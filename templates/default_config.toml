@@ -1,0 +1,216 @@
+# Hive AI Configuration File
+# Edit this file to customize your Hive AI experience
+
+[consensus]
+# Consensus profile: speed, balanced, cost, elite
+profile = "balanced"
+
+# Model selection for each stage
+[consensus.models]
+generator = "claude-3-5-sonnet-20241022"
+refiner = "gpt-4-turbo-preview"
+validator = "claude-3-opus-20240229"
+curator = "gpt-4o"
+
+# Alternative models for fallback
+[consensus.fallback]
+generator = ["claude-3-sonnet-20240229", "gpt-4"]
+refiner = ["claude-3-sonnet-20240229", "gpt-3.5-turbo"]
+validator = ["gpt-4", "claude-3-haiku-20240307"]
+curator = ["claude-3-sonnet-20240229", "gpt-3.5-turbo"]
+
+# Streaming configuration
+[consensus.streaming]
+enabled = true
+chunk_size = 1024
+timeout_ms = 30000
+
+# Temperature settings for each stage
+[consensus.temperature]
+generator = 0.7
+refiner = 0.3
+validator = 0.1
+curator = 0.2
+
+[performance]
+# Cache size (memory usage)
+cache_size = "2GB"
+
+# Maximum number of worker threads
+max_workers = 8
+
+# Enable incremental parsing
+incremental_parsing = true
+
+# Prefetch related files
+prefetch_related = true
+
+# Background indexing
+background_indexing = true
+
+# Memory limit in MB (optional)
+# memory_limit_mb = 4096
+
+[integration]
+# MCP server port
+mcp_port = 7777
+
+# LSP server port
+lsp_port = 7778
+
+# Auto-apply changes with high confidence
+auto_apply_threshold = 0.95
+
+# IDE-specific settings
+[integration.vscode]
+enabled = true
+show_progress = true
+inline_suggestions = true
+
+[integration.neovim]
+enabled = true
+keymap = "<leader>h"
+
+[search]
+# Full-text search enabled
+enabled = true
+
+# Maximum search results
+max_results = 100
+
+# Include documentation in search
+include_docs = true
+
+# Search index update interval (seconds)
+update_interval = 60
+
+# Index binary files
+index_binary_files = false
+
+[security]
+# Enable telemetry (anonymous usage data)
+telemetry = false
+
+# API key storage (encrypted)
+secure_storage = true
+
+# Timeout for API requests (seconds)
+api_timeout = 30
+
+# Trusted directories (will not prompt for permission)
+trust_directories = []
+
+# Blocked directories (will never access)
+blocked_directories = []
+
+[languages]
+# Supported languages and their parsers
+[languages.rust]
+parser = "tree-sitter-rust"
+linter = "clippy"
+formatter = "rustfmt"
+enabled = true
+
+[languages.typescript]
+parser = "tree-sitter-typescript"
+linter = "eslint"
+formatter = "prettier"
+enabled = true
+
+[languages.javascript]
+parser = "tree-sitter-javascript"
+linter = "eslint"
+formatter = "prettier"
+enabled = true
+
+[languages.python]
+parser = "tree-sitter-python"
+linter = "ruff"
+formatter = "black"
+enabled = true
+
+[languages.go]
+parser = "tree-sitter-go"
+linter = "golangci-lint"
+formatter = "gofmt"
+enabled = true
+
+[languages.java]
+parser = "tree-sitter-java"
+linter = "checkstyle"
+formatter = "google-java-format"
+enabled = true
+
+[languages.cpp]
+parser = "tree-sitter-cpp"
+linter = "clang-tidy"
+formatter = "clang-format"
+enabled = true
+
+[interface]
+# Enable TUI mode when running standalone
+tui_mode = true
+
+# Prefer TUI over banner when available
+prefer_tui = true
+
+# Enable startup banner
+banner_enabled = true
+
+# TUI layout preferences
+[interface.tui]
+# Panel sizes (percentages)
+explorer_width = 25
+consensus_width = 30
+terminal_height = 25
+
+# Theme
+theme = "dark"  # "dark", "light", "solarized"
+
+# Mouse support
+mouse_enabled = true
+
+# Key bindings
+[interface.tui.keys]
+quit = "Ctrl+Q"
+command_palette = "Ctrl+Shift+P"
+quick_open = "Ctrl+P"
+focus_explorer = "F1"
+focus_editor = "F2"
+focus_consensus = "F3"
+focus_terminal = "F4"
+save_file = "Ctrl+S"
+new_file = "Ctrl+N"
+close_file = "Ctrl+W"
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+
+# Log to file
+file = ".hive/hive.log"
+
+# Structured logging
+structured = false
+
+# Maximum log file size in MB
+max_size_mb = 10
+
+# Maximum number of log files to keep
+max_files = 5
+
+# OpenRouter API configuration (set via environment or CLI)
+# [openrouter]
+# api_key = "sk-or-xxxxx"
+# base_url = "https://openrouter.ai/api/v1"
+# timeout_seconds = 30
+# max_retries = 3
+# retry_delay_ms = 1000
+
+# Cloudflare D1 configuration (set via environment or CLI)
+# [cloudflare]
+# account_id = "xxxxx"
+# database_id = "xxxxx"
+# api_token = "xxxxx"
+# sync_enabled = true
+# sync_interval_minutes = 15

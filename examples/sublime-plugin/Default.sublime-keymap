@@ -1,0 +1,14 @@
+[
+    {
+        "keys": ["ctrl+shift+h"],
+        "command": "hive_ask_question"
+    },
+    {
+        "keys": ["ctrl+shift+e"],
+        "command": "hive_explain_code"
+    },
+    {
+        "keys": ["ctrl+shift+i"],
+        "command": "hive_improve_code"
+    }
+]

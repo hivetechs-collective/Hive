@@ -1,0 +1,49 @@
+{
+  "name": "@hivetechs/hive",
+  "version": "2.0.0",
+  "description": "HiveTechs Consensus - The world's most advanced AI-powered development assistant",
+  "main": "index.js",
+  "bin": {
+    "hive": "./bin/hive"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js",
+    "preuninstall": "node scripts/uninstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hivetechs-collective/hive.git"
+  },
+  "keywords": [
+    "ai", 
+    "development", 
+    "assistant", 
+    "consensus", 
+    "rust", 
+    "cli",
+    "code-analysis",
+    "planning",
+    "enterprise"
+  ],
+  "author": "HiveTechs Collective",
+  "license": "MIT",
+  "homepage": "https://hivetechs.com",
+  "bugs": {
+    "url": "https://github.com/hivetechs-collective/hive/issues"
+  },
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"],
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "tar": "^6.2.0"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

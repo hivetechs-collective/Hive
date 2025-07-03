@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>hive-ai</id>
+    <version>2.0.0</version>
+    <packageSourceUrl>https://github.com/hivetechs/hive</packageSourceUrl>
+    <owners>HiveTechs Collective</owners>
+    <title>HiveTechs Consensus</title>
+    <authors>HiveTechs Collective</authors>
+    <projectUrl>https://hive.ai</projectUrl>
+    <iconUrl>https://hive.ai/assets/icon.png</iconUrl>
+    <copyright>2024 HiveTechs Collective</copyright>
+    <licenseUrl>https://hive.ai/license</licenseUrl>
+    <requireLicenseAcceptance>true</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/hivetechs/hive</projectSourceUrl>
+    <docsUrl>https://hive.ai/docs</docsUrl>
+    <bugTrackerUrl>https://github.com/hivetechs/hive/issues</bugTrackerUrl>
+    <tags>ai development codebase intelligence consensus cli rust</tags>
+    <summary>AI-powered codebase intelligence platform with multi-model consensus</summary>
+    <description><![CDATA[
+# HiveTechs Consensus
+
+HiveTechs Consensus is a revolutionary AI-powered development assistant that combines the intelligence of 320+ AI models to provide unparalleled codebase understanding and transformation capabilities.
+
+## Key Features
+
+- **Multi-Model Consensus**: 4-stage AI pipeline for maximum accuracy
+- **Repository Intelligence**: Complete codebase analysis and understanding
+- **Code Transformation**: AI-powered refactoring and improvements
+- **Planning Mode**: Task decomposition and execution planning
+- **Memory System**: Context-aware conversations with thematic clustering
+- **TUI Interface**: VS Code-like terminal experience
+- **MCP Integration**: Claude Code compatibility
+
+## Performance
+
+- **10-40x faster** than TypeScript implementation
+- **<100ms startup time**
+- **<25MB memory usage**
+- **320+ AI models** via OpenRouter integration
+
+## Installation
+
+After installation, configure your API keys:
+```
+hive setup
+```
+
+Then test the installation:
+```
+hive ask "Hello world"
+```
+
+## Documentation
+
+Visit https://hive.ai/docs for complete documentation and tutorials.
+]]></description>
+    <releaseNotes>
+      Version 2.0.0:
+      * Complete Rust reimplementation with 10-40x performance improvement
+      * Revolutionary repository intelligence capabilities
+      * Advanced TUI interface with VS Code-like experience
+      * Enhanced memory system with thematic clustering
+      * MCP integration for Claude Code compatibility
+      * Production-ready enterprise features
+    </releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

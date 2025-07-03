@@ -1,0 +1,36 @@
+[package]
+name = "hive-ai-phase1"
+version = "0.1.0"
+edition = "2021"
+description = "HiveTechs Consensus - Phase 1 Essential Functionality"
+authors = ["HiveTechs Team"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/hivetechs/hive-ai"
+keywords = ["ai", "consensus", "code", "analysis"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "hive"
+path = "main_working.rs"
+
+[dependencies]
+# Core dependencies for Phase 1
+anyhow = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+clap = { version = "4.0", features = ["derive"] }
+console = "0.15"
+serde = { version = "1.0", features = ["derive"] }
+dirs = "5.0"
+
+[dev-dependencies]
+tempfile = "3.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[features]
+default = []

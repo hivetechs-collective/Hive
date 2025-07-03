@@ -1,0 +1,135 @@
+<idea-plugin>
+    <id>com.hivetechs.hive-ai-intellij</id>
+    <name>Hive AI</name>
+    <vendor email="team@hivetechs.com" url="https://hivetechs.com">HiveTechs Collective</vendor>
+    
+    <description><![CDATA[
+    AI-powered code analysis and assistance using HiveTechs Consensus engine.
+    
+    Features:
+    • Multi-model consensus AI for reliable code analysis
+    • Real-time code explanation and improvement suggestions
+    • Automated test generation with AI
+    • Repository-wide intelligence and context awareness
+    • Direct integration with Hive AI MCP server
+    
+    Supported languages: Rust, Java, Kotlin, JavaScript, TypeScript, Python, Go, C++, and more.
+    ]]></description>
+
+    <change-notes><![CDATA[
+    <h3>Version 2.0.0</h3>
+    <ul>
+        <li>Complete rewrite with Model Context Protocol integration</li>
+        <li>Real-time streaming consensus responses</li>
+        <li>Enhanced code analysis with repository intelligence</li>
+        <li>Improved AI-powered diagnostics and suggestions</li>
+        <li>Support for all major programming languages</li>
+    </ul>
+    ]]></change-notes>
+
+    <!-- Product and plugin compatibility requirements -->
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+    <depends>com.intellij.java</depends>
+    <depends optional="true" config-file="kotlin.xml">org.jetbrains.kotlin</depends>
+    <depends optional="true" config-file="javascript.xml">JavaScript</depends>
+    <depends optional="true" config-file="python.xml">Python</depends>
+    <depends optional="true" config-file="rust.xml">org.rust.lang</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Application services -->
+        <applicationService serviceImplementation="com.hivetechs.hive.services.HiveMcpService"/>
+        <applicationService serviceImplementation="com.hivetechs.hive.services.HiveSettingsService"/>
+        
+        <!-- Project services -->
+        <projectService serviceImplementation="com.hivetechs.hive.services.HiveProjectService"/>
+        
+        <!-- Tool windows -->
+        <toolWindow id="Hive AI" secondary="true" icon="/icons/hive.svg" anchor="right"
+                    factoryClass="com.hivetechs.hive.toolwindow.HiveToolWindowFactory"/>
+        
+        <!-- Code completion -->
+        <completion.contributor language="any" 
+                               implementationClass="com.hivetechs.hive.completion.HiveCompletionContributor"/>
+        
+        <!-- Code inspections -->
+        <localInspection language="any" displayName="Hive AI Analysis" groupName="Hive AI"
+                        implementationClass="com.hivetechs.hive.inspections.HiveCodeInspection"/>
+        
+        <!-- Intentions and quick fixes -->
+        <intentionAction>
+            <className>com.hivetechs.hive.intentions.ExplainCodeIntention</className>
+        </intentionAction>
+        <intentionAction>
+            <className>com.hivetechs.hive.intentions.ImproveCodeIntention</className>
+        </intentionAction>
+        <intentionAction>
+            <className>com.hivetechs.hive.intentions.GenerateTestsIntention</className>
+        </intentionAction>
+        
+        <!-- Settings -->
+        <applicationConfigurable parentId="tools" instance="com.hivetechs.hive.settings.HiveConfigurable"
+                                id="com.hivetechs.hive.settings" displayName="Hive AI"/>
+        
+        <!-- Status bar -->
+        <statusBarWidgetFactory implementation="com.hivetechs.hive.statusbar.HiveStatusBarWidgetFactory"/>
+        
+        <!-- Notification group -->
+        <notificationGroup id="Hive AI" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <!-- Main action group -->
+        <group id="HiveAI.MainGroup" text="Hive AI" description="Hive AI actions" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </group>
+
+        <!-- Individual actions -->
+        <action id="HiveAI.AskQuestion" class="com.hivetechs.hive.actions.AskQuestionAction"
+                text="Ask Hive AI" description="Ask Hive AI a question"
+                icon="/icons/question.svg">
+            <add-to-group group-id="HiveAI.MainGroup" anchor="first"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift H"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta shift H"/>
+        </action>
+
+        <action id="HiveAI.AnalyzeCode" class="com.hivetechs.hive.actions.AnalyzeCodeAction"
+                text="Analyze with Hive AI" description="Analyze current file with Hive AI"
+                icon="/icons/analyze.svg">
+            <add-to-group group-id="HiveAI.MainGroup" anchor="after" relative-to-action="HiveAI.AskQuestion"/>
+        </action>
+
+        <action id="HiveAI.ExplainCode" class="com.hivetechs.hive.actions.ExplainCodeAction"
+                text="Explain Code" description="Explain selected code with AI"
+                icon="/icons/explain.svg">
+            <add-to-group group-id="HiveAI.MainGroup" anchor="after" relative-to-action="HiveAI.AnalyzeCode"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift E"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta shift E"/>
+        </action>
+
+        <action id="HiveAI.ImproveCode" class="com.hivetechs.hive.actions.ImproveCodeAction"
+                text="Improve Code" description="Get improvement suggestions for selected code"
+                icon="/icons/improve.svg">
+            <add-to-group group-id="HiveAI.MainGroup" anchor="after" relative-to-action="HiveAI.ExplainCode"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift I"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta shift I"/>
+        </action>
+
+        <action id="HiveAI.GenerateTests" class="com.hivetechs.hive.actions.GenerateTestsAction"
+                text="Generate Tests" description="Generate unit tests for selected code"
+                icon="/icons/test.svg">
+            <add-to-group group-id="HiveAI.MainGroup" anchor="after" relative-to-action="HiveAI.ImproveCode"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl shift T"/>
+            <keyboard-shortcut keymap="Mac OS X" first-keystroke="meta shift T"/>
+        </action>
+
+        <action id="HiveAI.ShowStatus" class="com.hivetechs.hive.actions.ShowStatusAction"
+                text="Show Status" description="Show Hive AI connection status"
+                icon="/icons/status.svg">
+            <add-to-group group-id="HiveAI.MainGroup" anchor="last"/>
+        </action>
+    </actions>
+
+    <resource-bundle>messages.HiveBundle</resource-bundle>
+</idea-plugin>

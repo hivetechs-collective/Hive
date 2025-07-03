@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Community Discord
+    url: https://discord.gg/hivetechs
+    about: Join our Discord community for questions, discussions, and support
+  - name: 📚 Documentation
+    url: https://docs.hivetechs.com
+    about: Check our comprehensive documentation for guides and API reference
+  - name: 🔒 Security Issues
+    url: mailto:security@hivetechs.com
+    about: Report critical security vulnerabilities privately via email
+  - name: 🏢 Enterprise Support
+    url: mailto:enterprise@hivetechs.com
+    about: Enterprise customers can contact our dedicated support team
+  - name: 💡 Feature Discussions
+    url: https://github.com/hivetechs/hive-consensus/discussions
+    about: Discuss ideas and proposals with the community before creating feature requests

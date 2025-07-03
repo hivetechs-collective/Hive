@@ -1,0 +1,53 @@
+#!/bin/bash
+# HiveTechs Consensus Post-Installation Script
+
+set -e
+
+# Create hive user group (optional)
+if ! getent group hive >/dev/null; then
+    groupadd --system hive
+fi
+
+# Create system directories
+mkdir -p /var/lib/hive
+mkdir -p /var/log/hive
+mkdir -p /etc/hive
+
+# Set proper permissions
+chown root:hive /var/lib/hive
+chmod 775 /var/lib/hive
+chown root:hive /var/log/hive
+chmod 775 /var/log/hive
+
+# Install shell completions
+if [ -d /usr/share/bash-completion/completions ]; then
+    hive completions bash > /usr/share/bash-completion/completions/hive 2>/dev/null || true
+fi
+
+if [ -d /usr/share/zsh/vendor-completions ]; then
+    hive completions zsh > /usr/share/zsh/vendor-completions/_hive 2>/dev/null || true
+fi
+
+if [ -d /usr/share/fish/vendor_completions.d ]; then
+    hive completions fish > /usr/share/fish/vendor_completions.d/hive.fish 2>/dev/null || true
+fi
+
+# Enable systemd service (if present)
+if command -v systemctl >/dev/null 2>&1 && [ -f /etc/systemd/system/hive.service ]; then
+    systemctl daemon-reload
+    systemctl enable hive.service || true
+fi
+
+echo ""
+echo "🐝 HiveTechs Consensus installed successfully!"
+echo ""
+echo "Get started:"
+echo "  hive --help         # Show available commands"
+echo "  hive setup          # Configure API keys"
+echo "  hive ask 'Hello'    # Test consensus engine"
+echo ""
+echo "Documentation: https://hive.ai/docs"
+echo "Support: https://github.com/hivetechs/hive/issues"
+echo ""
+
+exit 0
