@@ -21,7 +21,7 @@ pub struct EnterpriseAuditLogger {
     log_file: Option<PathBuf>,
     retention_days: u32,
     encryption_key: Option<Vec<u8>>,
-    event_buffer: tokio::sync::RwLock<Vec<AuditEvent>>,
+    event_buffer: Arc<tokio::sync::RwLock<Vec<AuditEvent>>>,
 }
 
 /// Comprehensive audit event
@@ -235,7 +235,7 @@ impl EnterpriseAuditLogger {
             log_file,
             retention_days,
             encryption_key: None,
-            event_buffer: tokio::sync::RwLock::new(Vec::new()),
+            event_buffer: Arc::new(tokio::sync::RwLock::new(Vec::new())),
         })
     }
 

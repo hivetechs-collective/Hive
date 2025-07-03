@@ -2,7 +2,7 @@
 //!
 //! Provides current time awareness and temporal intelligence
 
-use chrono::{DateTime, Local, TimeZone};
+use chrono::{DateTime, Local, TimeZone, Timelike, Datelike};
 use serde::{Deserialize, Serialize};
 
 /// Temporal context manager
@@ -59,7 +59,7 @@ impl TemporalContext {
         Self {
             current_time: now,
             session_start: now,
-            timezone: now.timezone().to_string(),
+            timezone: now.format("%z").to_string(),
             business_hours: BusinessHours::default(),
         }
     }
@@ -211,12 +211,14 @@ impl TemporalContext {
 
     /// Get time until next hour
     pub fn time_until_next_hour(&self) -> chrono::Duration {
-        let next_hour = self.current_time
-            .with_time(self.current_time.time().with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap())
-            .unwrap()
+        let current = self.current_time;
+        let next_hour = current
+            .with_minute(0).unwrap()
+            .with_second(0).unwrap()
+            .with_nanosecond(0).unwrap()
             + chrono::Duration::hours(1);
         
-        next_hour.signed_duration_since(self.current_time)
+        next_hour.signed_duration_since(current)
     }
 
     /// Get "What's new" content based on time

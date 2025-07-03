@@ -919,11 +919,13 @@ impl CostController {
         
         // Limit trend data (keep last 1000 points)
         if tracking.cost_trends.len() > 1000 {
-            tracking.cost_trends.drain(0..tracking.cost_trends.len() - 1000);
+            let drain_count = tracking.cost_trends.len() - 1000;
+            tracking.cost_trends.drain(0..drain_count);
         }
         
         // Update efficiency metrics
-        self.update_efficiency_metrics(&mut tracking.efficiency_metrics, &tracking.cost_trends).await?;
+        let cost_trends = tracking.cost_trends.clone();
+        self.update_efficiency_metrics(&mut tracking.efficiency_metrics, &cost_trends).await?;
         
         // Check cost thresholds
         self.check_cost_thresholds(actual_cost, stage, &stage_result.model).await?;
@@ -1154,7 +1156,8 @@ impl CostController {
             
             // Limit stored alerts (keep last 1000)
             if alerts.len() > 1000 {
-                alerts.drain(0..alerts.len() - 1000);
+                let drain_count = alerts.len() - 1000;
+                alerts.drain(0..drain_count);
             }
         }
         

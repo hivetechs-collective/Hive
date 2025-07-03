@@ -672,14 +672,35 @@ impl ParserPool {
         }
     }
 
-    fn get_parser(&self, language: &str) -> Result<&tree_sitter::Parser> {
+    fn get_parser(&mut self, language: &str) -> Result<&mut tree_sitter::Parser> {
         match language {
-            "rust" => self.rust_parser.as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Rust parser not initialized")),
-            "javascript" | "typescript" => self.js_parser.as_ref()
-                .ok_or_else(|| anyhow::anyhow!("JavaScript parser not initialized")),
-            "python" => self.python_parser.as_ref()
-                .ok_or_else(|| anyhow::anyhow!("Python parser not initialized")),
+            "rust" => {
+                if self.rust_parser.is_none() {
+                    let mut parser = tree_sitter::Parser::new();
+                    parser.set_language(tree_sitter_rust::language())?;
+                    self.rust_parser = Some(parser);
+                }
+                self.rust_parser.as_mut()
+                    .ok_or_else(|| anyhow::anyhow!("Rust parser not initialized"))
+            },
+            "javascript" | "typescript" => {
+                if self.js_parser.is_none() {
+                    let mut parser = tree_sitter::Parser::new();
+                    parser.set_language(tree_sitter_javascript::language())?;
+                    self.js_parser = Some(parser);
+                }
+                self.js_parser.as_mut()
+                    .ok_or_else(|| anyhow::anyhow!("JavaScript parser not initialized"))
+            },
+            "python" => {
+                if self.python_parser.is_none() {
+                    let mut parser = tree_sitter::Parser::new();
+                    parser.set_language(tree_sitter_python::language())?;
+                    self.python_parser = Some(parser);
+                }
+                self.python_parser.as_mut()
+                    .ok_or_else(|| anyhow::anyhow!("Python parser not initialized"))
+            },
             _ => Err(anyhow::anyhow!("Unsupported language: {}", language)),
         }
     }

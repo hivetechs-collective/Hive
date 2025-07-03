@@ -523,6 +523,41 @@ impl From<reqwest::Error> for HiveError {
 }
 */
 
+impl From<rusqlite::Error> for HiveError {
+    fn from(err: rusqlite::Error) -> Self {
+        Self::DatabaseQuery { 
+            query: format!("SQLite error: {}", err) 
+        }
+    }
+}
+
+impl From<tokio::task::JoinError> for HiveError {
+    fn from(err: tokio::task::JoinError) -> Self {
+        Self::Internal { 
+            context: "task".to_string(), 
+            message: err.to_string() 
+        }
+    }
+}
+
+impl From<tree_sitter::LanguageError> for HiveError {
+    fn from(err: tree_sitter::LanguageError) -> Self {
+        Self::Internal { 
+            context: "tree-sitter".to_string(), 
+            message: format!("Language error: {:?}", err) 
+        }
+    }
+}
+
+impl From<std::str::Utf8Error> for HiveError {
+    fn from(err: std::str::Utf8Error) -> Self {
+        Self::Internal { 
+            context: "utf8".to_string(), 
+            message: err.to_string() 
+        }
+    }
+}
+
 /// Result type alias for Hive operations
 pub type Result<T> = std::result::Result<T, HiveError>;
 pub type HiveResult<T> = std::result::Result<T, HiveError>;

@@ -1150,7 +1150,7 @@ impl PerformanceTracker {
         
         let config = ABTestConfig {
             test_id: test_id.clone(),
-            name,
+            name: name.clone(),
             description,
             model_a,
             model_b,

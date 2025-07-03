@@ -3,55 +3,55 @@
 //! Professional dark theme inspired by VS Code Dark+ theme
 
 use ratatui::style::{Color, Style, Modifier};
-use super::{Theme, ThemeVariant, ColorPalette, StyleDefinitions};
+use super::{Theme, ThemeVariant, ColorPalette, StyleDefinitions, SerializableColor};
 
 /// Create professional dark theme
 pub fn create_dark_theme() -> Theme {
     let colors = ColorPalette {
         // Base colors - VS Code Dark+ inspired
-        primary: Color::Rgb(0, 122, 204),      // VS Code blue
-        secondary: Color::Rgb(37, 37, 38),     // Dark background
-        background: Color::Rgb(30, 30, 30),    // Editor background
-        foreground: Color::Rgb(204, 204, 204), // Default text
-        accent: Color::Rgb(14, 99, 156),       // Accent blue
+        primary: SerializableColor(Color::Rgb(0, 122, 204)),      // VS Code blue
+        secondary: SerializableColor(Color::Rgb(37, 37, 38)),     // Dark background
+        background: SerializableColor(Color::Rgb(30, 30, 30)),    // Editor background
+        foreground: SerializableColor(Color::Rgb(204, 204, 204)), // Default text
+        accent: SerializableColor(Color::Rgb(14, 99, 156)),       // Accent blue
         
         // Status colors
-        error: Color::Rgb(244, 71, 71),        // Red
-        warning: Color::Rgb(255, 196, 0),      // Yellow/Orange
-        success: Color::Rgb(73, 177, 146),     // Green
-        info: Color::Rgb(91, 168, 225),        // Light blue
-        muted: Color::Rgb(96, 96, 96),         // Gray
+        error: SerializableColor(Color::Rgb(244, 71, 71)),        // Red
+        warning: SerializableColor(Color::Rgb(255, 196, 0)),      // Yellow/Orange
+        success: SerializableColor(Color::Rgb(73, 177, 146)),     // Green
+        info: SerializableColor(Color::Rgb(91, 168, 225)),        // Light blue
+        muted: SerializableColor(Color::Rgb(96, 96, 96)),         // Gray
         
         // UI element colors
-        border_active: Color::Rgb(0, 122, 204),   // Active blue border
-        border_inactive: Color::Rgb(60, 60, 60),  // Inactive gray border
-        selection_bg: Color::Rgb(38, 79, 120),    // Selection background
-        selection_fg: Color::Rgb(255, 255, 255),  // Selection text
+        border_active: SerializableColor(Color::Rgb(0, 122, 204)),   // Active blue border
+        border_inactive: SerializableColor(Color::Rgb(60, 60, 60)),  // Inactive gray border
+        selection_bg: SerializableColor(Color::Rgb(38, 79, 120)),    // Selection background
+        selection_fg: SerializableColor(Color::Rgb(255, 255, 255)),  // Selection text
         
         // Syntax highlighting colors (VS Code Dark+ theme)
-        keyword: Color::Rgb(86, 156, 214),        // Blue
-        string: Color::Rgb(206, 145, 120),        // Orange
-        comment: Color::Rgb(106, 153, 85),        // Green
-        function: Color::Rgb(220, 220, 170),      // Light yellow
-        variable: Color::Rgb(156, 220, 254),      // Light blue
-        number: Color::Rgb(181, 206, 168),        // Light green
-        operator: Color::Rgb(204, 204, 204),      // White
+        keyword: SerializableColor(Color::Rgb(86, 156, 214)),        // Blue
+        string: SerializableColor(Color::Rgb(206, 145, 120)),        // Orange
+        comment: SerializableColor(Color::Rgb(106, 153, 85)),        // Green
+        function: SerializableColor(Color::Rgb(220, 220, 170)),      // Light yellow
+        variable: SerializableColor(Color::Rgb(156, 220, 254)),      // Light blue
+        number: SerializableColor(Color::Rgb(181, 206, 168)),        // Light green
+        operator: SerializableColor(Color::Rgb(204, 204, 204)),      // White
         
         // File explorer colors
-        directory: Color::Rgb(86, 156, 214),      // Blue
-        file: Color::Rgb(204, 204, 204),          // White
-        symlink: Color::Rgb(255, 196, 0),         // Yellow
-        executable: Color::Rgb(73, 177, 146),     // Green
+        directory: SerializableColor(Color::Rgb(86, 156, 214)),      // Blue
+        file: SerializableColor(Color::Rgb(204, 204, 204)),          // White
+        symlink: SerializableColor(Color::Rgb(255, 196, 0)),         // Yellow
+        executable: SerializableColor(Color::Rgb(73, 177, 146)),     // Green
         
         // Terminal colors
-        command: Color::Rgb(86, 156, 214),        // Blue
-        output: Color::Rgb(204, 204, 204),        // White
-        system_message: Color::Rgb(106, 153, 85), // Green
-        line_number: Color::Rgb(96, 96, 96),      // Gray
+        command: SerializableColor(Color::Rgb(86, 156, 214)),        // Blue
+        output: SerializableColor(Color::Rgb(204, 204, 204)),        // White
+        system_message: SerializableColor(Color::Rgb(106, 153, 85)), // Green
+        line_number: SerializableColor(Color::Rgb(96, 96, 96)),      // Gray
         
         // Editor colors
-        heading: Color::Rgb(86, 156, 214),        // Blue
-        code_block: Color::Rgb(96, 96, 96),       // Gray
+        heading: SerializableColor(Color::Rgb(86, 156, 214)),        // Blue
+        code_block: SerializableColor(Color::Rgb(96, 96, 96)),       // Gray
     };
 
     let styles = StyleDefinitions {
@@ -147,12 +147,12 @@ pub fn validate_contrast_ratios(theme: &Theme) -> Vec<String> {
     let mut issues = Vec::new();
     
     // Check if text has sufficient contrast against background
-    if !has_sufficient_contrast(theme.colors.foreground, theme.colors.background) {
+    if !has_sufficient_contrast(theme.colors.foreground.0, theme.colors.background.0) {
         issues.push("Foreground text may not have sufficient contrast against background".to_string());
     }
     
     // Check selection contrast
-    if !has_sufficient_contrast(theme.colors.selection_fg, theme.colors.selection_bg) {
+    if !has_sufficient_contrast(theme.colors.selection_fg.0, theme.colors.selection_bg.0) {
         issues.push("Selection text may not have sufficient contrast".to_string());
     }
     
@@ -185,9 +185,9 @@ pub fn customize_dark_theme(base_theme: &mut Theme, preferences: &DarkThemePrefe
     }
     
     if let Some(accent_color) = preferences.custom_accent {
-        base_theme.colors.accent = accent_color;
-        base_theme.colors.primary = accent_color;
-        base_theme.colors.border_active = accent_color;
+        base_theme.colors.accent = SerializableColor(accent_color);
+        base_theme.colors.primary = SerializableColor(accent_color);
+        base_theme.colors.border_active = SerializableColor(accent_color);
     }
 }
 
@@ -200,24 +200,24 @@ pub struct DarkThemePreferences {
 
 /// Apply high contrast modifications to dark theme
 fn apply_high_contrast_dark(theme: &mut Theme) {
-    theme.colors.foreground = Color::White;
-    theme.colors.background = Color::Black;
-    theme.colors.border_active = Color::White;
-    theme.colors.selection_bg = Color::White;
-    theme.colors.selection_fg = Color::Black;
+    theme.colors.foreground = SerializableColor(Color::White);
+    theme.colors.background = SerializableColor(Color::Black);
+    theme.colors.border_active = SerializableColor(Color::White);
+    theme.colors.selection_bg = SerializableColor(Color::White);
+    theme.colors.selection_fg = SerializableColor(Color::Black);
     
     // Make all styles more prominent
     theme.styles.text = theme.styles.text.add_modifier(Modifier::BOLD);
-    theme.styles.active_border = theme.styles.active_border.fg(Color::White);
+    theme.styles.active_border = theme.styles.active_border.fg(theme.colors.border_active.0);
 }
 
 /// Apply blue light filter to dark theme
 fn apply_blue_light_filter(theme: &mut Theme) {
     // Reduce blue components in colors
-    theme.colors.primary = Color::Rgb(100, 122, 150);  // Reduced blue
-    theme.colors.accent = Color::Rgb(100, 99, 120);    // Reduced blue
-    theme.colors.keyword = Color::Rgb(120, 156, 180);  // Reduced blue
-    theme.colors.info = Color::Rgb(150, 168, 200);     // Reduced blue
+    theme.colors.primary = SerializableColor(Color::Rgb(100, 122, 150));  // Reduced blue
+    theme.colors.accent = SerializableColor(Color::Rgb(100, 99, 120));    // Reduced blue
+    theme.colors.keyword = SerializableColor(Color::Rgb(120, 156, 180));  // Reduced blue
+    theme.colors.info = SerializableColor(Color::Rgb(150, 168, 200));     // Reduced blue
 }
 
 impl Default for DarkThemePreferences {

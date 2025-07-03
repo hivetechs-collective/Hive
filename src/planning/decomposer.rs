@@ -7,6 +7,7 @@ use crate::consensus::engine::ConsensusEngine;
 use crate::planning::types::*;
 use serde_json::json;
 use uuid::Uuid;
+use anyhow::anyhow;
 
 /// AI-powered task decomposition engine
 pub struct TaskDecomposer {
@@ -88,7 +89,7 @@ Please analyze and return a JSON object with:
         );
 
         let result = consensus_engine.process(&prompt, None).await?;
-        let analysis: TaskAnalysis = serde_json::from_str(&result.final_response)
+        let analysis: TaskAnalysis = serde_json::from_str(&result.result.ok_or_else(|| anyhow!("No analysis result"))?)
             .map_err(|e| HiveError::Planning(format!("Failed to parse task analysis: {}", e)))?;
         
         Ok(analysis)
@@ -147,7 +148,7 @@ Guidelines:
         );
 
         let result = consensus_engine.process(&prompt, None).await?;
-        let raw_tasks: Vec<RawTask> = serde_json::from_str(&result.final_response)
+        let raw_tasks: Vec<RawTask> = serde_json::from_str(&result.result.ok_or_else(|| anyhow!("No decomposition result"))?)
             .map_err(|e| HiveError::Planning(format!("Failed to parse tasks: {}", e)))?;
         
         // Convert raw tasks to proper Task objects

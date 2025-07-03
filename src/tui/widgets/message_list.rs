@@ -79,6 +79,7 @@ impl<'a> MessageList<'a> {
             MessageType::Error => self.theme.error_style().add_modifier(Modifier::BOLD),
             MessageType::Status => self.theme.warning_style(),
             MessageType::Help => self.theme.secondary_style(),
+            MessageType::Info => self.theme.accent_style(),
         }
     }
     

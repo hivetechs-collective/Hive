@@ -56,11 +56,11 @@ pub async fn handle_command(command: Commands) -> Result<()> {
         Commands::Collaborate { plan, team, share } => {
             crate::commands::planning::handle_collaborate(plan, team, share).await
         }
-        Commands::Mode { command: _command } => {
-            // handle_mode(command).await // Temporarily disabled
-            println!("⚠️  Mode commands temporarily disabled during development");
-            Ok(())
-        }
+        // Commands::Mode { command: _command } => {
+        //     // handle_mode(command).await // Temporarily disabled
+        //     println!("⚠️  Mode commands temporarily disabled during development");
+        //     Ok(())
+        // }
         Commands::Improve { file, aspect, preview, apply, multi_file, context, list_aspects } => {
             if list_aspects {
                 crate::commands::improve::list_aspects();

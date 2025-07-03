@@ -3,7 +3,7 @@
 use anyhow::{Result, anyhow};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use crate::analysis::{TreeSitterParser, AST};
+use crate::analysis::TreeSitterParser;
 use crate::core::Language;
 
 /// Handles syntax-aware code modifications
@@ -25,8 +25,8 @@ impl SyntaxAwareModifier {
         language: Language,
     ) -> Result<String> {
         // Parse original to ensure it's valid
-        let parser = self.parser.lock().await;
-        let original_ast = parser.parse(original)?;
+        let mut parser = self.parser.lock().await;
+        let _original_ast = parser.parse(original)?;
         
         // Split content into lines
         let mut lines: Vec<&str> = original.lines().collect();
@@ -77,7 +77,7 @@ impl SyntaxAwareModifier {
 
     /// Verify that code is syntactically valid
     pub async fn verify_syntax(&self, content: &str, language: Language) -> Result<()> {
-        let parser = self.parser.lock().await;
+        let mut parser = self.parser.lock().await;
         match parser.parse(content) {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!("Syntax validation failed: {}", e)),

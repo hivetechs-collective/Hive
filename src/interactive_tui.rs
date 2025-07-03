@@ -76,6 +76,7 @@ pub enum MessageType {
     Error,
     Help,
     Status,
+    Info,
 }
 
 pub struct StatusLine {
@@ -407,6 +408,7 @@ impl InteractiveTui {
                     MessageType::Error => Style::default().fg(Color::Red),
                     MessageType::Help => Style::default().fg(Color::Blue),
                     MessageType::Status => Style::default().fg(Color::Magenta),
+                    MessageType::Info => Style::default().fg(Color::Cyan),
                 };
 
                 let content = Text::from(msg.content.clone()).style(style);
@@ -1005,21 +1007,23 @@ impl InteractiveTui {
 
     /// Cycle through available themes
     async fn cycle_theme(&mut self) {
-        let available_themes = self.theme_manager.available_themes();
-        let current_theme = self.theme_manager.current_theme().name.clone();
-        
-        // Find current theme index
-        let current_index = available_themes
-            .iter()
-            .position(|&name| *name == current_theme)
-            .unwrap_or(0);
-        
-        // Get next theme (cycle back to start if at end)
-        let next_index = (current_index + 1) % available_themes.len();
-        let next_theme = available_themes[next_index];
+        let next_theme = {
+            let available_themes = self.theme_manager.available_themes();
+            let current_theme = self.theme_manager.current_theme().name.clone();
+            
+            // Find current theme index
+            let current_index = available_themes
+                .iter()
+                .position(|&name| *name == current_theme)
+                .unwrap_or(0);
+            
+            // Get next theme (cycle back to start if at end)
+            let next_index = (current_index + 1) % available_themes.len();
+            available_themes[next_index].to_string()
+        };
         
         // Load the next theme
-        if let Err(e) = self.theme_manager.load_theme(next_theme) {
+        if let Err(e) = self.theme_manager.load_theme(&next_theme) {
             self.add_message(&format!("Failed to load theme '{}': {}", next_theme, e), MessageType::Error).await;
         } else {
             self.add_message(&format!("🎨 Switched to '{}' theme", next_theme), MessageType::SystemResponse).await;

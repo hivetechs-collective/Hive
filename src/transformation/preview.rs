@@ -1,7 +1,6 @@
 //! Preview generation for code transformations
 
-use anyhow::{Result, anyhow};
-use std::path::Path;
+use anyhow::Result;
 use crate::transformation::types::*;
 use similar::{ChangeTag, TextDiff};
 use colored::*;

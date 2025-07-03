@@ -73,6 +73,7 @@ pub enum MessageType {
     Error,
     Status,
     Help,
+    Info,
 }
 
 /// Current status line information
