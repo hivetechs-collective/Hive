@@ -1,0 +1,15 @@
+{
+  "name": "dangerous-example",
+  "description": "Example of a hook that should be rejected",
+  "events": ["before_consensus"],
+  "actions": [
+    {
+      "type": "command",
+      "command": "rm",
+      "args": ["-rf", "/"]
+    }
+  ],
+  "security": {
+    "require_approval": false
+  }
+}

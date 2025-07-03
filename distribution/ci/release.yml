@@ -1,0 +1,454 @@
+name: Release Build and Distribution
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+        default: '0.1.0'
+      pre_release:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Build matrix for all platforms
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS builds
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: macos-x64
+            cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: macos-arm64
+            cross: false
+          
+          # Linux builds
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            name: linux-x64
+            cross: false
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            name: linux-arm64
+            cross: true
+          
+          # Windows builds
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            name: windows-x64
+            cross: false
+          - target: i686-pc-windows-msvc
+            os: windows-latest
+            name: windows-x86
+            cross: false
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.target }}
+        components: rustfmt, clippy
+
+    - name: Install cross-compilation tools (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y musl-tools musl-dev
+        if [[ "${{ matrix.target }}" == *"aarch64"* ]]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+        fi
+
+    - name: Install cross
+      if: matrix.cross
+      run: cargo install cross --git https://github.com/cross-rs/cross
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ matrix.target }}-
+          ${{ runner.os }}-cargo-
+
+    - name: Build binary
+      run: |
+        if [[ "${{ matrix.cross }}" == "true" ]]; then
+          cross build --profile production --target ${{ matrix.target }} --features production
+        else
+          cargo build --profile production --target ${{ matrix.target }} --features production
+        fi
+
+    - name: Create archive (Unix)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/production
+        if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          # Create universal binary for macOS
+          if [[ -f "../../../x86_64-apple-darwin/production/hive" ]] && [[ -f "../../../aarch64-apple-darwin/production/hive" ]] && [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
+            lipo -create hive ../../../aarch64-apple-darwin/production/hive -output hive-universal
+            mv hive-universal hive
+          fi
+        fi
+        strip hive || true
+        tar -czf ../../../hive-${{ matrix.name }}.tar.gz hive
+        cd ../../..
+
+    - name: Create archive (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        cd target/${{ matrix.target }}/production
+        7z a ../../../hive-${{ matrix.name }}.zip hive.exe
+        cd ../../..
+
+    - name: Generate checksums
+      run: |
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
+          Get-FileHash hive-${{ matrix.name }}.zip -Algorithm SHA256 | Format-List Hash | Out-String -Stream | Select-String "Hash" | ForEach-Object { $_.ToString().Split(" ")[-1].ToLower() + "  hive-${{ matrix.name }}.zip" } | Out-File -FilePath hive-${{ matrix.name }}.zip.sha256 -Encoding ASCII
+        else
+          shasum -a 256 hive-${{ matrix.name }}.tar.gz > hive-${{ matrix.name }}.tar.gz.sha256
+        fi
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: hive-${{ matrix.name }}
+        path: |
+          hive-${{ matrix.name }}.*
+        retention-days: 30
+
+  # Create macOS universal binary
+  macos-universal:
+    name: Create macOS Universal Binary
+    runs-on: macos-latest
+    needs: build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download x64 artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: hive-macos-x64
+        path: ./artifacts/x64
+
+    - name: Download ARM64 artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: hive-macos-arm64
+        path: ./artifacts/arm64
+
+    - name: Create universal binary
+      run: |
+        cd artifacts/x64
+        tar -xzf hive-macos-x64.tar.gz
+        cd ../arm64
+        tar -xzf hive-macos-arm64.tar.gz
+        cd ..
+        lipo -create x64/hive arm64/hive -output hive-universal
+        tar -czf hive-macos-universal.tar.gz hive-universal
+        shasum -a 256 hive-macos-universal.tar.gz > hive-macos-universal.tar.gz.sha256
+
+    - name: Upload universal binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: hive-macos-universal
+        path: artifacts/hive-macos-universal.*
+
+  # Build installers
+  installers:
+    name: Build Platform Installers
+    runs-on: ${{ matrix.os }}
+    needs: [build, macos-universal]
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+
+    - name: Build macOS installer
+      if: matrix.platform == 'macos'
+      run: |
+        # Extract universal binary
+        cd artifacts/hive-macos-universal
+        tar -xzf hive-macos-universal.tar.gz
+        
+        # Create package structure
+        mkdir -p package/usr/local/bin
+        cp hive-universal package/usr/local/bin/hive
+        chmod +x package/usr/local/bin/hive
+        
+        # Build package
+        pkgbuild --root package --identifier com.hivetechs.hive --version ${GITHUB_REF#refs/tags/v} --install-location / hive-macos-installer.pkg
+        
+        # Sign package (if certificates available)
+        # productsign --sign "Developer ID Installer" hive-macos-installer.pkg hive-macos-installer-signed.pkg || cp hive-macos-installer.pkg hive-macos-installer-signed.pkg
+
+    - name: Build Linux packages
+      if: matrix.platform == 'linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y alien fakeroot
+        
+        # Extract Linux binary
+        cd artifacts/hive-linux-x64
+        tar -xzf hive-linux-x64.tar.gz
+        
+        # Create DEB package structure
+        mkdir -p deb-package/DEBIAN
+        mkdir -p deb-package/usr/local/bin
+        mkdir -p deb-package/usr/share/applications
+        
+        cp hive deb-package/usr/local/bin/
+        chmod +x deb-package/usr/local/bin/hive
+        
+        # Create control file
+        cat > deb-package/DEBIAN/control << EOF
+        Package: hive-ai
+        Version: ${GITHUB_REF#refs/tags/v}
+        Section: devel
+        Priority: optional
+        Architecture: amd64
+        Maintainer: HiveTechs Collective <team@hivetechs.com>
+        Description: AI-powered codebase intelligence platform
+         HiveTechs Consensus provides AI-powered code analysis and transformation.
+        EOF
+        
+        # Build DEB package
+        fakeroot dpkg-deb --build deb-package hive-linux-amd64.deb
+        
+        # Convert to RPM
+        alien --to-rpm --scripts hive-linux-amd64.deb
+
+    - name: Build Windows installer
+      if: matrix.platform == 'windows'
+      run: |
+        # Extract Windows binary
+        cd artifacts/hive-windows-x64
+        7z x hive-windows-x64.zip
+        
+        # Install NSIS
+        choco install nsis -y
+        
+        # Copy installer script
+        cp ../../distribution/installers/windows/hive.nsi .
+        
+        # Build installer
+        makensis hive.nsi
+
+    - name: Upload installer artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: installers-${{ matrix.platform }}
+        path: |
+          *.pkg
+          *.deb
+          *.rpm
+          *.exe
+
+  # Performance and security tests
+  quality-tests:
+    name: Quality Tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Linux binary
+      uses: actions/download-artifact@v3
+      with:
+        name: hive-linux-x64
+        path: ./test-binary
+
+    - name: Extract and test binary
+      run: |
+        cd test-binary
+        tar -xzf hive-linux-x64.tar.gz
+        chmod +x hive
+        
+        # Performance tests
+        echo "Testing startup time..."
+        time ./hive --version
+        
+        # Binary size check
+        size=$(stat -c%s hive)
+        echo "Binary size: $size bytes"
+        if [ $size -gt 52428800 ]; then  # 50MB limit
+          echo "WARNING: Binary size exceeds 50MB"
+        fi
+        
+        # Security scan
+        echo "Scanning binary for security issues..."
+        strings hive | grep -i -E "(password|secret|key|token)" | head -10 || true
+
+  # Create GitHub release
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, macos-universal, installers, quality-tests]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./release-artifacts
+
+    - name: Organize release files
+      run: |
+        mkdir -p release-files
+        find release-artifacts -name "*.tar.gz" -o -name "*.zip" -o -name "*.pkg" -o -name "*.deb" -o -name "*.rpm" -o -name "*.exe" | xargs -I {} cp {} release-files/
+        find release-artifacts -name "*.sha256" | xargs -I {} cp {} release-files/
+        
+        # Create master checksum file
+        cd release-files
+        sha256sum * > checksums.sha256
+
+    - name: Generate release notes
+      run: |
+        echo "# HiveTechs Consensus ${GITHUB_REF#refs/tags/v}" > release-notes.md
+        echo "" >> release-notes.md
+        echo "## 🚀 What's New" >> release-notes.md
+        echo "" >> release-notes.md
+        echo "This release includes performance improvements, bug fixes, and new features." >> release-notes.md
+        echo "" >> release-notes.md
+        echo "## 📦 Installation" >> release-notes.md
+        echo "" >> release-notes.md
+        echo '```bash' >> release-notes.md
+        echo 'curl -fsSL https://hive.ai/install | sh' >> release-notes.md
+        echo '```' >> release-notes.md
+        echo "" >> release-notes.md
+        echo "## 🔍 Verification" >> release-notes.md
+        echo "" >> release-notes.md
+        echo "All release artifacts include SHA256 checksums for verification:" >> release-notes.md
+        echo '```bash' >> release-notes.md
+        echo 'sha256sum -c checksums.sha256' >> release-notes.md
+        echo '```' >> release-notes.md
+        echo "" >> release-notes.md
+        echo "## 📊 Build Information" >> release-notes.md
+        echo "" >> release-notes.md
+        echo "- **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release-notes.md
+        echo "- **Commit**: ${{ github.sha }}" >> release-notes.md
+        echo "- **Rust Version**: $(rustc --version | head -1)" >> release-notes.md
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: HiveTechs Consensus ${{ github.ref_name }}
+        body_path: release-notes.md
+        files: release-files/*
+        draft: false
+        prerelease: ${{ github.event.inputs.pre_release == 'true' }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Update install script
+  update-install-script:
+    name: Update Install Script
+    runs-on: ubuntu-latest
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, 'beta') && !contains(github.ref, 'alpha')
+    steps:
+    - name: Checkout GitHub Pages repo
+      uses: actions/checkout@v4
+      with:
+        repository: hivetechs/hivetechs.github.io  # Adjust to your GitHub Pages repo
+        token: ${{ secrets.GITHUB_TOKEN }}
+        path: pages-repo
+
+    - name: Update install script
+      run: |
+        cp distribution/scripts/install.sh pages-repo/install
+        cd pages-repo
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
+        git add install
+        git commit -m "Update install script for ${{ github.ref_name }}" || exit 0
+        git push
+
+  # Performance benchmarks
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: Download Linux binary
+      uses: actions/download-artifact@v3
+      with:
+        name: hive-linux-x64
+        path: ./bench-binary
+
+    - name: Run benchmarks
+      run: |
+        cd bench-binary
+        tar -xzf hive-linux-x64.tar.gz
+        chmod +x hive
+        
+        # Startup time benchmark
+        echo "=== Startup Time Benchmark ===" > ../benchmark-results.txt
+        for i in {1..10}; do
+          /usr/bin/time -f "%e" ./hive --version 2>&1 >/dev/null | tail -1
+        done | awk '{sum+=$1; count++} END {print "Average startup time: " sum/count "s"}' >> ../benchmark-results.txt
+        
+        # Memory usage benchmark
+        echo "=== Memory Usage Benchmark ===" >> ../benchmark-results.txt
+        /usr/bin/time -v ./hive --version 2>&1 | grep "Maximum resident set size" >> ../benchmark-results.txt
+        
+        # Binary size
+        echo "=== Binary Size ===" >> ../benchmark-results.txt
+        ls -lh hive | awk '{print "Binary size: " $5}' >> ../benchmark-results.txt
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmark-results.txt

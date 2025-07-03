@@ -1,0 +1,18 @@
+# Hive AI Configuration
+[consensus]
+profile = "balanced"
+
+[performance]
+cache_size = "256MB"
+max_workers = 4
+
+[interface]
+tui_mode = true
+
+[security]
+trust_mode = "explicit"
+require_confirmation = true
+
+[logging]
+level = "info"
+format = "pretty"

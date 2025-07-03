@@ -1,0 +1,59 @@
+# HiveTechs Consensus Auto-Update Server Configuration
+
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+max_connections = 1000
+
+[security]
+require_https = true
+verify_signatures = true
+rate_limit_per_minute = 60
+max_request_size = "10MB"
+
+[storage]
+# GitHub Releases Integration
+github_owner = "hivetechs"
+github_repo = "hive"
+github_token_env = "GITHUB_TOKEN"
+
+# CDN Configuration
+cdn_base_url = "https://cdn.hive.ai"
+cache_ttl = 3600  # 1 hour
+
+[releases]
+# Supported platforms
+platforms = [
+    "macos-universal",
+    "linux-x86_64", 
+    "linux-aarch64",
+    "windows-x86_64",
+    "windows-i686"
+]
+
+# Update channels
+[releases.channels]
+stable = { min_version = "2.0.0", auto_update = true }
+beta = { min_version = "2.0.0-beta", auto_update = false }
+nightly = { min_version = "2.0.0-dev", auto_update = false }
+
+[rollback]
+enabled = true
+max_rollback_versions = 3
+emergency_disable_updates = false
+
+[monitoring]
+health_check_interval = 30  # seconds
+metrics_enabled = true
+log_level = "info"
+
+[delta_updates]
+enabled = true
+max_delta_size = "5MB"
+compression_level = 6
+
+[notification]
+webhook_url = "https://api.hive.ai/webhooks/updates"
+notify_on_release = true
+notify_on_error = true
