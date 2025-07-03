@@ -161,7 +161,7 @@ impl RepositoryIntelligence {
     pub async fn new() -> HiveResult<Self> {
         Ok(Self {
             semantic_index: None,
-            analysis_engine: AnalysisEngine::new()?,
+            analysis_engine: AnalysisEngine::new(),
         })
     }
 
@@ -196,7 +196,7 @@ impl RepositoryIntelligence {
 
     /// Get relevant context for a specific task
     pub async fn get_task_context(&self, task: &Task, repository_context: &RepositoryContext) -> HiveResult<TaskContext> {
-        let mut relevant_files = Vec::new();
+        let mut relevant_files: Vec<PathBuf> = Vec::new();
         let mut related_modules = Vec::new();
         let mut potential_impacts = Vec::new();
         

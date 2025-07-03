@@ -139,7 +139,7 @@ impl AccessibilityManager {
     }
 
     /// Announce text to screen reader
-    pub fn announce(&self, text: &str, priority: AnnouncementPriority) {
+    pub fn announce(&mut self, text: &str, priority: AnnouncementPriority) {
         if self.settings.screen_reader_enabled {
             self.screen_reader.announce(text, priority);
         }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use super::{HookId, SecurityPolicy};
 
 /// User role definition
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Role {
     pub name: String,
     pub description: String,

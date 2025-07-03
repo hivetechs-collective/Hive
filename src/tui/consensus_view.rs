@@ -134,7 +134,7 @@ impl ConsensusView {
         };
         
         frame.render_widget(
-            Paragraph::new(&stage.name).style(name_style),
+            Paragraph::new(stage.name.as_str()).style(name_style),
             layout[0]
         );
         

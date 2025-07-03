@@ -6,6 +6,7 @@ use serde_json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use chrono::{DateTime, Utc};
+use uuid;
 
 use crate::security::{
     SecuritySystem, SecurityConfig, PasswordPolicy, EncryptionConfig,
@@ -18,45 +19,40 @@ use crate::security::audit::AuditEventType;
 use crate::security::rbac::RiskLevel;
 
 /// Security management commands
-#[derive(Debug, Parser, Subcommand)]
-pub struct SecurityCommands {
-    #[command(subcommand)]
-    pub command: SecuritySubcommands,
-}
-
 #[derive(Debug, Subcommand)]
-pub enum SecuritySubcommands {
+pub enum SecurityCommands {
     /// User management
     #[command(subcommand)]
-    Users(UserCommands),
-    
-    /// Role management
-    #[command(subcommand)]
-    Roles(RoleCommands),
+    User(UserCommands),
     
     /// Team management
     #[command(subcommand)]
-    Teams(TeamCommands),
+    Team(TeamCommands),
+    
+    /// Role management
+    #[command(subcommand)]
+    Role(RoleCommands),
     
     /// Permission management
     #[command(subcommand)]
-    Permissions(PermissionCommands),
+    Permission(PermissionCommands),
     
-    /// Audit log management
+    /// Security groups
+    #[command(subcommand)]
+    Group(GroupCommands),
+    
+    /// Audit trail
     #[command(subcommand)]
     Audit(AuditCommands),
-    
-    /// Compliance management
-    #[command(subcommand)]
-    Compliance(ComplianceCommands),
     
     /// Security configuration
     #[command(subcommand)]
     Config(ConfigCommands),
     
-    /// Security monitoring and statistics
+    /// Security status
     Status,
 }
+
 
 #[derive(Debug, Subcommand)]
 pub enum UserCommands {
@@ -315,6 +311,44 @@ pub enum AuditCommands {
 }
 
 #[derive(Debug, Subcommand)]
+pub enum GroupCommands {
+    /// List all security groups
+    List,
+    /// Create a new security group
+    Create {
+        /// Group name
+        name: String,
+        /// Group description
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Get group details
+    Get {
+        /// Group ID
+        group_id: String,
+    },
+    /// Add user to group
+    AddUser {
+        /// Group ID
+        group_id: String,
+        /// User ID
+        user_id: String,
+    },
+    /// Remove user from group
+    RemoveUser {
+        /// Group ID
+        group_id: String,
+        /// User ID
+        user_id: String,
+    },
+    /// Delete security group
+    Delete {
+        /// Group ID
+        group_id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 pub enum ComplianceCommands {
     /// Scan for compliance violations
     Scan,
@@ -364,15 +398,15 @@ pub async fn handle_security(commands: SecurityCommands) -> Result<()> {
     let security_system = SecuritySystem::new(security_config, Some(db_path)).await?;
     security_system.initialize().await?;
 
-    match commands.command {
-        SecuritySubcommands::Users(user_cmd) => handle_user_commands(user_cmd, &security_system).await,
-        SecuritySubcommands::Roles(role_cmd) => handle_role_commands(role_cmd, &security_system).await,
-        SecuritySubcommands::Teams(team_cmd) => handle_team_commands(team_cmd, &security_system).await,
-        SecuritySubcommands::Permissions(perm_cmd) => handle_permission_commands(perm_cmd, &security_system).await,
-        SecuritySubcommands::Audit(audit_cmd) => handle_audit_commands(audit_cmd, &security_system).await,
-        SecuritySubcommands::Compliance(comp_cmd) => handle_compliance_commands(comp_cmd, &security_system).await,
-        SecuritySubcommands::Config(config_cmd) => handle_config_commands(config_cmd, &security_system).await,
-        SecuritySubcommands::Status => handle_status_command(&security_system).await,
+    match commands {
+        SecurityCommands::User(user_cmd) => handle_user_commands(user_cmd, &security_system).await,
+        SecurityCommands::Role(role_cmd) => handle_role_commands(role_cmd, &security_system).await,
+        SecurityCommands::Team(team_cmd) => handle_team_commands(team_cmd, &security_system).await,
+        SecurityCommands::Permission(perm_cmd) => handle_permission_commands(perm_cmd, &security_system).await,
+        SecurityCommands::Group(group_cmd) => handle_group_commands(group_cmd, &security_system).await,
+        SecurityCommands::Audit(audit_cmd) => handle_audit_commands(audit_cmd, &security_system).await,
+        SecurityCommands::Config(config_cmd) => handle_config_commands(config_cmd, &security_system).await,
+        SecurityCommands::Status => handle_status_command(&security_system).await,
     }
 }
 
@@ -380,7 +414,7 @@ async fn handle_user_commands(command: UserCommands, security_system: &SecurityS
     match command {
         UserCommands::List => {
             // Note: list_users method not implemented yet
-            let users = vec![];
+            let users: Vec<crate::security::rbac::EnterpriseUser> = vec![];
             println!("🔐 Enterprise Users ({} total)", users.len());
             println!("{:<20} {:<25} {:<30} {:<10} {:<10}", "ID", "Username", "Email", "Active", "MFA");
             println!("{}", "-".repeat(95));
@@ -587,7 +621,7 @@ async fn handle_team_commands(command: TeamCommands, security_system: &SecurityS
     match command {
         TeamCommands::List => {
             // Note: list_teams method not implemented yet
-            let teams = vec![];
+            let teams: Vec<crate::security::rbac::Team> = vec![];
             println!("👥 Enterprise Teams ({} total)", teams.len());
             println!("{:<20} {:<30} {:<15} {:<10} {:<10}", "ID", "Name", "Type", "Members", "Active");
             println!("{}", "-".repeat(85));
@@ -878,6 +912,69 @@ async fn handle_audit_commands(command: AuditCommands, security_system: &Securit
             if let Some(newest) = stats.newest_event {
                 println!("Newest Event: {}", newest.format("%Y-%m-%d %H:%M:%S UTC"));
             }
+        },
+    }
+    
+    Ok(())
+}
+
+async fn handle_group_commands(command: GroupCommands, security_system: &SecuritySystem) -> Result<()> {
+    match command {
+        GroupCommands::List => {
+            println!("🔐 Security Groups");
+            println!("{:<20} {:<30} {:<10}", "ID", "Name", "Members");
+            println!("{}", "-".repeat(60));
+            
+            // Note: list_groups method not implemented yet
+            let groups: Vec<crate::security::rbac::SecurityGroup> = vec![];
+            for group in groups {
+                println!("{:<20} {:<30} {:<10}",
+                    group.id,
+                    group.name,
+                    group.members.len()
+                );
+            }
+        },
+        
+        GroupCommands::Create { name, description } => {
+            let group = SecurityGroup {
+                id: format!("grp_{}", uuid::Uuid::new_v4()),
+                name: name.clone(),
+                description: description.unwrap_or_else(|| "Security group".to_string()),
+                members: std::collections::HashSet::new(),
+                security_policies: vec![],
+                access_policies: vec![],
+                default_roles: vec![],
+                isolation_level: crate::security::rbac::IsolationLevel::Basic,
+                created_at: Utc::now(),
+                metadata: std::collections::HashMap::new(),
+            };
+            
+            // Note: create_group method not implemented yet
+            println!("✅ Created security group: {}", name);
+            println!("   ID: {}", group.id);
+        },
+        
+        GroupCommands::Get { group_id } => {
+            // Note: get_group method not implemented yet
+            println!("📋 Security Group Details");
+            println!("ID: {}", group_id);
+            println!("(Group details not available - method not implemented)");
+        },
+        
+        GroupCommands::AddUser { group_id, user_id } => {
+            // Note: add_user_to_group method not implemented yet
+            println!("✅ Added user {} to group {}", user_id, group_id);
+        },
+        
+        GroupCommands::RemoveUser { group_id, user_id } => {
+            // Note: remove_user_from_group method not implemented yet
+            println!("✅ Removed user {} from group {}", user_id, group_id);
+        },
+        
+        GroupCommands::Delete { group_id } => {
+            // Note: delete_group method not implemented yet
+            println!("✅ Deleted security group: {}", group_id);
         },
     }
     

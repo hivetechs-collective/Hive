@@ -570,7 +570,7 @@ async fn show_consensus_integration_status(hooks_system: Arc<HooksSystem>) -> Re
         println!("\n📜 Recent Hook Activity:");
         for log in logs.iter().take(3) {
             let time = log.timestamp.format("%H:%M:%S");
-            println!("   {} - {:?}", time, log.event_type);
+            println!("   {} - {:?}", time, log.event);
         }
     }
     

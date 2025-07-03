@@ -827,6 +827,8 @@ impl ApprovalWorkflow {
         let now = chrono::Utc::now();
         let duration = (now - request.created_at).num_seconds() as u64;
         
+        let hook_id = request.hook_id.clone();
+        
         let mut completed = self.completed_requests.write().await;
         completed.insert(request_id.clone(), CompletedApproval {
             request,
@@ -840,7 +842,7 @@ impl ApprovalWorkflow {
         // Log the auto-approval
         if let Some(audit_logger) = &self.audit_logger {
             let event = AuditEventType::ApprovalGranted {
-                hook_id: request.hook_id.clone(),
+                hook_id,
                 execution_id: request_id.clone(),
                 approver: "system".to_string(),
             };
@@ -930,7 +932,7 @@ impl ApprovalWorkflow {
                     hook_id: request.hook_id.clone(),
                     execution_id: request.id.clone(),
                     success: final_status == ApprovalStatus::Approved,
-                    duration_ms: (duration * 1000.0) as u64,
+                    duration_ms: duration * 1000,
                 },
             };
             
@@ -941,7 +943,7 @@ impl ApprovalWorkflow {
         }
         
         Ok(ApprovalProcessResult {
-            final_status,
+            final_status: final_status.clone(),
             approved,
             message: format!("Request completed: {:?}", final_status),
             remaining_approvers: Vec::new(),

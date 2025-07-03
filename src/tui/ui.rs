@@ -128,6 +128,8 @@ impl TuiInterface {
                 .fg(Color::Magenta),
             MessageType::Help => Style::default()
                 .fg(Color::Blue),
+            MessageType::Info => Style::default()
+                .fg(Color::Cyan),
         }
     }
     

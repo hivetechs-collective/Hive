@@ -99,7 +99,8 @@ impl ExplorerPanel {
     /// Refresh directory entries
     pub async fn refresh_entries(&mut self) -> Result<()> {
         self.entries.clear();
-        self.load_directory_tree(&self.current_dir, 0).await?;
+        let current_dir = self.current_dir.clone();
+        self.load_directory_tree(&current_dir, 0).await?;
         Ok(())
     }
 
@@ -328,7 +329,8 @@ impl ExplorerPanel {
                 if let Some(selected) = self.list_state.selected() {
                     if let Some(entry) = self.entries.get(selected) {
                         if entry.entry_type == EntryType::Directory {
-                            self.toggle_directory_expansion(&entry.path).await?;
+                            let path = entry.path.clone();
+                            self.toggle_directory_expansion(&path).await?;
                         }
                     }
                 }

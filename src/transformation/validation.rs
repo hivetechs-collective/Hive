@@ -9,13 +9,14 @@ use std::sync::Arc;
 
 use crate::{
     analysis::{TreeSitterParser, LanguageDetector},
-    core::{Language, security::{get_security_context, check_write_access}},
+    core::{Language, security::check_write_access},
     transformation::types::*,
 };
+use tokio::sync::Mutex;
 
 /// Validates transformations for safety and correctness
 pub struct TransformationValidator {
-    parsers: std::collections::HashMap<Language, Arc<TreeSitterParser>>,
+    parsers: std::collections::HashMap<Language, Arc<Mutex<TreeSitterParser>>>,
     language_detector: LanguageDetector,
 }
 
@@ -29,11 +30,11 @@ impl TransformationValidator {
     }
 
     /// Get or create parser for a language
-    fn get_parser(&mut self, language: Language) -> Result<Arc<TreeSitterParser>> {
+    fn get_parser(&mut self, language: Language) -> Result<Arc<Mutex<TreeSitterParser>>> {
         if let Some(parser) = self.parsers.get(&language) {
             Ok(parser.clone())
         } else {
-            let parser = Arc::new(TreeSitterParser::new(language)?);
+            let parser = Arc::new(Mutex::new(TreeSitterParser::new(language)?));
             self.parsers.insert(language, parser.clone());
             Ok(parser)
         }
@@ -99,7 +100,8 @@ impl TransformationValidator {
 
         // Syntax validation
         let parser = self.get_parser(language)?;
-        match parser.parse(&change.new_content) {
+        let mut parser_guard = parser.lock().await;
+        match parser_guard.parse(&change.new_content) {
             Ok(parse_result) => {
                 if !parse_result.errors.is_empty() {
                     report.warnings.push(format!(

@@ -364,12 +364,12 @@ pub enum Commands {
         share: bool,
     },
     
-    /// Manage intelligent mode switching (planning/execution/hybrid)
-    #[command(alias = "m")]
-    Mode {
-        #[command(subcommand)]
-        command: String, // crate::commands::mode::ModeCommands, // Temporarily disabled
-    },
+    // /// Manage intelligent mode switching (planning/execution/hybrid)
+    // #[command(alias = "m")]
+    // Mode {
+    //     #[command(subcommand)]
+    //     command: crate::commands::mode::ModeCommands,
+    // },
     
     /// Apply AI-suggested improvements to files
     Improve {

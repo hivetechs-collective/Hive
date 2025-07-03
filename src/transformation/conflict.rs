@@ -1,7 +1,7 @@
 //! Conflict detection and resolution for code transformations
 
-use anyhow::{Result, anyhow};
-use std::collections::{HashMap, HashSet};
+use anyhow::Result;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use crate::transformation::types::*;
 

@@ -211,7 +211,7 @@ impl PlanningEngine {
         // Use consensus engine to generate a concise title
         let prompt = format!("Generate a concise title (max 6 words) for this task: {}", description);
         let result = self.consensus_engine.process(&prompt, None).await?;
-        let title = result.final_response;
+        let title = result.result.unwrap_or_else(|| "Untitled Plan".to_string());
         Ok(title.trim().to_string())
     }
 

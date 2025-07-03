@@ -3,7 +3,7 @@
 //! Professional Solarized theme (dark variant) with excellent readability
 
 use ratatui::style::{Color, Style, Modifier};
-use super::{Theme, ThemeVariant, ColorPalette, StyleDefinitions};
+use super::{Theme, ThemeVariant, ColorPalette, StyleDefinitions, SerializableColor};
 
 /// Create Solarized dark theme
 pub fn create_solarized_theme() -> Theme {
@@ -12,49 +12,49 @@ pub fn create_solarized_theme() -> Theme {
     
     let colors = ColorPalette {
         // Base colors using Solarized palette
-        primary: solarized.blue,
-        secondary: solarized.base02,
-        background: solarized.base03,
-        foreground: solarized.base0,
-        accent: solarized.cyan,
+        primary: SerializableColor(solarized.blue),
+        secondary: SerializableColor(solarized.base02),
+        background: SerializableColor(solarized.base03),
+        foreground: SerializableColor(solarized.base0),
+        accent: SerializableColor(solarized.cyan),
         
         // Status colors
-        error: solarized.red,
-        warning: solarized.yellow,
-        success: solarized.green,
-        info: solarized.blue,
-        muted: solarized.base01,
+        error: SerializableColor(solarized.red),
+        warning: SerializableColor(solarized.yellow),
+        success: SerializableColor(solarized.green),
+        info: SerializableColor(solarized.blue),
+        muted: SerializableColor(solarized.base01),
         
         // UI element colors
-        border_active: solarized.blue,
-        border_inactive: solarized.base01,
-        selection_bg: solarized.base02,
-        selection_fg: solarized.base1,
+        border_active: SerializableColor(solarized.blue),
+        border_inactive: SerializableColor(solarized.base01),
+        selection_bg: SerializableColor(solarized.base02),
+        selection_fg: SerializableColor(solarized.base1),
         
         // Syntax highlighting colors (Solarized)
-        keyword: solarized.blue,
-        string: solarized.cyan,
-        comment: solarized.base01,
-        function: solarized.yellow,
-        variable: solarized.base0,
-        number: solarized.magenta,
-        operator: solarized.green,
+        keyword: SerializableColor(solarized.blue),
+        string: SerializableColor(solarized.cyan),
+        comment: SerializableColor(solarized.base01),
+        function: SerializableColor(solarized.yellow),
+        variable: SerializableColor(solarized.base0),
+        number: SerializableColor(solarized.magenta),
+        operator: SerializableColor(solarized.green),
         
         // File explorer colors
-        directory: solarized.blue,
-        file: solarized.base0,
-        symlink: solarized.cyan,
-        executable: solarized.green,
+        directory: SerializableColor(solarized.blue),
+        file: SerializableColor(solarized.base0),
+        symlink: SerializableColor(solarized.cyan),
+        executable: SerializableColor(solarized.green),
         
         // Terminal colors
-        command: solarized.blue,
-        output: solarized.base0,
-        system_message: solarized.green,
-        line_number: solarized.base01,
+        command: SerializableColor(solarized.blue),
+        output: SerializableColor(solarized.base0),
+        system_message: SerializableColor(solarized.green),
+        line_number: SerializableColor(solarized.base01),
         
         // Editor colors
-        heading: solarized.orange,
-        code_block: solarized.base01,
+        heading: SerializableColor(solarized.orange),
+        code_block: SerializableColor(solarized.base01),
     };
 
     let styles = StyleDefinitions {

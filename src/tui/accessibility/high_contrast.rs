@@ -3,7 +3,7 @@
 //! Provides enhanced contrast for users with visual impairments
 
 use ratatui::style::{Color, Style, Modifier};
-use crate::tui::themes::Theme;
+use crate::tui::themes::{Theme, SerializableColor};
 
 /// High contrast mode manager
 pub struct HighContrastMode {
@@ -67,22 +67,22 @@ impl HighContrastMode {
     /// Apply standard high contrast (WCAG AA - 4.5:1 ratio)
     fn apply_standard_contrast(&self, theme: &mut Theme) {
         // Ensure sufficient contrast for text
-        theme.colors.foreground = Color::White;
-        theme.colors.background = Color::Black;
+        theme.colors.foreground = SerializableColor(Color::White);
+        theme.colors.background = SerializableColor(Color::Black);
         
         // High contrast borders
-        theme.colors.border_active = Color::Yellow;
-        theme.colors.border_inactive = Color::Gray;
+        theme.colors.border_active = SerializableColor(Color::Yellow);
+        theme.colors.border_inactive = SerializableColor(Color::Gray);
         
         // High contrast selection
-        theme.colors.selection_bg = Color::Blue;
-        theme.colors.selection_fg = Color::White;
+        theme.colors.selection_bg = SerializableColor(Color::Blue);
+        theme.colors.selection_fg = SerializableColor(Color::White);
         
         // Status colors with high contrast
-        theme.colors.error = Color::LightRed;
-        theme.colors.warning = Color::Yellow;
-        theme.colors.success = Color::LightGreen;
-        theme.colors.info = Color::LightBlue;
+        theme.colors.error = SerializableColor(Color::LightRed);
+        theme.colors.warning = SerializableColor(Color::Yellow);
+        theme.colors.success = SerializableColor(Color::LightGreen);
+        theme.colors.info = SerializableColor(Color::LightBlue);
         
         // Update styles
         self.update_styles_for_contrast(theme);
@@ -91,22 +91,22 @@ impl HighContrastMode {
     /// Apply enhanced high contrast (WCAG AAA - 7:1 ratio)
     fn apply_enhanced_contrast(&self, theme: &mut Theme) {
         // Even higher contrast
-        theme.colors.foreground = Color::White;
-        theme.colors.background = Color::Black;
+        theme.colors.foreground = SerializableColor(Color::White);
+        theme.colors.background = SerializableColor(Color::Black);
         
         // Very prominent borders
-        theme.colors.border_active = Color::White;
-        theme.colors.border_inactive = Color::DarkGray;
+        theme.colors.border_active = SerializableColor(Color::White);
+        theme.colors.border_inactive = SerializableColor(Color::DarkGray);
         
         // High contrast selection
-        theme.colors.selection_bg = Color::White;
-        theme.colors.selection_fg = Color::Black;
+        theme.colors.selection_bg = SerializableColor(Color::White);
+        theme.colors.selection_fg = SerializableColor(Color::Black);
         
         // Enhanced status colors
-        theme.colors.error = Color::Red;
-        theme.colors.warning = Color::Yellow;
-        theme.colors.success = Color::Green;
-        theme.colors.info = Color::Cyan;
+        theme.colors.error = SerializableColor(Color::Red);
+        theme.colors.warning = SerializableColor(Color::Yellow);
+        theme.colors.success = SerializableColor(Color::Green);
+        theme.colors.info = SerializableColor(Color::Cyan);
         
         // Update styles with enhanced modifiers
         self.update_styles_for_enhanced_contrast(theme);
@@ -115,45 +115,45 @@ impl HighContrastMode {
     /// Apply maximum contrast (black and white only)
     fn apply_maximum_contrast(&self, theme: &mut Theme) {
         // Pure black and white
-        theme.colors.foreground = Color::White;
-        theme.colors.background = Color::Black;
-        theme.colors.primary = Color::White;
-        theme.colors.secondary = Color::Black;
-        theme.colors.accent = Color::White;
+        theme.colors.foreground = SerializableColor(Color::White);
+        theme.colors.background = SerializableColor(Color::Black);
+        theme.colors.primary = SerializableColor(Color::White);
+        theme.colors.secondary = SerializableColor(Color::Black);
+        theme.colors.accent = SerializableColor(Color::White);
         
         // Black and white only for UI elements
-        theme.colors.border_active = Color::White;
-        theme.colors.border_inactive = Color::Gray;
-        theme.colors.selection_bg = Color::White;
-        theme.colors.selection_fg = Color::Black;
+        theme.colors.border_active = SerializableColor(Color::White);
+        theme.colors.border_inactive = SerializableColor(Color::Gray);
+        theme.colors.selection_bg = SerializableColor(Color::White);
+        theme.colors.selection_fg = SerializableColor(Color::Black);
         
         // Status colors in grayscale
-        theme.colors.error = Color::White;
-        theme.colors.warning = Color::White;
-        theme.colors.success = Color::White;
-        theme.colors.info = Color::White;
-        theme.colors.muted = Color::Gray;
+        theme.colors.error = SerializableColor(Color::White);
+        theme.colors.warning = SerializableColor(Color::White);
+        theme.colors.success = SerializableColor(Color::White);
+        theme.colors.info = SerializableColor(Color::White);
+        theme.colors.muted = SerializableColor(Color::Gray);
         
         // Syntax highlighting in grayscale
-        theme.colors.keyword = Color::White;
-        theme.colors.string = Color::Gray;
-        theme.colors.comment = Color::DarkGray;
-        theme.colors.function = Color::White;
-        theme.colors.variable = Color::White;
-        theme.colors.number = Color::White;
-        theme.colors.operator = Color::White;
+        theme.colors.keyword = SerializableColor(Color::White);
+        theme.colors.string = SerializableColor(Color::Gray);
+        theme.colors.comment = SerializableColor(Color::DarkGray);
+        theme.colors.function = SerializableColor(Color::White);
+        theme.colors.variable = SerializableColor(Color::White);
+        theme.colors.number = SerializableColor(Color::White);
+        theme.colors.operator = SerializableColor(Color::White);
         
         // File explorer in grayscale
-        theme.colors.directory = Color::White;
-        theme.colors.file = Color::White;
-        theme.colors.symlink = Color::Gray;
-        theme.colors.executable = Color::White;
+        theme.colors.directory = SerializableColor(Color::White);
+        theme.colors.file = SerializableColor(Color::White);
+        theme.colors.symlink = SerializableColor(Color::Gray);
+        theme.colors.executable = SerializableColor(Color::White);
         
         // Terminal in grayscale
-        theme.colors.command = Color::White;
-        theme.colors.output = Color::White;
-        theme.colors.system_message = Color::Gray;
-        theme.colors.line_number = Color::DarkGray;
+        theme.colors.command = SerializableColor(Color::White);
+        theme.colors.output = SerializableColor(Color::White);
+        theme.colors.system_message = SerializableColor(Color::Gray);
+        theme.colors.line_number = SerializableColor(Color::DarkGray);
         
         // Update styles for maximum contrast
         self.update_styles_for_maximum_contrast(theme);
@@ -163,19 +163,19 @@ impl HighContrastMode {
     fn update_styles_for_contrast(&self, theme: &mut Theme) {
         // Make all text bold for better visibility
         theme.styles.text = Style::default()
-            .fg(theme.colors.foreground)
+            .fg(theme.colors.foreground.0)
             .add_modifier(Modifier::BOLD);
         
         // Prominent active borders
         theme.styles.active_border = Style::default()
-            .fg(theme.colors.border_active)
+            .fg(theme.colors.border_active.0)
             .add_modifier(Modifier::BOLD)
             .add_modifier(Modifier::UNDERLINED);
         
         // High contrast selection
         theme.styles.selection = Style::default()
-            .bg(theme.colors.selection_bg)
-            .fg(theme.colors.selection_fg)
+            .bg(theme.colors.selection_bg.0)
+            .fg(theme.colors.selection_fg.0)
             .add_modifier(Modifier::BOLD)
             .add_modifier(Modifier::REVERSED);
     }
@@ -205,8 +205,8 @@ impl HighContrastMode {
     fn update_styles_for_maximum_contrast(&self, theme: &mut Theme) {
         // Everything is bold and prominent
         let base_style = Style::default()
-            .fg(Color::White)
-            .bg(Color::Black)
+            .fg(theme.colors.foreground.0)
+            .bg(theme.colors.background.0)
             .add_modifier(Modifier::BOLD);
         
         theme.styles.text = base_style;
@@ -219,19 +219,19 @@ impl HighContrastMode {
         
         // Active elements are reversed
         theme.styles.active_border = Style::default()
-            .fg(Color::Black)
-            .bg(Color::White)
+            .fg(theme.colors.background.0)
+            .bg(theme.colors.foreground.0)
             .add_modifier(Modifier::BOLD);
         
         theme.styles.selection = Style::default()
-            .fg(Color::Black)
-            .bg(Color::White)
+            .fg(theme.colors.selection_fg.0)
+            .bg(theme.colors.selection_bg.0)
             .add_modifier(Modifier::BOLD)
             .add_modifier(Modifier::REVERSED);
         
         theme.styles.active_tab = Style::default()
-            .fg(Color::Black)
-            .bg(Color::White)
+            .fg(theme.colors.background.0)
+            .bg(theme.colors.foreground.0)
             .add_modifier(Modifier::BOLD);
     }
 

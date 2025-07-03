@@ -21,10 +21,10 @@ pub struct CodeApplier {
 }
 
 impl CodeApplier {
-    pub fn new(history: Arc<Mutex<TransformationHistory>>) -> Self {
+    pub fn new(history: Arc<Mutex<TransformationHistory>>, parser: Arc<Mutex<crate::analysis::TreeSitterParser>>) -> Self {
         Self {
             history,
-            syntax_modifier: SyntaxAwareModifier::new(Arc::new(crate::analysis::TreeSitterParser::new(Language::Rust).unwrap())),
+            syntax_modifier: SyntaxAwareModifier::new(parser),
         }
     }
 
@@ -98,7 +98,7 @@ impl CodeApplier {
         }
 
         // Verify the final syntax is valid
-        self.syntax_modifier.verify_syntax(&content, language)?;
+        self.syntax_modifier.verify_syntax(&content, language).await?;
 
         Ok(content)
     }
@@ -224,8 +224,8 @@ impl CodeApplier {
 
             // Verify syntax would be valid after change
             let detector = LanguageDetector::new();
-            let language = detector.detect_from_path(&change.file_path);
-            self.syntax_modifier.verify_syntax(&change.new_content, language?)?;
+            let language = detector.detect_from_path(&change.file_path)?;
+            self.syntax_modifier.verify_syntax(&change.new_content, language).await?;
         }
 
         Ok(())

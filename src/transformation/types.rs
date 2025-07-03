@@ -1,6 +1,5 @@
 //! Core types for the transformation engine
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use chrono::{DateTime, Utc};

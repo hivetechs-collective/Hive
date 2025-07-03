@@ -161,14 +161,14 @@ impl AccessibilityManager {
     pub fn describe_color(&self, color_name: &str) -> String {
         if self.screen_reader_mode {
             match color_name {
-                "red" => "error indication",
-                "green" => "success indication", 
-                "yellow" => "warning or in progress indication",
-                "blue" => "information indication",
-                "cyan" => "accent or link indication",
-                "gray" => "secondary or disabled indication",
+                "red" => "error indication".to_string(),
+                "green" => "success indication".to_string(), 
+                "yellow" => "warning or in progress indication".to_string(),
+                "blue" => "information indication".to_string(),
+                "cyan" => "accent or link indication".to_string(),
+                "gray" => "secondary or disabled indication".to_string(),
                 _ => format!("{} color", color_name),
-            }.to_string()
+            }
         } else {
             color_name.to_string()
         }

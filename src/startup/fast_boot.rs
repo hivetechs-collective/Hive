@@ -129,7 +129,7 @@ impl FastBootOptimizer {
     async fn load_config_cached(&self) -> Result<Arc<crate::core::config::HiveConfig>> {
         CONFIG_CACHE.get_or_try_init(|| async {
             debug!("Loading configuration for first time");
-            let config = crate::core::config::HiveConfig::load().await?;
+            let config = crate::core::config::load_config().await?;
             Ok(Arc::new(config))
         }).await.map(|config| config.clone())
     }

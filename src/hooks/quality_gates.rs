@@ -807,6 +807,7 @@ impl QualityGateManager {
             stage_scores.insert(gate.id.clone(), gate_result.score);
             
             if !gate_result.passed {
+                let gate_violations = gate_result.violations.clone();
                 violations.extend(gate_result.violations);
                 
                 // Determine required actions
@@ -824,7 +825,7 @@ impl QualityGateManager {
                                 &gate.name,
                                 stage,
                                 stage_result,
-                                &gate_result.violations,
+                                &gate_violations,
                             ).await?;
                             
                             actions_required.push(QualityActionRequired::RequestApproval {
@@ -871,7 +872,8 @@ impl QualityGateManager {
             
             // Limit stored violations (keep last 1000)
             if stored_violations.len() > 1000 {
-                stored_violations.drain(0..stored_violations.len() - 1000);
+                let drain_count = stored_violations.len() - 1000;
+                stored_violations.drain(0..drain_count);
             }
         }
         
@@ -1419,7 +1421,8 @@ impl QualityGateManager {
         
         // Keep only last 100 data points for trend analysis
         if metrics.quality_trend.data_points.len() > 100 {
-            metrics.quality_trend.data_points.drain(0..metrics.quality_trend.data_points.len() - 100);
+            let drain_count = metrics.quality_trend.data_points.len() - 100;
+            metrics.quality_trend.data_points.drain(0..drain_count);
         }
         
         // Recalculate trend
@@ -1483,6 +1486,7 @@ impl QualityGateManager {
         
         Ok(ApprovalRequest {
             id: Uuid::new_v4().to_string(),
+            hook_id: gate_id.to_string(),
             request_type: "quality_gate_failure".to_string(),
             description: format!(
                 "Quality gate '{}' failed for {} stage with {} violation(s)",
@@ -1568,8 +1572,8 @@ impl QualityGateManager {
         violation: &QualityViolation,
     ) -> Result<()> {
         let message = format!(
-            "Quality violation detected: {} in {} stage (Severity: {:?})",
-            violation.violation_type as u8, // Simple display
+            "Quality violation detected: {:?} in {} stage (Severity: {:?})",
+            violation.violation_type,
             violation.stage.as_str(),
             violation.severity
         );

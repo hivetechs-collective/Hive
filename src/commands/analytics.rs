@@ -547,7 +547,8 @@ async fn analyze_trends_advanced(
     );
     
     if let Some(metric_name) = metric {
-        pb.set_message(&format!("Analyzing trend for metric: {}", metric_name));
+        let message = format!("Analyzing trend for metric: {}", metric_name);
+        pb.set_message(&message);
         
         let horizon = if predict {
             Some(ForecastHorizon::Custom(horizon_days as i64))
@@ -738,8 +739,8 @@ async fn show_dashboard_advanced(live: bool, refresh_secs: u64) -> Result<()> {
             // Render dashboard
             let (width, height) = term.size();
             let ascii_dashboard = engine.dashboard().render_ascii(
-                width as usize,
-                height.saturating_sub(2) as usize
+                width,
+                height.saturating_sub(2)
             ).await?;
             
             println!("{}", ascii_dashboard);
@@ -762,8 +763,8 @@ async fn show_dashboard_advanced(live: bool, refresh_secs: u64) -> Result<()> {
         // Single render
         let (width, height) = term.size();
         let ascii_dashboard = engine.dashboard().render_ascii(
-            width as usize,
-            height.saturating_sub(2) as usize
+            width,
+            height.saturating_sub(2)
         ).await?;
         
         println!("{}", ascii_dashboard);

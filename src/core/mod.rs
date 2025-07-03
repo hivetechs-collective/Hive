@@ -125,6 +125,25 @@ pub enum Language {
     Unknown,
 }
 
+impl Language {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Language::Rust => "rust",
+            Language::TypeScript => "typescript",
+            Language::JavaScript => "javascript",
+            Language::Python => "python",
+            Language::Go => "go",
+            Language::Java => "java",
+            Language::Cpp => "cpp",
+            Language::C => "c",
+            Language::Ruby => "ruby",
+            Language::PHP => "php",
+            Language::Swift => "swift",
+            Language::Unknown => "text",
+        }
+    }
+}
+
 /// Git repository information
 #[derive(Debug)]
 pub struct GitRepo {
