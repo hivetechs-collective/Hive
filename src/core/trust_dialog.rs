@@ -14,13 +14,14 @@ use crossterm::{
     style::{Color, Print, ResetColor, SetForegroundColor, SetBackgroundColor},
 };
 use tracing::{debug, info};
+use is_terminal::IsTerminal;
 
 use super::security::TrustDecision;
 
 /// Show interactive trust dialog for a directory
 pub async fn show_trust_dialog(path: &Path) -> Result<TrustDecision> {
     // Check if we're in a terminal that supports interactive prompts
-    if !atty::is(atty::Stream::Stdin) || !atty::is(atty::Stream::Stdout) {
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         // Non-interactive mode - default to deny
         return Ok(TrustDecision::TrustDenied);
     }

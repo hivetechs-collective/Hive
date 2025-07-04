@@ -6,6 +6,7 @@ use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::io::{self, Write};
 use crate::core::temporal::TemporalContext;
+use is_terminal::IsTerminal;
 
 /// Simple CLI interface for fallback mode
 pub struct SimpleCli {
@@ -103,42 +104,58 @@ impl SimpleCli {
         io::stdout().flush().unwrap();
     }
 
-    /// Read user input
+    /// Read user input with fallback to basic stdin
     async fn read_input(&mut self) -> Result<CliResult> {
         let mut input = String::new();
         
-        loop {
-            if event::poll(std::time::Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Enter => {
-                                println!(); // New line
-                                break;
-                            }
-                            KeyCode::Char(c) => {
-                                input.push(c);
-                                print!("{}", c);
-                                io::stdout().flush()?;
-                            }
-                            KeyCode::Backspace => {
-                                if !input.is_empty() {
-                                    input.pop();
-                                    print!("\x08 \x08"); // Backspace, space, backspace
+        // Try to use crossterm events first
+        if Self::can_use_crossterm_events() {
+            loop {
+                if event::poll(std::time::Duration::from_millis(100))? {
+                    if let Event::Key(key) = event::read()? {
+                        if key.kind == KeyEventKind::Press {
+                            match key.code {
+                                KeyCode::Enter => {
+                                    println!(); // New line
+                                    break;
+                                }
+                                KeyCode::Char(c) => {
+                                    input.push(c);
+                                    print!("{}", c);
                                     io::stdout().flush()?;
                                 }
+                                KeyCode::Backspace => {
+                                    if !input.is_empty() {
+                                        input.pop();
+                                        print!("\x08 \x08"); // Backspace, space, backspace
+                                        io::stdout().flush()?;
+                                    }
+                                }
+                                KeyCode::Esc => {
+                                    return Ok(CliResult::Exit);
+                                }
+                                _ => {}
                             }
-                            KeyCode::Esc => {
-                                return Ok(CliResult::Exit);
-                            }
-                            _ => {}
                         }
                     }
                 }
             }
+        } else {
+            // Fall back to basic stdin read
+            io::stdin().read_line(&mut input)?;
+            input = input.trim().to_string();
         }
         
         self.process_command(input.trim()).await
+    }
+    
+    /// Check if we can use crossterm events
+    fn can_use_crossterm_events() -> bool {
+        // Try to poll for events to test if it works
+        match event::poll(std::time::Duration::from_millis(1)) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     /// Process user command
@@ -564,10 +581,54 @@ impl SimpleCli {
     }
 }
 
-/// Run simple CLI fallback mode
+/// Run simple CLI fallback mode with terminal error handling
 pub async fn run_simple_cli() -> Result<()> {
-    let mut cli = SimpleCli::new()?;
-    cli.run().await
+    // Initialize CLI with error handling
+    let mut cli = match SimpleCli::new() {
+        Ok(cli) => cli,
+        Err(e) => {
+            eprintln!("Failed to initialize simple CLI: {}", e);
+            eprintln!("Using basic text-only mode...");
+            return run_basic_text_mode().await;
+        }
+    };
+    
+    // Run the CLI with error handling
+    match cli.run().await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("CLI error: {}", e);
+            eprintln!("Falling back to basic text mode...");
+            run_basic_text_mode().await
+        }
+    }
+}
+
+/// Run in basic text mode for environments that don't support any terminal features
+async fn run_basic_text_mode() -> Result<()> {
+    println!("HiveTechs Consensus - Basic Text Mode");
+    println!("=====================================\n");
+    
+    println!("This is a minimal text-only interface for HiveTechs Consensus.");
+    println!("Your terminal doesn't support interactive features.\n");
+    
+    println!("To use the full interface, please:");
+    println!("1. Use a modern terminal (iTerm2, Windows Terminal, etc.)");
+    println!("2. Ensure you're running in an interactive shell");
+    println!("3. Check that your TERM environment variable is set\n");
+    
+    println!("Current environment:");
+    if let Ok(term) = std::env::var("TERM") {
+        println!("  TERM: {}", term);
+    } else {
+        println!("  TERM: (not set)");
+    }
+    
+    println!("  TTY: {}", if std::io::stdout().is_terminal() { "yes" } else { "no" });
+    
+    println!("\nFor help, visit: https://docs.hivetechs.com/troubleshooting");
+    
+    Ok(())
 }
 
 impl Default for SimpleCli {

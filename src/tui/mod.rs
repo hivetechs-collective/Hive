@@ -20,6 +20,10 @@ pub mod advanced;
 pub mod themes;
 pub mod accessibility;
 pub mod fallback;
+pub mod setup;
+pub mod streaming_callbacks;
+pub mod consensus_types;
+pub mod formatting;
 
 pub use app::{TuiApp, TuiResult};
 pub use ui::TuiInterface;
@@ -35,22 +39,69 @@ use ratatui::{
     Terminal,
 };
 use std::io;
+use tracing;
+use is_terminal::IsTerminal;
 
 /// TUI Framework - Main entry point for professional terminal interface
 pub struct TuiFramework {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     app: TuiApp,
+    setup_flow: Option<setup::SetupFlow>,
 }
 
 impl TuiFramework {
-    /// Initialize the professional TUI framework
+    /// Check if terminal can be used for TUI
+    fn can_use_terminal() -> bool {
+        // Check if we're in an interactive terminal
+        if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+            return false;
+        }
+        
+        // Check for CI/CD environments
+        if std::env::var("CI").is_ok() || 
+           std::env::var("GITHUB_ACTIONS").is_ok() || 
+           std::env::var("JENKINS_URL").is_ok() ||
+           std::env::var("BUILDKITE").is_ok() {
+            return false;
+        }
+        
+        // Check for dumb terminal
+        if std::env::var("TERM").map_or(false, |term| term == "dumb") {
+            return false;
+        }
+        
+        // Try to get terminal size as a test
+        crossterm::terminal::size().is_ok()
+    }
+    
+    /// Initialize the professional TUI framework with error handling
     pub async fn new() -> Result<Self> {
-        // Setup terminal
-        enable_raw_mode()?;
+        // Check if we can actually use the terminal
+        if !Self::can_use_terminal() {
+            return Err(anyhow::anyhow!("Terminal not available for TUI mode"));
+        }
+        
+        // Setup terminal with proper error handling
+        enable_raw_mode().map_err(|e| {
+            anyhow::anyhow!("Failed to enable raw mode: {}. Try running in a proper terminal.", e)
+        })?;
+        
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)
+            .map_err(|e| {
+                let _ = disable_raw_mode(); // Cleanup on failure
+                anyhow::anyhow!("Failed to setup terminal: {}. Your terminal may not support TUI mode.", e)
+            })?;
+            
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
+
+        // Check if setup is needed
+        let setup_flow = if setup::SetupFlow::is_setup_needed().await {
+            Some(setup::SetupFlow::new())
+        } else {
+            None
+        };
 
         // Initialize application state
         let app = TuiApp::new().await?;
@@ -58,11 +109,53 @@ impl TuiFramework {
         Ok(Self {
             terminal,
             app,
+            setup_flow,
         })
     }
 
     /// Run the TUI main loop with professional interface
     pub async fn run(&mut self) -> Result<()> {
+        // Run setup flow if needed
+        if let Some(ref mut setup) = self.setup_flow {
+            loop {
+                // Draw the setup interface
+                self.terminal.draw(|f| {
+                    let area = f.size();
+                    setup.render(f, area);
+                })?;
+
+                // Handle setup events
+                if event::poll(std::time::Duration::from_millis(50))? {
+                    if let Event::Key(key) = event::read()? {
+                        if key.kind == KeyEventKind::Press {
+                            // Exit on Ctrl+C
+                            if key.code == KeyCode::Char('c') && key.modifiers.contains(event::KeyModifiers::CONTROL) {
+                                self.cleanup()?;
+                                return Ok(());
+                            }
+                            
+                            // Process setup key event
+                            if setup.handle_key_event(key).await? {
+                                // Validation needed
+                                setup.process_validation().await?;
+                            }
+                        }
+                    }
+                }
+
+                // Check if setup is complete
+                if setup.is_complete() {
+                    // Reload consensus engine with new config
+                    self.app.reload_consensus_engine().await?;
+                    break;
+                }
+            }
+            
+            // Clear setup flow
+            self.setup_flow = None;
+        }
+
+        // Run main TUI loop
         loop {
             // Draw the interface
             self.terminal.draw(|f| {
@@ -108,21 +201,64 @@ impl Drop for TuiFramework {
     }
 }
 
-/// Launch the Claude Code-style professional TUI
+/// Launch the Claude Code-style professional TUI with safe fallbacks
 pub async fn run_professional_tui() -> Result<()> {
-    // Detect terminal capabilities
-    let terminal_size = crossterm::terminal::size()?;
+    // Check if we can use TUI at all
+    if !can_use_terminal() {
+        tracing::info!("Terminal not suitable for TUI, falling back to simple CLI");
+        return fallback::run_simple_cli().await;
+    }
+    
+    // Detect terminal capabilities safely
+    let terminal_size = match crossterm::terminal::size() {
+        Ok(size) => size,
+        Err(e) => {
+            tracing::warn!("Failed to get terminal size: {}, falling back to simple CLI", e);
+            return fallback::run_simple_cli().await;
+        }
+    };
+    
     let supports_advanced = advanced::layout::supports_advanced_tui(
         ratatui::layout::Rect::new(0, 0, terminal_size.0, terminal_size.1)
     );
     
     if supports_advanced {
-        // Launch advanced TUI mode
-        run_advanced_tui().await
+        // Try to launch advanced TUI mode
+        match run_advanced_tui().await {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                tracing::warn!("Advanced TUI failed: {}, falling back to simple CLI", e);
+                fallback::run_simple_cli().await
+            }
+        }
     } else {
         // Fall back to simple CLI mode
         fallback::run_simple_cli().await
     }
+}
+
+/// Check if terminal can be used for TUI (shared function)
+fn can_use_terminal() -> bool {
+    // Check if we're in an interactive terminal
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return false;
+    }
+    
+    // Check for CI/CD environments
+    if std::env::var("CI").is_ok() || 
+       std::env::var("GITHUB_ACTIONS").is_ok() || 
+       std::env::var("JENKINS_URL").is_ok() ||
+       std::env::var("BUILDKITE").is_ok() {
+        return false;
+    }
+    
+    // Check for dumb terminal
+    if std::env::var("TERM").map_or(false, |term| term == "dumb") {
+        return false;
+    }
+    
+    // Try to get terminal size as a test
+    crossterm::terminal::size().is_ok()
 }
 
 /// Run advanced TUI mode with VS Code-like interface
@@ -138,12 +274,49 @@ pub struct AdvancedTuiFramework {
 }
 
 impl AdvancedTuiFramework {
-    /// Initialize the advanced TUI framework
+    /// Check if terminal can be used for TUI
+    fn can_use_terminal() -> bool {
+        // Check if we're in an interactive terminal
+        if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+            return false;
+        }
+        
+        // Check for CI/CD environments
+        if std::env::var("CI").is_ok() || 
+           std::env::var("GITHUB_ACTIONS").is_ok() || 
+           std::env::var("JENKINS_URL").is_ok() ||
+           std::env::var("BUILDKITE").is_ok() {
+            return false;
+        }
+        
+        // Check for dumb terminal
+        if std::env::var("TERM").map_or(false, |term| term == "dumb") {
+            return false;
+        }
+        
+        // Try to get terminal size as a test
+        crossterm::terminal::size().is_ok()
+    }
+    
+    /// Initialize the advanced TUI framework with error handling
     pub async fn new() -> Result<Self> {
-        // Setup terminal
-        crossterm::terminal::enable_raw_mode()?;
+        // Check if we can actually use the terminal
+        if !Self::can_use_terminal() {
+            return Err(anyhow::anyhow!("Terminal not available for advanced TUI mode"));
+        }
+        
+        // Setup terminal with proper error handling
+        crossterm::terminal::enable_raw_mode().map_err(|e| {
+            anyhow::anyhow!("Failed to enable raw mode: {}. Try running in a proper terminal.", e)
+        })?;
+        
         let mut stdout = std::io::stdout();
-        crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen, crossterm::event::EnableMouseCapture)?;
+        crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen, crossterm::event::EnableMouseCapture)
+            .map_err(|e| {
+                let _ = crossterm::terminal::disable_raw_mode(); // Cleanup on failure
+                anyhow::anyhow!("Failed to setup terminal: {}. Your terminal may not support advanced TUI mode.", e)
+            })?;
+            
         let backend = ratatui::backend::CrosstermBackend::new(stdout);
         let terminal = ratatui::Terminal::new(backend)?;
 
@@ -175,6 +348,9 @@ impl AdvancedTuiFramework {
                     }
                 }
             }
+
+            // Handle async events
+            self.app.handle_async_events().await?;
 
             // Check if should quit
             if self.app.should_quit() {
