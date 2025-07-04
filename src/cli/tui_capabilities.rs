@@ -6,6 +6,7 @@
 use anyhow::Result;
 use crossterm::terminal;
 use std::env;
+use tracing;
 
 /// Terminal capabilities for progressive enhancement
 #[derive(Debug, Clone)]
@@ -55,9 +56,23 @@ pub enum TuiMode {
 }
 
 impl TuiCapabilities {
-    /// Detect terminal capabilities
+    /// Detect terminal capabilities with safe fallbacks
     pub fn detect() -> Result<Self> {
-        let terminal_size = terminal::size().unwrap_or((80, 24));
+        // First check if we have a terminal at all
+        if !Self::is_interactive_terminal() {
+            return Self::create_fallback_capabilities();
+        }
+        
+        // Try to get terminal size with error handling
+        let terminal_size = match terminal::size() {
+            Ok(size) => size,
+            Err(e) => {
+                // Handle "Device not configured" and similar errors
+                tracing::debug!("Failed to get terminal size: {}", e);
+                (80, 24) // Safe fallback
+            }
+        };
+        
         let terminal_type = Self::detect_terminal_type();
         let supports_color = Self::detect_color_support();
         let color_depth = Self::detect_color_depth();
@@ -79,6 +94,22 @@ impl TuiCapabilities {
             supports_true_color,
             supports_256_color,
             supports_focus_events,
+        })
+    }
+    
+    /// Create fallback capabilities for non-interactive environments
+    fn create_fallback_capabilities() -> Result<Self> {
+        Ok(Self {
+            supports_color: false,
+            supports_unicode: false,
+            supports_mouse: false,
+            supports_alternate_screen: false,
+            terminal_size: (80, 24),
+            color_depth: ColorDepth::Monochrome,
+            terminal_type: TerminalType::Unknown,
+            supports_true_color: false,
+            supports_256_color: false,
+            supports_focus_events: false,
         })
     }
 
@@ -123,6 +154,38 @@ impl TuiCapabilities {
         self.terminal_size.0 >= 80 &&
         self.terminal_size.1 >= 24 &&
         self.supports_alternate_screen
+    }
+    
+    /// Check if system supports desktop GUI applications
+    pub fn supports_desktop(&self) -> bool {
+        // Desktop GUI is supported if we're not in a headless environment
+        !self.is_headless_environment()
+    }
+    
+    /// Check if we're in a headless environment (CI, SSH, etc.)
+    fn is_headless_environment(&self) -> bool {
+        // Check for CI environments
+        if env::var("CI").is_ok() ||
+           env::var("GITHUB_ACTIONS").is_ok() ||
+           env::var("JENKINS_URL").is_ok() ||
+           env::var("BUILDKITE").is_ok() {
+            return true;
+        }
+        
+        // Check for SSH connection
+        if env::var("SSH_CLIENT").is_ok() || env::var("SSH_TTY").is_ok() {
+            return true;
+        }
+        
+        // Check for missing DISPLAY on Unix systems
+        #[cfg(unix)]
+        {
+            if env::var("DISPLAY").is_err() && env::var("WAYLAND_DISPLAY").is_err() {
+                return true;
+            }
+        }
+        
+        false
     }
 
     /// Get recommended layout constraints based on capabilities
@@ -280,7 +343,26 @@ impl TuiCapabilities {
 
     fn is_interactive_terminal() -> bool {
         // Use atty crate for cross-platform terminal detection
-        atty::is(atty::Stream::Stdin) && atty::is(atty::Stream::Stdout)
+        // Handle potential errors gracefully
+        match (atty::is(atty::Stream::Stdin), atty::is(atty::Stream::Stdout)) {
+            (true, true) => {
+                // Additional checks for CI/CD environments
+                if env::var("CI").is_ok() || 
+                   env::var("GITHUB_ACTIONS").is_ok() || 
+                   env::var("JENKINS_URL").is_ok() || 
+                   env::var("BUILDKITE").is_ok() {
+                    return false;
+                }
+                
+                // Check for non-interactive shells
+                if env::var("TERM").map_or(false, |term| term == "dumb") {
+                    return false;
+                }
+                
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -316,9 +398,18 @@ impl LayoutConstraints {
 pub struct TuiLauncher;
 
 impl TuiLauncher {
-    /// Check if TUI should be launched
+    /// Check if TUI should be launched with comprehensive error handling
     pub async fn should_launch_tui() -> Result<TuiMode> {
-        let capabilities = TuiCapabilities::detect()?;
+        // Handle the case where terminal detection fails
+        let capabilities = match TuiCapabilities::detect() {
+            Ok(caps) => caps,
+            Err(e) => {
+                tracing::debug!("Failed to detect TUI capabilities: {}", e);
+                // Return disabled mode if we can't detect capabilities
+                return Ok(TuiMode::Disabled);
+            }
+        };
+        
         Ok(capabilities.determine_tui_mode())
     }
 
