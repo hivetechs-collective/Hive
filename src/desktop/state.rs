@@ -33,6 +33,9 @@ pub struct AppState {
     
     /// Auto-accept edits setting
     pub auto_accept: bool,
+    
+    /// Current model being used
+    pub current_model: Option<String>,
 }
 
 impl Default for AppState {
@@ -53,6 +56,7 @@ impl AppState {
             total_cost: 0.0,
             context_usage: 0,
             auto_accept: true,
+            current_model: Some("claude-3-5-sonnet".to_string()),
         }
     }
     
@@ -87,6 +91,7 @@ pub struct ProjectInfo {
     pub path: PathBuf,
     pub language: Option<String>,
     pub git_status: GitStatus,
+    pub git_branch: Option<String>,
     pub file_count: usize,
 }
 
@@ -107,11 +112,18 @@ impl ProjectInfo {
         // Count files
         let file_count = count_project_files(&path).await;
         
+        // Extract git branch if available
+        let git_branch = match &git_status {
+            GitStatus::Repository { branch, .. } => Some(branch.clone()),
+            _ => None,
+        };
+        
         Ok(Self {
             name,
             path,
             language,
             git_status,
+            git_branch,
             file_count,
         })
     }
@@ -253,6 +265,29 @@ impl FileType {
             Self::Binary => "📦",
             Self::Directory => "📁",
             Self::Unknown => "❓",
+        }
+    }
+    
+    pub fn extension(&self) -> &'static str {
+        match self {
+            Self::Rust => "rs",
+            Self::TypeScript => "ts",
+            Self::JavaScript => "js",
+            Self::Python => "py",
+            Self::Go => "go",
+            Self::Java => "java",
+            Self::CPP => "cpp",
+            Self::C => "c",
+            Self::HTML => "html",
+            Self::CSS => "css",
+            Self::JSON => "json",
+            Self::TOML => "toml",
+            Self::YAML => "yaml",
+            Self::Markdown => "md",
+            Self::Text => "txt",
+            Self::Binary => "bin",
+            Self::Directory => "",
+            Self::Unknown => "",
         }
     }
 }
