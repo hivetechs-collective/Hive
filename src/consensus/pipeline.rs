@@ -10,10 +10,13 @@ use crate::consensus::types::{
 };
 #[cfg(test)]
 use crate::consensus::types::ConsensusProfile;
-use crate::hooks::{HooksSystem, EventType, EventSource, HookEvent, ConsensusIntegration};
-use crate::providers::openrouter::{
-    OpenRouterClient, OpenRouterMessage, MessageRole, StreamingClient, StreamingOptions
+// use crate::hooks::{HooksSystem, EventType, EventSource, HookEvent, ConsensusIntegration};
+use crate::consensus::openrouter::{
+    OpenRouterClient, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse,
+    StreamingCallbacks as OpenRouterStreamingCallbacks, SimpleStreamingCallbacks
 };
+use crate::consensus::models::{ModelManager, DynamicModelSelector, ModelSelectionCriteria, BudgetConstraints, PerformanceTargets, UserPreferences};
+use crate::core::database_simple::Database;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use std::sync::Arc;
@@ -26,15 +29,18 @@ pub struct ConsensusPipeline {
     temporal_provider: TemporalContextProvider,
     stages: Vec<Box<dyn ConsensusStage>>,
     callbacks: Arc<dyn StreamingCallbacks>,
-    hooks_system: Option<Arc<HooksSystem>>,
-    consensus_integration: Option<Arc<ConsensusIntegration>>,
+    // hooks_system: Option<Arc<HooksSystem>>,
+    // consensus_integration: Option<Arc<ConsensusIntegration>>,
     openrouter_client: Option<Arc<OpenRouterClient>>,
-    streaming_client: Option<Arc<StreamingClient>>,
+    model_manager: Option<Arc<ModelManager>>,
+    model_selector: Option<Arc<DynamicModelSelector>>,
+    database: Option<Arc<Database>>,
+    api_key: Option<String>,
 }
 
 impl ConsensusPipeline {
     /// Create a new consensus pipeline
-    pub fn new(config: ConsensusConfig) -> Self {
+    pub fn new(config: ConsensusConfig, api_key: Option<String>) -> Self {
         let callbacks: Arc<dyn StreamingCallbacks> = if config.show_progress {
             Arc::new(ConsoleCallbacks {
                 show_progress: true,
@@ -45,17 +51,14 @@ impl ConsensusPipeline {
             })
         };
 
-        // Initialize OpenRouter clients if API key is available
-        let (openrouter_client, streaming_client) = if let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") {
-            let client = crate::providers::openrouter::create_client(api_key.clone())
-                .map(Arc::new)
-                .ok();
-            let streaming = crate::providers::openrouter::create_streaming_client(api_key)
-                .map(Arc::new)
-                .ok();
-            (client, streaming)
+        // Initialize OpenRouter client and model management if API key is provided
+        let (openrouter_client, model_manager, model_selector) = if let Some(ref key) = api_key {
+            let client = Arc::new(OpenRouterClient::new(key.clone()));
+            let manager = Arc::new(ModelManager::new(Some(key.clone())));
+            let selector = Arc::new(DynamicModelSelector::new(Some(key.clone())));
+            (Some(client), Some(manager), Some(selector))
         } else {
-            (None, None)
+            (None, None, None)
         };
 
         Self {
@@ -68,10 +71,13 @@ impl ConsensusPipeline {
                 Box::new(CuratorStage::new()),
             ],
             callbacks,
-            hooks_system: None,
-            consensus_integration: None,
+            // hooks_system: None,
+            // consensus_integration: None,
             openrouter_client,
-            streaming_client,
+            model_manager,
+            model_selector,
+            database: None, // Will be set later when needed
+            api_key,
         }
     }
 
@@ -80,18 +86,24 @@ impl ConsensusPipeline {
         self.callbacks = callbacks;
         self
     }
+
+    /// Set the database for model management
+    pub fn with_database(mut self, database: Arc<Database>) -> Self {
+        self.database = Some(database);
+        self
+    }
     
     /// Set the hooks system for this pipeline
-    pub fn with_hooks(mut self, hooks_system: Arc<HooksSystem>) -> Self {
-        self.hooks_system = Some(hooks_system);
-        self
-    }
+    // pub fn with_hooks(mut self, hooks_system: Arc<HooksSystem>) -> Self {
+    //     self.hooks_system = Some(hooks_system);
+    //     self
+    // }
     
     /// Set the consensus integration for enterprise features
-    pub fn with_consensus_integration(mut self, integration: Arc<ConsensusIntegration>) -> Self {
-        self.consensus_integration = Some(integration);
-        self
-    }
+    // pub fn with_consensus_integration(mut self, integration: Arc<ConsensusIntegration>) -> Self {
+    //     self.consensus_integration = Some(integration);
+    //     self
+    // }
 
     /// Run the full consensus pipeline
     pub async fn run(
@@ -104,18 +116,18 @@ impl ConsensusPipeline {
         let mut total_cost = 0.0;
 
         // Emit BeforeConsensus hook event
-        if let Some(hooks) = &self.hooks_system {
-            let event = HookEvent::new(
-                EventType::BeforeConsensus,
-                EventSource::Consensus { stage: "pipeline".to_string() }
-            )
-            .with_context("question", question)
-            .with_context("conversation_id", &conversation_id);
-            
-            if let Err(e) = hooks.dispatch_event(event).await {
-                tracing::warn!("Failed to dispatch BeforeConsensus hook event: {}", e);
-            }
-        }
+//         // if let Some(hooks) = &self.hooks_system {
+//         //     let event = HookEvent::new(
+//         //         EventType::BeforeConsensus,
+//                 EventSource::Consensus { stage: "pipeline".to_string() }
+//             )
+//             .with_context("question", question)
+//             .with_context("conversation_id", &conversation_id);
+//             
+//             if let Err(e) = hooks.dispatch_event(event).await {
+//                 tracing::warn!("Failed to dispatch BeforeConsensus hook event: {}", e);
+//             }
+//         }
 
         // Check if temporal context is needed
         let temporal_context = if self.temporal_provider.requires_temporal_context(question) {
@@ -133,66 +145,104 @@ impl ConsensusPipeline {
         // Run through all 4 stages
         for (i, stage_handler) in self.stages.iter().enumerate() {
             let stage = stage_handler.stage();
-            let model = self.config.profile.get_model_for_stage(stage);
+            
+            // Use dynamic model selection if available, otherwise fallback to profile
+            let model = if let (Some(selector), Some(db)) = (&self.model_selector, &self.database) {
+                // Create selection criteria
+                let criteria = ModelSelectionCriteria {
+                    stage: stage.as_str().to_string(),
+                    question_complexity: if question.len() > 500 { "production".to_string() } else { "basic".to_string() },
+                    question_category: "general".to_string(), // TODO: Improve categorization
+                    budget_constraints: Some(BudgetConstraints {
+                        max_cost_per_stage: Some(0.10),
+                        max_total_cost: Some(0.50),
+                        cost_efficiency_target: None,
+                        prioritize_cost: false,
+                    }),
+                    performance_targets: Some(PerformanceTargets {
+                        max_latency: Some(5000),
+                        min_success_rate: Some(0.95),
+                        prioritize_speed: false,
+                        prioritize_quality: true,
+                    }),
+                    user_preferences: None,
+                    profile_template: Some(self.config.profile.profile_name.clone()),
+                };
 
-            // Execute pre-stage hooks with enterprise integration
-            if let Some(integration) = &self.consensus_integration {
-                // Estimate stage cost
-                let estimated_cost = self.estimate_stage_cost(stage, model, question).await?;
-                
-                // Execute pre-stage hooks with cost and quality checks
-                let pre_stage_result = integration.execute_pre_stage_hooks(
-                    stage,
-                    &conversation_id,
-                    question,
-                    model,
-                    estimated_cost,
-                ).await?;
-                
-                // Check if we should proceed
-                if !pre_stage_result.proceed {
-                    if let Some(approval_required) = pre_stage_result.approval_required {
-                        // Handle approval requirement
-                        tracing::info!("Approval required for {} stage: {}", stage.as_str(), approval_required.description);
-                        
-                        // For now, we'll continue with a warning
-                        // In a real implementation, this would wait for approval
-                        for warning in &pre_stage_result.warnings {
-                            tracing::warn!("Pre-stage warning: {}", warning);
-                        }
-                    } else {
-                        // Stage was blocked
-                        return Err(anyhow::anyhow!("Stage {} was blocked by enterprise hooks", stage.as_str()));
+                // Select optimal model
+                match selector.select_optimal_model(db, &criteria, Some(&conversation_id)).await {
+                    Ok(Some(candidate)) => candidate.openrouter_id,
+                    Ok(None) => {
+                        println!("⚠️ No optimal model found, using profile default");
+                        self.config.profile.get_model_for_stage(stage).to_string()
+                    }
+                    Err(e) => {
+                        println!("⚠️ Model selection failed: {}, using profile default", e);
+                        self.config.profile.get_model_for_stage(stage).to_string()
                     }
                 }
-            }
+            } else {
+                self.config.profile.get_model_for_stage(stage).to_string()
+            };
+
+            // Execute pre-stage hooks with enterprise integration
+            // if let Some(integration) = &self.consensus_integration {
+            //     // Estimate stage cost
+            //     let estimated_cost = self.estimate_stage_cost(stage, model, question).await?;
+            //     
+            //     // Execute pre-stage hooks with cost and quality checks
+            //     let pre_stage_result = integration.execute_pre_stage_hooks(
+            //         stage,
+            //         &conversation_id,
+            //         question,
+            //         model,
+            //         estimated_cost,
+            //     ).await?;
+            //     
+            //     // Check if we should proceed
+            //     if !pre_stage_result.proceed {
+            //         if let Some(approval_required) = pre_stage_result.approval_required {
+            //             // Handle approval requirement
+            //             tracing::info!("Approval required for {} stage: {}", stage.as_str(), approval_required.description);
+            //             
+            //             // For now, we'll continue with a warning
+            //             // In a real implementation, this would wait for approval
+            //             for warning in &pre_stage_result.warnings {
+            //                 tracing::warn!("Pre-stage warning: {}", warning);
+            //             }
+            //         } else {
+            //             // Stage was blocked
+            //             return Err(anyhow::anyhow!("Stage {} was blocked by enterprise hooks", stage.as_str()));
+            //         }
+            //     }
+            // }
 
             // Emit BeforeStage hook event
-            if let Some(hooks) = &self.hooks_system {
-                let stage_event_type = match stage {
-                    Stage::Generator => EventType::BeforeGeneratorStage,
-                    Stage::Refiner => EventType::BeforeRefinerStage,
-                    Stage::Validator => EventType::BeforeValidatorStage,
-                    Stage::Curator => EventType::BeforeCuratorStage,
-                };
-                
-                let event = HookEvent::new(
-                    stage_event_type,
-                    EventSource::Consensus { stage: stage.as_str().to_string() }
-                )
-                .with_context("question", question)
-                .with_context("conversation_id", &conversation_id)
-                .with_context("model", model)
-                .with_context("stage_index", i)
-                .with_context("previous_answer", previous_answer.as_deref().unwrap_or(""));
-                
-                if let Err(e) = hooks.dispatch_event(event).await {
-                    tracing::warn!("Failed to dispatch Before{:?}Stage hook event: {}", stage, e);
-                }
-            }
+//             if let Some(hooks) = &self.hooks_system {
+//                 let stage_event_type = match stage {
+//                     Stage::Generator => EventType::BeforeGeneratorStage,
+//                     Stage::Refiner => EventType::BeforeRefinerStage,
+//                     Stage::Validator => EventType::BeforeValidatorStage,
+//                     Stage::Curator => EventType::BeforeCuratorStage,
+//                 };
+//                 
+//                 let event = HookEvent::new(
+//                     stage_event_type,
+//                     EventSource::Consensus { stage: stage.as_str().to_string() }
+//                 )
+//                 .with_context("question", question)
+//                 .with_context("conversation_id", &conversation_id)
+//                 .with_context("model", model)
+//                 .with_context("stage_index", i)
+//                 .with_context("previous_answer", previous_answer.as_deref().unwrap_or(""));
+//                 
+//                 if let Err(e) = hooks.dispatch_event(event).await {
+//                     tracing::warn!("Failed to dispatch Before{:?}Stage hook event: {}", stage, e);
+//                 }
+//             }
 
             // Notify stage start
-            self.callbacks.on_stage_start(stage, model)?;
+            self.callbacks.on_stage_start(stage, &model)?;
 
             // Run the stage
             let stage_result = self
@@ -203,7 +253,7 @@ impl ConsensusPipeline {
                     previous_answer.as_deref(),
                     full_context.as_deref(),
                     &conversation_id,
-                    model,
+                    &model,
                 )
                 .await
                 .with_context(|| format!("Failed to run {} stage", stage.display_name()))?;
@@ -213,22 +263,22 @@ impl ConsensusPipeline {
                 total_cost += analytics.cost;
                 
                 // Emit cost control hook events if needed
-                if let Some(hooks) = &self.hooks_system {
-                    if analytics.cost > 0.05 { // Threshold for cost notifications
-                        let cost_event = HookEvent::new(
-                            EventType::CostThresholdReached,
-                            EventSource::Consensus { stage: stage.as_str().to_string() }
-                        )
-                        .with_context("estimated_cost", analytics.cost)
-                        .with_context("stage_cost", analytics.cost)
-                        .with_context("total_cost", total_cost)
-                        .with_context("model", model);
-                        
-                        if let Err(e) = hooks.dispatch_event(cost_event).await {
-                            tracing::warn!("Failed to dispatch CostThresholdReached hook event: {}", e);
-                        }
-                    }
-                }
+//                 if let Some(hooks) = &self.hooks_system {
+//                     if analytics.cost > 0.05 { // Threshold for cost notifications
+//                         let cost_event = HookEvent::new(
+//                             EventType::CostThresholdReached,
+//                             EventSource::Consensus { stage: stage.as_str().to_string() }
+//                         )
+//                         .with_context("estimated_cost", analytics.cost)
+//                         .with_context("stage_cost", analytics.cost)
+//                         .with_context("total_cost", total_cost)
+//                         .with_context("model", model);
+//                         
+//                         if let Err(e) = hooks.dispatch_event(cost_event).await {
+//                             tracing::warn!("Failed to dispatch CostThresholdReached hook event: {}", e);
+//                         }
+//                     }
+//                 }
             }
 
             // Store the answer for next stage
@@ -238,58 +288,58 @@ impl ConsensusPipeline {
             self.callbacks.on_stage_complete(stage, &stage_result)?;
 
             // Execute post-stage hooks with quality validation
-            if let Some(integration) = &self.consensus_integration {
-                let post_stage_result = integration.execute_post_stage_hooks(
-                    stage,
-                    &stage_result,
-                ).await?;
-                
-                // Check if we should continue
-                if !post_stage_result.proceed {
-                    if let Some(approval_required) = post_stage_result.approval_required {
-                        // Handle approval requirement
-                        tracing::warn!("Quality issue in {} stage requires approval: {}", stage.as_str(), approval_required.description);
-                        
-                        // For now, we'll continue with warnings
-                        for warning in &post_stage_result.warnings {
-                            tracing::warn!("Post-stage warning: {}", warning);
-                        }
-                    } else {
-                        // Stage result was rejected by quality gates
-                        return Err(anyhow::anyhow!("Stage {} result was rejected by quality gates", stage.as_str()));
-                    }
-                }
-                
-                // Log any warnings
-                for warning in &post_stage_result.warnings {
-                    tracing::warn!("Quality warning for {} stage: {}", stage.as_str(), warning);
-                }
-            }
+            // if let Some(integration) = &self.consensus_integration {
+            //     let post_stage_result = integration.execute_post_stage_hooks(
+            //         stage,
+            //         &stage_result,
+            //     ).await?;
+            //     
+            //     // Check if we should continue
+            //     if !post_stage_result.proceed {
+            //         if let Some(approval_required) = post_stage_result.approval_required {
+            //             // Handle approval requirement
+            //             tracing::warn!("Quality issue in {} stage requires approval: {}", stage.as_str(), approval_required.description);
+            //             
+            //             // For now, we'll continue with warnings
+            //             for warning in &post_stage_result.warnings {
+            //                 tracing::warn!("Post-stage warning: {}", warning);
+            //             }
+            //         } else {
+            //             // Stage result was rejected by quality gates
+            //             return Err(anyhow::anyhow!("Stage {} result was rejected by quality gates", stage.as_str()));
+            //         }
+            //     }
+            //     
+            //     // Log any warnings
+            //     for warning in &post_stage_result.warnings {
+            //         tracing::warn!("Quality warning for {} stage: {}", stage.as_str(), warning);
+            //     }
+            // }
 
             // Emit AfterStage hook event
-            if let Some(hooks) = &self.hooks_system {
-                let stage_event_type = match stage {
-                    Stage::Generator => EventType::AfterGeneratorStage,
-                    Stage::Refiner => EventType::AfterRefinerStage,
-                    Stage::Validator => EventType::AfterValidatorStage,
-                    Stage::Curator => EventType::AfterCuratorStage,
-                };
-                
-                let event = HookEvent::new(
-                    stage_event_type,
-                    EventSource::Consensus { stage: stage.as_str().to_string() }
-                )
-                .with_context("question", question)
-                .with_context("conversation_id", &conversation_id)
-                .with_context("model", model)
-                .with_context("answer", &stage_result.answer)
-                .with_context("duration", stage_result.analytics.as_ref().map(|a| a.duration).unwrap_or(0.0))
-                .with_context("cost", stage_result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0));
-                
-                if let Err(e) = hooks.dispatch_event(event).await {
-                    tracing::warn!("Failed to dispatch After{:?}Stage hook event: {}", stage, e);
-                }
-            }
+//             if let Some(hooks) = &self.hooks_system {
+//                 let stage_event_type = match stage {
+//                     Stage::Generator => EventType::AfterGeneratorStage,
+//                     Stage::Refiner => EventType::AfterRefinerStage,
+//                     Stage::Validator => EventType::AfterValidatorStage,
+//                     Stage::Curator => EventType::AfterCuratorStage,
+//                 };
+//                 
+//                 let event = HookEvent::new(
+//                     stage_event_type,
+//                     EventSource::Consensus { stage: stage.as_str().to_string() }
+//                 )
+//                 .with_context("question", question)
+//                 .with_context("conversation_id", &conversation_id)
+//                 .with_context("model", model)
+//                 .with_context("answer", &stage_result.answer)
+//                 .with_context("duration", stage_result.analytics.as_ref().map(|a| a.duration).unwrap_or(0.0))
+//                 .with_context("cost", stage_result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0));
+//                 
+//                 if let Err(e) = hooks.dispatch_event(event).await {
+//                     tracing::warn!("Failed to dispatch After{:?}Stage hook event: {}", stage, e);
+//                 }
+//             }
 
             stage_results.push(stage_result);
         }
@@ -310,22 +360,22 @@ impl ConsensusPipeline {
         };
 
         // Emit AfterConsensus hook event
-        if let Some(hooks) = &self.hooks_system {
-            let event = HookEvent::new(
-                EventType::AfterConsensus,
-                EventSource::Consensus { stage: "pipeline".to_string() }
-            )
-            .with_context("question", question)
-            .with_context("conversation_id", &conversation_id)
-            .with_context("final_answer", &final_answer)
-            .with_context("total_duration", result.total_duration)
-            .with_context("total_cost", result.total_cost)
-            .with_context("stages_count", result.stages.len());
-            
-            if let Err(e) = hooks.dispatch_event(event).await {
-                tracing::warn!("Failed to dispatch AfterConsensus hook event: {}", e);
-            }
-        }
+//         if let Some(hooks) = &self.hooks_system {
+//             let event = HookEvent::new(
+//                 EventType::AfterConsensus,
+//                 EventSource::Consensus { stage: "pipeline".to_string() }
+//             )
+//             .with_context("question", question)
+//             .with_context("conversation_id", &conversation_id)
+//             .with_context("final_answer", &final_answer)
+//             .with_context("total_duration", result.total_duration)
+//             .with_context("total_cost", result.total_cost)
+//             .with_context("stages_count", result.stages.len());
+//             
+//             if let Err(e) = hooks.dispatch_event(event).await {
+//                 tracing::warn!("Failed to dispatch AfterConsensus hook event: {}", e);
+//             }
+//         }
 
         Ok(result)
     }
@@ -374,7 +424,7 @@ impl ConsensusPipeline {
                 cost: response.cost,
                 provider: response.provider,
                 model_internal_id: response.model_internal_id,
-                quality_score: 0.95, // Placeholder
+                quality_score: 0.0, // Will be calculated by quality assessment
                 error_count: 0,
                 fallback_used: false,
                 rate_limit_hit: false,
@@ -426,139 +476,124 @@ impl ConsensusPipeline {
         messages: &[crate::consensus::types::Message],
         tracker: &mut ProgressTracker,
     ) -> Result<ModelResponse> {
-        // Check if OpenRouter clients are available
-        let streaming_client = self.streaming_client.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("OpenRouter streaming client not initialized. Please set OPENROUTER_API_KEY environment variable."))?;
+        // Check if OpenRouter client is available
+        let openrouter_client = self.openrouter_client.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("OpenRouter client not initialized. Please set OPENROUTER_API_KEY environment variable."))?;
 
         // Convert consensus messages to OpenRouter format
         let openrouter_messages: Vec<OpenRouterMessage> = messages
             .iter()
             .map(|msg| OpenRouterMessage {
-                role: match msg.role.as_str() {
-                    "system" => MessageRole::System,
-                    "user" => MessageRole::User,
-                    "assistant" => MessageRole::Assistant,
-                    _ => MessageRole::User, // Default fallback
-                },
+                role: msg.role.clone(),
                 content: msg.content.clone(),
             })
             .collect();
 
-        let mut response_content = String::new();
-        let mut prompt_tokens = 0u32;
-        let mut completion_tokens = 0u32;
-        let mut cost = 0.0f64;
-
-        // Configure streaming options
-        let streaming_options = StreamingOptions {
+        // Configure request
+        let request = OpenRouterRequest {
+            model: model.to_string(),
+            messages: openrouter_messages,
             temperature: Some(0.7),
             max_tokens: Some(2000),
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
+            stream: Some(self.config.enable_streaming),
+            provider: None,
         };
 
-        // Set up streaming callbacks to connect OpenRouter streaming with consensus progress
-        let response_content_arc = Arc::new(tokio::sync::Mutex::new(String::new()));
-        let response_content_clone = response_content_arc.clone();
+        // Make the API call
+        if self.config.enable_streaming {
+            // Use streaming
+            let callbacks = Box::new(SimpleStreamingCallbacks {
+                model_name: model.to_string(),
+            }) as Box<dyn OpenRouterStreamingCallbacks>;
 
-        let callbacks = crate::providers::openrouter::StreamingCallbacks {
-            on_chunk: Some(Arc::new(move |chunk, _total| {
-                let content = response_content_clone.clone();
-                tokio::spawn(async move {
-                    if let Ok(mut content_guard) = content.try_lock() {
-                        content_guard.push_str(&chunk);
+            match openrouter_client.chat_completion_stream(request, Some(callbacks)).await {
+                Ok(response_content) => {
+                    // Update tracker with response chunks
+                    for word in response_content.split_whitespace() {
+                        tracker.add_chunk(word)?;
+                        tracker.add_chunk(" ")?;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
                     }
-                });
-            })),
-            on_progress: Some(Arc::new(move |progress| {
-                // Progress is handled by the chunk callback
-                tracing::debug!("OpenRouter streaming progress: {:?}", progress);
-            })),
-            on_complete: Some(Arc::new(move |_response| {
-                tracing::debug!("OpenRouter streaming complete");
-            })),
-            on_error: Some(Arc::new(move |error| {
-                tracing::warn!("OpenRouter streaming error: {}", error);
-            })),
-            on_start: Some(Arc::new(move || {
-                tracing::debug!("OpenRouter streaming started");
-            })),
-        };
 
-        // Make the streaming API call
-        match streaming_client
-            .stream_chat_completion(model, openrouter_messages, streaming_options, callbacks)
-            .await
-        {
-            Ok(response) => {
-                // Extract final response content
-                response_content = response_content_arc.lock().await.clone();
-                
-                // Update tracker with final response
-                tracker.add_chunk(&response_content)?;
-                
-                // Extract usage from response
-                if let Some(usage) = &response.usage {
-                    prompt_tokens = usage.prompt_tokens;
-                    completion_tokens = usage.completion_tokens;
+                    Ok(ModelResponse {
+                        content: response_content,
+                        usage: None, // Token usage will be populated by actual API response
+                        cost: 0.0, // Cost will be calculated from actual API response
+                        provider: "openrouter".to_string(),
+                        model_internal_id: model.to_string(),
+                    })
                 }
-                
-                // Calculate cost based on usage (simplified estimation)
-                // TODO: Integrate with actual cost tracking system
-                cost = (prompt_tokens as f64 * 0.00001) + (completion_tokens as f64 * 0.00003);
-
-                Ok(ModelResponse {
-                    content: response_content,
-                    usage: Some(TokenUsage {
-                        prompt_tokens,
-                        completion_tokens,
-                        total_tokens: prompt_tokens + completion_tokens,
-                    }),
-                    cost,
-                    provider: "openrouter".to_string(),
-                    model_internal_id: model.to_string(),
-                })
+                Err(e) => {
+                    self.handle_api_error(e, tracker, model).await
+                }
             }
-            Err(e) => {
-                // Fallback to mock response on API failure
-                tracing::warn!("OpenRouter API call failed for model {}: {}. Using fallback response.", model, e);
-                
-                let fallback_text = match tracker.stage {
-                    Stage::Generator => {
-                        "This is a fallback response from the Generator stage. The OpenRouter API is currently unavailable, but the consensus pipeline continues to function."
-                    }
-                    Stage::Refiner => {
-                        "This is a fallback response from the Refiner stage. While the primary API is unavailable, the system continues to provide refined outputs."
-                    }
-                    Stage::Validator => {
-                        "This is a fallback response from the Validator stage. Validation continues even when external APIs are temporarily unavailable."
-                    }
-                    Stage::Curator => {
-                        "This is a fallback response from the Curator stage. The final polished output is provided despite API connectivity issues."
-                    }
-                };
+        } else {
+            // Use non-streaming
+            match openrouter_client.chat_completion(request).await {
+                Ok(response) => {
+                    let content = response.choices.first()
+                        .and_then(|choice| choice.message.as_ref())
+                        .map(|message| message.content.clone())
+                        .unwrap_or_else(|| "No response content".to_string());
 
-                // Stream the fallback response
-                for word in fallback_text.split_whitespace() {
-                    tracker.add_chunk(word)?;
-                    tracker.add_chunk(" ")?;
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    // Add response to tracker
+                    tracker.add_chunk(&content)?;
+
+                    let usage = response.usage.map(|u| TokenUsage {
+                        prompt_tokens: u.prompt_tokens,
+                        completion_tokens: u.completion_tokens,
+                        total_tokens: u.total_tokens,
+                    });
+
+                    // Calculate cost
+                    let cost = if let Some(ref usage) = usage {
+                        openrouter_client.estimate_cost(
+                            model,
+                            usage.prompt_tokens,
+                            usage.completion_tokens,
+                            Some(0.001), // Default input price
+                            Some(0.002), // Default output price
+                        )
+                    } else {
+                        0.0
+                    };
+
+                    Ok(ModelResponse {
+                        content,
+                        usage,
+                        cost,
+                        provider: "openrouter".to_string(),
+                        model_internal_id: model.to_string(),
+                    })
                 }
-
-                Ok(ModelResponse {
-                    content: fallback_text.to_string(),
-                    usage: Some(TokenUsage {
-                        prompt_tokens: 100,
-                        completion_tokens: 50,
-                        total_tokens: 150,
-                    }),
-                    cost: 0.0, // No cost for fallback
-                    provider: "fallback".to_string(),
-                    model_internal_id: "fallback".to_string(),
-                })
+                Err(e) => {
+                    self.handle_api_error(e, tracker, model).await
+                }
             }
         }
+    }
+
+    /// Handle API errors with fallback responses
+    async fn handle_api_error(
+        &self,
+        error: anyhow::Error,
+        tracker: &mut ProgressTracker,
+        model: &str,
+    ) -> Result<ModelResponse> {
+        println!("⚠️ OpenRouter API call failed for model {}: {}. Using fallback response.", model, error);
+        
+        // When OpenRouter API is unavailable, return an error rather than placeholder content
+        return Err(anyhow::anyhow!(
+            "OpenRouter API call failed for model {}: {}. Cannot proceed without API access.",
+            model, 
+            error
+        ));
+
+        // This code should not be reached since we return an error above
+        unreachable!("API error handling should return an error, not continue")
     }
     
     /// Estimate cost for a stage operation
@@ -622,7 +657,7 @@ mod tests {
             context_injection: crate::consensus::types::ContextInjectionStrategy::Smart,
         };
 
-        let pipeline = ConsensusPipeline::new(config);
+        let pipeline = ConsensusPipeline::new(config, None);
         let result = pipeline
             .run("What is Rust?", None)
             .await
