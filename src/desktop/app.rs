@@ -8,6 +8,7 @@ use crate::desktop::{
     consensus::ConsensusProgress,
     state::{AppState, ConnectionStatus},
     events::{EventDispatcher, KeyboardEventUtils},
+    styles::{get_chat_styles, get_app_styles},
 };
 
 /// Main Application Component
@@ -97,6 +98,9 @@ pub fn App() -> Element {
     };
     
     rsx! {
+        style { {get_app_styles()} }
+        style { {get_chat_styles()} }
+        
         div {
             id: "app",
             class: "app-container",
@@ -129,38 +133,133 @@ pub fn App() -> Element {
 /// Menu Bar Component
 #[component]
 fn MenuBar() -> Element {
+    // VS Code-like colors
+    let menu_bar_style = "
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        height: 30px;
+        background-color: #2d2d30;
+        border-bottom: 1px solid #474747;
+        padding: 0 10px;
+        -webkit-app-region: drag;
+        user-select: none;
+    ";
+    
+    let title_style = "
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #cccccc;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+    ";
+    
+    let menu_actions_style = "
+        display: flex;
+        align-items: center;
+        gap: 0;
+        -webkit-app-region: no-drag;
+    ";
+    
+    let menu_btn_style = "
+        background: transparent;
+        border: none;
+        color: #cccccc;
+        width: 46px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+        cursor: pointer;
+        transition: background-color 0.1s;
+        padding: 0;
+        margin: 0;
+        outline: none;
+    ";
+    
+    let menu_btn_hover_style = "
+        background: transparent;
+        border: none;
+        color: #cccccc;
+        width: 46px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro', system-ui, sans-serif;
+        cursor: pointer;
+        transition: background-color 0.1s;
+        padding: 0;
+        margin: 0;
+        outline: none;
+    ";
+    
+    // State for hover effects
+    let settings_hovered = use_signal(|| false);
+    let minimize_hovered = use_signal(|| false);
+    let close_hovered = use_signal(|| false);
+    
     rsx! {
         div {
-            class: "menu-bar",
+            style: "{menu_bar_style}",
             
             div {
-                class: "menu-title",
-                span { class: "logo", "🐝" }
-                span { class: "title", "HiveTechs Consensus" }
+                style: "{title_style}",
+                // Using text icon instead of emoji for modern look
+                span { 
+                    style: "font-weight: 600; font-size: 14px;",
+                    "◆" 
+                }
+                span { 
+                    style: "font-weight: 400;",
+                    "HiveTechs Consensus" 
+                }
             }
             
             div {
-                class: "menu-actions",
+                style: "{menu_actions_style}",
                 button {
-                    class: "menu-btn",
+                    style: if settings_hovered() { 
+                        format!("{} background-color: #3e3e42;", menu_btn_style) 
+                    } else { 
+                        menu_btn_style.to_string() 
+                    },
+                    onmouseenter: move |_| settings_hovered.set(true),
+                    onmouseleave: move |_| settings_hovered.set(false),
                     onclick: |_| {
                         // Handle settings
                     },
-                    "⚙️"
+                    "⚙"  // Cleaner gear icon without emoji variant
                 }
                 button {
-                    class: "menu-btn", 
+                    style: if minimize_hovered() { 
+                        format!("{} background-color: #3e3e42;", menu_btn_style) 
+                    } else { 
+                        menu_btn_style.to_string() 
+                    },
+                    onmouseenter: move |_| minimize_hovered.set(true),
+                    onmouseleave: move |_| minimize_hovered.set(false),
                     onclick: |_| {
                         // Handle minimize
                     },
-                    "−"
+                    "‒"  // Proper minus sign (en dash)
                 }
                 button {
-                    class: "menu-btn",
+                    style: if close_hovered() { 
+                        format!("{} background-color: #e81123; color: white;", menu_btn_style) 
+                    } else { 
+                        menu_btn_style.to_string() 
+                    },
+                    onmouseenter: move |_| close_hovered.set(true),
+                    onmouseleave: move |_| close_hovered.set(false),
                     onclick: |_| {
                         // Handle close
                     },
-                    "×"
+                    "✕"  // Modern X symbol
                 }
             }
         }
@@ -179,33 +278,71 @@ fn StatusBar() -> Element {
             
             div {
                 class: "status-left",
-                span {
+                // Connection Status
+                div {
                     class: "status-item",
-                    match state.connection_status {
-                        ConnectionStatus::Connected => "🟢 Connected",
-                        ConnectionStatus::Connecting => "🟡 Connecting",
-                        ConnectionStatus::Disconnected => "🔴 Disconnected",
+                    span {
+                        class: match state.connection_status {
+                            ConnectionStatus::Connected => "status-indicator connected",
+                            ConnectionStatus::Connecting => "status-indicator connecting",
+                            ConnectionStatus::Disconnected => "status-indicator disconnected",
+                        }
+                    }
+                    span {
+                        match state.connection_status {
+                            ConnectionStatus::Connected => "Connected",
+                            ConnectionStatus::Connecting => "Connecting",
+                            ConnectionStatus::Disconnected => "Disconnected",
+                        }
                     }
                 }
-                span {
+                
+                // Current Project
+                div {
                     class: "status-item",
-                    "📁 {state.current_project.as_ref().map(|p| p.name.as_str()).unwrap_or(\"No project\")}"
+                    {state.current_project.as_ref().map(|p| p.name.as_str()).unwrap_or("No workspace")}
+                }
+                
+                // Git Branch (if available)
+                if let Some(project) = &state.current_project {
+                    if let Some(branch) = &project.git_branch {
+                        div {
+                            class: "status-item",
+                            "git: {branch}"
+                        }
+                    }
                 }
             }
             
             div {
                 class: "status-right",
-                span {
+                // Cost Indicator
+                div {
                     class: "status-item",
                     "Cost: ${state.total_cost:.3}"
                 }
-                span {
-                    class: "status-item", 
+                
+                // Context Usage
+                div {
+                    class: "status-item",
                     "Context: {state.context_usage}%"
                 }
-                span {
-                    class: "status-item",
-                    if state.auto_accept { "Auto-accept: ON" } else { "Auto-accept: OFF" }
+                
+                // Auto-accept Toggle
+                div {
+                    class: if state.auto_accept { "status-item auto-accept-toggle enabled" } else { "status-item auto-accept-toggle disabled" },
+                    onclick: move |_| {
+                        app_state.write().auto_accept = !app_state.read().auto_accept;
+                    },
+                    if state.auto_accept { "Auto: ON" } else { "Auto: OFF" }
+                }
+                
+                // Model Indicator
+                if let Some(model) = &state.current_model {
+                    div {
+                        class: "status-item",
+                        "{model}"
+                    }
                 }
             }
         }

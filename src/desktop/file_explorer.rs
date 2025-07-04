@@ -17,10 +17,14 @@ pub fn FileExplorer() -> Element {
             // Header
             div {
                 class: "explorer-header",
-                h3 { "📁 Explorer" }
+                h3 { "EXPLORER" }
                 button {
                     class: "collapse-btn",
-                    "◀"
+                    onclick: move |_| {
+                        // TODO: Implement panel collapse
+                        tracing::debug!("Toggle explorer panel");
+                    },
+                    i { class: "fa-solid fa-chevron-left" }
                 }
             }
             
@@ -77,11 +81,21 @@ fn FileTreeItem(file: FileItem) -> Element {
         state.file_explorer.selected_file.as_ref() == Some(&file.path)
     };
     
-    let class_name = if is_selected {
-        "file-item selected"
-    } else {
-        "file-item"
-    };
+    let mut class_name = String::from("file-item");
+    if is_selected {
+        class_name.push_str(" selected");
+    }
+    
+    // Add git status to class for styling
+    let git_status_class = file.git_status.as_ref().map(|status| match status {
+        GitFileStatus::Modified => "modified",
+        GitFileStatus::Added => "added",
+        GitFileStatus::Deleted => "deleted",
+        GitFileStatus::Untracked => "untracked",
+        GitFileStatus::Renamed => "renamed",
+        GitFileStatus::Copied => "copied",
+        GitFileStatus::Ignored => "ignored",
+    });
     
     // Clone paths and directory flag for closures to avoid move issues
     let file_path_click = file.path.clone();
@@ -92,8 +106,9 @@ fn FileTreeItem(file: FileItem) -> Element {
     
     rsx! {
         div {
-            class: class_name,
+            class: "{class_name}",
             draggable: true,
+            data_git_status: git_status_class.unwrap_or(""),
             onclick: move |evt: MouseEvent| {
                 if MouseEventUtils::is_left_click(&evt) {
                     if is_directory {
@@ -130,7 +145,14 @@ fn FileTreeItem(file: FileItem) -> Element {
             
             span {
                 class: "file-icon",
-                {file.file_type.icon()}
+                i {
+                    class: if file.is_directory {
+                        crate::desktop::styles::get_folder_icon(file.is_expanded)
+                    } else {
+                        crate::desktop::styles::get_file_icon(&file.file_type.extension())
+                    },
+                    data_file_type: file.file_type.extension()
+                }
             }
             
             span {
@@ -141,6 +163,15 @@ fn FileTreeItem(file: FileItem) -> Element {
             if let Some(git_status) = &file.git_status {
                 span {
                     class: "git-status",
+                    title: match git_status {
+                        GitFileStatus::Modified => "Modified",
+                        GitFileStatus::Added => "Added",
+                        GitFileStatus::Deleted => "Deleted",
+                        GitFileStatus::Untracked => "Untracked",
+                        GitFileStatus::Renamed => "Renamed",
+                        GitFileStatus::Copied => "Copied",
+                        GitFileStatus::Ignored => "Ignored",
+                    },
                     match git_status {
                         GitFileStatus::Modified => "M",
                         GitFileStatus::Added => "A",

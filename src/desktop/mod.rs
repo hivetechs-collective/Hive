@@ -10,8 +10,16 @@ pub mod chat;
 pub mod consensus;
 pub mod state;
 pub mod events;
+pub mod styles;
 
 pub use app::App;
+
+// Re-export commonly used styling components
+pub use styles::components::{
+    VsCodeButton, VsCodePanel, FileTreeItem, VsCodeTab, StatusBarItem,
+    ButtonVariant, PanelStyle, IconSize
+};
+pub use styles::theme::{Theme, ThemeProvider, ThemeSwitcher, use_theme};
 
 use anyhow::Result;
 use dioxus::prelude::*;
@@ -19,7 +27,7 @@ use dioxus_desktop::{Config, WindowBuilder, LogicalSize};
 use crate::core::config::Config as HiveConfig;
 
 /// Launch the Dioxus desktop application
-pub async fn launch_desktop_app(config: HiveConfig) -> Result<()> {
+pub fn launch_desktop_app(config: HiveConfig) -> Result<()> {
     tracing::info!("Launching HiveTechs Consensus Desktop Application");
     
     // Configure the desktop window
@@ -30,7 +38,9 @@ pub async fn launch_desktop_app(config: HiveConfig) -> Result<()> {
         .with_resizable(true);
     
     let desktop_config = Config::new()
-        .with_window(window_config);
+        .with_window(window_config)
+        .with_custom_head(include_str!("styles/global_head.html"))
+        .with_custom_index(create_custom_index());
     
     // Launch the Dioxus app
     LaunchBuilder::desktop()
@@ -38,5 +48,24 @@ pub async fn launch_desktop_app(config: HiveConfig) -> Result<()> {
         .launch(app::App);
     
     Ok(())
+}
+
+/// Create custom HTML index with VS Code theming
+fn create_custom_index() -> String {
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveTechs Consensus</title>
+    <style>{}</style>
+</head>
+<body>
+    <div id="app"></div>
+</body>
+</html>"#,
+        &styles::get_global_styles()
+    )
 }
 
