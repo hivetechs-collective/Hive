@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Main application state
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AppState {
     /// Current project information
     pub current_project: Option<ProjectInfo>,
@@ -81,7 +81,7 @@ impl AppState {
 }
 
 /// Project information
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ProjectInfo {
     pub name: String,
     pub path: PathBuf,
@@ -118,7 +118,7 @@ impl ProjectInfo {
 }
 
 /// File explorer state
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FileExplorerState {
     pub root_path: Option<PathBuf>,
     pub expanded_dirs: HashMap<PathBuf, bool>,
@@ -169,6 +169,24 @@ pub struct FileItem {
     pub git_status: Option<GitFileStatus>,
     pub size: Option<u64>,
     pub modified: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl PartialEq for FileItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+            && self.name == other.name
+            && self.is_directory == other.is_directory
+            && self.is_expanded == other.is_expanded
+            && self.children == other.children
+            && self.file_type == other.file_type
+            && self.git_status == other.git_status
+            && self.size == other.size
+            && match (&self.modified, &other.modified) {
+                (Some(a), Some(b)) => a.timestamp() == b.timestamp(),
+                (None, None) => true,
+                _ => false,
+            }
+    }
 }
 
 /// File type for syntax highlighting and icons
@@ -240,7 +258,7 @@ impl FileType {
 }
 
 /// Chat interface state
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ChatState {
     pub messages: Vec<ChatMessage>,
     pub input_text: String,
@@ -284,7 +302,17 @@ pub struct ChatMessage {
     pub metadata: MessageMetadata,
 }
 
-#[derive(Clone, Debug)]
+impl PartialEq for ChatMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.content == other.content
+            && self.message_type == other.message_type
+            && self.timestamp.timestamp() == other.timestamp.timestamp()
+            && self.metadata == other.metadata
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum MessageType {
     User,
     Assistant,
@@ -293,7 +321,7 @@ pub enum MessageType {
     Welcome,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct MessageMetadata {
     pub cost: Option<f64>,
     pub model: Option<String>,
@@ -302,7 +330,7 @@ pub struct MessageMetadata {
 }
 
 /// Consensus engine state
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConsensusState {
     pub is_active: bool,
     pub current_stage: Option<ConsensusStage>,
@@ -346,7 +374,7 @@ impl ConsensusState {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ConsensusStage {
     Generator,
     Refiner,
@@ -354,7 +382,7 @@ pub enum ConsensusStage {
     Curator,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ConsensusProgress {
     pub generator: u8,
     pub refiner: u8,
@@ -362,7 +390,7 @@ pub struct ConsensusProgress {
     pub curator: u8,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StageInfo {
     pub name: String,
     pub model: String,
@@ -381,7 +409,7 @@ impl StageInfo {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum StageStatus {
     Waiting,
     Running,
@@ -390,7 +418,7 @@ pub enum StageStatus {
 }
 
 /// Application settings
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AppSettings {
     pub theme: Theme,
     pub font_size: f32,
@@ -413,7 +441,7 @@ impl Default for AppSettings {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum Theme {
     Dark,
     Light,
@@ -429,13 +457,13 @@ pub enum ConnectionStatus {
 }
 
 /// Git status
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GitStatus {
     NotRepository,
     Repository { branch: String, has_changes: bool },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum GitFileStatus {
     Untracked,
     Modified,
