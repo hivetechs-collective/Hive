@@ -33,9 +33,9 @@ pub fn ConsensusProgress() -> Element {
                     for (i, stage_info) in state.consensus.stages.iter().enumerate() {
                         ConsensusStageItem { 
                             stage_info: stage_info.clone(),
-                            is_active: matches!(state.consensus.current_stage, Some(ref current) => 
-                                stage_matches_index(current, i)
-                            ),
+                            is_active: state.consensus.current_stage.as_ref()
+                                .map(|current| stage_matches_index(current, i))
+                                .unwrap_or(false),
                             progress: get_stage_progress(&state.consensus.progress, i),
                         }
                     }
@@ -83,12 +83,12 @@ fn ConsensusStageItem(
                 
                 span {
                     class: "stage-status-icon",
-                    match stage_info.status {
+                    {match stage_info.status {
                         StageStatus::Waiting => "⏳",
                         StageStatus::Running => "⚡",
                         StageStatus::Completed => "✅",
                         StageStatus::Error => "❌",
-                    }
+                    }}
                 }
             }
             
@@ -101,6 +101,7 @@ fn ConsensusStageItem(
                 class: "stage-progress-container",
                 ProgressBar {
                     progress: progress,
+                    label: "".to_string(),
                 }
             }
         }

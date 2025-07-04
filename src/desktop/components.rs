@@ -7,16 +7,17 @@ use dioxus::prelude::*;
 pub fn Button(
     onclick: EventHandler<MouseEvent>,
     children: Element,
-    #[props(default = ButtonStyle::Primary)] style: ButtonStyle,
+    #[props(default)] style: Option<ButtonStyle>,
     #[props(default = false)] disabled: bool,
 ) -> Element {
+    let style = style.unwrap_or(ButtonStyle::Primary);
     let class = format!("btn btn-{}", style.class_name());
     
     rsx! {
         button {
             class: "{class}",
             disabled: disabled,
-            onclick: move |evt| onclick.call(evt),
+            onclick: move |evt| onclick(evt),
             {children}
         }
     }
