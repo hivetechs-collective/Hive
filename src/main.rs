@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 use hive_ai::tui::TuiFramework;
 use hive_ai::cli::CliFramework;
 use hive_ai::desktop::launch_desktop_app;
-use hive_ai::core::config::Config;
+use hive_ai::core::config::{Config, load_config};
 use hive_ai::core::error::HiveResult;
 use hive_ai::cli::banner::show_startup_banner;
 use hive_ai::cli::tui_capabilities::TuiCapabilities;
@@ -518,6 +518,11 @@ async fn execute_command(cli: &mut CliFramework, command: Commands) -> HiveResul
         Commands::Version => {
             // This should not happen as version is handled above
             unreachable!("Version command should be handled before this point");
+        }
+        Commands::Desktop => {
+            // Launch desktop application
+            let config = load_config().await?; // Load default config
+            launch_desktop_app(config).await?;
         }
     }
     Ok(())

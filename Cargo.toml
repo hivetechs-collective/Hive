@@ -54,6 +54,13 @@ dioxus-router = "0.5"
 dioxus-signals = "0.5"
 manganis = "0.2"
 
+# TUI (Terminal User Interface) - Legacy support
+ratatui = "0.26"
+crossterm = "0.27"
+tui-textarea = "0.4"
+fuzzy-matcher = "0.3"
+is-terminal = "0.4"
+
 # Utilities for desktop app
 console = "0.15"
 colored = "2.1"
@@ -88,8 +95,7 @@ reqwest = { version = "0.11", features = ["json", "stream"] }
 hyper = "1.1"
 warp = "0.3"
 tower-http = { version = "0.5", features = ["cors", "compression-br"] }
-tokio-tungstenite = "0.24"
-axum = { version = "0.7", features = ["ws", "headers"] }
+axum = { version = "0.7", features = ["ws"] }
 axum-extra = { version = "0.9", features = ["typed-header"] }
 tower = "0.4"
 tower-layer = "0.3"

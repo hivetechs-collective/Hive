@@ -1,7 +1,8 @@
 //! Chat Interface Component - Claude Code Style
 
 use dioxus::prelude::*;
-use crate::desktop::{state::*, components::*};
+use dioxus::events::{KeyboardEvent, MouseEvent};
+use crate::desktop::{state::*, components::*, events::KeyboardEventUtils};
 
 /// Chat Interface Component
 #[component]
@@ -68,65 +69,26 @@ fn WelcomeMessage() -> Element {
 /// Individual chat message component
 #[component]
 fn ChatMessageItem(message: ChatMessage) -> Element {
-    let class = format!("message message-{}", 
-        match message.message_type {
-            MessageType::User => "user",
-            MessageType::Assistant => "assistant", 
-            MessageType::System => "system",
-            MessageType::Error => "error",
-            MessageType::Welcome => "welcome",
-        }
-    );
+    let type_text = match message.message_type {
+        MessageType::User => "👤 You",
+        MessageType::Assistant => "🤖 Assistant",
+        MessageType::System => "⚙️ System",
+        MessageType::Error => "❌ Error",
+        MessageType::Welcome => "👋 Welcome",
+    };
+    
+    let class_suffix = match message.message_type {
+        MessageType::User => "user",
+        MessageType::Assistant => "assistant", 
+        MessageType::System => "system",
+        MessageType::Error => "error",
+        MessageType::Welcome => "welcome",
+    };
     
     rsx! {
         div {
-            class: "{class}",
-            
-            div {
-                class: "message-header",
-                span {
-                    class: "message-type",
-                    match message.message_type {
-                        MessageType::User => "👤 You",
-                        MessageType::Assistant => "🤖 Assistant",
-                        MessageType::System => "⚙️ System",
-                        MessageType::Error => "❌ Error",
-                        MessageType::Welcome => "👋 Welcome",
-                    }
-                }
-                
-                span {
-                    class: "message-timestamp",
-                    "{message.timestamp.format(\"%H:%M:%S\")}"
-                }
-                
-                if let Some(cost) = message.metadata.cost {
-                    span {
-                        class: "message-cost",
-                        "${cost:.3}"
-                    }
-                }
-            }
-            
-            div {
-                class: "message-content",
-                // Enable text selection for copying
-                user_select: "text",
-                "{message.content}"
-            }
-            
-            if let Some(model) = &message.metadata.model {
-                div {
-                    class: "message-metadata",
-                    span { "Model: {model}" }
-                    if let Some(time) = message.metadata.processing_time {
-                        span { " • Time: {time}ms" }
-                    }
-                    if let Some(tokens) = message.metadata.token_count {
-                        span { " • Tokens: {tokens}" }
-                    }
-                }
-            }
+            class: format!("message message-{}", class_suffix),
+            "Message: {message.content}"
         }
     }
 }
@@ -134,37 +96,72 @@ fn ChatMessageItem(message: ChatMessage) -> Element {
 /// Chat input component
 #[component]
 fn ChatInput() -> Element {
-    let app_state = use_context::<Signal<AppState>>();
+    let mut app_state = use_context::<Signal<AppState>>();
     let mut input_text = use_signal(String::new);
     
-    let on_send = move |_| {
-        let text = input_text.read().clone();
-        if !text.trim().is_empty() {
-            // Add user message
-            let message = ChatMessage {
-                id: uuid::Uuid::new_v4().to_string(),
-                content: text.clone(),
-                message_type: MessageType::User,
-                timestamp: chrono::Utc::now(),
-                metadata: MessageMetadata::default(),
-            };
-            
-            app_state.write().chat.add_message(message);
-            
-            // Start consensus processing
-            app_state.write().consensus.start_consensus();
-            
-            // Clear input
-            input_text.set(String::new());
-            
-            // TODO: Send to consensus engine
+    
+    let on_send = {
+        let mut app_state = app_state.clone();
+        let mut input_text = input_text.clone();
+        move |_evt: MouseEvent| {
+            let text = input_text.read().clone();
+            if !text.trim().is_empty() {
+                // Add user message
+                let message = ChatMessage {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    content: text.clone(),
+                    message_type: MessageType::User,
+                    timestamp: chrono::Utc::now(),
+                    metadata: MessageMetadata::default(),
+                };
+                
+                app_state.write().chat.add_message(message);
+                
+                // Start consensus processing
+                app_state.write().consensus.start_consensus();
+                
+                // Clear input
+                input_text.set(String::new());
+                
+                // TODO: Send to consensus engine
+            }
         }
     };
     
-    let on_key_down = move |evt: KeyboardEvent| {
-        if evt.key() == Key::Enter && !evt.shift_key() {
-            on_send.call(());
+    let on_key_down = {
+        let mut app_state = app_state.clone();
+        let mut input_text = input_text.clone();
+        move |evt: KeyboardEvent| {
+        if KeyboardEventUtils::is_enter_key(&evt) {
+            let text = input_text.read().clone();
+            if !text.trim().is_empty() {
+                // Add user message
+                let message = ChatMessage {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    content: text.clone(),
+                    message_type: MessageType::User,
+                    timestamp: chrono::Utc::now(),
+                    metadata: MessageMetadata::default(),
+                };
+                
+                app_state.write().chat.add_message(message);
+                
+                // Start consensus processing
+                app_state.write().consensus.start_consensus();
+                
+                // Clear input
+                input_text.set(String::new());
+                
+                // TODO: Send to consensus engine
+            }
+        } else if KeyboardEventUtils::is_escape(&evt) {
+            // Clear input on Escape
+            input_text.set(String::new());
+        } else if evt.key() == dioxus::events::Key::Tab && !evt.modifiers().shift() {
+            // Auto-complete or show suggestions
+            // TODO: Implement auto-complete
         }
+    }
     };
     
     rsx! {

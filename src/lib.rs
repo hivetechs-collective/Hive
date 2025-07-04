@@ -4,6 +4,7 @@
 
 #![warn(missing_docs)]
 #![warn(clippy::all)]
+#![recursion_limit = "1024"]
 
 // Full module list - ALL MODULES ENABLED
 pub mod core;
