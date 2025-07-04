@@ -5,6 +5,8 @@
 //! - Circular dependency detection
 //! - Dependency metrics and visualization
 
+#![recursion_limit = "256"]
+
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -764,13 +766,13 @@ impl DependencyGraph {
     fn calculate_max_depth(&self) -> usize {
         // Use topological sort to find longest path
         if let Ok(topo) = toposort(&self.graph, None) {
-            let mut depths = HashMap::new();
-            let mut max_depth = 0;
+            let mut depths: HashMap<NodeIndex, usize> = HashMap::new();
+            let mut max_depth: usize = 0;
             
             for node in topo {
-                let depth = self.graph
+                let depth: usize = self.graph
                     .neighbors_directed(node, petgraph::Direction::Incoming)
-                    .filter_map(|pred| depths.get(&pred))
+                    .filter_map(|pred| depths.get(&pred).copied())
                     .max()
                     .map(|d| d + 1)
                     .unwrap_or(0);

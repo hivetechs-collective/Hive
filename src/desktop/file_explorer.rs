@@ -1,12 +1,13 @@
 //! File Explorer Component
 
 use dioxus::prelude::*;
-use crate::desktop::{state::*, components::*};
+use dioxus::events::{MouseData, KeyboardEvent};
+use crate::desktop::{state::*, components::*, events::MouseEventUtils};
 
 /// File Explorer Component - VS Code-like file tree
 #[component]
 pub fn FileExplorer() -> Element {
-    let app_state = use_context::<Signal<AppState>>();
+    let mut app_state = use_context::<Signal<AppState>>();
     let state = app_state.read();
     
     rsx! {
@@ -26,6 +27,32 @@ pub fn FileExplorer() -> Element {
             // File Tree
             div {
                 class: "file-tree",
+                tabindex: 0,
+                onkeydown: move |evt: KeyboardEvent| {
+                    match evt.key() {
+                        Key::ArrowUp => {
+                            // evt.prevent_default(); // Not available in Dioxus 0.5
+                            // TODO: Navigate up in file tree
+                        },
+                        Key::ArrowDown => {
+                            // evt.prevent_default(); // Not available in Dioxus 0.5
+                            // TODO: Navigate down in file tree
+                        },
+                        Key::ArrowLeft => {
+                            // evt.prevent_default(); // Not available in Dioxus 0.5
+                            // TODO: Collapse directory
+                        },
+                        Key::ArrowRight => {
+                            // evt.prevent_default(); // Not available in Dioxus 0.5
+                            // TODO: Expand directory
+                        },
+                        Key::Enter => {
+                            // evt.prevent_default(); // Not available in Dioxus 0.5
+                            // TODO: Open selected file
+                        },
+                        _ => {}
+                    }
+                },
                 if state.file_explorer.files.is_empty() {
                     div {
                         class: "empty-state",
@@ -44,28 +71,66 @@ pub fn FileExplorer() -> Element {
 /// Individual file/directory item in the tree
 #[component]
 fn FileTreeItem(file: FileItem) -> Element {
-    let app_state = use_context::<Signal<AppState>>();
+    let mut app_state = use_context::<Signal<AppState>>();
     let is_selected = {
         let state = app_state.read();
         state.file_explorer.selected_file.as_ref() == Some(&file.path)
     };
     
+    let class_name = if is_selected {
+        "file-item selected"
+    } else {
+        "file-item"
+    };
+    
+    // Clone paths and directory flag for closures to avoid move issues
+    let file_path_click = file.path.clone();
+    let file_path_context = file.path.clone();
+    let file_path_drag = file.path.clone();
+    let file_path_drop = file.path.clone();
+    let is_directory = file.is_directory;
+    
     rsx! {
         div {
-            class: "file-item {if is_selected { \"selected\" } else { \"\" }}",
-            onclick: move |_| {
-                if file.is_directory {
-                    // Toggle directory expansion
-                    app_state.write().file_explorer.toggle_directory(&file.path);
-                } else {
-                    // Select file
-                    app_state.write().file_explorer.select_file(file.path.clone());
+            class: class_name,
+            draggable: true,
+            onclick: move |evt: MouseEvent| {
+                if MouseEventUtils::is_left_click(&evt) {
+                    if is_directory {
+                        // Toggle directory expansion
+                        app_state.write().file_explorer.toggle_directory(&file_path_click);
+                    } else {
+                        // Select file
+                        app_state.write().file_explorer.select_file(file_path_click.clone());
+                    }
+                }
+            },
+            oncontextmenu: move |evt: Event<MouseData>| {
+                // evt.prevent_default(); // TODO: Update to new Dioxus API
+                // TODO: Show context menu for file operations
+                tracing::debug!("Right click on file: {}", file_path_context.display());
+            },
+            ondragstart: move |evt| {
+                // Set drag data  
+                // TODO: Fix drag and drop API for Dioxus 0.5
+                tracing::debug!("Drag started for: {}", file_path_drag.display());
+            },
+            ondragover: move |evt| {
+                if is_directory {
+                    // evt.prevent_default(); // TODO: Update to new Dioxus API
+                }
+            },
+            ondrop: move |evt| {
+                if is_directory {
+                    // evt.prevent_default(); // TODO: Update to new Dioxus API
+                    // TODO: Handle file move/copy with proper drag data API
+                    tracing::debug!("Drop on directory: {}", file_path_drop.display());
                 }
             },
             
             span {
                 class: "file-icon",
-                "{file.file_type.icon()}"
+                {file.file_type.icon()}
             }
             
             span {

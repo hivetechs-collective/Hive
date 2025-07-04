@@ -19,6 +19,7 @@ use tracing_subscriber::{
     EnvFilter, Layer,
 };
 use serde_json::Value;
+use is_terminal::IsTerminal;
 
 use crate::core::error::{HiveError, Result};
 
@@ -120,7 +121,11 @@ fn setup_logging_internal(config: LoggingConfig) -> Result<()> {
 
     // Console layer with colors and formatting  
     let console_layer = fmt::layer()
-        .with_ansi(config.console_colors && atty::is(atty::Stream::Stdout))
+        .with_ansi(config.console_colors && {
+            use is_terminal::IsTerminal;
+            use std::io::stdout;
+            stdout().is_terminal()
+        })
         .with_target(true)
         .with_thread_ids(false)
         .with_thread_names(false)

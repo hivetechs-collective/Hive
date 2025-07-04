@@ -4,7 +4,7 @@
 
 use crate::core::error::{HiveResult, HiveError};
 use crate::planning::types::*;
-use chrono::{DateTime, Duration, Utc, Weekday, Datelike};
+use chrono::{DateTime, Duration, Utc, Weekday, Datelike, TimeZone, NaiveTime, Timelike};
 use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
@@ -154,7 +154,8 @@ impl TimelineEstimator {
             if degree == 0 {
                 queue.push_back(task_id.clone());
                 earliest_start.insert(task_id.clone(), Duration::zero());
-                let duration = durations.get(task_id).unwrap_or(&Duration::zero());
+                let zero_duration = Duration::zero();
+                let duration = durations.get(task_id).unwrap_or(&zero_duration);
                 earliest_finish.insert(task_id.clone(), *duration);
             }
         }
@@ -171,7 +172,8 @@ impl TimelineEstimator {
                     earliest_start.insert(dep_id.clone(), new_start);
                     
                     // Update earliest finish time
-                    let dep_duration = durations.get(dep_id).unwrap_or(&Duration::zero());
+                    let zero_duration = Duration::zero();
+                    let dep_duration = durations.get(dep_id).unwrap_or(&zero_duration);
                     earliest_finish.insert(dep_id.clone(), new_start + *dep_duration);
                     
                     // Decrement in-degree and add to queue if ready
@@ -424,16 +426,16 @@ impl TimelineEstimator {
         
         // Skip to next working day if needed
         while !self.working_hours.work_days.contains(&current.weekday()) ||
-              self.working_hours.holidays.iter().any(|h| h.date() == current.date()) {
+              self.working_hours.holidays.iter().any(|h| h.date_naive() == current.date_naive()) {
             current = current + Duration::days(1);
             // Reset to start of working day
-            current = current.date().and_hms(9, 0, 0); // 9 AM
+            current = current.date_naive().and_time(NaiveTime::from_hms_opt(9, 0, 0).unwrap()).and_utc(); // 9 AM
         }
         
         // Ensure within working hours
         let hour = current.time().hour();
         if hour < 9 {
-            current = current.date().and_hms(9, 0, 0);
+            current = current.date_naive().and_time(NaiveTime::from_hms_opt(9, 0, 0).unwrap()).and_utc();
         } else if hour >= 17 {
             // Move to next working day
             current = self.next_working_time(current + Duration::days(1));

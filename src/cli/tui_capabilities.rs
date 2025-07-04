@@ -7,6 +7,7 @@ use anyhow::Result;
 use crossterm::terminal;
 use std::env;
 use tracing;
+use is_terminal::IsTerminal;
 
 /// Terminal capabilities for progressive enhancement
 #[derive(Debug, Clone)]
@@ -342,26 +343,25 @@ impl TuiCapabilities {
     }
 
     fn is_interactive_terminal() -> bool {
-        // Use atty crate for cross-platform terminal detection
+        // Use is-terminal crate for cross-platform terminal detection
         // Handle potential errors gracefully
-        match (atty::is(atty::Stream::Stdin), atty::is(atty::Stream::Stdout)) {
-            (true, true) => {
-                // Additional checks for CI/CD environments
-                if env::var("CI").is_ok() || 
-                   env::var("GITHUB_ACTIONS").is_ok() || 
-                   env::var("JENKINS_URL").is_ok() || 
-                   env::var("BUILDKITE").is_ok() {
-                    return false;
-                }
-                
-                // Check for non-interactive shells
-                if env::var("TERM").map_or(false, |term| term == "dumb") {
-                    return false;
-                }
-                
-                true
+        if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+            // Additional checks for CI/CD environments
+            if env::var("CI").is_ok() || 
+               env::var("GITHUB_ACTIONS").is_ok() || 
+               env::var("JENKINS_URL").is_ok() || 
+               env::var("BUILDKITE").is_ok() {
+                return false;
             }
-            _ => false,
+            
+            // Check for non-interactive shells
+            if env::var("TERM").map_or(false, |term| term == "dumb") {
+                return false;
+            }
+            
+            true
+        } else {
+            false
         }
     }
 }
@@ -399,7 +399,7 @@ pub struct TuiLauncher;
 
 impl TuiLauncher {
     /// Check if TUI should be launched with comprehensive error handling
-    pub async fn should_launch_tui() -> Result<TuiMode> {
+    pub fn should_launch_tui() -> Result<TuiMode> {
         // Handle the case where terminal detection fails
         let capabilities = match TuiCapabilities::detect() {
             Ok(caps) => caps,
@@ -414,19 +414,19 @@ impl TuiLauncher {
     }
 
     /// Get capabilities for TUI configuration
-    pub async fn get_capabilities() -> Result<TuiCapabilities> {
+    pub fn get_capabilities() -> Result<TuiCapabilities> {
         TuiCapabilities::detect()
     }
 
     /// Check if current environment supports enhanced TUI
-    pub async fn supports_enhanced_tui() -> Result<bool> {
+    pub fn supports_enhanced_tui() -> Result<bool> {
         let capabilities = TuiCapabilities::detect()?;
         Ok(capabilities.supports_enhanced_tui())
     }
 
     /// Check if current environment supports any TUI
-    pub async fn supports_any_tui() -> Result<bool> {
-        let mode = Self::should_launch_tui().await?;
+    pub fn supports_any_tui() -> Result<bool> {
+        let mode = Self::should_launch_tui()?;
         Ok(mode != TuiMode::Disabled)
     }
 }
