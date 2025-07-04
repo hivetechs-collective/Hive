@@ -87,7 +87,11 @@ impl DatabaseManager {
         
         // Apply performance optimizations
         if config.enable_wal {
-            conn.execute(&format!("PRAGMA journal_mode = {}", config.journal_mode), [])?;
+            let _mode: String = conn.query_row(
+                &format!("PRAGMA journal_mode = {}", config.journal_mode),
+                [],
+                |row| row.get(0)
+            )?;
         }
         
         conn.execute(&format!("PRAGMA cache_size = {}", config.cache_size), [])?;
@@ -150,11 +154,11 @@ impl DatabaseManager {
                 output_tokens INTEGER DEFAULT 0,
                 start_time TEXT,
                 end_time TEXT,
-                success_rate TEXT DEFAULT '100',
-                quality_score REAL DEFAULT 0.95,
-                consensus_improvement INTEGER DEFAULT 15,
-                confidence_level TEXT DEFAULT 'High',
-                success INTEGER DEFAULT 1,
+                success_rate TEXT DEFAULT '0',
+                quality_score REAL DEFAULT 0.0,
+                consensus_improvement INTEGER DEFAULT 0,
+                confidence_level TEXT DEFAULT 'Unknown',
+                success INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id)
@@ -232,7 +236,7 @@ impl DatabaseManager {
             [],
         )?;
 
-        // Create placeholder tables for statistics queries
+        // Create OpenRouter models table for API model tracking
         conn.execute(
             "CREATE TABLE IF NOT EXISTS openrouter_models (
                 internal_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -507,11 +511,11 @@ impl Conversation {
             output_tokens: 0,
             start_time: Some(current_timestamp()),
             end_time: None,
-            success_rate: "100".to_string(),
-            quality_score: 0.95,
-            consensus_improvement: 15,
-            confidence_level: "High".to_string(),
-            success: true,
+            success_rate: "0".to_string(), // Will be calculated after completion
+            quality_score: 0.0, // Will be calculated based on actual consensus
+            consensus_improvement: 0, // Will be calculated from stage analysis
+            confidence_level: "Unknown".to_string(), // Will be determined by validator
+            success: false, // Will be set to true when consensus completes
             created_at: current_timestamp(),
             updated_at: current_timestamp(),
         };

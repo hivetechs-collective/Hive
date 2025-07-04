@@ -90,18 +90,35 @@ impl DatabaseManager {
         // Get a connection to apply initial pragmas
         let conn = pool.get().context("Failed to get initial connection")?;
         
+        info!("Applying database pragmas...");
         // Apply performance optimizations
         if config.enable_wal {
-            conn.execute(&format!("PRAGMA journal_mode = {}", config.journal_mode), [])?;
+            info!("Setting WAL mode...");
+            let _mode: String = conn.query_row(
+                &format!("PRAGMA journal_mode = {}", config.journal_mode),
+                [],
+                |row| row.get(0)
+            )?;
+            info!("WAL mode set successfully");
         }
         
+        info!("Setting cache size...");
         conn.execute(&format!("PRAGMA cache_size = {}", config.cache_size), [])?;
+        info!("Setting temp store...");
         conn.execute("PRAGMA temp_store = MEMORY", [])?;
-        conn.execute("PRAGMA mmap_size = 268435456", [])?; // 256MB mmap
+        info!("Setting mmap size...");
+        let _mmap_size: i64 = conn.query_row(
+            "PRAGMA mmap_size = 268435456",
+            [],
+            |row| row.get(0)
+        )?; // 256MB mmap
+        info!("Setting synchronous mode...");
         conn.execute(&format!("PRAGMA synchronous = {}", config.synchronous), [])?;
         
         if config.enable_foreign_keys {
+            info!("Enabling foreign keys...");
             conn.execute("PRAGMA foreign_keys = ON", [])?;
+            info!("Foreign keys enabled");
         }
 
         // Drop the connection to return it to the pool
@@ -115,7 +132,9 @@ impl DatabaseManager {
         let manager = Self { pool, config };
         
         // Run migrations
+        info!("Starting database migrations...");
         manager.run_migrations().await?;
+        info!("Database migrations completed");
         
         Ok(manager)
     }
@@ -558,11 +577,11 @@ impl Conversation {
             output_tokens: 0,
             start_time: Some(current_timestamp()),
             end_time: None,
-            success_rate: "100".to_string(),
-            quality_score: 0.95,
-            consensus_improvement: 15,
-            confidence_level: "High".to_string(),
-            success: true,
+            success_rate: "0".to_string(), // Will be calculated after completion
+            quality_score: 0.0, // Will be calculated based on actual consensus
+            consensus_improvement: 0, // Will be calculated from stage analysis
+            confidence_level: "Unknown".to_string(), // Will be determined by validator
+            success: false, // Will be set to true when consensus completes
             created_at: current_timestamp(),
             updated_at: current_timestamp(),
         };
@@ -1148,6 +1167,7 @@ where
 mod tests {
     use super::*;
     use tempfile::TempDir;
+    use anyhow::bail;
 
     async fn setup_test_db() -> Result<(Arc<DatabaseManager>, TempDir)> {
         let temp_dir = TempDir::new()?;
@@ -1427,3 +1447,38 @@ mod tests {
         Ok(())
     }
 }
+
+// Utility functions for database operations
+
+/// Execute a query that doesn't return results
+pub async fn execute_query(query: &str, params: &[&dyn rusqlite::ToSql]) -> Result<usize> {
+    let db = get_database().await?;
+    let conn = db.get_connection()?;
+    let result = conn.execute(query, params)?;
+    Ok(result)
+}
+
+/// Fetch all results from a query
+pub async fn fetch_all_query<T, F>(query: &str, params: &[&dyn rusqlite::ToSql], f: F) -> Result<Vec<T>>
+where
+    F: FnMut(&rusqlite::Row) -> rusqlite::Result<T>,
+{
+    let db = get_database().await?;
+    let conn = db.get_connection()?;
+    let mut stmt = conn.prepare(query)?;
+    let results = stmt.query_map(params, f)?
+        .collect::<rusqlite::Result<Vec<T>>>()?;
+    Ok(results)
+}
+
+/// Fetch optional result from a query
+pub async fn fetch_optional_query<T, F>(query: &str, params: &[&dyn rusqlite::ToSql], f: F) -> Result<Option<T>>
+where
+    F: FnOnce(&rusqlite::Row) -> rusqlite::Result<T>,
+{
+    let db = get_database().await?;
+    let conn = db.get_connection()?;
+    let result = conn.query_row(query, params, f).optional()?;
+    Ok(result)
+}
+
