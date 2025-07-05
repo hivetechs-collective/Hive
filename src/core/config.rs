@@ -27,6 +27,44 @@ pub struct HiveConfig {
     pub openrouter: Option<OpenRouterConfig>,
     pub cloudflare: Option<CloudflareConfig>,
     pub license: Option<LicenseConfig>,
+    pub core_dirs: CoreDirsConfig,
+    pub analytics: AnalyticsConfig,
+    pub database: DatabaseConfig,
+    pub memory: MemoryConfig,
+}
+
+/// Core directories configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoreDirsConfig {
+    pub data_dir: PathBuf,
+    pub config_dir: PathBuf,
+    pub cache_dir: PathBuf,
+}
+
+/// Analytics configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnalyticsConfig {
+    pub collection_enabled: bool,
+    pub retention_days: u32,
+    pub export_enabled: bool,
+}
+
+/// Database configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseConfig {
+    pub path: PathBuf,
+    pub connection_pool_size: usize,
+    pub enable_wal: bool,
+    pub auto_vacuum: bool,
+}
+
+/// Memory system configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryConfig {
+    pub max_conversations: usize,
+    pub context_window_size: usize,
+    pub clustering_enabled: bool,
+    pub embedding_model: String,
 }
 
 /// Consensus engine configuration
@@ -37,6 +75,7 @@ pub struct ConsensusConfig {
     pub streaming: StreamingConfig,
     pub max_tokens: u32,
     pub temperature: f32,
+    pub timeout_seconds: u32,
 }
 
 /// Consensus model configuration
@@ -89,6 +128,17 @@ pub struct SecurityConfig {
     pub require_confirmation: bool,
     pub audit_logging: bool,
     pub telemetry: bool,
+    pub enable_mfa: bool,
+    pub session_timeout: u32,
+    pub trust_dialog: TrustDialogConfig,
+}
+
+/// Trust dialog configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrustDialogConfig {
+    pub enabled: bool,
+    pub auto_trust_git: bool,
+    pub trust_timeout: u32,
 }
 
 /// Logging configuration
@@ -127,6 +177,8 @@ pub struct LicenseConfig {
 
 impl Default for HiveConfig {
     fn default() -> Self {
+        let hive_dir = get_hive_config_dir();
+        
         Self {
             consensus: ConsensusConfig {
                 profile: "balanced".to_string(),
@@ -143,6 +195,7 @@ impl Default for HiveConfig {
                 },
                 max_tokens: 4096,
                 temperature: 0.7,
+                timeout_seconds: 300,
             },
             performance: PerformanceConfig {
                 cache_size: "256MB".to_string(),
@@ -165,6 +218,13 @@ impl Default for HiveConfig {
                 require_confirmation: true,
                 audit_logging: true,
                 telemetry: false,
+                enable_mfa: false,
+                session_timeout: 3600,
+                trust_dialog: TrustDialogConfig {
+                    enabled: true,
+                    auto_trust_git: true,
+                    trust_timeout: 86400,
+                },
             },
             logging: LoggingConfig {
                 level: "info".to_string(),
@@ -174,6 +234,28 @@ impl Default for HiveConfig {
             openrouter: None,
             cloudflare: None,
             license: None,
+            core_dirs: CoreDirsConfig {
+                data_dir: hive_dir.join("data"),
+                config_dir: hive_dir.clone(),
+                cache_dir: hive_dir.join("cache"),
+            },
+            analytics: AnalyticsConfig {
+                collection_enabled: true,
+                retention_days: 90,
+                export_enabled: true,
+            },
+            database: DatabaseConfig {
+                path: hive_dir.join("data").join("hive.db"),
+                connection_pool_size: 10,
+                enable_wal: true,
+                auto_vacuum: true,
+            },
+            memory: MemoryConfig {
+                max_conversations: 1000,
+                context_window_size: 4096,
+                clustering_enabled: true,
+                embedding_model: "text-embedding-ada-002".to_string(),
+            },
         }
     }
 }
@@ -254,9 +336,30 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
         "security.require_confirmation" => config.security.require_confirmation = value.parse()?,
         "security.audit_logging" => config.security.audit_logging = value.parse()?,
         "security.telemetry" => config.security.telemetry = value.parse()?,
+        "security.enable_mfa" => config.security.enable_mfa = value.parse()?,
+        "security.session_timeout" => config.security.session_timeout = value.parse()?,
+        "security.trust_dialog.enabled" => config.security.trust_dialog.enabled = value.parse()?,
+        "security.trust_dialog.auto_trust_git" => config.security.trust_dialog.auto_trust_git = value.parse()?,
+        "security.trust_dialog.trust_timeout" => config.security.trust_dialog.trust_timeout = value.parse()?,
         
         "logging.level" => config.logging.level = value.to_string(),
         "logging.format" => config.logging.format = value.to_string(),
+        
+        // Handle Analytics config
+        "analytics.collection_enabled" => config.analytics.collection_enabled = value.parse()?,
+        "analytics.retention_days" => config.analytics.retention_days = value.parse()?,
+        "analytics.export_enabled" => config.analytics.export_enabled = value.parse()?,
+        
+        // Handle Database config
+        "database.connection_pool_size" => config.database.connection_pool_size = value.parse()?,
+        "database.enable_wal" => config.database.enable_wal = value.parse()?,
+        "database.auto_vacuum" => config.database.auto_vacuum = value.parse()?,
+        
+        // Handle Memory config
+        "memory.max_conversations" => config.memory.max_conversations = value.parse()?,
+        "memory.context_window_size" => config.memory.context_window_size = value.parse()?,
+        "memory.clustering_enabled" => config.memory.clustering_enabled = value.parse()?,
+        "memory.embedding_model" => config.memory.embedding_model = value.to_string(),
         
         // Handle OpenRouter config
         key if key.starts_with("openrouter.") => {
@@ -341,9 +444,35 @@ pub async fn get_config_value(key: &str) -> Result<String> {
         "security.require_confirmation" => config.security.require_confirmation.to_string(),
         "security.audit_logging" => config.security.audit_logging.to_string(),
         "security.telemetry" => config.security.telemetry.to_string(),
+        "security.enable_mfa" => config.security.enable_mfa.to_string(),
+        "security.session_timeout" => config.security.session_timeout.to_string(),
+        "security.trust_dialog.enabled" => config.security.trust_dialog.enabled.to_string(),
+        "security.trust_dialog.auto_trust_git" => config.security.trust_dialog.auto_trust_git.to_string(),
+        "security.trust_dialog.trust_timeout" => config.security.trust_dialog.trust_timeout.to_string(),
         
         "logging.level" => config.logging.level,
         "logging.format" => config.logging.format,
+        
+        // Handle Analytics config
+        "analytics.collection_enabled" => config.analytics.collection_enabled.to_string(),
+        "analytics.retention_days" => config.analytics.retention_days.to_string(),
+        "analytics.export_enabled" => config.analytics.export_enabled.to_string(),
+        
+        // Handle Database config  
+        "database.connection_pool_size" => config.database.connection_pool_size.to_string(),
+        "database.enable_wal" => config.database.enable_wal.to_string(),
+        "database.auto_vacuum" => config.database.auto_vacuum.to_string(),
+        
+        // Handle Memory config
+        "memory.max_conversations" => config.memory.max_conversations.to_string(),
+        "memory.context_window_size" => config.memory.context_window_size.to_string(),
+        "memory.clustering_enabled" => config.memory.clustering_enabled.to_string(),
+        "memory.embedding_model" => config.memory.embedding_model,
+        
+        // Handle Core dirs config
+        "core_dirs.data_dir" => config.core_dirs.data_dir.display().to_string(),
+        "core_dirs.config_dir" => config.core_dirs.config_dir.display().to_string(),
+        "core_dirs.cache_dir" => config.core_dirs.cache_dir.display().to_string(),
         
         // Handle OpenRouter config
         "openrouter.api_key" => config.openrouter.as_ref().and_then(|o| o.api_key.clone()).unwrap_or_default(),

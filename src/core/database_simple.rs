@@ -75,6 +75,81 @@ impl Database {
             config: Arc::new(RwLock::new(config)),
         })
     }
+
+    /// Get a database connection (sync version)
+    pub fn get_connection_sync(&self) -> Result<Connection> {
+        // For the simple implementation, we directly open a connection each time
+        // In the full implementation, this would use a connection pool
+        let config = self.config.blocking_read();
+        
+        // Expand home directory path if needed
+        let db_path = if config.path.to_string_lossy().starts_with("~/") {
+            let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+            home.join(config.path.strip_prefix("~/").unwrap_or(&config.path))
+        } else {
+            config.path.clone()
+        };
+        
+        // Ensure parent directory exists
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        
+        // Open connection
+        let conn = Connection::open(&db_path)?;
+        
+        // Apply pragmas
+        if config.enable_wal {
+            conn.execute("PRAGMA journal_mode = WAL", [])?;
+        }
+        
+        if config.enable_foreign_keys {
+            conn.execute("PRAGMA foreign_keys = ON", [])?;
+        }
+        
+        Ok(conn)
+    }
+}
+
+// Additional methods for async compatibility
+impl Database {
+    /// Get a database connection (async version)
+    /// This is needed for code that expects async behavior
+    pub async fn get_connection(&self) -> Result<Connection> {
+        // Get config without blocking the async runtime
+        let config = self.config.read().await.clone();
+        
+        // Expand home directory path if needed
+        let db_path = if config.path.to_string_lossy().starts_with("~/") {
+            let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+            home.join(config.path.strip_prefix("~/").unwrap_or(&config.path))
+        } else {
+            config.path.clone()
+        };
+        
+        // Use tokio to handle filesystem operations
+        if let Some(parent) = db_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        
+        // Open connection in blocking task to avoid blocking the async runtime
+        let conn = tokio::task::spawn_blocking(move || {
+            let conn = Connection::open(&db_path)?;
+            
+            // Apply pragmas
+            if config.enable_wal {
+                conn.execute("PRAGMA journal_mode = WAL", [])?;
+            }
+            
+            if config.enable_foreign_keys {
+                conn.execute("PRAGMA foreign_keys = ON", [])?;
+            }
+            
+            Ok::<Connection, anyhow::Error>(conn)
+        }).await??;
+        
+        Ok(conn)
+    }
 }
 
 // For now, provide stub implementations that can be filled in later

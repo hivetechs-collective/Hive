@@ -240,6 +240,11 @@ pub enum HiveError {
     #[error("IDE integration failed for {ide}: {message}")]
     IdeIntegration { ide: String, message: String },
 
+    // Security errors
+    /// Security operation failed
+    #[error("Security error: {message}")]
+    Security { message: String },
+    
     // System and environment errors
     /// Environment variable not set
     #[error("Required environment variable not set: {var}")]

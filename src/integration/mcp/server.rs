@@ -13,7 +13,7 @@ use super::tools::ToolRegistry;
 use super::resources::ResourceManager;
 use super::auth::AuthManager;
 use super::streaming::{StreamingHandler, WebSocketHandler};
-use crate::core::config::Config;
+use crate::core::config::{Config, self};
 use crate::consensus::engine::ConsensusEngine;
 
 use anyhow::{Result, anyhow};
@@ -41,9 +41,9 @@ pub struct McpServer {
 impl McpServer {
     /// Create new MCP server
     pub async fn new() -> Result<Self> {
-        let config = Arc::new(Config::load().await?);
+        let config = Arc::new(config::load_config().await?);
         let consensus_engine = Arc::new(RwLock::new(
-            ConsensusEngine::new(config.clone()).await?
+            ConsensusEngine::new(None).await?
         ));
         
         let tool_registry = Arc::new(ToolRegistry::new(
