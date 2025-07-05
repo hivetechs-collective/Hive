@@ -46,13 +46,16 @@ clap = { version = "4.4", features = ["derive", "env"] }
 clap_complete = "4.4"
 
 # Desktop App (Dioxus) dependencies - 100% Rust stack
-dioxus = { version = "0.5", features = ["desktop"] }
-dioxus-desktop = "0.5"
-dioxus-router = "0.5"
+dioxus = { version = "0.6.3", features = ["desktop"] }
+dioxus-desktop = "0.6.3"
+dioxus-router = "0.6.3"
 
 # Additional Dioxus utilities
-dioxus-signals = "0.5"
-manganis = "0.2"
+dioxus-signals = "0.6.3"
+manganis = { version = "0.7.0-alpha.2" }
+
+# Dioxus SDK for enhanced desktop features
+dioxus-sdk = "0.6"
 
 # TUI (Terminal User Interface) - Legacy support
 ratatui = "0.26"

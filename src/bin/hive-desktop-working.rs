@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use tokio::sync::mpsc::UnboundedReceiver;
 
 const DESKTOP_STYLES: &str = r#"
     /* VS Code-style CSS */
@@ -242,9 +241,20 @@ const DESKTOP_STYLES: &str = r#"
 "#;
 
 fn main() {
-    // Launch the desktop app with proper title
-    // Note: Dioxus 0.5 doesn't support launch_cfg, title must be set differently
-    dioxus::launch(App);
+    // Launch the desktop app with proper title using Dioxus 0.6 LaunchBuilder
+    use dioxus::desktop::{Config, WindowBuilder};
+    
+    dioxus::LaunchBuilder::desktop()
+        .with_cfg(
+            Config::new().with_window(
+                WindowBuilder::new()
+                    .with_title("Hive AI Desktop")
+                    .with_resizable(true)
+                    .with_inner_size(dioxus::desktop::LogicalSize::new(1200.0, 800.0))
+                    .with_min_inner_size(dioxus::desktop::LogicalSize::new(800.0, 600.0))
+            ),
+        )
+        .launch(App);
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -266,11 +276,11 @@ fn App() -> Element {
     ]);
     let mut input_value = use_signal(String::new);
     let mut is_processing = use_signal(|| false);
-    let mut selected_file = use_signal(|| None::<String>);
-    let mut file_tree = use_signal(|| Vec::<FileItem>::new());
-    let mut expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
-    let mut current_dir = use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let mut file_content = use_signal(String::new);
+    let selected_file = use_signal(|| None::<String>);
+    let file_tree = use_signal(|| Vec::<FileItem>::new());
+    let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
+    let current_dir = use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let file_content = use_signal(String::new);
     
     // Load initial directory
     {
@@ -433,7 +443,7 @@ fn App() -> Element {
                             disabled: *is_processing.read(),
                             oninput: move |evt| *input_value.write() = evt.value().clone(),
                             onkeypress: move |evt| {
-                                if evt.code() == dioxus::html::input_data::keyboard_types::Code::Enter {
+                                if evt.code() == dioxus::events::Code::Enter {
                                     send_message(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone());
                                 }
                             }
