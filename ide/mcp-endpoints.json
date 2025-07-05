@@ -1,0 +1,375 @@
+{
+  "name": "Hive AI MCP Server",
+  "version": "2.0.0",
+  "protocol": "2024-11-05",
+  "capabilities": {
+    "tools": true,
+    "resources": true,
+    "logging": true,
+    "prompts": true,
+    "sampling": true,
+    "subscriptions": true
+  },
+  "endpoints": {
+    "primary": {
+      "host": "127.0.0.1",
+      "port": 7777,
+      "protocol": "http",
+      "url": "http://127.0.0.1:7777"
+    },
+    "websocket": {
+      "host": "127.0.0.1",
+      "port": 7778,
+      "protocol": "ws",
+      "url": "ws://127.0.0.1:7778"
+    }
+  },
+  "authentication": {
+    "type": "none",
+    "required": false
+  },
+  "tools": [
+    {
+      "name": "ask_hive",
+      "description": "Ask Hive AI a question using multi-model consensus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "The question to ask Hive AI"
+          },
+          "profile": {
+            "type": "string",
+            "enum": ["speed", "balanced", "cost", "elite"],
+            "default": "balanced",
+            "description": "Consensus profile to use"
+          },
+          "context": {
+            "type": "string",
+            "description": "Additional context for the question"
+          }
+        },
+        "required": ["question"]
+      }
+    },
+    {
+      "name": "analyze_code",
+      "description": "Analyze code files or directories using AI consensus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Code to analyze"
+          },
+          "file_path": {
+            "type": "string",
+            "description": "Path to file to analyze"
+          },
+          "language": {
+            "type": "string",
+            "description": "Programming language"
+          },
+          "analysis_type": {
+            "type": "string",
+            "enum": ["quality", "security", "performance", "structure", "comprehensive"],
+            "default": "comprehensive",
+            "description": "Type of analysis to perform"
+          }
+        },
+        "required": ["code"]
+      }
+    },
+    {
+      "name": "explain_code",
+      "description": "Explain what code does using AI consensus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Code to explain"
+          },
+          "level": {
+            "type": "string",
+            "enum": ["beginner", "intermediate", "expert"],
+            "default": "intermediate",
+            "description": "Explanation level"
+          }
+        },
+        "required": ["code"]
+      }
+    },
+    {
+      "name": "improve_code",
+      "description": "Suggest improvements for code using AI consensus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Code to improve"
+          },
+          "focus": {
+            "type": "string",
+            "enum": ["performance", "readability", "security", "maintainability", "all"],
+            "default": "all",
+            "description": "Focus area for improvements"
+          },
+          "apply_changes": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether to apply changes directly"
+          }
+        },
+        "required": ["code"]
+      }
+    },
+    {
+      "name": "generate_tests",
+      "description": "Generate unit tests for code using AI consensus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Code to generate tests for"
+          },
+          "test_framework": {
+            "type": "string",
+            "description": "Testing framework to use"
+          },
+          "coverage_level": {
+            "type": "string",
+            "enum": ["basic", "comprehensive", "edge_cases"],
+            "default": "comprehensive",
+            "description": "Level of test coverage"
+          }
+        },
+        "required": ["code"]
+      }
+    },
+    {
+      "name": "repository_summary",
+      "description": "Generate a comprehensive summary of the repository",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Repository path"
+          },
+          "include_dependencies": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include dependency analysis"
+          },
+          "include_metrics": {
+            "type": "boolean",
+            "default": true,
+            "description": "Include code metrics"
+          }
+        }
+      }
+    },
+    {
+      "name": "plan_project",
+      "description": "Create a strategic plan for implementing features or changes",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "string",
+            "description": "Project goal or feature to implement"
+          },
+          "context": {
+            "type": "string",
+            "description": "Project context and constraints"
+          },
+          "timeline": {
+            "type": "string",
+            "description": "Desired timeline"
+          }
+        },
+        "required": ["goal"]
+      }
+    },
+    {
+      "name": "transform_code",
+      "description": "Apply AI-powered code transformations",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Code to transform"
+          },
+          "transformation": {
+            "type": "string",
+            "enum": ["refactor", "modernize", "optimize", "convert", "extract"],
+            "description": "Type of transformation"
+          },
+          "target": {
+            "type": "string",
+            "description": "Target format or style"
+          }
+        },
+        "required": ["code", "transformation"]
+      }
+    },
+    {
+      "name": "search_memory",
+      "description": "Search through conversation history and knowledge base",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["conversations", "knowledge", "all"],
+            "default": "all",
+            "description": "Search scope"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 10,
+            "description": "Maximum number of results"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "generate_analytics",
+      "description": "Generate analytics reports and insights",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["performance", "usage", "trends", "cost", "quality"],
+            "description": "Type of analytics report"
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": ["day", "week", "month", "quarter"],
+            "default": "week",
+            "description": "Timeframe for analysis"
+          }
+        },
+        "required": ["type"]
+      }
+    },
+    {
+      "name": "generate_docs",
+      "description": "Generate documentation for code using AI consensus",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Code to document"
+          },
+          "format": {
+            "type": "string",
+            "enum": ["markdown", "rst", "html", "inline"],
+            "default": "markdown",
+            "description": "Documentation format"
+          },
+          "style": {
+            "type": "string",
+            "enum": ["api", "tutorial", "reference", "overview"],
+            "default": "reference",
+            "description": "Documentation style"
+          }
+        },
+        "required": ["code"]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "uri": "hive://config",
+      "name": "Configuration",
+      "description": "Current Hive AI configuration",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "hive://memory/conversations",
+      "name": "Conversation History",
+      "description": "Recent conversation summaries",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "hive://analysis/repository",
+      "name": "Repository Analysis",
+      "description": "Current repository analysis data",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "hive://analytics/performance",
+      "name": "Performance Analytics",
+      "description": "Performance metrics and trends",
+      "mimeType": "application/json"
+    },
+    {
+      "uri": "hive://analytics/usage",
+      "name": "Usage Analytics",
+      "description": "Usage patterns and statistics",
+      "mimeType": "application/json"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "code_review",
+      "description": "Comprehensive code review prompt",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "Code to review",
+          "required": true
+        },
+        {
+          "name": "focus",
+          "description": "Review focus areas",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "architecture_analysis",
+      "description": "Architecture analysis prompt",
+      "arguments": [
+        {
+          "name": "codebase",
+          "description": "Codebase to analyze",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "refactoring_suggestions",
+      "description": "Refactoring suggestions prompt",
+      "arguments": [
+        {
+          "name": "code",
+          "description": "Code to refactor",
+          "required": true
+        },
+        {
+          "name": "goals",
+          "description": "Refactoring goals",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "logging": {
+    "level": "info",
+    "categories": ["server", "tools", "resources", "auth"]
+  }
+}
