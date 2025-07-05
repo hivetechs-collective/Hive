@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use dioxus::desktop::{Config, WindowBuilder};
 
 const DESKTOP_STYLES: &str = r#"
     /* VS Code-style CSS */
@@ -21,49 +22,14 @@ const DESKTOP_STYLES: &str = r#"
         flex-direction: column;
     }
     
-    /* Header styles */
-    .header {
-        height: 32px;
-        background: #2d2d30;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 20px;
-        border-bottom: 1px solid #3e3e42;
-    }
-    
-    .header-left {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .app-title {
-        font-size: 14px;
-        font-weight: 600;
-        margin: 0;
-    }
-    
-    .app-version {
-        font-size: 12px;
-        color: #858585;
-    }
-    
-    .header-right {
-        font-size: 12px;
-    }
-    
-    .status-indicator {
-        color: #4ec9b0;
-    }
-    
+    /* Main content area */
     .main-content {
         display: flex;
         flex: 1;
         overflow: hidden;
     }
     
-    /* Sidebar styles */
+    /* Sidebar styles (left) */
     .sidebar {
         width: 250px;
         background: #252526;
@@ -102,12 +68,68 @@ const DESKTOP_STYLES: &str = r#"
         color: #ffffff;
     }
     
-    /* Chat container styles */
-    .chat-container {
+    /* Code editor area (center) */
+    .editor-container {
         flex: 1;
         display: flex;
         flex-direction: column;
         background: #1e1e1e;
+        min-width: 0;
+    }
+    
+    .editor-tabs {
+        height: 35px;
+        background: #2d2d30;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid #3e3e42;
+        padding: 0 10px;
+    }
+    
+    .editor-tab {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 15px;
+        height: 100%;
+        background: #2d2d30;
+        border-right: 1px solid #3e3e42;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background-color 0.1s;
+    }
+    
+    .editor-tab.active {
+        background: #1e1e1e;
+        border-bottom: 1px solid #1e1e1e;
+    }
+    
+    .editor-tab:hover {
+        background: #323234;
+    }
+    
+    .editor-content {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+    
+    .welcome-message {
+        color: #858585;
+        text-align: center;
+        margin-top: 100px;
+    }
+    
+    /* Chat panel (right) */
+    .chat-panel {
+        width: 350px;
+        background: #252526;
+        border-left: 1px solid #3e3e42;
+        display: flex;
+        flex-direction: column;
     }
     
     .panel-header {
@@ -130,7 +152,7 @@ const DESKTOP_STYLES: &str = r#"
     .message {
         padding: 12px 16px;
         border-radius: 6px;
-        max-width: 70%;
+        max-width: 85%;
         font-size: 14px;
         line-height: 1.5;
     }
@@ -152,7 +174,7 @@ const DESKTOP_STYLES: &str = r#"
         display: flex;
         padding: 16px 20px;
         gap: 12px;
-        background: #252526;
+        background: #1e1e1e;
         border-top: 1px solid #3e3e42;
     }
     
@@ -194,44 +216,6 @@ const DESKTOP_STYLES: &str = r#"
         cursor: not-allowed;
     }
     
-    /* Right panel styles */
-    .right-panel {
-        width: 300px;
-        background: #252526;
-        border-left: 1px solid #3e3e42;
-        padding: 20px;
-    }
-    
-    .panel-title {
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        color: #858585;
-        margin-bottom: 16px;
-        letter-spacing: 0.5px;
-    }
-    
-    .stage-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 12px;
-        font-size: 13px;
-    }
-    
-    .stage-indicator {
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        background: #3e3e42;
-        flex-shrink: 0;
-    }
-    
-    .stage-indicator.stage-generator { background: #f48771; }
-    .stage-indicator.stage-refiner { background: #4ec9b0; }
-    .stage-indicator.stage-validator { background: #569cd6; }
-    .stage-indicator.stage-curator { background: #c586c0; }
-    
     /* Status bar styles */
     .status-bar {
         height: 24px;
@@ -249,11 +233,24 @@ const DESKTOP_STYLES: &str = r#"
         align-items: center;
         gap: 15px;
     }
+    
+    .git-branch {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
 "#;
 
 fn main() {
-    // Launch the desktop app
-    dioxus::launch(App);
+    // Configure the desktop app with proper window settings
+    let config = Config::new()
+        .with_window(WindowBuilder::new()
+            .with_title("Hive AI Desktop")
+            .with_inner_size(dioxus::desktop::LogicalSize::new(1200.0, 800.0))
+            .with_min_inner_size(dioxus::desktop::LogicalSize::new(800.0, 600.0)));
+    
+    // Launch with configuration
+    dioxus::desktop::launch_cfg(App, config);
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -270,6 +267,7 @@ fn App() -> Element {
     ]);
     let mut input_value = use_signal(String::new);
     let mut is_processing = use_signal(|| false);
+    let mut selected_file = use_signal(|| None::<String>);
 
     // Send message handler
     let send_message = move |messages: &mut Signal<Vec<Message>>, input_value: &mut Signal<String>, is_processing: &mut Signal<bool>| {
@@ -302,41 +300,80 @@ fn App() -> Element {
         div {
             class: "app-container",
             
-            // Header
-            div {
-                class: "header",
-                div {
-                    class: "header-left",
-                    h1 { class: "app-title", "🐝 Hive AI Desktop" }
-                    span { class: "app-version", "v2.0.2" }
-                }
-                div {
-                    class: "header-right",
-                    span { class: "status-indicator", "✓ Ready" }
-                }
-            }
-            
-            // Main content
+            // Main content (no header bar - VS Code style)
             div {
                 class: "main-content",
                 
-                // Sidebar
+                // Sidebar (left)
                 div {
                     class: "sidebar",
                     div { class: "sidebar-section-title", "EXPLORER" }
-                    div { class: "sidebar-item", "📁 Project Files" }
-                    div { class: "sidebar-item", "🔍 Search" }
-                    div { class: "sidebar-item", "⚙️ Settings" }
+                    div { 
+                        class: "sidebar-item",
+                        onclick: move |_| *selected_file.write() = Some("README.md".to_string()),
+                        "📄 README.md" 
+                    }
+                    div { 
+                        class: "sidebar-item",
+                        onclick: move |_| *selected_file.write() = Some("src/main.rs".to_string()),
+                        "📄 src/main.rs" 
+                    }
+                    div { 
+                        class: "sidebar-item",
+                        onclick: move |_| *selected_file.write() = Some("Cargo.toml".to_string()),
+                        "📄 Cargo.toml" 
+                    }
                     
-                    div { class: "sidebar-section-title", style: "margin-top: 20px;", "CONSENSUS" }
-                    div { class: "sidebar-item active", "💬 Chat" }
+                    div { class: "sidebar-section-title", style: "margin-top: 20px;", "ACTIONS" }
+                    div { class: "sidebar-item", "🔍 Search" }
                     div { class: "sidebar-item", "📊 Analytics" }
                     div { class: "sidebar-item", "🧠 Memory" }
+                    div { class: "sidebar-item", "⚙️ Settings" }
                 }
                 
-                // Chat area
+                // Code editor area (center)
                 div {
-                    class: "chat-container",
+                    class: "editor-container",
+                    
+                    // Editor tabs
+                    div {
+                        class: "editor-tabs",
+                        if let Some(file) = selected_file.read().as_ref() {
+                            div {
+                                class: "editor-tab active",
+                                "{file}"
+                            }
+                        }
+                    }
+                    
+                    // Editor content
+                    div {
+                        class: "editor-content",
+                        if let Some(file) = selected_file.read().as_ref() {
+                            div { 
+                                "// Content of {file} would be displayed here\n\n",
+                                "// This is a placeholder for the code editor.\n",
+                                "// Integration with a syntax highlighting library\n",
+                                "// like CodeMirror or Monaco would go here."
+                            }
+                        } else {
+                            div { 
+                                class: "welcome-message",
+                                "Select a file from the explorer to view its contents" 
+                            }
+                        }
+                    }
+                }
+                
+                // Chat panel (right)
+                div {
+                    class: "chat-panel",
+                    
+                    // Panel header
+                    div {
+                        class: "panel-header",
+                        "🐝 Hive AI Chat"
+                    }
                     
                     // Messages
                     div {
@@ -372,40 +409,28 @@ fn App() -> Element {
                         }
                     }
                 }
-                
-                // Right panel (consensus stages)
-                div {
-                    class: "right-panel",
-                    div { class: "panel-title", "CONSENSUS PIPELINE" }
-                    
-                    div {
-                        class: "stage-item",
-                        div { class: "stage-indicator stage-generator" }
-                        span { "Generator" }
-                    }
-                    div {
-                        class: "stage-item",
-                        div { class: "stage-indicator stage-refiner" }
-                        span { "Refiner" }
-                    }
-                    div {
-                        class: "stage-item",
-                        div { class: "stage-indicator stage-validator" }
-                        span { "Validator" }
-                    }
-                    div {
-                        class: "stage-item",
-                        div { class: "stage-indicator stage-curator" }
-                        span { "Curator" }
-                    }
-                }
             }
             
             // Status bar
             div {
                 class: "status-bar",
-                div { class: "status-left", "Rust Desktop Mode" }
-                div { class: "status-right", "UTF-8 | Ready" }
+                div { 
+                    class: "status-left",
+                    div {
+                        class: "git-branch",
+                        "🌿 main"
+                    }
+                    "•"
+                    "✓ 0 problems"
+                }
+                div { 
+                    class: "status-right",
+                    "Ln 1, Col 1",
+                    "•",
+                    "UTF-8",
+                    "•",
+                    "Rust"
+                }
             }
         }
     }
