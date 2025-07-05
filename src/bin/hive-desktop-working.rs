@@ -12,12 +12,49 @@ const DESKTOP_STYLES: &str = r#"
         color: #cccccc;
         height: 100vh;
         overflow: hidden;
+        font-size: 14px;
     }
     
     .app-container {
         display: flex;
         height: 100vh;
         flex-direction: column;
+    }
+    
+    /* Header styles */
+    .header {
+        height: 32px;
+        background: #2d2d30;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        border-bottom: 1px solid #3e3e42;
+    }
+    
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .app-title {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+    }
+    
+    .app-version {
+        font-size: 12px;
+        color: #858585;
+    }
+    
+    .header-right {
+        font-size: 12px;
+    }
+    
+    .status-indicator {
+        color: #4ec9b0;
     }
     
     .main-content {
@@ -28,36 +65,45 @@ const DESKTOP_STYLES: &str = r#"
     
     /* Sidebar styles */
     .sidebar {
-        width: 48px;
-        background: #2d2d30;
+        width: 250px;
+        background: #252526;
         display: flex;
         flex-direction: column;
-        align-items: center;
-        padding: 10px 0;
+        border-right: 1px solid #3e3e42;
+        overflow-y: auto;
     }
     
-    .sidebar-icon {
-        width: 48px;
-        height: 48px;
+    .sidebar-section-title {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #858585;
+        padding: 10px 20px 5px 20px;
+        letter-spacing: 0.5px;
+    }
+    
+    .sidebar-item {
+        padding: 6px 20px;
+        font-size: 13px;
+        cursor: pointer;
         display: flex;
         align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        color: #858585;
-        font-size: 24px;
-    }
-    
-    .sidebar-icon:hover {
+        gap: 8px;
         color: #cccccc;
+        transition: background-color 0.1s;
     }
     
-    .sidebar-icon.active {
+    .sidebar-item:hover {
+        background: #2a2d2e;
+    }
+    
+    .sidebar-item.active {
+        background: #094771;
         color: #ffffff;
-        border-left: 2px solid #007acc;
     }
     
-    /* Chat panel styles */
-    .chat-panel {
+    /* Chat container styles */
+    .chat-container {
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -69,6 +115,7 @@ const DESKTOP_STYLES: &str = r#"
         padding: 10px 20px;
         border-bottom: 1px solid #3e3e42;
         font-weight: 600;
+        font-size: 14px;
     }
     
     .messages-area {
@@ -77,13 +124,15 @@ const DESKTOP_STYLES: &str = r#"
         padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 15px;
     }
     
     .message {
-        padding: 10px 15px;
-        border-radius: 8px;
+        padding: 12px 16px;
+        border-radius: 6px;
         max-width: 70%;
+        font-size: 14px;
+        line-height: 1.5;
     }
     
     .user-message {
@@ -101,8 +150,8 @@ const DESKTOP_STYLES: &str = r#"
     /* Input area styles */
     .input-area {
         display: flex;
-        padding: 20px;
-        gap: 10px;
+        padding: 16px 20px;
+        gap: 12px;
         background: #252526;
         border-top: 1px solid #3e3e42;
     }
@@ -112,10 +161,12 @@ const DESKTOP_STYLES: &str = r#"
         background: #3c3c3c;
         border: 1px solid #3e3e42;
         color: #cccccc;
-        padding: 10px 15px;
+        padding: 10px 14px;
         border-radius: 4px;
         font-size: 14px;
+        font-family: inherit;
         outline: none;
+        transition: border-color 0.1s;
     }
     
     .message-input:focus {
@@ -130,6 +181,8 @@ const DESKTOP_STYLES: &str = r#"
         border-radius: 4px;
         cursor: pointer;
         font-weight: 600;
+        font-size: 14px;
+        transition: background-color 0.1s;
     }
     
     .send-button:hover {
@@ -150,25 +203,28 @@ const DESKTOP_STYLES: &str = r#"
     }
     
     .panel-title {
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
         color: #858585;
-        margin-bottom: 15px;
+        margin-bottom: 16px;
+        letter-spacing: 0.5px;
     }
     
     .stage-item {
         display: flex;
         align-items: center;
-        gap: 10px;
-        margin-bottom: 15px;
+        gap: 12px;
+        margin-bottom: 12px;
+        font-size: 13px;
     }
     
     .stage-indicator {
-        width: 12px;
-        height: 12px;
+        width: 10px;
+        height: 10px;
         border-radius: 50%;
         background: #3e3e42;
+        flex-shrink: 0;
     }
     
     .stage-indicator.stage-generator { background: #f48771; }
@@ -178,14 +234,20 @@ const DESKTOP_STYLES: &str = r#"
     
     /* Status bar styles */
     .status-bar {
-        height: 22px;
+        height: 24px;
         background: #007acc;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0 10px;
+        padding: 0 15px;
         font-size: 12px;
         color: white;
+    }
+    
+    .status-left, .status-right {
+        display: flex;
+        align-items: center;
+        gap: 15px;
     }
 "#;
 
