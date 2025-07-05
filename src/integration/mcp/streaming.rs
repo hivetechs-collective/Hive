@@ -38,7 +38,7 @@ impl StreamingHandler {
 
         while let Some(event) = stream.next().await {
             match event {
-                ConsensusEvent::StageStarted { stage } => {
+                ConsensusEvent::StageStarted { stage, model } => {
                     current_stage = stage.clone();
                     stage_buffer.clear();
                     
@@ -52,9 +52,9 @@ impl StreamingHandler {
                         }))
                     ).await?;
                 }
-                ConsensusEvent::Token { token, .. } => {
-                    buffer.push_str(&token);
-                    stage_buffer.push_str(&token);
+                ConsensusEvent::Token { chunk, .. } => {
+                    buffer.push_str(&chunk);
+                    stage_buffer.push_str(&chunk);
                     
                     // Send token update every 50 characters for better UX
                     if buffer.len() % 50 == 0 {
@@ -68,7 +68,7 @@ impl StreamingHandler {
                         ).await?;
                     }
                 }
-                ConsensusEvent::StageCompleted { stage, response } => {
+                ConsensusEvent::StageCompleted { stage, result } => {
                     // Send stage completion
                     self.send_progress_notification(
                         &format!("Stage completed: {:?}", stage),
@@ -76,21 +76,21 @@ impl StreamingHandler {
                         Some(json!({
                             "stage": format!("{:?}", stage),
                             "status": "completed",
-                            "response": response
+                            "result": result
                         }))
                     ).await?;
                 }
-                ConsensusEvent::FinalResponse { response } => {
+                ConsensusEvent::FinalResponse { content } => {
                     // Send final response
                     self.send_content_notification(
-                        &response,
+                        &content,
                         request_id.clone(),
                         Some(json!({
                             "final": true
                         }))
                     ).await?;
                 }
-                ConsensusEvent::Error { error } => {
+                ConsensusEvent::Error { stage, error } => {
                     error!("Stream error: {}", error);
                     self.send_error_notification(
                         &error,
@@ -98,7 +98,7 @@ impl StreamingHandler {
                     ).await?;
                     return Err(anyhow!("Stream error: {}", error));
                 }
-                ConsensusEvent::Progress { stage, percentage } => {
+                ConsensusEvent::Progress { stage, percentage, .. } => {
                     // Send progress update
                     self.send_progress_notification(
                         &format!("Progress: {:?} - {:.0}%", stage, percentage * 100.0),
@@ -106,6 +106,16 @@ impl StreamingHandler {
                         Some(json!({
                             "stage": format!("{:?}", stage),
                             "percentage": percentage
+                        }))
+                    ).await?;
+                }
+                ConsensusEvent::Completed => {
+                    // Pipeline completed
+                    self.send_progress_notification(
+                        "Consensus pipeline completed",
+                        request_id.clone(),
+                        Some(json!({
+                            "status": "completed"
                         }))
                     ).await?;
                 }

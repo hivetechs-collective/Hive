@@ -229,7 +229,7 @@ impl ModeSwitcher {
         // Find path through intermediate modes (simple BFS)
         let mut queue = std::collections::VecDeque::new();
         let mut visited = std::collections::HashSet::new();
-        let mut parent = std::collections::HashMap::new();
+        let mut parent: std::collections::HashMap<ModeType, ModeType> = std::collections::HashMap::new();
 
         queue.push_back(from.clone());
         visited.insert(from.clone());

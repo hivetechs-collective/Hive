@@ -349,7 +349,7 @@ async fn convert_to_rust_config(ts_config: &TypeScriptConfig) -> Result<HiveConf
     // Convert API keys
     if let Some(api_key) = &ts_config.openrouter_api_key {
         rust_config.openrouter = Some(OpenRouterConfig {
-            api_key: api_key.clone(),
+            api_key: Some(api_key.clone()),
             base_url: "https://openrouter.ai/api/v1".to_string(),
             timeout_seconds: 30,
             max_retries: 3,

@@ -256,8 +256,9 @@ impl HybridModeEngine {
         
         // Final duration update
         let final_duration = start_time.elapsed();
+        let sum_duration = mode_durations.values().sum::<std::time::Duration>();
         *mode_durations.entry(current_mode).or_insert(std::time::Duration::ZERO) += 
-            final_duration - mode_durations.values().sum::<std::time::Duration>();
+            final_duration - sum_duration;
         
         // Generate insights
         let insights = self.generate_insights(task, &mode_durations, segments_completed)?;

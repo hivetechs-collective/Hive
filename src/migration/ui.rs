@@ -239,7 +239,8 @@ impl MigrationWizard {
         let proceed = Confirm::new()
             .with_prompt("Ready to begin the migration process?")
             .default(true)
-            .interact()?;
+            .interact()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         if proceed {
             println!("\n✅ Starting migration wizard...\n");
@@ -271,7 +272,8 @@ impl MigrationWizard {
                 .with_prompt("Select TypeScript installation")
                 .items(&options)
                 .default(0)
-                .interact()?;
+                .interact()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
             if selection < common_paths.len() {
                 self.user_preferences.source_path = Some(common_paths[selection].clone());
@@ -279,14 +281,16 @@ impl MigrationWizard {
                 // Custom path input
                 let custom_path: String = Input::new()
                     .with_prompt("Enter TypeScript installation path")
-                    .interact_text()?;
+                    .interact_text()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 self.user_preferences.source_path = Some(std::path::PathBuf::from(custom_path));
             }
         } else {
             println!("\n⚠️  No TypeScript installations auto-detected.");
             let custom_path: String = Input::new()
                 .with_prompt("Enter TypeScript installation path")
-                .interact_text()?;
+                .interact_text()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
             self.user_preferences.source_path = Some(std::path::PathBuf::from(custom_path));
         }
 
@@ -320,7 +324,8 @@ impl MigrationWizard {
             .with_prompt("Select migration type")
             .items(&migration_types)
             .default(0)
-            .interact()?;
+            .interact()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         self.user_preferences.migration_type = Some(match selection {
             0 => MigrationType::Upgrade,
@@ -350,7 +355,8 @@ impl MigrationWizard {
             .with_prompt("Select validation level")
             .items(&validation_levels)
             .default(1) // Standard recommended
-            .interact()?;
+            .interact()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         self.user_preferences.validation_level = Some(match selection {
             0 => ValidationLevel::Basic,
@@ -381,7 +387,8 @@ impl MigrationWizard {
             .with_prompt("Select advanced options (Space to toggle, Enter to confirm)")
             .items(&advanced_options)
             .defaults(&[true, false, true, true]) // Recommended defaults
-            .interact()?;
+            .interact()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         self.user_preferences.preserve_original = selections.contains(&0);
         self.user_preferences.enable_compression = selections.contains(&1);
@@ -391,7 +398,8 @@ impl MigrationWizard {
             let backup_path: String = Input::new()
                 .with_prompt("Backup location (or press Enter for default)")
                 .default("~/.hive/backup".to_string())
-                .interact_text()?;
+                .interact_text()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
             self.user_preferences.backup_path = Some(std::path::PathBuf::from(backup_path));
         }
 
@@ -411,7 +419,8 @@ impl MigrationWizard {
                         Err("Batch size must be between 100 and 10000")
                     }
                 })
-                .interact_text()?;
+                .interact_text()
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
             self.user_preferences.batch_size = Some(batch_size);
         }
 
@@ -433,19 +442,27 @@ impl MigrationWizard {
 
         // Perform various checks
         let checks = vec![
-            ("Validating source database", self.check_source_database()),
-            ("Checking disk space", self.check_disk_space()),
-            ("Verifying dependencies", self.check_dependencies()),
-            ("Testing write permissions", self.check_permissions()),
-            ("Estimating migration time", self.estimate_migration_time()),
+            "Validating source database",
+            "Checking disk space",
+            "Verifying dependencies",
+            "Testing write permissions",
+            "Estimating migration time",
         ];
 
-        for (message, check_future) in checks {
+        for message in checks {
             check_spinner.set_message(message);
             check_spinner.tick();
             
             tokio::time::sleep(Duration::from_millis(500)).await; // Simulate check time
-            let result = check_future.await;
+            
+            let result = match message {
+                "Validating source database" => self.check_source_database().await,
+                "Checking disk space" => self.check_disk_space().await,
+                "Verifying dependencies" => self.check_dependencies().await,
+                "Testing write permissions" => self.check_permissions().await,
+                "Estimating migration time" => self.estimate_migration_time().await,
+                _ => Ok(()),
+            };
             
             match result {
                 Ok(()) => println!("✅ {}", message),
@@ -465,7 +482,8 @@ impl MigrationWizard {
         let proceed = Confirm::new()
             .with_prompt("All checks passed. Proceed with migration?")
             .default(true)
-            .interact()?;
+            .interact()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         Ok(proceed)
     }
@@ -507,7 +525,8 @@ impl MigrationWizard {
                 let retry = Confirm::new()
                     .with_prompt("Would you like to retry the migration?")
                     .default(false)
-                    .interact()?;
+                    .interact()
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
                 Ok(retry)
             }
@@ -528,20 +547,27 @@ impl MigrationWizard {
 
         // Run validation tests
         let validations = vec![
-            ("Verifying row counts", self.validate_row_counts()),
-            ("Checking data integrity", self.validate_data_integrity()),
-            ("Testing query performance", self.validate_performance()),
-            ("Validating schema compatibility", self.validate_schema()),
-            ("Running functional tests", self.validate_functionality()),
+            "Verifying row counts",
+            "Checking data integrity",
+            "Testing query performance",
+            "Validating schema compatibility",
+            "Running functional tests",
         ];
 
         let mut all_passed = true;
 
-        for (message, validation_future) in validations {
+        for message in validations {
             validation_spinner.set_message(message);
             validation_spinner.tick();
             
-            let result = validation_future.await;
+            let result = match message {
+                "Verifying row counts" => self.validate_row_counts().await,
+                "Checking data integrity" => self.validate_data_integrity().await,
+                "Testing query performance" => self.validate_performance().await,
+                "Validating schema compatibility" => self.validate_schema().await,
+                "Running functional tests" => self.validate_functionality().await,
+                _ => Ok(()),
+            };
             
             match result {
                 Ok(()) => println!("✅ {}", message),

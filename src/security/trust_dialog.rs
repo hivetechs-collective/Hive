@@ -731,6 +731,12 @@ impl TrustDialogSystem {
                 _ => TrustScope::Directory,
             };
             
+            let expires_at = if matches!(scope, TrustScope::Session) {
+                Some(Utc::now() + chrono::Duration::hours(24))
+            } else {
+                None
+            };
+            
             let decision = TrustDecision {
                 path: path.to_path_buf(),
                 trusted: true,
@@ -738,11 +744,7 @@ impl TrustDialogSystem {
                 user_id: None,
                 reason: Some(reason.to_string()),
                 scope,
-                expires_at: if matches!(scope, TrustScope::Session) {
-                    Some(Utc::now() + chrono::Duration::hours(24))
-                } else {
-                    None
-                },
+                expires_at,
                 conditions: vec![],
             };
             

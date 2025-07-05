@@ -575,15 +575,14 @@ impl EnterpriseAuditLogger {
 
     /// Log a trust decision
     pub async fn log_trust_decision(&self, path: &Path, trusted: bool, reason: Option<String>) -> Result<()> {
-        let event = self.create_event(
+        let mut event = self.create_event(
             AuditEventType::TrustDecision,
             None,
             Some(path.display().to_string()),
             format!("Trust decision for {}: {}", path.display(), if trusted { "trusted" } else { "denied" }),
             if trusted { AuditOutcome::Success } else { AuditOutcome::Denied },
-        );
+        ).await;
         
-        let mut event = event;
         if let Some(reason) = reason {
             event.metadata.insert("reason".to_string(), reason);
         }
@@ -600,7 +599,7 @@ impl EnterpriseAuditLogger {
             Some(path.display().to_string()),
             format!("Trust revoked for {}", path.display()),
             AuditOutcome::Success,
-        );
+        ).await;
         
         self.log_event(event).await
     }

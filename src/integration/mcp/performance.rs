@@ -179,16 +179,28 @@ impl PerformanceManager {
 
         let mut cache = self.cache.write().await;
         
-        if let Some(cached_result) = cache.cache.get_mut(cache_key) {
+        // Check if entry exists and is valid
+        let (is_hit, result) = if let Some(cached_result) = cache.cache.get_mut(cache_key) {
             // Check TTL
             if cached_result.cached_at.elapsed() <= cached_result.ttl {
                 cached_result.access_count += 1;
-                cache.hit_count += 1;
-                debug!("Cache hit for key: {}", cache_key);
-                return Some(cached_result.result.clone());
+                (true, Some(cached_result.result.clone()))
             } else {
-                // Expired, remove it
-                cache.cache.pop(cache_key);
+                (false, None)
+            }
+        } else {
+            (false, None)
+        };
+        
+        if is_hit {
+            cache.hit_count += 1;
+            debug!("Cache hit for key: {}", cache_key);
+            return result;
+        }
+        
+        // Handle expired entries
+        if !is_hit && result.is_none() {
+            if let Some(_) = cache.cache.pop(cache_key) {
                 cache.eviction_count += 1;
             }
         }
@@ -208,6 +220,8 @@ impl PerformanceManager {
             return Ok(());
         }
 
+        let cache_key_for_debug = cache_key.clone(); // Clone for the debug message
+        
         let cached_result = CachedToolResult {
             result,
             cached_at: Instant::now(),
@@ -219,7 +233,7 @@ impl PerformanceManager {
         let mut cache = self.cache.write().await;
         cache.cache.put(cache_key, cached_result);
         
-        debug!("Cached result for key: {}", cache_key);
+        debug!("Cached result for key: {}", cache_key_for_debug);
         Ok(())
     }
 

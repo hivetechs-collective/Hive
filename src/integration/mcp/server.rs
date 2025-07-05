@@ -191,7 +191,7 @@ impl McpServer {
         
         match message.content {
             McpMessageContent::Request(request) => {
-                let response = self.handle_request(request).await;
+                let response = self.handle_mcp_request(request).await;
                 McpMessage {
                     jsonrpc: "2.0".to_string(),
                     id,
@@ -224,7 +224,7 @@ impl McpServer {
     }
 
     /// Handle MCP request
-    async fn handle_request(&self, request: McpRequest) -> McpResponse {
+    async fn handle_mcp_request(&self, request: McpRequest) -> McpResponse {
         match request.method.as_str() {
             "initialize" => self.handle_initialize(request.params).await,
             "initialized" => self.handle_initialized().await,

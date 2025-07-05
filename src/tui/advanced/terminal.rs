@@ -374,7 +374,7 @@ impl TerminalPanel {
         let items: Vec<ListItem> = self
             .history
             .iter()
-            .map(|entry| self.create_history_item(entry, theme))
+            .map(|entry| create_history_item(entry, theme))
             .collect();
 
         let history_list = List::new(items)
@@ -393,25 +393,6 @@ impl TerminalPanel {
         frame.render_stateful_widget(history_list, area, &mut self.list_state);
     }
 
-    /// Create history list item
-    fn create_history_item(&self, entry: &TerminalEntry, theme: &Theme) -> ListItem {
-        let style = match entry.entry_type {
-            TerminalEntryType::Command => {
-                Style::default().fg(theme.command_color()).add_modifier(Modifier::BOLD)
-            }
-            TerminalEntryType::Output => theme.terminal_output_style(),
-            TerminalEntryType::Error => {
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-            }
-            TerminalEntryType::System => {
-                Style::default().fg(theme.system_message_color()).add_modifier(Modifier::ITALIC)
-            }
-        };
-
-        ListItem::new(Line::from(vec![
-            Span::styled(entry.content.clone(), style)
-        ]))
-    }
 
     /// Render input line
     fn render_input(
@@ -557,4 +538,24 @@ impl TerminalPanel {
         self.history.clear();
         self.add_system_message("Terminal cleared".to_string());
     }
+}
+
+/// Create history list item
+fn create_history_item<'a>(entry: &'a TerminalEntry, theme: &'a Theme) -> ListItem<'a> {
+    let style = match entry.entry_type {
+        TerminalEntryType::Command => {
+            Style::default().fg(theme.command_color()).add_modifier(Modifier::BOLD)
+        }
+        TerminalEntryType::Output => theme.terminal_output_style(),
+        TerminalEntryType::Error => {
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        }
+        TerminalEntryType::System => {
+            Style::default().fg(theme.system_message_color()).add_modifier(Modifier::ITALIC)
+        }
+    };
+
+    ListItem::new(Line::from(vec![
+        Span::styled(entry.content.clone(), style)
+    ]))
 }

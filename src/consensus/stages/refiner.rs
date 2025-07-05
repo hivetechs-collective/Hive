@@ -109,37 +109,37 @@ impl RefinerStage {
         // Check length appropriateness
         let word_count = response.split_whitespace().count();
         if word_count < 20 {
-            analysis.push("⚠️ Response may be too brief - consider adding more detail");
+            analysis.push("⚠️ Response may be too brief - consider adding more detail".to_string());
         } else if word_count > 1000 {
-            analysis.push("📝 Response is comprehensive - ensure clarity and structure");
+            analysis.push("📝 Response is comprehensive - ensure clarity and structure".to_string());
         }
         
         // Check for code quality
         if response.contains("```") {
             let code_blocks = response.matches("```").count() / 2;
             let code_analysis = format!("💻 Contains {} code block(s) - verify syntax and best practices", code_blocks);
-            analysis.push(&code_analysis);
+            analysis.push(code_analysis);
             
             if !response.contains("//") && !response.contains("#") && response.contains("fn ") {
-                analysis.push("📖 Consider adding code comments for clarity");
+                analysis.push("📖 Consider adding code comments for clarity".to_string());
             }
         }
         
         // Check structure
         if !response.contains('\n') && word_count > 50 {
-            analysis.push("📋 Consider breaking into paragraphs for better readability");
+            analysis.push("📋 Consider breaking into paragraphs for better readability".to_string());
         }
         
         // Check for examples
         if response.len() > 500 && !response.contains("example") && !response.contains("for instance") {
-            analysis.push("💡 Consider adding concrete examples to illustrate concepts");
+            analysis.push("💡 Consider adding concrete examples to illustrate concepts".to_string());
         }
         
         // Check for actionability
         if response.contains("you should") || response.contains("you can") {
-            analysis.push("✅ Response provides actionable guidance");
+            analysis.push("✅ Response provides actionable guidance".to_string());
         } else if word_count > 100 {
-            analysis.push("🎯 Consider adding actionable steps or recommendations");
+            analysis.push("🎯 Consider adding actionable steps or recommendations".to_string());
         }
         
         if analysis.is_empty() {

@@ -571,6 +571,96 @@ impl From<dialoguer::Error> for HiveError {
     }
 }
 
+impl From<std::env::VarError> for HiveError {
+    fn from(err: std::env::VarError) -> Self {
+        match err {
+            std::env::VarError::NotPresent => Self::EnvVarNotSet { 
+                var: "unknown".to_string() 
+            },
+            std::env::VarError::NotUnicode(_) => Self::Internal { 
+                context: "env".to_string(), 
+                message: "Environment variable contains invalid Unicode".to_string() 
+            },
+        }
+    }
+}
+
+impl From<reqwest::Error> for HiveError {
+    fn from(err: reqwest::Error) -> Self {
+        if err.is_timeout() {
+            Self::NetworkTimeout { 
+                operation: "HTTP request".to_string(), 
+                seconds: 30 
+            }
+        } else if let Some(status) = err.status() {
+            Self::HttpRequest { 
+                url: err.url().map(|u| u.to_string()).unwrap_or_default(), 
+                status: status.as_u16() 
+            }
+        } else {
+            Self::Internal { 
+                context: "network".to_string(), 
+                message: err.to_string() 
+            }
+        }
+    }
+}
+
+// Generic string error conversion (for parse errors, etc)
+impl From<String> for HiveError {
+    fn from(err: String) -> Self {
+        Self::Internal { 
+            context: "parse".to_string(), 
+            message: err 
+        }
+    }
+}
+
+impl From<&str> for HiveError {
+    fn from(err: &str) -> Self {
+        Self::Internal { 
+            context: "parse".to_string(), 
+            message: err.to_string() 
+        }
+    }
+}
+
+impl From<chrono::ParseError> for HiveError {
+    fn from(err: chrono::ParseError) -> Self {
+        Self::Internal { 
+            context: "time".to_string(), 
+            message: format!("Time parsing error: {}", err) 
+        }
+    }
+}
+
+impl From<std::num::ParseIntError> for HiveError {
+    fn from(err: std::num::ParseIntError) -> Self {
+        Self::Internal { 
+            context: "parse".to_string(), 
+            message: format!("Integer parsing error: {}", err) 
+        }
+    }
+}
+
+impl From<std::num::ParseFloatError> for HiveError {
+    fn from(err: std::num::ParseFloatError) -> Self {
+        Self::Internal { 
+            context: "parse".to_string(), 
+            message: format!("Float parsing error: {}", err) 
+        }
+    }
+}
+
+impl From<uuid::Error> for HiveError {
+    fn from(err: uuid::Error) -> Self {
+        Self::Internal { 
+            context: "uuid".to_string(), 
+            message: format!("UUID error: {}", err) 
+        }
+    }
+}
+
 /// Result type alias for Hive operations
 pub type Result<T> = std::result::Result<T, HiveError>;
 pub type HiveResult<T> = std::result::Result<T, HiveError>;

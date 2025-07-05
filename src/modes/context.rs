@@ -429,7 +429,7 @@ impl ModeContext {
     /// Create new context for a mode
     fn new(mode: ModeType) -> Self {
         Self {
-            mode,
+            mode: mode.clone(), // Clone for mode field
             created_at: Utc::now(),
             last_modified: Utc::now(),
             data: ContextData {

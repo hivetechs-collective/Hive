@@ -284,22 +284,24 @@ impl MemoryAnalyzer {
     
     /// Update quality metrics
     pub async fn update_quality_metrics(&mut self, metrics: QualityMetrics) -> Result<()> {
+        let overall_quality = metrics.overall_quality; // Extract value before move
         self.data.quality_metrics = metrics;
         
         // Update time series
         let today = Utc::now().format("%Y-%m-%d").to_string();
-        self.time_series.daily_quality.insert(today, metrics.overall_quality);
+        self.time_series.daily_quality.insert(today, overall_quality);
         
         Ok(())
     }
     
     /// Update performance metrics
     pub async fn update_performance_metrics(&mut self, metrics: PerformanceMetrics) -> Result<()> {
+        let metrics_clone = metrics.clone(); // Clone for time series
         self.data.performance_metrics = metrics;
         
         // Update time series
         let today = Utc::now().format("%Y-%m-%d").to_string();
-        self.time_series.daily_performance.insert(today, metrics);
+        self.time_series.daily_performance.insert(today, metrics_clone);
         
         Ok(())
     }

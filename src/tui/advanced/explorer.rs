@@ -189,7 +189,7 @@ impl ExplorerPanel {
         let items: Vec<ListItem> = self
             .entries
             .iter()
-            .map(|entry| self.create_list_item(entry, theme))
+            .map(|entry| create_list_item(entry, theme))
             .collect();
 
         let list = List::new(items)
@@ -213,92 +213,9 @@ impl ExplorerPanel {
         frame.render_stateful_widget(list, area, &mut self.list_state);
     }
 
-    /// Create list item for explorer entry
-    fn create_list_item(&self, entry: &ExplorerEntry, theme: &Theme) -> ListItem {
-        let indent = "  ".repeat(entry.indent_level);
-        let icon = self.get_entry_icon(entry);
-        let git_indicator = self.get_git_indicator(&entry.git_status);
-        let name_style = self.get_entry_style(entry, theme);
-        
-        let content = format!("{}{} {}{}", indent, icon, entry.name, git_indicator);
-        
-        ListItem::new(Line::from(vec![
-            Span::styled(content, name_style)
-        ]))
-    }
 
-    /// Get icon for entry type
-    fn get_entry_icon(&self, entry: &ExplorerEntry) -> &'static str {
-        match entry.entry_type {
-            EntryType::Directory => {
-                if entry.is_expanded {
-                    "📂"
-                } else {
-                    "📁"
-                }
-            }
-            EntryType::File => {
-                // Basic file type detection
-                if let Some(ext) = entry.path.extension() {
-                    match ext.to_string_lossy().as_ref() {
-                        "rs" => "🦀",
-                        "js" | "ts" => "📜",
-                        "py" => "🐍",
-                        "md" => "📝",
-                        "json" | "toml" | "yaml" | "yml" => "⚙️",
-                        "png" | "jpg" | "jpeg" | "gif" => "🖼️",
-                        _ => "📄",
-                    }
-                } else {
-                    "📄"
-                }
-            }
-            EntryType::Symlink => "🔗",
-        }
-    }
 
-    /// Get Git status indicator
-    fn get_git_indicator(&self, status: &GitStatus) -> &'static str {
-        match status {
-            GitStatus::Untracked => " ?",
-            GitStatus::Modified => " M",
-            GitStatus::Added => " A",
-            GitStatus::Deleted => " D",
-            GitStatus::Renamed => " R",
-            GitStatus::Copied => " C",
-            GitStatus::UpdatedButUnmerged => " U",
-            GitStatus::Clean => "",
-            GitStatus::Ignored => " !",
-        }
-    }
 
-    /// Get style for entry based on type and status
-    fn get_entry_style(&self, entry: &ExplorerEntry, theme: &Theme) -> Style {
-        let mut style = theme.text_style();
-        
-        match entry.entry_type {
-            EntryType::Directory => {
-                style = style.fg(theme.directory_color()).add_modifier(Modifier::BOLD);
-            }
-            EntryType::File => {
-                style = style.fg(theme.file_color());
-            }
-            EntryType::Symlink => {
-                style = style.fg(theme.symlink_color()).add_modifier(Modifier::ITALIC);
-            }
-        }
-        
-        // Apply Git status styling
-        match entry.git_status {
-            GitStatus::Modified => style = style.fg(Color::Yellow),
-            GitStatus::Added => style = style.fg(Color::Green),
-            GitStatus::Deleted => style = style.fg(Color::Red),
-            GitStatus::Untracked => style = style.fg(Color::Cyan),
-            _ => {}
-        }
-        
-        style
-    }
 
     /// Handle key events for explorer panel
     pub async fn handle_key_event(&mut self, key: KeyEvent, _theme: &Theme) -> Result<bool> {
@@ -408,4 +325,91 @@ impl ExplorerPanel {
     pub fn filter(&self) -> &str {
         &self.filter
     }
+}
+
+/// Create list item for explorer entry
+fn create_list_item<'a>(entry: &'a ExplorerEntry, theme: &'a Theme) -> ListItem<'a> {
+    let indent = "  ".repeat(entry.indent_level);
+    let icon = get_entry_icon(entry);
+    let git_indicator = get_git_indicator(&entry.git_status);
+    let name_style = get_entry_style(entry, theme);
+    
+    let content = format!("{}{} {}{}", indent, icon, entry.name, git_indicator);
+    
+    ListItem::new(Line::from(vec![
+        Span::styled(content, name_style)
+    ]))
+}
+
+/// Get icon for entry type
+fn get_entry_icon(entry: &ExplorerEntry) -> &'static str {
+    match entry.entry_type {
+        EntryType::Directory => {
+            if entry.is_expanded {
+                "📂"
+            } else {
+                "📁"
+            }
+        }
+        EntryType::File => {
+            // Basic file type detection
+            if let Some(ext) = entry.path.extension() {
+                match ext.to_string_lossy().as_ref() {
+                    "rs" => "🦀",
+                    "js" | "ts" => "📜",
+                    "py" => "🐍",
+                    "md" => "📝",
+                    "json" | "toml" | "yaml" | "yml" => "⚙️",
+                    "png" | "jpg" | "jpeg" | "gif" => "🖼️",
+                    _ => "📄",
+                }
+            } else {
+                "📄"
+            }
+        }
+        EntryType::Symlink => "🔗",
+    }
+}
+
+/// Get Git status indicator
+fn get_git_indicator(status: &GitStatus) -> &'static str {
+    match status {
+        GitStatus::Untracked => " ?",
+        GitStatus::Modified => " M",
+        GitStatus::Added => " A",
+        GitStatus::Deleted => " D",
+        GitStatus::Renamed => " R",
+        GitStatus::Copied => " C",
+        GitStatus::UpdatedButUnmerged => " U",
+        GitStatus::Clean => "",
+        GitStatus::Ignored => " !",
+    }
+}
+
+/// Get style for entry based on type and status
+fn get_entry_style(entry: &ExplorerEntry, theme: &Theme) -> Style {
+    let mut style = theme.text_style();
+    
+    match entry.entry_type {
+        EntryType::Directory => {
+            style = style.fg(theme.directory_color()).add_modifier(Modifier::BOLD);
+        }
+        EntryType::File => {
+            style = style.fg(theme.file_color());
+        }
+        EntryType::Symlink => {
+            style = style.fg(theme.symlink_color()).add_modifier(Modifier::ITALIC);
+        }
+    }
+    
+    // Apply Git status styling
+    match entry.git_status {
+        GitStatus::Modified => style = style.fg(Color::Yellow),
+        GitStatus::Added => style = style.fg(Color::Green),
+        GitStatus::Deleted => style = style.fg(Color::Red),
+        GitStatus::Untracked => style = style.fg(Color::Cyan),
+        _ => {}
+    }
+    
+    style
 }
