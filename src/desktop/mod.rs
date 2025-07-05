@@ -6,6 +6,7 @@ pub mod app;
 pub mod components;
 pub mod layout;
 pub mod file_explorer;
+pub mod file_system;
 pub mod chat;
 pub mod consensus;
 pub mod state;
