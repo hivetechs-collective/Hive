@@ -494,8 +494,8 @@ impl EditorPanel {
             }
             // Editor navigation
             _ => {
-                if let Some(tab) = self.current_tab_mut() {
-                    self.handle_editor_navigation(tab, key).await?
+                if self.active_tab < self.tabs.len() {
+                    self.handle_editor_navigation_by_index(self.active_tab, key).await
                 } else {
                     Ok(false)
                 }
@@ -503,8 +503,23 @@ impl EditorPanel {
         }
     }
 
-    /// Handle editor navigation and text editing
-    async fn handle_editor_navigation(&mut self, tab: &mut EditorTab, key: KeyEvent) -> Result<bool> {
+    /// Handle editor navigation by tab index
+    async fn handle_editor_navigation_by_index(&mut self, tab_index: usize, key: KeyEvent) -> Result<bool> {
+        // First, handle the navigation on the tab
+        let navigation_handled = if let Some(tab) = self.tabs.get_mut(tab_index) {
+            let handled = Self::handle_tab_navigation(tab, key);
+            // Update scroll offset while we still have the mutable reference
+            Self::update_scroll_offset_static(tab);
+            handled
+        } else {
+            return Ok(false);
+        };
+        
+        Ok(navigation_handled)
+    }
+
+    /// Handle navigation within a tab (static method to avoid borrowing issues)
+    fn handle_tab_navigation(tab: &mut EditorTab, key: KeyEvent) -> bool {
         match key.code {
             KeyCode::Up => {
                 if tab.cursor.0 > 0 {
@@ -547,19 +562,21 @@ impl EditorPanel {
             KeyCode::PageDown => {
                 tab.cursor.0 = (tab.cursor.0 + 10).min(tab.lines.len().saturating_sub(1));
             }
-            _ => {}
+            _ => return false,
         }
         
-        // Update scroll offset to keep cursor visible
-        self.update_scroll_offset(tab);
-        
-        Ok(false)
+        true
     }
 
-    /// Update scroll offset to keep cursor visible
-    fn update_scroll_offset(&self, tab: &mut EditorTab) {
+    /// Update scroll offset to keep cursor visible (static version)
+    fn update_scroll_offset_static(tab: &mut EditorTab) {
         // TODO: Implement proper scroll offset calculation
         // This would need viewport height information
+    }
+    
+    /// Update scroll offset to keep cursor visible
+    fn update_scroll_offset(&self, tab: &mut EditorTab) {
+        Self::update_scroll_offset_static(tab);
     }
 }
 

@@ -74,7 +74,7 @@ pub fn use_theme() -> Signal<Theme> {
 #[component]
 pub fn ThemeSwitcher() -> Element {
     let mut theme = use_theme();
-    let current_theme = theme.read();
+    let theme_icon = theme.read().icon();
     
     rsx! {
         div {
@@ -83,14 +83,15 @@ pub fn ThemeSwitcher() -> Element {
                 class: "btn btn-icon",
                 title: "Switch theme",
                 onclick: move |_| {
-                    let next_theme = match *current_theme {
+                    let current = *theme.read();
+                    let next_theme = match current {
                         Theme::Dark => Theme::Light,
                         Theme::Light => Theme::HighContrast,
                         Theme::HighContrast => Theme::Dark,
                     };
                     theme.set(next_theme);
                 },
-                i { class: "fa fa-{current_theme.icon()}" }
+                i { class: "fa fa-{theme_icon}" }
             }
         }
     }

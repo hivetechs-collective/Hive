@@ -133,6 +133,7 @@ fn get_message_style(message_type: &MessageType, theme: &WidgetTheme) -> Style {
         MessageType::Status => theme.warning_style(),
         MessageType::Help => theme.secondary_style(),
         MessageType::Info => theme.accent_style(),
+        MessageType::FormattedResult => theme.text_style(),
     }
 }
 

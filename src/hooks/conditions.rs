@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use regex::Regex;
 use super::ExecutionContext;
+use crate::HiveError;
 
 /// Conditions that must be met for a hook to execute
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,7 +341,7 @@ impl ConditionEvaluator {
         
         let now = if let Some(tz_str) = timezone {
             let tz: chrono_tz::Tz = tz_str.parse()
-                .map_err(|e| HiveError::validation(format!("Invalid timezone: {}", e)))?;
+                .map_err(|e| HiveError::ConfigInvalid { message: format!("Invalid timezone: {}", e) })?;
             chrono::Utc::now().with_timezone(&tz).naive_local()
         } else {
             Local::now().naive_local()

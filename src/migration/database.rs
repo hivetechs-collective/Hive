@@ -306,7 +306,7 @@ async fn analyze_table_columns(pool: &SqlitePool, table_name: &str) -> Result<Ve
         let column = ColumnSchema {
             name: row.get("name"),
             data_type: row.get("type"),
-            nullable: row.get::<_, i32>("notnull") == 0,
+            nullable: row.get::<i32>("notnull") == 0,
             default_value: row.get("dflt_value"),
         };
         columns.push(column);

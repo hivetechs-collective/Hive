@@ -79,6 +79,7 @@ pub enum MessageType {
     Info,
 }
 
+#[derive(Clone)]
 pub struct StatusLine {
     pub context_remaining: u8,
     pub auto_accept_edits: bool,
@@ -202,10 +203,18 @@ impl InteractiveTui {
             self.draw()?;
 
             // Handle TUI events in a non-blocking way
-            if let Some(receiver) = &mut self.event_receiver {
+            let events_to_handle: Vec<TuiEvent> = if let Some(receiver) = &mut self.event_receiver {
+                let mut events = Vec::new();
                 while let Ok(tui_event) = receiver.try_recv() {
-                    self.handle_tui_event(tui_event).await?;
+                    events.push(tui_event);
                 }
+                events
+            } else {
+                Vec::new()
+            };
+            
+            for tui_event in events_to_handle {
+                self.handle_tui_event(tui_event).await?;
             }
 
             // Check for keyboard input
@@ -348,10 +357,17 @@ impl InteractiveTui {
     }
 
     fn draw(&mut self) -> Result<()> {
+        let has_consensus = self.consensus_progress.is_some();
+        let messages = self.messages.clone();
+        let consensus_progress = self.consensus_progress.clone();
+        let input_buffer = self.input_buffer.clone();
+        let cursor_position = self.cursor_position;
+        let status_line = self.status_line.clone();
+        
         self.terminal.draw(|f| {
             let main_layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints(if self.consensus_progress.is_some() {
+                .constraints(if has_consensus {
                     vec![
                         Constraint::Min(1),      // Messages area
                         Constraint::Length(6),   // Consensus progress
@@ -367,38 +383,36 @@ impl InteractiveTui {
                 })
                 .split(f.size());
 
-            if self.consensus_progress.is_some() {
+            if has_consensus {
                 // Draw messages area
-                self.draw_messages(f, main_layout[0]);
+                Self::draw_messages_static(f, main_layout[0], &messages);
                 
                 // Draw consensus progress
-                self.draw_consensus_progress(f, main_layout[1]);
+                Self::draw_consensus_progress_static(f, main_layout[1], &consensus_progress);
                 
                 // Draw input box (Claude Code style)
-                self.draw_input_box(f, main_layout[2]);
+                Self::draw_input_box_static(f, main_layout[2], &input_buffer, cursor_position);
 
                 // Draw status line
-                self.draw_status_line(f, main_layout[3]);
+                Self::draw_status_line_static(f, main_layout[3], &status_line);
             } else {
                 // Draw messages area
-                self.draw_messages(f, main_layout[0]);
+                Self::draw_messages_static(f, main_layout[0], &messages);
                 
                 // Draw input box (Claude Code style)
-                self.draw_input_box(f, main_layout[1]);
+                Self::draw_input_box_static(f, main_layout[1], &input_buffer, cursor_position);
 
                 // Draw status line
-                self.draw_status_line(f, main_layout[2]);
+                Self::draw_status_line_static(f, main_layout[2], &status_line);
             }
         })?;
 
         Ok(())
     }
 
-    fn draw_messages(&self, f: &mut Frame, area: Rect) {
-        let messages: Vec<ListItem> = self
-            .messages
+    fn draw_messages_static(f: &mut Frame, area: Rect, messages: &[Message]) {
+        let messages: Vec<ListItem> = messages
             .iter()
-            .skip(self.scroll_offset)
             .map(|msg| {
                 let style = match msg.message_type {
                     MessageType::Welcome => Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
@@ -421,6 +435,79 @@ impl InteractiveTui {
             .style(Style::default());
 
         f.render_widget(list, area);
+    }
+    
+    fn draw_input_box_static(f: &mut Frame, area: Rect, input_buffer: &str, cursor_position: usize) {
+        let input_box = Paragraph::new(input_buffer)
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Blue))
+                .title("  Ask Hive AI anything  ")
+                .title_style(Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)))
+            .style(Style::default().fg(Color::White))
+            .wrap(Wrap { trim: false });
+
+        f.render_widget(input_box, area);
+
+        // Render cursor
+        let cursor_x = area.x + 1 + cursor_position as u16;
+        let cursor_y = area.y + 1;
+        
+        if cursor_x < area.x + area.width - 1 {
+            f.set_cursor(cursor_x, cursor_y);
+        }
+    }
+    
+    fn draw_consensus_progress_static(f: &mut Frame, area: Rect, progress: &Option<ConsensusProgress>) {
+        if let Some(progress) = progress {
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(25),
+                    Constraint::Percentage(25),
+                ])
+                .split(area);
+
+            Self::draw_stage_progress_static(f, chunks[0], "Generator", &progress.generator);
+            Self::draw_stage_progress_static(f, chunks[1], "Refiner", &progress.refiner);
+            Self::draw_stage_progress_static(f, chunks[2], "Validator", &progress.validator);
+            Self::draw_stage_progress_static(f, chunks[3], "Curator", &progress.curator);
+        }
+    }
+    
+    fn draw_stage_progress_static(f: &mut Frame, area: Rect, name: &str, stage: &StageProgress) {
+        let color = match stage.status {
+            StageStatus::Waiting => Color::DarkGray,
+            StageStatus::Running => Color::Yellow,
+            StageStatus::Completed => Color::Green,
+            StageStatus::Error => Color::Red,
+        };
+
+        let gauge = Gauge::default()
+            .block(Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" {} ", name)))
+            .gauge_style(Style::default().fg(color))
+            .percent(stage.progress)
+            .label(format!("{}", stage.model));
+
+        f.render_widget(gauge, area);
+    }
+    
+    fn draw_status_line_static(f: &mut Frame, area: Rect, status_line: &StatusLine) {
+        let status_text = format!(
+            " Mode: {} | Context: {}% | Auto-accept: {} | Ctrl+C: Exit | F1: Help ",
+            status_line.current_mode,
+            status_line.context_remaining,
+            if status_line.auto_accept_edits { "ON" } else { "OFF" }
+        );
+        
+        let status = Paragraph::new(status_text)
+            .style(Style::default().bg(Color::DarkGray).fg(Color::White));
+        
+        f.render_widget(status, area);
     }
 
     fn draw_input_box(&self, f: &mut Frame, area: Rect) {
@@ -697,8 +784,21 @@ impl InteractiveTui {
                     timestamp: chrono::Utc::now(),
                 });
             }
-            TuiEvent::ConsensusUpdate(progress) => {
-                self.consensus_progress = Some(progress);
+            TuiEvent::ConsensusProgress(progress) => {
+                // Convert f32 progress to ConsensusProgress struct
+                let stage_progress = StageProgress {
+                    name: "Processing".to_string(),
+                    model: "consensus".to_string(),
+                    progress: (progress * 100.0) as u16,
+                    status: StageStatus::Running,
+                };
+                self.consensus_progress = Some(ConsensusProgress {
+                    generator: stage_progress.clone(),
+                    refiner: stage_progress.clone(),
+                    validator: stage_progress.clone(),
+                    curator: stage_progress,
+                    is_active: true,
+                });
             }
             TuiEvent::ConsensusComplete => {
                 self.consensus_progress = None;

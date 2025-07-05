@@ -1657,8 +1657,8 @@ impl RepositoryAnalyzer {
             r#"\bloop\s*\{"#,
         ];
         
-        let mut max_nesting = 0;
-        let mut current_nesting = 0;
+        let mut max_nesting = 0usize;
+        let mut current_nesting = 0usize;
         
         for line in code.lines() {
             for pattern in &loop_patterns {

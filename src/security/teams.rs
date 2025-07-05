@@ -509,17 +509,22 @@ impl TeamManager {
         invitation.status = InvitationStatus::Accepted;
         invitation.accepted_at = Some(Utc::now());
         invitation.invitee_user_id = Some(user_id.to_string());
+        
+        // Clone needed values before dropping the lock
+        let team_id = invitation.team_id.clone();
+        let is_temporary = invitation.temporary;
+        let temp_duration = invitation.temporary_duration;
 
         // Add user to team
         drop(invitations); // Release lock before calling add_user_to_team
-        self.add_user_to_team(user_id, &invitation.team_id).await?;
+        self.add_user_to_team(user_id, &team_id).await?;
 
         // Set temporary membership if specified
-        if invitation.temporary {
+        if is_temporary {
             self.set_temporary_membership(
                 user_id,
-                &invitation.team_id,
-                invitation.temporary_duration,
+                &team_id,
+                temp_duration,
             ).await?;
         }
 

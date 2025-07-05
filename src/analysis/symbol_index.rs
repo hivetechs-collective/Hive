@@ -243,24 +243,26 @@ impl SymbolIndexer {
         // Extract references
         let references = self.extract_references(&parse_result, file_path, content)?;
         
-        // Store in database
-        let mut conn = self.db.get_connection()?;
-        let tx = conn.transaction()?;
-        
-        // Clear existing symbols for this file
-        tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path.to_str()])?;
-        
-        // Insert symbols
-        for symbol in &symbols {
-            self.insert_symbol(&tx, symbol)?;
-        }
-        
-        // Insert references
-        for reference in &references {
-            self.insert_reference(&tx, reference)?;
-        }
-        
-        tx.commit()?;
+        // Store in database - complete all DB operations before async
+        {
+            let mut conn = self.db.get_connection()?;
+            let tx = conn.transaction()?;
+            
+            // Clear existing symbols for this file
+            tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path.to_str()])?;
+            
+            // Insert symbols
+            for symbol in &symbols {
+                self.insert_symbol(&tx, symbol)?;
+            }
+            
+            // Insert references
+            for reference in &references {
+                self.insert_reference(&tx, reference)?;
+            }
+            
+            tx.commit()?;
+        } // conn and tx are dropped here, before any await
         
         // Update call graph
         self.update_call_graph(&symbols, &references).await?;
@@ -446,7 +448,7 @@ impl SymbolIndexer {
                 quality_score,
                 reference_count: 0,
                 is_exported,
-                attributes: Vec::new(),
+                attributes: HashMap::new(),
                 last_modified: chrono::Utc::now(),
                 usage_count: 0,
             });

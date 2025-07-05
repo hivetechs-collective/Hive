@@ -93,6 +93,9 @@ impl MotionPreferences {
             AnimationType::Parallax => !self.disable_parallax,
             AnimationType::Spin => false, // Always disable spinning animations
             AnimationType::Bounce => self.animation_speed != AnimationSpeed::None,
+            AnimationType::Instant => true,  // Always allow instant animations
+            AnimationType::Static => true,   // Always allow static (no animation)
+            AnimationType::Jump => !self.reduce_motion,
         }
     }
 

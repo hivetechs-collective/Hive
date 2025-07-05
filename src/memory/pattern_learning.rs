@@ -242,16 +242,33 @@ impl PatternLearner {
         let pattern_id = format!("{:?}_{}", pattern_type, template.chars().take(20).collect::<String>());
         
         // Update pattern statistics
-        let stats = self.pattern_stats.entry(pattern_id.clone()).or_default();
-        stats.occurrences += 1;
-        stats.last_updated = Some(Utc::now());
+        {
+            let stats = self.pattern_stats.entry(pattern_id.clone()).or_default();
+            stats.occurrences += 1;
+            stats.last_updated = Some(Utc::now());
+        }
         
         // Check if pattern meets threshold
-        if stats.occurrences >= self.config.min_occurrences {
+        let occurrences = self.pattern_stats.get(&pattern_id).map(|s| s.occurrences).unwrap_or(0);
+        if occurrences >= self.config.min_occurrences {
+            // Calculate values before mutating
+            let quality_score = self.calculate_quality_score(question, answer);
+            let stats = self.pattern_stats.get(&pattern_id).cloned();
+            
+            // Find pattern and calculate confidence if needed
+            let pattern_exists = self.patterns.iter().any(|p| p.id == pattern_id);
+            let new_confidence = if pattern_exists && stats.is_some() {
+                // Find the pattern temporarily to calculate confidence
+                let pattern = self.patterns.iter().find(|p| p.id == pattern_id).unwrap();
+                Some(self.calculate_confidence(pattern, stats.as_ref().unwrap()))
+            } else {
+                None
+            };
+            
             // Find existing pattern or create new one
             if let Some(pattern) = self.patterns.iter_mut().find(|p| p.id == pattern_id) {
                 // Update existing pattern
-                pattern.frequency = stats.occurrences;
+                pattern.frequency = occurrences;
                 pattern.last_seen = Utc::now();
                 
                 // Add example
@@ -260,13 +277,15 @@ impl PatternLearner {
                         input: question.to_string(),
                         output: answer.to_string(),
                         context: context.map(String::from),
-                        quality_score: self.calculate_quality_score(question, answer),
+                        quality_score,
                         timestamp: Utc::now(),
                     });
                 }
                 
                 // Update confidence
-                pattern.confidence = self.calculate_confidence(pattern, stats);
+                if let Some(confidence) = new_confidence {
+                    pattern.confidence = confidence;
+                }
             } else {
                 // Create new pattern
                 let pattern = Pattern {
@@ -281,7 +300,7 @@ impl PatternLearner {
                         timestamp: Utc::now(),
                     }],
                     confidence: 0.8,
-                    frequency: stats.occurrences,
+                    frequency: occurrences,
                     effectiveness: 0.8,
                     discovered_at: Utc::now(),
                     last_seen: Utc::now(),

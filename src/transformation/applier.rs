@@ -94,7 +94,7 @@ impl CodeApplier {
 
         // Apply changes in reverse order (bottom to top) to preserve line numbers
         for change in changes {
-            content = self.apply_single_change(&content, change, language.clone())?;
+            content = self.apply_single_change(&content, change, language.clone()).await?;
         }
 
         // Verify the final syntax is valid
@@ -104,7 +104,7 @@ impl CodeApplier {
     }
 
     /// Apply a single change
-    fn apply_single_change(
+    async fn apply_single_change(
         &self,
         content: &str,
         change: CodeChange,
@@ -123,7 +123,7 @@ impl CodeApplier {
                 &modification,
                 change.line_range,
                 language,
-            )
+            ).await
         } else {
             // If we can't extract specific lines, try a different approach
             // This might happen if new_content is the entire file content

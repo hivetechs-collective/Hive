@@ -492,7 +492,7 @@ Return as JSON array of segments."#,
         }
         
         if mode_durations.get(&ModeType::Planning).unwrap_or(&std::time::Duration::ZERO) 
-            > &task.estimated_duration / 3 {
+            > &(task.estimated_duration / 3) {
             recommendations.push("Planning phase took significant time, consider more execution focus".to_string());
         }
         

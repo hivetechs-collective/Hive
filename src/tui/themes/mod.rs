@@ -298,123 +298,123 @@ impl Theme {
 
     // Color getters
     pub fn primary_color(&self) -> Color {
-        self.colors.primary
+        self.colors.primary.0
     }
 
     pub fn secondary_color(&self) -> Color {
-        self.colors.secondary
+        self.colors.secondary.0
     }
 
     pub fn background_color(&self) -> Color {
-        self.colors.background
+        self.colors.background.0
     }
 
     pub fn foreground_color(&self) -> Color {
-        self.colors.foreground
+        self.colors.foreground.0
     }
 
     pub fn accent_color(&self) -> Color {
-        self.colors.accent
+        self.colors.accent.0
     }
 
     pub fn error_color(&self) -> Color {
-        self.colors.error
+        self.colors.error.0
     }
 
     pub fn warning_color(&self) -> Color {
-        self.colors.warning
+        self.colors.warning.0
     }
 
     pub fn success_color(&self) -> Color {
-        self.colors.success
+        self.colors.success.0
     }
 
     pub fn info_color(&self) -> Color {
-        self.colors.info
+        self.colors.info.0
     }
 
     pub fn muted_color(&self) -> Color {
-        self.colors.muted
+        self.colors.muted.0
     }
 
     pub fn selection_bg_color(&self) -> Color {
-        self.colors.selection_bg
+        self.colors.selection_bg.0
     }
 
     pub fn selection_fg_color(&self) -> Color {
-        self.colors.selection_fg
+        self.colors.selection_fg.0
     }
 
     // Syntax highlighting colors
     pub fn keyword_color(&self) -> Color {
-        self.colors.keyword
+        self.colors.keyword.0
     }
 
     pub fn string_color(&self) -> Color {
-        self.colors.string
+        self.colors.string.0
     }
 
     pub fn comment_color(&self) -> Color {
-        self.colors.comment
+        self.colors.comment.0
     }
 
     pub fn function_color(&self) -> Color {
-        self.colors.function
+        self.colors.function.0
     }
 
     pub fn variable_color(&self) -> Color {
-        self.colors.variable
+        self.colors.variable.0
     }
 
     pub fn number_color(&self) -> Color {
-        self.colors.number
+        self.colors.number.0
     }
 
     pub fn operator_color(&self) -> Color {
-        self.colors.operator
+        self.colors.operator.0
     }
 
     // File explorer colors
     pub fn directory_color(&self) -> Color {
-        self.colors.directory
+        self.colors.directory.0
     }
 
     pub fn file_color(&self) -> Color {
-        self.colors.file
+        self.colors.file.0
     }
 
     pub fn symlink_color(&self) -> Color {
-        self.colors.symlink
+        self.colors.symlink.0
     }
 
     pub fn executable_color(&self) -> Color {
-        self.colors.executable
+        self.colors.executable.0
     }
 
     // Terminal colors
     pub fn command_color(&self) -> Color {
-        self.colors.command
+        self.colors.command.0
     }
 
     pub fn output_color(&self) -> Color {
-        self.colors.output
+        self.colors.output.0
     }
 
     pub fn system_message_color(&self) -> Color {
-        self.colors.system_message
+        self.colors.system_message.0
     }
 
     pub fn line_number_color(&self) -> Color {
-        self.colors.line_number
+        self.colors.line_number.0
     }
 
     // Editor colors
     pub fn heading_color(&self) -> Color {
-        self.colors.heading
+        self.colors.heading.0
     }
 
     pub fn code_block_color(&self) -> Color {
-        self.colors.code_block
+        self.colors.code_block.0
     }
 
     /// Apply accessibility adjustments
@@ -430,9 +430,9 @@ impl Theme {
     /// Increase contrast for accessibility
     fn increase_contrast(&mut self) {
         // Adjust colors for higher contrast
-        self.colors.border_active = Color::White;
-        self.colors.selection_bg = Color::White;
-        self.colors.selection_fg = Color::Black;
+        self.colors.border_active = SerializableColor(Color::White);
+        self.colors.selection_bg = SerializableColor(Color::White);
+        self.colors.selection_fg = SerializableColor(Color::Black);
         
         // Make text more prominent
         self.styles.text = Style::default()

@@ -99,7 +99,7 @@ fn get_bash_completion_dir() -> Option<std::path::PathBuf> {
 fn get_zsh_completion_dir() -> Option<std::path::PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
         // Create user zsh completion directory if it doesn't exist
-        let zsh_dir = std::path::PathBuf::from(home).join(".zsh").join("completions");
+        let zsh_dir = std::path::PathBuf::from(&home).join(".zsh").join("completions");
         if !zsh_dir.exists() {
             if std::fs::create_dir_all(&zsh_dir).is_ok() {
                 return Some(zsh_dir);
@@ -110,8 +110,8 @@ fn get_zsh_completion_dir() -> Option<std::path::PathBuf> {
         
         // Try other common zsh completion directories
         let alt_dirs = [
-            format!("{}/.oh-my-zsh/completions", home),
-            format!("{}/.config/zsh/completions", home),
+            format!("{}/.oh-my-zsh/completions", &home),
+            format!("{}/.config/zsh/completions", &home),
         ];
         
         for dir_str in &alt_dirs {

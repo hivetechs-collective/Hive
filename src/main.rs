@@ -440,7 +440,7 @@ async fn main() -> Result<()> {
     match ui_mode {
         UIMode::Desktop => {
             tracing::info!("Launching desktop GUI mode");
-            launch_desktop_app(config).await?;
+            launch_desktop_app(config)?;
         }
         UIMode::TUI => {
             tracing::info!("Launching TUI mode");
@@ -522,7 +522,7 @@ async fn execute_command(cli: &mut CliFramework, command: Commands) -> HiveResul
         Commands::Desktop => {
             // Launch desktop application
             let config = load_config().await?; // Load default config
-            launch_desktop_app(config).await?;
+            launch_desktop_app(config)?;
         }
     }
     Ok(())

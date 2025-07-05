@@ -880,7 +880,7 @@ impl WidgetRenderer for LineChartRenderer {
                     let min_val = points.iter().map(|p| p.value).fold(f64::INFINITY, f64::min);
                     
                     // Create simple sparkline
-                    let sparkline = create_sparkline(points, width - 4);
+                    let sparkline = create_sparkline(points, (width - 4) as usize);
                     output.push_str(&format!("│ {} │\n", sparkline));
                     output.push_str(&format!("│ Min: {:.1} Max: {:.1}{:>width$} │\n", 
                         min_val, max_val, "", 

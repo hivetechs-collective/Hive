@@ -208,18 +208,18 @@ fn ChatInput() -> Element {
     };
     
     let on_send = {
-        let send_message = send_message.clone();
+        let mut send_message = send_message.clone();
         move |_evt: MouseEvent| {
             send_message();
         }
     };
     
     let on_key_down = {
-        let send_message = send_message.clone();
+        let mut send_message = send_message.clone();
         let mut input_text = input_text.clone();
         let is_composing = is_composing.clone();
         move |evt: KeyboardEvent| {
-            if KeyboardEventUtils::is_enter_key(&evt) && !evt.modifiers().shift() && !is_composing.read() {
+            if KeyboardEventUtils::is_enter_key(&evt) && !evt.modifiers().shift() && !*is_composing.read() {
                 send_message();
             } else if KeyboardEventUtils::is_escape(&evt) {
                 // Clear input on Escape

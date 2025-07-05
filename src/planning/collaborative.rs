@@ -262,19 +262,25 @@ impl CollaborativePlanner {
         conflict_id: &str,
         resolution_id: &str,
     ) -> HiveResult<()> {
-        let conflict = session.conflicts.iter_mut()
-            .find(|c| c.id == conflict_id)
+        // First find the conflict and get its index
+        let conflict_index = session.conflicts.iter()
+            .position(|c| c.id == conflict_id)
             .ok_or_else(|| HiveError::Planning("Conflict not found".to_string()))?;
         
-        let resolution = conflict.resolution_options.iter()
+        // Get the resolution option
+        let resolution = session.conflicts[conflict_index].resolution_options.iter()
             .find(|r| r.id == resolution_id)
             .ok_or_else(|| HiveError::Planning("Resolution option not found".to_string()))?
             .clone();
         
-        // Apply resolution
-        self.conflict_resolver.apply_resolution(session, conflict, &resolution)?;
+        // Clone the conflict for the resolver
+        let conflict = session.conflicts[conflict_index].clone();
         
-        conflict.resolved = true;
+        // Apply resolution
+        self.conflict_resolver.apply_resolution(session, &conflict, &resolution)?;
+        
+        // Now update the conflict
+        session.conflicts[conflict_index].resolved = true;
         session.updated_at = Utc::now();
         Ok(())
     }

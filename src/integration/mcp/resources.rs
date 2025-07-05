@@ -10,7 +10,7 @@ use anyhow::{Result, anyhow};
 use std::sync::Arc;
 use std::path::Path;
 use std::fs;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 use url::Url;
 use walkdir::WalkDir;
 
