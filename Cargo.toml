@@ -57,6 +57,9 @@ manganis = { version = "0.7.0-alpha.2" }
 # Dioxus SDK for enhanced desktop features
 dioxus-sdk = "0.6"
 
+# Native file dialogs
+rfd = "0.15"
+
 # TUI (Terminal User Interface) - Legacy support
 ratatui = "0.26"
 crossterm = "0.27"
