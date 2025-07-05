@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use rfd;
 
 const DESKTOP_STYLES: &str = r#"
     /* VS Code-style CSS */
@@ -36,6 +37,39 @@ const DESKTOP_STYLES: &str = r#"
         flex-direction: column;
         border-right: 1px solid #3e3e42;
         overflow-y: auto;
+    }
+    
+    .sidebar-header {
+        padding: 10px 20px;
+        background: #2d2d30;
+        border-bottom: 1px solid #3e3e42;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .current-path {
+        font-size: 11px;
+        color: #858585;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .open-folder-button {
+        padding: 6px 12px;
+        background: #007acc;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        transition: background-color 0.1s;
+    }
+    
+    .open-folder-button:hover {
+        background: #005a9e;
     }
     
     .sidebar-section-title {
@@ -275,7 +309,7 @@ fn App() -> Element {
         Message { text: "This is the Rust-powered version with VS Code-style interface.".to_string(), is_user: false },
     ]);
     let mut input_value = use_signal(String::new);
-    let mut is_processing = use_signal(|| false);
+    let is_processing = use_signal(|| false);
     let selected_file = use_signal(|| None::<String>);
     let file_tree = use_signal(|| Vec::<FileItem>::new());
     let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
@@ -341,6 +375,61 @@ fn App() -> Element {
                 // Sidebar (left)
                 div {
                     class: "sidebar",
+                    
+                    // Sidebar header with current path and open folder button
+                    div {
+                        class: "sidebar-header",
+                        div {
+                            class: "current-path",
+                            title: "{current_dir.read().display()}",
+                            "{current_dir.read().display()}"
+                        }
+                        button {
+                            class: "open-folder-button",
+                            onclick: move |_| {
+                                // Open folder dialog
+                                spawn({
+                                    let mut current_dir = current_dir.clone();
+                                    let mut file_tree = file_tree.clone();
+                                    let mut expanded_dirs = expanded_dirs.clone();
+                                    let mut selected_file = selected_file.clone();
+                                    let mut file_content = file_content.clone();
+                                    
+                                    async move {
+                                        let current_path = current_dir.read().clone();
+                                        if let Some(folder) = rfd::AsyncFileDialog::new()
+                                            .set_directory(&current_path)
+                                            .pick_folder()
+                                            .await
+                                        {
+                                            // Update current directory
+                                            *current_dir.write() = folder.path().to_path_buf();
+                                            
+                                            // Clear selected file and content
+                                            *selected_file.write() = None;
+                                            *file_content.write() = String::new();
+                                            
+                                            // Clear expanded dirs for new folder
+                                            expanded_dirs.write().clear();
+                                            
+                                            // Load new directory tree
+                                            match file_system::load_directory_tree(folder.path(), &HashMap::new(), false).await {
+                                                Ok(files) => {
+                                                    file_tree.write().clear();
+                                                    file_tree.write().extend(files);
+                                                }
+                                                Err(e) => {
+                                                    eprintln!("Error loading directory: {}", e);
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            },
+                            "📁 Open Folder"
+                        }
+                    }
+                    
                     div { class: "sidebar-section-title", "EXPLORER" }
                     
                     // File tree
