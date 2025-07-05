@@ -89,14 +89,14 @@ pub struct MouseEventUtils;
 
 impl MouseEventUtils {
     /// Check if left mouse button was clicked
-    pub fn is_left_click(evt: &MouseEvent) -> bool {
+    pub fn is_left_click(_evt: &MouseEvent) -> bool {
         // For now, assume left click is the primary interaction
         // TODO: Update when proper mouse button detection is available
         true
     }
     
     /// Check if right mouse button was clicked
-    pub fn is_right_click(evt: &MouseEvent) -> bool {
+    pub fn is_right_click(_evt: &MouseEvent) -> bool {
         // TODO: Implement proper right click detection
         false
     }

@@ -428,8 +428,9 @@ impl ModeVisualizer {
         to: Option<&ModeIndicator>,
         progress: f32
     ) -> String {
-        let from_symbol = from.map(|i| &i.symbol).unwrap_or(&"?");
-        let to_symbol = to.map(|i| &i.symbol).unwrap_or(&"?");
+        let default_symbol = "?".to_string();
+        let from_symbol = from.map(|i| &i.symbol).unwrap_or(&default_symbol);
+        let to_symbol = to.map(|i| &i.symbol).unwrap_or(&default_symbol);
         
         if progress < 0.3 {
             from_symbol.to_string()

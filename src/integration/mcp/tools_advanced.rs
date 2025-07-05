@@ -5,14 +5,12 @@
 use super::protocol::{Tool, ToolResult, ToolContent};
 use crate::core::config::Config;
 use crate::consensus::engine::ConsensusEngine; 
-use crate::analysis::repository_intelligence::RepositoryAnalyzer;
 
 use anyhow::{Result, anyhow};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde_json::Value;
-use std::path::Path;
-use tracing::{info, error};
+use tracing::info;
 
 /// Advanced tool registry extension
 pub struct AdvancedToolRegistry {

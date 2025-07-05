@@ -453,13 +453,13 @@ impl TrendAnalyzer {
         let avg_value = sum_y / n;
         let normalized_slope = slope / avg_value;
         
-        match normalized_slope {
+        Ok(match normalized_slope {
             s if s > 0.1 => TrendDirection::StronglyIncreasing,
             s if s > 0.02 => TrendDirection::Increasing,
             s if s < -0.1 => TrendDirection::StronglyDecreasing,
             s if s < -0.02 => TrendDirection::Decreasing,
             _ => TrendDirection::Stable,
-        }
+        })
     }
 
     fn calculate_model_accuracy(

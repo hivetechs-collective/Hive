@@ -16,6 +16,7 @@ pub mod lsp;
 pub mod security;
 pub mod migrate;
 pub mod shell;
+pub mod install;
 // pub mod mcp; // Temporarily disabled
 // pub mod mode; // Temporarily disabled
 
@@ -38,6 +39,7 @@ pub use planning::{
 pub use lsp::{handle_lsp, LspCommands, generate_editor_config};
 pub use security::{handle_security, SecurityCommands};
 pub use shell::{handle_shell, ShellCommands, generate_manual_instructions, verify_installation, get_integration_report};
+pub use install::{handle_install_command, InstallArgs};
 // pub use mcp::{
 //     start_server as mcp_start_server, check_status as mcp_check_status,
 //     list_tools as mcp_list_tools, test_tool as mcp_test_tool,

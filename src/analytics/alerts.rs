@@ -368,7 +368,7 @@ impl AlertManager {
                             triggered_at: Utc::now(),
                             resolved_at: None,
                             status: AlertStatus::Active,
-                            metrics: Self::collect_alert_metrics(&rule, &metric_store.read().await).await,
+                            metrics: Self::collect_alert_metrics(&rule, &*metric_store.read().await).await,
                             context: rule.metadata.clone(),
                         };
 

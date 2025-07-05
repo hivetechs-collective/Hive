@@ -107,7 +107,7 @@ impl ModeManager {
     
     /// Switch to a different mode with context preservation
     pub async fn switch_mode(&self, target_mode: ModeType, preserve_context: bool) -> HiveResult<SwitchResult> {
-        let current_mode = *self.current_mode.read().await;
+        let current_mode = self.current_mode.read().await.clone();
         
         // Preserve context if requested
         let context_snapshot = if preserve_context {
@@ -173,7 +173,7 @@ impl ModeManager {
     
     /// Get current mode status
     pub async fn get_status(&self) -> HiveResult<ModeStatus> {
-        let current_mode = *self.current_mode.read().await;
+        let current_mode = self.current_mode.read().await.clone();
         let visualizer = self.visualizer.read().await;
         let status = visualizer.get_current_status(&current_mode);
         Ok(status)

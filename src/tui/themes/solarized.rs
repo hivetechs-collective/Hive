@@ -199,9 +199,9 @@ pub fn customize_solarized_theme(base_theme: &mut Theme, preferences: &Solarized
     }
     
     if let Some(accent_color) = preferences.custom_accent {
-        base_theme.colors.accent = accent_color;
-        base_theme.colors.primary = accent_color;
-        base_theme.colors.border_active = accent_color;
+        base_theme.colors.accent = SerializableColor(accent_color);
+        base_theme.colors.primary = SerializableColor(accent_color);
+        base_theme.colors.border_active = SerializableColor(accent_color);
     }
 }
 
@@ -210,10 +210,10 @@ fn apply_solarized_light_variant(theme: &mut Theme) {
     let solarized = SolarizedPalette::new();
     
     // Swap background and foreground tones for light theme
-    theme.colors.background = solarized.base3;
-    theme.colors.secondary = solarized.base2;
-    theme.colors.foreground = solarized.base00;
-    theme.colors.muted = solarized.base1;
+    theme.colors.background = SerializableColor(solarized.base3);
+    theme.colors.secondary = SerializableColor(solarized.base2);
+    theme.colors.foreground = SerializableColor(solarized.base00);
+    theme.colors.muted = SerializableColor(solarized.base1);
     
     // Update styles for light variant
     theme.styles.panel = theme.styles.panel.bg(solarized.base3).fg(solarized.base00);
@@ -227,8 +227,8 @@ fn apply_enhanced_contrast_solarized(theme: &mut Theme) {
     let solarized = SolarizedPalette::new();
     
     // Use more contrasting colors
-    theme.colors.foreground = solarized.base1;
-    theme.colors.selection_fg = solarized.base3;
+    theme.colors.foreground = SerializableColor(solarized.base1);
+    theme.colors.selection_fg = SerializableColor(solarized.base3);
     
     // Enhance border visibility
     theme.styles.active_border = theme.styles.active_border
@@ -262,9 +262,9 @@ pub fn validate_solarized_adherence(theme: &Theme) -> bool {
     let solarized = SolarizedPalette::new();
     
     // Check if key colors match Solarized palette
-    theme.colors.background == solarized.base03 &&
-    theme.colors.foreground == solarized.base0 &&
-    theme.colors.primary == solarized.blue
+    theme.colors.background == SerializableColor(solarized.base03) &&
+    theme.colors.foreground == SerializableColor(solarized.base0) &&
+    theme.colors.primary == SerializableColor(solarized.blue)
 }
 
 impl Default for SolarizedThemePreferences {

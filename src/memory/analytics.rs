@@ -765,7 +765,7 @@ impl InsightGenerator {
         let mut insights = Vec::new();
         
         // Analyze graph connectivity
-        let stats = graph.stats.clone();
+        let stats = graph.stats().clone();
         
         if stats.avg_connections < 1.5 {
             insights.push(MemoryInsight {

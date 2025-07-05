@@ -450,7 +450,7 @@ async fn assess_compatibility(analysis: &TypeScriptAnalysis) -> Result<Compatibi
             config_compat -= 0.2;
         }
     }
-    config_compat = config_compat.max(0.0_f64);
+    config_compat = f64::max(config_compat, 0.0);
     
     // Assess database compatibility
     if !analysis.database_info.integrity_check {
@@ -471,11 +471,11 @@ async fn assess_compatibility(analysis: &TypeScriptAnalysis) -> Result<Compatibi
     let overall = (config_compat + db_compat + feature_compat) / 3.0;
     
     Ok(CompatibilityAssessment {
-        overall_score: overall,
-        config_compatibility: config_compat,
-        database_compatibility: db_compat,
-        feature_compatibility: feature_compat,
-        migration_complexity: complexity,
+        overall_score: overall as f32,
+        config_compatibility: config_compat as f32,
+        database_compatibility: db_compat as f32,
+        feature_compatibility: feature_compat as f32,
+        migration_complexity: complexity.clone(),
         recommended_approach: match complexity {
             MigrationComplexity::Simple => "Direct automated migration".to_string(),
             MigrationComplexity::Moderate => "Assisted migration with manual verification".to_string(),

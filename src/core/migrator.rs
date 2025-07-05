@@ -311,7 +311,9 @@ impl HiveMigrator {
                 .unwrap_or_default(),
             preferences: raw_config.get("preferences")
                 .and_then(|v| v.as_object())
-                .map(|obj| obj.clone())
+                .map(|obj| obj.iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect())
                 .unwrap_or_default(),
         })
     }

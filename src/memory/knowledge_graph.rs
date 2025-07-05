@@ -226,6 +226,11 @@ impl KnowledgeGraph {
         Ok(node_index)
     }
     
+    /// Get graph statistics
+    pub fn stats(&self) -> &GraphStatistics {
+        &self.stats
+    }
+    
     /// Add a relationship to the graph
     pub fn add_relationship(&mut self, relationship: Relationship) -> Result<()> {
         // Ensure both entities exist

@@ -357,10 +357,9 @@ impl RepositoryIntelligence {
         // Analyze technical debt
         // TODO: Convert AnalyzedFile to FileInfo or implement analyze_technical_debt for AnalyzedFile
         let technical_debt = TechnicalDebt {
+            score: 0.0,
             hotspots: vec![],
             refactoring_candidates: vec![],
-            complexity_issues: vec![],
-            total_score: 0.0,
         };
         
         Ok(CodeMetrics {

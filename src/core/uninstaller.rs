@@ -494,8 +494,8 @@ impl HiveUninstaller {
                 if let Ok(xdg_config) = env::var("XDG_CONFIG_HOME") {
                     dirs.push(PathBuf::from(xdg_config).join("hive"));
                 } else if let Ok(home) = env::var("HOME") {
-                    dirs.push(PathBuf::from(home).join(".config").join("hive"));
-                    dirs.push(PathBuf::from(home).join(".hive"));
+                    dirs.push(PathBuf::from(&home).join(".config").join("hive"));
+                    dirs.push(PathBuf::from(&home).join(".hive"));
                 }
             }
             "windows" => {

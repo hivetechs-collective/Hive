@@ -143,19 +143,19 @@ pub fn customize_light_theme(base_theme: &mut Theme, preferences: &LightThemePre
     }
     
     if let Some(accent_color) = preferences.custom_accent {
-        base_theme.colors.accent = accent_color;
-        base_theme.colors.primary = accent_color;
-        base_theme.colors.border_active = accent_color;
+        base_theme.colors.accent = SerializableColor(accent_color);
+        base_theme.colors.primary = SerializableColor(accent_color);
+        base_theme.colors.border_active = SerializableColor(accent_color);
     }
 }
 
 /// Apply high contrast modifications to light theme
 fn apply_high_contrast_light(theme: &mut Theme) {
-    theme.colors.foreground = Color::Black;
-    theme.colors.background = Color::White;
-    theme.colors.border_active = Color::Black;
-    theme.colors.selection_bg = Color::Black;
-    theme.colors.selection_fg = Color::White;
+    theme.colors.foreground = SerializableColor(Color::Black);
+    theme.colors.background = SerializableColor(Color::White);
+    theme.colors.border_active = SerializableColor(Color::Black);
+    theme.colors.selection_bg = SerializableColor(Color::Black);
+    theme.colors.selection_fg = SerializableColor(Color::White);
     
     // Make all styles more prominent
     theme.styles.text = theme.styles.text.add_modifier(Modifier::BOLD);

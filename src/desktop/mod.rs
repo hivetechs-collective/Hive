@@ -39,7 +39,7 @@ pub fn launch_desktop_app(config: HiveConfig) -> Result<()> {
     
     let desktop_config = Config::new()
         .with_window(window_config)
-        .with_custom_head(include_str!("styles/global_head.html"))
+        .with_custom_head(include_str!("styles/global_head.html").to_string())
         .with_custom_index(create_custom_index());
     
     // Launch the Dioxus app

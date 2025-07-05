@@ -407,7 +407,8 @@ impl MigrationWizard {
         if Confirm::new()
             .with_prompt("Customize batch size for performance tuning?")
             .default(false)
-            .interact()? 
+            .interact()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))? 
         {
             let batch_size: u32 = Input::new()
                 .with_prompt("Batch size (100-10000)")

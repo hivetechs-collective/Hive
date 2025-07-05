@@ -331,7 +331,8 @@ fn StatusBar() -> Element {
                 div {
                     class: if state.auto_accept { "status-item auto-accept-toggle enabled" } else { "status-item auto-accept-toggle disabled" },
                     onclick: move |_| {
-                        app_state.write().auto_accept = !app_state.read().auto_accept;
+                        let current_value = app_state.read().auto_accept;
+                        app_state.write().auto_accept = !current_value;
                     },
                     if state.auto_accept { "Auto: ON" } else { "Auto: OFF" }
                 }

@@ -255,7 +255,8 @@ impl PerformanceOptimizer {
     /// Start performance monitoring
     async fn start_performance_monitoring(&self) -> Result<(), HiveError> {
         let monitor = self.monitor.clone();
-        monitor.start_time = Some(std::time::SystemTime::now());
+        // TODO: Use RwLock or Mutex for start_time
+        // monitor.start_time = Some(std::time::SystemTime::now());
         monitor.is_monitoring.store(true, Ordering::Relaxed);
 
         // Spawn monitoring task

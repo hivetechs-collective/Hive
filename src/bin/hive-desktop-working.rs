@@ -1,18 +1,197 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus_desktop::{Config, WindowBuilder};
+
+const DESKTOP_STYLES: &str = r#"
+    /* VS Code-style CSS */
+    body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+        background: #1e1e1e;
+        color: #cccccc;
+        height: 100vh;
+        overflow: hidden;
+    }
+    
+    .app-container {
+        display: flex;
+        height: 100vh;
+        flex-direction: column;
+    }
+    
+    .main-content {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+    }
+    
+    /* Sidebar styles */
+    .sidebar {
+        width: 48px;
+        background: #2d2d30;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px 0;
+    }
+    
+    .sidebar-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: #858585;
+        font-size: 24px;
+    }
+    
+    .sidebar-icon:hover {
+        color: #cccccc;
+    }
+    
+    .sidebar-icon.active {
+        color: #ffffff;
+        border-left: 2px solid #007acc;
+    }
+    
+    /* Chat panel styles */
+    .chat-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: #1e1e1e;
+    }
+    
+    .panel-header {
+        background: #2d2d30;
+        padding: 10px 20px;
+        border-bottom: 1px solid #3e3e42;
+        font-weight: 600;
+    }
+    
+    .messages-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .message {
+        padding: 10px 15px;
+        border-radius: 8px;
+        max-width: 70%;
+    }
+    
+    .user-message {
+        background: #007acc;
+        color: white;
+        align-self: flex-end;
+    }
+    
+    .ai-message {
+        background: #2d2d30;
+        border: 1px solid #3e3e42;
+        align-self: flex-start;
+    }
+    
+    /* Input area styles */
+    .input-area {
+        display: flex;
+        padding: 20px;
+        gap: 10px;
+        background: #252526;
+        border-top: 1px solid #3e3e42;
+    }
+    
+    .message-input {
+        flex: 1;
+        background: #3c3c3c;
+        border: 1px solid #3e3e42;
+        color: #cccccc;
+        padding: 10px 15px;
+        border-radius: 4px;
+        font-size: 14px;
+        outline: none;
+    }
+    
+    .message-input:focus {
+        border-color: #007acc;
+    }
+    
+    .send-button {
+        padding: 10px 20px;
+        background: #007acc;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+    
+    .send-button:hover {
+        background: #005a9e;
+    }
+    
+    .send-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+    
+    /* Right panel styles */
+    .right-panel {
+        width: 300px;
+        background: #252526;
+        border-left: 1px solid #3e3e42;
+        padding: 20px;
+    }
+    
+    .panel-title {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: #858585;
+        margin-bottom: 15px;
+    }
+    
+    .stage-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .stage-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #3e3e42;
+    }
+    
+    .stage-indicator.stage-generator { background: #f48771; }
+    .stage-indicator.stage-refiner { background: #4ec9b0; }
+    .stage-indicator.stage-validator { background: #569cd6; }
+    .stage-indicator.stage-curator { background: #c586c0; }
+    
+    /* Status bar styles */
+    .status-bar {
+        height: 22px;
+        background: #007acc;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 10px;
+        font-size: 12px;
+        color: white;
+    }
+"#;
 
 fn main() {
     // Launch the desktop app
-    dioxus_desktop::launch_cfg(
-        App,
-        Config::default()
-            .with_window(WindowBuilder::new()
-                .with_title("🐝 Hive AI Desktop")
-                .with_inner_size(dioxus_desktop::LogicalSize::new(1200.0, 800.0))
-            )
-    );
+    dioxus::launch(App);
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -21,46 +200,42 @@ struct Message {
     is_user: bool,
 }
 
-fn App(cx: Scope) -> Element {
+fn App() -> Element {
     // State management
-    let messages = use_state(cx, || vec![
+    let mut messages = use_signal(|| vec![
         Message { text: "🐝 Welcome to Hive AI Desktop!".to_string(), is_user: false },
         Message { text: "This is the Rust-powered version with VS Code-style interface.".to_string(), is_user: false },
     ]);
-    let input_value = use_state(cx, String::new);
-    let is_processing = use_state(cx, || false);
+    let mut input_value = use_signal(String::new);
+    let mut is_processing = use_signal(|| false);
 
     // Send message handler
-    let send_message = |messages: &UseState<Vec<Message>>, input_value: &UseState<String>, is_processing: &UseState<bool>| {
-        if !input_value.is_empty() && !**is_processing {
-            let user_msg = input_value.get().clone();
+    let send_message = move |messages: &mut Signal<Vec<Message>>, input_value: &mut Signal<String>, is_processing: &mut Signal<bool>| {
+        if !input_value.read().is_empty() && !*is_processing.read() {
+            let user_msg = input_value.read().clone();
             
             // Add user message
-            messages.modify(|msgs| {
-                msgs.push(Message { text: user_msg.clone(), is_user: true });
-            });
+            messages.write().push(Message { text: user_msg.clone(), is_user: true });
             
             // Clear input
-            input_value.set(String::new());
+            input_value.write().clear();
             
             // Simulate processing
-            is_processing.set(true);
+            *is_processing.write() = true;
             
             // Simulate AI response
-            messages.modify(|msgs| {
-                msgs.push(Message { 
-                    text: "🐝 I'm currently running in demo mode. The full consensus engine is being integrated.".to_string(), 
-                    is_user: false 
-                });
+            messages.write().push(Message { 
+                text: "🐝 I'm currently running in demo mode. The full consensus engine is being integrated.".to_string(), 
+                is_user: false 
             });
             
-            is_processing.set(false);
+            *is_processing.write() = false;
         }
     };
 
-    cx.render(rsx! {
+    rsx! {
         // Inject VS Code-style CSS
-        style { include_str!("../../desktop_styles.css") }
+        style { "{DESKTOP_STYLES}" }
         
         div {
             class: "app-container",
@@ -104,12 +279,12 @@ fn App(cx: Scope) -> Element {
                     // Messages
                     div {
                         class: "messages-area",
-                        messages.iter().map(|msg| rsx! {
+                        for msg in messages.read().iter() {
                             div {
                                 class: if msg.is_user { "message user-message" } else { "message ai-message" },
                                 "{msg.text}"
                             }
-                        })
+                        }
                     }
                     
                     // Input area
@@ -117,21 +292,21 @@ fn App(cx: Scope) -> Element {
                         class: "input-area",
                         input {
                             class: "message-input",
-                            value: "{input_value}",
+                            value: "{input_value.read()}",
                             placeholder: "Ask Hive anything...",
-                            disabled: **is_processing,
-                            oninput: move |evt| input_value.set(evt.value.clone()),
+                            disabled: *is_processing.read(),
+                            oninput: move |evt| *input_value.write() = evt.value().clone(),
                             onkeypress: move |evt| {
-                                if evt.key() == Key::Enter {
-                                    send_message(&messages, &input_value, &is_processing);
+                                if evt.code() == dioxus::html::input_data::keyboard_types::Code::Enter {
+                                    send_message(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone());
                                 }
                             }
                         }
                         button {
                             class: "send-button",
-                            disabled: input_value.is_empty() || **is_processing,
-                            onclick: move |_| send_message(&messages, &input_value, &is_processing),
-                            if **is_processing { "Processing..." } else { "Send" }
+                            disabled: input_value.read().is_empty() || *is_processing.read(),
+                            onclick: move |_| send_message(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone()),
+                            if *is_processing.read() { "Processing..." } else { "Send" }
                         }
                     }
                 }
@@ -171,5 +346,5 @@ fn App(cx: Scope) -> Element {
                 div { class: "status-right", "UTF-8 | Ready" }
             }
         }
-    })
+    }
 }

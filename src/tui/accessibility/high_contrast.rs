@@ -291,22 +291,22 @@ impl HighContrastMode {
         let mut issues = Vec::new();
         
         // Test main colors
-        if !self.meets_wcag_aa(theme.colors.foreground, theme.colors.background) {
+        if !self.meets_wcag_aa(theme.colors.foreground.0, theme.colors.background.0) {
             issues.push("Main text does not meet WCAG AA contrast requirements".to_string());
         }
         
-        if !self.meets_wcag_aa(theme.colors.selection_fg, theme.colors.selection_bg) {
+        if !self.meets_wcag_aa(theme.colors.selection_fg.0, theme.colors.selection_bg.0) {
             issues.push("Selection text does not meet WCAG AA contrast requirements".to_string());
         }
         
         // Test status colors
         for (name, color) in [
-            ("Error", theme.colors.error),
-            ("Warning", theme.colors.warning),
-            ("Success", theme.colors.success),
-            ("Info", theme.colors.info),
+            ("Error", &theme.colors.error),
+            ("Warning", &theme.colors.warning),
+            ("Success", &theme.colors.success),
+            ("Info", &theme.colors.info),
         ] {
-            if !self.meets_wcag_aa(color, theme.colors.background) {
+            if !self.meets_wcag_aa(color.0, theme.colors.background.0) {
                 issues.push(format!("{} color does not meet WCAG AA contrast requirements", name));
             }
         }

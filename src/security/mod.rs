@@ -394,7 +394,7 @@ impl SecuritySystem {
 
     // Trust dialog methods
     pub async fn is_directory_trusted(&self, path: &std::path::Path, operation: Option<&str>) -> Result<bool> {
-        self.trust_dialog_system.is_directory_trusted(path, operation).await
+        self.trust_dialog_system.is_directory_trusted(path).await
     }
 
     pub async fn request_directory_trust(&self, path: &std::path::Path, operation: Option<&str>) -> Result<bool> {

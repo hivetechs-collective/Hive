@@ -612,7 +612,7 @@ impl RiskAnalyzer {
 
     fn calculate_mitigation_cost(&self, risk: &Risk, template: &MitigationTemplate) -> f64 {
         let base_cost = 1000.0; // Base cost per mitigation
-        base_cost * template.cost_factor * (risk.probability as f64)
+        base_cost * (template.cost_factor as f64) * (risk.probability as f64)
     }
 
     fn calculate_mitigation_time(&self, risk: &Risk, template: &MitigationTemplate) -> Duration {

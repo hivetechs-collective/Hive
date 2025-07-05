@@ -199,11 +199,11 @@ impl ProductionDatabase {
             "curator_truths",
         ];
 
-        for phase_name in phases {
+        for phase_name in phases.iter() {
             log::info!("Starting migration phase: {}", phase_name);
             
             let phase_start = std::time::Instant::now();
-            let phase_stats = match phase_name {
+            let phase_stats = match &**phase_name {
                 "conversations" => self.migrate_conversations_batch(&config).await?,
                 "stage_outputs" => self.migrate_stage_outputs_batch(&config).await?,
                 "knowledge_base" => self.migrate_knowledge_base_batch(&config).await?,
