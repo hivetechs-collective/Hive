@@ -638,6 +638,48 @@ impl SecurityContext {
         warn!("All trust decisions have been reset");
         Ok(())
     }
+
+    /// Check if a path is trusted without prompting
+    pub fn is_path_trusted(&self, path: &Path) -> Result<bool> {
+        match self.check_trust_status(path)? {
+            TrustLevel::Trusted | TrustLevel::Temporary => Ok(true),
+            TrustLevel::Untrusted => Ok(false),
+        }
+    }
+    
+    /// Check trust status for a path
+    fn check_trust_status(&self, path: &Path) -> Result<TrustLevel> {
+        // Check cache first
+        {
+            let cache = self.trust_cache.lock().unwrap();
+            if let Some(&level) = cache.get(path) {
+                return Ok(level);
+            }
+        }
+
+        // Check database
+        let db = self.db.lock().unwrap();
+        let mut stmt = db.prepare(
+            "SELECT trust_level FROM trust_decisions 
+             WHERE path = ?1 AND (expires_at IS NULL OR expires_at > datetime('now'))
+             ORDER BY created_at DESC LIMIT 1"
+        )?;
+
+        let level = stmt.query_row(params![path.to_str().unwrap_or("")], |row| {
+            let level_str: String = row.get(0)?;
+            Ok(match level_str.as_str() {
+                "trusted" => TrustLevel::Trusted,
+                "temporary" => TrustLevel::Temporary,
+                _ => TrustLevel::Untrusted,
+            })
+        }).unwrap_or(TrustLevel::Untrusted);
+
+        // Update cache
+        let mut cache = self.trust_cache.lock().unwrap();
+        cache.insert(path.to_path_buf(), level);
+
+        Ok(level)
+    }
 }
 
 /// Global security context instance

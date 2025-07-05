@@ -264,6 +264,7 @@ pub struct UserPreferences {
     pub risk_tolerance: RiskTolerance,
     pub automation_level: AutomationLevel,
     pub collaboration_style: CollaborationStyle,
+    pub preference_strength: f32,
 }
 
 /// Level of detail in plans
@@ -316,17 +317,6 @@ impl Default for PlanningContext {
     }
 }
 
-impl Default for UserPreferences {
-    fn default() -> Self {
-        Self {
-            preferred_mode: ModeType::Hybrid,
-            detail_level: DetailLevel::Medium,
-            risk_tolerance: RiskTolerance::Balanced,
-            automation_level: AutomationLevel::Guided,
-            collaboration_style: CollaborationStyle::Solo,
-        }
-    }
-}
 
 impl fmt::Display for TaskType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

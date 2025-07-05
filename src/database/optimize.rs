@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use anyhow::Result;
-use rusqlite::{Connection, Statement, params};
+use rusqlite::{Connection};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use serde::{Deserialize, Serialize};
@@ -72,9 +72,15 @@ impl OptimizedDatabase {
         let _timer = PerfTimer::new("database_initialization");
         
         // Create connection manager with optimizations
+        let config_clone = config.clone();
         let manager = SqliteConnectionManager::file(database_path)
             .with_init(move |conn| {
-                Self::apply_optimizations(conn, &config)?;
+                if let Err(e) = Self::apply_optimizations(conn, &config_clone) {
+                    return Err(rusqlite::Error::SqliteFailure(
+                        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
+                        Some(format!("Failed to apply optimizations: {}", e))
+                    ));
+                }
                 Ok(())
             });
 
@@ -190,10 +196,12 @@ impl OptimizedDatabase {
         let result = if let Some(cached_statement) = statement_cache.get(&statement_key) {
             debug!("Using cached prepared statement");
             // Execute with cached statement template
-            self.execute_statement(&mut conn, cached_statement, params).await?
+            self.execute_statement(&mut conn, &cached_statement.sql, params).await?
         } else {
             debug!("Creating new prepared statement");
-            let prepared = conn.prepare(query)?;
+            {
+                let _prepared = conn.prepare(query)?;
+            } // Drop the prepared statement to release the borrow
             let statement_info = StatementInfo {
                 sql: query.to_string(),
                 param_count: params.len(),
@@ -245,7 +253,7 @@ impl OptimizedDatabase {
         
         if query.trim().to_lowercase().starts_with("select") {
             let mut stmt = conn.prepare(query)?;
-            let rows = stmt.query_map(params, |row| {
+            let rows = stmt.query_map(params, |_row| {
                 // Simplified row parsing - would need proper implementation
                 Ok(serde_json::json!({}))
             })?;
@@ -276,7 +284,7 @@ impl OptimizedDatabase {
             
             // Execute in transaction for efficiency
             let mut stmt = tx.prepare(query)?;
-            stmt.execute(params)?;
+            stmt.execute(*params)?;
             
             results.push(QueryResult {
                 data: "success".to_string(),
@@ -302,7 +310,7 @@ impl OptimizedDatabase {
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(query)?;
         
-        let rows = stmt.query_map(params, |row| {
+        let rows = stmt.query_map(params, |_row| {
             // Simplified implementation
             Ok(serde_json::json!({}))
         })?;
@@ -324,7 +332,7 @@ impl OptimizedDatabase {
     pub async fn write_optimized(&self, query: &str, params: &[&dyn rusqlite::ToSql]) -> Result<usize> {
         let _timer = PerfTimer::new("write_optimized");
         
-        let mut conn = self.pool.get()?;
+        let conn = self.pool.get()?;
         let rows_affected = conn.execute(query, params)?;
         
         Ok(rows_affected)
@@ -367,9 +375,9 @@ impl OptimizedDatabase {
         hasher.update(query.as_bytes());
         
         // Hash parameters (simplified)
-        for param in params {
+        for (i, _param) in params.iter().enumerate() {
             // In a real implementation, you'd need proper parameter serialization
-            hasher.update(format!("{:?}", param).as_bytes());
+            hasher.update(format!("param_{}", i).as_bytes());
         }
         
         format!("{:x}", hasher.finalize())
@@ -398,7 +406,7 @@ impl OptimizedDatabase {
     async fn update_connection_metrics(&self, connection_time: Duration) {
         let mut metrics = self.metrics.write().await;
         metrics.connection_time = connection_time;
-        metrics.active_connections = self.pool.state().connections;
+        metrics.active_connections = self.pool.state().connections as usize;
     }
 
     /// Update cache metrics

@@ -27,7 +27,7 @@ use std::env;
 pub async fn should_launch_tui() -> bool {
     use tui_capabilities::{TuiLauncher, TuiMode};
     
-    match TuiLauncher::should_launch_tui().await {
+    match TuiLauncher::should_launch_tui() {
         Ok(TuiMode::Enhanced) | Ok(TuiMode::Simple) => true,
         _ => false,
     }

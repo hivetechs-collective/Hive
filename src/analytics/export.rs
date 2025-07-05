@@ -576,7 +576,8 @@ impl DataExporter {
             file.write_all(b"  <record>\n").await?;
             
             for (i, value) in row.values().enumerate() {
-                let header = headers.get(i).unwrap_or(&format!("field{}", i));
+                let default_header = format!("field{}", i);
+                let header = headers.get(i).unwrap_or(&default_header);
                 let formatted = Self::format_value(value, &config.formatting);
                 file.write_all(format!("    <{}>{}</{}>\n", header, formatted, header).as_bytes()).await?;
             }

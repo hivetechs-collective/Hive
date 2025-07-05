@@ -42,6 +42,10 @@ pub enum ConsensusEvent {
     },
     /// Pipeline completed
     Completed,
+    /// Final response ready
+    FinalResponse {
+        content: String,
+    },
 }
 
 /// Callbacks for streaming consensus

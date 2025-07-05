@@ -18,7 +18,7 @@ pub async fn run_benchmarks() -> Result<()> {
 
     // Consensus engine initialization
     let consensus_start = Instant::now();
-    let engine = crate::consensus::ConsensusEngine::new(/* db.clone() */).await
+    let engine = crate::consensus::ConsensusEngine::new(None).await
         .context("Failed to initialize consensus engine")?;
     let consensus_time = consensus_start.elapsed();
     println!(" Consensus engine initialization: {:?}", consensus_time);

@@ -7,7 +7,7 @@ use anyhow::Context;
 /// Estimate cost for a consensus query
 pub async fn estimate_cost(query: &str) -> Result<()> {
     // let db = Arc::new(Database::open_default().await?);
-    let engine = ConsensusEngine::new(/* db */).await
+    let engine = ConsensusEngine::new(None).await
         .context("Failed to initialize consensus engine")?;
 
     // Get current profile

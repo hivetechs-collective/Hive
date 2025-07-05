@@ -213,7 +213,7 @@ impl GeneratorStage {
             if !ctx.file_summaries.is_empty() {
                 prompt.push_str("PROJECT STRUCTURE:\n");
                 for summary in ctx.file_summaries.iter().take(5) {
-                    prompt.push_str(&format!("- {}: {}\n", summary.file.display(), summary.summary));
+                    prompt.push_str(&format!("- {}: {}\n", summary.path.display(), summary.description));
                 }
                 prompt.push('\n');
             }

@@ -213,12 +213,13 @@ impl ModeVisualizer {
     
     /// Format mode for display
     pub fn format_mode_display(&self, mode: &ModeType, include_animation: bool) -> String {
+        let default_indicator = ModeIndicator {
+            symbol: "?".to_string(),
+            color: Color::White,
+            animation: AnimationType::None,
+        };
         let indicator = self.indicators.get(mode)
-            .unwrap_or(&ModeIndicator {
-                symbol: "?".to_string(),
-                color: Color::White,
-                animation: AnimationType::None,
-            });
+            .unwrap_or(&default_indicator);
         
         let symbol = if include_animation {
             self.get_animated_symbol(mode, &indicator.symbol)

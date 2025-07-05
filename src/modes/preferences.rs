@@ -9,7 +9,7 @@ use crate::modes::detector::DetectionResult;
 use crate::modes::switcher::SwitchResult;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, Timelike};
 use tokio::sync::RwLock;
 use std::sync::Arc;
 
@@ -235,7 +235,7 @@ impl PreferenceManager {
         }
         
         // Apply temporal patterns
-        let current_hour = Utc::now().time().hour();
+        let current_hour = Utc::now().time().hour() as u32;
         if let Some(pattern) = self.find_time_pattern(&storage.learning_data, current_hour) {
             if let PatternData::TimeBasedMode { preferred_mode, .. } = &pattern.data {
                 context.user_preferences.preferred_mode = preferred_mode.clone();
@@ -790,6 +790,9 @@ impl Default for BasePreferences {
             preferred_mode: ModeType::Hybrid,
             detail_level: crate::planning::types::DetailLevel::Medium,
             preference_strength: 0.5,
+            risk_tolerance: crate::planning::types::RiskTolerance::Balanced,
+            automation_level: crate::planning::types::AutomationLevel::Guided,
+            collaboration_style: crate::planning::types::CollaborationStyle::Solo,
         }
     }
 }

@@ -222,7 +222,7 @@ impl SecuritySystem {
         self.audit_logger.log_user_event(
             AuditEventType::UserCreated,
             &user.id,
-            format!("User created: {}", user.name),
+            format!("User created: {}", user.full_name),
         ).await?;
         
         result
@@ -302,8 +302,8 @@ impl SecuritySystem {
             active_sessions: auth_stats.active_sessions,
             failed_logins_24h: auth_stats.failed_logins_last_24h,
             api_keys_active: auth_stats.active_api_keys,
-            total_users: rbac_stats.total_users,
-            total_teams: team_stats.total_teams,
+            total_users: rbac_stats.total_users as u64,
+            total_teams: team_stats.total_teams as u64,
             audit_events_24h: audit_stats.events_last_24h,
             compliance_violations: self.compliance_manager.get_violation_count().await?,
             last_updated: Utc::now(),

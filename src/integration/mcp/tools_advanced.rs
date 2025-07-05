@@ -628,7 +628,7 @@ impl AdvancedToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Debug analysis failed: {}", e))?;
 
         Ok(ToolResult {
@@ -672,7 +672,7 @@ impl AdvancedToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Refactoring failed: {}", e))?;
 
         Ok(ToolResult {
@@ -721,7 +721,7 @@ impl AdvancedToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Code review failed: {}", e))?;
 
         Ok(ToolResult {

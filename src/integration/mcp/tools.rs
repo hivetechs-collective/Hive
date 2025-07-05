@@ -9,6 +9,9 @@ use super::performance::{PerformanceManager, PerformanceConfig};
 use crate::core::config::Config;
 use crate::consensus::engine::ConsensusEngine;
 use crate::analysis::repository_intelligence::RepositoryAnalyzer;
+use crate::analysis::symbol_index::SymbolIndexer;
+use crate::analysis::dependency::DependencyAnalyzer;
+use crate::core::database::DatabaseManager;
 use crate::commands::analyze::analyze_codebase;
 
 use anyhow::{Result, anyhow};
@@ -16,6 +19,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tracing::{info, error};
 use chrono::Utc;
 use uuid::Uuid;
@@ -486,7 +490,7 @@ impl ToolRegistry {
         }
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -508,17 +512,14 @@ impl ToolRegistry {
             .unwrap_or("general");
 
         // Use existing analyze command
-        let analysis = analyze_codebase(
-            path,
-            true, // detailed
-            Some(focus.to_string()),
-            &self.config,
-        ).await
+        let path_buf = PathBuf::from(path);
+        let analysis = analyze_codebase(&path_buf).await
             .map_err(|e| anyhow!("Analysis failed: {}", e))?;
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: analysis 
+                text: serde_json::to_string_pretty(&analysis)
+                    .unwrap_or_else(|_| analysis.to_string()) 
             }],
             is_error: None,
         })
@@ -540,7 +541,7 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -571,7 +572,7 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -602,7 +603,7 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -619,8 +620,17 @@ impl ToolRegistry {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
 
+        // Create dependencies for repository analyzer
+        let db = Arc::new(DatabaseManager::default().await
+            .map_err(|e| anyhow!("Failed to create database manager: {}", e))?);
+        let symbol_indexer = Arc::new(SymbolIndexer::new(db.clone()).await
+            .map_err(|e| anyhow!("Failed to create symbol indexer: {}", e))?);
+        let dependency_analyzer = Arc::new(DependencyAnalyzer::new().await
+            .map_err(|e| anyhow!("Failed to create dependency analyzer: {}", e))?);
+        
         // Use repository analyzer
-        let analyzer = RepositoryAnalyzer::new(self.config.clone());
+        let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer).await
+            .map_err(|e| anyhow!("Failed to create repository analyzer: {}", e))?;
         let summary = analyzer.analyze_repository(path).await
             .map_err(|e| anyhow!("Repository analysis failed: {}", e))?;
 
@@ -667,7 +677,7 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Planning failed: {}", e))?;
 
         Ok(ToolResult {
@@ -701,7 +711,7 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Transformation failed: {}", e))?;
 
         Ok(ToolResult {
@@ -809,7 +819,7 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Documentation generation failed: {}", e))?;
 
         Ok(ToolResult {
@@ -845,7 +855,7 @@ impl ToolRegistryHandler {
         }
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -867,17 +877,14 @@ impl ToolRegistryHandler {
             .unwrap_or("general");
 
         // Use existing analyze command
-        let analysis = analyze_codebase(
-            path,
-            true, // detailed
-            Some(focus.to_string()),
-            &self.config,
-        ).await
+        let path_buf = PathBuf::from(path);
+        let analysis = analyze_codebase(&path_buf).await
             .map_err(|e| anyhow!("Analysis failed: {}", e))?;
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: analysis 
+                text: serde_json::to_string_pretty(&analysis)
+                    .unwrap_or_else(|_| analysis.to_string()) 
             }],
             is_error: None,
         })
@@ -899,7 +906,7 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -930,7 +937,7 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -961,7 +968,7 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
@@ -978,8 +985,17 @@ impl ToolRegistryHandler {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
 
+        // Create dependencies for repository analyzer
+        let db = Arc::new(DatabaseManager::default().await
+            .map_err(|e| anyhow!("Failed to create database manager: {}", e))?);
+        let symbol_indexer = Arc::new(SymbolIndexer::new(db.clone()).await
+            .map_err(|e| anyhow!("Failed to create symbol indexer: {}", e))?);
+        let dependency_analyzer = Arc::new(DependencyAnalyzer::new().await
+            .map_err(|e| anyhow!("Failed to create dependency analyzer: {}", e))?);
+        
         // Use repository analyzer
-        let analyzer = RepositoryAnalyzer::new(self.config.clone());
+        let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer).await
+            .map_err(|e| anyhow!("Failed to create repository analyzer: {}", e))?;
         let summary = analyzer.analyze_repository(path).await
             .map_err(|e| anyhow!("Repository analysis failed: {}", e))?;
 
@@ -1026,7 +1042,7 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Planning failed: {}", e))?;
 
         Ok(ToolResult {
@@ -1060,7 +1076,7 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Transformation failed: {}", e))?;
 
         Ok(ToolResult {
@@ -1168,7 +1184,7 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt).await
+        let response = engine.process(&prompt, None).await
             .map_err(|e| anyhow!("Documentation generation failed: {}", e))?;
 
         Ok(ToolResult {

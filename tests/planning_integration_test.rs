@@ -9,7 +9,7 @@ async fn test_planning_engine_creation() {
     let consensus_engine = ConsensusEngine::new().await.unwrap();
     
     // Create planning engine
-    let planning_engine = PlanningEngine::new(consensus_engine).await.unwrap();
+    let planning_engine = PlanningEngine::new(std::sync::Arc::new(consensus_engine)).await.unwrap();
     
     assert!(true); // If we get here, creation succeeded
 }
@@ -17,7 +17,7 @@ async fn test_planning_engine_creation() {
 #[tokio::test]
 async fn test_mode_detection() {
     let consensus_engine = ConsensusEngine::new().await.unwrap();
-    let planning_engine = PlanningEngine::new(consensus_engine).await.unwrap();
+    let planning_engine = PlanningEngine::new(std::sync::Arc::new(consensus_engine)).await.unwrap();
     
     let context = PlanningContext::default();
     

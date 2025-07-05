@@ -74,6 +74,7 @@ pub enum MessageType {
     Status,
     Help,
     Info,
+    FormattedResult,
 }
 
 /// Current status line information
@@ -441,5 +442,12 @@ impl TuiApp {
     /// Get event sender for external command processing
     pub fn event_sender(&self) -> mpsc::UnboundedSender<TuiEvent> {
         self.event_sender.clone()
+    }
+
+    /// Reload consensus engine
+    pub async fn reload_consensus_engine(&mut self) -> Result<()> {
+        // TODO: Implement consensus engine reloading
+        // For now, just return success
+        Ok(())
     }
 }

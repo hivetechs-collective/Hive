@@ -60,7 +60,7 @@ pub enum ResourceType {
 }
 
 /// Subscription filters
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SubscriptionFilters {
     pub file_extensions: Option<HashSet<String>>,
     pub path_patterns: Option<Vec<String>>,

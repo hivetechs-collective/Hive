@@ -654,6 +654,143 @@ impl TrustDialogSystem {
         
         Ok(expired_count)
     }
+
+    /// Check if a directory is trusted
+    pub async fn is_directory_trusted(&self, path: &Path) -> Result<bool> {
+        let store = self.trust_store.read().await;
+        
+        // Check exact path first
+        if let Some(decision) = store.get(path) {
+            if !decision.trusted {
+                return Ok(false);
+            }
+            
+            // Check if expired
+            if let Some(expires_at) = decision.expires_at {
+                if Utc::now() > expires_at {
+                    return Ok(false);
+                }
+            }
+            
+            return Ok(true);
+        }
+        
+        // Check parent directories if recursive trust is enabled
+        let mut current = path;
+        while let Some(parent) = current.parent() {
+            if let Some(decision) = store.get(parent) {
+                if matches!(decision.scope, TrustScope::Recursive) && decision.trusted {
+                    // Check if not expired
+                    if let Some(expires_at) = decision.expires_at {
+                        if Utc::now() <= expires_at {
+                            return Ok(true);
+                        }
+                    } else {
+                        return Ok(true);
+                    }
+                }
+            }
+            current = parent;
+        }
+        
+        Ok(false)
+    }
+
+    /// Request trust for a directory
+    pub async fn request_directory_trust(&self, path: &Path, reason: &str) -> Result<bool> {
+        // Show trust dialog
+        let theme = ColorfulTheme::default();
+        
+        println!("\n{}", style("🔐 Directory Access Request").bold().yellow());
+        println!("{}", style("─".repeat(50)).dim());
+        println!("Path: {}", style(path.display()).cyan());
+        println!("Reason: {}", style(reason).italic());
+        println!();
+        
+        let trust = Confirm::with_theme(&theme)
+            .with_prompt("Do you trust this directory?")
+            .interact()?;
+        
+        if trust {
+            let scope_options = vec![
+                "This directory only",
+                "This directory and subdirectories",
+                "This session only",
+            ];
+            
+            let scope_idx = Select::with_theme(&theme)
+                .with_prompt("Select trust scope")
+                .items(&scope_options)
+                .default(0)
+                .interact()?;
+            
+            let scope = match scope_idx {
+                0 => TrustScope::Directory,
+                1 => TrustScope::Recursive,
+                2 => TrustScope::Session,
+                _ => TrustScope::Directory,
+            };
+            
+            let decision = TrustDecision {
+                path: path.to_path_buf(),
+                trusted: true,
+                timestamp: Utc::now(),
+                user_id: None,
+                reason: Some(reason.to_string()),
+                scope,
+                expires_at: if matches!(scope, TrustScope::Session) {
+                    Some(Utc::now() + chrono::Duration::hours(24))
+                } else {
+                    None
+                },
+                conditions: vec![],
+            };
+            
+            let mut store = self.trust_store.write().await;
+            store.insert(path.to_path_buf(), decision);
+            
+            // Log audit event if configured
+            if let Some(logger) = &self.audit_logger {
+                logger.log_trust_decision(path, true, Some(reason.to_string())).await?;
+            }
+            
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Revoke trust for a directory
+    pub async fn revoke_directory_trust(&self, path: &Path) -> Result<()> {
+        let mut store = self.trust_store.write().await;
+        store.remove(path);
+        
+        // Log audit event if configured
+        if let Some(logger) = &self.audit_logger {
+            logger.log_trust_revoked(path).await?;
+        }
+        
+        Ok(())
+    }
+
+    /// Clean up expired trust decisions
+    pub async fn cleanup_expired_trust(&self) -> Result<usize> {
+        let mut store = self.trust_store.write().await;
+        let now = Utc::now();
+        let mut expired_count = 0;
+        
+        store.retain(|_, decision| {
+            if let Some(expires_at) = decision.expires_at {
+                if now > expires_at {
+                    expired_count += 1;
+                    return false;
+                }
+            }
+            true
+        });
+        
+        Ok(expired_count)
+    }
 }
 
 /// Format bytes in human-readable format

@@ -526,7 +526,7 @@ impl ConsensusIntegration {
             if self.config.enterprise.require_approvals {
                 let approval_request = ApprovalRequest {
                     id: Uuid::new_v4().to_string(),
-                    hook_id: HookId::new("consensus.cost_threshold"),
+                    hook_id: HookId::from_name("consensus.cost_threshold"),
                     request_type: "cost_threshold_exceeded".to_string(),
                     description: format!(
                         "Stage {} cost ${:.4} exceeds threshold ${:.4}",
@@ -560,7 +560,7 @@ impl ConsensusIntegration {
             if self.config.enterprise.require_approvals {
                 let approval_request = ApprovalRequest {
                     id: Uuid::new_v4().to_string(),
-                    hook_id: HookId::new("consensus.total_cost"),
+                    hook_id: HookId::from_name("consensus.total_cost"),
                     request_type: "total_cost_threshold_exceeded".to_string(),
                     description: format!(
                         "Total consensus cost ${:.4} exceeds threshold ${:.4}",
@@ -853,7 +853,7 @@ impl ConsensusIntegration {
     ) -> Result<ApprovalRequest> {
         Ok(ApprovalRequest {
             id: Uuid::new_v4().to_string(),
-            hook_id: HookId::new("consensus.quality_gate"),
+            hook_id: HookId::from_name("consensus.quality_gate"),
             request_type: "quality_gate_failure".to_string(),
             description: format!(
                 "Quality gate failure in {} stage: {} (value: {:.3})",

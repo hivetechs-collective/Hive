@@ -25,12 +25,12 @@ pub async fn handle_plan(
     
     // Initialize consensus engine
     let config = get_config().await?;
-    let consensus_engine = ConsensusEngine::new()
+    let consensus_engine = ConsensusEngine::new(None)
         .await
         .map_err(|e| HiveError::Planning(format!("Failed to initialize consensus engine: {}", e)))?;
     
     // Create planning engine
-    let mut planning_engine = PlanningEngine::new(consensus_engine).await?;
+    let mut planning_engine = PlanningEngine::new(std::sync::Arc::new(consensus_engine)).await?;
     
     // Determine if we're in a repository
     let current_dir = std::env::current_dir()?;
@@ -97,8 +97,8 @@ pub async fn handle_decompose(
     
     // Initialize engines
     let config = get_config().await?;
-    let consensus_engine = ConsensusEngine::new().await?;
-    let planning_engine = PlanningEngine::new(consensus_engine).await?;
+    let consensus_engine = ConsensusEngine::new(None).await?;
+    let planning_engine = PlanningEngine::new(std::sync::Arc::new(consensus_engine)).await?;
     
     // Create context
     let context = PlanningContext::default();
@@ -108,7 +108,7 @@ pub async fn handle_decompose(
     
     // Use the decomposer directly
     let decomposer = crate::planning::TaskDecomposer::new();
-    let subtasks = decomposer.decompose(&task, &context, &planning_engine.consensus_engine).await?;
+    let subtasks = decomposer.decompose(&task, &context, &*planning_engine.consensus_engine).await?;
     
     println!("📋 Generated {} subtasks:", subtasks.len());
     println!();
@@ -162,8 +162,8 @@ pub async fn handle_analyze_risks(
     
     // Initialize engines
     let config = get_config().await?;
-    let consensus_engine = ConsensusEngine::new().await?;
-    let planning_engine = PlanningEngine::new(consensus_engine).await?;
+    let consensus_engine = ConsensusEngine::new(None).await?;
+    let planning_engine = PlanningEngine::new(std::sync::Arc::new(consensus_engine)).await?;
     
     // Create a sample plan context
     let context = PlanningContext::default();
@@ -223,8 +223,8 @@ pub async fn handle_timeline(
     
     // Initialize engines
     let config = get_config().await?;
-    let consensus_engine = ConsensusEngine::new().await?;
-    let planning_engine = PlanningEngine::new(consensus_engine).await?;
+    let consensus_engine = ConsensusEngine::new(None).await?;
+    let planning_engine = PlanningEngine::new(std::sync::Arc::new(consensus_engine)).await?;
     
     println!();
     println!("🔄 Analyzing task dependencies...");

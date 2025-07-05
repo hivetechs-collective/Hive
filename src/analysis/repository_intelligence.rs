@@ -10,6 +10,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::fmt;
 use anyhow::{Result, Context, anyhow};
 use serde::{Serialize, Deserialize};
 use tokio::sync::RwLock;
@@ -46,6 +47,22 @@ pub struct RepositoryAnalysis {
     pub performance: PerformanceReport,
     pub technical_debt: TechnicalDebtReport,
     pub recommendations: Vec<Recommendation>,
+}
+
+impl fmt::Display for RepositoryAnalysis {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Repository Analysis:\n")?;
+        write!(f, "  Architecture: {:?} (confidence: {:.1}%)\n", 
+               self.architecture.primary_pattern, 
+               self.architecture.confidence * 100.0)?;
+        write!(f, "  Quality Score: {:.1}/10\n", self.quality.overall_score)?;
+        write!(f, "  Security Issues: {} ({} critical)\n", 
+               self.security.issues.len(),
+               self.security.issues.iter().filter(|i| matches!(i.severity, Severity::Critical)).count())?;
+        write!(f, "  Performance Issues: {}\n", self.performance.issues.len())?;
+        write!(f, "  Technical Debt: {:.1} hours\n", self.technical_debt.total_hours)?;
+        write!(f, "  Recommendations: {}", self.recommendations.len())
+    }
 }
 
 /// Architecture information
