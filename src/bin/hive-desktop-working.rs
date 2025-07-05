@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use tokio::sync::mpsc::UnboundedReceiver;
 
 const DESKTOP_STYLES: &str = r#"
     /* VS Code-style CSS */
@@ -290,24 +291,44 @@ fn App() -> Element {
         });
     }
     
-    // Watch for file selection changes
-    use_effect(move || {
+    // Watch for file selection changes using a coroutine
+    use_coroutine(move |_: UnboundedReceiver<()>| {
         let selected_file = selected_file.clone();
         let mut file_content = file_content.clone();
         
-        spawn(async move {
-            if let Some(path_str) = selected_file.read().as_ref() {
-                let path = PathBuf::from(path_str);
-                match file_system::read_file_content(&path).await {
-                    Ok(content) => {
-                        *file_content.write() = content;
+        async move {
+            let mut prev_selection: Option<String> = None;
+            
+            loop {
+                let current_selection = selected_file.read().clone();
+                
+                // Only load if selection changed
+                if current_selection != prev_selection {
+                    if let Some(path_str) = &current_selection {
+                        println!("Loading file content for: {}", path_str);
+                        let path = PathBuf::from(path_str);
+                        match file_system::read_file_content(&path).await {
+                            Ok(content) => {
+                                println!("File content loaded, {} bytes", content.len());
+                                *file_content.write() = content;
+                            }
+                            Err(e) => {
+                                println!("Error reading file: {}", e);
+                                *file_content.write() = format!("// Error reading file: {}", e);
+                            }
+                        }
+                    } else {
+                        // Clear content when no file is selected
+                        *file_content.write() = String::new();
                     }
-                    Err(e) => {
-                        *file_content.write() = format!("// Error reading file: {}", e);
-                    }
+                    
+                    prev_selection = current_selection;
                 }
+                
+                // Small delay to prevent busy loop
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
             }
-        });
+        }
     });
 
     // Send message handler
@@ -359,6 +380,7 @@ fn App() -> Element {
                             expanded_dirs: expanded_dirs.clone(),
                             file_tree: file_tree.clone(),
                             current_dir: current_dir.clone(),
+                            file_content: file_content.clone(),
                         }
                     }
                     
@@ -497,6 +519,7 @@ fn FileTreeItem(
     expanded_dirs: Signal<HashMap<PathBuf, bool>>,
     file_tree: Signal<Vec<FileItem>>,
     current_dir: Signal<PathBuf>,
+    file_content: Signal<String>,
 ) -> Element {
     let file_path = file.path.clone();
     let file_name = file.name.clone();
@@ -539,7 +562,25 @@ fn FileTreeItem(
                     println!("Directory expanded/collapsed");
                 } else {
                     // Select file
-                    *selected_file.write() = Some(file_path.to_string_lossy().to_string());
+                    println!("File clicked: {}", file_path.display());
+                    let path_string = file_path.to_string_lossy().to_string();
+                    *selected_file.write() = Some(path_string.clone());
+                    
+                    // Load file content immediately
+                    let file_content = file_content.clone();
+                    let file_path = file_path.clone();
+                    spawn(async move {
+                        match file_system::read_file_content(&file_path).await {
+                            Ok(content) => {
+                                println!("File content loaded immediately, {} bytes", content.len());
+                                *file_content.write() = content;
+                            }
+                            Err(e) => {
+                                println!("Error reading file immediately: {}", e);
+                                *file_content.write() = format!("// Error reading file: {}", e);
+                            }
+                        }
+                    });
                 }
             },
             "{icon} {file_name}"
@@ -555,6 +596,7 @@ fn FileTreeItem(
                     expanded_dirs: expanded_dirs.clone(),
                     file_tree: file_tree.clone(),
                     current_dir: current_dir.clone(),
+                    file_content: file_content.clone(),
                 }
             }
         }
