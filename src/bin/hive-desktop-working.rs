@@ -291,45 +291,7 @@ fn App() -> Element {
         });
     }
     
-    // Watch for file selection changes using a coroutine
-    use_coroutine(move |_: UnboundedReceiver<()>| {
-        let selected_file = selected_file.clone();
-        let mut file_content = file_content.clone();
-        
-        async move {
-            let mut prev_selection: Option<String> = None;
-            
-            loop {
-                let current_selection = selected_file.read().clone();
-                
-                // Only load if selection changed
-                if current_selection != prev_selection {
-                    if let Some(path_str) = &current_selection {
-                        println!("Loading file content for: {}", path_str);
-                        let path = PathBuf::from(path_str);
-                        match file_system::read_file_content(&path).await {
-                            Ok(content) => {
-                                println!("File content loaded, {} bytes", content.len());
-                                *file_content.write() = content;
-                            }
-                            Err(e) => {
-                                println!("Error reading file: {}", e);
-                                *file_content.write() = format!("// Error reading file: {}", e);
-                            }
-                        }
-                    } else {
-                        // Clear content when no file is selected
-                        *file_content.write() = String::new();
-                    }
-                    
-                    prev_selection = current_selection;
-                }
-                
-                // Small delay to prevent busy loop
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-            }
-        }
-    });
+    // File selection is handled directly in the onclick handler
 
     // Send message handler
     let send_message = move |messages: &mut Signal<Vec<Message>>, input_value: &mut Signal<String>, is_processing: &mut Signal<bool>| {
@@ -567,7 +529,7 @@ fn FileTreeItem(
                     *selected_file.write() = Some(path_string.clone());
                     
                     // Load file content immediately
-                    let file_content = file_content.clone();
+                    let mut file_content = file_content.clone();
                     let file_path = file_path.clone();
                     spawn(async move {
                         match file_system::read_file_content(&file_path).await {
