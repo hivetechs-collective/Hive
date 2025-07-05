@@ -39,13 +39,13 @@ pub struct PlanningEngine {
     collaborative_planner: CollaborativePlanner,
     mode_detector: ModeDetector,
     mode_switcher: ModeSwitcher,
-    pub(crate) consensus_engine: ConsensusEngine,
+    pub(crate) consensus_engine: std::sync::Arc<ConsensusEngine>,
     repository_intelligence: RepositoryIntelligence,
 }
 
 impl PlanningEngine {
     /// Create a new planning engine
-    pub async fn new(consensus_engine: ConsensusEngine) -> HiveResult<Self> {
+    pub async fn new(consensus_engine: std::sync::Arc<ConsensusEngine>) -> HiveResult<Self> {
         Ok(Self {
             decomposer: TaskDecomposer::new(),
             risk_analyzer: RiskAnalyzer::new(),

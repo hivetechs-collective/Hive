@@ -47,7 +47,7 @@ impl CliFramework {
         // Convert config::DatabaseConfig to database::DatabaseConfig
         let db_config = crate::core::database::DatabaseConfig {
             path: config.database.path.clone(),
-            max_connections: config.database.connection_pool_size,
+            max_connections: config.database.connection_pool_size as u32,
             connection_timeout: std::time::Duration::from_secs(5),
             idle_timeout: std::time::Duration::from_secs(300),
             enable_wal: config.database.enable_wal,

@@ -378,7 +378,7 @@ impl ConsensusEngine {
     async fn load_active_profile(database: &Option<Arc<Database>>) -> Result<ConsensusProfile> {
         if let Some(db) = database {
             // Get database connection
-            let conn = db.get_connection()?;
+            let conn = db.get_connection().await?;
             
             // Get active profile name from settings
             let active_profile_name: Result<String, rusqlite::Error> = conn.query_row(

@@ -152,6 +152,10 @@ full = ["embeddings"]
 name = "hive"
 path = "src/main.rs"
 
+[[bin]]
+name = "hive-desktop-working"
+path = "src/bin/hive-desktop-working.rs"
+
 [lib]
 name = "hive_ai"
 path = "src/lib.rs"

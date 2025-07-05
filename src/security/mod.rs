@@ -59,6 +59,7 @@ pub struct SecuritySystem {
     permission_manager: Arc<PermissionManager>,
     rbac_manager: Arc<EnterpriseRbacManager>,
     team_manager: Arc<TeamManager>,
+    trust_dialog_system: Arc<TrustDialogSystem>,
     config: SecurityConfig,
 }
 
@@ -83,6 +84,8 @@ pub struct SecurityConfig {
     pub password_policy: PasswordPolicy,
     /// Encryption settings
     pub encryption: EncryptionConfig,
+    /// Trust dialog configuration
+    pub trust_dialog: TrustDialogConfig,
 }
 
 /// Password policy configuration
@@ -135,6 +138,7 @@ impl Default for SecurityConfig {
                 encrypt_audit_logs: true,
                 encrypt_session_data: true,
             },
+            trust_dialog: TrustDialogConfig::default(),
         }
     }
 }
@@ -160,6 +164,7 @@ impl SecuritySystem {
             rbac_manager.clone(),
             audit_logger.clone(),
         ).await?);
+        let trust_dialog_system = Arc::new(TrustDialogSystem::new(config.trust_dialog.clone()).await?);
 
         Ok(Self {
             auth_manager,
@@ -168,6 +173,7 @@ impl SecuritySystem {
             permission_manager,
             rbac_manager,
             team_manager,
+            trust_dialog_system,
             config,
         })
     }
@@ -384,6 +390,27 @@ impl SecuritySystem {
 
     pub fn teams(&self) -> Arc<TeamManager> {
         self.team_manager.clone()
+    }
+
+    // Trust dialog methods
+    pub async fn is_directory_trusted(&self, path: &std::path::Path, operation: Option<&str>) -> Result<bool> {
+        self.trust_dialog_system.is_directory_trusted(path, operation).await
+    }
+
+    pub async fn request_directory_trust(&self, path: &std::path::Path, operation: Option<&str>) -> Result<bool> {
+        self.trust_dialog_system.request_directory_trust(path, operation).await
+    }
+
+    pub async fn revoke_directory_trust(&self, path: &std::path::Path) -> Result<()> {
+        self.trust_dialog_system.revoke_directory_trust(path).await
+    }
+
+    pub async fn cleanup_expired_trust(&self) -> Result<usize> {
+        self.trust_dialog_system.cleanup_expired_trust().await
+    }
+
+    pub async fn list_trust_decisions(&self) -> Result<Vec<TrustDecision>> {
+        self.trust_dialog_system.list_trust_decisions().await
     }
 }
 
