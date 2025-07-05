@@ -1,7 +1,10 @@
 //! Consensus Progress Component
 
 use dioxus::prelude::*;
-use crate::desktop::{state::*, components::*};
+use crate::desktop::{
+    state::{AppState, ConsensusProgress as ConsensusProgressState, ConsensusStage, StageInfo, StageStatus}, 
+    components::*
+};
 
 /// Consensus Progress Component - Shows 4-stage pipeline
 #[component]
@@ -119,7 +122,7 @@ fn stage_matches_index(stage: &ConsensusStage, index: usize) -> bool {
     }
 }
 
-fn get_stage_progress(progress: &ConsensusProgress, stage_index: usize) -> u8 {
+fn get_stage_progress(progress: &ConsensusProgressState, stage_index: usize) -> u8 {
     match stage_index {
         0 => progress.generator,
         1 => progress.refiner,
@@ -129,7 +132,7 @@ fn get_stage_progress(progress: &ConsensusProgress, stage_index: usize) -> u8 {
     }
 }
 
-fn calculate_overall_progress(progress: &ConsensusProgress) -> u8 {
+fn calculate_overall_progress(progress: &ConsensusProgressState) -> u8 {
     let total = progress.generator + progress.refiner + progress.validator + progress.curator;
     (total / 4).min(100)
 }
