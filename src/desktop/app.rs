@@ -198,9 +198,9 @@ fn MenuBar() -> Element {
     ";
     
     // State for hover effects
-    let settings_hovered = use_signal(|| false);
-    let minimize_hovered = use_signal(|| false);
-    let close_hovered = use_signal(|| false);
+    let mut settings_hovered = use_signal(|| false);
+    let mut minimize_hovered = use_signal(|| false);
+    let mut close_hovered = use_signal(|| false);
     
     rsx! {
         div {
@@ -268,7 +268,7 @@ fn MenuBar() -> Element {
 /// Status Bar Component
 #[component]
 fn StatusBar() -> Element {
-    let app_state = use_context::<Signal<AppState>>();
+    let mut app_state = use_context::<Signal<AppState>>();
     let state = app_state.read();
     
     rsx! {

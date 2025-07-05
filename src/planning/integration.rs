@@ -405,24 +405,26 @@ impl RepositoryIntelligence {
         let mut refactoring_candidates = Vec::new();
         
         for file in files {
-            // High complexity files are hotspots
-            if file.metrics.complexity > 20 {
-                hotspots.push(CodeHotspot {
-                    file_path: PathBuf::from(&file.path),
-                    change_frequency: 0.0, // Would need git history
-                    complexity: file.metrics.complexity as f32,
-                    coupled_files: Vec::new(),
-                });
-            }
-            
-            // Large files are refactoring candidates
-            if file.metrics.lines > 500 {
-                refactoring_candidates.push(RefactoringCandidate {
-                    file_path: PathBuf::from(&file.path),
-                    reason: "File too large - consider splitting".to_string(),
-                    priority: Priority::Medium,
-                    estimated_effort: chrono::Duration::hours(4),
-                });
+            if let Some(metrics) = &file.metrics {
+                // High complexity files are hotspots
+                if metrics.complexity > 20 {
+                    hotspots.push(CodeHotspot {
+                        file_path: PathBuf::from(&file.path),
+                        change_frequency: 0.0, // Would need git history
+                        complexity: metrics.complexity as f32,
+                        coupled_files: Vec::new(),
+                    });
+                }
+                
+                // Large files are refactoring candidates
+                if metrics.lines_of_code > 500 {
+                    refactoring_candidates.push(RefactoringCandidate {
+                        file_path: PathBuf::from(&file.path),
+                        reason: "File too large - consider splitting".to_string(),
+                        priority: Priority::Medium,
+                        estimated_effort: chrono::Duration::hours(4),
+                    });
+                }
             }
         }
         

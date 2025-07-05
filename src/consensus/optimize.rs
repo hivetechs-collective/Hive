@@ -425,8 +425,6 @@ impl OptimizedConnection {
     fn new() -> Self {
         let client = reqwest::Client::builder()
             .tcp_keepalive(Duration::from_secs(60))
-            .gzip(true)
-            .brotli(true)
             .pool_max_idle_per_host(5)
             .pool_idle_timeout(Duration::from_secs(30))
             .timeout(Duration::from_millis(250))

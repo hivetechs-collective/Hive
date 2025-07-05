@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::fmt;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,6 +21,12 @@ impl HookId {
     
     pub fn from_name(name: &str) -> Self {
         Self(format!("{}-{}", name.to_lowercase().replace(' ', "-"), Uuid::new_v4().simple()))
+    }
+}
+
+impl fmt::Display for HookId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

@@ -23,7 +23,7 @@ pub struct ResourceManager {
 impl ResourceManager {
     /// Create new resource manager
     pub async fn new(config: Arc<Config>) -> Result<Self> {
-        let security = SecurityManager::new(config.clone())?;
+        let security = SecurityManager::new(None, true)?;
         
         Ok(Self {
             config,

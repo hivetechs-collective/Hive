@@ -214,8 +214,8 @@ impl AnalyticsApi {
             .or(dashboards)
             .or(alerts)
             .or(stream)
-            .with(cors)
             .recover(handle_rejection)
+            .with(cors)
     }
 
     /// Analytics routes

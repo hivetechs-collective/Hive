@@ -108,7 +108,7 @@ fn FileTreeItem(file: FileItem) -> Element {
         div {
             class: "{class_name}",
             draggable: true,
-            data_git_status: git_status_class.unwrap_or(""),
+            "data-git-status": git_status_class.unwrap_or(""),
             onclick: move |evt: MouseEvent| {
                 if MouseEventUtils::is_left_click(&evt) {
                     if is_directory {
@@ -151,7 +151,7 @@ fn FileTreeItem(file: FileItem) -> Element {
                     } else {
                         crate::desktop::styles::get_file_icon(&file.file_type.extension())
                     },
-                    data_file_type: file.file_type.extension()
+                    "data-file-type": file.file_type.extension()
                 }
             }
             

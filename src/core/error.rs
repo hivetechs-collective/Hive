@@ -563,6 +563,14 @@ impl From<std::str::Utf8Error> for HiveError {
     }
 }
 
+impl From<dialoguer::Error> for HiveError {
+    fn from(err: dialoguer::Error) -> Self {
+        match err {
+            dialoguer::Error::IO(io_err) => Self::from(io_err),
+        }
+    }
+}
+
 /// Result type alias for Hive operations
 pub type Result<T> = std::result::Result<T, HiveError>;
 pub type HiveResult<T> = std::result::Result<T, HiveError>;

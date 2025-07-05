@@ -11,7 +11,7 @@ use clap::Subcommand;
 use console::{style, Style, Term};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
+use chrono::Utc;
 
 use crate::{
     core::analytics::{

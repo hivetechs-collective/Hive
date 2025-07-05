@@ -399,4 +399,11 @@ impl AdvancedTuiApp {
     pub fn should_quit(&self) -> bool {
         self.should_quit
     }
+
+    /// Handle async events
+    pub async fn handle_async_events(&mut self) -> Result<()> {
+        // TODO: Implement async event handling
+        // For now, just return success
+        Ok(())
+    }
 }

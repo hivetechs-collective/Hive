@@ -561,7 +561,7 @@ impl ValidationSuite {
                             title: "Data Integrity Issues Detected".to_string(),
                             description: "Some data integrity issues were found during validation".to_string(),
                             action_required: true,
-                            estimated_fix_time: Some(Duration::from_hours(2)),
+                            estimated_fix_time: Some(Duration::from_secs(2 * 60 * 60)),
                         }
                     },
                     ValidationCategory::PerformanceValidation => {
@@ -571,7 +571,7 @@ impl ValidationSuite {
                             title: "Performance Target Not Met".to_string(),
                             description: "Performance improvement target was not achieved".to_string(),
                             action_required: false,
-                            estimated_fix_time: Some(Duration::from_hours(4)),
+                            estimated_fix_time: Some(Duration::from_secs(4 * 60 * 60)),
                         }
                     },
                     _ => {
@@ -581,7 +581,7 @@ impl ValidationSuite {
                             title: format!("{:?} Validation Failed", category),
                             description: "Review validation results and address issues".to_string(),
                             action_required: true,
-                            estimated_fix_time: Some(Duration::from_hours(1)),
+                            estimated_fix_time: Some(Duration::from_secs(60 * 60)),
                         }
                     }
                 };

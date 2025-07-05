@@ -325,7 +325,7 @@ async fn handle_consensus(
     
     // Create real consensus engine
     println!("🔧 Initializing consensus engine...");
-    let engine = ConsensusEngine::new().await?;
+    let engine = ConsensusEngine::new(None).await?;
     
     // Set profile
     engine.set_profile(&profile).await

@@ -110,6 +110,10 @@ pub struct FileInfo {
     pub last_modified: SystemTime,
     /// Detected language
     pub language: Language,
+    /// Path to the file
+    pub path: PathBuf,
+    /// Code metrics for the file
+    pub metrics: Option<CodeMetrics>,
 }
 
 /// Supported programming languages
@@ -194,6 +198,8 @@ impl Workspace {
             content: Arc::new(content),
             last_modified: tokio::fs::metadata(path).await?.modified()?,
             language,
+            path: path.clone(),
+            metrics: None, // Metrics can be computed lazily if needed
         };
         
         let mut files = self.files.lock().unwrap();

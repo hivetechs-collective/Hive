@@ -50,7 +50,7 @@ pub enum BatchStrategy {
 }
 
 /// Performance monitoring and metrics
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Default)]
 pub struct PerformanceMonitor {
     pub start_time: Option<std::time::SystemTime>,
     pub operations_completed: AtomicU64,

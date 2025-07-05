@@ -149,29 +149,30 @@ impl KeySequence {
         let mut parts = Vec::new();
         
         if self.modifiers.contains(KeyModifiers::CONTROL) {
-            parts.push("Ctrl");
+            parts.push("Ctrl".to_string());
         }
         if self.modifiers.contains(KeyModifiers::SHIFT) {
-            parts.push("Shift");
+            parts.push("Shift".to_string());
         }
         if self.modifiers.contains(KeyModifiers::ALT) {
-            parts.push("Alt");
+            parts.push("Alt".to_string());
         }
         
-        match self.key {
-            KeyCode::Char(c) => parts.push(&c.to_uppercase().to_string()),
-            KeyCode::F(n) => parts.push(&format!("F{}", n)),
-            KeyCode::Enter => parts.push("Enter"),
-            KeyCode::Tab => parts.push("Tab"),
-            KeyCode::Esc => parts.push("Esc"),
-            KeyCode::Backspace => parts.push("Backspace"),
-            KeyCode::Delete => parts.push("Delete"),
-            KeyCode::Up => parts.push("↑"),
-            KeyCode::Down => parts.push("↓"),
-            KeyCode::Left => parts.push("←"),
-            KeyCode::Right => parts.push("→"),
-            _ => parts.push("?"),
-        }
+        let key_str = match self.key {
+            KeyCode::Char(c) => c.to_uppercase().to_string(),
+            KeyCode::F(n) => format!("F{}", n),
+            KeyCode::Enter => "Enter".to_string(),
+            KeyCode::Tab => "Tab".to_string(),
+            KeyCode::Esc => "Esc".to_string(),
+            KeyCode::Backspace => "Backspace".to_string(),
+            KeyCode::Delete => "Delete".to_string(),
+            KeyCode::Up => "↑".to_string(),
+            KeyCode::Down => "↓".to_string(),
+            KeyCode::Left => "←".to_string(),
+            KeyCode::Right => "→".to_string(),
+            _ => "?".to_string(),
+        };
+        parts.push(key_str);
         
         parts.join("+")
     }

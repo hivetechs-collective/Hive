@@ -29,7 +29,7 @@ pub async fn handle_consensus_test(
     let start_time = Instant::now();
     
     // Create consensus engine
-    let engine = ConsensusEngine::new().await
+    let engine = ConsensusEngine::new(None).await
         .context("Failed to create consensus engine")?;
     
     // Set profile if specified
@@ -198,7 +198,7 @@ pub async fn handle_consensus_benchmark(iterations: usize) -> Result<()> {
     println!("🔢 Iterations: {}", iterations);
     println!();
     
-    let engine = ConsensusEngine::new().await?;
+    let engine = ConsensusEngine::new(None).await?;
     
     let test_queries = [
         "What is Rust?",

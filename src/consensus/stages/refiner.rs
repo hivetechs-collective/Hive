@@ -117,7 +117,8 @@ impl RefinerStage {
         // Check for code quality
         if response.contains("```") {
             let code_blocks = response.matches("```").count() / 2;
-            analysis.push(&format!("💻 Contains {} code block(s) - verify syntax and best practices", code_blocks));
+            let code_analysis = format!("💻 Contains {} code block(s) - verify syntax and best practices", code_blocks);
+            analysis.push(&code_analysis);
             
             if !response.contains("//") && !response.contains("#") && response.contains("fn ") {
                 analysis.push("📖 Consider adding code comments for clarity");

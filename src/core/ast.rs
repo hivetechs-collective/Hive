@@ -116,6 +116,29 @@ pub enum SymbolKind {
     Trait,
 }
 
+impl SymbolKind {
+    /// Get string representation of the symbol kind
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SymbolKind::Function => "function",
+            SymbolKind::Method => "method",
+            SymbolKind::Class => "class",
+            SymbolKind::Interface => "interface",
+            SymbolKind::Enum => "enum",
+            SymbolKind::Struct => "struct",
+            SymbolKind::Variable => "variable",
+            SymbolKind::Constant => "constant",
+            SymbolKind::Module => "module",
+            SymbolKind::Namespace => "namespace",
+            SymbolKind::Property => "property",
+            SymbolKind::Parameter => "parameter",
+            SymbolKind::TypeAlias => "type_alias",
+            SymbolKind::Import => "import",
+            SymbolKind::Trait => "trait",
+        }
+    }
+}
+
 /// Parsing result with AST and extracted information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParseResult {

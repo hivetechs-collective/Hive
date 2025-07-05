@@ -46,7 +46,7 @@ pub struct DataPoint {
 }
 
 /// Types of time series models
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ModelType {
     MovingAverage,
     ExponentialSmoothing,

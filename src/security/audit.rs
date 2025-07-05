@@ -7,7 +7,7 @@
 //! - Event correlation and analysis
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
@@ -97,6 +97,8 @@ pub enum AuditEventType {
     DataExport,
     DataImport,
     ComplianceViolation,
+    TrustDecision,
+    TrustRevoked,
 
     // Administrative events
     UserCreated,
@@ -569,6 +571,38 @@ impl EnterpriseAuditLogger {
             compliance_tags: vec![],
             hash,
         }
+    }
+
+    /// Log a trust decision
+    pub async fn log_trust_decision(&self, path: &Path, trusted: bool, reason: Option<String>) -> Result<()> {
+        let event = self.create_event(
+            AuditEventType::TrustDecision,
+            None,
+            Some(path.display().to_string()),
+            format!("Trust decision for {}: {}", path.display(), if trusted { "trusted" } else { "denied" }),
+            if trusted { AuditOutcome::Success } else { AuditOutcome::Denied },
+        );
+        
+        let mut event = event;
+        if let Some(reason) = reason {
+            event.metadata.insert("reason".to_string(), reason);
+        }
+        event.metadata.insert("trusted".to_string(), trusted.to_string());
+        
+        self.log_event(event).await
+    }
+
+    /// Log trust revoked
+    pub async fn log_trust_revoked(&self, path: &Path) -> Result<()> {
+        let event = self.create_event(
+            AuditEventType::TrustRevoked,
+            None,
+            Some(path.display().to_string()),
+            format!("Trust revoked for {}", path.display()),
+            AuditOutcome::Success,
+        );
+        
+        self.log_event(event).await
     }
 }
 

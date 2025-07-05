@@ -10,6 +10,7 @@ pub trait VsCodeTheme {
 }
 
 /// Button styles matching VS Code theme
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ButtonVariant {
     Primary,
     Secondary,
@@ -29,6 +30,7 @@ impl VsCodeTheme for ButtonVariant {
 }
 
 /// Panel styles for different contexts
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PanelStyle {
     Sidebar,
     Editor,

@@ -48,6 +48,7 @@ pub struct ReportTemplate {
     pub sections: Vec<TemplateSection>,
     pub styling: ReportStyling,
     pub metadata: TemplateMetadata,
+    pub tags: Vec<String>,
 }
 
 /// Template section
@@ -398,6 +399,7 @@ impl TemplateManager {
                     tags: vec!["executive".to_string(), "summary".to_string()],
                     department: None,
                 },
+                tags: vec!["executive".to_string(), "summary".to_string(), "overview".to_string()],
             },
         );
 
@@ -485,6 +487,7 @@ impl TemplateManager {
                     tags: vec!["financial".to_string(), "budget".to_string()],
                     department: Some("Finance".to_string()),
                 },
+                tags: vec!["financial".to_string(), "budget".to_string(), "analysis".to_string()],
             },
         );
 
@@ -591,6 +594,7 @@ impl TemplateManager {
                     tags: vec!["compliance".to_string(), "audit".to_string()],
                     department: Some("Legal".to_string()),
                 },
+                tags: vec!["compliance".to_string(), "audit".to_string(), "legal".to_string()],
             },
         );
     }
@@ -1022,6 +1026,7 @@ mod tests {
                 tags: vec!["test".to_string()],
                 department: None,
             },
+            tags: vec!["test".to_string()],
         };
         
         manager.create_custom_template(template).await?;

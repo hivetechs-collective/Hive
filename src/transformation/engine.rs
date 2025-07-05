@@ -39,7 +39,7 @@ pub struct TransformationEngine {
 impl TransformationEngine {
     /// Create a new transformation engine
     pub async fn new(context: Arc<ContextBuilder>) -> Result<Self> {
-        let consensus_engine = Arc::new(ConsensusEngine::new().await?);
+        let consensus_engine = Arc::new(ConsensusEngine::new(None).await?);
         let parser = Arc::new(Mutex::new(TreeSitterParser::new(Language::Rust)?));
         
         // Get database manager from context
@@ -62,7 +62,7 @@ impl TransformationEngine {
             conflict_resolver: ConflictResolver::new(),
             preview_system: PreviewSystem::new(),
             history: history.clone(),
-            applier: CodeApplier::new(history),
+            applier: CodeApplier::new(history, parser.clone()),
             config: TransformConfig::default(),
         })
     }
