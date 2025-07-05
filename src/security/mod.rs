@@ -13,6 +13,7 @@ pub mod compliance;
 pub mod permissions;
 pub mod rbac;
 pub mod teams;
+pub mod trust_dialog;
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -45,6 +46,9 @@ pub use rbac::{
 pub use teams::{
     TeamManager, EnterpriseTeam, TeamHierarchy, TeamRole,
     TeamPermissions, TeamAccess, TeamInvitation,
+};
+pub use trust_dialog::{
+    TrustDecision, TrustScope, TrustCondition, TrustDialogConfig, TrustDialogSystem,
 };
 
 /// Main enterprise security system

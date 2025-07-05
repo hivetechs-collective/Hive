@@ -296,7 +296,8 @@ impl EnhancedModeSwitcher {
         let result = self.consensus_engine.process(&prompt, None).await?;
         
         // Parse recommendations from response
-        Ok(result.final_response
+        Ok(result.result
+            .unwrap_or_default()
             .lines()
             .filter(|line| !line.trim().is_empty())
             .take(3)

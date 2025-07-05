@@ -27,6 +27,9 @@ pub mod analytics;
 // Auto-update mechanism
 pub mod updater;
 
+// License management
+pub mod license;
+
 // Migration tool
 pub mod migrator;
 
@@ -77,6 +80,7 @@ pub use uninstaller::{
     HiveUninstaller, UninstallPlan, UninstallResult, UninstallComponent
 };
 pub use memory::{MemorySystem, MemoryManager};
+pub use license::{LicenseManager, LicenseInfo, LicenseStatus};
 
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;

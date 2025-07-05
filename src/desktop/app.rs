@@ -8,7 +8,7 @@ use crate::desktop::{
     consensus::ConsensusProgress,
     state::{AppState, ConnectionStatus},
     events::{EventDispatcher, KeyboardEventUtils},
-    styles::{get_chat_styles, get_app_styles},
+    styles::get_global_styles,
 };
 
 /// Main Application Component
@@ -98,8 +98,7 @@ pub fn App() -> Element {
     };
     
     rsx! {
-        style { {get_app_styles()} }
-        style { {get_chat_styles()} }
+        style { {get_global_styles()} }
         
         div {
             id: "app",

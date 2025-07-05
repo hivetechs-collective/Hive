@@ -13,6 +13,7 @@ pub mod editor;
 pub mod terminal;
 pub mod layout;
 pub mod keybindings;
+pub mod consensus;
 
 use anyhow::Result;
 use crossterm::event::{KeyEvent, KeyCode, KeyModifiers};

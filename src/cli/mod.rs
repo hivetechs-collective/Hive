@@ -7,6 +7,7 @@ pub mod args;
 pub mod banner;
 pub mod commands;
 pub mod completions;
+pub mod framework;
 pub mod interactive;
 pub mod trust;
 pub mod tui_commands;
@@ -17,6 +18,7 @@ pub mod accessibility;
 pub use args::{Cli, Commands};
 pub use banner::print_banner;
 pub use commands::*;
+pub use framework::CliFramework;
 
 use crate::core::error::Result;
 use std::env;

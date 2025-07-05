@@ -1186,6 +1186,81 @@ pub fn get_platform_fonts() -> &'static str {
     }
 }
 
+/// Get the appropriate Font Awesome icon class for a folder
+pub fn get_folder_icon(is_expanded: bool) -> &'static str {
+    if is_expanded {
+        "fa-solid fa-folder-open"
+    } else {
+        "fa-solid fa-folder"
+    }
+}
+
+/// Get the appropriate Font Awesome icon class for a file based on its extension
+pub fn get_file_icon(extension: &str) -> &'static str {
+    match extension.to_lowercase().as_str() {
+        // Code files
+        "rs" => "fa-brands fa-rust",
+        "js" | "jsx" => "fa-brands fa-js",
+        "ts" | "tsx" => "fa-brands fa-js", // TypeScript uses JS icon
+        "py" => "fa-brands fa-python",
+        "java" => "fa-brands fa-java",
+        "go" => "fa-brands fa-golang",
+        "cpp" | "cc" | "cxx" | "c++" => "fa-solid fa-code",
+        "c" => "fa-solid fa-code",
+        "cs" => "fa-solid fa-code",
+        "php" => "fa-brands fa-php",
+        "rb" => "fa-solid fa-gem",
+        "swift" => "fa-brands fa-swift",
+        "kt" => "fa-solid fa-code",
+        "dart" => "fa-solid fa-code",
+        "r" => "fa-brands fa-r-project",
+        
+        // Web files
+        "html" | "htm" => "fa-brands fa-html5",
+        "css" | "scss" | "sass" | "less" => "fa-brands fa-css3-alt",
+        "vue" => "fa-brands fa-vuejs",
+        "react" => "fa-brands fa-react",
+        
+        // Config files
+        "json" => "fa-solid fa-brackets-curly",
+        "toml" => "fa-solid fa-gear",
+        "yaml" | "yml" => "fa-solid fa-gear",
+        "xml" => "fa-solid fa-code",
+        "ini" | "cfg" | "conf" => "fa-solid fa-gear",
+        
+        // Documentation
+        "md" | "markdown" => "fa-brands fa-markdown",
+        "txt" => "fa-solid fa-file-lines",
+        "pdf" => "fa-solid fa-file-pdf",
+        "doc" | "docx" => "fa-solid fa-file-word",
+        
+        // Images
+        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "svg" | "webp" => "fa-solid fa-image",
+        
+        // Archives
+        "zip" | "tar" | "gz" | "rar" | "7z" => "fa-solid fa-file-zipper",
+        
+        // Scripts
+        "sh" | "bash" | "zsh" | "fish" => "fa-solid fa-terminal",
+        "ps1" | "psm1" | "psd1" => "fa-solid fa-terminal",
+        "bat" | "cmd" => "fa-solid fa-terminal",
+        
+        // Data files
+        "sql" => "fa-solid fa-database",
+        "db" | "sqlite" => "fa-solid fa-database",
+        "csv" => "fa-solid fa-table",
+        
+        // Git files
+        "gitignore" | "gitattributes" => "fa-brands fa-git-alt",
+        
+        // Lock files
+        "lock" => "fa-solid fa-lock",
+        
+        // Default
+        _ => "fa-solid fa-file",
+    }
+}
+
 /// Additional theme variants
 pub mod themes {
     pub const LIGHT_THEME_OVERRIDES: &str = r#"

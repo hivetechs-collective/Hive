@@ -316,7 +316,7 @@ Return as JSON array of segments."#,
         let result = self.consensus_engine.process(&prompt, None).await?;
         
         // Parse segments or use fallback
-        let segments = self.parse_segments(&result.final_response)
+        let segments = self.parse_segments(&result.result.unwrap_or_default())
             .unwrap_or_else(|_| self.create_default_segments(query));
         
         Ok(segments)

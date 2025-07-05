@@ -491,7 +491,7 @@ impl ToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -545,7 +545,7 @@ impl ToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -576,7 +576,7 @@ impl ToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -607,7 +607,7 @@ impl ToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -672,7 +672,7 @@ impl ToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -706,7 +706,7 @@ impl ToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -814,7 +814,7 @@ impl ToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -850,7 +850,7 @@ impl ToolRegistryHandler {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -904,7 +904,7 @@ impl ToolRegistryHandler {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -935,7 +935,7 @@ impl ToolRegistryHandler {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -966,7 +966,7 @@ impl ToolRegistryHandler {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -1031,7 +1031,7 @@ impl ToolRegistryHandler {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -1065,7 +1065,7 @@ impl ToolRegistryHandler {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -1173,7 +1173,7 @@ impl ToolRegistryHandler {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })

@@ -199,7 +199,7 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
         let result = self.consensus_engine.process(&prompt, None).await?;
         
         // Parse the response
-        match serde_json::from_str::<ConsensusInsights>(&result.final_response) {
+        match serde_json::from_str::<ConsensusInsights>(&result.result.unwrap_or_default()) {
             Ok(insights) => Ok(insights),
             Err(_) => {
                 // Fallback to basic insights if parsing fails

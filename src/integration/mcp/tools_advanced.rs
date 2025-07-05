@@ -633,7 +633,7 @@ impl AdvancedToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -677,7 +677,7 @@ impl AdvancedToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
@@ -726,7 +726,7 @@ impl AdvancedToolRegistry {
 
         Ok(ToolResult {
             content: vec![ToolContent::Text { 
-                text: response.final_response 
+                text: response.result.unwrap_or_default() 
             }],
             is_error: None,
         })
