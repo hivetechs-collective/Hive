@@ -401,7 +401,7 @@ impl TreeSitterParser {
                 (lang, symbol_query, import_query, highlight_query)
             },
             Language::Swift => {
-                let lang = tree_sitter_swift::language();
+                let lang = tree_sitter_swift::LANGUAGE;
                 
                 let symbol_query = tree_sitter::Query::new(
                     lang,

@@ -217,7 +217,7 @@ pub fn ConsensusStageIndicator(
     
     rsx! {
         div { class: "{class}",
-            i { class: "fa fa-{icon} consensus-stage-icon {}" }
+            i { class: "fa fa-{icon} consensus-stage-icon" }
             span { class: "consensus-stage-name", "{stage_name}" }
             if let Some(pct) = progress {
                 span { class: "consensus-stage-status", "{pct:.0}%" }

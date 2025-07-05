@@ -26,6 +26,7 @@ pub struct HiveConfig {
     pub logging: LoggingConfig,
     pub openrouter: Option<OpenRouterConfig>,
     pub cloudflare: Option<CloudflareConfig>,
+    pub license: Option<LicenseConfig>,
 }
 
 /// Consensus engine configuration
@@ -101,7 +102,7 @@ pub struct LoggingConfig {
 /// OpenRouter API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenRouterConfig {
-    pub api_key: String,
+    pub api_key: Option<String>,
     pub base_url: String,
     pub timeout_seconds: u32,
     pub max_retries: u32,
@@ -114,6 +115,14 @@ pub struct CloudflareConfig {
     pub account_id: String,
     pub api_token: String,
     pub sync_enabled: bool,
+}
+
+/// License configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LicenseConfig {
+    pub key: Option<String>,
+    pub email: Option<String>,
+    pub tier: Option<String>,
 }
 
 impl Default for HiveConfig {
@@ -164,6 +173,7 @@ impl Default for HiveConfig {
             },
             openrouter: None,
             cloudflare: None,
+            license: None,
         }
     }
 }
@@ -252,7 +262,7 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
         key if key.starts_with("openrouter.") => {
             if config.openrouter.is_none() {
                 config.openrouter = Some(OpenRouterConfig {
-                    api_key: String::new(),
+                    api_key: None,
                     base_url: "https://openrouter.ai/api/v1".to_string(),
                     timeout_seconds: 30,
                     max_retries: 3,
@@ -261,10 +271,30 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
             
             if let Some(ref mut openrouter) = config.openrouter {
                 match key {
-                    "openrouter.api_key" => openrouter.api_key = value.to_string(),
+                    "openrouter.api_key" => openrouter.api_key = Some(value.to_string()),
                     "openrouter.base_url" => openrouter.base_url = value.to_string(),
                     "openrouter.timeout_seconds" => openrouter.timeout_seconds = value.parse()?,
                     "openrouter.max_retries" => openrouter.max_retries = value.parse()?,
+                    _ => return Err(anyhow!("Unknown configuration key: {}", key)),
+                }
+            }
+        }
+        
+        // Handle License config
+        key if key.starts_with("license.") => {
+            if config.license.is_none() {
+                config.license = Some(LicenseConfig {
+                    key: None,
+                    email: None,
+                    tier: None,
+                });
+            }
+            
+            if let Some(ref mut license) = config.license {
+                match key {
+                    "license.key" => license.key = Some(value.to_string()),
+                    "license.email" => license.email = Some(value.to_string()),
+                    "license.tier" => license.tier = Some(value.to_string()),
                     _ => return Err(anyhow!("Unknown configuration key: {}", key)),
                 }
             }
@@ -316,10 +346,15 @@ pub async fn get_config_value(key: &str) -> Result<String> {
         "logging.format" => config.logging.format,
         
         // Handle OpenRouter config
-        "openrouter.api_key" => config.openrouter.as_ref().map(|o| o.api_key.clone()).unwrap_or_default(),
+        "openrouter.api_key" => config.openrouter.as_ref().and_then(|o| o.api_key.clone()).unwrap_or_default(),
         "openrouter.base_url" => config.openrouter.as_ref().map(|o| o.base_url.clone()).unwrap_or_default(),
         "openrouter.timeout_seconds" => config.openrouter.as_ref().map(|o| o.timeout_seconds.to_string()).unwrap_or_default(),
         "openrouter.max_retries" => config.openrouter.as_ref().map(|o| o.max_retries.to_string()).unwrap_or_default(),
+        
+        // Handle License config
+        "license.key" => config.license.as_ref().and_then(|l| l.key.clone()).unwrap_or_default(),
+        "license.email" => config.license.as_ref().and_then(|l| l.email.clone()).unwrap_or_default(),
+        "license.tier" => config.license.as_ref().and_then(|l| l.tier.clone()).unwrap_or_default(),
         
         _ => return Err(anyhow!("Unknown configuration key: {}", key)),
     };

@@ -8,6 +8,9 @@ pub mod streaming;
 pub mod temporal;
 pub mod types;
 pub mod optimize;
+pub mod models;
+pub mod openrouter;
+pub mod profiles;
 
 pub use engine::ConsensusEngine;
 pub use pipeline::ConsensusPipeline;
@@ -17,3 +20,6 @@ pub use types::{ConsensusConfig, ConsensusProfile, ConsensusResult, ConsensusReq
 
 // Re-export commonly used items
 pub use stages::{CuratorStage, GeneratorStage, RefinerStage, ValidatorStage};
+pub use models::{ModelInfo, ModelManager, DynamicModelSelector};
+pub use openrouter::OpenRouterClient;
+pub use profiles::ExpertProfileManager;

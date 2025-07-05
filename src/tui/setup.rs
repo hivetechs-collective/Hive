@@ -12,7 +12,6 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap, Clear},
 };
 use crossterm::event::{KeyCode, KeyEvent};
-use std::path::PathBuf;
 
 use crate::core::config::{HiveConfig, OpenRouterConfig, LicenseConfig, get_hive_config_dir};
 

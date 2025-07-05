@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use std::path::Path;
 
-pub use self::types::{Plan, Task, Risk, Dependency, ModeType, PlanningContext};
+pub use self::types::{Plan, Task, Risk, Dependency, ModeType, PlanningContext, UserPreferences};
 pub use self::decomposer::TaskDecomposer;
 pub use self::risk_analyzer::RiskAnalyzer;
 pub use self::timeline::TimelineEstimator;

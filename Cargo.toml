@@ -92,11 +92,12 @@ r2d2_sqlite = "0.24"
 
 # HTTP and network
 reqwest = { version = "0.11", features = ["json", "stream"] }
-hyper = "1.1"
+hyper = { version = "0.14", features = ["full"] }
 warp = "0.3"
-tower-http = { version = "0.5", features = ["cors", "compression-br"] }
-axum = { version = "0.7", features = ["ws"] }
-axum-extra = { version = "0.9", features = ["typed-header"] }
+tower-http = { version = "0.3", features = ["cors"] }
+axum = { version = "0.6", features = ["ws"] }
+axum-extra = "0.7"
+tokio-tungstenite = "0.20"
 tower = "0.4"
 tower-layer = "0.3"
 mime_guess = "2.0"

@@ -621,7 +621,7 @@ async fn handle_team_commands(command: TeamCommands, security_system: &SecurityS
     match command {
         TeamCommands::List => {
             // Note: list_teams method not implemented yet
-            let teams: Vec<crate::security::rbac::Team> = vec![];
+            let teams: Vec<EnterpriseTeam> = vec![];
             println!("👥 Enterprise Teams ({} total)", teams.len());
             println!("{:<20} {:<30} {:<15} {:<10} {:<10}", "ID", "Name", "Type", "Members", "Active");
             println!("{}", "-".repeat(85));

@@ -29,6 +29,7 @@ pub mod startup;
 pub mod transformation;
 pub mod tui;
 pub mod desktop;
+pub mod interactive_tui;
 
 // Version constant
 pub const VERSION: &str = "2.0.0";
