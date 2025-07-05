@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus::desktop::{Config, WindowBuilder};
 
 const DESKTOP_STYLES: &str = r#"
     /* VS Code-style CSS */
@@ -242,15 +241,9 @@ const DESKTOP_STYLES: &str = r#"
 "#;
 
 fn main() {
-    // Configure the desktop app with proper window settings
-    let config = Config::new()
-        .with_window(WindowBuilder::new()
-            .with_title("Hive AI Desktop")
-            .with_inner_size(dioxus::desktop::LogicalSize::new(1200.0, 800.0))
-            .with_min_inner_size(dioxus::desktop::LogicalSize::new(800.0, 600.0)));
-    
-    // Launch with configuration
-    dioxus::desktop::launch_cfg(App, config);
+    // Launch the desktop app with proper title
+    // Note: Dioxus 0.5 doesn't support launch_cfg, title must be set differently
+    dioxus::launch(App);
 }
 
 #[derive(Debug, Clone, PartialEq)]
