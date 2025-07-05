@@ -217,8 +217,12 @@ pub enum FileType {
     JSON,
     TOML,
     YAML,
+    XML,
     Markdown,
     Text,
+    Shell,
+    Docker,
+    Image,
     Binary,
     Directory,
     Unknown,
@@ -240,8 +244,12 @@ impl FileType {
             "json" => Self::JSON,
             "toml" => Self::TOML,
             "yaml" | "yml" => Self::YAML,
-            "md" => Self::Markdown,
+            "xml" => Self::XML,
+            "md" | "markdown" => Self::Markdown,
             "txt" => Self::Text,
+            "sh" | "bash" => Self::Shell,
+            "dockerfile" => Self::Docker,
+            "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" => Self::Image,
             _ => Self::Unknown,
         }
     }
@@ -260,8 +268,12 @@ impl FileType {
             Self::JSON => "📋",
             Self::TOML => "⚙️",
             Self::YAML => "📄",
+            Self::XML => "📄",
             Self::Markdown => "📝",
             Self::Text => "📄",
+            Self::Shell => "💻",
+            Self::Docker => "🐳",
+            Self::Image => "🖼️",
             Self::Binary => "📦",
             Self::Directory => "📁",
             Self::Unknown => "❓",
@@ -283,8 +295,12 @@ impl FileType {
             Self::JSON => "json",
             Self::TOML => "toml",
             Self::YAML => "yaml",
+            Self::XML => "xml",
             Self::Markdown => "md",
             Self::Text => "txt",
+            Self::Shell => "sh",
+            Self::Docker => "dockerfile",
+            Self::Image => "img",
             Self::Binary => "bin",
             Self::Directory => "",
             Self::Unknown => "",
@@ -526,10 +542,9 @@ async fn count_project_files(_path: &PathBuf) -> usize {
 }
 
 async fn load_directory_tree(
-    _root: &PathBuf,
-    _expanded: &HashMap<PathBuf, bool>,
-    _show_hidden: bool,
+    root: &PathBuf,
+    expanded: &HashMap<PathBuf, bool>,
+    show_hidden: bool,
 ) -> anyhow::Result<Vec<FileItem>> {
-    // TODO: Implement directory tree loading
-    Ok(Vec::new())
+    crate::desktop::file_system::load_directory_tree(root, expanded, show_hidden).await
 }

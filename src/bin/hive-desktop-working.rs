@@ -252,6 +252,11 @@ struct Message {
     is_user: bool,
 }
 
+use hive_ai::desktop::file_system;
+use hive_ai::desktop::state::FileItem;
+use std::path::PathBuf;
+use std::collections::HashMap;
+
 fn App() -> Element {
     // State management
     let mut messages = use_signal(|| vec![
@@ -261,6 +266,49 @@ fn App() -> Element {
     let mut input_value = use_signal(String::new);
     let mut is_processing = use_signal(|| false);
     let mut selected_file = use_signal(|| None::<String>);
+    let mut file_tree = use_signal(|| Vec::<FileItem>::new());
+    let mut expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
+    let mut current_dir = use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let mut file_content = use_signal(String::new);
+    
+    // Load initial directory
+    {
+        let mut file_tree = file_tree.clone();
+        let current_dir_path = current_dir.read().clone();
+        let expanded_map = expanded_dirs.read().clone();
+        
+        spawn(async move {
+            match file_system::load_directory_tree(&current_dir_path, &expanded_map, false).await {
+                Ok(files) => {
+                    file_tree.write().clear();
+                    file_tree.write().extend(files);
+                }
+                Err(e) => {
+                    eprintln!("Error loading directory: {}", e);
+                }
+            }
+        });
+    }
+    
+    // Watch for file selection changes
+    use_effect(move || {
+        let selected_file = selected_file.clone();
+        let mut file_content = file_content.clone();
+        
+        spawn(async move {
+            if let Some(path_str) = selected_file.read().as_ref() {
+                let path = PathBuf::from(path_str);
+                match file_system::read_file_content(&path).await {
+                    Ok(content) => {
+                        *file_content.write() = content;
+                    }
+                    Err(e) => {
+                        *file_content.write() = format!("// Error reading file: {}", e);
+                    }
+                }
+            }
+        });
+    });
 
     // Send message handler
     let send_message = move |messages: &mut Signal<Vec<Message>>, input_value: &mut Signal<String>, is_processing: &mut Signal<bool>| {
@@ -301,20 +349,25 @@ fn App() -> Element {
                 div {
                     class: "sidebar",
                     div { class: "sidebar-section-title", "EXPLORER" }
-                    div { 
-                        class: "sidebar-item",
-                        onclick: move |_| *selected_file.write() = Some("README.md".to_string()),
-                        "📄 README.md" 
+                    
+                    // File tree
+                    for file in file_tree.read().iter() {
+                        FileTreeItem { 
+                            file: file.clone(),
+                            level: 0,
+                            selected_file: selected_file.clone(),
+                            expanded_dirs: expanded_dirs.clone(),
+                            file_tree: file_tree.clone(),
+                            current_dir: current_dir.clone(),
+                        }
                     }
-                    div { 
-                        class: "sidebar-item",
-                        onclick: move |_| *selected_file.write() = Some("src/main.rs".to_string()),
-                        "📄 src/main.rs" 
-                    }
-                    div { 
-                        class: "sidebar-item",
-                        onclick: move |_| *selected_file.write() = Some("Cargo.toml".to_string()),
-                        "📄 Cargo.toml" 
+                    
+                    if file_tree.read().is_empty() {
+                        div { 
+                            class: "sidebar-item",
+                            style: "color: #858585; font-style: italic;",
+                            "No files in directory" 
+                        }
                     }
                     
                     div { class: "sidebar-section-title", style: "margin-top: 20px;", "ACTIONS" }
@@ -331,23 +384,30 @@ fn App() -> Element {
                     // Editor tabs
                     div {
                         class: "editor-tabs",
-                        if let Some(file) = selected_file.read().as_ref() {
-                            div {
-                                class: "editor-tab active",
-                                "{file}"
-                            }
+                        {
+                            selected_file.read().as_ref().map(|file_path| {
+                                let path = PathBuf::from(file_path);
+                                let filename = path.file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or(file_path)
+                                    .to_string();
+                                rsx! {
+                                    div {
+                                        class: "editor-tab active",
+                                        "{filename}"
+                                    }
+                                }
+                            })
                         }
                     }
                     
                     // Editor content
                     div {
                         class: "editor-content",
-                        if let Some(file) = selected_file.read().as_ref() {
-                            div { 
-                                "// Content of {file} would be displayed here\n\n",
-                                "// This is a placeholder for the code editor.\n",
-                                "// Integration with a syntax highlighting library\n",
-                                "// like CodeMirror or Monaco would go here."
+                        if selected_file.read().is_some() {
+                            pre { 
+                                style: "margin: 0; white-space: pre-wrap; word-wrap: break-word;",
+                                "{file_content.read()}"
                             }
                         } else {
                             div { 
@@ -423,6 +483,78 @@ fn App() -> Element {
                     "UTF-8",
                     "•",
                     "Rust"
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn FileTreeItem(
+    file: FileItem,
+    level: usize,
+    selected_file: Signal<Option<String>>,
+    expanded_dirs: Signal<HashMap<PathBuf, bool>>,
+    file_tree: Signal<Vec<FileItem>>,
+    current_dir: Signal<PathBuf>,
+) -> Element {
+    let file_path = file.path.clone();
+    let file_name = file.name.clone();
+    let is_dir = file.is_directory;
+    
+    // Calculate indentation
+    let indent = level * 20;
+    
+    // Check if selected
+    let is_selected = selected_file.read().as_ref() == Some(&file_path.to_string_lossy().to_string());
+    
+    // Check if expanded
+    let is_expanded = if is_dir {
+        expanded_dirs.read().get(&file_path).copied().unwrap_or(false)
+    } else {
+        false
+    };
+    
+    // File icon
+    let icon = if is_dir {
+        if is_expanded { "📂" } else { "📁" }
+    } else {
+        file.file_type.icon()
+    };
+    
+    rsx! {
+        div {
+            class: if is_selected { "sidebar-item active" } else { "sidebar-item" },
+            style: "padding-left: {indent + 20}px;",
+            onclick: move |_| {
+                if is_dir {
+                    // Toggle expansion
+                    let current = expanded_dirs.read().get(&file_path).copied().unwrap_or(false);
+                    expanded_dirs.write().insert(file_path.clone(), !current);
+                    
+                    // Trigger reload by changing a dummy state
+                    // This will cause the coroutine to re-run
+                    // (In a real app, we'd use a proper reload trigger)
+                    // Just log for now
+                    println!("Directory expanded/collapsed");
+                } else {
+                    // Select file
+                    *selected_file.write() = Some(file_path.to_string_lossy().to_string());
+                }
+            },
+            "{icon} {file_name}"
+        }
+        
+        // Render children if expanded
+        if is_dir && is_expanded {
+            for child in &file.children {
+                FileTreeItem {
+                    file: child.clone(),
+                    level: level + 1,
+                    selected_file: selected_file.clone(),
+                    expanded_dirs: expanded_dirs.clone(),
+                    file_tree: file_tree.clone(),
+                    current_dir: current_dir.clone(),
                 }
             }
         }
