@@ -416,7 +416,7 @@ impl PreferenceManager {
     
     // Private helper methods
     
-    fn find_time_pattern(&self, data: &LearningData, hour: u32) -> Option<&Pattern> {
+    fn find_time_pattern<'a>(&self, data: &'a LearningData, hour: u32) -> Option<&'a Pattern> {
         data.pattern_cache.values()
             .filter(|p| p.pattern_type == PatternType::TimeBasedMode)
             .find(|p| {

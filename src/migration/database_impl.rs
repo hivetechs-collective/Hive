@@ -140,14 +140,16 @@ impl ProductionDatabase {
         let target_conn = task::spawn_blocking({
             let target_path = target_path.to_owned();
             move || {
-                Connection::open(&target_path)
-                    .map_err(|e| HiveError::Migration { message: format!("Failed to open target database: {}", e) })
+                let conn = Connection::open(&target_path)
+                    .map_err(|e| HiveError::Migration { message: format!("Failed to open target database: {}", e) })?;
+                
+                // Initialize schema in the same blocking context
+                Self::initialize_target_schema_sync(&conn)?;
+                
+                Ok::<Connection, HiveError>(conn)
             }
         }).await
         .map_err(|e| HiveError::Migration { message: format!("Task join error: {}", e) })??;
-
-        // Initialize target schema
-        Self::initialize_target_schema(&target_conn).await?;
 
         let setup_time = start_time.elapsed().as_millis() as u64;
         log::info!("Database connections established in {}ms", setup_time);
@@ -167,17 +169,11 @@ impl ProductionDatabase {
     }
 
     /// Initialize target database schema (Rust version)
-    async fn initialize_target_schema(conn: &Connection) -> Result<(), HiveError> {
+    fn initialize_target_schema_sync(conn: &Connection) -> Result<(), HiveError> {
         let schema_sql = include_str!("../sql/rust_schema.sql");
         
-        task::spawn_blocking({
-            let mut conn = unsafe { std::ptr::read(conn as *const Connection) };
-            move || {
-                conn.execute_batch(schema_sql)
-                    .map_err(|e| HiveError::Migration { message: format!("Failed to initialize target schema: {}", e) })
-            }
-        }).await
-        .map_err(|e| HiveError::Migration { message: format!("Task join error: {}", e) })??;
+        conn.execute_batch(schema_sql)
+            .map_err(|e| HiveError::Migration { message: format!("Failed to initialize target schema: {}", e) })?;
 
         log::info!("Target database schema initialized");
         Ok(())
@@ -192,22 +188,33 @@ impl ProductionDatabase {
 
         // Migration phases in dependency order
         let phases = vec![
-            ("conversations", Self::migrate_conversations_batch),
-            ("stage_outputs", Self::migrate_stage_outputs_batch),
-            ("knowledge_base", Self::migrate_knowledge_base_batch),
-            ("conversation_topics", Self::migrate_topics_batch),
-            ("conversation_keywords", Self::migrate_keywords_batch),
-            ("conversation_context", Self::migrate_context_batch),
-            ("stage_confidence", Self::migrate_confidence_batch),
-            ("consensus_metrics", Self::migrate_metrics_batch),
-            ("curator_truths", Self::migrate_curator_truths_batch),
+            "conversations",
+            "stage_outputs",
+            "knowledge_base",
+            "conversation_topics",
+            "conversation_keywords",
+            "conversation_context",
+            "stage_confidence",
+            "consensus_metrics",
+            "curator_truths",
         ];
 
-        for (phase_name, migrate_fn) in phases {
+        for phase_name in phases {
             log::info!("Starting migration phase: {}", phase_name);
             
             let phase_start = std::time::Instant::now();
-            let phase_stats = migrate_fn(self, &config).await?;
+            let phase_stats = match phase_name {
+                "conversations" => self.migrate_conversations_batch(&config).await?,
+                "stage_outputs" => self.migrate_stage_outputs_batch(&config).await?,
+                "knowledge_base" => self.migrate_knowledge_base_batch(&config).await?,
+                "conversation_topics" => self.migrate_topics_batch(&config).await?,
+                "conversation_keywords" => self.migrate_keywords_batch(&config).await?,
+                "conversation_context" => self.migrate_context_batch(&config).await?,
+                "stage_confidence" => self.migrate_confidence_batch(&config).await?,
+                "consensus_metrics" => self.migrate_metrics_batch(&config).await?,
+                "curator_truths" => self.migrate_curator_truths_batch(&config).await?,
+                _ => unreachable!(),
+            };
             let phase_duration = phase_start.elapsed().as_millis() as u64;
             
             log::info!("Phase '{}' completed in {}ms, {} rows migrated", 
@@ -679,8 +686,8 @@ impl ProductionDatabase {
     }
 
     /// Calculate migration progress
-    fn calculate_migration_progress(&self, phases: &[(& str, fn(&mut Self, &BatchConfig) -> Result<(), HiveError>)], current_phase: &str) -> f64 {
-        let phase_index = phases.iter().position(|(name, _)| *name == current_phase).unwrap_or(0);
+    fn calculate_migration_progress(&self, phases: &[&str], current_phase: &str) -> f64 {
+        let phase_index = phases.iter().position(|&name| name == current_phase).unwrap_or(0);
         (phase_index as f64 + 1.0) / phases.len() as f64
     }
 

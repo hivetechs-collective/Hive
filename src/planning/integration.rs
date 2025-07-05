@@ -5,7 +5,7 @@
 use crate::core::error::{HiveResult, HiveError};
 use crate::core::semantic::SemanticIndex;
 use crate::planning::types::*;
-use crate::analysis::AnalysisEngine;
+use crate::analysis::{AnalysisEngine, types::AnalyzedFile};
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
@@ -218,11 +218,14 @@ impl RepositoryIntelligence {
         // Assess potential impacts
         potential_impacts = self.assess_task_impacts(task, &relevant_files, repository_context)?;
         
+        // Find existing patterns before moving relevant_files
+        let existing_patterns = self.find_existing_patterns(&relevant_files)?;
+        
         Ok(TaskContext {
             relevant_files,
             related_modules,
             potential_impacts,
-            existing_patterns: self.find_existing_patterns(&relevant_files)?,
+            existing_patterns,
             suggested_approach: self.suggest_approach(task, repository_context)?,
         })
     }
@@ -268,7 +271,7 @@ impl RepositoryIntelligence {
 
         // Use analysis engine to scan repository
         // Note: scan_directory method not implemented yet
-        let files = vec![];
+        let files: Vec<AnalyzedFile> = vec![];
         structure.total_files = files.len();
 
         // Categorize files and directories
@@ -329,7 +332,7 @@ impl RepositoryIntelligence {
 
     async fn calculate_metrics(&self, path: &Path) -> HiveResult<CodeMetrics> {
         // Note: scan_directory method not implemented yet
-        let files = vec![];
+        let files: Vec<AnalyzedFile> = vec![];
         
         let mut total_lines = 0;
         let mut code_lines = 0;
@@ -352,7 +355,13 @@ impl RepositoryIntelligence {
         };
         
         // Analyze technical debt
-        let technical_debt = self.analyze_technical_debt(&files)?;
+        // TODO: Convert AnalyzedFile to FileInfo or implement analyze_technical_debt for AnalyzedFile
+        let technical_debt = TechnicalDebt {
+            hotspots: vec![],
+            refactoring_candidates: vec![],
+            complexity_issues: vec![],
+            total_score: 0.0,
+        };
         
         Ok(CodeMetrics {
             total_lines,

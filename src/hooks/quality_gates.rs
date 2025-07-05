@@ -808,7 +808,7 @@ impl QualityGateManager {
             
             if !gate_result.passed {
                 let gate_violations = gate_result.violations.clone();
-                violations.extend(gate_result.violations);
+                violations.extend(gate_violations.clone()); // Use the cloned version
                 
                 // Determine required actions
                 match &gate.failure_action {
@@ -839,7 +839,7 @@ impl QualityGateManager {
                         }
                     }
                     QualityGateAction::Remediate => {
-                        let suggestions = self.generate_remediation_suggestions(&gate_result.violations).await?;
+                        let suggestions = self.generate_remediation_suggestions(&gate_violations).await?;
                         remediation_suggestions.extend(suggestions);
                         
                         actions_required.push(QualityActionRequired::Remediate {
@@ -1486,7 +1486,7 @@ impl QualityGateManager {
         
         Ok(ApprovalRequest {
             id: Uuid::new_v4().to_string(),
-            hook_id: gate_id.to_string(),
+            hook_id: HookId(gate_id.to_string()),
             request_type: "quality_gate_failure".to_string(),
             description: format!(
                 "Quality gate '{}' failed for {} stage with {} violation(s)",

@@ -289,6 +289,8 @@ impl AlertManager {
         let mut store = self.metric_store.write().await;
         let now = Utc::now();
 
+        let max_age = store.max_age; // Get max_age before the mutable borrow
+        
         let series = store.metrics.entry(name.to_string()).or_insert_with(|| {
             MetricTimeSeries {
                 values: Vec::new(),
@@ -300,7 +302,7 @@ impl AlertManager {
         series.last_updated = now;
 
         // Clean old values
-        let cutoff = now - store.max_age;
+        let cutoff = now - max_age;
         series.values.retain(|(timestamp, _)| *timestamp > cutoff);
 
         Ok(())

@@ -117,7 +117,7 @@ pub enum ViolationSeverity {
 }
 
 /// Violation status
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ViolationStatus {
     Open,

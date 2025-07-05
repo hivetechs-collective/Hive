@@ -69,42 +69,18 @@ impl<'a> MessageList<'a> {
         self
     }
     
-    /// Get style for message type
-    fn get_message_style(&self, message_type: &MessageType) -> Style {
-        match message_type {
-            MessageType::Welcome => self.theme.secondary_style().add_modifier(Modifier::BOLD),
-            MessageType::UserInput => self.theme.primary_style(),
-            MessageType::SystemResponse => self.theme.text_style(),
-            MessageType::ConsensusProgress => self.theme.accent_style(),
-            MessageType::Error => self.theme.error_style().add_modifier(Modifier::BOLD),
-            MessageType::Status => self.theme.warning_style(),
-            MessageType::Help => self.theme.secondary_style(),
-            MessageType::Info => self.theme.accent_style(),
-        }
-    }
     
-    /// Format message content with optional timestamp
-    fn format_message<'b>(&self, message: &'b TuiMessage) -> Text<'b> {
-        let style = self.get_message_style(&message.message_type);
-        
-        if self.show_timestamps && !matches!(message.message_type, MessageType::Welcome | MessageType::UserInput) {
-            let timestamp = message.timestamp.format("%H:%M:%S");
-            let timestamp_style = Style::default().fg(Color::DarkGray);
-            
-            Text::from(vec![
-                Line::from(vec![
-                    Span::styled(format!("[{}] ", timestamp), timestamp_style),
-                    Span::styled(&message.content, style),
-                ]),
-            ])
-        } else {
-            Text::from(Span::styled(&message.content, style))
-        }
-    }
 }
 
 impl<'a> Widget for MessageList<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        // Extract fields before the block match to avoid partial move
+        let messages = self.messages;
+        let scroll_offset = self.scroll_offset;
+        let style = self.style;
+        let theme = self.theme;
+        let show_timestamps = self.show_timestamps;
+        
         let area = match self.block {
             Some(b) => {
                 let inner_area = b.inner(area);
@@ -115,16 +91,48 @@ impl<'a> Widget for MessageList<'a> {
         };
         
         // Convert messages to list items
-        let items: Vec<ListItem> = self
-            .messages
+        let items: Vec<ListItem> = messages
             .iter()
-            .skip(self.scroll_offset)
-            .map(|msg| ListItem::new(self.format_message(msg)))
+            .skip(scroll_offset)
+            .map(|msg| ListItem::new(format_message(msg, theme, show_timestamps)))
             .collect();
         
         // Create and render the list
-        let list = List::new(items).style(self.style);
+        let list = List::new(items).style(style);
         list.render(area, buf);
+    }
+}
+
+/// Format message content with optional timestamp
+fn format_message<'a>(message: &'a TuiMessage, theme: &WidgetTheme, show_timestamps: bool) -> Text<'a> {
+    let style = get_message_style(&message.message_type, theme);
+    
+    if show_timestamps && !matches!(message.message_type, MessageType::Welcome | MessageType::UserInput) {
+        let timestamp = message.timestamp.format("%H:%M:%S");
+        let timestamp_style = Style::default().fg(Color::DarkGray);
+        
+        Text::from(vec![
+            Line::from(vec![
+                Span::styled(format!("[{}] ", timestamp), timestamp_style),
+                Span::styled(&message.content, style),
+            ]),
+        ])
+    } else {
+        Text::from(Span::styled(&message.content, style))
+    }
+}
+
+/// Get style for message type
+fn get_message_style(message_type: &MessageType, theme: &WidgetTheme) -> Style {
+    match message_type {
+        MessageType::Welcome => theme.secondary_style().add_modifier(Modifier::BOLD),
+        MessageType::UserInput => theme.primary_style(),
+        MessageType::SystemResponse => theme.text_style(),
+        MessageType::ConsensusProgress => theme.accent_style(),
+        MessageType::Error => theme.error_style().add_modifier(Modifier::BOLD),
+        MessageType::Status => theme.warning_style(),
+        MessageType::Help => theme.secondary_style(),
+        MessageType::Info => theme.accent_style(),
     }
 }
 

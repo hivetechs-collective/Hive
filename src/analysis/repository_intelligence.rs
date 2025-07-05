@@ -220,6 +220,7 @@ pub struct SecurityReport {
     pub risk_score: f32,
     pub vulnerabilities: Vec<SecurityVulnerability>,
     pub dependency_risks: Vec<DependencyRisk>,
+    pub issues: Vec<SecurityVulnerability>, // Added for compatibility
 }
 
 /// Security vulnerability
@@ -265,6 +266,7 @@ pub struct PerformanceReport {
     pub hotspots: Vec<PerformanceHotspot>,
     pub bottlenecks: Vec<Bottleneck>,
     pub optimization_opportunities: Vec<OptimizationOpportunity>,
+    pub issues: Vec<PerformanceHotspot>, // Added for compatibility
 }
 
 /// Performance hotspot
@@ -341,6 +343,7 @@ pub struct TechnicalDebtReport {
     pub items: Vec<TechnicalDebtItem>,
     pub debt_by_category: HashMap<String, f32>,
     pub payment_plan: Vec<DebtPaymentTask>,
+    pub total_hours: f32, // Added for compatibility (alias for total_debt_hours)
 }
 
 /// Technical debt item
@@ -716,8 +719,9 @@ impl RepositoryAnalyzer {
         Ok(SecurityReport {
             vulnerability_count,
             risk_score,
-            vulnerabilities,
+            vulnerabilities: vulnerabilities.clone(),
             dependency_risks: vec![], // Placeholder - would need dependency analysis
+            issues: vulnerabilities, // Use same vulnerabilities for issues field
         })
     }
 
@@ -742,9 +746,10 @@ impl RepositoryAnalyzer {
         let optimization_opportunities = self.find_optimization_opportunities(symbols)?;
         
         Ok(PerformanceReport {
-            hotspots,
+            hotspots: hotspots.clone(),
             bottlenecks,
             optimization_opportunities,
+            issues: hotspots, // Use hotspots for issues field
         })
     }
 
@@ -853,6 +858,7 @@ impl RepositoryAnalyzer {
             items: debt_items,
             debt_by_category,
             payment_plan,
+            total_hours: total_debt_hours, // Alias for backward compatibility
         })
     }
     

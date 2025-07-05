@@ -358,8 +358,8 @@ impl EnhancedModeSwitcher {
         }
         
         let mut heap = BinaryHeap::new();
-        let mut costs = HashMap::new();
-        let mut came_from = HashMap::new();
+        let mut costs: HashMap<ModeType, i32> = HashMap::new();
+        let mut came_from: HashMap<ModeType, ModeType> = HashMap::new();
         
         heap.push(State { cost: 0, mode: from.clone() });
         costs.insert(from.clone(), 0);

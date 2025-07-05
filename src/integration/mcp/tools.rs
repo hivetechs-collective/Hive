@@ -19,7 +19,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::{info, error};
 use chrono::Utc;
 use uuid::Uuid;
@@ -396,14 +396,16 @@ impl ToolRegistry {
     /// Register advanced tools
     async fn register_advanced_tools(&mut self) -> Result<()> {
         let advanced_tool_definitions = self.advanced_tools.get_advanced_tools();
+        let tool_count = advanced_tool_definitions.len(); // Get the count before moving the vec
         
         for (name, tool) in advanced_tool_definitions {
+            let name_for_closure = name.clone();
             self.register_tool(
                 &name,
                 &tool.description,
                 tool.input_schema.clone(),
                 Box::new(move |registry, args| {
-                    let name_clone = name.clone();
+                    let name_clone = name_for_closure.clone();
                     let registry_clone = registry.clone_for_handler();
                     tokio::spawn(async move {
                         registry_clone.handle_advanced_tool(&name_clone, args).await
@@ -412,7 +414,7 @@ impl ToolRegistry {
             );
         }
 
-        info!("Registered {} advanced MCP tools", advanced_tool_definitions.len());
+        info!("Registered {} advanced MCP tools", tool_count);
         info!("Total MCP tools available: {}", self.tools.len());
         Ok(())
     }
@@ -455,7 +457,8 @@ impl ToolRegistry {
             &arguments,
             || async {
                 let handle = (tool_def.handler)(self, arguments.clone());
-                let tool_result = handle.await?;
+                let tool_result = handle.await
+                    .map_err(|e| anyhow!("Tool execution failed: {}", e))??;
                 
                 // Convert ToolResult to JSON for caching
                 Ok(serde_json::to_value(tool_result)?)
@@ -631,7 +634,7 @@ impl ToolRegistry {
         // Use repository analyzer
         let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer).await
             .map_err(|e| anyhow!("Failed to create repository analyzer: {}", e))?;
-        let summary = analyzer.analyze_repository(path).await
+        let summary = analyzer.analyze_repository(Path::new(path)).await
             .map_err(|e| anyhow!("Repository analysis failed: {}", e))?;
 
         Ok(ToolResult {
@@ -996,7 +999,7 @@ impl ToolRegistryHandler {
         // Use repository analyzer
         let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer).await
             .map_err(|e| anyhow!("Failed to create repository analyzer: {}", e))?;
-        let summary = analyzer.analyze_repository(path).await
+        let summary = analyzer.analyze_repository(Path::new(path)).await
             .map_err(|e| anyhow!("Repository analysis failed: {}", e))?;
 
         Ok(ToolResult {

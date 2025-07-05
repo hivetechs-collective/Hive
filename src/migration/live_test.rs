@@ -65,7 +65,7 @@ pub struct LiveTestResult {
 }
 
 /// Test execution status
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TestStatus {
     NotStarted,
     Running,
@@ -166,7 +166,7 @@ impl LiveMigrationTester {
             // Final validation
             self.run_final_validation().await?;
             
-            Ok(())
+            Ok::<(), HiveError>(())
         }).await;
 
         // Handle test completion

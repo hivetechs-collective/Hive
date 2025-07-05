@@ -164,7 +164,7 @@ impl SecuritySystem {
             rbac_manager.clone(),
             audit_logger.clone(),
         ).await?);
-        let trust_dialog_system = Arc::new(TrustDialogSystem::new(config.trust_dialog.clone()).await?);
+        let trust_dialog_system = Arc::new(TrustDialogSystem::new(config.trust_dialog.clone()));
 
         Ok(Self {
             auth_manager,
@@ -398,7 +398,8 @@ impl SecuritySystem {
     }
 
     pub async fn request_directory_trust(&self, path: &std::path::Path, operation: Option<&str>) -> Result<bool> {
-        self.trust_dialog_system.request_directory_trust(path, operation).await
+        let reason = operation.unwrap_or("Access files in this directory");
+        self.trust_dialog_system.request_directory_trust(path, reason).await
     }
 
     pub async fn revoke_directory_trust(&self, path: &std::path::Path) -> Result<()> {

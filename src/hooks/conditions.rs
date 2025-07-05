@@ -339,7 +339,8 @@ impl ConditionEvaluator {
         use chrono::{Local, Timelike, Datelike};
         
         let now = if let Some(tz_str) = timezone {
-            let tz: chrono_tz::Tz = tz_str.parse()?;
+            let tz: chrono_tz::Tz = tz_str.parse()
+                .map_err(|e| HiveError::validation(format!("Invalid timezone: {}", e)))?;
             chrono::Utc::now().with_timezone(&tz).naive_local()
         } else {
             Local::now().naive_local()
@@ -356,7 +357,7 @@ impl ConditionEvaluator {
         // Check time window
         if let (Some(start), Some(end)) = (start_time, end_time) {
             let current_time = format!("{:02}:{:02}", now.time().hour(), now.time().minute());
-            Ok(current_time >= start && current_time <= end)
+            Ok(current_time.as_str() >= start && current_time.as_str() <= end)
         } else {
             Ok(true)
         }

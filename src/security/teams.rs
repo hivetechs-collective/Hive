@@ -192,7 +192,7 @@ pub enum JoinPolicy {
     AdminOnly,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum InvitationStatus {
     Pending,

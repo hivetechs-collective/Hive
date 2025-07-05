@@ -697,7 +697,7 @@ impl InteractiveTui {
                     timestamp: chrono::Utc::now(),
                 });
             }
-            TuiEvent::ConsensusProgress(progress) => {
+            TuiEvent::ConsensusUpdate(progress) => {
                 self.consensus_progress = Some(progress);
             }
             TuiEvent::ConsensusComplete => {

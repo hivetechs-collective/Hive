@@ -1500,7 +1500,7 @@ async fn handle_config(command: ConfigCommands) -> Result<()> {
                     
                     if let Some(ref openrouter) = config.openrouter {
                         let api_key = if show_sensitive {
-                            &openrouter.api_key
+                            openrouter.api_key.as_deref().unwrap_or("not set")
                         } else {
                             "sk-or-****"
                         };

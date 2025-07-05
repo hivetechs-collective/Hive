@@ -67,7 +67,7 @@ impl ScreenReaderInterface {
 
         let announcement = Announcement {
             text: text.to_string(),
-            priority,
+            priority: priority.clone(),
             timestamp: std::time::Instant::now(),
         };
 

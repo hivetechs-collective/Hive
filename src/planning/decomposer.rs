@@ -153,6 +153,7 @@ Guidelines:
         
         // Convert raw tasks to proper Task objects
         let tasks = raw_tasks.into_iter().enumerate().map(|(index, raw)| {
+            let resources = self.determine_resources(&raw); // Call before moving fields
             Task {
                 id: Uuid::new_v4().to_string(),
                 title: raw.title,
@@ -162,7 +163,7 @@ Guidelines:
                 estimated_duration: chrono::Duration::hours(raw.estimated_hours as i64),
                 dependencies: Vec::new(), // Will be resolved later
                 required_skills: raw.required_skills,
-                resources: self.determine_resources(&raw),
+                resources,
                 acceptance_criteria: raw.acceptance_criteria,
                 subtasks: Vec::new(),
             }

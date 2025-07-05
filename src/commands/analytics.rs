@@ -548,7 +548,7 @@ async fn analyze_trends_advanced(
     
     if let Some(metric_name) = metric {
         let message = format!("Analyzing trend for metric: {}", metric_name);
-        pb.set_message(&message);
+        pb.set_message(message);
         
         let horizon = if predict {
             Some(ForecastHorizon::Custom(horizon_days as i64))

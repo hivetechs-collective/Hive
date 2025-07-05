@@ -20,6 +20,7 @@ pub mod dependency;
 pub mod repository_intelligence;
 pub mod file_analyzer;
 pub mod fast_parse;
+pub mod types;
 
 pub use parser::{TreeSitterParser, ParserRegistry, Edit, IncrementalParseState, HighlightSpan, HighlightType};
 pub use language_detector::{LanguageDetector, detect_language};

@@ -257,6 +257,7 @@ impl DataExporter {
         };
 
         let job_id = job.id.clone();
+        let job_id_for_return = job_id.clone(); // Clone for the return value
 
         // Store job
         {
@@ -269,10 +270,11 @@ impl DataExporter {
         let export_path = self.export_path.clone();
         
         tokio::spawn(async move {
-            if let Err(e) = Self::execute_export(job_id.clone(), config, data_source, jobs.clone(), export_path).await {
+            let job_id_clone = job_id.clone(); // Clone for the error handling closure
+            if let Err(e) = Self::execute_export(job_id, config, data_source, jobs.clone(), export_path).await {
                 // Update job with error
                 let mut jobs = jobs.write().await;
-                if let Some(job) = jobs.get_mut(&job_id) {
+                if let Some(job) = jobs.get_mut(&job_id_clone) {
                     job.status = ExportStatus::Failed;
                     job.error = Some(e.to_string());
                     job.completed_at = Some(Utc::now());
@@ -280,7 +282,7 @@ impl DataExporter {
             }
         });
 
-        Ok(job_id)
+        Ok(job_id_for_return)
     }
 
     /// Execute export

@@ -133,12 +133,22 @@ struct ModelPricing {
 }
 
 /// Cost optimization rule
-#[derive(Debug)]
 struct OptimizationRule {
     name: String,
     condition: Box<dyn Fn(&CostMetrics) -> bool + Send + Sync>,
     recommendation: String,
     potential_savings: f64,
+}
+
+impl std::fmt::Debug for OptimizationRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OptimizationRule")
+            .field("name", &self.name)
+            .field("recommendation", &self.recommendation)
+            .field("potential_savings", &self.potential_savings)
+            .field("condition", &"<function>")
+            .finish()
+    }
 }
 
 /// Cost metrics for analysis
