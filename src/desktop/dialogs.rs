@@ -578,9 +578,6 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
         });
     });
     
-    // Debug log
-    tracing::info!("OnboardingDialog - current_step: {}, show_onboarding: {}, has_keys: {}", 
-                  current_step.read(), show_onboarding.read(), !openrouter_key.read().is_empty());
     
     rsx! {
         div {
@@ -1140,23 +1137,29 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 let mut license_info = license_info.clone();
                                 
                                 spawn(async move {
+                                    tracing::info!("Saving API keys - OpenRouter: {} chars, Hive: {} chars", 
+                                                 or_key.len(), h_key.len());
                                     match save_api_keys(&or_key, &h_key).await {
                                         Ok(license_result) => {
+                                            tracing::info!("API keys saved successfully");
                                             // Save to parent signals
-                                            *openrouter_key.write() = or_key;
-                                            *hive_key.write() = h_key;
+                                            *openrouter_key.write() = or_key.clone();
+                                            *hive_key.write() = h_key.clone();
                                             
                                             // Store license info if available
                                             if let Some(license) = license_result {
                                                 tracing::info!("License validated: tier={}, daily_limit={}", 
                                                             license.tier, license.daily_limit);
                                                 *license_info.write() = Some(license);
+                                            } else {
+                                                tracing::info!("No Hive license provided (using free tier)");
                                             }
                                             
                                             // Move to profile selection
                                             *current_step.write() = 4;
                                         }
                                         Err(e) => {
+                                            tracing::error!("Failed to save API keys: {}", e);
                                             // Show error
                                             *validation_error.write() = Some(e.to_string());
                                         }
@@ -1165,6 +1168,7 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 });
                             } else if step == 4 {
                                 // Profile -> Complete
+                                tracing::info!("Step 4: Profile configuration - moving to completion");
                                 let mode = profile_mode.read().clone();
                                 let template_id = selected_template.read().clone();
                                 let profile_name_val = profile_name.read().clone();
@@ -1191,10 +1195,13 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                         profile_name_val
                                     };
                                     
+                                    tracing::info!("Creating profile from template: {} as {}", template_id, name);
                                     let name_for_spawn = name.clone();
                                     spawn(async move {
                                         if let Err(e) = create_profile_from_template(&template_id, &name_for_spawn).await {
                                             tracing::error!("Failed to create profile: {}", e);
+                                        } else {
+                                            tracing::info!("Profile created successfully");
                                         }
                                     });
                                     
@@ -1202,9 +1209,12 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 } else if mode == "existing" && existing_id.is_some() {
                                     // Set existing profile as default
                                     if let Some(profile_id) = existing_id {
+                                        tracing::info!("Setting existing profile {} as default", profile_id);
                                         spawn(async move {
                                             if let Err(e) = set_default_profile(profile_id).await {
                                                 tracing::error!("Failed to set default profile: {}", e);
+                                            } else {
+                                                tracing::info!("Default profile set successfully");
                                             }
                                         });
                                         
@@ -1214,25 +1224,43 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                         }
                                     }
                                 } else {
-                                    // No profile selected - use default
+                                    // No profile selected - create default
+                                    tracing::info!("No profile selected - creating default Balanced Generalist");
                                     *selected_profile.write() = "Balanced Generalist".to_string();
+                                    
+                                    // Create the default profile
+                                    spawn(async move {
+                                        if let Err(e) = create_profile_from_template("balanced-generalist", "Balanced Generalist").await {
+                                            tracing::error!("Failed to create default profile: {}", e);
+                                        } else {
+                                            tracing::info!("Default profile created successfully");
+                                        }
+                                    });
                                 }
                                 
                                 if !has_error {
+                                    tracing::info!("Moving to step 5 (completion)");
                                     *current_step.write() = 5;
                                 }
                             } else if step == 5 {
                                 // Complete -> Close dialog and mark onboarding as complete
-                                tracing::info!("Onboarding completed successfully");
+                                tracing::info!("Step 5: Get Started clicked - closing onboarding dialog");
                                 
-                                // Mark onboarding as complete in the database
+                                // Close the dialog immediately
+                                *show_onboarding.write() = false;
+                                
+                                // Mark onboarding as complete in the database (in background)
                                 spawn(async move {
+                                    tracing::info!("Marking onboarding as complete in database");
                                     if let Err(e) = mark_onboarding_complete().await {
                                         tracing::warn!("Failed to mark onboarding complete: {}", e);
+                                    } else {
+                                        tracing::info!("Onboarding marked as complete successfully");
                                     }
                                 });
-                                
-                                *show_onboarding.write() = false;
+                            } else {
+                                // This shouldn't happen, but log it
+                                tracing::warn!("Unexpected step in button handler: {}", step);
                             }
                         },
                         if *is_validating.read() { 
@@ -1263,6 +1291,9 @@ struct LicenseValidationResult {
 async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<Option<LicenseValidationResult>> {
     use crate::core::api_keys::ApiKeyManager;
     use crate::core::{license::LicenseManager, config::get_hive_config_dir};
+    
+    tracing::info!("save_api_keys called - OpenRouter: {} chars, Hive: {} chars",
+                 openrouter_key.len(), if hive_key.is_empty() { 0 } else { hive_key.len() });
     
     let mut license_result = None;
     
@@ -1306,8 +1337,10 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
         // Test with live API call
         match ApiKeyManager::test_openrouter_key(openrouter_key).await {
             Ok(true) => {
+                tracing::info!("OpenRouter key validated successfully");
                 // Key is valid, save to database
                 ApiKeyManager::save_to_database(Some(openrouter_key), Some(hive_key)).await?;
+                tracing::info!("API keys saved to database");
             }
             Ok(false) => {
                 return Err(anyhow::anyhow!("API key validation failed"));
