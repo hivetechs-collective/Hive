@@ -373,8 +373,9 @@ impl DialogManager {
                         self.file_picker.selected_index = 0;
                         DialogResult::Continue
                     } else {
+                        let path = entry.path.clone();
                         self.close_dialog();
-                        DialogResult::FileSelected(entry.path.clone())
+                        DialogResult::FileSelected(path)
                     }
                 } else {
                     DialogResult::Continue

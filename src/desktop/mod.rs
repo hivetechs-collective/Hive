@@ -23,6 +23,8 @@ pub use styles::components::{
     ButtonVariant, PanelStyle, IconSize
 };
 pub use styles::theme::{Theme, ThemeProvider, ThemeSwitcher, use_theme};
+pub use menu_bar::{MenuBar, MenuAction};
+pub use dialogs::{AboutDialog, WelcomeTab, CommandPalette, DIALOG_STYLES};
 
 use anyhow::Result;
 use dioxus::prelude::*;

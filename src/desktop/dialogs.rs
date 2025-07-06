@@ -1,7 +1,204 @@
+//! Dialog components for the desktop application
+
 use dioxus::prelude::*;
 
+/// About dialog component
+#[component]
+pub fn AboutDialog(show_about: Signal<bool>) -> Element {
+    if !*show_about.read() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div {
+            class: "dialog-overlay",
+            onclick: move |_| *show_about.write() = false,
+            
+            div {
+                class: "dialog-box about-dialog",
+                onclick: move |e| e.stop_propagation(),
+                
+                div {
+                    class: "dialog-header",
+                    h2 { "About Hive Consensus" }
+                    button {
+                        class: "dialog-close",
+                        onclick: move |_| *show_about.write() = false,
+                        "×"
+                    }
+                }
+                
+                div {
+                    class: "dialog-content",
+                    div { class: "app-icon", "🐝" }
+                    h3 { "Hive Consensus" }
+                    p { "Version {env!(\"CARGO_PKG_VERSION\")}" }
+                    p { "A VS Code-inspired AI development environment" }
+                    
+                    div {
+                        class: "dialog-features",
+                        h4 { "Features:" }
+                        ul {
+                            li { "✓ Multi-model consensus engine" }
+                            li { "✓ Real-time code analysis" }
+                            li { "✓ Integrated file explorer" }
+                            li { "✓ Syntax highlighting" }
+                            li { "✓ Git integration" }
+                        }
+                    }
+                    
+                    p {
+                        class: "dialog-footer-text",
+                        "Built with Rust and Dioxus"
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Welcome dialog/tab component
+#[component]
+pub fn WelcomeTab(show_welcome: Signal<bool>) -> Element {
+    if !*show_welcome.read() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div {
+            class: "welcome-tab",
+            
+            div {
+                class: "welcome-header",
+                h1 { "Welcome to Hive Consensus" }
+                p { "Get started with your AI-powered development environment" }
+            }
+            
+            div {
+                class: "welcome-sections",
+                
+                div {
+                    class: "welcome-section",
+                    h3 { "🚀 Quick Start" }
+                    button { 
+                        class: "welcome-button",
+                        "Open Folder"
+                    }
+                    button { 
+                        class: "welcome-button",
+                        "Open Recent"
+                    }
+                    button { 
+                        class: "welcome-button",
+                        "New File"
+                    }
+                }
+                
+                div {
+                    class: "welcome-section",
+                    h3 { "💡 Tips" }
+                    ul {
+                        li { "Use Cmd/Ctrl+Shift+P for Command Palette" }
+                        li { "Ask the AI assistant anything about your code" }
+                        li { "Click files to view and edit them" }
+                    }
+                }
+                
+                div {
+                    class: "welcome-section",
+                    h3 { "📚 Resources" }
+                    a { 
+                        href: "#",
+                        class: "welcome-link",
+                        "Documentation"
+                    }
+                    a { 
+                        href: "#",
+                        class: "welcome-link",
+                        "Keyboard Shortcuts"
+                    }
+                    a { 
+                        href: "#",
+                        class: "welcome-link",
+                        "Report Issue"
+                    }
+                }
+            }
+            
+            button {
+                class: "welcome-close",
+                onclick: move |_| *show_welcome.write() = false,
+                "Close Welcome"
+            }
+        }
+    }
+}
+
+/// Command palette component
+#[component]
+pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
+    let mut search_query = use_signal(String::new);
+    
+    if !*show_palette.read() {
+        return rsx! {};
+    }
+
+    const COMMANDS: &[(&str, &str)] = &[
+        ("Open File", "Ctrl+O"),
+        ("Open Folder", "Ctrl+K Ctrl+O"),
+        ("Save", "Ctrl+S"),
+        ("Save As", "Ctrl+Shift+S"),
+        ("Find", "Ctrl+F"),
+        ("Replace", "Ctrl+H"),
+        ("Toggle Terminal", "Ctrl+`"),
+        ("Settings", "Ctrl+,"),
+    ];
+
+    let filtered_commands: Vec<_> = COMMANDS.iter()
+        .filter(|(cmd, _)| {
+            (*search_query.read()).is_empty() || 
+            cmd.to_lowercase().contains(&(*search_query.read()).to_lowercase())
+        })
+        .collect();
+
+    rsx! {
+        div {
+            class: "dialog-overlay",
+            onclick: move |_| *show_palette.write() = false,
+            
+            div {
+                class: "command-palette",
+                onclick: move |e| e.stop_propagation(),
+                
+                input {
+                    class: "command-palette-input",
+                    placeholder: "Type a command...",
+                    value: "{search_query.read()}",
+                    oninput: move |evt| *search_query.write() = evt.value().clone(),
+                    autofocus: true,
+                }
+                
+                div {
+                    class: "command-palette-results",
+                    for (cmd, shortcut) in filtered_commands {
+                        div {
+                            class: "command-palette-item",
+                            onclick: move |_| {
+                                println!("Execute command: {}", cmd);
+                                *show_palette.write() = false;
+                            },
+                            span { class: "command-name", "{cmd}" }
+                            span { class: "command-shortcut", "{shortcut}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// CSS styles for dialogs
 pub const DIALOG_STYLES: &str = r#"
-    /* Dialog overlay styles */
     .dialog-overlay {
         position: fixed;
         top: 0;
@@ -12,319 +209,225 @@ pub const DIALOG_STYLES: &str = r#"
         display: flex;
         align-items: center;
         justify-content: center;
-        z-index: 2000;
+        z-index: 1000;
     }
     
-    .dialog {
-        background: #252526;
+    .dialog-box {
+        background: #2d2d30;
         border: 1px solid #3e3e42;
         border-radius: 8px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-        min-width: 400px;
-        max-width: 600px;
-        animation: dialogFadeIn 0.2s ease-out;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        max-width: 90%;
+        max-height: 90vh;
+        overflow: auto;
     }
     
-    @keyframes dialogFadeIn {
-        from {
-            opacity: 0;
-            transform: scale(0.95);
-        }
-        to {
-            opacity: 1;
-            transform: scale(1);
-        }
+    .about-dialog {
+        width: 500px;
     }
     
     .dialog-header {
-        padding: 16px 20px;
-        border-bottom: 1px solid #3e3e42;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        padding: 20px;
+        border-bottom: 1px solid #3e3e42;
     }
     
-    .dialog-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: #cccccc;
+    .dialog-header h2 {
         margin: 0;
+        font-size: 20px;
+        color: #ffffff;
     }
     
     .dialog-close {
         background: none;
         border: none;
-        color: #858585;
-        font-size: 20px;
+        color: #cccccc;
+        font-size: 24px;
         cursor: pointer;
         padding: 0;
-        width: 24px;
-        height: 24px;
+        width: 30px;
+        height: 30px;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 4px;
-        transition: background-color 0.1s;
     }
     
     .dialog-close:hover {
+        color: #ffffff;
         background: #3e3e42;
-        color: #cccccc;
-    }
-    
-    .dialog-body {
-        padding: 20px;
-        color: #cccccc;
-        line-height: 1.6;
-    }
-    
-    .dialog-footer {
-        padding: 16px 20px;
-        border-top: 1px solid #3e3e42;
-        display: flex;
-        justify-content: flex-end;
-        gap: 8px;
-    }
-    
-    .dialog-button {
-        padding: 6px 14px;
         border-radius: 4px;
-        border: 1px solid transparent;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.1s;
     }
     
-    .dialog-button.primary {
-        background: #007acc;
-        color: white;
-        border-color: #007acc;
-    }
-    
-    .dialog-button.primary:hover {
-        background: #005a9e;
-        border-color: #005a9e;
-    }
-    
-    .dialog-button.secondary {
-        background: #3e3e42;
-        color: #cccccc;
-        border-color: #3e3e42;
-    }
-    
-    .dialog-button.secondary:hover {
-        background: #4e4e52;
-        border-color: #4e4e52;
-    }
-    
-    /* About dialog specific styles */
-    .about-content {
+    .dialog-content {
+        padding: 30px;
         text-align: center;
     }
     
-    .about-logo {
-        font-size: 48px;
-        margin-bottom: 16px;
+    .app-icon {
+        font-size: 64px;
+        margin-bottom: 20px;
     }
     
-    .about-title {
+    .dialog-content h3 {
+        margin: 10px 0;
         font-size: 24px;
-        font-weight: 600;
-        color: #e1e1e1;
-        margin: 0 0 8px 0;
+        color: #ffffff;
     }
     
-    .about-version {
-        font-size: 14px;
-        color: #858585;
-        margin-bottom: 20px;
-    }
-    
-    .about-description {
-        font-size: 14px;
-        margin-bottom: 20px;
+    .dialog-content p {
+        margin: 10px 0;
         color: #cccccc;
     }
     
-    .about-features {
+    .dialog-features {
+        margin: 30px 0;
         text-align: left;
-        background: #1e1e1e;
-        border-radius: 4px;
-        padding: 16px;
-        margin: 16px 0;
     }
     
-    .about-features h4 {
-        margin: 0 0 8px 0;
-        color: #e1e1e1;
-        font-size: 14px;
+    .dialog-features h4 {
+        margin-bottom: 10px;
+        color: #ffffff;
     }
     
-    .about-features ul {
-        margin: 0;
-        padding-left: 20px;
+    .dialog-features ul {
+        list-style: none;
+        padding: 0;
+    }
+    
+    .dialog-features li {
+        padding: 5px 0;
         color: #cccccc;
-        font-size: 13px;
     }
     
-    .about-features li {
-        margin: 4px 0;
-    }
-    
-    .about-copyright {
+    .dialog-footer-text {
+        margin-top: 30px;
         font-size: 12px;
         color: #858585;
-        margin-top: 20px;
+    }
+    
+    /* Welcome tab styles */
+    .welcome-tab {
+        padding: 40px;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .welcome-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+    
+    .welcome-header h1 {
+        font-size: 36px;
+        margin-bottom: 10px;
+    }
+    
+    .welcome-sections {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 30px;
+        margin-bottom: 40px;
+    }
+    
+    .welcome-section {
+        background: #2d2d30;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #3e3e42;
+    }
+    
+    .welcome-section h3 {
+        margin-bottom: 15px;
+    }
+    
+    .welcome-button {
+        display: block;
+        width: 100%;
+        padding: 10px;
+        margin: 5px 0;
+        background: #007acc;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    
+    .welcome-button:hover {
+        background: #005a9e;
+    }
+    
+    .welcome-link {
+        display: block;
+        padding: 5px 0;
+        color: #007acc;
+        text-decoration: none;
+    }
+    
+    .welcome-link:hover {
+        text-decoration: underline;
+    }
+    
+    .welcome-close {
+        display: block;
+        margin: 0 auto;
+        padding: 10px 30px;
+        background: #3e3e42;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    
+    .welcome-close:hover {
+        background: #4e4e52;
+    }
+    
+    /* Command palette styles */
+    .command-palette {
+        background: #252526;
+        border: 1px solid #3e3e42;
+        border-radius: 8px;
+        width: 600px;
+        max-height: 400px;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    
+    .command-palette-input {
+        width: 100%;
+        padding: 15px 20px;
+        background: #3c3c3c;
+        border: none;
+        border-bottom: 1px solid #3e3e42;
+        color: #ffffff;
+        font-size: 16px;
+        outline: none;
+    }
+    
+    .command-palette-results {
+        max-height: 350px;
+        overflow-y: auto;
+    }
+    
+    .command-palette-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 20px;
+        cursor: pointer;
+    }
+    
+    .command-palette-item:hover {
+        background: #094771;
+    }
+    
+    .command-name {
+        color: #cccccc;
+    }
+    
+    .command-shortcut {
+        color: #858585;
+        font-size: 12px;
     }
 "#;
-
-#[component]
-pub fn AboutDialog(on_close: EventHandler<()>) -> Element {
-    rsx! {
-        style { "{DIALOG_STYLES}" }
-        
-        div {
-            class: "dialog-overlay",
-            onclick: move |_| on_close.call(()),
-            
-            div {
-                class: "dialog",
-                onclick: move |e| e.stop_propagation(),
-                
-                div {
-                    class: "dialog-header",
-                    h3 { class: "dialog-title", "About HiveTechs Consensus" }
-                    button {
-                        class: "dialog-close",
-                        onclick: move |_| on_close.call(()),
-                        "×"
-                    }
-                }
-                
-                div {
-                    class: "dialog-body",
-                    div {
-                        class: "about-content",
-                        div { class: "about-logo", "🐝" }
-                        h2 { class: "about-title", "HiveTechs Consensus IDE" }
-                        div { class: "about-version", "Version {env!(\"CARGO_PKG_VERSION\")}" }
-                        
-                        div {
-                            class: "about-description",
-                            "The most advanced AI-powered development assistant with "
-                            "4-stage consensus pipeline and enterprise features."
-                        }
-                        
-                        div {
-                            class: "about-features",
-                            h4 { "Key Features:" }
-                            ul {
-                                li { "🧠 4-Stage AI Consensus Pipeline" }
-                                li { "⚡ 10-40x Performance vs TypeScript" }
-                                li { "🔍 ML-Powered Repository Intelligence" }
-                                li { "📊 Enterprise Analytics & Reporting" }
-                                li { "🎯 Deterministic AI Control" }
-                                li { "🌐 323+ AI Models via OpenRouter" }
-                            }
-                        }
-                        
-                        div { class: "about-copyright", "© 2024 HiveTechs. All rights reserved." }
-                    }
-                }
-                
-                div {
-                    class: "dialog-footer",
-                    button {
-                        class: "dialog-button primary",
-                        onclick: move |_| on_close.call(()),
-                        "OK"
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn WelcomeDialog(on_close: EventHandler<()>) -> Element {
-    rsx! {
-        style { "{DIALOG_STYLES}" }
-        
-        div {
-            class: "dialog-overlay",
-            onclick: move |_| on_close.call(()),
-            
-            div {
-                class: "dialog",
-                style: "max-width: 700px;",
-                onclick: move |e| e.stop_propagation(),
-                
-                div {
-                    class: "dialog-header",
-                    h3 { class: "dialog-title", "Welcome to HiveTechs Consensus" }
-                    button {
-                        class: "dialog-close",
-                        onclick: move |_| on_close.call(()),
-                        "×"
-                    }
-                }
-                
-                div {
-                    class: "dialog-body",
-                    h3 { style: "margin-top: 0;", "Get Started" }
-                    
-                    div { style: "margin-bottom: 16px;",
-                        "👋 Welcome! Here's how to make the most of HiveTechs Consensus:"
-                    }
-                    
-                    div { style: "margin-bottom: 12px;",
-                        strong { "Open a Project:" }
-                        ul { style: "margin: 4px 0;",
-                            li { "Use File → Open Folder (Cmd+K Cmd+O) to open a project directory" }
-                            li { "Or File → Open File (Cmd+O) to open individual files" }
-                        }
-                    }
-                    
-                    div { style: "margin-bottom: 12px;",
-                        strong { "Use AI Assistance:" }
-                        ul { style: "margin: 4px 0;",
-                            li { "Type questions in the chat panel to get AI-powered help" }
-                            li { "The 4-stage consensus ensures high-quality responses" }
-                            li { "Use commands like 'analyze', 'plan', and 'ask' for specific tasks" }
-                        }
-                    }
-                    
-                    div { style: "margin-bottom: 12px;",
-                        strong { "Keyboard Shortcuts:" }
-                        ul { style: "margin: 4px 0;",
-                            li { "Cmd+Shift+P - Open command palette" }
-                            li { "Cmd+P - Quick file search" }
-                            li { "Cmd+S - Save current file" }
-                            li { "Cmd+W - Close current tab" }
-                        }
-                    }
-                    
-                    div { style: "margin-bottom: 12px;",
-                        strong { "Explore Features:" }
-                        ul { style: "margin: 4px 0;",
-                            li { "File explorer on the left shows your project structure" }
-                            li { "Code editor with syntax highlighting in the center" }
-                            li { "AI chat panel on the right for assistance" }
-                            li { "Status bar shows git info and file details" }
-                        }
-                    }
-                }
-                
-                div {
-                    class: "dialog-footer",
-                    button {
-                        class: "dialog-button primary",
-                        onclick: move |_| on_close.call(()),
-                        "Get Started"
-                    }
-                }
-            }
-        }
-    }
-}

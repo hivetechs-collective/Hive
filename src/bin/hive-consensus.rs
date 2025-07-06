@@ -307,7 +307,7 @@ struct Message {
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
-use hive_ai::desktop::dialogs::{AboutDialog, WelcomeDialog};
+use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, DIALOG_STYLES};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
@@ -319,15 +319,16 @@ fn App() -> Element {
     ]);
     let mut input_value = use_signal(String::new);
     let is_processing = use_signal(|| false);
-    let selected_file = use_signal(|| None::<String>);
-    let file_tree = use_signal(|| Vec::<FileItem>::new());
-    let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
-    let current_dir = use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let file_content = use_signal(String::new);
+    let mut selected_file = use_signal(|| None::<String>);
+    let mut file_tree = use_signal(|| Vec::<FileItem>::new());
+    let mut expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
+    let mut current_dir = use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let mut file_content = use_signal(String::new);
     
     // Dialog state
     let mut show_about_dialog = use_signal(|| false);
     let mut show_welcome_dialog = use_signal(|| false);
+    let mut show_command_palette = use_signal(|| false);
     
     // Load initial directory
     {
@@ -455,9 +456,7 @@ fn App() -> Element {
                 });
             },
             MenuAction::About => {
-                // TODO: Show proper about dialog
-                // For now, just log to console
-                println!("About: Hive Consensus v{}", env!("CARGO_PKG_VERSION"));
+                *show_about_dialog.write() = true;
             },
             MenuAction::OpenFile => {
                 spawn({
@@ -487,11 +486,13 @@ fn App() -> Element {
             },
             MenuAction::Save => {
                 // TODO: Implement save functionality
-                println!("Save action triggered");
+                // For now, show a status message in console (not chat)
+                println!("Save functionality not yet implemented");
             },
             MenuAction::SaveAs => {
-                // TODO: Implement save as functionality
-                println!("Save As action triggered");
+                // TODO: Implement save as functionality  
+                // For now, show a status message in console (not chat)
+                println!("Save As functionality not yet implemented");
             },
             MenuAction::CloseFolder => {
                 // Clear the current folder
@@ -501,20 +502,22 @@ fn App() -> Element {
                 *file_content.write() = String::new();
             },
             MenuAction::CommandPalette => {
-                // TODO: Show command palette overlay
-                println!("Command palette requested");
+                *show_command_palette.write() = true;
             },
             MenuAction::ChangeTheme => {
                 // TODO: Show theme selector
-                println!("Theme selector requested");
+                // For now, just log to console
+                println!("Theme selector not yet implemented");
             },
             MenuAction::Welcome => {
-                // TODO: Show welcome tab in editor
-                println!("Welcome tab requested");
+                *show_welcome_dialog.write() = true;
+                // Set the selected file to show welcome in editor
+                *selected_file.write() = Some("__welcome__".to_string());
             },
             MenuAction::Documentation => {
-                // TODO: Open documentation in browser or help panel
-                println!("Documentation requested");
+                // TODO: Open documentation in browser
+                println!("Opening documentation...");
+                // In a real implementation, would use webbrowser crate to open docs
             },
             _ => {
                 // Other actions not yet implemented
@@ -524,8 +527,9 @@ fn App() -> Element {
     };
 
     rsx! {
-        // Inject VS Code-style CSS
+        // Inject VS Code-style CSS and dialog styles
         style { "{DESKTOP_STYLES}" }
+        style { "{DIALOG_STYLES}" }
         
         div {
             class: "app-container",
@@ -592,15 +596,19 @@ fn App() -> Element {
                         class: "editor-tabs",
                         {
                             selected_file.read().as_ref().map(|file_path| {
-                                let path = PathBuf::from(file_path);
-                                let filename = path.file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or(file_path)
-                                    .to_string();
+                                let display_name = if file_path == "__welcome__" {
+                                    "Welcome".to_string()
+                                } else {
+                                    let path = PathBuf::from(file_path);
+                                    path.file_name()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or(file_path)
+                                        .to_string()
+                                };
                                 rsx! {
                                     div {
                                         class: "editor-tab active",
-                                        "{filename}"
+                                        "{display_name}"
                                     }
                                 }
                             })
@@ -610,10 +618,18 @@ fn App() -> Element {
                     // Editor content
                     div {
                         class: "editor-content",
-                        if selected_file.read().is_some() {
-                            pre { 
-                                style: "margin: 0; white-space: pre-wrap; word-wrap: break-word;",
-                                "{file_content.read()}"
+                        if let Some(file) = selected_file.read().as_ref() {
+                            if file == "__welcome__" && *show_welcome_dialog.read() {
+                                // Show welcome tab in editor area
+                                WelcomeTab {
+                                    show_welcome: show_welcome_dialog.clone(),
+                                }
+                            } else {
+                                // Show file content
+                                pre { 
+                                    style: "margin: 0; white-space: pre-wrap; word-wrap: break-word;",
+                                    "{file_content.read()}"
+                                }
                             }
                         } else {
                             div { 
@@ -696,13 +712,13 @@ fn App() -> Element {
         // Render dialogs
         if *show_about_dialog.read() {
             AboutDialog {
-                on_close: move || *show_about_dialog.write() = false,
+                show_about: show_about_dialog.clone(),
             }
         }
         
-        if *show_welcome_dialog.read() {
-            WelcomeDialog {
-                on_close: move || *show_welcome_dialog.write() = false,
+        if *show_command_palette.read() {
+            CommandPalette {
+                show_palette: show_command_palette.clone(),
             }
         }
     }
