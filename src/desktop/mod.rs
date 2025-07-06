@@ -13,6 +13,7 @@ pub mod state;
 pub mod events;
 pub mod styles;
 pub mod menu_bar;
+pub mod dialogs;
 
 pub use app::App;
 

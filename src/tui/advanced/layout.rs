@@ -50,7 +50,7 @@ impl LayoutManager {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),     // Title bar
+                Constraint::Length(2),     // Title bar (menu + title)
                 Constraint::Min(0),        // Main content
                 Constraint::Length(1),     // Status bar
             ])

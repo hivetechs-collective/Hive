@@ -23,6 +23,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use crate::tui::themes::Theme;
+use tokio::fs as async_fs;
 
 /// Code editor panel state
 pub struct EditorPanel {
@@ -117,7 +118,8 @@ impl EditorPanel {
     }
 
     /// Open file in new tab
-    pub async fn open_file(&mut self, path: &Path) -> Result<()> {
+    pub async fn open_file(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
         let content = fs::read_to_string(path)?;
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         let language = FileLanguage::from_path(path);
@@ -179,6 +181,24 @@ impl EditorPanel {
     /// Get current tab mutably
     pub fn current_tab_mut(&mut self) -> Option<&mut EditorTab> {
         self.tabs.get_mut(self.active_tab)
+    }
+    
+    /// Save file (async version for menu action)
+    pub async fn save_file(&mut self) -> Result<()> {
+        self.save_current_tab().await
+    }
+    
+    /// Get current file path
+    pub fn current_file(&self) -> Option<&PathBuf> {
+        self.current_tab()
+            .and_then(|tab| tab.path.as_ref())
+    }
+    
+    /// Close all files
+    pub fn close_all_files(&mut self) {
+        self.tabs.clear();
+        self.tabs.push(EditorTab::new_empty());
+        self.active_tab = 0;
     }
 
     /// Render the editor panel

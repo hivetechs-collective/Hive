@@ -307,6 +307,7 @@ struct Message {
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
+use hive_ai::desktop::dialogs::{AboutDialog, WelcomeDialog};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
@@ -323,6 +324,10 @@ fn App() -> Element {
     let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
     let current_dir = use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let file_content = use_signal(String::new);
+    
+    // Dialog state
+    let mut show_about_dialog = use_signal(|| false);
+    let mut show_welcome_dialog = use_signal(|| false);
     
     // Load initial directory
     {
@@ -450,17 +455,70 @@ fn App() -> Element {
                 });
             },
             MenuAction::About => {
-                messages.write().push(Message {
-                    text: format!("🐝 Hive Consensus v{}\nRust-powered IDE with VS Code-style interface", env!("CARGO_PKG_VERSION")),
-                    is_user: false,
+                // TODO: Show proper about dialog
+                // For now, just log to console
+                println!("About: Hive Consensus v{}", env!("CARGO_PKG_VERSION"));
+            },
+            MenuAction::OpenFile => {
+                spawn({
+                    let mut selected_file = selected_file.clone();
+                    let mut file_content = file_content.clone();
+                    
+                    async move {
+                        if let Some(file) = rfd::AsyncFileDialog::new()
+                            .pick_file()
+                            .await
+                        {
+                            let path_string = file.path().to_string_lossy().to_string();
+                            *selected_file.write() = Some(path_string.clone());
+                            
+                            match file_system::read_file_content(file.path()).await {
+                                Ok(content) => {
+                                    *file_content.write() = content;
+                                }
+                                Err(e) => {
+                                    eprintln!("Error reading file: {}", e);
+                                    *file_content.write() = format!("// Error reading file: {}", e);
+                                }
+                            }
+                        }
+                    }
                 });
             },
+            MenuAction::Save => {
+                // TODO: Implement save functionality
+                println!("Save action triggered");
+            },
+            MenuAction::SaveAs => {
+                // TODO: Implement save as functionality
+                println!("Save As action triggered");
+            },
+            MenuAction::CloseFolder => {
+                // Clear the current folder
+                *current_dir.write() = std::env::current_dir().unwrap_or_default();
+                file_tree.write().clear();
+                *selected_file.write() = None;
+                *file_content.write() = String::new();
+            },
+            MenuAction::CommandPalette => {
+                // TODO: Show command palette overlay
+                println!("Command palette requested");
+            },
+            MenuAction::ChangeTheme => {
+                // TODO: Show theme selector
+                println!("Theme selector requested");
+            },
+            MenuAction::Welcome => {
+                // TODO: Show welcome tab in editor
+                println!("Welcome tab requested");
+            },
+            MenuAction::Documentation => {
+                // TODO: Open documentation in browser or help panel
+                println!("Documentation requested");
+            },
             _ => {
-                // Show "Coming soon" for other actions
-                messages.write().push(Message {
-                    text: format!("🚧 {:?} - Coming soon!", action),
-                    is_user: false,
-                });
+                // Other actions not yet implemented
+                println!("{:?} action not implemented yet", action);
             }
         }
     };
@@ -632,6 +690,19 @@ fn App() -> Element {
                     "•",
                     "Rust"
                 }
+            }
+        }
+        
+        // Render dialogs
+        if *show_about_dialog.read() {
+            AboutDialog {
+                on_close: move || *show_about_dialog.write() = false,
+            }
+        }
+        
+        if *show_welcome_dialog.read() {
+            WelcomeDialog {
+                on_close: move || *show_welcome_dialog.write() = false,
             }
         }
     }
