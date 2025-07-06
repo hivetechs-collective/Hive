@@ -402,10 +402,13 @@ fn ProfileOption(name: &'static str, description: &'static str, models: &'static
 
 /// Onboarding Dialog for first-time users
 #[component]
-pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<String>) -> Element {
+pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<String>, hive_key: Signal<String>) -> Element {
     let mut current_step = use_signal(|| 1);
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
+    let mut selected_profile = use_signal(|| "balanced".to_string());
+    let mut temp_openrouter_key = use_signal(|| String::new());
+    let mut temp_hive_key = use_signal(|| String::new());
     
     rsx! {
         div {
@@ -413,12 +416,47 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
             
             div {
                 class: "dialog onboarding-dialog",
-                style: "width: 600px;",
+                style: "width: 700px;",
                 onclick: move |evt| evt.stop_propagation(),
                 
                 div {
                     class: "dialog-header",
                     h2 { "🐝 Welcome to Hive Consensus" }
+                }
+                
+                // Progress indicator
+                div {
+                    class: "onboarding-progress",
+                    style: "display: flex; justify-content: center; padding: 20px 0;",
+                    div {
+                        class: if *current_step.read() >= 1 { "progress-step active" } else { "progress-step" },
+                        style: "margin: 0 10px;",
+                        "1. Welcome"
+                    }
+                    div { class: "progress-separator", "→" }
+                    div {
+                        class: if *current_step.read() >= 2 { "progress-step active" } else { "progress-step" },
+                        style: "margin: 0 10px;",
+                        "2. License Key"
+                    }
+                    div { class: "progress-separator", "→" }
+                    div {
+                        class: if *current_step.read() >= 3 { "progress-step active" } else { "progress-step" },
+                        style: "margin: 0 10px;",
+                        "3. OpenRouter Key"
+                    }
+                    div { class: "progress-separator", "→" }
+                    div {
+                        class: if *current_step.read() >= 4 { "progress-step active" } else { "progress-step" },
+                        style: "margin: 0 10px;",
+                        "4. Profile"
+                    }
+                    div { class: "progress-separator", "→" }
+                    div {
+                        class: if *current_step.read() >= 5 { "progress-step active" } else { "progress-step" },
+                        style: "margin: 0 10px;",
+                        "5. Complete"
+                    }
                 }
                 
                 div {
@@ -439,11 +477,69 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 div { class: "feature-item", "✅ VS Code-like interface" }
                                 div { class: "feature-item", "✅ Full file system access" }
                             }
+                            
+                            p {
+                                style: "margin-top: 20px; color: #cccccc;",
+                                "To get started, you'll need to configure your license key and API access."
+                            }
                         }
                     } else if *current_step.read() == 2 {
                         div {
                             class: "onboarding-step",
-                            h3 { "Configure Your API Key" }
+                            h3 { "🏷️ Configure Your Hive License" }
+                            p { 
+                                "Enter your Hive license key to unlock all features and enable cloud sync." 
+                            }
+                            
+                            div {
+                                class: "settings-field",
+                                label { 
+                                    class: "settings-label",
+                                    "Hive License Key" 
+                                }
+                                input {
+                                    class: "settings-input",
+                                    r#type: "password",
+                                    value: "{temp_hive_key.read()}",
+                                    placeholder: "hive-xxxx-xxxx-xxxx",
+                                    oninput: move |evt| *temp_hive_key.write() = evt.value().clone(),
+                                }
+                                
+                                div {
+                                    class: "api-key-help",
+                                    p { 
+                                        class: "settings-hint",
+                                        "Your license key enables conversation sync and premium features." 
+                                    }
+                                    p {
+                                        style: "margin-top: 10px;",
+                                        "Don't have a license? ",
+                                        a {
+                                            href: "#",
+                                            onclick: move |evt| {
+                                                evt.stop_propagation();
+                                                spawn(async {
+                                                    let _ = webbrowser::open("https://hivetechs.io/purchase");
+                                                });
+                                            },
+                                            "Get one from HiveTechs"
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Show validation error if any
+                            if let Some(error) = validation_error.read().as_ref() {
+                                div {
+                                    style: "margin-top: 10px; padding: 10px; background: #5a1e1e; border: 1px solid #8b3a3a; border-radius: 4px; color: #ff6b6b;",
+                                    "❌ {error}"
+                                }
+                            }
+                        }
+                    } else if *current_step.read() == 3 {
+                        div {
+                            class: "onboarding-step",
+                            h3 { "🔗 Configure Your OpenRouter API Key" }
                             p { 
                                 "To use Hive Consensus, you'll need an OpenRouter API key. This gives you access to 323+ models from various providers." 
                             }
@@ -457,9 +553,9 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 input {
                                     class: "settings-input",
                                     r#type: "password",
-                                    value: "{openrouter_key.read()}",
+                                    value: "{temp_openrouter_key.read()}",
                                     placeholder: "sk-or-v1-...",
-                                    oninput: move |evt| *openrouter_key.write() = evt.value().clone(),
+                                    oninput: move |evt| *temp_openrouter_key.write() = evt.value().clone(),
                                 }
                                 
                                 div {
@@ -492,10 +588,51 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 }
                             }
                         }
+                    } else if *current_step.read() == 4 {
+                        div {
+                            class: "onboarding-step",
+                            h3 { "🧠 Choose Your Consensus Profile" }
+                            p { 
+                                "Select a profile that best matches your needs. You can change this later in settings." 
+                            }
+                            
+                            div {
+                                class: "profile-grid",
+                                style: "margin-top: 20px;",
+                                div {
+                                    class: if *selected_profile.read() == "balanced" { "profile-option selected" } else { "profile-option" },
+                                    onclick: move |_| *selected_profile.write() = "balanced".to_string(),
+                                    h4 { "⚖️ Balanced" }
+                                    p { class: "profile-description", "Best overall performance and quality" }
+                                    p { class: "profile-models", "Claude 3.5 Sonnet, GPT-4 Turbo, Claude 3 Opus, GPT-4o" }
+                                }
+                                div {
+                                    class: if *selected_profile.read() == "speed" { "profile-option selected" } else { "profile-option" },
+                                    onclick: move |_| *selected_profile.write() = "speed".to_string(),
+                                    h4 { "⚡ Speed" }
+                                    p { class: "profile-description", "Faster responses with good quality" }
+                                    p { class: "profile-models", "Claude 3 Haiku, GPT-3.5 Turbo" }
+                                }
+                                div {
+                                    class: if *selected_profile.read() == "quality" { "profile-option selected" } else { "profile-option" },
+                                    onclick: move |_| *selected_profile.write() = "quality".to_string(),
+                                    h4 { "💎 Quality" }
+                                    p { class: "profile-description", "Highest quality responses" }
+                                    p { class: "profile-models", "Claude 3 Opus, GPT-4o" }
+                                }
+                                div {
+                                    class: if *selected_profile.read() == "cost" { "profile-option selected" } else { "profile-option" },
+                                    onclick: move |_| *selected_profile.write() = "cost".to_string(),
+                                    h4 { "💰 Cost" }
+                                    p { class: "profile-description", "Most cost-effective option" }
+                                    p { class: "profile-models", "Llama 3.2, Mistral 7B" }
+                                }
+                            }
+                        }
                     } else {
                         div {
                             class: "onboarding-step",
-                            h3 { "You're all set!" }
+                            h3 { "🎉 You're all set!" }
                             p { 
                                 "Hive Consensus is ready to use. Here are some things you can try:" 
                             }
@@ -519,6 +656,15 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                     "🐛 Debug issues: \"Why is this code not working?\"" 
                                 }
                             }
+                            
+                            div {
+                                style: "margin-top: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px;",
+                                p {
+                                    style: "margin: 0; color: #cccccc;",
+                                    "Selected profile: ",
+                                    strong { "{selected_profile.read()}" }
+                                }
+                            }
                         }
                     }
                 }
@@ -532,55 +678,95 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 let step = *current_step.read();
                                 if step > 1 {
                                     *current_step.write() = step - 1;
+                                    *validation_error.write() = None; // Clear errors when going back
                                 }
                             },
                             "Back"
                         }
                     }
                     
+                    // Skip button for optional Hive license key
+                    if *current_step.read() == 2 {
+                        button {
+                            class: "button button-secondary",
+                            onclick: move |_| {
+                                *current_step.write() = 3; // Skip to OpenRouter key
+                                *validation_error.write() = None;
+                            },
+                            "Skip"
+                        }
+                    }
+                    
                     button {
                         class: "button button-primary",
-                        disabled: if (*current_step.read() == 2 && openrouter_key.read().is_empty()) || *is_validating.read() { true } else { false },
+                        disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) || *is_validating.read() { true } else { false },
                         onclick: move |_| {
                             let step = *current_step.read();
-                            if step < 3 {
-                                // Don't allow moving past step 2 without a key
-                                if step == 2 && openrouter_key.read().is_empty() {
+                            
+                            if step == 1 {
+                                // Welcome -> License Key
+                                *current_step.write() = 2;
+                            } else if step == 2 {
+                                // License Key -> OpenRouter Key (optional, can be empty)
+                                *current_step.write() = 3;
+                            } else if step == 3 {
+                                // OpenRouter Key -> Validate and save
+                                if temp_openrouter_key.read().is_empty() {
                                     return;
                                 }
                                 
-                                // If on step 2, validate the key
-                                if step == 2 {
-                                    *validation_error.write() = None;
-                                    *is_validating.write() = true;
-                                    
-                                    let key = openrouter_key.read().clone();
-                                    let mut current_step = current_step.clone();
-                                    let mut is_validating = is_validating.clone();
-                                    let mut validation_error = validation_error.clone();
-                                    
-                                    spawn(async move {
-                                        match save_api_keys(&key, "").await {
-                                            Ok(_) => {
-                                                // Move to success step
-                                                *current_step.write() = 3;
-                                            }
-                                            Err(e) => {
-                                                // Show error
-                                                *validation_error.write() = Some(e.to_string());
-                                            }
+                                *validation_error.write() = None;
+                                *is_validating.write() = true;
+                                
+                                let or_key = temp_openrouter_key.read().clone();
+                                let h_key = temp_hive_key.read().clone();
+                                let mut current_step = current_step.clone();
+                                let mut is_validating = is_validating.clone();
+                                let mut validation_error = validation_error.clone();
+                                let mut openrouter_key = openrouter_key.clone();
+                                let mut hive_key = hive_key.clone();
+                                let mut selected_profile = selected_profile.clone();
+                                
+                                spawn(async move {
+                                    match save_api_keys(&or_key, &h_key).await {
+                                        Ok(_) => {
+                                            // Save to parent signals
+                                            *openrouter_key.write() = or_key;
+                                            *hive_key.write() = h_key;
+                                            
+                                            // Save profile preference
+                                            let profile = selected_profile.read().clone();
+                                            let _ = save_profile_preference(&profile).await;
+                                            
+                                            // Move to profile selection
+                                            *current_step.write() = 4;
                                         }
-                                        *is_validating.write() = false;
-                                    });
-                                } else {
-                                    *current_step.write() = step + 1;
-                                }
+                                        Err(e) => {
+                                            // Show error
+                                            *validation_error.write() = Some(e.to_string());
+                                        }
+                                    }
+                                    *is_validating.write() = false;
+                                });
+                            } else if step == 4 {
+                                // Profile -> Complete
+                                let profile = selected_profile.read().clone();
+                                spawn(async move {
+                                    let _ = save_profile_preference(&profile).await;
+                                });
+                                *current_step.write() = 5;
                             } else {
-                                // Close on final step
+                                // Complete -> Close dialog
                                 *show_onboarding.write() = false;
                             }
                         },
-                        if *is_validating.read() { "Validating..." } else if *current_step.read() < 3 { "Next" } else { "Get Started" }
+                        if *is_validating.read() { 
+                            "Validating..." 
+                        } else if *current_step.read() < 5 { 
+                            "Next" 
+                        } else { 
+                            "Get Started" 
+                        }
                     }
                 }
             }
@@ -612,6 +798,24 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<(
     } else {
         return Err(anyhow::anyhow!("OpenRouter API key is required"));
     }
+    
+    Ok(())
+}
+
+/// Save profile preference to configuration
+async fn save_profile_preference(profile: &str) -> anyhow::Result<()> {
+    // For now, just log the profile preference
+    // In the full implementation, this would:
+    // 1. Create the profile in the pipeline_profiles table
+    // 2. Set it as the default profile
+    // 3. Configure the appropriate models for each stage
+    
+    tracing::info!("User selected profile: {}", profile);
+    
+    // TODO: When database is fully implemented:
+    // - Create profile in pipeline_profiles table
+    // - Set appropriate models for each stage based on profile type
+    // - Mark as default profile
     
     Ok(())
 }
@@ -1073,5 +1277,33 @@ pub const DIALOG_STYLES: &str = r#"
         border-radius: 8px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         overflow: hidden;
+    }
+    
+    /* Progress indicator styles */
+    .onboarding-progress {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        border-bottom: 1px solid #3e3e42;
+    }
+    
+    .progress-step {
+        padding: 8px 16px;
+        border-radius: 20px;
+        background: #2d2d30;
+        color: #858585;
+        font-size: 13px;
+        transition: all 0.3s;
+    }
+    
+    .progress-step.active {
+        background: #007acc;
+        color: #ffffff;
+    }
+    
+    .progress-separator {
+        margin: 0 5px;
+        color: #858585;
     }
 "#;
