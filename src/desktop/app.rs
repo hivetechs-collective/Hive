@@ -32,25 +32,106 @@ pub fn App() -> Element {
     let mut openrouter_key = use_signal(|| String::new());
     let mut hive_key = use_signal(|| String::new());
     
-    // Check for API keys on startup (only once)
+    // Check for API keys and onboarding status on startup (only once)
     use_effect(move || {
         let mut show_onboarding = show_onboarding.clone();
         let mut openrouter_key = openrouter_key.clone();
         let mut hive_key = hive_key.clone();
         
         spawn(async move {
+            // Import needed functions
+            use crate::desktop::dialogs::load_existing_profiles;
+            use crate::core::database::{DatabaseManager, DatabaseConfig};
+            use crate::core::config::get_hive_config_dir;
+            
+            // Check if onboarding has been completed
+            let db_path = get_hive_config_dir().join("hive.db");
+            let onboarding_completed = if !db_path.exists() {
+                false
+            } else {
+                let db_config = DatabaseConfig {
+                    path: db_path,
+                    max_connections: 10,
+                    connection_timeout: std::time::Duration::from_secs(5),
+                    idle_timeout: std::time::Duration::from_secs(300),
+                    enable_wal: true,
+                    enable_foreign_keys: true,
+                    cache_size: 8192,
+                    synchronous: "NORMAL".to_string(),
+                    journal_mode: "WAL".to_string(),
+                };
+                
+                if let Ok(db) = DatabaseManager::new(db_config).await {
+                    if let Ok(conn) = db.get_connection() {
+                        if let Ok(mut stmt) = conn.prepare(
+                            "SELECT value FROM configurations WHERE key = 'onboarding_completed'"
+                        ) {
+                            if let Ok(mut rows) = stmt.query([]) {
+                                if let Ok(Some(_)) = rows.next() {
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
+            
+            // Check if onboarding is already completed
+            if onboarding_completed {
+                tracing::info!("Onboarding already completed - loading keys");
+                // Just load the keys, don't show onboarding
+                if let Ok(config) = ApiKeyManager::load_from_database().await {
+                    if let Some(key) = config.openrouter_key {
+                        *openrouter_key.write() = key;
+                    }
+                    if let Some(key) = config.hive_key {
+                        *hive_key.write() = key;
+                    }
+                }
+                return;
+            }
+            
+            // Otherwise, check if we need to show onboarding
             match ApiKeyManager::has_valid_keys().await {
                 Ok(has_keys) => {
                     if !has_keys {
+                        tracing::info!("No API keys found - showing onboarding");
                         *show_onboarding.write() = true;
                     } else {
                         // Load existing keys
-                        if let Ok((or_key, h_key)) = ApiKeyManager::load_from_database().await {
-                            if let Some(key) = or_key {
+                        if let Ok(config) = ApiKeyManager::load_from_database().await {
+                            if let Some(key) = config.openrouter_key {
                                 *openrouter_key.write() = key;
                             }
-                            if let Some(key) = h_key {
+                            if let Some(key) = config.hive_key {
                                 *hive_key.write() = key;
+                            }
+                            
+                            // Check if profiles exist
+                            if let Ok(profiles) = load_existing_profiles().await {
+                                if profiles.is_empty() {
+                                    tracing::info!("Keys exist but no profiles - showing onboarding");
+                                    *show_onboarding.write() = true;
+                                } else {
+                                    tracing::info!("Setup complete - keys and profiles exist");
+                                    // Mark onboarding as complete since we have everything
+                                    spawn(async {
+                                        use crate::desktop::dialogs::mark_onboarding_complete;
+                                        if let Err(e) = mark_onboarding_complete().await {
+                                            tracing::warn!("Failed to mark onboarding complete: {}", e);
+                                        }
+                                    });
+                                }
                             }
                         }
                     }

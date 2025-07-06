@@ -1021,6 +1021,7 @@ fn App() -> Element {
             OnboardingDialog {
                 show_onboarding: show_onboarding_dialog.clone(),
                 openrouter_key: openrouter_key.clone(),
+                hive_key: hive_key.clone(),
             }
         }
     }

@@ -5,11 +5,11 @@ use anyhow;
 
 /// Information about a consensus profile
 #[derive(Debug, Clone, PartialEq)]
-struct ProfileInfo {
-    id: i64,
-    name: String,
-    is_default: bool,
-    created_at: String,
+pub struct ProfileInfo {
+    pub id: i64,
+    pub name: String,
+    pub is_default: bool,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -530,6 +530,9 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
     let mut selected_profile_id = use_signal(|| None::<i64>);
     let mut existing_profiles = use_signal(|| Vec::<ProfileInfo>::new());
     
+    // License validation result
+    let mut license_info = use_signal(|| None::<LicenseValidationResult>);
+    
     // Load existing profiles on mount
     use_effect(move || {
         let mut existing_profiles = existing_profiles.clone();
@@ -540,12 +543,39 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
         });
     });
     
-    // Check if we already have keys and skip to profile step
+    // Check onboarding state ONLY on initial mount
     use_effect(move || {
-        if !openrouter_key.read().is_empty() && *current_step.read() == 1 {
-            // We already have keys, skip to profile configuration
-            *current_step.write() = 4;
-        }
+        let openrouter_key = openrouter_key.clone();
+        let hive_key = hive_key.clone();
+        let mut current_step = current_step.clone();
+        let mut show_onboarding = show_onboarding.clone();
+        let mut existing_profiles = existing_profiles.clone();
+        
+        // Only run this check once on mount
+        spawn(async move {
+            // If dialog is not meant to be shown, don't do anything
+            if !*show_onboarding.read() {
+                return;
+            }
+            
+            // If we have keys, check if profiles exist
+            if !openrouter_key.read().is_empty() {
+                // Load profiles to check if any exist
+                if let Ok(profiles) = load_existing_profiles().await {
+                    *existing_profiles.write() = profiles.clone();
+                    
+                    if !profiles.is_empty() {
+                        // We have keys and profiles, onboarding is complete
+                        tracing::info!("Onboarding complete - keys and profiles exist");
+                        *show_onboarding.write() = false;
+                    } else {
+                        // We have keys but no profiles, go to profile step
+                        tracing::info!("Keys exist but no profiles - showing profile configuration");
+                        *current_step.write() = 4;
+                    }
+                }
+            }
+        });
     });
     
     // Debug log
@@ -736,6 +766,51 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                             h3 { "🧠 Configure Your Consensus Profile" }
                             p { 
                                 "Choose from expert-crafted profiles or create your own. Each profile uses a 4-stage AI consensus pipeline." 
+                            }
+                            
+                            // Show license info if available
+                            if let Some(license) = license_info.read().as_ref() {
+                                div {
+                                    style: "margin: 15px 0; padding: 15px; background: #1e3a2e; border: 1px solid #2e5a3e; border-radius: 6px;",
+                                    div {
+                                        style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                        span { 
+                                            style: "font-size: 18px;",
+                                            "✅" 
+                                        }
+                                        span {
+                                            style: "color: #4ade80; font-weight: 600;",
+                                            "License Validated"
+                                        }
+                                    }
+                                    div {
+                                        style: "display: grid; grid-template-columns: 1fr 1fr; gap: 10px; color: #cccccc; font-size: 13px;",
+                                        div {
+                                            "🎯 Tier: ",
+                                            span { 
+                                                style: "font-weight: 600; color: #4ade80;",
+                                                "{license.tier}"
+                                            }
+                                        }
+                                        div {
+                                            "💬 Daily Conversations: ",
+                                            span { 
+                                                style: "font-weight: 600; color: #4ade80;",
+                                                "{license.daily_limit}"
+                                            }
+                                        }
+                                        if let Some(email) = &license.email {
+                                            div {
+                                                style: "grid-column: span 2;",
+                                                "📧 Account: ",
+                                                span { 
+                                                    style: "color: #858585;",
+                                                    "{email}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             
                             // Profile selection mode tabs
@@ -1062,12 +1137,21 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 let mut hive_key = hive_key.clone();
                                 let mut selected_profile = selected_profile.clone();
                                 
+                                let mut license_info = license_info.clone();
+                                
                                 spawn(async move {
                                     match save_api_keys(&or_key, &h_key).await {
-                                        Ok(_) => {
+                                        Ok(license_result) => {
                                             // Save to parent signals
                                             *openrouter_key.write() = or_key;
                                             *hive_key.write() = h_key;
+                                            
+                                            // Store license info if available
+                                            if let Some(license) = license_result {
+                                                tracing::info!("License validated: tier={}, daily_limit={}", 
+                                                            license.tier, license.daily_limit);
+                                                *license_info.write() = Some(license);
+                                            }
                                             
                                             // Move to profile selection
                                             *current_step.write() = 4;
@@ -1137,8 +1221,17 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 if !has_error {
                                     *current_step.write() = 5;
                                 }
-                            } else {
-                                // Complete -> Close dialog
+                            } else if step == 5 {
+                                // Complete -> Close dialog and mark onboarding as complete
+                                tracing::info!("Onboarding completed successfully");
+                                
+                                // Mark onboarding as complete in the database
+                                spawn(async move {
+                                    if let Err(e) = mark_onboarding_complete().await {
+                                        tracing::warn!("Failed to mark onboarding complete: {}", e);
+                                    }
+                                });
+                                
                                 *show_onboarding.write() = false;
                             }
                         },
@@ -1156,9 +1249,55 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
     }
 }
 
+/// License validation result
+#[derive(Debug, Clone)]
+struct LicenseValidationResult {
+    valid: bool,
+    tier: String,
+    daily_limit: u32,
+    user_id: String,
+    email: Option<String>,
+}
+
 /// Save API keys with validation and database storage
-async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<()> {
+async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<Option<LicenseValidationResult>> {
     use crate::core::api_keys::ApiKeyManager;
+    use crate::core::{license::LicenseManager, config::get_hive_config_dir};
+    
+    let mut license_result = None;
+    
+    // Validate Hive license key if provided
+    if !hive_key.is_empty() {
+        tracing::info!("Validating Hive license key...");
+        let license_manager = LicenseManager::new(get_hive_config_dir());
+        
+        match license_manager.validate_license(hive_key).await {
+            Ok(validation) => {
+                if validation.valid {
+                    // Store license
+                    license_manager.store_license(hive_key, &validation).await?;
+                    
+                    license_result = Some(LicenseValidationResult {
+                        valid: validation.valid,
+                        tier: validation.tier.clone(),
+                        daily_limit: validation.daily_limit,
+                        user_id: validation.user_id.clone(),
+                        email: validation.email.clone(),
+                    });
+                    
+                    tracing::info!("License validated - tier: {}, daily_limit: {}", 
+                                 validation.tier, validation.daily_limit);
+                } else {
+                    return Err(anyhow::anyhow!("Invalid license key: {}", 
+                        validation.message.unwrap_or_else(|| "Unknown error".to_string())));
+                }
+            }
+            Err(e) => {
+                tracing::warn!("License validation failed: {}", e);
+                // Continue without license (free tier)
+            }
+        }
+    }
     
     // Validate OpenRouter key format first
     if !openrouter_key.is_empty() {
@@ -1181,7 +1320,7 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<(
         return Err(anyhow::anyhow!("OpenRouter API key is required"));
     }
     
-    Ok(())
+    Ok(license_result)
 }
 
 /// Save profile preference to configuration
@@ -1203,7 +1342,7 @@ async fn save_profile_preference(profile: &str) -> anyhow::Result<()> {
 }
 
 /// Load existing profiles from database
-async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
+pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
     
@@ -1302,6 +1441,37 @@ async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
     conn.execute(
         "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
         [profile_id]
+    )?;
+    
+    Ok(())
+}
+
+/// Mark onboarding as complete in the database
+pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    
+    let db_path = get_hive_config_dir().join("hive.db");
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let conn = db.get_connection()?;
+    
+    // Store onboarding completion in configurations table
+    conn.execute(
+        "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at) 
+         VALUES ('onboarding_completed', 'true', datetime('now'), datetime('now'))",
+        []
     )?;
     
     Ok(())
