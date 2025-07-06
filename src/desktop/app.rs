@@ -27,6 +27,7 @@ pub fn App() -> Element {
     let mut show_settings = use_signal(|| false);
     let mut show_about = use_signal(|| false);
     let mut show_command_palette = use_signal(|| false);
+    let mut onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
     
     // API key states
     let mut openrouter_key = use_signal(|| String::new());
@@ -258,7 +259,8 @@ pub fn App() -> Element {
                 OnboardingDialog { 
                     show_onboarding, 
                     openrouter_key,
-                    hive_key
+                    hive_key,
+                    current_step: onboarding_current_step.clone(),
                 }
             }
             

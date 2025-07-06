@@ -515,8 +515,12 @@ fn ProfileOption(name: &'static str, description: &'static str, models: &'static
 
 /// Onboarding Dialog for first-time users
 #[component]
-pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<String>, hive_key: Signal<String>) -> Element {
-    let mut current_step = use_signal(|| 1);
+pub fn OnboardingDialog(
+    show_onboarding: Signal<bool>, 
+    openrouter_key: Signal<String>, 
+    hive_key: Signal<String>,
+    current_step: Signal<i32>
+) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
     let mut selected_profile = use_signal(|| "balanced".to_string());
@@ -543,36 +547,27 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
         });
     });
     
-    // Check onboarding state ONLY on initial mount
+    // Check onboarding state ONLY on initial mount to determine starting step
     use_effect(move || {
         let openrouter_key = openrouter_key.clone();
-        let hive_key = hive_key.clone();
         let mut current_step = current_step.clone();
-        let mut show_onboarding = show_onboarding.clone();
         let mut existing_profiles = existing_profiles.clone();
         
         // Only run this check once on mount
         spawn(async move {
-            // If dialog is not meant to be shown, don't do anything
-            if !*show_onboarding.read() {
-                return;
-            }
-            
-            // If we have keys, check if profiles exist
+            // If we have keys, check if profiles exist to determine starting step
             if !openrouter_key.read().is_empty() {
                 // Load profiles to check if any exist
                 if let Ok(profiles) = load_existing_profiles().await {
                     *existing_profiles.write() = profiles.clone();
                     
-                    if !profiles.is_empty() {
-                        // We have keys and profiles, onboarding is complete
-                        tracing::info!("Onboarding complete - keys and profiles exist");
-                        *show_onboarding.write() = false;
-                    } else {
-                        // We have keys but no profiles, go to profile step
-                        tracing::info!("Keys exist but no profiles - showing profile configuration");
+                    if profiles.is_empty() {
+                        // We have keys but no profiles, go directly to profile step
+                        tracing::info!("Keys exist but no profiles - starting at profile configuration step");
                         *current_step.write() = 4;
                     }
+                    // Note: We don't close the dialog here even if profiles exist
+                    // Let the user complete the flow or close it manually
                 }
             }
         });
@@ -1109,6 +1104,7 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                         disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) || *is_validating.read() { true } else { false },
                         onclick: move |_| {
                             let step = *current_step.read();
+                            tracing::info!("Button clicked at step: {}", step);
                             
                             if step == 1 {
                                 // Welcome -> License Key
@@ -1243,19 +1239,22 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                     *current_step.write() = 5;
                                 }
                             } else if step == 5 {
-                                // Complete -> Close dialog and mark onboarding as complete
-                                tracing::info!("Step 5: Get Started clicked - closing onboarding dialog");
+                                // Complete -> Close dialog IMMEDIATELY
+                                tracing::info!("Step 5: Get Started clicked - closing onboarding dialog NOW");
                                 
-                                // Close the dialog immediately
+                                // Close the dialog immediately - no async delays
                                 *show_onboarding.write() = false;
                                 
-                                // Mark onboarding as complete in the database (in background)
+                                // Reset step for next time
+                                *current_step.write() = 1;
+                                
+                                // Mark onboarding as complete in the background (don't block UI)
                                 spawn(async move {
-                                    tracing::info!("Marking onboarding as complete in database");
+                                    tracing::info!("Background: Marking onboarding as complete in database");
                                     if let Err(e) = mark_onboarding_complete().await {
-                                        tracing::warn!("Failed to mark onboarding complete: {}", e);
+                                        tracing::warn!("Background: Failed to mark onboarding complete: {}", e);
                                     } else {
-                                        tracing::info!("Onboarding marked as complete successfully");
+                                        tracing::info!("Background: Onboarding marked as complete successfully");
                                     }
                                 });
                             } else {
