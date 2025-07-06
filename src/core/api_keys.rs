@@ -144,7 +144,51 @@ impl ApiKeyManager {
     
     /// Load API keys from database
     pub async fn load_from_database() -> Result<ApiKeyConfig> {
-        // For now, load from config to avoid database initialization issues
+        // Try to load from database directly using rusqlite
+        let db_path = crate::core::config::get_hive_config_dir().join("hive-ai.db");
+        
+        if db_path.exists() {
+            if let Ok(conn) = Connection::open(&db_path) {
+                // Check if configurations table exists
+                let table_exists: i32 = conn.query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='configurations'",
+                    [],
+                    |row| row.get(0)
+                ).unwrap_or(0);
+                
+                if table_exists > 0 {
+                    // Load OpenRouter key from configurations table
+                    let openrouter_key: Option<String> = conn
+                        .query_row(
+                            "SELECT value FROM configurations WHERE key = ?1",
+                            params!["openrouter_api_key"],
+                            |row| row.get(0),
+                        )
+                        .ok()
+                        .filter(|k: &String| !k.is_empty());
+                    
+                    // Load Hive key from configurations table
+                    let hive_key: Option<String> = conn
+                        .query_row(
+                            "SELECT value FROM configurations WHERE key = ?1",
+                            params!["hive_license_key"],
+                            |row| row.get(0),
+                        )
+                        .ok()
+                        .filter(|k: &String| !k.is_empty());
+                    
+                    if openrouter_key.is_some() || hive_key.is_some() {
+                        debug!("Loaded API keys from database");
+                        return Ok(ApiKeyConfig {
+                            openrouter_key,
+                            hive_key,
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Fall back to config.toml if database fails
         let config = crate::core::config::get_config().await?;
         
         let openrouter_key = config.openrouter
@@ -188,26 +232,19 @@ impl ApiKeyManager {
     
     /// Get OpenRouter API key from database or config
     pub async fn get_openrouter_key() -> Result<String> {
-        // Try database first
+        // Try loading from database first (this now properly checks database)
         let config = Self::load_from_database().await?;
         if let Some(key) = config.openrouter_key {
-            return Ok(key);
-        }
-        
-        // Try config.toml as fallback
-        if let Ok(config) = crate::core::config::get_config().await {
-            if let Some(openrouter) = config.openrouter {
-                if let Some(key) = openrouter.api_key {
-                    // Migrate to database for next time
-                    let _ = Self::save_to_database(Some(&key), None).await;
-                    return Ok(key);
-                }
+            if !key.is_empty() && Self::validate_format(&key).is_ok() {
+                debug!("Found OpenRouter key in database");
+                return Ok(key);
             }
         }
         
-        // Try environment variable as last resort
+        // Try environment variable as fallback
         if let Ok(key) = std::env::var("OPENROUTER_API_KEY") {
             if Self::validate_format(&key).is_ok() {
+                debug!("Found OpenRouter key in environment");
                 // Save to database for persistence
                 let _ = Self::save_to_database(Some(&key), None).await;
                 return Ok(key);

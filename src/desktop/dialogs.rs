@@ -314,8 +314,11 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
 pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String>, hive_key: Signal<String>) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
+    let mut profiles = use_signal(|| Vec::<ProfileInfo>::new());
+    let mut selected_profile = use_signal(|| String::new());
+    let mut profiles_loading = use_signal(|| true);
     
-    // Load existing keys from database on mount
+    // Load existing keys and profiles from database on mount
     use_effect(move || {
         // Load OpenRouter key if exists
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
@@ -330,6 +333,28 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                 *hive_key.write() = key;
             }
         }
+        
+        // Load consensus profiles from database
+        spawn(async move {
+            match load_existing_profiles().await {
+                Ok(loaded_profiles) => {
+                    // Find the default profile
+                    let default_profile_id = loaded_profiles.iter()
+                        .find(|p| p.is_default)
+                        .map(|p| p.id.to_string())
+                        .or_else(|| loaded_profiles.first().map(|p| p.id.to_string()))
+                        .unwrap_or_default();
+                    
+                    *selected_profile.write() = default_profile_id;
+                    *profiles.write() = loaded_profiles;
+                    *profiles_loading.write() = false;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load profiles: {}", e);
+                    *profiles_loading.write() = false;
+                }
+            }
+        });
     });
     
     rsx! {
@@ -432,31 +457,32 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             "Choose your consensus processing profile based on your needs." 
                         }
                         
-                        div {
-                            class: "profile-grid",
-                            ProfileOption { 
-                                name: "Balanced",
-                                description: "Best overall performance and quality",
-                                models: "Claude 3.5 Sonnet, GPT-4 Turbo, Claude 3 Opus, GPT-4o",
-                                is_selected: true,
+                        if *profiles_loading.read() {
+                            div {
+                                class: "loading-container",
+                                style: "text-align: center; padding: 20px;",
+                                "Loading profiles..."
                             }
-                            ProfileOption { 
-                                name: "Speed",
-                                description: "Faster responses with good quality",
-                                models: "Claude 3 Haiku, GPT-3.5 Turbo",
-                                is_selected: false,
+                        } else if profiles.read().is_empty() {
+                            div {
+                                class: "empty-state",
+                                style: "text-align: center; padding: 20px; color: #888;",
+                                "No profiles found. Please complete onboarding to create expert profiles."
                             }
-                            ProfileOption { 
-                                name: "Quality",
-                                description: "Highest quality responses",
-                                models: "Claude 3 Opus, GPT-4o",
-                                is_selected: false,
-                            }
-                            ProfileOption { 
-                                name: "Cost",
-                                description: "Most cost-effective option",
-                                models: "Llama 3.2, Mistral 7B",
-                                is_selected: false,
+                        } else {
+                            div {
+                                class: "profile-grid",
+                                for profile in profiles.read().iter() {
+                                    DatabaseProfileOption { 
+                                        profile_id: profile.id.to_string(),
+                                        name: profile.name.clone(),
+                                        is_selected: *selected_profile.read() == profile.id.to_string(),
+                                        is_default: profile.is_default,
+                                        on_select: move |id: String| {
+                                            *selected_profile.write() = id;
+                                        },
+                                    }
+                                }
                             }
                         }
                     }
@@ -484,6 +510,8 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             let mut validation_error = validation_error.clone();
                             let mut show_settings = show_settings.clone();
                             
+                            let selected_profile_id = selected_profile.read().clone();
+                            
                             spawn(async move {
                                 // Simple synchronous saves
                                 let mut success = true;
@@ -502,6 +530,13 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     if let Err(e) = crate::desktop::simple_db::save_config("hive_license_key", &hive) {
                                         success = false;
                                         error_msg = format!("Failed to save Hive key: {}", e);
+                                    }
+                                }
+                                
+                                // Update selected profile as default if changed
+                                if !selected_profile_id.is_empty() {
+                                    if let Err(e) = update_default_profile(&selected_profile_id).await {
+                                        tracing::error!("Failed to update default profile: {}", e);
                                     }
                                 }
                                 
@@ -546,6 +581,79 @@ fn ProfileOption(name: &'static str, description: &'static str, models: &'static
             p { class: "profile-models", "{models}" }
         }
     }
+}
+
+#[component]
+fn DatabaseProfileOption(
+    profile_id: String,
+    name: String,
+    is_selected: bool,
+    is_default: bool,
+    on_select: EventHandler<String>
+) -> Element {
+    rsx! {
+        div {
+            class: if is_selected { "profile-option selected" } else { "profile-option" },
+            onclick: move |_| on_select.call(profile_id.clone()),
+            style: "cursor: pointer;",
+            
+            h4 { 
+                "{name}"
+                if is_default {
+                    span { 
+                        style: "font-size: 12px; margin-left: 8px; padding: 2px 6px; background: #4a5568; border-radius: 4px;",
+                        "Default" 
+                    }
+                }
+            }
+            p { 
+                class: "profile-description", 
+                style: "font-size: 12px; color: #888;",
+                "Expert consensus profile"
+            }
+        }
+    }
+}
+
+/// Update the default profile in the database
+async fn update_default_profile(profile_id: &str) -> anyhow::Result<()> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    
+    let db_path = get_hive_config_dir().join("hive-ai.db");
+    if !db_path.exists() {
+        return Err(anyhow::anyhow!("Database not found"));
+    }
+    
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let mut conn = db.get_connection()?;
+    let tx = conn.transaction()?;
+    
+    // First, unset all profiles as default
+    tx.execute("UPDATE consensus_profiles SET is_default = 0", [])?;
+    
+    // Then set the selected profile as default
+    tx.execute(
+        "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
+        rusqlite::params![profile_id]
+    )?;
+    
+    tx.commit()?;
+    tracing::info!("Updated default profile to: {}", profile_id);
+    
+    Ok(())
 }
 
 /// Onboarding Dialog for first-time users
