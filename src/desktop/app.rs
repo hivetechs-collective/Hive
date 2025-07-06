@@ -9,7 +9,9 @@ use crate::desktop::{
     state::{AppState, ConnectionStatus},
     events::{EventDispatcher, KeyboardEventUtils},
     styles::get_global_styles,
+    dialogs::{OnboardingDialog, SettingsDialog, AboutDialog, CommandPalette},
 };
+use crate::core::api_keys::ApiKeyManager;
 
 /// Main Application Component
 #[component]
@@ -20,9 +22,37 @@ pub fn App() -> Element {
     // Initialize event dispatcher
     let event_dispatcher = use_signal(|| EventDispatcher::new());
     
+    // Dialog visibility states
+    let mut show_onboarding = use_signal(|| false);
+    let mut show_settings = use_signal(|| false);
+    let mut show_about = use_signal(|| false);
+    let mut show_command_palette = use_signal(|| false);
+    
+    // API key states
+    let mut openrouter_key = use_signal(|| String::new());
+    let mut hive_key = use_signal(|| String::new());
+    
+    // Check for API keys on startup
+    let _ = use_resource(move || async move {
+        match ApiKeyManager::has_valid_keys().await {
+            Ok(has_keys) => {
+                if !has_keys {
+                    *show_onboarding.write() = true;
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to check API keys: {}", e);
+                *show_onboarding.write() = true;
+            }
+        }
+    });
+    
     // Provide state to all child components
     use_context_provider(move || app_state);
     use_context_provider(|| event_dispatcher);
+    use_context_provider(|| show_settings.clone());
+    use_context_provider(|| show_about.clone());
+    use_context_provider(|| show_command_palette.clone());
     
     // Global keyboard shortcuts
     let on_global_keydown = move |evt: KeyboardEvent| {
@@ -51,7 +81,7 @@ pub fn App() -> Element {
                 },
                 Key::Character(c) if c == "p" => {
                     // evt.prevent_default(); // Not available in Dioxus 0.5"
-                    // TODO: Command palette
+                    *show_command_palette.write() = true;
                     tracing::debug!("Ctrl+P pressed - Command palette");
                 },
                 Key::Character(c) if c == "w" => {
@@ -125,6 +155,31 @@ pub fn App() -> Element {
             
             // Status Bar
             StatusBar {}
+            
+            // Dialogs (rendered on top of everything)
+            if *show_onboarding.read() {
+                OnboardingDialog { 
+                    show_onboarding, 
+                    openrouter_key,
+                    hive_key
+                }
+            }
+            
+            if *show_settings.read() {
+                SettingsDialog { 
+                    show_settings, 
+                    openrouter_key,
+                    hive_key
+                }
+            }
+            
+            if *show_about.read() {
+                AboutDialog { show_about }
+            }
+            
+            if *show_command_palette.read() {
+                CommandPalette { show_palette: show_command_palette }
+            }
         }
     }
 }
@@ -132,6 +187,8 @@ pub fn App() -> Element {
 /// Menu Bar Component
 #[component]
 fn MenuBar() -> Element {
+    // Get the show_settings signal from parent
+    let mut show_settings = use_context::<Signal<bool>>();
     // VS Code-like colors
     let menu_bar_style = "
         display: flex;
@@ -229,8 +286,8 @@ fn MenuBar() -> Element {
                     },
                     onmouseenter: move |_| settings_hovered.set(true),
                     onmouseleave: move |_| settings_hovered.set(false),
-                    onclick: |_| {
-                        // Handle settings
+                    onclick: move |_| {
+                        *show_settings.write() = true;
                     },
                     "⚙"  // Cleaner gear icon without emoji variant
                 }

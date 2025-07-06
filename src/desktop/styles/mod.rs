@@ -15,10 +15,14 @@ pub fn get_global_styles() -> String {
 {platform_fonts}
 
 /* Platform-specific UI adjustments */
-{platform_adjustments}"#,
+{platform_adjustments}
+
+/* Dialog styles */
+{dialog_styles}"#,
         base_styles = get_base_styles(),
         platform_fonts = get_platform_fonts(),
-        platform_adjustments = theme::platform_adjustments()
+        platform_adjustments = theme::platform_adjustments(),
+        dialog_styles = crate::desktop::dialogs::DIALOG_STYLES
     )
 }
 
