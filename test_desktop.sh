@@ -1,22 +1,22 @@
-#!/bin/bash
+#\!/bin/bash
 
-# Test script for desktop GUI
+echo "Testing desktop mode launch..."
+echo "This should launch the desktop GUI without tokio runtime conflicts"
+echo ""
 
-echo "🖥️  Testing Hive Desktop GUI..."
-echo "================================"
+# Test the desktop flag
+echo "1. Testing: hive --desktop"
+cargo run -- --desktop &
+PID=$\!
+sleep 3
+kill $PID 2>/dev/null
 
-# First try to build the desktop test
-echo "Building desktop test app..."
-cargo build --bin hive-desktop-test --release
+echo ""
+echo "2. Testing: hive desktop"
+cargo run -- desktop &
+PID=$\!
+sleep 3
+kill $PID 2>/dev/null
 
-if [ $? -eq 0 ]; then
-    echo "✅ Desktop test build successful"
-    echo ""
-    echo "Running desktop test app..."
-    RUST_LOG=debug ./target/release/hive-desktop-test
-else
-    echo "❌ Desktop test build failed"
-    echo ""
-    echo "Trying main app with desktop mode..."
-    RUST_LOG=debug HIVE_DESKTOP=1 cargo run --release
-fi
+echo ""
+echo "Desktop mode test completed. If no runtime errors appeared, the fix is working\!"

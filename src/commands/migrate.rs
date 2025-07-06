@@ -320,7 +320,7 @@ async fn handle_database_migration(path: PathBuf, verify: bool) -> Result<(), Hi
         // Basic database verification
         let db_path = dirs::home_dir()
             .ok_or_else(|| HiveError::EnvVarNotSet { var: "HOME".to_string() })?
-            .join(".hive").join("hive.db");
+            .join(".hive").join("hive-ai.db");
         
         if db_path.exists() {
             println!("✅ Database verification passed");
@@ -484,7 +484,7 @@ async fn handle_status_command() -> Result<(), HiveError> {
     
     let rust_db_path = dirs::home_dir()
         .ok_or_else(|| HiveError::EnvVarNotSet { var: "HOME".to_string() })?
-        .join(".hive").join("hive.db");
+        .join(".hive").join("hive-ai.db");
     
     if rust_config_path.exists() || rust_db_path.exists() {
         println!("🦀 Rust installation: ✅ Found");

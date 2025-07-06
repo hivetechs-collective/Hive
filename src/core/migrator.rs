@@ -196,7 +196,7 @@ impl HiveMigrator {
     async fn validate_typescript_installation(&self, path: &Path) -> Result<bool> {
         // Check for key TypeScript Hive files
         let config_file = path.join("config.json");
-        let db_file = path.join("conversations.db");
+        let db_file = path.join("hive-ai.db");
         
         if !config_file.exists() {
             return Ok(false);
@@ -246,7 +246,7 @@ impl HiveMigrator {
         info!("Analyzing TypeScript Hive AI data...");
 
         let config_path = ts_dir.join("config.json");
-        let database_path = ts_dir.join("conversations.db");
+        let database_path = ts_dir.join("hive-ai.db");
 
         // Read config
         let config_content = fs::read_to_string(&config_path).await
@@ -777,7 +777,7 @@ impl HiveMigrator {
         }
         
         // Initialize new Rust database
-        let db_path = self.rust_config_dir.join("conversations.db");
+        let db_path = self.rust_config_dir.join("hive-ai.db");
         initialize_database(None).await?;
         
         info!("Database schema converted");
@@ -845,7 +845,7 @@ impl HiveMigrator {
             match check.check_type {
                 ValidationType::ConversationCount => {
                     // Count conversations in new database
-                    let db_path = self.rust_config_dir.join("conversations.db");
+                    let db_path = self.rust_config_dir.join("hive-ai.db");
                     if db_path.exists() {
                         let count = self.count_migrated_conversations(&db_path).await.unwrap_or(0);
                         check.actual_result = Some(serde_json::json!(count));

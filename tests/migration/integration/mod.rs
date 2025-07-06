@@ -434,7 +434,7 @@ mod tests {
         let target_db_path = dirs::home_dir()
             .unwrap()
             .join(".hive")
-            .join("hive.db");
+            .join("hive-ai.db");
 
         if target_db_path.exists() {
             let validation_result = run_quick_validation(&setup.source_db_path, &target_db_path)

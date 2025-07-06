@@ -315,23 +315,6 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
     
-    // Load existing keys from database on mount
-    use_effect(move || {
-        // Load OpenRouter key if exists
-        if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
-            if !key.is_empty() && openrouter_key.read().is_empty() {
-                *openrouter_key.write() = key;
-            }
-        }
-        
-        // Load Hive key if exists
-        if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
-            if !key.is_empty() && hive_key.read().is_empty() {
-                *hive_key.write() = key;
-            }
-        }
-    });
-    
     rsx! {
         div {
             class: "dialog-overlay",
@@ -485,34 +468,16 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             let mut show_settings = show_settings.clone();
                             
                             spawn(async move {
-                                // Simple synchronous saves
-                                let mut success = true;
-                                let mut error_msg = String::new();
-                                
-                                // Save OpenRouter key
-                                if !openrouter.is_empty() {
-                                    if let Err(e) = crate::desktop::simple_db::save_config("openrouter_api_key", &openrouter) {
-                                        success = false;
-                                        error_msg = format!("Failed to save OpenRouter key: {}", e);
+                                match save_api_keys(&openrouter, &hive).await {
+                                    Ok(_) => {
+                                        // Success - close dialog
+                                        *show_settings.write() = false;
+                                    }
+                                    Err(e) => {
+                                        // Show error
+                                        *validation_error.write() = Some(e.to_string());
                                     }
                                 }
-                                
-                                // Save Hive key
-                                if !hive.is_empty() {
-                                    if let Err(e) = crate::desktop::simple_db::save_config("hive_license_key", &hive) {
-                                        success = false;
-                                        error_msg = format!("Failed to save Hive key: {}", e);
-                                    }
-                                }
-                                
-                                if success {
-                                    // Success - close dialog
-                                    *show_settings.write() = false;
-                                } else {
-                                    // Show error
-                                    *validation_error.write() = Some(error_msg);
-                                }
-                                
                                 *is_validating.write() = false;
                             });
                         },
@@ -559,25 +524,12 @@ pub fn OnboardingDialog(
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
     let mut selected_profile = use_signal(|| "balanced".to_string());
-    // Initialize temp keys with existing values from database if available
-    let mut temp_openrouter_key = use_signal(|| {
-        if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
-            key
-        } else {
-            openrouter_key.read().clone()
-        }
-    });
-    let mut temp_hive_key = use_signal(|| {
-        if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
-            key
-        } else {
-            hive_key.read().clone()
-        }
-    });
+    let mut temp_openrouter_key = use_signal(|| openrouter_key.read().clone());
+    let mut temp_hive_key = use_signal(|| hive_key.read().clone());
     
-    // Track if keys already exist in database
-    let has_existing_openrouter = crate::desktop::simple_db::has_openrouter_key();
-    let has_existing_hive = crate::desktop::simple_db::has_hive_key();
+    // Track if keys already exist
+    let has_existing_openrouter = !openrouter_key.read().is_empty();
+    let has_existing_hive = !hive_key.read().is_empty();
     
     // Profile configuration state
     let mut profile_mode = use_signal(|| "expert".to_string()); // expert, existing, custom
@@ -590,7 +542,6 @@ pub fn OnboardingDialog(
     let mut profiles_created = use_signal(|| Vec::<String>::new());
     let mut show_profile_success = use_signal(|| false);
     let mut continue_creating_profiles = use_signal(|| false);
-    let mut is_closing = use_signal(|| false);
     
     // License validation result
     let mut license_info = use_signal(|| None::<LicenseValidationResult>);
@@ -603,38 +554,6 @@ pub fn OnboardingDialog(
                 *existing_profiles.write() = profiles;
             }
         });
-    });
-    
-    // Load existing keys from database on mount
-    use_effect(move || {
-        // Load OpenRouter key if exists
-        if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
-            if !key.is_empty() {
-                *openrouter_key.write() = key.clone();
-                *temp_openrouter_key.write() = key;
-            }
-        }
-        
-        // Load Hive key if exists
-        if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
-            if !key.is_empty() {
-                *hive_key.write() = key.clone();
-                *temp_hive_key.write() = key;
-            }
-        }
-    });
-    
-    // Handle closing state changes
-    use_effect(move || {
-        if *is_closing.read() {
-            // When closing flag is set, actually close the dialog
-            let mut show_onboarding_clone = show_onboarding.clone();
-            spawn(async move {
-                // Small delay to prevent re-render issues
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                show_onboarding_clone.set(false);
-            });
-        }
     });
     
     // Check onboarding state ONLY on initial mount to determine starting step
@@ -663,14 +582,10 @@ pub fn OnboardingDialog(
         });
     });
     
-    // Early return if dialog should not be shown or is closing
-    let show = *show_onboarding.read();
-    let closing = *is_closing.read();
-    if !show || closing {
-        tracing::info!("OnboardingDialog render check: show = {}, closing = {}, returning empty", show, closing);
+    // Early return if dialog should not be shown
+    if !*show_onboarding.read() {
         return rsx! {};
     }
-    tracing::info!("OnboardingDialog render check: show = true, rendering dialog");
     
     rsx! {
         div {
@@ -678,9 +593,7 @@ pub fn OnboardingDialog(
             onclick: move |_| {
                 // Allow closing by clicking overlay
                 tracing::info!("Overlay clicked - closing onboarding dialog");
-                
-                // Just set closing flag - useEffect will handle the actual close
-                *is_closing.write() = true;
+                show_onboarding.set(false);
             },
             
             div {
@@ -696,9 +609,8 @@ pub fn OnboardingDialog(
                         style: "background: none; border: none; color: #cccccc; font-size: 20px; cursor: pointer; padding: 0; width: 30px; height: 30px;",
                         onclick: move |_| {
                             tracing::info!("Close button clicked - closing dialog");
-                            
-                            // Just set closing flag - useEffect will handle the actual close
-                            *is_closing.write() = true;
+                            show_onboarding.set(false);
+                            // Don't reset the step when closing
                         },
                         "×"
                     }
@@ -1027,124 +939,6 @@ pub fn OnboardingDialog(
                                             "Select an expert template optimized for specific use cases:"
                                         }
                                         
-                                        // Show profile creation options prominently at the top
-                                        div {
-                                            style: "margin-bottom: 20px; padding: 20px; background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); border: 2px solid #48bb78; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);",
-                                            h4 {
-                                                style: "margin: 0 0 10px 0; color: #ffffff; font-size: 18px;",
-                                                "🌟 Quick Actions"
-                                            }
-                                            p {
-                                                style: "margin: 0 0 15px 0; color: #a0aec0; font-size: 14px;",
-                                                "Get started quickly by adding all expert-crafted profiles at once!"
-                                            }
-                                            div {
-                                                style: "display: flex; gap: 10px; flex-wrap: wrap;",
-                                                button {
-                                                    class: "dialog-button",
-                                                    style: "background: #48bb78; color: white; padding: 12px 24px; font-weight: 600; font-size: 16px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); transition: all 0.2s;",
-                                                    disabled: *is_creating_profile.read(),
-                                                    onclick: move |_| {
-                                                        tracing::info!("Adding all expert templates");
-                                                        let mut is_creating_profile = is_creating_profile.clone();
-                                                        let mut profile_error = profile_error.clone();
-                                                        let mut profiles_created = profiles_created.clone();
-                                                        let mut show_profile_success = show_profile_success.clone();
-                                                        let mut existing_profiles = existing_profiles.clone();
-                                                        
-                                                        spawn(async move {
-                                                            *is_creating_profile.write() = true;
-                                                            *profile_error.write() = None;
-                                                            
-                                                            let templates = vec![
-                                                                ("lightning-fast", "Lightning Fast"),
-                                                                ("precision-architect", "Precision Architect"),
-                                                                ("budget-optimizer", "Budget Optimizer"),
-                                                                ("research-specialist", "Research Specialist"),
-                                                                ("debug-specialist", "Debug Specialist"),
-                                                                ("balanced-generalist", "Balanced Generalist"),
-                                                                ("enterprise-architect", "Enterprise Architect"),
-                                                                ("creative-innovator", "Creative Innovator"),
-                                                                ("teaching-assistant", "Teaching Assistant"),
-                                                                ("debugging-detective", "Debugging Detective")
-                                                            ];
-                                                            
-                                                            let mut created = Vec::new();
-                                                            let total = templates.len();
-                                                            
-                                                            for (index, (template_id, name)) in templates.into_iter().enumerate() {
-                                                                // Update progress
-                                                                let progress = index + 1;
-                                                                *profiles_created.write() = created.clone();
-                                                                
-                                                                match create_profile_from_template(template_id, name).await {
-                                                                    Ok(_) => {
-                                                                        created.push(name.to_string());
-                                                                        tracing::info!("Created profile {}/{}: {}", progress, total, name);
-                                                                    }
-                                                                    Err(e) => {
-                                                                        tracing::warn!("Failed to create profile {}: {}", name, e);
-                                                                    }
-                                                                }
-                                                                
-                                                                // Small delay to show progress
-                                                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                                                            }
-                                                            
-                                                            *profiles_created.write() = created;
-                                                            *show_profile_success.write() = true;
-                                                            *is_creating_profile.write() = false;
-                                                            
-                                                            // Reload profiles
-                                                            if let Ok(profiles) = load_existing_profiles().await {
-                                                                *existing_profiles.write() = profiles;
-                                                            }
-                                                        });
-                                                    },
-                                                    {
-                                                        if *is_creating_profile.read() { 
-                                                            format!("⏳ Creating profiles... ({}/10)", profiles_created.read().len())
-                                                        } else { 
-                                                            "🚀 Add All 10 Expert Templates".to_string() 
-                                                        }
-                                                    }
-                                                }
-                                                button {
-                                                    class: "dialog-button",
-                                                    style: "background: #4299e1; color: white; padding: 12px 24px; border-radius: 6px;",
-                                                    onclick: move |_| {
-                                                        tracing::info!("Moving to completion without creating profiles");
-                                                        *current_step.write() = 5;
-                                                    },
-                                                    "➡️ Continue Without Profiles"
-                                                }
-                                            }
-                                            if *is_creating_profile.read() {
-                                                div {
-                                                    style: "margin-top: 15px; padding: 10px; background: #1a202c; border-radius: 6px;",
-                                                    p {
-                                                        style: "margin: 0; color: #48bb78; font-size: 14px;",
-                                                        "🔄 Creating {profiles_created.read().len()}/10 profiles..."
-                                                    }
-                                                    div {
-                                                        style: "margin-top: 8px; height: 8px; background: #2d3748; border-radius: 4px; overflow: hidden;",
-                                                        div {
-                                                            style: {
-                                                                let width = (profiles_created.read().len() as f32 / 10.0 * 100.0) as u32;
-                                                                format!("height: 100%; background: #48bb78; width: {}%; transition: width 0.3s;", width)
-                                                            },
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            if !profiles_created.read().is_empty() && !*is_creating_profile.read() {
-                                                p {
-                                                    style: "margin: 15px 0 0 0; color: #90ee90; font-size: 14px; font-weight: 600;",
-                                                    "✅ Successfully created {profiles_created.read().len()} profile(s)!"
-                                                }
-                                            }
-                                        }
-                                        
                                         // Expert templates grid
                                         div {
                                             class: "expert-templates-grid",
@@ -1248,6 +1042,87 @@ pub fn OnboardingDialog(
                                                 use_cases: "Bug hunting, Error analysis, Performance issues",
                                                 is_selected: *selected_template.read() == "debugging-detective",
                                                 on_select: move |_| *selected_template.write() = "debugging-detective".to_string(),
+                                            }
+                                        }
+                                        
+                                        // Show profile creation options prominently at the top
+                                        div {
+                                            style: "margin-bottom: 20px; padding: 15px; background: #2d3748; border: 2px solid #4a5568; border-radius: 8px;",
+                                            h4 {
+                                                style: "margin: 0 0 15px 0; color: #ffffff;",
+                                                "🌟 Quick Actions"
+                                            }
+                                            div {
+                                                style: "display: flex; gap: 10px; flex-wrap: wrap;",
+                                                button {
+                                                    class: "dialog-button",
+                                                    style: "background: #48bb78; color: white; padding: 10px 20px; font-weight: 600;",
+                                                    disabled: *is_creating_profile.read(),
+                                                    onclick: move |_| {
+                                                        tracing::info!("Adding all expert templates");
+                                                        let mut is_creating_profile = is_creating_profile.clone();
+                                                        let mut profile_error = profile_error.clone();
+                                                        let mut profiles_created = profiles_created.clone();
+                                                        let mut show_profile_success = show_profile_success.clone();
+                                                        let mut existing_profiles = existing_profiles.clone();
+                                                        
+                                                        spawn(async move {
+                                                            *is_creating_profile.write() = true;
+                                                            *profile_error.write() = None;
+                                                            
+                                                            let templates = vec![
+                                                                ("lightning-fast", "Lightning Fast"),
+                                                                ("precision-architect", "Precision Architect"),
+                                                                ("budget-optimizer", "Budget Optimizer"),
+                                                                ("research-specialist", "Research Specialist"),
+                                                                ("debug-specialist", "Debug Specialist"),
+                                                                ("balanced-generalist", "Balanced Generalist"),
+                                                                ("enterprise-architect", "Enterprise Architect"),
+                                                                ("creative-innovator", "Creative Innovator"),
+                                                                ("teaching-assistant", "Teaching Assistant"),
+                                                                ("debugging-detective", "Debugging Detective")
+                                                            ];
+                                                            
+                                                            let mut created = Vec::new();
+                                                            for (template_id, name) in templates {
+                                                                match create_profile_from_template(template_id, name).await {
+                                                                    Ok(_) => {
+                                                                        created.push(name.to_string());
+                                                                        tracing::info!("Created profile: {}", name);
+                                                                    }
+                                                                    Err(e) => {
+                                                                        tracing::warn!("Failed to create profile {}: {}", name, e);
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            *profiles_created.write() = created;
+                                                            *show_profile_success.write() = true;
+                                                            *is_creating_profile.write() = false;
+                                                            
+                                                            // Reload profiles
+                                                            if let Ok(profiles) = load_existing_profiles().await {
+                                                                *existing_profiles.write() = profiles;
+                                                            }
+                                                        });
+                                                    },
+                                                    if *is_creating_profile.read() { "Creating profiles..." } else { "🚀 Add All 10 Expert Templates" }
+                                                }
+                                                button {
+                                                    class: "dialog-button",
+                                                    style: "background: #4299e1; color: white; padding: 10px 20px;",
+                                                    onclick: move |_| {
+                                                        tracing::info!("Moving to completion without creating profiles");
+                                                        *current_step.write() = 5;
+                                                    },
+                                                    "➡️ Continue Without Profiles"
+                                                }
+                                            }
+                                            if !profiles_created.read().is_empty() {
+                                                p {
+                                                    style: "margin: 10px 0 0 0; color: #90ee90; font-size: 13px;",
+                                                    "✅ Created {profiles_created.read().len()} profile(s)"
+                                                }
                                             }
                                         }
                                         
@@ -1454,18 +1329,6 @@ pub fn OnboardingDialog(
                         }
                     }
                     
-                    // Skip button for OpenRouter key if it already exists
-                    if *current_step.read() == 3 && has_existing_openrouter {
-                        button {
-                            class: "button button-secondary",
-                            onclick: move |_| {
-                                *current_step.write() = 4; // Skip to Profile configuration
-                                *validation_error.write() = None;
-                            },
-                            "Skip"
-                        }
-                    }
-                    
                     // Show different buttons for profile creation step
                     if *current_step.read() == 4 && *show_profile_success.read() {
                         // After creating profiles, show options to create more or continue
@@ -1521,10 +1384,8 @@ pub fn OnboardingDialog(
                                     // Simple synchronous save
                                     if let Err(e) = crate::desktop::simple_db::save_config("hive_license_key", &h_key) {
                                         tracing::error!("Failed to save Hive key: {}", e);
-                                        *validation_error.write() = Some(format!("Failed to save key: {}", e));
-                                        return;
                                     } else {
-                                        tracing::info!("Hive key saved successfully to database");
+                                        tracing::info!("Hive key saved");
                                     }
                                 }
                                 // Move to next step
@@ -1547,9 +1408,8 @@ pub fn OnboardingDialog(
                                 if let Err(e) = crate::desktop::simple_db::save_config("openrouter_api_key", &or_key) {
                                     tracing::error!("Failed to save OpenRouter key: {}", e);
                                     *validation_error.write() = Some(format!("Failed to save key: {}", e));
-                                    return;
                                 } else {
-                                    tracing::info!("OpenRouter key saved successfully to database");
+                                    tracing::info!("OpenRouter key saved");
                                     // Move to profile selection
                                     *current_step.write() = 4;
                                 }
@@ -1661,10 +1521,16 @@ pub fn OnboardingDialog(
                                     tracing::error!("Failed to mark onboarding complete: {}", e);
                                 }
                                 
-                                // Just set closing flag - useEffect will handle the actual close
-                                *is_closing.write() = true;
+                                // Close the dialog
+                                tracing::info!("Current show_onboarding value: {}", show_onboarding.read());
                                 
-                                tracing::info!("Dialog close initiated");
+                                // Use set() method for better reactivity
+                                show_onboarding.set(false);
+                                
+                                tracing::info!("After set - show_onboarding value: {}", show_onboarding.read());
+                                
+                                // Don't reset the step - this causes the dialog to loop back
+                                // current_step.set(1);  // REMOVED - this was causing the loop!
                             } else {
                                 // This shouldn't happen, but log it
                                 tracing::warn!("Unexpected step in button handler: {}", step);

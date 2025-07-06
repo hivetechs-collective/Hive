@@ -216,7 +216,7 @@ target/
     }
     
     // Initialize database
-    let db_path = hive_dir.join("conversations.db");
+    let db_path = hive_dir.join("hive-ai.db");
     if !db_path.exists() || force {
         use crate::core::database_simple::{initialize_database, DatabaseConfig};
         let config = DatabaseConfig {
@@ -2465,7 +2465,7 @@ async fn handle_uninstall(
     }
     
     if !preserve_data {
-        items_to_remove.push("Conversation data: ~/.hive/conversations.db");
+        items_to_remove.push("Conversation data: ~/.hive/hive-ai.db");
         items_to_remove.push("Cache files: ~/.hive/cache/");
     }
     
@@ -3318,7 +3318,7 @@ async fn handle_migrate(command: MigrateCommands) -> Result<()> {
 
             // Check if migration has been performed
             let hive_dir = dirs::home_dir().unwrap_or_default().join(".hive");
-            let rust_db = hive_dir.join("hive.db");
+            let rust_db = hive_dir.join("hive-ai.db");
             let typescript_dir = dirs::home_dir().unwrap_or_default().join(".hive-ai");
 
             if rust_db.exists() {

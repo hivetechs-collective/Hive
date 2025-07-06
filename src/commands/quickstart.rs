@@ -244,7 +244,7 @@ impl CompleteSetupSystem {
         pb.enable_steady_tick(Duration::from_millis(100));
 
         // Initialize database with complete schema
-        let db_path = self.config_dir.join("hive.db");
+        let db_path = self.config_dir.join("hive-ai.db");
         let db_config = crate::core::database::DatabaseConfig {
             path: db_path,
             max_connections: 10,
@@ -355,7 +355,7 @@ impl CompleteSetupSystem {
         // Sync models
         pb.set_message("Syncing models from OpenRouter...");
         
-        let db_path = self.config_dir.join("hive.db");
+        let db_path = self.config_dir.join("hive-ai.db");
         let db_config = crate::core::database::DatabaseConfig {
             path: db_path,
             max_connections: 10,
@@ -397,7 +397,7 @@ impl CompleteSetupSystem {
         println!("{}", "Creating 10+ pre-built consensus profiles...".white().dimmed());
         println!();
 
-        let db_path = self.config_dir.join("hive.db");
+        let db_path = self.config_dir.join("hive-ai.db");
         let db_config = crate::core::database::DatabaseConfig {
             path: db_path,
             max_connections: 10,
@@ -538,7 +538,7 @@ impl CompleteSetupSystem {
         }
         
         // Check database status
-        let db_path = self.config_dir.join("hive.db");
+        let db_path = self.config_dir.join("hive-ai.db");
         if db_path.exists() {
             println!("  {} Database: Complete schema with 17 tables", "✅".green());
         }

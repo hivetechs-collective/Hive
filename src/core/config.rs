@@ -214,7 +214,7 @@ impl Default for HiveConfig {
             cloudflare: None,
             license: None,
             core_dirs: CoreDirsConfig {
-                data_dir: hive_dir.join("data"),
+                data_dir: hive_dir.clone(),
                 config_dir: hive_dir.clone(),
                 cache_dir: hive_dir.join("cache"),
             },
@@ -224,7 +224,7 @@ impl Default for HiveConfig {
                 export_enabled: true,
             },
             database: DatabaseConfig {
-                path: hive_dir.join("data").join("hive.db"),
+                path: hive_dir.join("hive-ai.db"),
                 connection_pool_size: 10,
                 enable_wal: true,
                 auto_vacuum: true,

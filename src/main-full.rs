@@ -902,7 +902,7 @@ async fn print_status_info() -> Result<()> {
     
     let config_dir = get_hive_config_dir();
     let config_exists = tokio::fs::metadata(config_dir.join("config.toml")).await.is_ok();
-    let db_exists = tokio::fs::metadata(config_dir.join("conversations.db")).await.is_ok();
+    let db_exists = tokio::fs::metadata(config_dir.join("hive-ai.db")).await.is_ok();
     
     println!(" System:");
     println!("   Version: {}", env!("CARGO_PKG_VERSION"));
@@ -1031,7 +1031,7 @@ async fn process_interactive_command(input: &str) -> Result<()> {
 }
 
 async fn get_conversation_count(config_dir: &std::path::Path) -> Result<usize> {
-    let db_path = config_dir.join("conversations.db");
+    let db_path = config_dir.join("hive-ai.db");
     if !db_path.exists() {
         return Ok(0);
     }
