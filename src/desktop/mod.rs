@@ -14,6 +14,7 @@ pub mod events;
 pub mod styles;
 pub mod menu_bar;
 pub mod dialogs;
+pub mod consensus_integration;
 
 pub use app::App;
 

@@ -384,15 +384,19 @@ pub struct MessageMetadata {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ConsensusState {
     pub is_active: bool,
+    pub is_running: bool,
     pub current_stage: Option<ConsensusStage>,
     pub progress: ConsensusProgress,
     pub stages: Vec<StageInfo>,
+    pub total_tokens: usize,
+    pub estimated_cost: f64,
 }
 
 impl ConsensusState {
     pub fn new() -> Self {
         Self {
             is_active: false,
+            is_running: false,
             current_stage: None,
             progress: ConsensusProgress::default(),
             stages: vec![
@@ -401,13 +405,18 @@ impl ConsensusState {
                 StageInfo::new("Validator", "claude-3-opus"),
                 StageInfo::new("Curator", "gpt-4o"),
             ],
+            total_tokens: 0,
+            estimated_cost: 0.0,
         }
     }
     
     pub fn start_consensus(&mut self) {
         self.is_active = true;
+        self.is_running = true;
         self.current_stage = Some(ConsensusStage::Generator);
         self.progress = ConsensusProgress::default();
+        self.total_tokens = 0;
+        self.estimated_cost = 0.0;
     }
     
     pub fn update_progress(&mut self, stage: ConsensusStage, progress: u8) {
@@ -421,17 +430,18 @@ impl ConsensusState {
     
     pub fn complete_consensus(&mut self) {
         self.is_active = false;
+        self.is_running = false;
         self.current_stage = None;
+    }
+    
+    pub fn add_tokens(&mut self, tokens: usize, cost: f64) {
+        self.total_tokens += tokens;
+        self.estimated_cost += cost;
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ConsensusStage {
-    Generator,
-    Refiner,
-    Validator,
-    Curator,
-}
+// Use ConsensusStage from consensus module
+pub use crate::consensus::ConsensusStage;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ConsensusProgress {

@@ -308,10 +308,19 @@ use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
 use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, WelcomeAction, DIALOG_STYLES};
+use hive_ai::desktop::consensus_integration::{DesktopConsensusManager, use_consensus};
+use hive_ai::desktop::state::{AppState, ConsensusState};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
 fn App() -> Element {
+    // Initialize app state
+    let app_state = use_signal(|| AppState::default());
+    use_context_provider(|| app_state.clone());
+    
+    // Get consensus manager
+    let consensus_manager = use_consensus();
+    
     // State management
     let messages = use_signal(|| vec![
         Message { text: "🐝 Welcome to Hive Consensus!".to_string(), is_user: false },
@@ -370,8 +379,12 @@ fn App() -> Element {
     
     // File selection is handled directly in the onclick handler
 
-    // Send message handler
-    let send_message = move |messages: &mut Signal<Vec<Message>>, input_value: &mut Signal<String>, is_processing: &mut Signal<bool>| {
+    // Send message handler - create as a function that takes all needed signals
+    let handle_send = std::sync::Arc::new({
+        let consensus_manager = consensus_manager.clone();
+        let app_state = app_state.clone();
+        
+        move |messages: &mut Signal<Vec<Message>>, input_value: &mut Signal<String>, is_processing: &mut Signal<bool>| {
         if !input_value.read().is_empty() && !*is_processing.read() {
             let user_msg = input_value.read().clone();
             
@@ -381,18 +394,51 @@ fn App() -> Element {
             // Clear input
             input_value.write().clear();
             
-            // Simulate processing
+            // Start processing
             *is_processing.write() = true;
             
-            // Simulate AI response
-            messages.write().push(Message { 
-                text: "🐝 I'm currently running in demo mode. The full consensus engine is being integrated.".to_string(), 
-                is_user: false 
-            });
-            
-            *is_processing.write() = false;
+            // Use consensus engine if available
+            if let Some(mut consensus) = consensus_manager.clone() {
+                let mut messages = messages.clone();
+                let mut is_processing = is_processing.clone();
+                let app_state = app_state.clone();
+                
+                spawn(async move {
+                    // Update UI to show consensus is running
+                    let mut app_state = app_state.clone();
+                    app_state.write().consensus.start_consensus();
+                    
+                    match consensus.process_query(&user_msg).await {
+                        Ok(response) => {
+                            messages.write().push(Message { 
+                                text: response, 
+                                is_user: false 
+                            });
+                        }
+                        Err(e) => {
+                            messages.write().push(Message { 
+                                text: format!("❌ Error: {}", e), 
+                                is_user: false 
+                            });
+                        }
+                    }
+                    
+                    // Update UI to show consensus is complete
+                    let mut app_state = app_state.clone();
+                    app_state.write().consensus.complete_consensus();
+                    *is_processing.write() = false;
+                });
+            } else {
+                // Fallback if consensus engine not initialized
+                messages.write().push(Message { 
+                    text: "⚠️ Consensus engine is initializing. Please check your OpenRouter API key in ~/.hive/config.toml".to_string(), 
+                    is_user: false 
+                });
+                *is_processing.write() = false;
+            }
         }
-    };
+        }
+    });
 
     // Handle menu actions
     let mut handle_menu_action = move |action: MenuAction| {
@@ -768,6 +814,13 @@ fn App() -> Element {
                         "🐝 Hive Consensus Chat"
                     }
                     
+                    // Consensus progress display
+                    if app_state.read().consensus.is_running {
+                        ConsensusProgressDisplay { 
+                            consensus_state: app_state.read().consensus.clone() 
+                        }
+                    }
+                    
                     // Messages
                     div {
                         class: "messages-area",
@@ -788,16 +841,22 @@ fn App() -> Element {
                             placeholder: "Ask Hive anything...",
                             disabled: *is_processing.read(),
                             oninput: move |evt| *input_value.write() = evt.value().clone(),
-                            onkeypress: move |evt| {
-                                if evt.code() == dioxus::events::Code::Enter {
-                                    send_message(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone());
+                            onkeypress: {
+                                let handle_send = handle_send.clone();
+                                move |evt: dioxus::events::KeyboardEvent| {
+                                    if evt.code() == dioxus::events::Code::Enter {
+                                        handle_send(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone());
+                                    }
                                 }
                             }
                         }
                         button {
                             class: "send-button",
                             disabled: input_value.read().is_empty() || *is_processing.read(),
-                            onclick: move |_| send_message(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone()),
+                            onclick: {
+                                let handle_send = handle_send.clone();
+                                move |_| handle_send(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone())
+                            },
                             if *is_processing.read() { "Processing..." } else { "Send" }
                         }
                     }
@@ -928,6 +987,74 @@ fn FileTreeItem(
                     file_tree: file_tree.clone(),
                     current_dir: current_dir.clone(),
                     file_content: file_content.clone(),
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
+    rsx! {
+        div {
+            style: "padding: 10px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
+            
+            // Show all 4 stages
+            for (idx, stage) in consensus_state.stages.iter().enumerate() {
+                div {
+                    style: "margin: 5px 0;",
+                    
+                    // Stage info
+                    div {
+                        style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;",
+                        span { 
+                            style: "color: #cccccc; font-size: 12px; font-weight: 600;",
+                            "{stage.name}"
+                        }
+                        span { 
+                            style: "color: #858585; font-size: 11px;",
+                            "{stage.model}"
+                        }
+                        span { 
+                            style: match stage.status {
+                                hive_ai::desktop::state::StageStatus::Waiting => "color: #666666; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Running => "color: #007acc; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Completed => "color: #4caf50; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Error => "color: #f44336; font-size: 11px;",
+                            },
+                            match stage.status {
+                                hive_ai::desktop::state::StageStatus::Waiting => "Waiting",
+                                hive_ai::desktop::state::StageStatus::Running => "Running",
+                                hive_ai::desktop::state::StageStatus::Completed => "Complete",
+                                hive_ai::desktop::state::StageStatus::Error => "Error",
+                            }
+                        }
+                    }
+                    
+                    // Progress bar
+                    div {
+                        style: "background: #1e1e1e; height: 4px; border-radius: 2px; overflow: hidden;",
+                        div {
+                            style: format!("background: {}; height: 100%; width: {}%; transition: width 0.3s;",
+                                match stage.status {
+                                    hive_ai::desktop::state::StageStatus::Waiting => "#666666",
+                                    hive_ai::desktop::state::StageStatus::Running => "#007acc",
+                                    hive_ai::desktop::state::StageStatus::Completed => "#4caf50",
+                                    hive_ai::desktop::state::StageStatus::Error => "#f44336",
+                                },
+                                stage.progress
+                            ),
+                        }
+                    }
+                }
+            }
+            
+            // Show cost and tokens
+            if consensus_state.total_tokens > 0 {
+                div {
+                    style: "margin-top: 10px; padding-top: 10px; border-top: 1px solid #3e3e42; display: flex; justify-content: space-between; font-size: 11px; color: #858585;",
+                    span { "Tokens: {consensus_state.total_tokens}" }
+                    span { "Cost: ${consensus_state.estimated_cost:.4}" }
                 }
             }
         }
