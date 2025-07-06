@@ -1168,12 +1168,12 @@ pub fn OnboardingDialog(
                                                                 ("lightning-fast", "Lightning Fast"),
                                                                 ("precision-architect", "Precision Architect"),
                                                                 ("budget-optimizer", "Budget Optimizer"),
-                                                                ("research-specialist", "Research Specialist"),
-                                                                ("debug-specialist", "Debug Specialist"),
-                                                                ("balanced-generalist", "Balanced Generalist"),
-                                                                ("enterprise-architect", "Enterprise Architect"),
+                                                                ("research-deep-dive", "Research Deep Dive"),
+                                                                ("startup-mvp", "Startup MVP"),
+                                                                ("enterprise-grade", "Enterprise Grade"),
                                                                 ("creative-innovator", "Creative Innovator"),
-                                                                ("teaching-assistant", "Teaching Assistant"),
+                                                                ("security-focused", "Security Focused"),
+                                                                ("ml-ai-specialist", "ML/AI Specialist"),
                                                                 ("debugging-detective", "Debugging Detective")
                                                             ];
                                                             
@@ -1288,64 +1288,64 @@ pub fn OnboardingDialog(
                                                 on_select: move |_| *selected_template.write() = "budget-optimizer".to_string(),
                                             }
                                             
-                                            // Research Specialist
+                                            // Research Deep Dive
                                             ExpertTemplateOption {
-                                                id: "research-specialist",
-                                                name: "🔬 Research Specialist",
-                                                description: "Deep exploration for research and problem-solving",
-                                                use_cases: "Research papers, Complex analysis, Deep exploration",
-                                                is_selected: *selected_template.read() == "research-specialist",
-                                                on_select: move |_| *selected_template.write() = "research-specialist".to_string(),
+                                                id: "research-deep-dive",
+                                                name: "🔬 Research Deep Dive",
+                                                description: "Comprehensive analysis for research and knowledge discovery",
+                                                use_cases: "Technical research, Market analysis, Documentation",
+                                                is_selected: *selected_template.read() == "research-deep-dive",
+                                                on_select: move |_| *selected_template.write() = "research-deep-dive".to_string(),
                                             }
                                             
-                                            // Debug Specialist
+                                            // Startup MVP
                                             ExpertTemplateOption {
-                                                id: "debug-specialist",
-                                                name: "🐛 Debug Specialist",
-                                                description: "Specialized for debugging and troubleshooting",
-                                                use_cases: "Bug fixing, Error analysis, Code review",
-                                                is_selected: *selected_template.read() == "debug-specialist",
-                                                on_select: move |_| *selected_template.write() = "debug-specialist".to_string(),
+                                                id: "startup-mvp",
+                                                name: "🚀 Startup MVP",
+                                                description: "Balanced consensus for MVP development",
+                                                use_cases: "MVP development, Startup projects, Feature prototyping",
+                                                is_selected: *selected_template.read() == "startup-mvp",
+                                                on_select: move |_| *selected_template.write() = "startup-mvp".to_string(),
                                             }
                                             
-                                            // Balanced Generalist
+                                            // Enterprise Grade
                                             ExpertTemplateOption {
-                                                id: "balanced-generalist",
-                                                name: "⚖️ Balanced Generalist",
-                                                description: "Well-rounded for general development tasks",
-                                                use_cases: "General development, Documentation, Explanations",
-                                                is_selected: *selected_template.read() == "balanced-generalist",
-                                                on_select: move |_| *selected_template.write() = "balanced-generalist".to_string(),
+                                                id: "enterprise-grade",
+                                                name: "🏢 Enterprise Grade",
+                                                description: "Production-ready with enterprise security and reliability",
+                                                use_cases: "Enterprise applications, Mission-critical systems, Financial services",
+                                                is_selected: *selected_template.read() == "enterprise-grade",
+                                                on_select: move |_| *selected_template.write() = "enterprise-grade".to_string(),
                                             }
                                             
-                                            // Enterprise Architect
+                                            // Security Focused
                                             ExpertTemplateOption {
-                                                id: "enterprise-architect",
-                                                name: "🏢 Enterprise Architect",
-                                                description: "Enterprise-grade for production systems",
-                                                use_cases: "Production systems, Security, Compliance",
-                                                is_selected: *selected_template.read() == "enterprise-architect",
-                                                on_select: move |_| *selected_template.write() = "enterprise-architect".to_string(),
+                                                id: "security-focused",
+                                                name: "🔐 Security Focused",
+                                                description: "Security-first for secure coding and vulnerability analysis",
+                                                use_cases: "Security audits, Vulnerability analysis, Compliance reviews",
+                                                is_selected: *selected_template.read() == "security-focused",
+                                                on_select: move |_| *selected_template.write() = "security-focused".to_string(),
                                             }
                                             
                                             // Creative Innovator
                                             ExpertTemplateOption {
                                                 id: "creative-innovator",
                                                 name: "🎨 Creative Innovator",
-                                                description: "Creative solutions and innovative approaches",
-                                                use_cases: "Creative coding, Novel solutions, Brainstorming",
+                                                description: "High-creativity for innovative solutions and creative problem solving",
+                                                use_cases: "Creative coding, Innovative solutions, Brainstorming",
                                                 is_selected: *selected_template.read() == "creative-innovator",
                                                 on_select: move |_| *selected_template.write() = "creative-innovator".to_string(),
                                             }
                                             
-                                            // Teaching Assistant
+                                            // ML/AI Specialist
                                             ExpertTemplateOption {
-                                                id: "teaching-assistant",
-                                                name: "📚 Teaching Assistant",
-                                                description: "Optimized for educational explanations",
-                                                use_cases: "Learning, Tutorials, Code explanations",
-                                                is_selected: *selected_template.read() == "teaching-assistant",
-                                                on_select: move |_| *selected_template.write() = "teaching-assistant".to_string(),
+                                                id: "ml-ai-specialist",
+                                                name: "🤖 ML/AI Specialist",
+                                                description: "Specialized for machine learning and AI development",
+                                                use_cases: "ML model development, AI system design, Data science",
+                                                is_selected: *selected_template.read() == "ml-ai-specialist",
+                                                on_select: move |_| *selected_template.write() = "ml-ai-specialist".to_string(),
                                             }
                                             
                                             // Debugging Detective
