@@ -307,27 +307,27 @@ struct Message {
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
-use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, DIALOG_STYLES};
+use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, WelcomeAction, DIALOG_STYLES};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
 fn App() -> Element {
     // State management
-    let mut messages = use_signal(|| vec![
+    let messages = use_signal(|| vec![
         Message { text: "🐝 Welcome to Hive Consensus!".to_string(), is_user: false },
         Message { text: "This is the Rust-powered version with VS Code-style interface.".to_string(), is_user: false },
     ]);
     let mut input_value = use_signal(String::new);
     let is_processing = use_signal(|| false);
-    let mut selected_file = use_signal(|| None::<String>);
+    let mut selected_file = use_signal(|| Some("__welcome__".to_string()));
     let mut file_tree = use_signal(|| Vec::<FileItem>::new());
-    let mut expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
+    let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
     let mut current_dir = use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let mut file_content = use_signal(String::new);
     
     // Dialog state
     let mut show_about_dialog = use_signal(|| false);
-    let mut show_welcome_dialog = use_signal(|| false);
+    let mut show_welcome_dialog = use_signal(|| true);
     let mut show_command_palette = use_signal(|| false);
     
     // Load initial directory
@@ -395,7 +395,7 @@ fn App() -> Element {
     };
 
     // Handle menu actions
-    let handle_menu_action = move |action: MenuAction| {
+    let mut handle_menu_action = move |action: MenuAction| {
         match action {
             MenuAction::OpenFolder => {
                 // Open folder dialog
@@ -485,14 +485,43 @@ fn App() -> Element {
                 });
             },
             MenuAction::Save => {
-                // TODO: Implement save functionality
-                // For now, show a status message in console (not chat)
-                println!("Save functionality not yet implemented");
+                // Save current file if one is selected
+                if let Some(file_path) = selected_file.read().as_ref() {
+                    if file_path != "__welcome__" {
+                        let content = file_content.read().clone();
+                        let path = PathBuf::from(file_path);
+                        spawn(async move {
+                            match tokio::fs::write(&path, content).await {
+                                Ok(_) => println!("File saved: {}", path.display()),
+                                Err(e) => eprintln!("Error saving file: {}", e),
+                            }
+                        });
+                    }
+                }
             },
             MenuAction::SaveAs => {
-                // TODO: Implement save as functionality  
-                // For now, show a status message in console (not chat)
-                println!("Save As functionality not yet implemented");
+                // Save As dialog
+                spawn({
+                    let mut selected_file = selected_file.clone();
+                    let file_content = file_content.clone();
+                    
+                    async move {
+                        if let Some(file) = rfd::AsyncFileDialog::new()
+                            .set_file_name("untitled.txt")
+                            .save_file()
+                            .await
+                        {
+                            let content = file_content.read().clone();
+                            match tokio::fs::write(file.path(), content).await {
+                                Ok(_) => {
+                                    println!("File saved as: {}", file.path().display());
+                                    *selected_file.write() = Some(file.path().to_string_lossy().to_string());
+                                }
+                                Err(e) => eprintln!("Error saving file: {}", e),
+                            }
+                        }
+                    }
+                });
             },
             MenuAction::CloseFolder => {
                 // Clear the current folder
@@ -515,13 +544,101 @@ fn App() -> Element {
                 *selected_file.write() = Some("__welcome__".to_string());
             },
             MenuAction::Documentation => {
-                // TODO: Open documentation in browser
-                println!("Opening documentation...");
-                // In a real implementation, would use webbrowser crate to open docs
+                // Open documentation in browser
+                spawn(async {
+                    let url = "https://github.com/hivetechs/hive/wiki";
+                    match webbrowser::open(url) {
+                        Ok(_) => println!("Opening documentation: {}", url),
+                        Err(e) => eprintln!("Failed to open browser: {}", e),
+                    }
+                });
             },
             _ => {
                 // Other actions not yet implemented
                 println!("{:?} action not implemented yet", action);
+            }
+        }
+    };
+
+    // Handle welcome page actions
+    let handle_welcome_action = {
+        let mut selected_file = selected_file.clone();
+        let mut file_content = file_content.clone();
+        let mut show_welcome_dialog = show_welcome_dialog.clone();
+        let mut current_dir = current_dir.clone();
+        let mut file_tree = file_tree.clone();
+        let mut expanded_dirs = expanded_dirs.clone();
+        
+        move |action: WelcomeAction| {
+            match action {
+                WelcomeAction::OpenFolder => {
+                    // Open folder dialog
+                    spawn({
+                        let mut current_dir = current_dir.clone();
+                        let mut file_tree = file_tree.clone();
+                        let mut expanded_dirs = expanded_dirs.clone();
+                        let mut selected_file = selected_file.clone();
+                        let mut file_content = file_content.clone();
+                        
+                        async move {
+                            let current_path = current_dir.read().clone();
+                            if let Some(folder) = rfd::AsyncFileDialog::new()
+                                .set_directory(&current_path)
+                                .pick_folder()
+                                .await
+                            {
+                                // Update current directory
+                                *current_dir.write() = folder.path().to_path_buf();
+                                
+                                // Clear selected file and content
+                                *selected_file.write() = None;
+                                *file_content.write() = String::new();
+                                
+                                // Clear expanded dirs for new folder
+                                expanded_dirs.write().clear();
+                                
+                                // Load new directory tree
+                                let root_name = folder.path().file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("Root")
+                                    .to_string();
+                                
+                                match file_system::load_directory_tree(folder.path(), &HashMap::new(), false).await {
+                                    Ok(files) => {
+                                        // Create root folder item with children
+                                        let root_item = FileItem {
+                                            path: folder.path().to_path_buf(),
+                                            name: root_name,
+                                            is_directory: true,
+                                            is_expanded: true, // Root is expanded by default
+                                            children: files,
+                                            file_type: FileType::Directory,
+                                            git_status: None,
+                                            size: None,
+                                            modified: None,
+                                        };
+                                        
+                                        file_tree.write().clear();
+                                        file_tree.write().push(root_item);
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Error loading directory: {}", e);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                },
+                WelcomeAction::OpenRecent => {
+                    // TODO: Implement recent files
+                    println!("OpenRecent not yet implemented");
+                },
+                WelcomeAction::NewFile => {
+                    // Create new untitled file
+                    *selected_file.write() = Some("untitled.txt".to_string());
+                    *file_content.write() = String::new();
+                    *show_welcome_dialog.write() = false;
+                },
             }
         }
     };
@@ -623,6 +740,7 @@ fn App() -> Element {
                                 // Show welcome tab in editor area
                                 WelcomeTab {
                                     show_welcome: show_welcome_dialog.clone(),
+                                    on_action: handle_welcome_action,
                                 }
                             } else {
                                 // Show file content

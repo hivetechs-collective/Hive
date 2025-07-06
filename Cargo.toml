@@ -60,6 +60,9 @@ dioxus-sdk = "0.6"
 # Native file dialogs
 rfd = "0.15"
 
+# Browser opening
+webbrowser = "1.0"
+
 # TUI (Terminal User Interface) - Legacy support
 ratatui = "0.26"
 crossterm = "0.27"
@@ -161,6 +164,10 @@ path = "src/main.rs"
 [[bin]]
 name = "hive-consensus"
 path = "src/bin/hive-consensus.rs"
+
+[package.metadata.bundle]
+name = "Hive"
+identifier = "com.hivetechs.hive"
 
 [lib]
 name = "hive_ai"
