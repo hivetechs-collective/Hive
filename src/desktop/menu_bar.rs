@@ -11,6 +11,7 @@ pub enum MenuAction {
     CloseFolder,
     CommandPalette,
     ChangeTheme,
+    Settings,
     Welcome,
     Documentation,
     About,
@@ -201,6 +202,8 @@ pub fn MenuBar(on_action: EventHandler<MenuAction>) -> Element {
             MenuItem::submenu("Appearance", vec![
                 MenuItem::new("Theme", MenuAction::ChangeTheme, None),
             ]),
+            MenuItem::separator(),
+            MenuItem::new("Settings", MenuAction::Settings, Some("Cmd+,")),
         ]),
         ("Help", vec![
             MenuItem::new("Welcome", MenuAction::Welcome, None),

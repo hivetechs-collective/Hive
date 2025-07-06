@@ -307,7 +307,7 @@ struct Message {
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
-use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, WelcomeAction, DIALOG_STYLES};
+use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, SettingsDialog, OnboardingDialog, WelcomeAction, DIALOG_STYLES};
 use hive_ai::desktop::consensus_integration::{DesktopConsensusManager, use_consensus};
 use hive_ai::desktop::state::{AppState, ConsensusState};
 use std::path::PathBuf;
@@ -322,12 +322,12 @@ fn App() -> Element {
     let consensus_manager = use_consensus();
     
     // State management
-    let messages = use_signal(|| vec![
+    let mut messages = use_signal(|| vec![
         Message { text: "🐝 Welcome to Hive Consensus!".to_string(), is_user: false },
         Message { text: "This is the Rust-powered version with VS Code-style interface.".to_string(), is_user: false },
     ]);
     let mut input_value = use_signal(String::new);
-    let is_processing = use_signal(|| false);
+    let mut is_processing = use_signal(|| false);
     let mut selected_file = use_signal(|| Some("__welcome__".to_string()));
     let mut file_tree = use_signal(|| Vec::<FileItem>::new());
     let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
@@ -338,6 +338,27 @@ fn App() -> Element {
     let mut show_about_dialog = use_signal(|| false);
     let mut show_welcome_dialog = use_signal(|| true);
     let mut show_command_palette = use_signal(|| false);
+    let mut show_settings_dialog = use_signal(|| false);
+    let mut show_onboarding_dialog = use_signal(|| false);
+    
+    // API keys state
+    let mut openrouter_key = use_signal(String::new);
+    let mut hive_key = use_signal(String::new);
+    
+    // Check if we need to show onboarding
+    {
+        let consensus_manager = consensus_manager.clone();
+        let mut show_onboarding = show_onboarding_dialog.clone();
+        let mut show_welcome = show_welcome_dialog.clone();
+        
+        use_effect(move || {
+            if consensus_manager.is_none() {
+                // No consensus manager means no API key
+                *show_onboarding.write() = true;
+                *show_welcome.write() = false;
+            }
+        });
+    }
     
     // Load initial directory
     {
@@ -378,67 +399,6 @@ fn App() -> Element {
     }
     
     // File selection is handled directly in the onclick handler
-
-    // Send message handler - create as a function that takes all needed signals
-    let handle_send = std::sync::Arc::new({
-        let consensus_manager = consensus_manager.clone();
-        let app_state = app_state.clone();
-        
-        move |messages: &mut Signal<Vec<Message>>, input_value: &mut Signal<String>, is_processing: &mut Signal<bool>| {
-        if !input_value.read().is_empty() && !*is_processing.read() {
-            let user_msg = input_value.read().clone();
-            
-            // Add user message
-            messages.write().push(Message { text: user_msg.clone(), is_user: true });
-            
-            // Clear input
-            input_value.write().clear();
-            
-            // Start processing
-            *is_processing.write() = true;
-            
-            // Use consensus engine if available
-            if let Some(mut consensus) = consensus_manager.clone() {
-                let mut messages = messages.clone();
-                let mut is_processing = is_processing.clone();
-                let app_state = app_state.clone();
-                
-                spawn(async move {
-                    // Update UI to show consensus is running
-                    let mut app_state = app_state.clone();
-                    app_state.write().consensus.start_consensus();
-                    
-                    match consensus.process_query(&user_msg).await {
-                        Ok(response) => {
-                            messages.write().push(Message { 
-                                text: response, 
-                                is_user: false 
-                            });
-                        }
-                        Err(e) => {
-                            messages.write().push(Message { 
-                                text: format!("❌ Error: {}", e), 
-                                is_user: false 
-                            });
-                        }
-                    }
-                    
-                    // Update UI to show consensus is complete
-                    let mut app_state = app_state.clone();
-                    app_state.write().consensus.complete_consensus();
-                    *is_processing.write() = false;
-                });
-            } else {
-                // Fallback if consensus engine not initialized
-                messages.write().push(Message { 
-                    text: "⚠️ Consensus engine is initializing. Please check your OpenRouter API key in ~/.hive/config.toml".to_string(), 
-                    is_user: false 
-                });
-                *is_processing.write() = false;
-            }
-        }
-        }
-    });
 
     // Handle menu actions
     let mut handle_menu_action = move |action: MenuAction| {
@@ -584,6 +544,9 @@ fn App() -> Element {
                 // For now, just log to console
                 println!("Theme selector not yet implemented");
             },
+            MenuAction::Settings => {
+                *show_settings_dialog.write() = true;
+            },
             MenuAction::Welcome => {
                 *show_welcome_dialog.write() = true;
                 // Set the selected file to show welcome in editor
@@ -611,9 +574,9 @@ fn App() -> Element {
         let mut selected_file = selected_file.clone();
         let mut file_content = file_content.clone();
         let mut show_welcome_dialog = show_welcome_dialog.clone();
-        let mut current_dir = current_dir.clone();
-        let mut file_tree = file_tree.clone();
-        let mut expanded_dirs = expanded_dirs.clone();
+        let current_dir = current_dir.clone();
+        let file_tree = file_tree.clone();
+        let expanded_dirs = expanded_dirs.clone();
         
         move |action: WelcomeAction| {
             match action {
@@ -747,7 +710,12 @@ fn App() -> Element {
                     div { class: "sidebar-item", "🔍 Search" }
                     div { class: "sidebar-item", "📊 Analytics" }
                     div { class: "sidebar-item", "🧠 Memory" }
-                    div { class: "sidebar-item", "⚙️ Settings" }
+                    div { 
+                        class: "sidebar-item",
+                        onclick: move |_| *show_settings_dialog.write() = true,
+                        style: "cursor: pointer;",
+                        "⚙️ Settings" 
+                    }
                 }
                 
                 // Code editor area (center)
@@ -842,21 +810,127 @@ fn App() -> Element {
                             disabled: *is_processing.read(),
                             oninput: move |evt| *input_value.write() = evt.value().clone(),
                             onkeypress: {
-                                let handle_send = handle_send.clone();
+                                let consensus_manager = consensus_manager.clone();
                                 move |evt: dioxus::events::KeyboardEvent| {
-                                    if evt.code() == dioxus::events::Code::Enter {
-                                        handle_send(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone());
+                                if evt.code() == dioxus::events::Code::Enter && !input_value.read().is_empty() && !*is_processing.read() {
+                                    let user_msg = input_value.read().clone();
+                                    
+                                    // Add user message
+                                    messages.write().push(Message { text: user_msg.clone(), is_user: true });
+                                    
+                                    // Clear input
+                                    input_value.write().clear();
+                                    
+                                    // Start processing
+                                    *is_processing.write() = true;
+                                    
+                                    // Use consensus engine if available
+                                    if let Some(mut consensus) = consensus_manager.clone() {
+                                        let mut messages = messages.clone();
+                                        let mut is_processing = is_processing.clone();
+                                        let app_state = app_state.clone();
+                                        
+                                        spawn(async move {
+                                            // Update UI to show consensus is running
+                                            let mut app_state = app_state.clone();
+                                            app_state.write().consensus.start_consensus();
+                                            
+                                            match consensus.process_query(&user_msg).await {
+                                                Ok(response) => {
+                                                    messages.write().push(Message { 
+                                                        text: response, 
+                                                        is_user: false 
+                                                    });
+                                                }
+                                                Err(e) => {
+                                                    messages.write().push(Message { 
+                                                        text: format!("❌ Error: {}", e), 
+                                                        is_user: false 
+                                                    });
+                                                }
+                                            }
+                                            
+                                            // Update UI to show consensus is complete
+                                            let mut app_state = app_state.clone();
+                                            app_state.write().consensus.complete_consensus();
+                                            *is_processing.write() = false;
+                                        });
+                                    } else {
+                                        // Show onboarding if consensus engine not initialized
+                                        messages.write().push(Message { 
+                                            text: "⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.".to_string(), 
+                                            is_user: false 
+                                        });
+                                        *is_processing.write() = false;
+                                        
+                                        // Show onboarding dialog
+                                        *show_onboarding_dialog.write() = true;
                                     }
                                 }
-                            }
+                            }}
                         }
                         button {
                             class: "send-button",
                             disabled: input_value.read().is_empty() || *is_processing.read(),
                             onclick: {
-                                let handle_send = handle_send.clone();
-                                move |_| handle_send(&mut messages.clone(), &mut input_value.clone(), &mut is_processing.clone())
-                            },
+                                let consensus_manager = consensus_manager.clone();
+                                move |_| {
+                                if !input_value.read().is_empty() && !*is_processing.read() {
+                                    let user_msg = input_value.read().clone();
+                                    
+                                    // Add user message
+                                    messages.write().push(Message { text: user_msg.clone(), is_user: true });
+                                    
+                                    // Clear input
+                                    input_value.write().clear();
+                                    
+                                    // Start processing
+                                    *is_processing.write() = true;
+                                    
+                                    // Use consensus engine if available
+                                    if let Some(mut consensus) = consensus_manager.clone() {
+                                        let mut messages = messages.clone();
+                                        let mut is_processing = is_processing.clone();
+                                        let app_state = app_state.clone();
+                                        
+                                        spawn(async move {
+                                            // Update UI to show consensus is running
+                                            let mut app_state = app_state.clone();
+                                            app_state.write().consensus.start_consensus();
+                                            
+                                            match consensus.process_query(&user_msg).await {
+                                                Ok(response) => {
+                                                    messages.write().push(Message { 
+                                                        text: response, 
+                                                        is_user: false 
+                                                    });
+                                                }
+                                                Err(e) => {
+                                                    messages.write().push(Message { 
+                                                        text: format!("❌ Error: {}", e), 
+                                                        is_user: false 
+                                                    });
+                                                }
+                                            }
+                                            
+                                            // Update UI to show consensus is complete
+                                            let mut app_state = app_state.clone();
+                                            app_state.write().consensus.complete_consensus();
+                                            *is_processing.write() = false;
+                                        });
+                                    } else {
+                                        // Show onboarding if consensus engine not initialized
+                                        messages.write().push(Message { 
+                                            text: "⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.".to_string(), 
+                                            is_user: false 
+                                        });
+                                        *is_processing.write() = false;
+                                        
+                                        // Show onboarding dialog
+                                        *show_onboarding_dialog.write() = true;
+                                    }
+                                }
+                            }},
                             if *is_processing.read() { "Processing..." } else { "Send" }
                         }
                     }
@@ -896,6 +970,21 @@ fn App() -> Element {
         if *show_command_palette.read() {
             CommandPalette {
                 show_palette: show_command_palette.clone(),
+            }
+        }
+        
+        if *show_settings_dialog.read() {
+            SettingsDialog {
+                show_settings: show_settings_dialog.clone(),
+                openrouter_key: openrouter_key.clone(),
+                hive_key: hive_key.clone(),
+            }
+        }
+        
+        if *show_onboarding_dialog.read() {
+            OnboardingDialog {
+                show_onboarding: show_onboarding_dialog.clone(),
+                openrouter_key: openrouter_key.clone(),
             }
         }
     }
@@ -1000,7 +1089,7 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
             style: "padding: 10px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
             
             // Show all 4 stages
-            for (idx, stage) in consensus_state.stages.iter().enumerate() {
+            for (_idx, stage) in consensus_state.stages.iter().enumerate() {
                 div {
                     style: "margin: 5px 0;",
                     
