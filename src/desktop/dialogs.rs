@@ -527,12 +527,21 @@ pub fn OnboardingDialog(
     let mut temp_openrouter_key = use_signal(|| openrouter_key.read().clone());
     let mut temp_hive_key = use_signal(|| hive_key.read().clone());
     
+    // Track if keys already exist
+    let has_existing_openrouter = !openrouter_key.read().is_empty();
+    let has_existing_hive = !hive_key.read().is_empty();
+    
     // Profile configuration state
     let mut profile_mode = use_signal(|| "expert".to_string()); // expert, existing, custom
     let mut selected_template = use_signal(|| String::new());
     let mut profile_name = use_signal(|| String::new());
     let mut selected_profile_id = use_signal(|| None::<i64>);
     let mut existing_profiles = use_signal(|| Vec::<ProfileInfo>::new());
+    let mut is_creating_profile = use_signal(|| false);
+    let mut profile_error = use_signal(|| None::<String>);
+    let mut profiles_created = use_signal(|| Vec::<String>::new());
+    let mut show_profile_success = use_signal(|| false);
+    let mut continue_creating_profiles = use_signal(|| false);
     
     // License validation result
     let mut license_info = use_signal(|| None::<LicenseValidationResult>);
@@ -655,6 +664,14 @@ pub fn OnboardingDialog(
                                 "Enter your Hive license key to unlock all features and enable cloud sync." 
                             }
                             
+                            // Show existing key message if applicable
+                            if has_existing_hive {
+                                div {
+                                    style: "margin: 10px 0; padding: 10px; background: #2a3f2a; border: 1px solid #3a5f3a; border-radius: 4px; color: #90ee90;",
+                                    "✅ A Hive license key already exists. Enter a new key to update it or click Skip to keep the current one."
+                                }
+                            }
+                            
                             div {
                                 class: "settings-field",
                                 label { 
@@ -706,6 +723,14 @@ pub fn OnboardingDialog(
                             h3 { "🔗 Configure Your OpenRouter API Key" }
                             p { 
                                 "To use Hive Consensus, you'll need an OpenRouter API key. This gives you access to 323+ models from various providers." 
+                            }
+                            
+                            // Show existing key message if applicable
+                            if has_existing_openrouter {
+                                div {
+                                    style: "margin: 10px 0; padding: 10px; background: #2a3f2a; border: 1px solid #3a5f3a; border-radius: 4px; color: #90ee90;",
+                                    "✅ An OpenRouter API key already exists. Enter a new key to update it or leave empty to keep the current one."
+                                }
                             }
                             
                             div {
@@ -945,6 +970,81 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "teaching-assistant",
                                                 on_select: move |_| *selected_template.write() = "teaching-assistant".to_string(),
                                             }
+                                            
+                                            // Debugging Detective
+                                            ExpertTemplateOption {
+                                                id: "debugging-detective",
+                                                name: "🔍 Debugging Detective",
+                                                description: "Methodical consensus for debugging and troubleshooting",
+                                                use_cases: "Bug hunting, Error analysis, Performance issues",
+                                                is_selected: *selected_template.read() == "debugging-detective",
+                                                on_select: move |_| *selected_template.write() = "debugging-detective".to_string(),
+                                            }
+                                        }
+                                        
+                                        // Add All Expert Templates button
+                                        if profiles_created.read().is_empty() {
+                                            div {
+                                                style: "margin-top: 15px; padding: 15px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 6px;",
+                                                p {
+                                                    style: "margin: 0 0 10px 0; color: #cccccc; font-size: 13px;",
+                                                    "💡 Want to add all 10 expert templates at once?"
+                                                }
+                                                button {
+                                                    class: "dialog-button",
+                                                    style: "background: #2d7d2d; color: white; padding: 8px 16px;",
+                                                    disabled: *is_creating_profile.read(),
+                                                    onclick: move |_| {
+                                                        tracing::info!("Adding all expert templates");
+                                                        let mut is_creating_profile = is_creating_profile.clone();
+                                                        let mut profile_error = profile_error.clone();
+                                                        let mut profiles_created = profiles_created.clone();
+                                                        let mut show_profile_success = show_profile_success.clone();
+                                                        let mut existing_profiles = existing_profiles.clone();
+                                                        
+                                                        spawn(async move {
+                                                            *is_creating_profile.write() = true;
+                                                            *profile_error.write() = None;
+                                                            
+                                                            let templates = vec![
+                                                                ("lightning-fast", "Lightning Fast"),
+                                                                ("precision-architect", "Precision Architect"),
+                                                                ("budget-optimizer", "Budget Optimizer"),
+                                                                ("research-specialist", "Research Specialist"),
+                                                                ("debug-specialist", "Debug Specialist"),
+                                                                ("balanced-generalist", "Balanced Generalist"),
+                                                                ("enterprise-architect", "Enterprise Architect"),
+                                                                ("creative-innovator", "Creative Innovator"),
+                                                                ("teaching-assistant", "Teaching Assistant"),
+                                                                ("debugging-detective", "Debugging Detective")
+                                                            ];
+                                                            
+                                                            let mut created = Vec::new();
+                                                            for (template_id, name) in templates {
+                                                                match create_profile_from_template(template_id, name).await {
+                                                                    Ok(_) => {
+                                                                        created.push(name.to_string());
+                                                                        tracing::info!("Created profile: {}", name);
+                                                                    }
+                                                                    Err(e) => {
+                                                                        tracing::warn!("Failed to create profile {}: {}", name, e);
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            *profiles_created.write() = created;
+                                                            *show_profile_success.write() = true;
+                                                            *is_creating_profile.write() = false;
+                                                            
+                                                            // Reload profiles
+                                                            if let Ok(profiles) = load_existing_profiles().await {
+                                                                *existing_profiles.write() = profiles;
+                                                            }
+                                                        });
+                                                    },
+                                                    if *is_creating_profile.read() { "Creating profiles..." } else { "Add All Expert Templates" }
+                                                }
+                                            }
                                         }
                                         
                                         // Profile name input for template
@@ -965,6 +1065,57 @@ pub fn OnboardingDialog(
                                                 p {
                                                     style: "margin-top: 5px; font-size: 12px; color: #858585;",
                                                     "Give your profile a memorable name (e.g., 'My Production Config')"
+                                                }
+                                                
+                                                // Create profile button
+                                                button {
+                                                    class: "button button-primary",
+                                                    style: "margin-top: 15px; width: 100%;",
+                                                    disabled: *is_creating_profile.read() || profile_name.read().is_empty(),
+                                                    onclick: move |_| {
+                                                        let template_id = selected_template.read().clone();
+                                                        let profile_name_val = profile_name.read().clone();
+                                                        
+                                                        if !template_id.is_empty() && !profile_name_val.is_empty() {
+                                                            tracing::info!("Creating profile from template: {} as {}", template_id, profile_name_val);
+                                                            let name_for_spawn = profile_name_val.clone();
+                                                            let template_for_spawn = template_id.clone();
+                                                            let mut is_creating_profile = is_creating_profile.clone();
+                                                            let mut profile_error = profile_error.clone();
+                                                            let mut profiles_created = profiles_created.clone();
+                                                            let mut show_profile_success = show_profile_success.clone();
+                                                            let mut existing_profiles = existing_profiles.clone();
+                                                            let mut selected_profile = selected_profile.clone();
+                                                            
+                                                            spawn(async move {
+                                                                *is_creating_profile.write() = true;
+                                                                *profile_error.write() = None;
+                                                                
+                                                                match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
+                                                                    Ok(_) => {
+                                                                        tracing::info!("Profile created successfully: {}", name_for_spawn);
+                                                                        let mut created = profiles_created.read().clone();
+                                                                        created.push(name_for_spawn.clone());
+                                                                        *profiles_created.write() = created;
+                                                                        *show_profile_success.write() = true;
+                                                                        *selected_profile.write() = name_for_spawn;
+                                                                        
+                                                                        // Reload profiles
+                                                                        if let Ok(profiles) = load_existing_profiles().await {
+                                                                            *existing_profiles.write() = profiles;
+                                                                        }
+                                                                    }
+                                                                    Err(e) => {
+                                                                        tracing::error!("Failed to create profile: {}", e);
+                                                                        *profile_error.write() = Some(e.to_string());
+                                                                    }
+                                                                }
+                                                                
+                                                                *is_creating_profile.write() = false;
+                                                            });
+                                                        }
+                                                    },
+                                                    if *is_creating_profile.read() { "Creating Profile..." } else { "Create Profile" }
                                                 }
                                             }
                                         }
@@ -1099,10 +1250,37 @@ pub fn OnboardingDialog(
                         }
                     }
                     
-                    button {
-                        class: "button button-primary",
-                        disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) || *is_validating.read() { true } else { false },
-                        onclick: move |_| {
+                    // Show different buttons for profile creation step
+                    if *current_step.read() == 4 && *show_profile_success.read() {
+                        // After creating profiles, show options to create more or continue
+                        button {
+                            class: "button button-secondary",
+                            onclick: move |_| {
+                                // Reset for creating another profile
+                                *selected_template.write() = String::new();
+                                *profile_name.write() = String::new();
+                                *show_profile_success.write() = false;
+                                // Don't clear profiles_created - keep the list
+                            },
+                            "Create Another Profile"
+                        }
+                        button {
+                            class: "button button-primary",
+                            onclick: move |_| {
+                                // Move to completion
+                                *current_step.write() = 5;
+                            },
+                            "Continue to Finish"
+                        }
+                    } else {
+                        // Normal Next/Get Started button
+                        button {
+                            class: "button button-primary",
+                            disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) || 
+                                     (*current_step.read() == 4 && *profile_mode.read() == "expert" && selected_template.read().is_empty() && !*show_profile_success.read()) ||
+                                     (*current_step.read() == 4 && *profile_mode.read() == "expert" && !selected_template.read().is_empty() && profile_name.read().is_empty()) ||
+                                     *is_validating.read() || *is_creating_profile.read() { true } else { false },
+                            onclick: move |_| {
                             let step = *current_step.read();
                             tracing::info!("Button clicked at step: {}", step);
                             
@@ -1163,15 +1341,12 @@ pub fn OnboardingDialog(
                                     *is_validating.write() = false;
                                 });
                             } else if step == 4 {
-                                // Profile -> Complete
-                                tracing::info!("Step 4: Profile configuration - moving to completion");
+                                // Profile creation with continuous flow support
+                                tracing::info!("Step 4: Profile configuration");
                                 let mode = profile_mode.read().clone();
                                 let template_id = selected_template.read().clone();
                                 let profile_name_val = profile_name.read().clone();
                                 let existing_id = *selected_profile_id.read();
-                                
-                                // Handle profile creation/selection
-                                let mut has_error = false;
                                 
                                 if mode == "expert" && !template_id.is_empty() {
                                     // Create profile from template
@@ -1193,62 +1368,77 @@ pub fn OnboardingDialog(
                                     
                                     tracing::info!("Creating profile from template: {} as {}", template_id, name);
                                     let name_for_spawn = name.clone();
+                                    let template_for_spawn = template_id.clone();
+                                    let mut is_creating_profile = is_creating_profile.clone();
+                                    let mut profile_error = profile_error.clone();
+                                    let mut profiles_created = profiles_created.clone();
+                                    let mut show_profile_success = show_profile_success.clone();
+                                    let mut existing_profiles = existing_profiles.clone();
+                                    let mut selected_profile = selected_profile.clone();
+                                    
                                     spawn(async move {
-                                        if let Err(e) = create_profile_from_template(&template_id, &name_for_spawn).await {
-                                            tracing::error!("Failed to create profile: {}", e);
-                                        } else {
-                                            tracing::info!("Profile created successfully");
+                                        *is_creating_profile.write() = true;
+                                        *profile_error.write() = None;
+                                        
+                                        match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
+                                            Ok(_) => {
+                                                tracing::info!("Profile created successfully: {}", name_for_spawn);
+                                                let mut created = profiles_created.read().clone();
+                                                created.push(name_for_spawn.clone());
+                                                *profiles_created.write() = created;
+                                                *show_profile_success.write() = true;
+                                                *selected_profile.write() = name_for_spawn;
+                                                
+                                                // Reload profiles
+                                                if let Ok(profiles) = load_existing_profiles().await {
+                                                    *existing_profiles.write() = profiles;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("Failed to create profile: {}", e);
+                                                *profile_error.write() = Some(e.to_string());
+                                            }
                                         }
+                                        
+                                        *is_creating_profile.write() = false;
                                     });
                                     
-                                    *selected_profile.write() = name;
                                 } else if mode == "existing" && existing_id.is_some() {
                                     // Set existing profile as default
                                     if let Some(profile_id) = existing_id {
                                         tracing::info!("Setting existing profile {} as default", profile_id);
+                                        let mut selected_profile = selected_profile.clone();
+                                        let existing_profiles = existing_profiles.clone();
+                                        let mut show_profile_success = show_profile_success.clone();
+                                        
                                         spawn(async move {
                                             if let Err(e) = set_default_profile(profile_id).await {
                                                 tracing::error!("Failed to set default profile: {}", e);
                                             } else {
                                                 tracing::info!("Default profile set successfully");
+                                                // Find the profile name from existing profiles
+                                                if let Some(profile) = existing_profiles.read().iter().find(|p| p.id == profile_id) {
+                                                    *selected_profile.write() = profile.name.clone();
+                                                }
+                                                *show_profile_success.write() = true;
                                             }
                                         });
-                                        
-                                        // Find the profile name from existing profiles
-                                        if let Some(profile) = existing_profiles.read().iter().find(|p| p.id == profile_id) {
-                                            *selected_profile.write() = profile.name.clone();
-                                        }
                                     }
-                                } else {
-                                    // No profile selected - create default
-                                    tracing::info!("No profile selected - creating default Balanced Generalist");
-                                    *selected_profile.write() = "Balanced Generalist".to_string();
                                     
-                                    // Create the default profile
-                                    spawn(async move {
-                                        if let Err(e) = create_profile_from_template("balanced-generalist", "Balanced Generalist").await {
-                                            tracing::error!("Failed to create default profile: {}", e);
-                                        } else {
-                                            tracing::info!("Default profile created successfully");
-                                        }
-                                    });
+                                    // Move to step 5 after setting existing profile
+                                    *current_step.write() = 5;
+                                } else if !*show_profile_success.read() {
+                                    // No profile selected and no success yet - don't auto-advance
+                                    tracing::info!("No profile selected - waiting for user action");
                                 }
                                 
-                                if !has_error {
-                                    tracing::info!("Moving to step 5 (completion)");
-                                    *current_step.write() = 5;
-                                }
+                                // Note: We don't automatically move to step 5 anymore
+                                // User must click "Continue to Finish" after creating profiles
                             } else if step == 5 {
                                 // Complete -> Close dialog IMMEDIATELY
                                 tracing::info!("Step 5: Get Started clicked - closing onboarding dialog NOW");
                                 
-                                // Close the dialog immediately - no async delays
-                                *show_onboarding.write() = false;
-                                
-                                // Reset step for next time
-                                *current_step.write() = 1;
-                                
-                                // Mark onboarding as complete in the background (don't block UI)
+                                // Mark onboarding complete first
                                 spawn(async move {
                                     tracing::info!("Background: Marking onboarding as complete in database");
                                     if let Err(e) = mark_onboarding_complete().await {
@@ -1257,17 +1447,23 @@ pub fn OnboardingDialog(
                                         tracing::info!("Background: Onboarding marked as complete successfully");
                                     }
                                 });
+                                
+                                // Close the dialog (don't reset step here)
+                                *show_onboarding.write() = false;
                             } else {
                                 // This shouldn't happen, but log it
                                 tracing::warn!("Unexpected step in button handler: {}", step);
                             }
-                        },
-                        if *is_validating.read() { 
-                            "Validating..." 
-                        } else if *current_step.read() < 5 { 
-                            "Next" 
-                        } else { 
-                            "Get Started" 
+                            },
+                            if *is_validating.read() { 
+                                "Validating..." 
+                            } else if *is_creating_profile.read() { 
+                                "Creating Profile..." 
+                            } else if *current_step.read() < 5 { 
+                                "Next" 
+                            } else { 
+                                "Get Started" 
+                            }
                         }
                     }
                 }
