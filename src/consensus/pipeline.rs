@@ -5,7 +5,7 @@ use crate::consensus::stages::{ConsensusStage, CuratorStage, GeneratorStage, Ref
 use crate::consensus::streaming::{ConsoleCallbacks, ProgressTracker, StreamingCallbacks};
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::consensus::types::{
-    ConsensusConfig, ConsensusResult, Stage, StageAnalytics, StageResult,
+    ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
     TokenUsage,
 };
 #[cfg(test)]
@@ -26,6 +26,7 @@ use uuid::Uuid;
 /// The main consensus pipeline orchestrator
 pub struct ConsensusPipeline {
     config: ConsensusConfig,
+    profile: ConsensusProfile,
     temporal_provider: TemporalContextProvider,
     stages: Vec<Box<dyn ConsensusStage>>,
     callbacks: Arc<dyn StreamingCallbacks>,
@@ -40,7 +41,7 @@ pub struct ConsensusPipeline {
 
 impl ConsensusPipeline {
     /// Create a new consensus pipeline
-    pub fn new(config: ConsensusConfig, api_key: Option<String>) -> Self {
+    pub fn new(config: ConsensusConfig, profile: ConsensusProfile, api_key: Option<String>) -> Self {
         let callbacks: Arc<dyn StreamingCallbacks> = if config.show_progress {
             Arc::new(ConsoleCallbacks {
                 show_progress: true,
@@ -63,6 +64,7 @@ impl ConsensusPipeline {
 
         Self {
             config,
+            profile,
             temporal_provider: TemporalContextProvider::default(),
             stages: vec![
                 Box::new(GeneratorStage::new()),
@@ -166,7 +168,7 @@ impl ConsensusPipeline {
                         prioritize_quality: true,
                     }),
                     user_preferences: None,
-                    profile_template: Some(self.config.profile.profile_name.clone()),
+                    profile_template: Some(self.profile.profile_name.clone()),
                 };
 
                 // Select optimal model
@@ -174,15 +176,15 @@ impl ConsensusPipeline {
                     Ok(Some(candidate)) => candidate.openrouter_id,
                     Ok(None) => {
                         println!("⚠️ No optimal model found, using profile default");
-                        self.config.profile.get_model_for_stage(stage).to_string()
+                        self.profile.get_model_for_stage(stage).to_string()
                     }
                     Err(e) => {
                         println!("⚠️ Model selection failed: {}, using profile default", e);
-                        self.config.profile.get_model_for_stage(stage).to_string()
+                        self.profile.get_model_for_stage(stage).to_string()
                     }
                 }
             } else {
-                self.config.profile.get_model_for_stage(stage).to_string()
+                self.profile.get_model_for_stage(stage).to_string()
             };
 
             // Execute pre-stage hooks with enterprise integration
@@ -494,7 +496,7 @@ impl ConsensusPipeline {
             model: model.to_string(),
             messages: openrouter_messages,
             temperature: Some(0.7),
-            max_tokens: Some(2000),
+            max_tokens: Some(4000), // Matching TypeScript hardcoded value
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
@@ -649,7 +651,6 @@ mod tests {
         };
 
         let config = ConsensusConfig {
-            profile,
             enable_streaming: false,
             show_progress: false,
             timeout_seconds: 60,
@@ -657,7 +658,7 @@ mod tests {
             context_injection: crate::consensus::types::ContextInjectionStrategy::Smart,
         };
 
-        let pipeline = ConsensusPipeline::new(config, None);
+        let pipeline = ConsensusPipeline::new(config, profile, None);
         let result = pipeline
             .run("What is Rust?", None)
             .await

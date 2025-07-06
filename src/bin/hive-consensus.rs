@@ -314,6 +314,22 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 
 fn App() -> Element {
+    // Initialize database on first render
+    use_effect(move || {
+        spawn(async move {
+            use hive_ai::core::database::{initialize_database, DatabaseConfig};
+            
+            // Initialize database with proper config
+            let config = DatabaseConfig::default();
+            if let Err(e) = initialize_database(Some(config)).await {
+                // Only log if it's not "already initialized"
+                if !e.to_string().contains("already initialized") {
+                    eprintln!("Failed to initialize database: {}", e);
+                }
+            }
+        });
+    });
+    
     // Initialize app state
     let app_state = use_signal(|| AppState::default());
     use_context_provider(|| app_state.clone());

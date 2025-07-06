@@ -404,6 +404,8 @@ fn ProfileOption(name: &'static str, description: &'static str, models: &'static
 #[component]
 pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<String>) -> Element {
     let mut current_step = use_signal(|| 1);
+    let mut is_validating = use_signal(|| false);
+    let mut validation_error = use_signal(|| None::<String>);
     
     rsx! {
         div {
@@ -481,6 +483,14 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                     }
                                 }
                             }
+                            
+                            // Show validation error if any
+                            if let Some(error) = validation_error.read().as_ref() {
+                                div {
+                                    style: "margin-top: 10px; padding: 10px; background: #5a1e1e; border: 1px solid #8b3a3a; border-radius: 4px; color: #ff6b6b;",
+                                    "❌ {error}"
+                                }
+                            }
                         }
                     } else {
                         div {
@@ -530,7 +540,7 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                     
                     button {
                         class: "button button-primary",
-                        disabled: if *current_step.read() == 2 && openrouter_key.read().is_empty() { true } else { false },
+                        disabled: if (*current_step.read() == 2 && openrouter_key.read().is_empty()) || *is_validating.read() { true } else { false },
                         onclick: move |_| {
                             let step = *current_step.read();
                             if step < 3 {
@@ -541,9 +551,13 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 
                                 // If on step 2, validate the key
                                 if step == 2 {
+                                    *validation_error.write() = None;
+                                    *is_validating.write() = true;
+                                    
                                     let key = openrouter_key.read().clone();
                                     let mut current_step = current_step.clone();
-                                    let mut show_onboarding = show_onboarding.clone();
+                                    let mut is_validating = is_validating.clone();
+                                    let mut validation_error = validation_error.clone();
                                     
                                     spawn(async move {
                                         match save_api_keys(&key, "").await {
@@ -552,10 +566,11 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                                 *current_step.write() = 3;
                                             }
                                             Err(e) => {
-                                                // Show error in console for now
-                                                eprintln!("Failed to validate API key: {}", e);
+                                                // Show error
+                                                *validation_error.write() = Some(e.to_string());
                                             }
                                         }
+                                        *is_validating.write() = false;
                                     });
                                 } else {
                                     *current_step.write() = step + 1;
@@ -565,7 +580,7 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 *show_onboarding.write() = false;
                             }
                         },
-                        if *current_step.read() < 3 { "Next" } else { "Get Started" }
+                        if *is_validating.read() { "Validating..." } else if *current_step.read() < 3 { "Next" } else { "Get Started" }
                     }
                 }
             }

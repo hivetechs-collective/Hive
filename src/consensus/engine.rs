@@ -14,7 +14,8 @@ use crate::core::config;
 use crate::core::api_keys::ApiKeyManager;
 use crate::core::database_simple::Database;
 // use crate::core::Database; // TODO: Replace with actual database implementation
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
+use rusqlite::params;
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
@@ -54,26 +55,14 @@ impl ConsensusEngine {
             (None, None)
         };
         
-        // Try to load profile from database first
-        let profile = match Self::load_active_profile(&database).await {
-            Ok(profile) => profile,
-            Err(_) => {
-                // Fallback to config-based profile creation
-                match hive_config.consensus.profile.as_str() {
-                    "balanced" => Self::create_balanced_profile(),
-                    "speed" => Self::create_speed_profile(),
-                    "quality" => Self::create_quality_profile(),
-                    "cost" => Self::create_cost_profile(),
-                    _ => Self::create_balanced_profile(), // Default fallback
-                }
-            }
-        };
+        // Load default profile from database (matching TypeScript behavior)
+        let profile = Self::load_default_profile(&database).await
+            .context("No pipeline profile found. Please run: hive quickstart")?;
 
         let config = ConsensusConfig {
-            profile: profile.clone(),
             enable_streaming: hive_config.consensus.streaming.enabled,
             show_progress: true,
-            timeout_seconds: 120,
+            timeout_seconds: hive_config.consensus.timeout_seconds as u64,
             retry_policy: RetryPolicy::default(),
             context_injection: ContextInjectionStrategy::default(),
         };
@@ -98,7 +87,8 @@ impl ConsensusEngine {
     ) -> Result<ConsensusResult> {
         let config = self.config.read().await.clone();
         
-        let mut pipeline = ConsensusPipeline::new(config, self.openrouter_api_key.clone());
+        let profile = self.current_profile.read().await.clone();
+        let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone());
         
         // Set database if available
         if let Some(ref db) = self.database {
@@ -120,7 +110,8 @@ impl ConsensusEngine {
     ) -> Result<ConsensusResult> {
         let config = self.config.read().await.clone();
         
-        let mut pipeline = ConsensusPipeline::new(config, self.openrouter_api_key.clone())
+        let profile = self.current_profile.read().await.clone();
+        let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone())
             .with_callbacks(callbacks);
         
         // Set database if available
@@ -221,14 +212,10 @@ impl ConsensusEngine {
                     .collect();
                 Ok(profiles)
             }
-            Err(_) => {
-                // Fallback to hardcoded profiles
-                Ok(vec![
-                    Self::create_balanced_profile(),
-                    Self::create_speed_profile(),
-                    Self::create_quality_profile(),
-                    Self::create_cost_profile(),
-                ])
+            Err(e) => {
+                // No fallback - profiles must exist in database
+                tracing::error!("Failed to load profiles from database: {}", e);
+                Ok(vec![])
             }
         }
     }
@@ -238,15 +225,9 @@ impl ConsensusEngine {
         // Try to load from database first
         let profile = match Self::load_profile_by_name(profile_name).await {
             Ok(profile) => profile,
-            Err(_) => {
-                // Fallback to creating profile
-                match profile_name {
-                    "balanced" | "Consensus_Balanced" => Self::create_balanced_profile(),
-                    "speed" | "Consensus_Speed" => Self::create_speed_profile(),
-                    "quality" | "Consensus_Elite" => Self::create_quality_profile(),
-                    "cost" | "Consensus_Cost" => Self::create_cost_profile(),
-                    _ => anyhow::bail!("Unknown profile: {}", profile_name),
-                }
+            Err(e) => {
+                // No fallback - profile must exist in database
+                anyhow::bail!("Profile '{}' not found in database: {}. Run 'hive quickstart' to create default profiles.", profile_name, e)
             }
         };
 
@@ -259,8 +240,7 @@ impl ConsensusEngine {
             )?;
         }
 
-        *self.current_profile.write().await = profile.clone();
-        self.config.write().await.profile = profile;
+        *self.current_profile.write().await = profile;
 
         Ok(())
     }
@@ -359,85 +339,86 @@ impl ConsensusEngine {
         templates.iter().map(|t| t.id.clone()).collect()
     }
 
-    /// Load active profile from database
-    async fn load_active_profile(database: &Option<Arc<Database>>) -> Result<ConsensusProfile> {
-        if let Some(db) = database {
-            // Get database connection
-            let conn = db.get_connection().await?;
-            
-            // Get active profile name from settings
-            let active_profile_name: Result<String, rusqlite::Error> = conn.query_row(
-                "SELECT value FROM consensus_settings WHERE key = 'active_profile'",
-                [],
-                |row| row.get(0),
-            );
-            
-            if let Ok(profile_name) = active_profile_name {
-                // Try to load the profile from database
-                // For now, return error to fallback to default profile
-                anyhow::bail!("Database profile loading not yet implemented");
-            }
-        }
+    /// Load default pipeline profile from database (matching TypeScript getDefaultPipelineProfile)
+    async fn load_default_profile(database: &Option<Arc<Database>>) -> Result<ConsensusProfile> {
+        let db = database.as_ref()
+            .ok_or_else(|| anyhow!("Database not available"))?;
         
-        // No database or profile found, return error to use fallback
-        anyhow::bail!("No active profile found")
+        let conn = db.get_connection().await?;
+        
+        // Query for default profile matching TypeScript logic
+        let row = conn.query_row(
+            "SELECT 
+                pp.id,
+                pp.name,
+                gen.openrouter_id as generator_model,
+                ref.openrouter_id as refiner_model,
+                val.openrouter_id as validator_model,
+                cur.openrouter_id as curator_model
+            FROM pipeline_profiles pp
+            JOIN openrouter_models gen ON pp.generator_model_internal_id = gen.internal_id
+            JOIN openrouter_models ref ON pp.refiner_model_internal_id = ref.internal_id
+            JOIN openrouter_models val ON pp.validator_model_internal_id = val.internal_id
+            JOIN openrouter_models cur ON pp.curator_model_internal_id = cur.internal_id
+            WHERE pp.is_default = 1
+            LIMIT 1",
+            [],
+            |row| {
+                Ok(ConsensusProfile {
+                    id: row.get(0)?,
+                    profile_name: row.get(1)?,
+                    generator_model: row.get(2)?,
+                    refiner_model: row.get(3)?,
+                    validator_model: row.get(4)?,
+                    curator_model: row.get(5)?,
+                    created_at: Utc::now(),
+                    is_active: true,
+                })
+            },
+        )?;
+        
+        Ok(row)
     }
 
-    /// Create balanced profile (default)
-    fn create_balanced_profile() -> ConsensusProfile {
-        ConsensusProfile {
-            id: "balanced".to_string(),
-            profile_name: "Consensus_Balanced".to_string(),
-            generator_model: "anthropic/claude-3-5-sonnet".to_string(),
-            refiner_model: "openai/gpt-4-turbo".to_string(),
-            validator_model: "anthropic/claude-3-opus".to_string(),
-            curator_model: "openai/gpt-4o".to_string(),
-            created_at: Utc::now(),
-            is_active: true,
-        }
-    }
-
-
-    /// Create speed-optimized profile
-    fn create_speed_profile() -> ConsensusProfile {
-        ConsensusProfile {
-            id: "speed".to_string(),
-            profile_name: "Consensus_Speed".to_string(),
-            generator_model: "anthropic/claude-3-haiku".to_string(),
-            refiner_model: "openai/gpt-3.5-turbo".to_string(),
-            validator_model: "anthropic/claude-3-haiku".to_string(),
-            curator_model: "openai/gpt-3.5-turbo".to_string(),
-            created_at: Utc::now(),
-            is_active: false,
-        }
-    }
-
-    /// Create quality-optimized profile
-    fn create_quality_profile() -> ConsensusProfile {
-        ConsensusProfile {
-            id: "quality".to_string(),
-            profile_name: "Consensus_Elite".to_string(),
-            generator_model: "anthropic/claude-3-opus".to_string(),
-            refiner_model: "openai/gpt-4o".to_string(),
-            validator_model: "anthropic/claude-3-opus".to_string(),
-            curator_model: "openai/gpt-4o".to_string(),
-            created_at: Utc::now(),
-            is_active: false,
-        }
-    }
-
-    /// Create cost-optimized profile
-    fn create_cost_profile() -> ConsensusProfile {
-        ConsensusProfile {
-            id: "cost".to_string(),
-            profile_name: "Consensus_Cost".to_string(),
-            generator_model: "meta-llama/llama-3.2-3b-instruct".to_string(),
-            refiner_model: "mistralai/mistral-7b-instruct".to_string(),
-            validator_model: "meta-llama/llama-3.2-3b-instruct".to_string(),
-            curator_model: "mistralai/mistral-7b-instruct".to_string(),
-            created_at: Utc::now(),
-            is_active: false,
-        }
+    /// Load specific pipeline profile by name or ID (matching TypeScript getPipelineProfile)
+    async fn load_profile_by_name_or_id(database: &Option<Arc<Database>>, profile_name_or_id: &str) -> Result<ConsensusProfile> {
+        let db = database.as_ref()
+            .ok_or_else(|| anyhow!("Database not available"))?;
+        
+        let conn = db.get_connection().await?;
+        
+        // Query for specific profile by name or ID
+        let row = conn.query_row(
+            "SELECT 
+                pp.id,
+                pp.name,
+                gen.openrouter_id as generator_model,
+                ref.openrouter_id as refiner_model,
+                val.openrouter_id as validator_model,
+                cur.openrouter_id as curator_model
+            FROM pipeline_profiles pp
+            JOIN openrouter_models gen ON pp.generator_model_internal_id = gen.internal_id
+            JOIN openrouter_models ref ON pp.refiner_model_internal_id = ref.internal_id
+            JOIN openrouter_models val ON pp.validator_model_internal_id = val.internal_id
+            JOIN openrouter_models cur ON pp.curator_model_internal_id = cur.internal_id
+            WHERE pp.id = ?1 OR pp.name = ?1
+            LIMIT 1",
+            params![profile_name_or_id],
+            |row| {
+                Ok(ConsensusProfile {
+                    id: row.get(0)?,
+                    profile_name: row.get(1)?,
+                    generator_model: row.get(2)?,
+                    refiner_model: row.get(3)?,
+                    validator_model: row.get(4)?,
+                    curator_model: row.get(5)?,
+                    created_at: Utc::now(),
+                    is_active: true,
+                })
+            },
+        )?;
+        
+        Ok(row)
     }
 
     /// Validate consensus prerequisites
