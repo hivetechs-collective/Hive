@@ -347,6 +347,26 @@ fn App() -> Element {
     
     // Check if we need to show onboarding
     {
+        let mut show_onboarding_dialog = show_onboarding_dialog.clone();
+        let mut openrouter_key = openrouter_key.clone();
+        spawn(async move {
+            use hive_ai::core::api_keys::ApiKeyManager;
+            
+            // Check if API keys are configured
+            if !ApiKeyManager::has_valid_keys().await.unwrap_or(false) {
+                *show_onboarding_dialog.write() = true;
+            } else {
+                // Load existing key for settings
+                if let Ok(config) = ApiKeyManager::load_from_database().await {
+                    if let Some(key) = config.openrouter_key {
+                        *openrouter_key.write() = key;
+                    }
+                }
+            }
+        });
+    }
+    
+    {
         let consensus_manager = consensus_manager.clone();
         let mut show_onboarding = show_onboarding_dialog.clone();
         let mut show_welcome = show_welcome_dialog.clone();

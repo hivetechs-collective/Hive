@@ -8,6 +8,7 @@ use crate::consensus::{
     streaming::{StreamingCallbacks, ProgressInfo},
     types::Stage,
 };
+use crate::core::api_keys::ApiKeyManager;
 use crate::desktop::state::{AppState, ConsensusStage, StageStatus};
 use anyhow::Result;
 use dioxus::prelude::*;
@@ -199,6 +200,13 @@ pub struct DesktopConsensusManager {
 impl DesktopConsensusManager {
     /// Create a new desktop consensus manager
     pub async fn new(app_state: Signal<AppState>) -> Result<Self> {
+        // Check if we have valid API keys first
+        if !ApiKeyManager::has_valid_keys().await? {
+            return Err(anyhow::anyhow!(
+                "No valid OpenRouter API key configured. Please configure in Settings."
+            ));
+        }
+        
         let engine = ConsensusEngine::new(None).await?;
         
         Ok(Self {
