@@ -14,6 +14,8 @@ pub mod terminal;
 pub mod layout;
 pub mod keybindings;
 pub mod consensus;
+pub mod menu_bar;
+pub mod dialogs;
 
 use anyhow::Result;
 use crossterm::event::{KeyEvent, KeyCode, KeyModifiers};
@@ -25,6 +27,8 @@ use ratatui::{
 use crate::tui::themes::Theme;
 use crate::tui::accessibility::AccessibilityManager;
 use crate::core::temporal::TemporalContext;
+use self::menu_bar::{MenuBar, MenuResult, MenuAction};
+use self::dialogs::{DialogManager, DialogType, DialogResult};
 
 /// Advanced TUI application state
 pub struct AdvancedTuiApp {
@@ -44,6 +48,10 @@ pub struct AdvancedTuiApp {
     pub temporal: TemporalContext,
     /// Layout manager
     layout: layout::LayoutManager,
+    /// Menu bar
+    menu_bar: MenuBar,
+    /// Dialog manager
+    dialog_manager: DialogManager,
     /// Should quit application
     should_quit: bool,
     /// Command palette state
@@ -77,6 +85,8 @@ impl AdvancedTuiApp {
             accessibility,
             temporal,
             layout: layout::LayoutManager::new(),
+            menu_bar: MenuBar::new(),
+            dialog_manager: DialogManager::new(),
             should_quit: false,
             command_palette_open: false,
             quick_search_open: false,
@@ -93,7 +103,7 @@ impl AdvancedTuiApp {
         // Create main layout
         let chunks = self.layout.calculate_layout(size, &self.theme);
         
-        // Render title bar
+        // Render title bar with menu
         self.render_title_bar(frame, chunks.title_bar);
         
         // Render main content area
@@ -102,13 +112,53 @@ impl AdvancedTuiApp {
         // Render status bar
         self.render_status_bar(frame, chunks.status_bar);
         
-        // Render overlays (command palette, quick search)
+        // Render overlays (command palette, quick search, dialogs)
         self.render_overlays(frame, size);
     }
 
     /// Handle key events with VS Code-like keybindings
     pub async fn handle_key_event(&mut self, key: KeyEvent) -> Result<bool> {
-        // Handle global keybindings first
+        // Handle dialog input first
+        if self.dialog_manager.is_active() {
+            match self.dialog_manager.handle_key_event(key) {
+                DialogResult::Closed => return Ok(false),
+                DialogResult::FileSelected(path) => {
+                    // Open file in editor
+                    self.editor.open_file(path).await?;
+                    self.active_panel = PanelType::Editor;
+                    return Ok(false);
+                }
+                DialogResult::FolderSelected(path) => {
+                    // Update explorer to show folder
+                    self.explorer.set_root(path).await?;
+                    return Ok(false);
+                }
+                DialogResult::ThemeSelected(theme_name) => {
+                    // Apply theme
+                    self.apply_theme(&theme_name);
+                    return Ok(false);
+                }
+                DialogResult::Continue => return Ok(false),
+            }
+        }
+        
+        // Handle menu bar input
+        if self.menu_bar.is_active() {
+            match self.menu_bar.handle_key_event(key) {
+                MenuResult::Action(action) => {
+                    self.handle_menu_action(action).await?;
+                    return Ok(self.should_quit);
+                }
+                MenuResult::Close => {
+                    // Return focus to current panel
+                    return Ok(false);
+                }
+                MenuResult::Continue => return Ok(false),
+                MenuResult::None => {}
+            }
+        }
+        
+        // Handle global keybindings
         if self.handle_global_keybindings(key).await? {
             return Ok(self.should_quit);
         }
@@ -136,6 +186,92 @@ impl AdvancedTuiApp {
         };
         
         Ok(self.should_quit)
+    }
+
+    /// Handle menu actions
+    async fn handle_menu_action(&mut self, action: MenuAction) -> Result<()> {
+        match action {
+            // File menu actions
+            MenuAction::OpenFile => {
+                self.dialog_manager.show_dialog(DialogType::FilePicker)?;
+            }
+            MenuAction::OpenFolder => {
+                // TODO: Implement folder picker
+                self.dialog_manager.show_dialog(DialogType::FilePicker)?;
+            }
+            MenuAction::OpenRecent => {
+                // TODO: Implement recent files
+            }
+            MenuAction::Save => {
+                if let Some(path) = self.editor.current_file() {
+                    self.editor.save_file().await?;
+                }
+            }
+            MenuAction::SaveAs => {
+                self.dialog_manager.show_dialog(DialogType::SaveAs)?;
+            }
+            MenuAction::CloseFolder => {
+                self.explorer.clear_root().await?;
+                self.editor.close_all_files();
+            }
+            MenuAction::Exit => {
+                self.should_quit = true;
+            }
+            
+            // View menu actions
+            MenuAction::CommandPalette => {
+                self.command_palette_open = true;
+            }
+            MenuAction::ThemeSelector => {
+                self.dialog_manager.show_dialog(DialogType::ThemeSelector)?;
+            }
+            MenuAction::ToggleTerminal => {
+                self.layout.toggle_terminal();
+            }
+            MenuAction::ToggleExplorer => {
+                // TODO: Implement explorer toggle
+            }
+            MenuAction::ToggleConsensus => {
+                self.layout.toggle_consensus();
+            }
+            
+            // Help menu actions
+            MenuAction::ShowWelcome => {
+                self.dialog_manager.show_dialog(DialogType::Welcome)?;
+            }
+            MenuAction::ShowDocumentation => {
+                // TODO: Open documentation in browser or help panel
+            }
+            MenuAction::ShowAbout => {
+                self.dialog_manager.show_dialog(DialogType::About)?;
+            }
+            
+            MenuAction::Separator => {}
+        }
+        Ok(())
+    }
+    
+    /// Apply theme by name
+    fn apply_theme(&mut self, theme_name: &str) {
+        // TODO: Implement theme switching
+        // For now, just update the theme name
+        match theme_name {
+            "Light" => {
+                // self.theme = Theme::light();
+            }
+            "High Contrast" => {
+                // self.theme = Theme::high_contrast();
+            }
+            "Solarized Dark" => {
+                // self.theme = Theme::solarized_dark();
+            }
+            "Solarized Light" => {
+                // self.theme = Theme::solarized_light();
+            }
+            _ => {
+                // Default dark theme
+            }
+        }
     }
 
     /// Handle global VS Code-like keybindings
@@ -183,6 +319,13 @@ impl AdvancedTuiApp {
                 self.cycle_active_panel();
                 Ok(true)
             }
+            // Alt key - Focus menu bar
+            (KeyModifiers::ALT, KeyCode::Char(_)) => {
+                self.menu_bar.focus();
+                // Let menu bar handle the specific Alt+key combination
+                self.menu_bar.handle_key_event(key);
+                Ok(true)
+            }
             _ => Ok(false)
         }
     }
@@ -227,12 +370,25 @@ impl AdvancedTuiApp {
         };
     }
 
-    /// Render title bar with branding and current time
-    fn render_title_bar(&self, frame: &mut Frame, area: Rect) {
+    /// Render title bar with menu bar
+    fn render_title_bar(&mut self, frame: &mut Frame, area: Rect) {
         use ratatui::widgets::{Block, Borders, Paragraph};
         use ratatui::style::{Style, Modifier};
         use ratatui::text::{Span, Line};
         
+        // Split title bar into menu area and title area
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1),  // Menu bar
+                Constraint::Length(1),  // Title
+            ])
+            .split(area);
+        
+        // Render menu bar
+        self.menu_bar.render(frame, chunks[0], &self.theme);
+        
+        // Render title
         let title = format!(
             "🐝 HiveTechs Consensus | {} | {}",
             self.temporal.current_time_formatted(),
@@ -242,10 +398,10 @@ impl AdvancedTuiApp {
         let title_widget = Paragraph::new(Line::from(vec![
             Span::styled(title, Style::default().add_modifier(Modifier::BOLD))
         ]))
-        .block(Block::default().borders(Borders::BOTTOM))
-        .style(self.theme.title_bar_style());
+        .style(self.theme.title_bar_style())
+        .alignment(ratatui::layout::Alignment::Center);
         
-        frame.render_widget(title_widget, area);
+        frame.render_widget(title_widget, chunks[1]);
     }
 
     /// Render main content area with panels
@@ -292,8 +448,12 @@ impl AdvancedTuiApp {
         frame.render_widget(status_widget, area);
     }
 
-    /// Render overlays (command palette, quick search)
-    fn render_overlays(&self, frame: &mut Frame, area: Rect) {
+    /// Render overlays (command palette, quick search, dialogs)
+    fn render_overlays(&mut self, frame: &mut Frame, area: Rect) {
+        // Render dialogs first (they should be on top)
+        self.dialog_manager.render(frame, area, &self.theme);
+        
+        // Then render command palette and quick search
         if self.command_palette_open {
             self.render_command_palette(frame, area);
         }

@@ -325,6 +325,23 @@ impl ExplorerPanel {
     pub fn filter(&self) -> &str {
         &self.filter
     }
+    
+    /// Set root directory
+    pub async fn set_root(&mut self, path: PathBuf) -> Result<()> {
+        self.current_dir = path;
+        self.refresh_entries().await?;
+        self.list_state.select(Some(0));
+        Ok(())
+    }
+    
+    /// Clear root directory (close folder)
+    pub async fn clear_root(&mut self) -> Result<()> {
+        self.current_dir = std::env::current_dir()?;
+        self.entries.clear();
+        self.expanded_dirs.clear();
+        self.refresh_entries().await?;
+        Ok(())
+    }
 }
 
 /// Create list item for explorer entry
