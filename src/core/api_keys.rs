@@ -96,8 +96,8 @@ impl ApiKeyManager {
             // Validate before saving
             Self::validate_format(key)?;
             
-            // Save to config.toml first for immediate availability
-            crate::core::config::set_config_value("openrouter.api_key", key).await?;
+            // Don't save to config.toml - following TypeScript pattern of database-only storage
+            // API keys should only be in the database for security
             
             // Try to save to database as well
             if let Ok(db) = get_database().await {
