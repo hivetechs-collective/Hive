@@ -63,6 +63,9 @@ rfd = "0.15"
 # Browser opening
 webbrowser = "1.0"
 
+# System information
+hostname = "0.3"
+
 # TUI (Terminal User Interface) - Legacy support
 ratatui = "0.26"
 crossterm = "0.27"

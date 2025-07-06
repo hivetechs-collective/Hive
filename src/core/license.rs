@@ -48,8 +48,12 @@ pub struct LicenseValidationResponse {
     pub daily_limit: u32,
     pub features: Vec<String>,
     pub user_id: String,
+    pub email: Option<String>,
     pub expires_at: Option<String>,
     pub message: Option<String>,
+    pub subscription_status: Option<String>,
+    pub max_devices: Option<u32>,
+    pub active_devices: Option<u32>,
 }
 
 /// Local license information
@@ -85,6 +89,21 @@ impl LicenseManager {
         }
     }
 
+    /// Get device fingerprint for license validation
+    fn get_device_fingerprint(&self) -> String {
+        // Combine hostname and username for basic device identification
+        let hostname = hostname::get()
+            .ok()
+            .and_then(|h| h.to_str().map(|s| s.to_string()))
+            .unwrap_or_else(|| "unknown".to_string());
+        
+        let username = std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .unwrap_or_else(|_| "unknown".to_string());
+        
+        format!("{}-{}", hostname, username)
+    }
+
     /// Validate license key with HiveTechs servers
     pub async fn validate_license(&self, license_key: &str) -> Result<LicenseValidationResponse> {
         // Validate license key format first
@@ -94,15 +113,19 @@ impl LicenseManager {
             });
         }
 
-        // Make request to HiveTechs validation endpoint
-        let url = "https://api.hivetechs.com/v1/license/validate";
+        // Make request to HiveTechs validation endpoint (Cloudflare D1 gateway)
+        let url = std::env::var("HIVE_API_ENDPOINT")
+            .unwrap_or_else(|_| "https://gateway.hivetechs.io".to_string());
+        let validation_url = format!("{}/v1/session/validate", url);
         
         let response = self.client
-            .post(url)
+            .post(&validation_url)
+            .header("Authorization", format!("Bearer {}", license_key))
             .json(&serde_json::json!({
                 "license_key": license_key,
                 "product": "hive-ai",
-                "version": "2.0.0"
+                "version": "2.0.0",
+                "device_fingerprint": self.get_device_fingerprint()
             }))
             .send()
             .await
