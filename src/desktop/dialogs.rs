@@ -211,6 +211,9 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
 /// Settings Dialog Component
 #[component]
 pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String>, hive_key: Signal<String>) -> Element {
+    let mut is_validating = use_signal(|| false);
+    let mut validation_error = use_signal(|| None::<String>);
+    
     rsx! {
         div {
             class: "dialog-overlay",
@@ -292,6 +295,14 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 "Used for syncing conversations and advanced features" 
                             }
                         }
+                        
+                        // Show validation error if any
+                        if let Some(error) = validation_error.read().as_ref() {
+                            div {
+                                style: "margin-top: 10px; padding: 10px; background: #5a1e1e; border: 1px solid #8b3a3a; border-radius: 4px; color: #ff6b6b;",
+                                "❌ {error}"
+                            }
+                        }
                     }
                     
                     // Consensus Profile Section
@@ -342,20 +353,34 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                     }
                     button {
                         class: "button button-primary",
+                        disabled: *is_validating.read(),
                         onclick: move |_| {
-                            // Save settings to config
+                            // Clear previous error
+                            *validation_error.write() = None;
+                            *is_validating.write() = true;
+                            
+                            // Save settings with validation
                             let openrouter = openrouter_key.read().clone();
                             let hive = hive_key.read().clone();
+                            let mut is_validating = is_validating.clone();
+                            let mut validation_error = validation_error.clone();
+                            let mut show_settings = show_settings.clone();
                             
                             spawn(async move {
-                                if let Err(e) = save_api_keys(&openrouter, &hive).await {
-                                    eprintln!("Failed to save API keys: {}", e);
+                                match save_api_keys(&openrouter, &hive).await {
+                                    Ok(_) => {
+                                        // Success - close dialog
+                                        *show_settings.write() = false;
+                                    }
+                                    Err(e) => {
+                                        // Show error
+                                        *validation_error.write() = Some(e.to_string());
+                                    }
                                 }
+                                *is_validating.write() = false;
                             });
-                            
-                            *show_settings.write() = false;
                         },
-                        "Save Settings"
+                        if *is_validating.read() { "Validating..." } else { "Save Settings" }
                     }
                 }
             }
@@ -505,18 +530,38 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                     
                     button {
                         class: "button button-primary",
+                        disabled: if *current_step.read() == 2 && openrouter_key.read().is_empty() { true } else { false },
                         onclick: move |_| {
                             let step = *current_step.read();
                             if step < 3 {
-                                *current_step.write() = step + 1;
+                                // Don't allow moving past step 2 without a key
+                                if step == 2 && openrouter_key.read().is_empty() {
+                                    return;
+                                }
+                                
+                                // If on step 2, validate the key
+                                if step == 2 {
+                                    let key = openrouter_key.read().clone();
+                                    let mut current_step = current_step.clone();
+                                    let mut show_onboarding = show_onboarding.clone();
+                                    
+                                    spawn(async move {
+                                        match save_api_keys(&key, "").await {
+                                            Ok(_) => {
+                                                // Move to success step
+                                                *current_step.write() = 3;
+                                            }
+                                            Err(e) => {
+                                                // Show error in console for now
+                                                eprintln!("Failed to validate API key: {}", e);
+                                            }
+                                        }
+                                    });
+                                } else {
+                                    *current_step.write() = step + 1;
+                                }
                             } else {
-                                // Save API key and close
-                                let key = openrouter_key.read().clone();
-                                spawn(async move {
-                                    if let Err(e) = save_api_keys(&key, "").await {
-                                        eprintln!("Failed to save API key: {}", e);
-                                    }
-                                });
+                                // Close on final step
                                 *show_onboarding.write() = false;
                             }
                         },
@@ -528,80 +573,30 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
     }
 }
 
-/// Save API keys to config file
+/// Save API keys with validation and database storage
 async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<()> {
-    use std::path::PathBuf;
-    use tokio::fs;
+    use crate::core::api_keys::ApiKeyManager;
     
-    let config_dir = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
-        .join(".hive");
-    
-    // Create directory if it doesn't exist
-    fs::create_dir_all(&config_dir).await?;
-    
-    let config_path = config_dir.join("config.toml");
-    
-    // Read existing config or create new one
-    let mut config_content = if config_path.exists() {
-        fs::read_to_string(&config_path).await.unwrap_or_default()
-    } else {
-        String::new()
-    };
-    
-    // Update or add OpenRouter section
-    if config_content.contains("[openrouter]") {
-        // Update existing key
-        let lines: Vec<String> = config_content.lines().map(|s| s.to_string()).collect();
-        let mut new_lines = Vec::new();
-        let mut in_openrouter = false;
-        let mut key_updated = false;
+    // Validate OpenRouter key format first
+    if !openrouter_key.is_empty() {
+        ApiKeyManager::validate_format(openrouter_key)?;
         
-        for line in lines {
-            if line.trim() == "[openrouter]" {
-                in_openrouter = true;
-                new_lines.push(line);
-            } else if in_openrouter && line.trim().starts_with("api_key") {
-                new_lines.push(format!("api_key = \"{}\"", openrouter_key));
-                key_updated = true;
-                in_openrouter = false;
-            } else if line.trim().starts_with('[') {
-                if in_openrouter && !key_updated {
-                    // Add the key before the next section
-                    new_lines.push(format!("api_key = \"{}\"", openrouter_key));
-                }
-                in_openrouter = false;
-                new_lines.push(line);
-            } else {
-                new_lines.push(line);
+        // Test with live API call
+        match ApiKeyManager::test_openrouter_key(openrouter_key).await {
+            Ok(true) => {
+                // Key is valid, save to database
+                ApiKeyManager::save_to_database(Some(openrouter_key), Some(hive_key)).await?;
+            }
+            Ok(false) => {
+                return Err(anyhow::anyhow!("API key validation failed"));
+            }
+            Err(e) => {
+                return Err(anyhow::anyhow!("Failed to validate API key: {}", e));
             }
         }
-        
-        // If we're still in openrouter section at the end and haven't added key
-        if in_openrouter && !key_updated {
-            new_lines.push(format!("api_key = \"{}\"", openrouter_key));
-        }
-        
-        config_content = new_lines.join("\n");
     } else {
-        // Add new OpenRouter section
-        if !config_content.is_empty() && !config_content.ends_with('\n') {
-            config_content.push('\n');
-        }
-        config_content.push_str(&format!("\n[openrouter]\napi_key = \"{}\"\n", openrouter_key));
+        return Err(anyhow::anyhow!("OpenRouter API key is required"));
     }
-    
-    // Add Hive key if provided
-    if !hive_key.is_empty() {
-        if config_content.contains("[hive]") {
-            // Update existing key (similar logic)
-        } else {
-            config_content.push_str(&format!("\n[hive]\napi_key = \"{}\"\n", hive_key));
-        }
-    }
-    
-    // Write config file
-    fs::write(config_path, config_content).await?;
     
     Ok(())
 }

@@ -11,6 +11,7 @@ use crate::consensus::profiles::{ExpertProfileManager, TemplateFilter, TemplateP
 use crate::consensus::models::{ModelManager, DynamicModelSelector};
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::core::config;
+use crate::core::api_keys::ApiKeyManager;
 use crate::core::database_simple::Database;
 // use crate::core::Database; // TODO: Replace with actual database implementation
 use anyhow::{Context, Result};
@@ -37,10 +38,8 @@ impl ConsensusEngine {
         // Load configuration from file system
         let hive_config = config::get_config().await?;
         
-        // Extract OpenRouter API key from config
-        let openrouter_api_key = hive_config.openrouter
-            .as_ref()
-            .and_then(|or| or.api_key.clone());
+        // Get OpenRouter API key from ApiKeyManager (checks database, config, and env)
+        let openrouter_api_key = ApiKeyManager::get_openrouter_key().await.ok();
         
         // Initialize profile manager
         let profile_manager = Arc::new(ExpertProfileManager::new());

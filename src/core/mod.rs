@@ -1,5 +1,6 @@
 //! Core functionality for semantic code understanding
 
+pub mod api_keys;
 pub mod ast;
 pub mod semantic;
 pub mod context;
