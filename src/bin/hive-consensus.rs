@@ -306,6 +306,7 @@ struct Message {
 
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
+use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
@@ -387,6 +388,83 @@ fn App() -> Element {
         }
     };
 
+    // Handle menu actions
+    let handle_menu_action = move |action: MenuAction| {
+        match action {
+            MenuAction::OpenFolder => {
+                // Open folder dialog
+                spawn({
+                    let mut current_dir = current_dir.clone();
+                    let mut file_tree = file_tree.clone();
+                    let mut expanded_dirs = expanded_dirs.clone();
+                    let mut selected_file = selected_file.clone();
+                    let mut file_content = file_content.clone();
+                    
+                    async move {
+                        let current_path = current_dir.read().clone();
+                        if let Some(folder) = rfd::AsyncFileDialog::new()
+                            .set_directory(&current_path)
+                            .pick_folder()
+                            .await
+                        {
+                            // Update current directory
+                            *current_dir.write() = folder.path().to_path_buf();
+                            
+                            // Clear selected file and content
+                            *selected_file.write() = None;
+                            *file_content.write() = String::new();
+                            
+                            // Clear expanded dirs for new folder
+                            expanded_dirs.write().clear();
+                            
+                            // Load new directory tree
+                            let root_name = folder.path().file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("Root")
+                                .to_string();
+                            
+                            match file_system::load_directory_tree(folder.path(), &HashMap::new(), false).await {
+                                Ok(files) => {
+                                    // Create root folder item with children
+                                    let root_item = FileItem {
+                                        path: folder.path().to_path_buf(),
+                                        name: root_name,
+                                        is_directory: true,
+                                        is_expanded: true, // Root is expanded by default
+                                        children: files,
+                                        file_type: FileType::Directory,
+                                        git_status: None,
+                                        size: None,
+                                        modified: None,
+                                    };
+                                    
+                                    file_tree.write().clear();
+                                    file_tree.write().push(root_item);
+                                }
+                                Err(e) => {
+                                    eprintln!("Error loading directory: {}", e);
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+            MenuAction::About => {
+                messages.write().push(Message {
+                    text: format!("🐝 Hive Consensus v{}\nRust-powered IDE with VS Code-style interface", env!("CARGO_PKG_VERSION")),
+                    is_user: false,
+                });
+            },
+            _ => {
+                // Show "Coming soon" for other actions
+                messages.write().push(Message {
+                    text: format!("🚧 {:?} - Coming soon!", action),
+                    is_user: false,
+                });
+            }
+        }
+    };
+
     rsx! {
         // Inject VS Code-style CSS
         style { "{DESKTOP_STYLES}" }
@@ -394,7 +472,12 @@ fn App() -> Element {
         div {
             class: "app-container",
             
-            // Main content (no header bar - VS Code style)
+            // Menu bar at the top
+            MenuBar {
+                on_action: handle_menu_action,
+            }
+            
+            // Main content (below menu bar)
             div {
                 class: "main-content",
                 
@@ -409,68 +492,6 @@ fn App() -> Element {
                             class: "current-path",
                             title: "{current_dir.read().display()}",
                             "{current_dir.read().display()}"
-                        }
-                        button {
-                            class: "open-folder-button",
-                            onclick: move |_| {
-                                // Open folder dialog
-                                spawn({
-                                    let mut current_dir = current_dir.clone();
-                                    let mut file_tree = file_tree.clone();
-                                    let mut expanded_dirs = expanded_dirs.clone();
-                                    let mut selected_file = selected_file.clone();
-                                    let mut file_content = file_content.clone();
-                                    
-                                    async move {
-                                        let current_path = current_dir.read().clone();
-                                        if let Some(folder) = rfd::AsyncFileDialog::new()
-                                            .set_directory(&current_path)
-                                            .pick_folder()
-                                            .await
-                                        {
-                                            // Update current directory
-                                            *current_dir.write() = folder.path().to_path_buf();
-                                            
-                                            // Clear selected file and content
-                                            *selected_file.write() = None;
-                                            *file_content.write() = String::new();
-                                            
-                                            // Clear expanded dirs for new folder
-                                            expanded_dirs.write().clear();
-                                            
-                                            // Load new directory tree
-                                            let root_name = folder.path().file_name()
-                                                .and_then(|n| n.to_str())
-                                                .unwrap_or("Root")
-                                                .to_string();
-                                            
-                                            match file_system::load_directory_tree(folder.path(), &HashMap::new(), false).await {
-                                                Ok(files) => {
-                                                    // Create root folder item with children
-                                                    let root_item = FileItem {
-                                                        path: folder.path().to_path_buf(),
-                                                        name: root_name,
-                                                        is_directory: true,
-                                                        is_expanded: true, // Root is expanded by default
-                                                        children: files,
-                                                        file_type: FileType::Directory,
-                                                        git_status: None,
-                                                        size: None,
-                                                        modified: None,
-                                                    };
-                                                    
-                                                    file_tree.write().clear();
-                                                    file_tree.write().push(root_item);
-                                                }
-                                                Err(e) => {
-                                                    eprintln!("Error loading directory: {}", e);
-                                                }
-                                            }
-                                        }
-                                    }
-                                });
-                            },
-                            "📁 Open Folder"
                         }
                     }
                     
