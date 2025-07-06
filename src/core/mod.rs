@@ -31,6 +31,9 @@ pub mod updater;
 // License management
 pub mod license;
 
+// Profile management
+pub mod profiles;
+
 // Migration tool
 pub mod migrator;
 
