@@ -278,11 +278,18 @@ fn main() {
     // Launch the desktop app with proper title using Dioxus 0.6 LaunchBuilder
     use dioxus::desktop::{Config, WindowBuilder};
     
+    // TODO: Native menu bar support will be added in Dioxus 0.8
+    // For now, we use in-app UI elements for file operations
+    // Future menu structure:
+    // - File: Open, Open Folder, Open Recent, Save, Save As, Close Folder
+    // - View: Appearance settings, Toggle panels
+    // - Help: About, Version, Documentation
+    
     dioxus::LaunchBuilder::desktop()
         .with_cfg(
             Config::new().with_window(
                 WindowBuilder::new()
-                    .with_title("Hive AI Desktop")
+                    .with_title("Hive Consensus")
                     .with_resizable(true)
                     .with_inner_size(dioxus::desktop::LogicalSize::new(1200.0, 800.0))
                     .with_min_inner_size(dioxus::desktop::LogicalSize::new(800.0, 600.0))
@@ -298,14 +305,14 @@ struct Message {
 }
 
 use hive_ai::desktop::file_system;
-use hive_ai::desktop::state::FileItem;
+use hive_ai::desktop::state::{FileItem, FileType};
 use std::path::PathBuf;
 use std::collections::HashMap;
 
 fn App() -> Element {
     // State management
     let mut messages = use_signal(|| vec![
-        Message { text: "🐝 Welcome to Hive AI Desktop!".to_string(), is_user: false },
+        Message { text: "🐝 Welcome to Hive Consensus!".to_string(), is_user: false },
         Message { text: "This is the Rust-powered version with VS Code-style interface.".to_string(), is_user: false },
     ]);
     let mut input_value = use_signal(String::new);
@@ -323,10 +330,29 @@ fn App() -> Element {
         let expanded_map = expanded_dirs.read().clone();
         
         spawn(async move {
+            // Create root folder item
+            let root_name = current_dir_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Root")
+                .to_string();
+            
             match file_system::load_directory_tree(&current_dir_path, &expanded_map, false).await {
                 Ok(files) => {
+                    // Create root folder item with children
+                    let root_item = FileItem {
+                        path: current_dir_path.clone(),
+                        name: root_name,
+                        is_directory: true,
+                        is_expanded: true, // Root is expanded by default
+                        children: files,
+                        file_type: FileType::Directory,
+                        git_status: None,
+                        size: None,
+                        modified: None,
+                    };
+                    
                     file_tree.write().clear();
-                    file_tree.write().extend(files);
+                    file_tree.write().push(root_item);
                 }
                 Err(e) => {
                     eprintln!("Error loading directory: {}", e);
@@ -413,10 +439,28 @@ fn App() -> Element {
                                             expanded_dirs.write().clear();
                                             
                                             // Load new directory tree
+                                            let root_name = folder.path().file_name()
+                                                .and_then(|n| n.to_str())
+                                                .unwrap_or("Root")
+                                                .to_string();
+                                            
                                             match file_system::load_directory_tree(folder.path(), &HashMap::new(), false).await {
                                                 Ok(files) => {
+                                                    // Create root folder item with children
+                                                    let root_item = FileItem {
+                                                        path: folder.path().to_path_buf(),
+                                                        name: root_name,
+                                                        is_directory: true,
+                                                        is_expanded: true, // Root is expanded by default
+                                                        children: files,
+                                                        file_type: FileType::Directory,
+                                                        git_status: None,
+                                                        size: None,
+                                                        modified: None,
+                                                    };
+                                                    
                                                     file_tree.write().clear();
-                                                    file_tree.write().extend(files);
+                                                    file_tree.write().push(root_item);
                                                 }
                                                 Err(e) => {
                                                     eprintln!("Error loading directory: {}", e);
@@ -508,7 +552,7 @@ fn App() -> Element {
                     // Panel header
                     div {
                         class: "panel-header",
-                        "🐝 Hive AI Chat"
+                        "🐝 Hive Consensus Chat"
                     }
                     
                     // Messages
