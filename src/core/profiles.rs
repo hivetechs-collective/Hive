@@ -3,7 +3,8 @@
 //! This module provides pre-built expert templates for different use cases,
 //! dynamic model selection, and consensus pipeline configuration.
 
-use crate::core::{HiveError, Result, DatabaseManager};
+use crate::core::{HiveError, Result};
+use crate::core::database::DatabaseManager;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -255,7 +256,10 @@ impl ExpertTemplateManager {
         ).optional()?;
 
         if existing.is_some() {
-            return Err(HiveError::Conflict(format!("Profile '{}' already exists", profile_name)));
+            return Err(HiveError::Internal { 
+                context: "profiles".to_string(), 
+                message: format!("Profile '{}' already exists", profile_name) 
+            });
         }
 
         // Insert new profile
@@ -551,7 +555,7 @@ impl ExpertTemplateManager {
                 Ok(_) => {
                     created_profiles.push(profile_name);
                 }
-                Err(HiveError::Conflict(_)) => {
+                Err(HiveError::Internal { context, message }) if message.contains("already exists") => {
                     // Profile already exists, skip
                     continue;
                 }

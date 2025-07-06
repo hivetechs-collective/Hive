@@ -3,11 +3,112 @@
 use dioxus::prelude::*;
 use anyhow;
 
+/// Information about a consensus profile
+#[derive(Debug, Clone, PartialEq)]
+struct ProfileInfo {
+    id: i64,
+    name: String,
+    is_default: bool,
+    created_at: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WelcomeAction {
     OpenFolder,
     OpenRecent,
     NewFile,
+}
+
+/// Expert template option component
+#[component]
+fn ExpertTemplateOption(
+    id: &'static str,
+    name: &'static str,
+    description: &'static str,
+    use_cases: &'static str,
+    is_selected: bool,
+    on_select: EventHandler<()>,
+) -> Element {
+    rsx! {
+        div {
+            class: if is_selected { "template-option selected" } else { "template-option" },
+            style: if is_selected { 
+                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s;" 
+            } else { 
+                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;" 
+            },
+            onclick: move |_| on_select.call(()),
+            
+            div {
+                style: "display: flex; align-items: center; margin-bottom: 8px;",
+                h4 {
+                    style: "margin: 0; color: #ffffff; font-size: 16px;",
+                    "{name}"
+                }
+                if is_selected {
+                    span {
+                        style: "margin-left: auto; color: #007acc;",
+                        "✓"
+                    }
+                }
+            }
+            
+            p {
+                style: "margin: 0 0 8px 0; color: #cccccc; font-size: 13px;",
+                "{description}"
+            }
+            
+            p {
+                style: "margin: 0; color: #858585; font-size: 12px;",
+                "Use cases: {use_cases}"
+            }
+        }
+    }
+}
+
+/// Existing profile option component
+#[component]
+fn ExistingProfileOption(
+    profile: ProfileInfo,
+    is_selected: bool,
+    on_select: EventHandler<()>,
+) -> Element {
+    rsx! {
+        div {
+            class: if is_selected { "profile-option selected" } else { "profile-option" },
+            style: if is_selected { 
+                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;" 
+            } else { 
+                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;" 
+            },
+            onclick: move |_| on_select.call(()),
+            
+            div {
+                style: "display: flex; align-items: center; justify-content: space-between;",
+                h4 {
+                    style: "margin: 0; color: #ffffff; font-size: 16px;",
+                    "{profile.name}"
+                }
+                if profile.is_default {
+                    span {
+                        style: "padding: 2px 8px; background: #007acc; border-radius: 4px; font-size: 11px; color: white;",
+                        "DEFAULT"
+                    }
+                }
+                if is_selected {
+                    span {
+                        style: "color: #007acc;",
+                        "✓"
+                    }
+                }
+            }
+            
+            p {
+                style: "margin: 5px 0 0 0; color: #858585; font-size: 12px;",
+                "Created: {profile.created_at}"
+            }
+        }
+    }
 }
 
 /// About dialog component
@@ -388,6 +489,18 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     }
 }
 
+/// Profile info for display
+#[derive(Debug, Clone)]
+struct ProfileDisplayInfo {
+    id: i64,
+    name: String,
+    is_default: bool,
+    generator_model: String,
+    refiner_model: String,
+    validator_model: String,
+    curator_model: String,
+}
+
 #[component]
 fn ProfileOption(name: &'static str, description: &'static str, models: &'static str, is_selected: bool) -> Element {
     rsx! {
@@ -407,8 +520,37 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
     let mut selected_profile = use_signal(|| "balanced".to_string());
-    let mut temp_openrouter_key = use_signal(|| String::new());
-    let mut temp_hive_key = use_signal(|| String::new());
+    let mut temp_openrouter_key = use_signal(|| openrouter_key.read().clone());
+    let mut temp_hive_key = use_signal(|| hive_key.read().clone());
+    
+    // Profile configuration state
+    let mut profile_mode = use_signal(|| "expert".to_string()); // expert, existing, custom
+    let mut selected_template = use_signal(|| String::new());
+    let mut profile_name = use_signal(|| String::new());
+    let mut selected_profile_id = use_signal(|| None::<i64>);
+    let mut existing_profiles = use_signal(|| Vec::<ProfileInfo>::new());
+    
+    // Load existing profiles on mount
+    use_effect(move || {
+        let mut existing_profiles = existing_profiles.clone();
+        spawn(async move {
+            if let Ok(profiles) = load_existing_profiles().await {
+                *existing_profiles.write() = profiles;
+            }
+        });
+    });
+    
+    // Check if we already have keys and skip to profile step
+    use_effect(move || {
+        if !openrouter_key.read().is_empty() && *current_step.read() == 1 {
+            // We already have keys, skip to profile configuration
+            *current_step.write() = 4;
+        }
+    });
+    
+    // Debug log
+    tracing::info!("OnboardingDialog - current_step: {}, show_onboarding: {}, has_keys: {}", 
+                  current_step.read(), show_onboarding.read(), !openrouter_key.read().is_empty());
     
     rsx! {
         div {
@@ -591,45 +733,231 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                     } else if *current_step.read() == 4 {
                         div {
                             class: "onboarding-step",
-                            h3 { "🧠 Choose Your Consensus Profile" }
+                            h3 { "🧠 Configure Your Consensus Profile" }
                             p { 
-                                "Select a profile that best matches your needs. You can change this later in settings." 
+                                "Choose from expert-crafted profiles or create your own. Each profile uses a 4-stage AI consensus pipeline." 
                             }
                             
+                            // Profile selection mode tabs
                             div {
-                                class: "profile-grid",
-                                style: "margin-top: 20px;",
-                                div {
-                                    class: if *selected_profile.read() == "balanced" { "profile-option selected" } else { "profile-option" },
-                                    onclick: move |_| *selected_profile.write() = "balanced".to_string(),
-                                    h4 { "⚖️ Balanced" }
-                                    p { class: "profile-description", "Best overall performance and quality" }
-                                    p { class: "profile-models", "Claude 3.5 Sonnet, GPT-4 Turbo, Claude 3 Opus, GPT-4o" }
+                                class: "profile-tabs",
+                                style: "display: flex; gap: 10px; margin: 20px 0; border-bottom: 1px solid #3e3e42; padding-bottom: 10px;",
+                                button {
+                                    class: if *profile_mode.read() == "expert" { "tab-button active" } else { "tab-button" },
+                                    style: "padding: 8px 16px; background: transparent; border: none; color: #cccccc; cursor: pointer; border-bottom: 2px solid transparent;",
+                                    onclick: move |_| *profile_mode.write() = "expert".to_string(),
+                                    "🎯 Expert Templates"
                                 }
-                                div {
-                                    class: if *selected_profile.read() == "speed" { "profile-option selected" } else { "profile-option" },
-                                    onclick: move |_| *selected_profile.write() = "speed".to_string(),
-                                    h4 { "⚡ Speed" }
-                                    p { class: "profile-description", "Faster responses with good quality" }
-                                    p { class: "profile-models", "Claude 3 Haiku, GPT-3.5 Turbo" }
+                                button {
+                                    class: if *profile_mode.read() == "existing" { "tab-button active" } else { "tab-button" },
+                                    style: "padding: 8px 16px; background: transparent; border: none; color: #cccccc; cursor: pointer; border-bottom: 2px solid transparent;",
+                                    onclick: move |_| {
+                                        *profile_mode.write() = "existing".to_string();
+                                        
+                                        // Load existing profiles when tab is clicked
+                                        let mut existing_profiles = existing_profiles.clone();
+                                        spawn(async move {
+                                            if let Ok(profiles) = load_existing_profiles().await {
+                                                *existing_profiles.write() = profiles;
+                                            }
+                                        });
+                                    },
+                                    "📋 Existing Profiles"
                                 }
-                                div {
-                                    class: if *selected_profile.read() == "quality" { "profile-option selected" } else { "profile-option" },
-                                    onclick: move |_| *selected_profile.write() = "quality".to_string(),
-                                    h4 { "💎 Quality" }
-                                    p { class: "profile-description", "Highest quality responses" }
-                                    p { class: "profile-models", "Claude 3 Opus, GPT-4o" }
+                                button {
+                                    class: if *profile_mode.read() == "custom" { "tab-button active" } else { "tab-button" },
+                                    style: "padding: 8px 16px; background: transparent; border: none; color: #cccccc; cursor: pointer; border-bottom: 2px solid transparent;",
+                                    onclick: move |_| *profile_mode.write() = "custom".to_string(),
+                                    "🛠️ Custom Profile"
                                 }
-                                div {
-                                    class: if *selected_profile.read() == "cost" { "profile-option selected" } else { "profile-option" },
-                                    onclick: move |_| *selected_profile.write() = "cost".to_string(),
-                                    h4 { "💰 Cost" }
-                                    p { class: "profile-description", "Most cost-effective option" }
-                                    p { class: "profile-models", "Llama 3.2, Mistral 7B" }
+                            }
+                            
+                            // Profile content based on selected mode
+                            div {
+                                class: "profile-content",
+                                style: "max-height: 400px; overflow-y: auto; padding: 10px 0;",
+                                
+                                if *profile_mode.read() == "expert" {
+                                    div {
+                                        p {
+                                            style: "margin-bottom: 15px; color: #cccccc;",
+                                            "Select an expert template optimized for specific use cases:"
+                                        }
+                                        
+                                        // Expert templates grid
+                                        div {
+                                            class: "expert-templates-grid",
+                                            style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;",
+                                            
+                                            // Lightning Fast
+                                            ExpertTemplateOption {
+                                                id: "lightning-fast",
+                                                name: "⚡ Lightning Fast",
+                                                description: "Ultra-high-speed consensus for rapid prototyping",
+                                                use_cases: "Quick prototyping, Simple questions, Learning",
+                                                is_selected: *selected_template.read() == "lightning-fast",
+                                                on_select: move |_| *selected_template.write() = "lightning-fast".to_string(),
+                                            }
+                                            
+                                            // Precision Architect
+                                            ExpertTemplateOption {
+                                                id: "precision-architect",
+                                                name: "🏗️ Precision Architect",
+                                                description: "Maximum quality for complex architectural decisions",
+                                                use_cases: "Architecture, Complex algorithms, Production review",
+                                                is_selected: *selected_template.read() == "precision-architect",
+                                                on_select: move |_| *selected_template.write() = "precision-architect".to_string(),
+                                            }
+                                            
+                                            // Budget Optimizer
+                                            ExpertTemplateOption {
+                                                id: "budget-optimizer",
+                                                name: "💰 Budget Optimizer",
+                                                description: "Cost-efficient consensus maximizing value",
+                                                use_cases: "Cost-conscious dev, High-volume, Experimentation",
+                                                is_selected: *selected_template.read() == "budget-optimizer",
+                                                on_select: move |_| *selected_template.write() = "budget-optimizer".to_string(),
+                                            }
+                                            
+                                            // Research Specialist
+                                            ExpertTemplateOption {
+                                                id: "research-specialist",
+                                                name: "🔬 Research Specialist",
+                                                description: "Deep exploration for research and problem-solving",
+                                                use_cases: "Research papers, Complex analysis, Deep exploration",
+                                                is_selected: *selected_template.read() == "research-specialist",
+                                                on_select: move |_| *selected_template.write() = "research-specialist".to_string(),
+                                            }
+                                            
+                                            // Debug Specialist
+                                            ExpertTemplateOption {
+                                                id: "debug-specialist",
+                                                name: "🐛 Debug Specialist",
+                                                description: "Specialized for debugging and troubleshooting",
+                                                use_cases: "Bug fixing, Error analysis, Code review",
+                                                is_selected: *selected_template.read() == "debug-specialist",
+                                                on_select: move |_| *selected_template.write() = "debug-specialist".to_string(),
+                                            }
+                                            
+                                            // Balanced Generalist
+                                            ExpertTemplateOption {
+                                                id: "balanced-generalist",
+                                                name: "⚖️ Balanced Generalist",
+                                                description: "Well-rounded for general development tasks",
+                                                use_cases: "General development, Documentation, Explanations",
+                                                is_selected: *selected_template.read() == "balanced-generalist",
+                                                on_select: move |_| *selected_template.write() = "balanced-generalist".to_string(),
+                                            }
+                                            
+                                            // Enterprise Architect
+                                            ExpertTemplateOption {
+                                                id: "enterprise-architect",
+                                                name: "🏢 Enterprise Architect",
+                                                description: "Enterprise-grade for production systems",
+                                                use_cases: "Production systems, Security, Compliance",
+                                                is_selected: *selected_template.read() == "enterprise-architect",
+                                                on_select: move |_| *selected_template.write() = "enterprise-architect".to_string(),
+                                            }
+                                            
+                                            // Creative Innovator
+                                            ExpertTemplateOption {
+                                                id: "creative-innovator",
+                                                name: "🎨 Creative Innovator",
+                                                description: "Creative solutions and innovative approaches",
+                                                use_cases: "Creative coding, Novel solutions, Brainstorming",
+                                                is_selected: *selected_template.read() == "creative-innovator",
+                                                on_select: move |_| *selected_template.write() = "creative-innovator".to_string(),
+                                            }
+                                            
+                                            // Teaching Assistant
+                                            ExpertTemplateOption {
+                                                id: "teaching-assistant",
+                                                name: "📚 Teaching Assistant",
+                                                description: "Optimized for educational explanations",
+                                                use_cases: "Learning, Tutorials, Code explanations",
+                                                is_selected: *selected_template.read() == "teaching-assistant",
+                                                on_select: move |_| *selected_template.write() = "teaching-assistant".to_string(),
+                                            }
+                                        }
+                                        
+                                        // Profile name input for template
+                                        if !selected_template.read().is_empty() {
+                                            div {
+                                                style: "margin-top: 20px; padding: 15px; background: #2d2d30; border-radius: 6px;",
+                                                label {
+                                                    style: "display: block; margin-bottom: 8px; color: #cccccc;",
+                                                    "Profile Name:"
+                                                }
+                                                input {
+                                                    class: "settings-input",
+                                                    r#type: "text",
+                                                    value: "{profile_name.read()}",
+                                                    placeholder: "Enter a name for your profile",
+                                                    oninput: move |evt| *profile_name.write() = evt.value().clone(),
+                                                }
+                                                p {
+                                                    style: "margin-top: 5px; font-size: 12px; color: #858585;",
+                                                    "Give your profile a memorable name (e.g., 'My Production Config')"
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if *profile_mode.read() == "existing" {
+                                    div {
+                                        p {
+                                            style: "margin-bottom: 15px; color: #cccccc;",
+                                            if existing_profiles.read().is_empty() {
+                                                "No existing profiles found. Create one from expert templates or build a custom profile."
+                                            } else {
+                                                "Select from your existing profiles:"
+                                            }
+                                        }
+                                        
+                                        // Load and display existing profiles
+                                        if !existing_profiles.read().is_empty() {
+                                            div {
+                                                class: "existing-profiles-list",
+                                                {
+                                                    let profiles = existing_profiles.read().clone();
+                                                    profiles.into_iter().map(|profile| {
+                                                        let profile_id = profile.id;
+                                                        let is_selected = *selected_profile_id.read() == Some(profile_id);
+                                                        let mut selected_profile_id = selected_profile_id.clone();
+                                                        
+                                                        rsx! {
+                                                            ExistingProfileOption {
+                                                                profile: profile,
+                                                                is_selected: is_selected,
+                                                                on_select: move |_| *selected_profile_id.write() = Some(profile_id),
+                                                            }
+                                                        }
+                                                    })
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if *profile_mode.read() == "custom" {
+                                    div {
+                                        p {
+                                            style: "margin-bottom: 15px; color: #cccccc;",
+                                            "Build a custom 4-stage consensus pipeline by selecting models for each stage:"
+                                        }
+                                        p {
+                                            style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 6px; color: #e9c46a;",
+                                            "⚠️ Custom profile creation is an advanced feature. For best results, use expert templates."
+                                        }
+                                        
+                                        // TODO: Implement custom model selection UI
+                                        // This would involve loading available models and allowing selection for each stage
+                                        div {
+                                            style: "text-align: center; padding: 40px; color: #858585;",
+                                            "Custom profile builder coming soon..."
+                                        }
+                                    }
                                 }
                             }
                         }
-                    } else {
+                    } else if *current_step.read() == 5 {
                         div {
                             class: "onboarding-step",
                             h3 { "🎉 You're all set!" }
@@ -665,6 +993,13 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                     strong { "{selected_profile.read()}" }
                                 }
                             }
+                        }
+                    } else {
+                        // Default case - should not happen
+                        div {
+                            class: "onboarding-step",
+                            h3 { "Loading..." }
+                            p { "Step {current_step.read()}" }
                         }
                     }
                 }
@@ -734,10 +1069,6 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                             *openrouter_key.write() = or_key;
                                             *hive_key.write() = h_key;
                                             
-                                            // Save profile preference
-                                            let profile = selected_profile.read().clone();
-                                            let _ = save_profile_preference(&profile).await;
-                                            
                                             // Move to profile selection
                                             *current_step.write() = 4;
                                         }
@@ -750,11 +1081,62 @@ pub fn OnboardingDialog(show_onboarding: Signal<bool>, openrouter_key: Signal<St
                                 });
                             } else if step == 4 {
                                 // Profile -> Complete
-                                let profile = selected_profile.read().clone();
-                                spawn(async move {
-                                    let _ = save_profile_preference(&profile).await;
-                                });
-                                *current_step.write() = 5;
+                                let mode = profile_mode.read().clone();
+                                let template_id = selected_template.read().clone();
+                                let profile_name_val = profile_name.read().clone();
+                                let existing_id = *selected_profile_id.read();
+                                
+                                // Handle profile creation/selection
+                                let mut has_error = false;
+                                
+                                if mode == "expert" && !template_id.is_empty() {
+                                    // Create profile from template
+                                    let name = if profile_name_val.is_empty() {
+                                        format!("{} Profile", template_id.replace('-', " ")
+                                            .split_whitespace()
+                                            .map(|w| {
+                                                let mut c = w.chars();
+                                                match c.next() {
+                                                    None => String::new(),
+                                                    Some(f) => f.to_uppercase().chain(c).collect()
+                                                }
+                                            })
+                                            .collect::<Vec<_>>()
+                                            .join(" "))
+                                    } else {
+                                        profile_name_val
+                                    };
+                                    
+                                    let name_for_spawn = name.clone();
+                                    spawn(async move {
+                                        if let Err(e) = create_profile_from_template(&template_id, &name_for_spawn).await {
+                                            tracing::error!("Failed to create profile: {}", e);
+                                        }
+                                    });
+                                    
+                                    *selected_profile.write() = name;
+                                } else if mode == "existing" && existing_id.is_some() {
+                                    // Set existing profile as default
+                                    if let Some(profile_id) = existing_id {
+                                        spawn(async move {
+                                            if let Err(e) = set_default_profile(profile_id).await {
+                                                tracing::error!("Failed to set default profile: {}", e);
+                                            }
+                                        });
+                                        
+                                        // Find the profile name from existing profiles
+                                        if let Some(profile) = existing_profiles.read().iter().find(|p| p.id == profile_id) {
+                                            *selected_profile.write() = profile.name.clone();
+                                        }
+                                    }
+                                } else {
+                                    // No profile selected - use default
+                                    *selected_profile.write() = "Balanced Generalist".to_string();
+                                }
+                                
+                                if !has_error {
+                                    *current_step.write() = 5;
+                                }
                             } else {
                                 // Complete -> Close dialog
                                 *show_onboarding.write() = false;
@@ -816,6 +1198,111 @@ async fn save_profile_preference(profile: &str) -> anyhow::Result<()> {
     // - Create profile in pipeline_profiles table
     // - Set appropriate models for each stage based on profile type
     // - Mark as default profile
+    
+    Ok(())
+}
+
+/// Load existing profiles from database
+async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    
+    let db_path = get_hive_config_dir().join("hive.db");
+    if !db_path.exists() {
+        return Ok(vec![]);
+    }
+    
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let conn = db.get_connection()?;
+    
+    let mut stmt = conn.prepare(
+        "SELECT id, name, is_default, created_at 
+         FROM consensus_profiles 
+         ORDER BY is_default DESC, created_at DESC"
+    )?;
+    
+    let profiles = stmt.query_map([], |row| {
+        Ok(ProfileInfo {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            is_default: row.get(2)?,
+            created_at: row.get(3)?,
+        })
+    })?
+    .filter_map(Result::ok)
+    .collect();
+    
+    Ok(profiles)
+}
+
+/// Create profile from expert template
+async fn create_profile_from_template(template_id: &str, profile_name: &str) -> anyhow::Result<()> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    use crate::core::profiles::ExpertTemplateManager;
+    
+    let db_path = get_hive_config_dir().join("hive.db");
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let template_manager = ExpertTemplateManager::new(db);
+    
+    template_manager.create_profile_from_template(template_id, profile_name, None).await?;
+    
+    Ok(())
+}
+
+/// Set a profile as default
+async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    
+    let db_path = get_hive_config_dir().join("hive.db");
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let conn = db.get_connection()?;
+    
+    // First, unset all profiles as default
+    conn.execute("UPDATE consensus_profiles SET is_default = 0", [])?;
+    
+    // Then set the selected profile as default
+    conn.execute(
+        "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
+        [profile_id]
+    )?;
     
     Ok(())
 }
@@ -990,6 +1477,45 @@ pub const DIALOG_STYLES: &str = r#"
     
     .welcome-link:hover {
         text-decoration: underline;
+    }
+    
+    /* Template and profile option styles */
+    .template-option, .profile-option {
+        transition: all 0.2s ease;
+    }
+    
+    .template-option:hover, .profile-option:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    .template-option.selected, .profile-option.selected {
+        background: #1e1e1e !important;
+        border-color: #007acc !important;
+    }
+    
+    .expert-templates-grid {
+        max-height: 350px;
+        overflow-y: auto;
+        padding-right: 10px;
+    }
+    
+    .expert-templates-grid::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .expert-templates-grid::-webkit-scrollbar-track {
+        background: #1e1e1e;
+        border-radius: 4px;
+    }
+    
+    .expert-templates-grid::-webkit-scrollbar-thumb {
+        background: #3e3e42;
+        border-radius: 4px;
+    }
+    
+    .expert-templates-grid::-webkit-scrollbar-thumb:hover {
+        background: #4e4e52;
     }
     
     .welcome-close {

@@ -32,19 +32,35 @@ pub fn App() -> Element {
     let mut openrouter_key = use_signal(|| String::new());
     let mut hive_key = use_signal(|| String::new());
     
-    // Check for API keys on startup
-    let _ = use_resource(move || async move {
-        match ApiKeyManager::has_valid_keys().await {
-            Ok(has_keys) => {
-                if !has_keys {
+    // Check for API keys on startup (only once)
+    use_effect(move || {
+        let mut show_onboarding = show_onboarding.clone();
+        let mut openrouter_key = openrouter_key.clone();
+        let mut hive_key = hive_key.clone();
+        
+        spawn(async move {
+            match ApiKeyManager::has_valid_keys().await {
+                Ok(has_keys) => {
+                    if !has_keys {
+                        *show_onboarding.write() = true;
+                    } else {
+                        // Load existing keys
+                        if let Ok((or_key, h_key)) = ApiKeyManager::load_from_database().await {
+                            if let Some(key) = or_key {
+                                *openrouter_key.write() = key;
+                            }
+                            if let Some(key) = h_key {
+                                *hive_key.write() = key;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to check API keys: {}", e);
                     *show_onboarding.write() = true;
                 }
             }
-            Err(e) => {
-                tracing::warn!("Failed to check API keys: {}", e);
-                *show_onboarding.write() = true;
-            }
-        }
+        });
     });
     
     // Provide state to all child components
