@@ -345,6 +345,19 @@ impl Theme {
         self.colors.selection_fg.0
     }
 
+    // Convenience methods for TUI advanced components
+    pub fn selection_bg(&self) -> Color {
+        self.colors.selection_bg.0
+    }
+
+    pub fn text_color(&self) -> Color {
+        self.colors.foreground.0
+    }
+
+    pub fn border_color(&self) -> Color {
+        self.colors.border_active.0
+    }
+
     // Syntax highlighting colors
     pub fn keyword_color(&self) -> Color {
         self.colors.keyword.0
