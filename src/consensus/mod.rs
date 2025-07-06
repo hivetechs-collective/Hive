@@ -7,16 +7,16 @@ pub mod stages;
 pub mod streaming;
 pub mod temporal;
 pub mod types;
-pub mod optimize;
+// pub mod optimize; // TODO: Fix profile field usage
 pub mod models;
 pub mod openrouter;
 pub mod profiles;
 
 pub use engine::ConsensusEngine;
 pub use pipeline::ConsensusPipeline;
-pub use streaming::{ConsensusEvent, StreamingCallbacks, StreamingResponse, ConsensusStage, ConsensusResponseResult};
+pub use streaming::{ConsensusEvent, StreamingCallbacks, StreamingResponse, ConsensusStage, ConsensusResponseResult, ChannelStreamingCallbacks};
 pub use temporal::TemporalContextProvider;
-pub use types::{ConsensusConfig, ConsensusProfile, ConsensusResult, ConsensusRequest, ConsensusResponse, Stage};
+pub use types::{ConsensusConfig, ConsensusProfile, ConsensusResult, ConsensusRequest, ConsensusResponse, Stage, ResponseMetadata};
 
 // Re-export commonly used items
 pub use stages::{CuratorStage, GeneratorStage, RefinerStage, ValidatorStage};

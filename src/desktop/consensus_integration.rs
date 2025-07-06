@@ -131,7 +131,7 @@ pub async fn process_consensus_events(
         match event {
             ConsensusUIEvent::StageStarted { stage, model } => {
                 let mut state = app_state.write();
-                state.consensus.current_stage = Some(stage);
+                state.consensus.current_stage = Some(stage.clone());
                 
                 let stage_index = match stage {
                     ConsensusStage::Generator => 0,

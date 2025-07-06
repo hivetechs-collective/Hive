@@ -1,7 +1,7 @@
 // Streaming support for consensus pipeline
 // Provides real-time updates and progress tracking
 
-use crate::consensus::types::{Stage, StageResult};
+use crate::consensus::types::{Stage, StageResult, ResponseMetadata};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -226,7 +226,7 @@ pub enum StreamingResponse {
 }
 
 /// Consensus stage enum for TUI
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConsensusStage {
     Generator,
     Refiner,
@@ -241,14 +241,6 @@ pub struct ConsensusResponseResult {
     pub metadata: ResponseMetadata,
 }
 
-/// Response metadata
-#[derive(Debug, Clone)]
-pub struct ResponseMetadata {
-    pub total_tokens: u32,
-    pub cost: f64,
-    pub duration_ms: u64,
-    pub models_used: Vec<String>,
-}
 
 /// Enhanced progress tracker with quality metrics
 pub struct EnhancedProgressTracker {
@@ -423,6 +415,91 @@ impl ConsensusMetrics {
         };
         
         format!("{} {} {:.0}% (Q: {:.1})", status, name, progress, quality * 100.0)
+    }
+}
+
+/// Channel-based streaming callbacks for consensus engine
+pub struct ChannelStreamingCallbacks {
+    sender: mpsc::UnboundedSender<StreamingResponse>,
+}
+
+impl ChannelStreamingCallbacks {
+    pub fn new(sender: mpsc::UnboundedSender<StreamingResponse>) -> Self {
+        Self { sender }
+    }
+}
+
+impl StreamingCallbacks for ChannelStreamingCallbacks {
+    fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let _ = self.sender.send(StreamingResponse::StageStarted {
+            stage: consensus_stage,
+            model: model.to_string(),
+        });
+        
+        Ok(())
+    }
+
+    fn on_stage_chunk(&self, _stage: Stage, chunk: &str, _total_content: &str) -> Result<()> {
+        let _ = self.sender.send(StreamingResponse::TokenReceived {
+            token: chunk.to_string(),
+        });
+        Ok(())
+    }
+
+    fn on_stage_progress(&self, stage: Stage, progress: ProgressInfo) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let progress_u16 = (progress.percentage as u16).min(100);
+        
+        let _ = self.sender.send(StreamingResponse::StageProgress {
+            stage: consensus_stage,
+            progress: progress_u16,
+        });
+        
+        Ok(())
+    }
+
+    fn on_stage_complete(&self, stage: Stage, _result: &StageResult) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let _ = self.sender.send(StreamingResponse::StageCompleted {
+            stage: consensus_stage,
+        });
+        
+        Ok(())
+    }
+
+    fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let _ = self.sender.send(StreamingResponse::Error {
+            stage: consensus_stage,
+            error: error.to_string(),
+        });
+        
+        Ok(())
     }
 }
 

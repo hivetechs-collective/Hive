@@ -2,10 +2,10 @@
 // Manages profiles, configuration, and pipeline execution
 
 use crate::consensus::pipeline::ConsensusPipeline;
-use crate::consensus::streaming::{StreamingCallbacks, StreamingResponse, ConsensusStage, ConsensusResponseResult, ResponseMetadata};
+use crate::consensus::streaming::{StreamingCallbacks, StreamingResponse, ConsensusStage, ConsensusResponseResult, ChannelStreamingCallbacks};
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, ConsensusRequest,
-    ContextInjectionStrategy, RetryPolicy,
+    ContextInjectionStrategy, RetryPolicy, ResponseMetadata,
 };
 use crate::consensus::profiles::{ExpertProfileManager, TemplateFilter, TemplatePreferences};
 use crate::consensus::models::{ModelManager, DynamicModelSelector};
@@ -141,71 +141,57 @@ impl ConsensusEngine {
         request: ConsensusRequest,
     ) -> Result<mpsc::UnboundedReceiver<StreamingResponse>> {
         let (sender, receiver) = mpsc::unbounded_channel();
-        let start_time = Instant::now();
+        
+        // Create streaming callbacks that send to channel
+        let callbacks = Arc::new(ChannelStreamingCallbacks::new(sender.clone()));
         
         // Clone necessary data for the async task
+        let engine = self.clone();
         let query = request.query.clone();
         let context = request.context.clone();
-        let temporal_context = request.temporal_context.clone();
-        let config = self.config.read().await.clone();
-        let api_key = self.openrouter_api_key.clone();
         
         // Spawn async task to process consensus
         tokio::spawn(async move {
-            // Use models from config
-            let models = vec![
-                (config.profile.generator_model.clone(), ConsensusStage::Generator),
-                (config.profile.refiner_model.clone(), ConsensusStage::Refiner),
-                (config.profile.validator_model.clone(), ConsensusStage::Validator),
-                (config.profile.curator_model.clone(), ConsensusStage::Curator),
-            ];
+            let start_time = Instant::now();
             
-            let mut final_content = String::new();
-            let mut total_tokens = 0u32;
-            let mut total_cost = 0.0f64;
-            let mut models_used = Vec::new();
-            
-            // Process each stage
-            for (model, stage) in models {
-                // Send stage started event
-                let _ = sender.send(StreamingResponse::StageStarted {
-                    stage,
-                    model: model.clone(),
-                });
-                
-                models_used.push(model.clone());
-                
-                // Simulate processing with progress updates
-                for progress in (0..=100).step_by(10) {
-                    let _ = sender.send(StreamingResponse::StageProgress { stage, progress });
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            // Process through the actual consensus pipeline
+            match engine.process_with_callbacks(&query, context, callbacks).await {
+                Ok(result) => {
+                    // Extract metrics from the result
+                    let mut total_tokens = 0u32;
+                    let mut total_cost = 0.0f64;
+                    let mut models_used = Vec::new();
+                    
+                    for stage in &result.stages {
+                        models_used.push(stage.model.clone());
+                        if let Some(usage) = &stage.usage {
+                            total_tokens += usage.total_tokens;
+                        }
+                        if let Some(analytics) = &stage.analytics {
+                            total_cost += analytics.cost;
+                        }
+                    }
+                    
+                    // Send completion event
+                    let response = ConsensusResponseResult {
+                        content: result.result.unwrap_or_else(|| "No response generated".to_string()),
+                        metadata: ResponseMetadata {
+                            total_tokens,
+                            cost: total_cost,
+                            duration_ms: start_time.elapsed().as_millis() as u64,
+                            models_used,
+                        },
+                    };
+                    
+                    let _ = sender.send(StreamingResponse::Complete { response });
                 }
-                
-                // Simulate stage completion
-                let _ = sender.send(StreamingResponse::StageCompleted { stage });
-                
-                // Update metrics based on actual API response
-                // Token and cost information will be populated by the OpenRouter API response
-                total_tokens += 0; // Will be set by actual API response
-                total_cost += 0.0; // Will be set by actual API response
+                Err(e) => {
+                    let _ = sender.send(StreamingResponse::Error {
+                        stage: ConsensusStage::Generator,
+                        error: e.to_string(),
+                    });
+                }
             }
-            
-            // The final_content should be populated by the actual consensus pipeline execution
-            // This streaming function should delegate to the actual consensus pipeline
-            final_content = "Error: This streaming function needs to be integrated with the actual consensus pipeline".to_string();
-            
-            // Send completion event
-            let response = ConsensusResponseResult {
-                content: final_content,
-                metadata: ResponseMetadata {
-                    total_tokens,
-                    cost: total_cost,
-                    duration_ms: start_time.elapsed().as_millis() as u64,
-                    models_used,
-                },
-            };
-            
-            let _ = sender.send(StreamingResponse::Complete { response });
         });
         
         Ok(receiver)

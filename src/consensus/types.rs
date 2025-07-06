@@ -193,6 +193,16 @@ pub struct Message {
     pub content: String,
 }
 
+/// Consensus request structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusRequest {
+    pub query: String,
+    pub context: Option<String>,
+    pub temporal_context: Option<TemporalContext>,
+    pub profile_override: Option<String>,
+    pub max_tokens: Option<u32>,
+}
+
 /// Stage-specific prompts
 pub struct StagePrompts;
 
@@ -218,16 +228,6 @@ impl StagePrompts {
     }
 }
 
-/// Consensus request for TUI integration
-#[derive(Debug, Clone)]
-pub struct ConsensusRequest {
-    pub query: String,
-    pub context: Option<String>,
-    pub temporal_context: Option<TemporalContext>,
-    pub streaming: bool,
-    pub profile: String,
-}
-
 /// Consensus response for TUI integration
 #[derive(Debug, Clone)]
 pub struct ConsensusResponse {
@@ -240,7 +240,7 @@ pub struct ConsensusResponse {
 }
 
 /// Response metadata
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseMetadata {
     pub total_tokens: u32,
     pub cost: f64,
