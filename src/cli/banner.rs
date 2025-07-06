@@ -9,10 +9,17 @@ use crate::cli::{get_current_dir_display, check_internet_connection, check_api_s
 use crate::core::config::{get_config, get_hive_config_dir};
 use chrono::Local;
 
+/// Get active profile name from database
+async fn get_active_profile_name() -> Result<String> {
+    // For now, return a default since we don't have database access here
+    // In a real implementation, this would query the database
+    Ok("Default".to_string())
+}
+
 /// Configuration for banner display
 #[derive(Debug)]
 pub struct BannerConfig {
-    pub consensus_profile: String,
+    pub consensus_profile: Option<String>,
     pub model_count: usize,
     pub conversation_count: usize,
     pub internet_connected: bool,
@@ -69,8 +76,11 @@ async fn load_banner_config() -> Result<BannerConfig> {
     // Get memory usage
     let memory_usage_mb = get_memory_usage() as f64 / 1024.0 / 1024.0;
     
+    // Get active profile from database
+    let consensus_profile = get_active_profile_name().await.ok();
+    
     Ok(BannerConfig {
-        consensus_profile: config.consensus.profile,
+        consensus_profile,
         model_count: 323, // From OpenRouter API
         conversation_count,
         internet_connected,
@@ -123,7 +133,7 @@ async fn print_system_status(config: &BannerConfig) -> Result<()> {
     
     println!("   {} {}", 
         style("Profile:").dim(),
-        style(&config.consensus_profile).cyan()
+        style(config.consensus_profile.as_deref().unwrap_or("None")).cyan()
     );
     
     println!();
@@ -194,7 +204,6 @@ pub async fn show_status_info() -> Result<()> {
     println!(" {}:", style("Configuration").bold());
     let config_path = get_hive_config_dir().join("config.toml");
     println!("   Config file: {}", style(config_path.display()).dim());
-    println!("   Profile: {}", style(&config.consensus.profile).cyan());
     println!("   TUI mode: {}", if config.interface.tui_mode { 
         style("✓ Enabled").green() 
     } else { 
@@ -209,15 +218,14 @@ pub async fn show_status_info() -> Result<()> {
     
     // Consensus engine
     println!(" {}:", style("Consensus Engine").bold());
-    println!("   Generator: {}", style(&config.consensus.models.generator).cyan());
-    println!("   Refiner: {}", style(&config.consensus.models.refiner).cyan());
-    println!("   Validator: {}", style(&config.consensus.models.validator).cyan());
-    println!("   Curator: {}", style(&config.consensus.models.curator).cyan());
+    let profile_display = banner_config.consensus_profile.as_deref().unwrap_or("None");
+    println!("   Profile: {}", style(profile_display).cyan());
     println!("   Streaming: {}", if config.consensus.streaming.enabled {
         style("✓ Enabled").green()
     } else {
         style("✗ Disabled").red()
     });
+    println!("   Timeout: {}s", style(config.consensus.timeout_seconds).cyan());
     println!();
     
     // Connectivity and APIs

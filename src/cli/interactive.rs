@@ -484,7 +484,7 @@ impl InteractiveSession {
             "show" | "" => {
                 println!("📋 {} Configuration:", style("Current").bold());
                 if let Ok(config) = crate::core::config::get_config().await {
-                    println!("  Consensus profile: {}", style(&config.consensus.profile).cyan());
+                    println!("  Consensus: {} (profiles in database)", style("Configured").cyan());
                     println!("  TUI mode: {}", if config.interface.tui_mode { 
                         style("✓ Enabled").green() 
                     } else { 

@@ -133,10 +133,10 @@ pub struct ConsensusResult {
     pub total_cost: f64,
 }
 
-/// Consensus configuration
+/// Consensus configuration for runtime settings
+/// Note: Profiles are loaded separately from database, not stored in config
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsensusConfig {
-    pub profile: ConsensusProfile,
     pub enable_streaming: bool,
     pub show_progress: bool,
     pub timeout_seconds: u64,

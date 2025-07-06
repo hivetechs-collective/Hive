@@ -1441,16 +1441,15 @@ async fn handle_config(command: ConfigCommands) -> Result<()> {
             match section.as_deref() {
                 Some("consensus") => {
                     println!("🧠 {} Configuration:", style("Consensus").bold().cyan());
-                    println!("   Profile: {}", style(&config.consensus.profile).yellow());
-                    println!("   Generator: {}", style(&config.consensus.models.generator).blue());
-                    println!("   Refiner: {}", style(&config.consensus.models.refiner).blue());
-                    println!("   Validator: {}", style(&config.consensus.models.validator).blue());
-                    println!("   Curator: {}", style(&config.consensus.models.curator).blue());
+                    println!("   Note: Profiles are stored in database, not config file");
+                    println!("   Use 'hive consensus profiles' to manage profiles");
+                    println!();
                     println!("   Streaming: {}", if config.consensus.streaming.enabled { 
                         style("✓ Enabled").green() 
                     } else { 
                         style("✗ Disabled").red() 
                     });
+                    println!("   Timeout: {}s", style(config.consensus.timeout_seconds).yellow());
                 }
                 Some("performance") => {
                     println!("⚡ {} Configuration:", style("Performance").bold().cyan());
@@ -1489,7 +1488,7 @@ async fn handle_config(command: ConfigCommands) -> Result<()> {
                 None => {
                     // Show summary of all sections
                     println!("📊 {} Overview:", style("Configuration").bold());
-                    println!("   Consensus profile: {}", style(&config.consensus.profile).cyan());
+                    println!("   Consensus: {} (profiles in database)", style("Configured").cyan());
                     println!("   TUI mode: {}", if config.interface.tui_mode { 
                         style("✓ Enabled").green() 
                     } else { 

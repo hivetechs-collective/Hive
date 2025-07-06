@@ -67,24 +67,12 @@ pub struct MemoryConfig {
     pub embedding_model: String,
 }
 
-/// Consensus engine configuration
+/// Consensus engine runtime configuration
+/// Note: Profiles and models are stored in database, not config files
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConsensusConfig {
-    pub profile: String,
-    pub models: ConsensusModels,
     pub streaming: StreamingConfig,
-    pub max_tokens: u32,
-    pub temperature: f32,
     pub timeout_seconds: u32,
-}
-
-/// Consensus model configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConsensusModels {
-    pub generator: String,
-    pub refiner: String,
-    pub validator: String,
-    pub curator: String,
 }
 
 /// Streaming configuration
@@ -181,20 +169,11 @@ impl Default for HiveConfig {
         
         Self {
             consensus: ConsensusConfig {
-                profile: "balanced".to_string(),
-                models: ConsensusModels {
-                    generator: "claude-3-5-sonnet".to_string(),
-                    refiner: "gpt-4-turbo".to_string(),
-                    validator: "claude-3-opus".to_string(),
-                    curator: "gpt-4o".to_string(),
-                },
                 streaming: StreamingConfig {
                     enabled: true,
                     buffer_size: 1024,
                     chunk_delay_ms: 50,
                 },
-                max_tokens: 4096,
-                temperature: 0.7,
                 timeout_seconds: 300,
             },
             performance: PerformanceConfig {
@@ -313,14 +292,9 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
     
     // Parse the key and update the value
     match key {
-        "consensus.profile" => config.consensus.profile = value.to_string(),
-        "consensus.models.generator" => config.consensus.models.generator = value.to_string(),
-        "consensus.models.refiner" => config.consensus.models.refiner = value.to_string(),
-        "consensus.models.validator" => config.consensus.models.validator = value.to_string(),
-        "consensus.models.curator" => config.consensus.models.curator = value.to_string(),
+        // Consensus profiles are now stored in database, not config files
         "consensus.streaming.enabled" => config.consensus.streaming.enabled = value.parse()?,
-        "consensus.max_tokens" => config.consensus.max_tokens = value.parse()?,
-        "consensus.temperature" => config.consensus.temperature = value.parse()?,
+        // Max tokens and temperature are hardcoded in consensus engine
         
         "performance.cache_size" => config.performance.cache_size = value.to_string(),
         "performance.max_workers" => config.performance.max_workers = value.parse()?,
@@ -421,14 +395,9 @@ pub async fn get_config_value(key: &str) -> Result<String> {
     let config = get_config().await?;
     
     let value = match key {
-        "consensus.profile" => config.consensus.profile,
-        "consensus.models.generator" => config.consensus.models.generator,
-        "consensus.models.refiner" => config.consensus.models.refiner,
-        "consensus.models.validator" => config.consensus.models.validator,
-        "consensus.models.curator" => config.consensus.models.curator,
+        // Consensus profiles are now loaded from database
         "consensus.streaming.enabled" => config.consensus.streaming.enabled.to_string(),
-        "consensus.max_tokens" => config.consensus.max_tokens.to_string(),
-        "consensus.temperature" => config.consensus.temperature.to_string(),
+        // Max tokens and temperature are hardcoded
         
         "performance.cache_size" => config.performance.cache_size,
         "performance.max_workers" => config.performance.max_workers.to_string(),
@@ -542,7 +511,7 @@ mod tests {
     #[tokio::test]
     async fn test_default_config() {
         let config = HiveConfig::default();
-        assert_eq!(config.consensus.profile, "balanced");
+        assert_eq!(config.consensus.timeout_seconds, 300);
         assert_eq!(config.interface.tui_mode, true);
         assert_eq!(config.security.telemetry, false);
     }
@@ -557,8 +526,8 @@ mod tests {
         drop(global);
         
         // Test getting values
-        let profile = get_config_value("consensus.profile").await.unwrap();
-        assert_eq!(profile, "balanced");
+        let timeout = get_config_value("consensus.timeout_seconds").await.unwrap();
+        assert_eq!(timeout, "300");
         
         let tui_mode = get_config_value("interface.tui_mode").await.unwrap();
         assert_eq!(tui_mode, "true");

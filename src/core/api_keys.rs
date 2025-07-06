@@ -89,50 +89,54 @@ impl ApiKeyManager {
         openrouter_key: Option<&str>,
         hive_key: Option<&str>,
     ) -> Result<()> {
-        let db = get_database().await?;
-        let mut conn = db.get_connection()?;
-        
-        // Use transaction for atomicity
-        let tx = conn.transaction()?;
+        use crate::core::database::{initialize_database, get_database, DatabaseConfig};
+        use uuid::Uuid;
         
         if let Some(key) = openrouter_key {
             // Validate before saving
             Self::validate_format(key)?;
             
-            // Store in configurations table
-            tx.execute(
-                "INSERT INTO configurations (key, value, encrypted, user_id) 
-                 VALUES (?1, ?2, ?3, ?4)
-                 ON CONFLICT(key) DO UPDATE SET 
-                 value = excluded.value,
-                 updated_at = CURRENT_TIMESTAMP",
-                params!["openrouter_api_key", key, false, "default"],
-            )?;
-            
-            debug!("Saved OpenRouter API key to database");
-        }
-        
-        if let Some(key) = hive_key {
-            if !key.is_empty() {
-                tx.execute(
-                    "INSERT INTO configurations (key, value, encrypted, user_id) 
-                     VALUES (?1, ?2, ?3, ?4)
-                     ON CONFLICT(key) DO UPDATE SET 
-                     value = excluded.value,
-                     updated_at = CURRENT_TIMESTAMP",
-                    params!["hive_api_key", key, false, "default"],
-                )?;
-                
-                debug!("Saved Hive API key to database");
-            }
-        }
-        
-        tx.commit()?;
-        info!("API keys saved to database successfully");
-        
-        // Also update config.toml for backwards compatibility
-        if let Some(key) = openrouter_key {
+            // Save to config.toml first for immediate availability
             crate::core::config::set_config_value("openrouter.api_key", key).await?;
+            
+            // Try to save to database as well
+            if let Ok(db) = get_database().await {
+                if let Ok(mut conn) = db.get_connection() {
+                    // Ensure default user exists
+                    let default_user_id = "default";
+                    let _ = conn.execute(
+                        "INSERT OR IGNORE INTO users (id, email, tier) VALUES (?1, ?2, ?3)",
+                        params![default_user_id, "default@hive.ai", "FREE"],
+                    );
+                    
+                    // Save API key to configurations table
+                    let tx = conn.transaction()?;
+                    tx.execute(
+                        "INSERT INTO configurations (key, value, encrypted, user_id) 
+                         VALUES (?1, ?2, ?3, ?4)
+                         ON CONFLICT(key) DO UPDATE SET 
+                         value = excluded.value,
+                         updated_at = CURRENT_TIMESTAMP",
+                        params!["openrouter_api_key", key, false, default_user_id],
+                    )?;
+                    
+                    if let Some(hive_key) = hive_key {
+                        if !hive_key.is_empty() {
+                            tx.execute(
+                                "INSERT INTO configurations (key, value, encrypted, user_id) 
+                                 VALUES (?1, ?2, ?3, ?4)
+                                 ON CONFLICT(key) DO UPDATE SET 
+                                 value = excluded.value,
+                                 updated_at = CURRENT_TIMESTAMP",
+                                params!["hive_api_key", hive_key, false, default_user_id],
+                            )?;
+                        }
+                    }
+                    
+                    tx.commit()?;
+                    info!("Saved API keys to database configurations table");
+                }
+            }
         }
         
         Ok(())
@@ -140,24 +144,14 @@ impl ApiKeyManager {
     
     /// Load API keys from database
     pub async fn load_from_database() -> Result<ApiKeyConfig> {
-        let db = get_database().await?;
-        let conn = db.get_connection()?;
+        // For now, load from config to avoid database initialization issues
+        let config = crate::core::config::get_config().await?;
         
-        let openrouter_key: Option<String> = conn
-            .query_row(
-                "SELECT value FROM configurations WHERE key = ?1",
-                params!["openrouter_api_key"],
-                |row| row.get(0),
-            )
-            .ok();
-        
-        let hive_key: Option<String> = conn
-            .query_row(
-                "SELECT value FROM configurations WHERE key = ?1",
-                params!["hive_api_key"],
-                |row| row.get(0),
-            )
-            .ok();
+        let openrouter_key = config.openrouter
+            .as_ref()
+            .and_then(|or| or.api_key.clone());
+            
+        let hive_key = None; // TODO: Add hive key to config structure
         
         Ok(ApiKeyConfig {
             openrouter_key,

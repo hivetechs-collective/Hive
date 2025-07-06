@@ -733,7 +733,7 @@ impl CliFramework {
         println!();
         
         println!("{}", style("Consensus Engine:").bold());
-        println!("  Profile: {}", self.config.consensus.profile);
+        println!("  Profiles: Stored in database");
         println!("  Timeout: {}s", self.config.consensus.timeout_seconds);
         println!();
         
