@@ -12,6 +12,7 @@ pub mod consensus;
 pub mod state;
 pub mod events;
 pub mod styles;
+pub mod menu_bar;
 
 pub use app::App;
 
