@@ -159,8 +159,8 @@ name = "hive"
 path = "src/main.rs"
 
 [[bin]]
-name = "hive-desktop-working"
-path = "src/bin/hive-desktop-working.rs"
+name = "hive-consensus"
+path = "src/bin/hive-consensus.rs"
 
 [lib]
 name = "hive_ai"
