@@ -161,15 +161,13 @@ impl DatabaseManager {
         )?;
 
         // Get current version
-        let current_version: Option<i32> = conn
+        let current_version: i32 = conn
             .query_row(
-                "SELECT MAX(version) FROM schema_migrations",
+                "SELECT COALESCE(MAX(version), 0) FROM schema_migrations",
                 [],
                 |row| row.get(0),
             )
-            .optional()?;
-
-        let current_version = current_version.unwrap_or(0);
+            .unwrap_or(0);
         info!("Current database version: {}", current_version);
 
         // Load and apply migrations

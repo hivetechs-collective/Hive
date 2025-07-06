@@ -9,7 +9,7 @@ use crate::desktop::{
     state::{AppState, ConnectionStatus},
     events::{EventDispatcher, KeyboardEventUtils},
     styles::get_global_styles,
-    dialogs::{OnboardingDialog, SettingsDialog, AboutDialog, CommandPalette},
+    dialogs::{SettingsDialog, AboutDialog, CommandPalette, OnboardingDialog},
 };
 use crate::core::api_keys::ApiKeyManager;
 
@@ -29,117 +29,73 @@ pub fn App() -> Element {
     let mut show_command_palette = use_signal(|| false);
     let mut onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
     
-    // API key states
-    let mut openrouter_key = use_signal(|| String::new());
-    let mut hive_key = use_signal(|| String::new());
+    // API key states - initialize with values from database if available
+    let mut openrouter_key = use_signal(|| {
+        crate::desktop::simple_db::get_config("openrouter_api_key")
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+    });
+    let mut hive_key = use_signal(|| {
+        crate::desktop::simple_db::get_config("hive_license_key")
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+    });
     
     // Check for API keys and onboarding status on startup (only once)
     use_effect(move || {
-        let mut show_onboarding = show_onboarding.clone();
-        let mut openrouter_key = openrouter_key.clone();
-        let mut hive_key = hive_key.clone();
-        
+        // Don't clone the signals - use them directly
         spawn(async move {
             // Import needed functions
             use crate::desktop::dialogs::load_existing_profiles;
             use crate::core::database::{DatabaseManager, DatabaseConfig};
             use crate::core::config::get_hive_config_dir;
             
-            // Check if onboarding has been completed
-            let db_path = get_hive_config_dir().join("hive.db");
-            let onboarding_completed = if !db_path.exists() {
-                false
-            } else {
-                let db_config = DatabaseConfig {
-                    path: db_path,
-                    max_connections: 10,
-                    connection_timeout: std::time::Duration::from_secs(5),
-                    idle_timeout: std::time::Duration::from_secs(300),
-                    enable_wal: true,
-                    enable_foreign_keys: true,
-                    cache_size: 8192,
-                    synchronous: "NORMAL".to_string(),
-                    journal_mode: "WAL".to_string(),
-                };
-                
-                if let Ok(db) = DatabaseManager::new(db_config).await {
-                    if let Ok(conn) = db.get_connection() {
-                        if let Ok(mut stmt) = conn.prepare(
-                            "SELECT value FROM configurations WHERE key = 'onboarding_completed'"
-                        ) {
-                            if let Ok(mut rows) = stmt.query([]) {
-                                if let Ok(Some(_)) = rows.next() {
-                                    true
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            };
+            // Check if onboarding has been completed - simple version
+            let onboarding_completed = crate::desktop::simple_db::is_onboarding_completed();
             
             // Check if onboarding is already completed
             if onboarding_completed {
                 tracing::info!("Onboarding already completed - loading keys");
-                // Just load the keys, don't show onboarding
-                if let Ok(config) = ApiKeyManager::load_from_database().await {
-                    if let Some(key) = config.openrouter_key {
-                        *openrouter_key.write() = key;
-                    }
-                    if let Some(key) = config.hive_key {
-                        *hive_key.write() = key;
-                    }
+                // Just load the keys from simple_db, don't show onboarding
+                if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
+                    openrouter_key.set(key);
+                }
+                if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
+                    hive_key.set(key);
                 }
                 return;
             }
             
-            // Otherwise, check if we need to show onboarding
-            match ApiKeyManager::has_valid_keys().await {
-                Ok(has_keys) => {
-                    if !has_keys {
-                        tracing::info!("No API keys found - showing onboarding");
-                        *show_onboarding.write() = true;
+            // Otherwise, check if we need to show onboarding using simple_db
+            let has_openrouter = crate::desktop::simple_db::has_openrouter_key();
+            
+            if !has_openrouter {
+                tracing::info!("No API keys found - showing onboarding");
+                show_onboarding.set(true);
+            } else {
+                // Load existing keys from simple_db
+                if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
+                    openrouter_key.set(key);
+                }
+                if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
+                    hive_key.set(key);
+                }
+                
+                // Check if profiles exist
+                if let Ok(profiles) = load_existing_profiles().await {
+                    if profiles.is_empty() {
+                        tracing::info!("Keys exist but no profiles - showing onboarding at step 4");
+                        onboarding_current_step.set(4); // Start at profile configuration
+                        show_onboarding.set(true);
                     } else {
-                        // Load existing keys
-                        if let Ok(config) = ApiKeyManager::load_from_database().await {
-                            if let Some(key) = config.openrouter_key {
-                                *openrouter_key.write() = key;
-                            }
-                            if let Some(key) = config.hive_key {
-                                *hive_key.write() = key;
-                            }
-                            
-                            // Check if profiles exist
-                            if let Ok(profiles) = load_existing_profiles().await {
-                                if profiles.is_empty() {
-                                    tracing::info!("Keys exist but no profiles - showing onboarding");
-                                    *show_onboarding.write() = true;
-                                } else {
-                                    tracing::info!("Setup complete - keys and profiles exist");
-                                    // Mark onboarding as complete since we have everything
-                                    spawn(async {
-                                        use crate::desktop::dialogs::mark_onboarding_complete;
-                                        if let Err(e) = mark_onboarding_complete().await {
-                                            tracing::warn!("Failed to mark onboarding complete: {}", e);
-                                        }
-                                    });
-                                }
-                            }
+                        tracing::info!("Setup complete - keys and profiles exist");
+                        // Mark onboarding as complete since we have everything
+                        if let Err(e) = crate::desktop::simple_db::mark_onboarding_complete() {
+                            tracing::warn!("Failed to mark onboarding complete: {}", e);
                         }
                     }
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to check API keys: {}", e);
-                    *show_onboarding.write() = true;
                 }
             }
         });
@@ -179,7 +135,7 @@ pub fn App() -> Element {
                 },
                 Key::Character(c) if c == "p" => {
                     // evt.prevent_default(); // Not available in Dioxus 0.5"
-                    *show_command_palette.write() = true;
+                    show_command_palette.set(true);
                     tracing::debug!("Ctrl+P pressed - Command palette");
                 },
                 Key::Character(c) if c == "w" => {
@@ -255,13 +211,11 @@ pub fn App() -> Element {
             StatusBar {}
             
             // Dialogs (rendered on top of everything)
-            if *show_onboarding.read() {
-                OnboardingDialog { 
-                    show_onboarding, 
-                    openrouter_key,
-                    hive_key,
-                    current_step: onboarding_current_step.clone(),
-                }
+            OnboardingDialog { 
+                show_onboarding, 
+                openrouter_key,
+                hive_key,
+                current_step: onboarding_current_step,
             }
             
             if *show_settings.read() {

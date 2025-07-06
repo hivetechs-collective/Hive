@@ -15,6 +15,7 @@ pub mod styles;
 pub mod menu_bar;
 pub mod dialogs;
 pub mod consensus_integration;
+pub mod simple_db;
 
 pub use app::App;
 

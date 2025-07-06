@@ -268,9 +268,9 @@ impl HiveUninstaller {
 
         for config_dir in config_dirs {
             let db_files = [
-                config_dir.join("conversations.db"),
-                config_dir.join("conversations.db-shm"),
-                config_dir.join("conversations.db-wal"),
+                config_dir.join("hive-ai.db"),
+                config_dir.join("hive-ai.db-shm"),
+                config_dir.join("hive-ai.db-wal"),
                 config_dir.join("index.db"),
                 config_dir.join("analytics.db"),
             ];

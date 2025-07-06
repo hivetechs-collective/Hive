@@ -45,7 +45,7 @@ format = "pretty"
     println!("⚙️  Created {}", style("configuration file").dim());
     
     // Create simple database file
-    let db_path = hive_dir.join("conversations.db");
+    let db_path = hive_dir.join("hive-ai.db");
     std::fs::write(&db_path, "")?;
     println!("💾 Created {}", style("conversation database").dim());
     
@@ -69,7 +69,7 @@ pub async fn essential_status() -> Result<()> {
     println!("  Config: {}", config_status);
     
     // Check database
-    let db_path = PathBuf::from(".hive/conversations.db");
+    let db_path = PathBuf::from(".hive/hive-ai.db");
     let db_status = if db_path.exists() {
         style("✓ Database initialized").green()
     } else {

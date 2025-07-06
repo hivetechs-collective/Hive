@@ -382,25 +382,21 @@ enum CostCommands {
     },
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     // Initialize logging
     initialize_default_logging()?;
     
     let cli = Cli::parse();
     
-    // Load configuration
-    let config = Config::default();
-    
-    // Change directory if specified
-    if let Some(dir) = &cli.directory {
-        env::set_current_dir(dir)?;
-    }
-    
     // Handle version command first
     if matches!(cli.command, Some(Commands::Version)) {
         println!("Hive AI {}", hive_ai::VERSION);
         return Ok(());
+    }
+    
+    // Change directory if specified
+    if let Some(dir) = &cli.directory {
+        env::set_current_dir(dir)?;
     }
     
     // Detect capabilities
@@ -431,6 +427,23 @@ async fn main() -> Result<()> {
         }
     };
     
+    // Handle desktop mode before creating tokio runtime
+    if ui_mode == UIMode::Desktop {
+        tracing::info!("Launching desktop GUI mode");
+        let config = Config::default();
+        launch_desktop_app(config)?;
+        return Ok(());
+    }
+    
+    // For CLI and TUI modes, use tokio runtime
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async_main(cli, ui_mode))
+}
+
+async fn async_main(cli: Cli, ui_mode: UIMode) -> Result<()> {
+    // Load configuration
+    let config = Config::default();
+    
     // Show startup banner if no command specified
     if cli.command.is_none() {
         show_startup_banner().await?;
@@ -439,8 +452,8 @@ async fn main() -> Result<()> {
     // Initialize the appropriate framework
     match ui_mode {
         UIMode::Desktop => {
-            tracing::info!("Launching desktop GUI mode");
-            launch_desktop_app(config)?;
+            // This should never happen as desktop is handled in main()
+            unreachable!("Desktop mode should be handled before async runtime");
         }
         UIMode::TUI => {
             tracing::info!("Launching TUI mode");
@@ -520,9 +533,8 @@ async fn execute_command(cli: &mut CliFramework, command: Commands) -> HiveResul
             unreachable!("Version command should be handled before this point");
         }
         Commands::Desktop => {
-            // Launch desktop application
-            let config = load_config().await?; // Load default config
-            launch_desktop_app(config)?;
+            // This should not happen as Desktop is handled before async runtime
+            unreachable!("Desktop command should be handled before async runtime");
         }
     }
     Ok(())

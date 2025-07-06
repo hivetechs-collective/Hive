@@ -252,7 +252,7 @@ fn get_target_database_path() -> Result<PathBuf, HiveError> {
             message: "Cannot determine home directory".to_string()
         })?;
     
-    Ok(home_dir.join(".hive").join("hive.db"))
+    Ok(home_dir.join(".hive").join("hive-ai.db"))
 }
 
 /// Analyze TypeScript database schema

@@ -130,7 +130,7 @@ impl InteractiveSession {
         
         let config_dir = crate::core::config::get_hive_config_dir();
         let config_exists = tokio::fs::metadata(config_dir.join("config.toml")).await.is_ok();
-        let db_exists = tokio::fs::metadata(config_dir.join("conversations.db")).await.is_ok();
+        let db_exists = tokio::fs::metadata(config_dir.join("hive-ai.db")).await.is_ok();
         
         println!(" {}:", style("System").bold());
         println!("   Version: {}", style(env!("CARGO_PKG_VERSION")).green());

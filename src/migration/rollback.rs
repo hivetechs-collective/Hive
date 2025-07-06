@@ -591,7 +591,7 @@ fn get_target_database_path() -> Result<PathBuf, HiveError> {
         .ok_or_else(|| HiveError::Migration { 
             message: "Cannot determine home directory".to_string()
         })?;
-    Ok(home_dir.join(".hive").join("hive.db"))
+    Ok(home_dir.join(".hive").join("hive-ai.db"))
 }
 
 /// Get target configuration path

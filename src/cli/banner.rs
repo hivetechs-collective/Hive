@@ -260,7 +260,7 @@ pub async fn show_status_info() -> Result<()> {
     
     // Memory and performance
     println!(" {}:", style("Memory & Performance").bold());
-    let db_path = get_hive_config_dir().join("conversations.db");
+    let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_size = if db_path.exists() {
         tokio::fs::metadata(&db_path).await?.len()
     } else {
@@ -332,7 +332,7 @@ pub async fn show_status_info() -> Result<()> {
     
     // Last updated
     println!(" {}:", style("Last Activity").bold());
-    if let Ok(metadata) = tokio::fs::metadata(config_dir.join("conversations.db")).await {
+    if let Ok(metadata) = tokio::fs::metadata(config_dir.join("hive-ai.db")).await {
         if let Ok(modified) = metadata.modified() {
             let duration = std::time::SystemTime::now().duration_since(modified).unwrap_or_default();
             let hours = duration.as_secs() / 3600;
@@ -352,7 +352,7 @@ pub async fn show_status_info() -> Result<()> {
 
 /// Get conversation count from database
 async fn get_conversation_count(config_dir: &std::path::Path) -> Result<usize> {
-    let db_path = config_dir.join("conversations.db");
+    let db_path = config_dir.join("hive-ai.db");
     if !db_path.exists() {
         return Ok(0);
     }

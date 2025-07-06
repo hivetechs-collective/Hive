@@ -1,6 +1,11 @@
 # Hive AI Configuration File
 # Edit this file to customize your Hive AI experience
 
+[llm]
+# OpenRouter API configuration
+api_endpoint = "https://openrouter.ai/api/v1"
+timeout_seconds = 30
+
 [consensus]
 # Consensus profile: speed, balanced, cost, elite
 profile = "balanced"
@@ -22,8 +27,8 @@ curator = ["claude-3-sonnet-20240229", "gpt-3.5-turbo"]
 # Streaming configuration
 [consensus.streaming]
 enabled = true
-chunk_size = 1024
-timeout_ms = 30000
+buffer_size = 1024
+chunk_delay_ms = 50
 
 # Temperature settings for each stage
 [consensus.temperature]
@@ -214,3 +219,47 @@ max_files = 5
 # api_token = "xxxxx"
 # sync_enabled = true
 # sync_interval_minutes = 15
+
+[core_dirs]
+# Data directory
+data_dir = "~/.hive/data"
+# Configuration directory
+config_dir = "~/.hive"
+# Cache directory
+cache_dir = "~/.hive/cache"
+
+[analytics]
+# Enable analytics collection
+collection_enabled = false
+# Data retention in days
+retention_days = 30
+# Enable export
+export_enabled = false
+
+[database]
+# Database file path
+path = "~/.hive/hive-ai.db"
+# Connection pool size
+connection_pool_size = 5
+# Enable Write-Ahead Logging
+enable_wal = true
+# Auto vacuum
+auto_vacuum = true
+
+[memory]
+# Maximum conversations to remember
+max_conversations = 1000
+# Context window size
+context_window_size = 8192
+# Enable clustering
+clustering_enabled = true
+# Embedding model
+embedding_model = "text-embedding-ada-002"
+
+[security.trust_dialog]
+# Enable trust dialog for new directories
+enabled = true
+# Auto-trust git repositories
+auto_trust_git = true
+# Trust timeout in seconds
+trust_timeout = 300
