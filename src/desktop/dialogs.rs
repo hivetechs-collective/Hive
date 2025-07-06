@@ -2,6 +2,13 @@
 
 use dioxus::prelude::*;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WelcomeAction {
+    OpenFolder,
+    OpenRecent,
+    NewFile,
+}
+
 /// About dialog component
 #[component]
 pub fn AboutDialog(show_about: Signal<bool>) -> Element {
@@ -59,7 +66,7 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
 
 /// Welcome dialog/tab component
 #[component]
-pub fn WelcomeTab(show_welcome: Signal<bool>) -> Element {
+pub fn WelcomeTab(show_welcome: Signal<bool>, on_action: EventHandler<WelcomeAction>) -> Element {
     if !*show_welcome.read() {
         return rsx! {};
     }
@@ -82,14 +89,17 @@ pub fn WelcomeTab(show_welcome: Signal<bool>) -> Element {
                     h3 { "🚀 Quick Start" }
                     button { 
                         class: "welcome-button",
+                        onclick: move |_| on_action.call(WelcomeAction::OpenFolder),
                         "Open Folder"
                     }
                     button { 
                         class: "welcome-button",
+                        onclick: move |_| on_action.call(WelcomeAction::OpenRecent),
                         "Open Recent"
                     }
                     button { 
                         class: "welcome-button",
+                        onclick: move |_| on_action.call(WelcomeAction::NewFile),
                         "New File"
                     }
                 }
