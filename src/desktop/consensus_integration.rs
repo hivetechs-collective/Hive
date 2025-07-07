@@ -207,7 +207,11 @@ impl DesktopConsensusManager {
             ));
         }
         
-        let engine = ConsensusEngine::new(None).await?;
+        // Use simple database for desktop app
+        use crate::core::database_simple::Database;
+        let db = Arc::new(Database::open_default().await?);
+        
+        let engine = ConsensusEngine::new(Some(db)).await?;
         
         Ok(Self {
             engine: Arc::new(Mutex::new(engine)),

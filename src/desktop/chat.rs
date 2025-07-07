@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus::events::{KeyboardEvent, MouseEvent};
-use crate::desktop::{state::*, components::*, events::KeyboardEventUtils};
+use crate::desktop::{state::*, components::*, events::KeyboardEventUtils, consensus_integration::{use_consensus, DesktopConsensusManager}};
 
 /// Chat Interface Component
 #[component]
@@ -172,59 +172,153 @@ fn format_timestamp(timestamp: &chrono::DateTime<chrono::Utc>) -> String {
     timestamp.format("%H:%M").to_string()
 }
 
+/// Process a message from the chat input
+fn process_message(
+    text: String,
+    app_state: &mut Signal<AppState>,
+    input_text: &mut Signal<String>,
+    consensus_manager: &Option<DesktopConsensusManager>,
+    show_onboarding: &mut Signal<bool>,
+) {
+    // Check if we need to show onboarding (no profiles configured)
+    if consensus_manager.is_none() {
+        // Check if profiles exist
+        let mut app_state_clone = app_state.clone();
+        let mut show_onboarding_clone = show_onboarding.clone();
+        spawn(async move {
+            use crate::desktop::dialogs::load_existing_profiles;
+            
+            match load_existing_profiles().await {
+                Ok(profiles) if profiles.is_empty() => {
+                    tracing::info!("No profiles configured - showing onboarding");
+                    show_onboarding_clone.set(true);
+                }
+                Ok(_) => {
+                    tracing::error!("Consensus manager not available but profiles exist");
+                    let error_msg = ChatMessage {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        content: "Error: Consensus engine not initialized. Please restart the application.".to_string(),
+                        message_type: MessageType::Error,
+                        timestamp: chrono::Utc::now(),
+                        metadata: MessageMetadata::default(),
+                    };
+                    app_state_clone.write().chat.add_message(error_msg);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load profiles: {}", e);
+                    show_onboarding_clone.set(true);
+                }
+            }
+        });
+        return;
+    }
+    
+    // Add user message
+    let message = ChatMessage {
+        id: uuid::Uuid::new_v4().to_string(),
+        content: text.clone(),
+        message_type: MessageType::User,
+        timestamp: chrono::Utc::now(),
+        metadata: MessageMetadata::default(),
+    };
+    
+    app_state.write().chat.add_message(message);
+    
+    // Start consensus processing
+    app_state.write().consensus.start_consensus();
+    
+    // Clear input
+    input_text.set(String::new());
+    
+    // Send to consensus engine
+    if let Some(consensus) = consensus_manager {
+        let query = text.clone();
+        let mut app_state_consensus = app_state.clone();
+        let mut show_onboarding_clone = show_onboarding.clone();
+        let mut consensus_clone = consensus.clone();
+        
+        spawn(async move {
+            match consensus_clone.process_query(&query).await {
+                Ok(response) => {
+                    let response_msg = ChatMessage {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        content: response,
+                        message_type: MessageType::Assistant,
+                        timestamp: chrono::Utc::now(),
+                        metadata: MessageMetadata {
+                            cost: Some(app_state_consensus.read().consensus.estimated_cost),
+                            model: Some("4-stage consensus".to_string()),
+                            processing_time: None,
+                            token_count: Some(app_state_consensus.read().consensus.total_tokens as u32),
+                        },
+                    };
+                    app_state_consensus.write().chat.add_message(response_msg);
+                }
+                Err(e) => {
+                    tracing::error!("Consensus processing error: {}", e);
+                    let error_msg = ChatMessage {
+                        id: uuid::Uuid::new_v4().to_string(),
+                        content: format!("Error processing request: {}", e),
+                        message_type: MessageType::Error,
+                        timestamp: chrono::Utc::now(),
+                        metadata: MessageMetadata::default(),
+                    };
+                    app_state_consensus.write().chat.add_message(error_msg);
+                    
+                    // If the error is about missing profiles or API key, show onboarding
+                    if e.to_string().contains("No valid OpenRouter API key") || 
+                       e.to_string().contains("profile") {
+                        show_onboarding_clone.set(true);
+                    }
+                }
+            }
+            
+            // Complete consensus
+            app_state_consensus.write().consensus.complete_consensus();
+        });
+    }
+}
+
 /// Chat input component
 #[component]
 fn ChatInput() -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let mut input_text = use_signal(String::new);
     let mut is_composing = use_signal(|| false);
+    let consensus_manager = use_consensus();
+    let mut show_onboarding = use_context::<Signal<bool>>();
     
-    let send_message = {
+    let on_send_click = {
         let mut app_state = app_state.clone();
         let mut input_text = input_text.clone();
-        move || {
+        let consensus_manager = consensus_manager.clone();
+        let mut show_onboarding = show_onboarding.clone();
+        
+        move |_evt: MouseEvent| {
             let text = input_text.read().clone();
             if !text.trim().is_empty() {
-                // Add user message
-                let message = ChatMessage {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    content: text.clone(),
-                    message_type: MessageType::User,
-                    timestamp: chrono::Utc::now(),
-                    metadata: MessageMetadata::default(),
-                };
-                
-                app_state.write().chat.add_message(message);
-                
-                // Start consensus processing
-                app_state.write().consensus.start_consensus();
-                
-                // Clear input
-                input_text.set(String::new());
-                
-                // TODO: Send to consensus engine
+                process_message(text, &mut app_state, &mut input_text, &consensus_manager, &mut show_onboarding);
             }
         }
     };
     
-    let on_send = {
-        let mut send_message = send_message.clone();
-        move |_evt: MouseEvent| {
-            send_message();
-        }
-    };
-    
     let on_key_down = {
-        let mut send_message = send_message.clone();
+        let mut app_state = app_state.clone();
         let mut input_text = input_text.clone();
+        let consensus_manager = consensus_manager.clone();
+        let mut show_onboarding = show_onboarding.clone();
         let is_composing = is_composing.clone();
+        
         move |evt: KeyboardEvent| {
             if KeyboardEventUtils::is_enter_key(&evt) && !evt.modifiers().shift() && !*is_composing.read() {
-                send_message();
+                let text = input_text.read().clone();
+                if !text.trim().is_empty() {
+                    process_message(text, &mut app_state, &mut input_text, &consensus_manager, &mut show_onboarding);
+                }
             } else if KeyboardEventUtils::is_escape(&evt) {
                 // Clear input on Escape
                 input_text.set(String::new());
-            } else if evt.key() == dioxus::events::Key::Tab && !evt.modifiers().shift() {
+            } else if evt.key() == dioxus::html::input_data::keyboard_types::Key::Tab && !evt.modifiers().shift() {
                 // Auto-complete or show suggestions
                 // TODO: Implement auto-complete
             }
@@ -256,7 +350,7 @@ fn ChatInput() -> Element {
                 
                 button {
                     class: if input_text.read().trim().is_empty() { "send-btn disabled" } else { "send-btn" },
-                    onclick: on_send,
+                    onclick: on_send_click,
                     disabled: input_text.read().trim().is_empty(),
                     svg {
                         width: "20",
