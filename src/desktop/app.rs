@@ -2,6 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus::events::{KeyboardEvent, MouseEvent};
+use dioxus::html::input_data::keyboard_types::Key;
 use crate::desktop::{
     file_explorer::FileExplorer,
     chat::ChatInterface,
@@ -107,6 +108,7 @@ pub fn App() -> Element {
     use_context_provider(|| show_settings.clone());
     use_context_provider(|| show_about.clone());
     use_context_provider(|| show_command_palette.clone());
+    use_context_provider(|| show_onboarding.clone());
     
     // Global keyboard shortcuts
     let on_global_keydown = move |evt: KeyboardEvent| {
