@@ -57,7 +57,7 @@ impl ConsensusEngine {
         
         // Load default profile from database (matching TypeScript behavior)
         let profile = Self::load_default_profile(&database).await
-            .context("No pipeline profile found. Please run: hive quickstart")?;
+            .context("No consensus profile found. Please complete onboarding to create profiles")?;
 
         let config = ConsensusConfig {
             enable_streaming: hive_config.consensus.streaming.enabled,
@@ -339,28 +339,28 @@ impl ConsensusEngine {
         templates.iter().map(|t| t.id.clone()).collect()
     }
 
-    /// Load default pipeline profile from database (matching TypeScript getDefaultPipelineProfile)
+    /// Load default consensus profile from database
     async fn load_default_profile(database: &Option<Arc<Database>>) -> Result<ConsensusProfile> {
         let db = database.as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
         
         let conn = db.get_connection().await?;
         
-        // Query for default profile matching TypeScript logic
+        // Query for default profile from consensus_profiles table
         let row = conn.query_row(
             "SELECT 
-                pp.id,
-                pp.name,
+                cp.id,
+                cp.name,
                 gen.openrouter_id as generator_model,
                 ref.openrouter_id as refiner_model,
                 val.openrouter_id as validator_model,
                 cur.openrouter_id as curator_model
-            FROM pipeline_profiles pp
-            JOIN openrouter_models gen ON pp.generator_model_internal_id = gen.internal_id
-            JOIN openrouter_models ref ON pp.refiner_model_internal_id = ref.internal_id
-            JOIN openrouter_models val ON pp.validator_model_internal_id = val.internal_id
-            JOIN openrouter_models cur ON pp.curator_model_internal_id = cur.internal_id
-            WHERE pp.is_default = 1
+            FROM consensus_profiles cp
+            JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
+            JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
+            JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
+            JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
+            WHERE cp.is_default = 1
             LIMIT 1",
             [],
             |row| {
@@ -380,28 +380,28 @@ impl ConsensusEngine {
         Ok(row)
     }
 
-    /// Load specific pipeline profile by name or ID (matching TypeScript getPipelineProfile)
+    /// Load specific consensus profile by name or ID
     async fn load_profile_by_name_or_id(database: &Option<Arc<Database>>, profile_name_or_id: &str) -> Result<ConsensusProfile> {
         let db = database.as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
         
         let conn = db.get_connection().await?;
         
-        // Query for specific profile by name or ID
+        // Query for specific profile by name or ID from consensus_profiles table
         let row = conn.query_row(
             "SELECT 
-                pp.id,
-                pp.name,
+                cp.id,
+                cp.name,
                 gen.openrouter_id as generator_model,
                 ref.openrouter_id as refiner_model,
                 val.openrouter_id as validator_model,
                 cur.openrouter_id as curator_model
-            FROM pipeline_profiles pp
-            JOIN openrouter_models gen ON pp.generator_model_internal_id = gen.internal_id
-            JOIN openrouter_models ref ON pp.refiner_model_internal_id = ref.internal_id
-            JOIN openrouter_models val ON pp.validator_model_internal_id = val.internal_id
-            JOIN openrouter_models cur ON pp.curator_model_internal_id = cur.internal_id
-            WHERE pp.id = ?1 OR pp.name = ?1
+            FROM consensus_profiles cp
+            JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
+            JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
+            JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
+            JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
+            WHERE cp.id = ?1 OR cp.name = ?1
             LIMIT 1",
             params![profile_name_or_id],
             |row| {
