@@ -666,7 +666,9 @@ pub fn OnboardingDialog(
 ) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
-    let mut selected_profile = use_signal(|| "balanced".to_string());
+    // Load the current default profile name from database
+    let mut selected_profile = use_signal(|| String::new());
+    let mut default_profile_id = use_signal(|| None::<i64>);
     // Initialize temp keys with existing values from database if available
     let mut temp_openrouter_key = use_signal(|| {
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
@@ -766,6 +768,29 @@ pub fn OnboardingDialog(
                     }
                     // Note: We don't close the dialog here even if profiles exist
                     // Let the user complete the flow or close it manually
+                }
+            }
+        });
+    });
+    
+    // Load the default profile name from database
+    use_effect(move || {
+        let mut selected_profile = selected_profile.clone();
+        let mut default_profile_id = default_profile_id.clone();
+        
+        spawn(async move {
+            // Load the current default profile from database
+            match load_default_profile().await {
+                Ok(Some((id, name))) => {
+                    tracing::info!("Loaded default profile: {} (id: {})", name, id);
+                    *selected_profile.write() = name;
+                    *default_profile_id.write() = Some(id);
+                }
+                Ok(None) => {
+                    tracing::info!("No default profile set");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to load default profile: {}", e);
                 }
             }
         });
@@ -2004,6 +2029,37 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     .collect();
     
     Ok(profiles)
+}
+
+/// Load the current default profile from database
+async fn load_default_profile() -> anyhow::Result<Option<(i64, String)>> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    
+    let db_path = get_hive_config_dir().join("hive-ai.db");
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let conn = db.get_connection()?;
+    
+    // Query for the default profile
+    let result = conn.query_row(
+        "SELECT id, name FROM consensus_profiles WHERE is_default = 1 LIMIT 1",
+        [],
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    ).optional()?;
+    
+    Ok(result)
 }
 
 /// Create profile from expert template

@@ -257,7 +257,16 @@ pub fn use_consensus() -> Option<DesktopConsensusManager> {
     let app_state = use_context::<Signal<AppState>>();
     
     let resource = use_resource(move || async move {
-        DesktopConsensusManager::new(app_state).await.ok()
+        match DesktopConsensusManager::new(app_state).await {
+            Ok(manager) => {
+                tracing::info!("Successfully created consensus manager");
+                Some(manager)
+            }
+            Err(e) => {
+                tracing::error!("Failed to create consensus manager: {}", e);
+                None
+            }
+        }
     });
     
     let result = resource.read().as_ref().and_then(|r| r.as_ref().cloned());
