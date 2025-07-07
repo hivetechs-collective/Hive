@@ -2,15 +2,16 @@
 // Preserves exact behavior from TypeScript version with Rust performance
 
 pub mod engine;
+pub mod maintenance;
+pub mod models;
+pub mod openrouter;
 pub mod pipeline;
+pub mod profiles;
 pub mod stages;
 pub mod streaming;
 pub mod temporal;
 pub mod types;
 // pub mod optimize; // TODO: Fix profile field usage
-pub mod models;
-pub mod openrouter;
-pub mod profiles;
 
 pub use engine::ConsensusEngine;
 pub use pipeline::ConsensusPipeline;

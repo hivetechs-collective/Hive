@@ -585,17 +585,55 @@ impl ConsensusPipeline {
         tracker: &mut ProgressTracker,
         model: &str,
     ) -> Result<ModelResponse> {
-        println!("⚠️ OpenRouter API call failed for model {}: {}. Using fallback response.", model, error);
+        // Check if this is a model unavailable error
+        let error_str = error.to_string();
+        let is_model_unavailable = error_str.contains("404") || 
+                                   error_str.contains("model not found") ||
+                                   error_str.contains("model unavailable");
         
-        // When OpenRouter API is unavailable, return an error rather than placeholder content
-        return Err(anyhow::anyhow!(
-            "OpenRouter API call failed for model {}: {}. Cannot proceed without API access.",
+        if is_model_unavailable {
+            tracing::warn!("Model {} is unavailable, attempting to find replacement", model);
+            
+            // Try to find a replacement model
+            if let Some(db) = &self.database {
+                use crate::consensus::maintenance::TemplateMaintenanceManager;
+                
+                let maintenance = TemplateMaintenanceManager::new(
+                    db.clone(), 
+                    self.api_key.clone()
+                );
+                
+                if let Ok(Some(replacement)) = maintenance.find_model_replacement(model).await {
+                    tracing::info!("Found replacement model: {} -> {}", model, replacement);
+                    
+                    // Return a special response indicating we need to retry with a different model
+                    return Ok(ModelResponse {
+                        model: replacement.clone(),
+                        content: format!("RETRY_WITH_MODEL:{}", replacement),
+                        usage: TokenUsage {
+                            prompt_tokens: 0,
+                            completion_tokens: 0,
+                            total_tokens: 0,
+                        },
+                        analytics: StageAnalytics {
+                            duration: 0.0,
+                            cost: 0.0,
+                            provider: "fallback".to_string(),
+                            model_internal_id: "0".to_string(),
+                            quality_score: 0.0,
+                            error_count: 1,
+                        },
+                    });
+                }
+            }
+        }
+        
+        // For other errors or if no replacement found, return the error
+        Err(anyhow::anyhow!(
+            "OpenRouter API call failed for model {}: {}",
             model, 
             error
-        ));
-
-        // This code should not be reached since we return an error above
-        unreachable!("API error handling should return an error, not continue")
+        ))
     }
     
     /// Estimate cost for a stage operation
@@ -625,11 +663,10 @@ impl ConsensusPipeline {
 
 /// Response from model API
 struct ModelResponse {
+    model: String,
     content: String,
-    usage: Option<TokenUsage>,
-    cost: f64,
-    provider: String,
-    model_internal_id: String,
+    usage: TokenUsage,
+    analytics: StageAnalytics,
 }
 
 #[cfg(test)]
