@@ -56,8 +56,17 @@ impl ConsensusEngine {
         };
         
         // Load default profile from database (matching TypeScript behavior)
-        let profile = Self::load_default_profile(&database).await
-            .context("No consensus profile found. Please complete onboarding to create profiles")?;
+        tracing::info!("Loading default profile from database...");
+        let profile = match Self::load_default_profile(&database).await {
+            Ok(p) => {
+                tracing::info!("Successfully loaded profile: {}", p.profile_name);
+                p
+            }
+            Err(e) => {
+                tracing::error!("Failed to load default profile: {}", e);
+                return Err(e).context("No consensus profile found. Please complete onboarding to create profiles");
+            }
+        };
 
         let config = ConsensusConfig {
             enable_streaming: hive_config.consensus.streaming.enabled,
@@ -341,43 +350,53 @@ impl ConsensusEngine {
 
     /// Load default consensus profile from database
     async fn load_default_profile(database: &Option<Arc<Database>>) -> Result<ConsensusProfile> {
+        tracing::info!("load_default_profile: Starting...");
         let db = database.as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
         
+        // Use the async connection method which handles spawning properly
         let conn = db.get_connection().await?;
+        tracing::info!("load_default_profile: Got async connection, executing query...");
         
-        // Query for default profile from consensus_profiles table
-        let row = conn.query_row(
-            "SELECT 
-                cp.id,
-                cp.name,
-                gen.openrouter_id as generator_model,
-                ref.openrouter_id as refiner_model,
-                val.openrouter_id as validator_model,
-                cur.openrouter_id as curator_model
-            FROM consensus_profiles cp
-            JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
-            JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
-            JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
-            JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
-            WHERE cp.is_default = 1
-            LIMIT 1",
-            [],
-            |row| {
-                Ok(ConsensusProfile {
-                    id: row.get(0)?,
-                    profile_name: row.get(1)?,
-                    generator_model: row.get(2)?,
-                    refiner_model: row.get(3)?,
-                    validator_model: row.get(4)?,
-                    curator_model: row.get(5)?,
-                    created_at: Utc::now(),
-                    is_active: true,
-                })
-            },
-        )?;
+        // Use spawn_blocking for the query operation only
+        let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
+            // Query for default profile from consensus_profiles table
+            let row = conn.query_row(
+                "SELECT 
+                    cp.id,
+                    cp.name,
+                    gen.openrouter_id as generator_model,
+                    ref.openrouter_id as refiner_model,
+                    val.openrouter_id as validator_model,
+                    cur.openrouter_id as curator_model
+                FROM consensus_profiles cp
+                JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
+                JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
+                JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
+                JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
+                WHERE cp.is_default = 1
+                LIMIT 1",
+                [],
+                |row| {
+                    // Convert INTEGER id to String
+                    let id: i64 = row.get(0)?;
+                    Ok(ConsensusProfile {
+                        id: id.to_string(),
+                        profile_name: row.get(1)?,
+                        generator_model: row.get(2)?,
+                        refiner_model: row.get(3)?,
+                        validator_model: row.get(4)?,
+                        curator_model: row.get(5)?,
+                        created_at: Utc::now(),
+                        is_active: true,
+                    })
+                },
+            )?;
+            
+            Ok(row)
+        }).await??;
         
-        Ok(row)
+        Ok(profile)
     }
 
     /// Load specific consensus profile by name or ID
@@ -385,40 +404,50 @@ impl ConsensusEngine {
         let db = database.as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
         
+        let profile_id = profile_name_or_id.to_string();
+        
+        // Use the async connection method which handles spawning properly
         let conn = db.get_connection().await?;
         
-        // Query for specific profile by name or ID from consensus_profiles table
-        let row = conn.query_row(
-            "SELECT 
-                cp.id,
-                cp.name,
-                gen.openrouter_id as generator_model,
-                ref.openrouter_id as refiner_model,
-                val.openrouter_id as validator_model,
-                cur.openrouter_id as curator_model
-            FROM consensus_profiles cp
-            JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
-            JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
-            JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
-            JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
-            WHERE cp.id = ?1 OR cp.name = ?1
-            LIMIT 1",
-            params![profile_name_or_id],
-            |row| {
-                Ok(ConsensusProfile {
-                    id: row.get(0)?,
-                    profile_name: row.get(1)?,
-                    generator_model: row.get(2)?,
-                    refiner_model: row.get(3)?,
-                    validator_model: row.get(4)?,
-                    curator_model: row.get(5)?,
-                    created_at: Utc::now(),
-                    is_active: true,
-                })
-            },
-        )?;
+        // Use spawn_blocking for the query operation only
+        let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
+            // Query for specific profile by name or ID from consensus_profiles table
+            let row = conn.query_row(
+                "SELECT 
+                    cp.id,
+                    cp.name,
+                    gen.openrouter_id as generator_model,
+                    ref.openrouter_id as refiner_model,
+                    val.openrouter_id as validator_model,
+                    cur.openrouter_id as curator_model
+                FROM consensus_profiles cp
+                JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
+                JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
+                JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
+                JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
+                WHERE cp.id = ?1 OR cp.name = ?1
+                LIMIT 1",
+                params![profile_id],
+                |row| {
+                    // Convert INTEGER id to String
+                    let id: i64 = row.get(0)?;
+                    Ok(ConsensusProfile {
+                        id: id.to_string(),
+                        profile_name: row.get(1)?,
+                        generator_model: row.get(2)?,
+                        refiner_model: row.get(3)?,
+                        validator_model: row.get(4)?,
+                        curator_model: row.get(5)?,
+                        created_at: Utc::now(),
+                        is_active: true,
+                    })
+                },
+            )?;
+            
+            Ok(row)
+        }).await??;
         
-        Ok(row)
+        Ok(profile)
     }
 
     /// Validate consensus prerequisites

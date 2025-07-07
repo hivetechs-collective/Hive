@@ -100,10 +100,12 @@ impl Database {
         
         // Apply pragmas
         if config.enable_wal {
-            conn.execute("PRAGMA journal_mode = WAL", [])?;
+            // journal_mode returns a result, so use query_row
+            let _mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
         }
         
         if config.enable_foreign_keys {
+            // foreign_keys doesn't return a result, so execute is fine
             conn.execute("PRAGMA foreign_keys = ON", [])?;
         }
         
@@ -138,10 +140,12 @@ impl Database {
             
             // Apply pragmas
             if config.enable_wal {
-                conn.execute("PRAGMA journal_mode = WAL", [])?;
+                // journal_mode returns a result, so use query_row
+                let _mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
             }
             
             if config.enable_foreign_keys {
+                // foreign_keys doesn't return a result, so execute is fine
                 conn.execute("PRAGMA foreign_keys = ON", [])?;
             }
             
@@ -177,11 +181,13 @@ pub async fn initialize_database(config: Option<DatabaseConfig>) -> Result<()> {
     
     // Enable WAL mode for better performance
     if config.enable_wal {
-        conn.execute("PRAGMA journal_mode = WAL", [])?;
+        // journal_mode returns a result, so use query_row
+        let _mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
     }
     
     // Enable foreign keys
     if config.enable_foreign_keys {
+        // foreign_keys doesn't return a result, so execute is fine
         conn.execute("PRAGMA foreign_keys = ON", [])?;
     }
     
