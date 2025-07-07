@@ -315,7 +315,7 @@ impl HookSecurityValidator {
     fn compile_dangerous_patterns() -> Result<Vec<Regex>> {
         let patterns = [
             r"rm\s+-rf\s+/",
-            r":(){ :|:& };:", // Fork bomb
+            r":\(\)\{\s*:\|:&\s*\};:", // Fork bomb (escaped braces)
             r">\s*/dev/sd[a-z]",
             r"dd\s+if=/dev/zero",
             r"/etc/passwd",

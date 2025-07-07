@@ -63,9 +63,10 @@ impl CliFramework {
         crate::core::database::initialize_database(Some(db_config)).await?;
         println!("✅ Database initialized");
 
-        // Initialize consensus engine
-        // ConsensusEngine expects Option<Arc<Database>>, not ConsensusConfig
-        let consensus_engine = Arc::new(ConsensusEngine::new(None).await?);
+        // Initialize consensus engine with database
+        use crate::core::database_simple::Database;
+        let simple_db = Arc::new(Database::open_default().await?);
+        let consensus_engine = Arc::new(ConsensusEngine::new(Some(simple_db)).await?);
         println!("✅ Consensus engine initialized");
 
         // Initialize security system
