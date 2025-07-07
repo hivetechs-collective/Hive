@@ -2035,6 +2035,7 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
 async fn load_default_profile() -> anyhow::Result<Option<(i64, String)>> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use rusqlite::OptionalExtension;
     
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
