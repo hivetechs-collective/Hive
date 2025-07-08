@@ -183,11 +183,11 @@ const DESKTOP_STYLES: &str = r#"
         line-height: 1.6;
         color: #cccccc;
         scroll-behavior: smooth;
-        overflow-anchor: none;
     }
     
     .response-content {
         /* Markdown content styling */
+        padding-bottom: 20px;
     }
     
     .response-content h1 {
@@ -485,6 +485,7 @@ fn App() -> Element {
     
     // Track if we should auto-scroll
     let mut should_auto_scroll = use_signal(|| true);
+    let mut scroll_to_bottom = use_signal(|| false);
     
     // Auto-scroll response area when streaming content changes
     let previous_content_length = use_signal(|| 0usize);
@@ -492,14 +493,15 @@ fn App() -> Element {
     use_effect({
         let app_state = app_state.clone();
         let mut previous_content_length = previous_content_length.clone();
-        let mut should_auto_scroll = should_auto_scroll.clone();
+        let should_auto_scroll = should_auto_scroll.clone();
+        let mut scroll_to_bottom = scroll_to_bottom.clone();
         move || {
             let current_length = app_state.read().consensus.streaming_content.len();
-            if current_length > *previous_content_length.read() {
+            if current_length > *previous_content_length.read() && *should_auto_scroll.read() {
                 *previous_content_length.write() = current_length;
                 
-                // Set flag to scroll on next render
-                *should_auto_scroll.write() = true;
+                // Trigger scroll by updating signal
+                *scroll_to_bottom.write() = true;
             }
         }
     });
@@ -761,11 +763,6 @@ fn App() -> Element {
         style { "{DESKTOP_STYLES}" }
         style { "{DIALOG_STYLES}" }
         
-        // Inject auto-scroll script
-        script {
-            dangerous_inner_html: "{hive_ai::desktop::scroll_handler::AUTO_SCROLL_JS}"
-        }
-        
         div {
             class: "app-container",
             
@@ -903,7 +900,7 @@ fn App() -> Element {
                         class: "response-area",
                         id: "response-area",
                         onwheel: move |_| {
-                            // User scrolled manually, disable auto-scroll
+                            // User manually scrolled, disable auto-scroll
                             *should_auto_scroll.write() = false;
                         },
                         if !app_state.read().consensus.streaming_content.is_empty() {
@@ -912,13 +909,14 @@ fn App() -> Element {
                                 class: "response-content",
                                 dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
                             }
-                            // Auto-scroll anchor - a div that we'll scroll into view
-                            if *should_auto_scroll.read() {
+                            // Scroll anchor that stays at bottom
+                            if *should_auto_scroll.read() && *scroll_to_bottom.read() {
                                 div {
-                                    style: "height: 1px; visibility: hidden;",
+                                    id: "scroll-anchor",
+                                    style: "height: 1px;",
                                     onmounted: move |_| {
-                                        // When this mounts, it means new content was added
-                                        // We'll use a small hack to trigger scroll
+                                        *scroll_to_bottom.write() = false;
+                                        // The CSS flexbox layout will ensure this is visible
                                     }
                                 }
                             }
