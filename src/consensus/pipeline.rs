@@ -15,6 +15,7 @@ use crate::consensus::openrouter::{
     OpenRouterClient, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse,
     StreamingCallbacks as OpenRouterStreamingCallbacks, SimpleStreamingCallbacks
 };
+use rusqlite::params;
 use crate::consensus::models::ModelManager;
 use crate::core::database_simple::Database;
 use anyhow::{Context, Result};
@@ -158,8 +159,11 @@ impl ConsensusPipeline {
             None
         };
 
-        // Build full context
-        let full_context = self.build_full_context(context, temporal_context).await?;
+        // Get memory context (recent + thematic) - CRITICAL for multi-conversation intelligence
+        let memory_context = self.get_memory_context(question).await?;
+
+        // Build full context including semantic, temporal, and memory
+        let full_context = self.build_full_context(context, temporal_context, memory_context).await?;
 
         let mut previous_answer: Option<String> = None;
         let mut stage_results = Vec::new();
@@ -339,11 +343,29 @@ impl ConsensusPipeline {
             success: true,
             result: Some(final_answer.clone()),
             error: None,
-            stages: stage_results,
+            stages: stage_results.clone(),
             conversation_id: conversation_id.clone(),
             total_duration: pipeline_start.elapsed().as_secs_f64(),
             total_cost,
         };
+
+        // CRITICAL: Store conversation and curator result in database (like TypeScript implementation)
+        if let Some(db) = &self.database {
+            tracing::info!("Database available, attempting to store consensus result for conversation {}", conversation_id);
+            if let Err(e) = self.store_consensus_result(
+                &conversation_id,
+                question,
+                &final_answer,
+                &stage_results,
+                total_cost,
+                db.clone()
+            ).await {
+                tracing::error!("Failed to store consensus result in database: {}", e);
+                // Don't fail the entire consensus for storage errors, but log them
+            }
+        } else {
+            tracing::warn!("No database available - consensus results will not be persisted!");
+        }
 
         // Emit AfterConsensus hook event
 //         if let Some(hooks) = &self.hooks_system {
@@ -441,21 +463,29 @@ impl ConsensusPipeline {
         Ok(stage_result)
     }
 
-    /// Build full context combining semantic and temporal
+    /// Build full context combining semantic, temporal, and memory
     async fn build_full_context(
         &self,
         semantic_context: Option<String>,
         temporal_context: Option<crate::consensus::temporal::TemporalContext>,
+        memory_context: Option<String>,
     ) -> Result<Option<String>> {
         let mut contexts = Vec::new();
 
+        // Add memory context first (most important for multi-conversation intelligence)
+        if let Some(memory) = memory_context {
+            if !memory.is_empty() {
+                contexts.push(format!("## Memory Context\n{}", memory));
+            }
+        }
+
         if let Some(semantic) = semantic_context {
-            contexts.push(semantic);
+            contexts.push(format!("## Semantic Context\n{}", semantic));
         }
 
         if let Some(temporal) = temporal_context {
             contexts.push(format!(
-                "{}\n{}",
+                "## Temporal Context\n{}\n{}",
                 temporal.search_instruction, temporal.temporal_awareness
             ));
         }
@@ -708,6 +738,279 @@ impl ConsensusPipeline {
         };
         
         Ok(estimated_tokens as f64 * cost_per_token)
+    }
+
+    /// Store consensus result in database (matching TypeScript implementation)
+    async fn store_consensus_result(
+        &self,
+        conversation_id: &str,
+        question: &str,
+        final_answer: &str,
+        stage_results: &[StageResult],
+        total_cost: f64,
+        database: Arc<Database>,
+    ) -> Result<()> {
+        tracing::info!("Storing consensus result for conversation {}", conversation_id);
+        
+        let now = Utc::now().to_rfc3339();
+        let mut conn = database.get_connection().await?;
+        
+        // Use spawn_blocking for the entire database transaction
+        let conversation_id = conversation_id.to_string();
+        let question = question.to_string();
+        let final_answer = final_answer.to_string();
+        let stage_results = stage_results.to_vec();
+        let profile_id = self.profile.id.clone(); // Capture profile ID before closure
+        
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let tx = conn.transaction()?;
+            
+            // 1. Store conversation record
+            tx.execute(
+                "INSERT OR REPLACE INTO conversations (
+                    id, user_id, consensus_profile_id, total_cost, 
+                    input_tokens, output_tokens, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    conversation_id,
+                    "default_user", // TODO: Get actual user ID when auth is implemented
+                    profile_id, // Use the actual profile ID from the pipeline
+                    total_cost,
+                    stage_results.iter().map(|s| s.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0)).sum::<u32>(),
+                    stage_results.iter().map(|s| s.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0)).sum::<u32>(),
+                    &now,
+                    &now
+                ]
+            )?;
+            
+            // 2. Store all stage outputs as messages for audit trail
+            for stage_result in &stage_results {
+                // Store user message (question) - only for first stage
+                if stage_result.stage_name == "generator" {
+                    tx.execute(
+                        "INSERT INTO messages (
+                            id, conversation_id, role, content, stage, model_used, timestamp
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![
+                            uuid::Uuid::new_v4().to_string(),
+                            conversation_id,
+                            "user",
+                            question,
+                            None::<String>, // User message has no stage
+                            None::<String>, // User message has no model
+                            &now
+                        ]
+                    )?;
+                }
+                
+                // Store assistant message for each stage
+                tx.execute(
+                    "INSERT INTO messages (
+                        id, conversation_id, role, content, stage, model_used, timestamp
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        uuid::Uuid::new_v4().to_string(),
+                        conversation_id,
+                        "assistant",
+                        stage_result.answer,
+                        stage_result.stage_name,
+                        stage_result.model,
+                        stage_result.timestamp.to_rfc3339()
+                    ]
+                )?;
+            }
+            
+            // 3. Store in knowledge_conversations (extended format matching TypeScript)
+            tx.execute(
+                "INSERT OR REPLACE INTO knowledge_conversations (
+                    id, conversation_id, question, final_answer, source_of_truth, 
+                    conversation_context, profile_id, created_at, last_updated
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    uuid::Uuid::new_v4().to_string(),
+                    conversation_id,
+                    question,
+                    final_answer,
+                    final_answer, // Final answer is the "source of truth" from Curator
+                    None::<String>, // TODO: Add conversation context if available
+                    profile_id, // Use the actual profile ID
+                    &now,
+                    &now
+                ]
+            )?;
+            
+            // 4. Store curator truth (flagged as source of truth - critical for memory system)
+            let curator_result = stage_results.iter()
+                .find(|s| s.stage_name == "curator")
+                .ok_or_else(|| anyhow::anyhow!("No curator stage result found"))?;
+            
+            let confidence_score = curator_result.analytics
+                .as_ref()
+                .map(|a| a.quality_score)
+                .unwrap_or(0.8); // Default confidence
+            
+            let topic_summary = Self::extract_topic_summary(&question, &final_answer);
+            
+            tx.execute(
+                "INSERT OR REPLACE INTO curator_truths (
+                    conversation_id, curator_output, confidence_score, topic_summary, created_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    conversation_id,
+                    curator_result.answer,
+                    confidence_score,
+                    topic_summary,
+                    &now
+                ]
+            )?;
+            
+            tx.commit()?;
+            tracing::info!("Successfully stored consensus result for conversation {}", conversation_id);
+            Ok(())
+        }).await??;
+        
+        Ok(())
+    }
+    
+    /// Extract topic summary from question and answer (simple implementation)
+    fn extract_topic_summary(question: &str, answer: &str) -> String {
+        // Simple topic extraction - in production this would use AI or NLP
+        let combined = format!("{} {}", question, answer);
+        let words: Vec<&str> = combined
+            .split_whitespace()
+            .filter(|w| w.len() > 4) // Filter short words
+            .take(5) // Take first 5 meaningful words
+            .collect();
+        
+        if words.is_empty() {
+            "general_topic".to_string()
+        } else {
+            words.join("_").to_lowercase()
+        }
+    }
+
+    /// Get memory context for question (temporal + thematic)
+    async fn get_memory_context(&self, question: &str) -> Result<Option<String>> {
+        if let Some(db) = &self.database {
+            let context = self.build_memory_context(question, db.clone()).await?;
+            if context.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(context))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Build memory context combining recent and thematic memories (matching TypeScript)
+    async fn build_memory_context(&self, query: &str, database: Arc<Database>) -> Result<String> {
+        let mut conn = database.get_connection().await?;
+        let query = query.to_string();
+        
+        // Use spawn_blocking for database queries
+        let results = tokio::task::spawn_blocking(move || -> Result<String> {
+            let mut context_parts = Vec::new();
+            
+            // 1. Get recent context (past 24 hours) - matching TypeScript implementation
+            let twenty_four_hours_ago = (Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
+            
+            let mut stmt = conn.prepare(
+                "SELECT ct.curator_output, kc.question, ct.confidence_score, ct.created_at
+                 FROM curator_truths ct
+                 JOIN knowledge_conversations kc ON kc.conversation_id = ct.conversation_id
+                 WHERE ct.created_at > ?1
+                 ORDER BY ct.confidence_score DESC, ct.created_at DESC
+                 LIMIT 3"
+            )?;
+            
+            let recent_results = stmt.query_map([&twenty_four_hours_ago], |row| {
+                Ok((
+                    row.get::<_, String>(0)?, // curator_output
+                    row.get::<_, String>(1)?, // question
+                    row.get::<_, f64>(2)?,    // confidence_score
+                    row.get::<_, String>(3)?, // created_at
+                ))
+            })?;
+            
+            let mut recent_memories = Vec::new();
+            for result in recent_results {
+                recent_memories.push(result?);
+            }
+            
+            if !recent_memories.is_empty() {
+                context_parts.push("## Recent Context (24h):".to_string());
+                for (i, (answer, question, confidence, _)) in recent_memories.iter().enumerate() {
+                    context_parts.push(format!(
+                        "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
+                        i + 1, question, answer, confidence * 100.0
+                    ));
+                }
+            }
+            
+            // 2. Get thematic context - simple keyword matching for now
+            // TODO: Implement proper semantic search with embeddings
+            let keywords: Vec<String> = query
+                .split_whitespace()
+                .filter(|w| w.len() > 3)
+                .take(3)
+                .map(|w| format!("%{}%", w.to_lowercase()))
+                .collect();
+            
+            if !keywords.is_empty() {
+                let keyword_query = keywords.iter()
+                    .map(|_| "curator_output LIKE ?")
+                    .collect::<Vec<_>>()
+                    .join(" OR ");
+                
+                let full_query = format!(
+                    "SELECT DISTINCT ct.curator_output, kc.question, ct.confidence_score
+                     FROM curator_truths ct
+                     JOIN knowledge_conversations kc ON kc.conversation_id = ct.conversation_id
+                     WHERE ({}) AND ct.created_at <= ?{}
+                     ORDER BY ct.confidence_score DESC
+                     LIMIT 2",
+                    keyword_query,
+                    keywords.len() + 1
+                );
+                
+                let mut stmt = conn.prepare(&full_query)?;
+                let mut params: Vec<&dyn rusqlite::ToSql> = keywords.iter()
+                    .map(|k| k as &dyn rusqlite::ToSql)
+                    .collect();
+                params.push(&twenty_four_hours_ago);
+                
+                let thematic_results = stmt.query_map(&params[..], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?, // curator_output
+                        row.get::<_, String>(1)?, // question
+                        row.get::<_, f64>(2)?,    // confidence_score
+                    ))
+                })?;
+                
+                let mut thematic_memories = Vec::new();
+                for result in thematic_results {
+                    thematic_memories.push(result?);
+                }
+                
+                if !thematic_memories.is_empty() {
+                    if !context_parts.is_empty() {
+                        context_parts.push("".to_string()); // Empty line separator
+                    }
+                    context_parts.push("## Related Context:".to_string());
+                    for (i, (answer, question, confidence)) in thematic_memories.iter().enumerate() {
+                        context_parts.push(format!(
+                            "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
+                            i + 1, question, answer, confidence * 100.0
+                        ));
+                    }
+                }
+            }
+            
+            Ok(context_parts.join("\n"))
+        }).await??;
+        
+        Ok(results)
     }
 }
 
