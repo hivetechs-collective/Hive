@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
-use dioxus::events::KeyboardEvent;
+use dioxus::document::eval;
 use rfd;
 
 const DESKTOP_STYLES: &str = r#"
@@ -485,7 +485,6 @@ fn App() -> Element {
     
     // Track if we should auto-scroll
     let mut should_auto_scroll = use_signal(|| true);
-    let mut scroll_to_bottom = use_signal(|| false);
     
     // Auto-scroll response area when streaming content changes
     let previous_content_length = use_signal(|| 0usize);
@@ -494,14 +493,22 @@ fn App() -> Element {
         let app_state = app_state.clone();
         let mut previous_content_length = previous_content_length.clone();
         let should_auto_scroll = should_auto_scroll.clone();
-        let mut scroll_to_bottom = scroll_to_bottom.clone();
         move || {
             let current_length = app_state.read().consensus.streaming_content.len();
             if current_length > *previous_content_length.read() && *should_auto_scroll.read() {
                 *previous_content_length.write() = current_length;
                 
-                // Trigger scroll by updating signal
-                *scroll_to_bottom.write() = true;
+                // Use eval to scroll to bottom
+                let eval = eval(r#"
+                    const responseArea = document.getElementById('response-area');
+                    if (responseArea) {
+                        responseArea.scrollTop = responseArea.scrollHeight;
+                    }
+                "#);
+                
+                spawn(async move {
+                    let _ = eval.await;
+                });
             }
         }
     });
@@ -899,26 +906,39 @@ fn App() -> Element {
                     div {
                         class: "response-area",
                         id: "response-area",
-                        onwheel: move |_| {
-                            // User manually scrolled, disable auto-scroll
-                            *should_auto_scroll.write() = false;
+                        // Force re-render when content changes to trigger scroll
+                        key: "{app_state.read().consensus.streaming_content.len()}",
+                        onscroll: move |_| {
+                            // Check if user scrolled away from bottom
+                            let eval = eval(r#"
+                                const responseArea = document.getElementById('response-area');
+                                if (responseArea) {
+                                    const isAtBottom = responseArea.scrollTop + responseArea.clientHeight >= responseArea.scrollHeight - 10;
+                                    isAtBottom
+                                } else {
+                                    true
+                                }
+                            "#);
+                            
+                            spawn(async move {
+                                match eval.await {
+                                    Ok(result) => {
+                                        if let Some(is_at_bottom) = result.as_bool() {
+                                            *should_auto_scroll.write() = is_at_bottom;
+                                        }
+                                    }
+                                    Err(_) => {
+                                        // Default to auto-scroll if we can't detect position
+                                        *should_auto_scroll.write() = true;
+                                    }
+                                }
+                            });
                         },
                         if !app_state.read().consensus.streaming_content.is_empty() {
                             // Show streaming content in real-time
                             div {
                                 class: "response-content",
                                 dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
-                            }
-                            // Scroll anchor that stays at bottom
-                            if *should_auto_scroll.read() && *scroll_to_bottom.read() {
-                                div {
-                                    id: "scroll-anchor",
-                                    style: "height: 1px;",
-                                    onmounted: move |_| {
-                                        *scroll_to_bottom.write() = false;
-                                        // The CSS flexbox layout will ensure this is visible
-                                    }
-                                }
                             }
                         } else if !current_response.read().is_empty() {
                             // Show final response if no streaming content
@@ -957,6 +977,9 @@ fn App() -> Element {
                                         input_value.write().clear();
                                         current_response.write().clear();
                                         app_state.write().consensus.streaming_content.clear();
+                                        
+                                        // Re-enable auto-scroll for new query
+                                        *should_auto_scroll.write() = true;
                                         
                                         // Start processing
                                         *is_processing.write() = true;
