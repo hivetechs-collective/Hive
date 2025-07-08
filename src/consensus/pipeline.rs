@@ -949,7 +949,7 @@ impl ConsensusPipeline {
                  FROM curator_truths ct
                  JOIN knowledge_conversations kc ON kc.conversation_id = ct.conversation_id
                  WHERE ct.created_at > ?1
-                 ORDER BY ct.confidence_score DESC, ct.created_at DESC
+                 ORDER BY ct.created_at DESC, ct.confidence_score DESC
                  LIMIT 3"
             )?;
             
@@ -1004,11 +1004,11 @@ impl ConsensusPipeline {
                     .join(" OR ");
                 
                 let full_query = format!(
-                    "SELECT DISTINCT ct.curator_output, kc.question, ct.confidence_score
+                    "SELECT DISTINCT ct.curator_output, kc.question, ct.confidence_score, ct.created_at
                      FROM curator_truths ct
                      JOIN knowledge_conversations kc ON kc.conversation_id = ct.conversation_id
                      WHERE ({}) AND ct.created_at <= ?{}
-                     ORDER BY ct.confidence_score DESC
+                     ORDER BY ct.created_at DESC, ct.confidence_score DESC
                      LIMIT 2",
                     keyword_query,
                     keywords.len() + 1
@@ -1025,6 +1025,7 @@ impl ConsensusPipeline {
                         row.get::<_, String>(0)?, // curator_output
                         row.get::<_, String>(1)?, // question
                         row.get::<_, f64>(2)?,    // confidence_score
+                        row.get::<_, String>(3)?, // created_at (for temporal ordering)
                     ))
                 })?;
                 
@@ -1038,10 +1039,16 @@ impl ConsensusPipeline {
                         context_parts.push("".to_string()); // Empty line separator
                     }
                     context_parts.push("## Related Context:".to_string());
-                    for (i, (answer, question, confidence)) in thematic_memories.iter().enumerate() {
+                    for (i, (answer, question, confidence, _created_at)) in thematic_memories.iter().enumerate() {
+                        // Truncate the answer for display in context
+                        let answer_preview = if answer.len() > 500 {
+                            format!("{}...", &answer[..500])
+                        } else {
+                            answer.clone()
+                        };
                         context_parts.push(format!(
                             "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
-                            i + 1, question, answer, confidence * 100.0
+                            i + 1, question, answer_preview, confidence * 100.0
                         ));
                     }
                 }
