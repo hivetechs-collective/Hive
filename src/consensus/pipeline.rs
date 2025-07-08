@@ -2,7 +2,7 @@
 // Manages flow from Generator → Refiner → Validator → Curator
 
 use crate::consensus::stages::{ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage};
-use crate::consensus::streaming::{ConsoleCallbacks, ProgressTracker, StreamingCallbacks};
+use crate::consensus::streaming::{ConsoleCallbacks, ProgressTracker, StreamingCallbacks, ProgressInfo};
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
@@ -502,19 +502,20 @@ impl ConsensusPipeline {
 
         // Make the API call
         if self.config.enable_streaming {
-            // Use streaming
-            let callbacks = Box::new(SimpleStreamingCallbacks {
-                model_name: model.to_string(),
+            // Create a custom callback that forwards to our tracker
+            let stage = tracker.stage.clone();
+            let tracker_callbacks = tracker.callbacks.clone();
+            
+            let callbacks = Box::new(TrackerForwardingCallbacks {
+                tracker_callbacks,
+                stage,
             }) as Box<dyn OpenRouterStreamingCallbacks>;
 
             match openrouter_client.chat_completion_stream(request, Some(callbacks)).await {
                 Ok(response_content) => {
-                    // Update tracker with response chunks
-                    for word in response_content.split_whitespace() {
-                        tracker.add_chunk(word)?;
-                        tracker.add_chunk(" ")?;
-                        tokio::time::sleep(tokio::time::Duration::from_millis(25)).await;
-                    }
+                    // The streaming callbacks have already been called during streaming
+                    // Just update the final content
+                    tracker.content = response_content.clone();
 
                     Ok(ModelResponse {
                         model: model.to_string(),
@@ -716,6 +717,45 @@ struct ModelResponse {
     content: String,
     usage: TokenUsage,
     analytics: StageAnalytics,
+}
+
+/// Callbacks that forward OpenRouter streaming to our consensus callbacks
+struct TrackerForwardingCallbacks {
+    tracker_callbacks: Arc<dyn StreamingCallbacks>,
+    stage: Stage,
+}
+
+impl OpenRouterStreamingCallbacks for TrackerForwardingCallbacks {
+    fn on_start(&self) {
+        // Already handled by on_stage_start
+    }
+    
+    fn on_chunk(&self, chunk: String, total_content: String) {
+        // Forward to our consensus callbacks
+        tracing::trace!("TrackerForwardingCallbacks: Received chunk for stage {:?}: '{}'", self.stage, chunk);
+        let _ = self.tracker_callbacks.on_stage_chunk(self.stage, &chunk, &total_content);
+    }
+    
+    fn on_progress(&self, progress: crate::consensus::openrouter::StreamingProgress) {
+        // Convert and forward
+        if let Some(tokens) = progress.tokens {
+            let percentage = progress.percentage.unwrap_or(0.0);
+            let info = ProgressInfo {
+                tokens,
+                estimated_total: None, // We don't have a good estimate from OpenRouter
+                percentage: (percentage / 100.0) as f32, // Convert to 0-1 range
+            };
+            let _ = self.tracker_callbacks.on_stage_progress(self.stage, info);
+        }
+    }
+    
+    fn on_complete(&self, _final_content: String, _usage: Option<crate::consensus::openrouter::Usage>) {
+        // Will be handled by on_stage_complete
+    }
+    
+    fn on_error(&self, error: &anyhow::Error) {
+        let _ = self.tracker_callbacks.on_error(self.stage, error);
+    }
 }
 
 #[cfg(test)]

@@ -2831,6 +2831,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "getopts"
+version = "0.2.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cba6ae63eb948698e300f645f87c70f76630d505f23b8907cf1e193ee85048c1"
+dependencies = [
+ "unicode-width 0.2.1",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3257,6 +3266,7 @@ dependencies = [
  "num_cpus",
  "once_cell",
  "petgraph",
+ "pulldown-cmark",
  "r2d2",
  "r2d2_sqlite",
  "rand 0.8.5",
@@ -5372,6 +5382,18 @@ dependencies = [
  "quote",
  "syn 2.0.104",
  "version_check",
+]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.9.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57206b407293d2bcd3af849ce869d52068623f19e1b5ff8e8778e3309439682b"
+dependencies = [
+ "bitflags 2.9.1",
+ "getopts",
+ "memchr",
+ "unicase",
 ]
 
 [[package]]

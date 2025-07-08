@@ -92,7 +92,7 @@ pub struct ConsoleCallbacks {
 impl StreamingCallbacks for ConsoleCallbacks {
     fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
         if self.show_progress {
-            println!("{} → Starting ({})", stage.display_name(), model);
+            tracing::info!("{} → Starting ({})", stage.display_name(), model);
         }
         Ok(())
     }
@@ -127,7 +127,7 @@ impl StreamingCallbacks for ConsoleCallbacks {
 
     fn on_stage_complete(&self, stage: Stage, _result: &StageResult) -> Result<()> {
         if self.show_progress {
-            println!("\r{} → [{}] 100% ✓", 
+            tracing::info!("{} → [{}] 100% ✓", 
                 stage.display_name(),
                 "█".repeat(20)
             );
@@ -136,7 +136,7 @@ impl StreamingCallbacks for ConsoleCallbacks {
     }
 
     fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
-        eprintln!("\n{} → Error: {}", stage.display_name(), error);
+        tracing::error!("{} → Error: {}", stage.display_name(), error);
         Ok(())
     }
 }
@@ -144,10 +144,10 @@ impl StreamingCallbacks for ConsoleCallbacks {
 /// Progress tracker for stages
 pub struct ProgressTracker {
     pub stage: Stage,
-    tokens: u32,
-    content: String,
-    estimated_total: Option<u32>,
-    callbacks: Arc<dyn StreamingCallbacks>,
+    pub tokens: u32,
+    pub content: String,
+    pub estimated_total: Option<u32>,
+    pub callbacks: Arc<dyn StreamingCallbacks>,
 }
 
 impl ProgressTracker {

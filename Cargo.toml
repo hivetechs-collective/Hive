@@ -48,6 +48,7 @@ clap_complete = "4.4"
 # Desktop App (Dioxus) dependencies - 100% Rust stack
 dioxus = { version = "0.6.3", features = ["desktop"] }
 dioxus-desktop = "0.6.3"
+pulldown-cmark = "0.9"
 dioxus-router = "0.6.3"
 
 # Additional Dioxus utilities
@@ -167,6 +168,10 @@ path = "src/main.rs"
 [[bin]]
 name = "hive-consensus"
 path = "src/bin/hive-consensus.rs"
+
+[[bin]]
+name = "test-streaming"
+path = "src/bin/test-streaming.rs"
 
 [package.metadata.bundle]
 name = "Hive"

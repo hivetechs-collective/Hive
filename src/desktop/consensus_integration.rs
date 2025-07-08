@@ -23,6 +23,7 @@ pub enum ConsensusUIEvent {
     StageCompleted { stage: ConsensusStage, cost: f64 },
     StageError { stage: ConsensusStage, error: String },
     TokenUpdate { count: usize, cost: f64 },
+    StreamingChunk { stage: ConsensusStage, chunk: String, total_content: String },
 }
 
 /// Desktop streaming callbacks that send events to UI
@@ -34,6 +35,12 @@ impl DesktopStreamingCallbacks {
     pub fn new(event_sender: mpsc::UnboundedSender<ConsensusUIEvent>) -> Self {
         Self { event_sender }
     }
+}
+
+/// Dual channel callbacks that send to both streaming and internal channels
+pub struct DualChannelCallbacks {
+    stream_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
+    internal_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
 }
 
 impl StreamingCallbacks for DesktopStreamingCallbacks {
@@ -53,13 +60,23 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         Ok(())
     }
     
-    fn on_stage_chunk(&self, _stage: Stage, _chunk: &str, _total_content: &str) -> Result<()> {
-        // For desktop, we might want to show streaming text in the future
-        // For now, just update token count
-        let _ = self.event_sender.send(ConsensusUIEvent::TokenUpdate {
-            count: 1,
-            cost: 0.0001,
+    fn on_stage_chunk(&self, stage: Stage, chunk: &str, total_content: &str) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        tracing::trace!("DesktopStreamingCallbacks: Sending chunk for stage {:?}: '{}'", stage, chunk);
+        
+        // Send the streaming chunk to update the UI in real-time
+        let _ = self.event_sender.send(ConsensusUIEvent::StreamingChunk {
+            stage: consensus_stage,
+            chunk: chunk.to_string(),
+            total_content: total_content.to_string(),
         });
+        
         Ok(())
     }
     
@@ -116,6 +133,118 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
             stage: consensus_stage,
             error: error.to_string(),
         });
+        
+        tracing::error!("Consensus error at stage {:?}: {}", stage, error);
+        
+        Ok(())
+    }
+}
+
+impl StreamingCallbacks for DualChannelCallbacks {
+    fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let event = ConsensusUIEvent::StageStarted {
+            stage: consensus_stage,
+            model: model.to_string(),
+        };
+        
+        // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
+        
+        Ok(())
+    }
+    
+    fn on_stage_chunk(&self, stage: Stage, chunk: &str, total_content: &str) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let event = ConsensusUIEvent::StreamingChunk {
+            stage: consensus_stage,
+            chunk: chunk.to_string(),
+            total_content: total_content.to_string(),
+        };
+        
+        // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
+        
+        Ok(())
+    }
+    
+    fn on_stage_progress(&self, stage: Stage, progress: ProgressInfo) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let event = ConsensusUIEvent::StageProgress {
+            stage: consensus_stage,
+            percentage: (progress.percentage * 100.0) as u8,
+            tokens: progress.tokens as usize,
+        };
+        
+        // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
+        
+        Ok(())
+    }
+    
+    fn on_stage_complete(&self, stage: Stage, result: &crate::consensus::types::StageResult) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let cost = if let Some(usage) = &result.usage {
+            usage.total_tokens as f64 * 0.0001
+        } else {
+            0.0
+        };
+        
+        let event = ConsensusUIEvent::StageCompleted {
+            stage: consensus_stage,
+            cost,
+        };
+        
+        // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
+        
+        Ok(())
+    }
+    
+    fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
+        let consensus_stage = match stage {
+            Stage::Generator => ConsensusStage::Generator,
+            Stage::Refiner => ConsensusStage::Refiner,
+            Stage::Validator => ConsensusStage::Validator,
+            Stage::Curator => ConsensusStage::Curator,
+        };
+        
+        let event = ConsensusUIEvent::StageError {
+            stage: consensus_stage,
+            error: error.to_string(),
+        };
+        
+        // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
         
         tracing::error!("Consensus error at stage {:?}: {}", stage, error);
         
@@ -186,6 +315,13 @@ pub async fn process_consensus_events(
                 let mut state = app_state.write();
                 state.consensus.add_tokens(count, cost);
             }
+            ConsensusUIEvent::StreamingChunk { stage, chunk, total_content } => {
+                // Handle streaming chunk - this will be picked up by the UI component
+                // The UI should display this chunk in real-time
+                let _ = stage; // We might use this to show which stage is streaming
+                let _ = chunk; // The actual text chunk to display
+                let _ = total_content; // The full content so far
+            }
         }
     }
 }
@@ -219,31 +355,53 @@ impl DesktopConsensusManager {
         })
     }
     
-    /// Process a query with UI updates
-    pub async fn process_query(&mut self, query: &str) -> Result<String> {
+    /// Process a query with UI updates and streaming
+    pub async fn process_query_streaming(&mut self, query: &str) -> Result<(String, mpsc::UnboundedReceiver<ConsensusUIEvent>)> {
         // Start consensus in UI
         self.app_state.write().consensus.start_consensus();
         
-        // Create event channel
-        let (tx, rx) = mpsc::unbounded_channel();
+        // Create two channels - one for streaming events to return, one for internal processing
+        let (tx_stream, rx_stream) = mpsc::unbounded_channel();
+        let (tx_internal, rx_internal) = mpsc::unbounded_channel();
         
-        // Spawn task to process events
+        // Spawn task to process events internally
         let app_state_events = self.app_state.clone();
         dioxus::prelude::spawn(async move {
-            process_consensus_events(rx, app_state_events).await;
+            process_consensus_events(rx_internal, app_state_events).await;
         });
         
-        // Create callbacks
-        let callbacks = Arc::new(DesktopStreamingCallbacks::new(tx));
+        // Create callbacks that send to both channels
+        let callbacks = Arc::new(DualChannelCallbacks {
+            stream_sender: tx_stream,
+            internal_sender: tx_internal,
+        });
         
-        // Process with streaming
-        let engine = self.engine.lock().await;
-        let result = engine.process_with_callbacks(query, None, callbacks).await?;
+        // Clone what we need for the async task
+        let engine = self.engine.clone();
+        let query = query.to_string();
+        let callbacks_clone = callbacks.clone();
         
-        // Complete consensus in UI
+        // Spawn the consensus processing
+        let handle = tokio::spawn(async move {
+            let engine = engine.lock().await;
+            let result = engine.process_with_callbacks(&query, None, callbacks_clone).await;
+            
+            result.map(|r| r.result.unwrap_or_else(|| "No response received".to_string()))
+        });
+        
+        // Wait for result
+        let result = handle.await??;
+        
+        // Complete consensus in UI after the task completes
         self.app_state.write().consensus.complete_consensus();
         
-        Ok(result.result.unwrap_or_else(|| "No response received".to_string()))
+        Ok((result, rx_stream))
+    }
+    
+    /// Process a query with UI updates
+    pub async fn process_query(&mut self, query: &str) -> Result<String> {
+        let (result, _rx) = self.process_query_streaming(query).await?;
+        Ok(result)
     }
     
     /// Get the consensus engine for direct access
