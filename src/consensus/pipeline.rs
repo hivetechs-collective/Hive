@@ -782,8 +782,9 @@ impl ConsensusPipeline {
             let rows_affected = tx.execute(
                 "INSERT OR REPLACE INTO conversations (
                     id, user_id, consensus_profile_id, total_cost, 
-                    input_tokens, output_tokens, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    input_tokens, output_tokens, start_time, end_time, 
+                    success, quality_score, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     conversation_id,
                     "default_user", // TODO: Get actual user ID when auth is implemented
@@ -791,8 +792,12 @@ impl ConsensusPipeline {
                     total_cost,
                     stage_results.iter().map(|s| s.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0)).sum::<u32>(),
                     stage_results.iter().map(|s| s.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0)).sum::<u32>(),
-                    &now,
-                    &now
+                    &now, // start_time
+                    &now, // end_time
+                    1i32, // success (true)
+                    0.95f64, // quality_score (default high quality)
+                    &now, // created_at
+                    &now  // updated_at
                 ]
             )?;
             tracing::debug!("Conversation record stored, {} rows affected", rows_affected);
