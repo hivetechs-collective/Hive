@@ -480,14 +480,11 @@ impl ConsensusPipeline {
         let mut contexts = Vec::new();
 
         // Add memory context first (most important for multi-conversation intelligence)
+        // This is the AUTHORITATIVE knowledge from previous curator results
         if let Some(memory) = memory_context {
             if !memory.is_empty() {
-                contexts.push(format!("## Memory Context\n{}", memory));
+                contexts.push(memory); // Already formatted with headers
             }
-        }
-
-        if let Some(semantic) = semantic_context {
-            contexts.push(format!("## Semantic Context\n{}", semantic));
         }
 
         if let Some(temporal) = temporal_context {
@@ -495,6 +492,10 @@ impl ConsensusPipeline {
                 "## Temporal Context\n{}\n{}",
                 temporal.search_instruction, temporal.temporal_awareness
             ));
+        }
+
+        if let Some(semantic) = semantic_context {
+            contexts.push(format!("## Semantic Context\n{}", semantic));
         }
 
         if contexts.is_empty() {

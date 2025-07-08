@@ -76,7 +76,13 @@ impl GeneratorStage {
         let mut structured = String::new();
         
         // Parse context type based on content
-        if context.contains("IMPORTANT: Today's date is") {
+        if context.contains("## Memory Context") || context.contains("## Recent Context") {
+            structured.push_str("🧠 AUTHORITATIVE MEMORY CONTEXT:\n");
+            structured.push_str(context);
+            structured.push_str("\n\n⚡ IMPORTANT: The above memory context contains AUTHORITATIVE ANSWERS from previous conversations. ");
+            structured.push_str("These are curated, validated responses that should be treated as the primary source of truth. ");
+            structured.push_str("Use this information as the foundation for your response, building upon it rather than contradicting it.\n");
+        } else if context.contains("IMPORTANT: Today's date is") {
             structured.push_str("🕒 TEMPORAL CONTEXT:\n");
             structured.push_str(context);
         } else if context.contains("symbols:") || context.contains("dependencies:") {
@@ -89,6 +95,11 @@ impl GeneratorStage {
         
         // Add context usage instructions
         structured.push_str("\n\n📌 CONTEXT USAGE:\n");
+        if context.contains("## Memory Context") || context.contains("## Recent Context") {
+            structured.push_str("- ALWAYS prioritize the authoritative memory context over general knowledge\n");
+            structured.push_str("- Build upon previous answers rather than starting from scratch\n");
+            structured.push_str("- Reference specific details from the memory context in your response\n");
+        }
         if self.needs_repository_context(question) {
             structured.push_str("- Reference specific symbols, files, and patterns from the repository context\n");
             structured.push_str("- Use architecture and dependency information to provide accurate suggestions\n");
