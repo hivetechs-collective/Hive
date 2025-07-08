@@ -11,6 +11,7 @@ use crate::consensus::profiles::ExpertTemplate;
 use crate::core::database_simple::Database;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -244,34 +245,38 @@ impl TemplateMaintenanceManager {
         let mut validations = HashMap::new();
         
         // Get all profiles
-        let mut stmt = conn.prepare(
-            "SELECT id, name, 
-                    gen.openrouter_id as generator,
-                    ref.openrouter_id as refiner,
-                    val.openrouter_id as validator,
-                    cur.openrouter_id as curator
-             FROM consensus_profiles cp
-             JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
-             JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
-             JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
-             JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id"
-        )?;
+        let profiles = {
+            let mut stmt = conn.prepare(
+                "SELECT cp.id, cp.name, 
+                        gen.openrouter_id as generator,
+                        ref.openrouter_id as refiner,
+                        val.openrouter_id as validator,
+                        cur.openrouter_id as curator
+                 FROM consensus_profiles cp
+                 JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
+                 JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
+                 JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
+                 JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id"
+            )?;
+            
+            let profile_rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?.to_string(),
+                    row.get::<_, String>(1)?,
+                    vec![
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, String>(5)?,
+                    ]
+                ))
+            })?;
+            
+            // Collect into a vector first to avoid Send issues
+            profile_rows.collect::<Result<Vec<_>, _>>()?
+        };
         
-        let profiles = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)?.to_string(),
-                row.get::<_, String>(1)?,
-                vec![
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                    row.get::<_, String>(5)?,
-                ]
-            ))
-        })?;
-        
-        for profile in profiles {
-            let (id, name, models) = profile?;
+        for (id, name, models) in profiles {
             info!("Validating profile: {} ({})", name, id);
             
             let mut profile_validations = Vec::new();

@@ -13,6 +13,7 @@ pub mod hooks;
 pub mod consensus;
 pub mod planning;
 pub mod lsp;
+pub mod maintenance;
 pub mod security;
 pub mod migrate;
 pub mod shell;
@@ -37,6 +38,7 @@ pub use planning::{
     handle_timeline, handle_collaborate
 };
 pub use lsp::{handle_lsp, LspCommands, generate_editor_config};
+pub use maintenance::run_maintenance_command;
 pub use security::{handle_security, SecurityCommands};
 pub use shell::{handle_shell, ShellCommands, generate_manual_instructions, verify_installation, get_integration_report};
 pub use install::{handle_install_command, InstallArgs};

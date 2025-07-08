@@ -113,6 +113,29 @@ impl ConsensusPipeline {
         question: &str,
         context: Option<String>,
     ) -> Result<ConsensusResult> {
+        // Check if maintenance has run recently
+        if let Some(db) = &self.database {
+            use crate::consensus::maintenance::TemplateMaintenanceManager;
+            
+            let mut maintenance = TemplateMaintenanceManager::new(
+                db.clone(), 
+                self.api_key.clone()
+            );
+            
+            if maintenance.needs_maintenance() {
+                tracing::info!("Running model maintenance before consensus...");
+                match maintenance.run_maintenance().await {
+                    Ok(report) => {
+                        tracing::info!("Model maintenance complete: {} models synced, {} profiles migrated", 
+                                     report.models_synced, report.migrated_profiles.len());
+                    }
+                    Err(e) => {
+                        tracing::warn!("Model maintenance failed: {}. Continuing anyway.", e);
+                    }
+                }
+            }
+        }
+        
         let conversation_id = Uuid::new_v4().to_string();
         let pipeline_start = Instant::now();
         let mut total_cost = 0.0;
@@ -402,11 +425,23 @@ impl ConsensusPipeline {
         // Create progress tracker
         let mut tracker = ProgressTracker::new(stage, self.callbacks.clone());
 
-        // Simulate API call (will be replaced with actual OpenRouter client)
-        let response = self
+        // Call model with retry logic for fallback models
+        let mut response = self
             .call_model(model, &messages, &mut tracker)
             .await
             .with_context(|| format!("Failed to call model {} for {}", model, stage.display_name()))?;
+        
+        // Check if we need to retry with a different model
+        if response.content.starts_with("RETRY_WITH_MODEL:") {
+            let replacement_model = response.content.trim_start_matches("RETRY_WITH_MODEL:");
+            tracing::info!("Retrying with replacement model: {}", replacement_model);
+            
+            // Call with replacement model
+            response = self
+                .call_model(replacement_model, &messages, &mut tracker)
+                .await
+                .with_context(|| format!("Failed to call replacement model {} for {}", replacement_model, stage.display_name()))?;
+        }
 
         // Mark complete
         tracker.complete()?;
@@ -417,17 +452,17 @@ impl ConsensusPipeline {
             stage_name: stage.as_str().to_string(),
             question: question.to_string(),
             answer: response.content,
-            model: model.to_string(),
+            model: response.model,
             conversation_id: conversation_id.to_string(),
             timestamp: Utc::now(),
-            usage: response.usage,
+            usage: Some(response.usage),
             analytics: Some(StageAnalytics {
                 duration: stage_start.elapsed().as_secs_f64(),
-                cost: response.cost,
-                provider: response.provider,
-                model_internal_id: response.model_internal_id,
-                quality_score: 0.0, // Will be calculated by quality assessment
-                error_count: 0,
+                cost: response.analytics.cost,
+                provider: response.analytics.provider,
+                model_internal_id: response.analytics.model_internal_id,
+                quality_score: response.analytics.quality_score,
+                error_count: response.analytics.error_count,
                 fallback_used: false,
                 rate_limit_hit: false,
                 retry_count: 0,
@@ -521,11 +556,32 @@ impl ConsensusPipeline {
                     }
 
                     Ok(ModelResponse {
+                        model: model.to_string(),
                         content: response_content,
-                        usage: None, // Token usage will be populated by actual API response
-                        cost: 0.0, // Cost will be calculated from actual API response
-                        provider: "openrouter".to_string(),
-                        model_internal_id: model.to_string(),
+                        usage: TokenUsage {
+                            prompt_tokens: 0,
+                            completion_tokens: 0,
+                            total_tokens: 0,
+                        },
+                        analytics: StageAnalytics {
+                            duration: 0.0,
+                            cost: 0.0,
+                            provider: "openrouter".to_string(),
+                            model_internal_id: model.to_string(),
+                            quality_score: 1.0,
+                            error_count: 0,
+                            fallback_used: false,
+                            rate_limit_hit: false,
+                            retry_count: 0,
+                            start_time: Utc::now(),
+                            end_time: Utc::now(),
+                            memory_usage: None,
+                            features: crate::consensus::types::AnalyticsFeatures {
+                                streaming: self.config.enable_streaming,
+                                routing_variant: "balanced".to_string(),
+                                optimization_applied: Some(true),
+                            },
+                        },
                     })
                 }
                 Err(e) => {
@@ -564,11 +620,32 @@ impl ConsensusPipeline {
                     };
 
                     Ok(ModelResponse {
+                        model: model.to_string(),
                         content,
-                        usage,
-                        cost,
-                        provider: "openrouter".to_string(),
-                        model_internal_id: model.to_string(),
+                        usage: usage.unwrap_or(TokenUsage {
+                            prompt_tokens: 0,
+                            completion_tokens: 0,
+                            total_tokens: 0,
+                        }),
+                        analytics: StageAnalytics {
+                            duration: 0.0,
+                            cost,
+                            provider: "openrouter".to_string(),
+                            model_internal_id: model.to_string(),
+                            quality_score: 1.0,
+                            error_count: 0,
+                            fallback_used: false,
+                            rate_limit_hit: false,
+                            retry_count: 0,
+                            start_time: Utc::now(),
+                            end_time: Utc::now(),
+                            memory_usage: None,
+                            features: crate::consensus::types::AnalyticsFeatures {
+                                streaming: self.config.enable_streaming,
+                                routing_variant: "balanced".to_string(),
+                                optimization_applied: Some(true),
+                            },
+                        },
                     })
                 }
                 Err(e) => {
@@ -578,7 +655,7 @@ impl ConsensusPipeline {
         }
     }
 
-    /// Handle API errors with fallback responses
+    /// Handle API errors
     async fn handle_api_error(
         &self,
         error: anyhow::Error,
@@ -599,7 +676,7 @@ impl ConsensusPipeline {
                 use crate::consensus::maintenance::TemplateMaintenanceManager;
                 
                 let maintenance = TemplateMaintenanceManager::new(
-                    db.clone(), 
+                    db.clone(),
                     self.api_key.clone()
                 );
                 
@@ -622,6 +699,17 @@ impl ConsensusPipeline {
                             model_internal_id: "0".to_string(),
                             quality_score: 0.0,
                             error_count: 1,
+                            fallback_used: true,
+                            rate_limit_hit: false,
+                            retry_count: 0,
+                            start_time: Utc::now(),
+                            end_time: Utc::now(),
+                            memory_usage: None,
+                            features: crate::consensus::types::AnalyticsFeatures {
+                                streaming: self.config.enable_streaming,
+                                routing_variant: "fallback".to_string(),
+                                optimization_applied: Some(false),
+                            },
                         },
                     });
                 }

@@ -362,8 +362,8 @@ fn App() -> Element {
     let mut openrouter_key = use_signal(String::new);
     let mut hive_key = use_signal(String::new);
     
-    // Check if we need to show onboarding
-    {
+    // Check if we need to show onboarding (only once on mount)
+    use_effect(move || {
         let mut show_onboarding_dialog = show_onboarding_dialog.clone();
         let mut openrouter_key = openrouter_key.clone();
         spawn(async move {
@@ -381,21 +381,20 @@ fn App() -> Element {
                 }
             }
         });
-    }
+    });
     
-    {
+    // Check consensus manager status (only once)
+    use_effect(move || {
         let consensus_manager = consensus_manager.clone();
         let mut show_onboarding = show_onboarding_dialog.clone();
         let mut show_welcome = show_welcome_dialog.clone();
         
-        use_effect(move || {
-            if consensus_manager.is_none() {
-                // No consensus manager means no API key
-                *show_onboarding.write() = true;
-                *show_welcome.write() = false;
-            }
-        });
-    }
+        if consensus_manager.is_none() {
+            // No consensus manager means no API key
+            *show_onboarding.write() = true;
+            *show_welcome.write() = false;
+        }
+    });
     
     // Load initial directory
     {

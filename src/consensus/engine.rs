@@ -55,6 +55,29 @@ impl ConsensusEngine {
             (None, None)
         };
         
+        // Check if model maintenance needs to run
+        if let (Some(db), Some(_)) = (&database, &openrouter_api_key) {
+            use crate::consensus::maintenance::TemplateMaintenanceManager;
+            
+            let mut maintenance = TemplateMaintenanceManager::new(
+                db.clone(), 
+                openrouter_api_key.clone()
+            );
+            
+            if maintenance.needs_maintenance() {
+                tracing::info!("Running initial model maintenance...");
+                match maintenance.run_maintenance().await {
+                    Ok(report) => {
+                        tracing::info!("Model maintenance complete: {} models synced, {} profiles migrated", 
+                                     report.models_synced, report.migrated_profiles.len());
+                    }
+                    Err(e) => {
+                        tracing::warn!("Initial model maintenance failed: {}. Will retry during consensus.", e);
+                    }
+                }
+            }
+        }
+        
         // Load default profile from database (matching TypeScript behavior)
         tracing::info!("Loading default profile from database...");
         let profile = match Self::load_default_profile(&database).await {

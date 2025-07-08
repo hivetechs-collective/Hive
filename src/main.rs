@@ -156,6 +156,9 @@ enum Commands {
         args: hive_ai::commands::install::InstallArgs,
     },
     
+    /// Run OpenRouter model maintenance
+    Maintenance,
+    
     /// Migration from TypeScript
     Migrate {
         #[command(flatten)]
@@ -520,6 +523,9 @@ async fn execute_command(cli: &mut CliFramework, command: Commands) -> HiveResul
         Commands::Install { args } => {
             hive_ai::commands::install::handle_install_command(args).await
                 .map_err(|e| hive_ai::core::error::HiveError::ConfigInvalid { message: e.to_string() })?;
+        }
+        Commands::Maintenance => {
+            hive_ai::commands::maintenance::run_maintenance_command().await?;
         }
         Commands::Migrate { args } => {
             hive_ai::commands::migrate::handle_migrate(args).await?;
