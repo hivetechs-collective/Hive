@@ -272,8 +272,19 @@ pub async fn process_consensus_events(
                 let mut state = app_state.write();
                 state.consensus.current_stage = Some(stage.clone());
                 
-                // Clear streaming content when new stage starts so each stage shows its own output
-                state.consensus.streaming_content.clear();
+                // Add stage header to show progression but don't clear previous content
+                let stage_name = match stage {
+                    ConsensusStage::Generator => "Generator",
+                    ConsensusStage::Refiner => "Refiner",
+                    ConsensusStage::Validator => "Validator",
+                    ConsensusStage::Curator => "Curator",
+                };
+                
+                // Add visual separator for new stage
+                if !state.consensus.streaming_content.is_empty() {
+                    state.consensus.streaming_content.push_str("\n\n---\n\n");
+                }
+                state.consensus.streaming_content.push_str(&format!("## 📝 {} Stage\n\n", stage_name));
                 
                 let stage_index = match stage {
                     ConsensusStage::Generator => 0,

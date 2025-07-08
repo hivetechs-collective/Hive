@@ -938,26 +938,7 @@ fn App() -> Element {
                             // Show streaming content in real-time from all stages
                             div {
                                 class: "response-content",
-                                // Show current stage indicator
-                                if let Some(current_stage) = &app_state.read().consensus.current_stage {
-                                    div {
-                                        class: "stage-indicator",
-                                        style: "font-size: 12px; color: #007acc; margin-bottom: 10px; padding: 5px 10px; background: rgba(0, 122, 204, 0.1); border-radius: 4px;",
-                                        {
-                                            let stage_name = match current_stage {
-                                                hive_ai::desktop::state::ConsensusStage::Generator => "Generator",
-                                                hive_ai::desktop::state::ConsensusStage::Refiner => "Refiner", 
-                                                hive_ai::desktop::state::ConsensusStage::Validator => "Validator",
-                                                hive_ai::desktop::state::ConsensusStage::Curator => "Curator",
-                                            };
-                                            format!("📝 {} Stage", stage_name)
-                                        }
-                                    }
-                                }
-                                // Stream content from current stage
-                                div {
-                                    dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
-                                }
+                                dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
                             }
                         } else if !current_response.read().is_empty() {
                             // Show final response if no streaming content
