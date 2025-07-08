@@ -973,15 +973,9 @@ impl ConsensusPipeline {
                 context_parts.push("## Recent Context (24h):".to_string());
                 for (i, (answer, question, confidence, _)) in recent_memories.iter().enumerate() {
                     tracing::debug!("Recent memory {}: Q: {}", i + 1, question);
-                    // Truncate the answer for display in context
-                    let answer_preview = if answer.len() > 500 {
-                        format!("{}...", &answer[..500])
-                    } else {
-                        answer.clone()
-                    };
                     context_parts.push(format!(
                         "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
-                        i + 1, question, answer_preview, confidence * 100.0
+                        i + 1, question, answer, confidence * 100.0
                     ));
                 }
             } else {
@@ -1040,15 +1034,9 @@ impl ConsensusPipeline {
                     }
                     context_parts.push("## Related Context:".to_string());
                     for (i, (answer, question, confidence, _created_at)) in thematic_memories.iter().enumerate() {
-                        // Truncate the answer for display in context
-                        let answer_preview = if answer.len() > 500 {
-                            format!("{}...", &answer[..500])
-                        } else {
-                            answer.clone()
-                        };
                         context_parts.push(format!(
                             "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
-                            i + 1, question, answer_preview, confidence * 100.0
+                            i + 1, question, answer, confidence * 100.0
                         ));
                     }
                 }
