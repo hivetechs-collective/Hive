@@ -761,6 +761,11 @@ fn App() -> Element {
         style { "{DESKTOP_STYLES}" }
         style { "{DIALOG_STYLES}" }
         
+        // Inject auto-scroll script
+        script {
+            dangerous_inner_html: "{hive_ai::desktop::scroll_handler::AUTO_SCROLL_JS}"
+        }
+        
         div {
             class: "app-container",
             
