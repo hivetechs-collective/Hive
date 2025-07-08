@@ -52,23 +52,49 @@ impl GeneratorStage {
         Self
     }
 
+    /// Detect the scope of the question
+    pub fn detect_question_scope(&self, question: &str) -> &'static str {
+        let question_lower = question.to_lowercase();
+        let word_count = question.split_whitespace().count();
+        
+        // Basic questions (minimal scope)
+        if word_count <= 5 || question_lower.contains("what is") || question_lower.contains("how to") {
+            "minimal"
+        }
+        // Regular questions (basic scope)
+        else if word_count <= 15 && !self.needs_repository_context(question) {
+            "basic"
+        }
+        // Complex questions (production scope)
+        else {
+            "production"
+        }
+    }
+
     /// Enhance system prompt with question-specific context
     pub fn enhance_system_prompt_with_context(&self, question: &str) -> String {
         let base_prompt = StagePrompts::generator_system();
+        let scope = self.detect_question_scope(question);
+        
+        let mut enhanced = format!("{}", base_prompt);
+        
+        // Add scope-specific instructions
+        match scope {
+            "minimal" => enhanced.push_str("\n\nQUICK ANSWER MODE: Provide a concise, direct answer."),
+            "basic" => enhanced.push_str("\n\nSTANDARD MODE: Provide a clear, well-structured answer."),
+            "production" => enhanced.push_str("\n\nCOMPREHENSIVE MODE: Provide an in-depth analysis with multiple perspectives."),
+            _ => {}
+        }
         
         if self.needs_repository_context(question) {
-            format!(
-                "{}\n\nCODE ANALYSIS MODE: This question appears to be about code or repository content. Use any provided repository context (symbols, dependencies, file structure) to give accurate, specific answers. Reference actual code patterns and project structure when available.",
-                base_prompt
-            )
-        } else if self.needs_temporal_context(question) {
-            format!(
-                "{}\n\nTEMPORAL AWARENESS MODE: This question requires current information. Use any provided temporal context (current date, market hours, recent events) to give up-to-date answers. Prioritize recent information and clearly indicate currency of data.",
-                base_prompt
-            )
-        } else {
-            base_prompt.to_string()
+            enhanced.push_str("\n\nCODE ANALYSIS MODE: This question appears to be about code or repository content. Use any provided repository context (symbols, dependencies, file structure) to give accurate, specific answers. Reference actual code patterns and project structure when available.");
         }
+        
+        if self.needs_temporal_context(question) {
+            enhanced.push_str("\n\nTEMPORAL AWARENESS MODE: This question requires current information. Use any provided temporal context (current date, market hours, recent events) to give up-to-date answers. Prioritize recent information and clearly indicate currency of data.");
+        }
+        
+        enhanced
     }
 
     /// Structure context based on type and question
@@ -133,7 +159,8 @@ impl GeneratorStage {
 
     /// Format user question with better structure
     pub fn format_user_question(&self, question: &str) -> String {
-        format!("USER QUESTION:\n{}", question)
+        let scope = self.detect_question_scope(question);
+        format!("USER QUESTION (Scope: {}):\n{}", scope, question)
     }
 
     /// Enhance prompt with semantic context
