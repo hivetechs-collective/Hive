@@ -160,7 +160,14 @@ impl ConsensusPipeline {
         };
 
         // Get memory context (recent + thematic) - CRITICAL for multi-conversation intelligence
+        tracing::info!("Retrieving memory context for question: {}", question);
         let memory_context = self.get_memory_context(question).await?;
+        if let Some(ref mem_ctx) = memory_context {
+            tracing::info!("Retrieved memory context with {} characters", mem_ctx.len());
+            tracing::debug!("Memory context preview: {}", &mem_ctx.chars().take(200).collect::<String>());
+        } else {
+            tracing::info!("No memory context found (this is normal for first conversation)");
+        }
 
         // Build full context including semantic, temporal, and memory
         let full_context = self.build_full_context(context, temporal_context, memory_context).await?;
@@ -750,10 +757,14 @@ impl ConsensusPipeline {
         total_cost: f64,
         database: Arc<Database>,
     ) -> Result<()> {
-        tracing::info!("Storing consensus result for conversation {}", conversation_id);
+        tracing::info!("Starting to store consensus result for conversation {}", conversation_id);
+        tracing::debug!("Question: {}", question);
+        tracing::debug!("Number of stage results: {}", stage_results.len());
+        tracing::debug!("Profile ID: {}", self.profile.id);
         
         let now = Utc::now().to_rfc3339();
         let mut conn = database.get_connection().await?;
+        tracing::debug!("Got database connection");
         
         // Use spawn_blocking for the entire database transaction
         let conversation_id = conversation_id.to_string();
@@ -763,10 +774,12 @@ impl ConsensusPipeline {
         let profile_id = self.profile.id.clone(); // Capture profile ID before closure
         
         tokio::task::spawn_blocking(move || -> Result<()> {
+            tracing::debug!("Inside spawn_blocking, starting transaction");
             let tx = conn.transaction()?;
             
             // 1. Store conversation record
-            tx.execute(
+            tracing::debug!("Storing conversation record with ID: {}", conversation_id);
+            let rows_affected = tx.execute(
                 "INSERT OR REPLACE INTO conversations (
                     id, user_id, consensus_profile_id, total_cost, 
                     input_tokens, output_tokens, created_at, updated_at
@@ -782,6 +795,7 @@ impl ConsensusPipeline {
                     &now
                 ]
             )?;
+            tracing::debug!("Conversation record stored, {} rows affected", rows_affected);
             
             // 2. Store all stage outputs as messages for audit trail
             for stage_result in &stage_results {
@@ -840,9 +854,15 @@ impl ConsensusPipeline {
             )?;
             
             // 4. Store curator truth (flagged as source of truth - critical for memory system)
+            tracing::debug!("Looking for curator stage result");
             let curator_result = stage_results.iter()
                 .find(|s| s.stage_name == "curator")
-                .ok_or_else(|| anyhow::anyhow!("No curator stage result found"))?;
+                .ok_or_else(|| {
+                    tracing::error!("No curator stage result found! Stage names: {:?}", 
+                        stage_results.iter().map(|s| &s.stage_name).collect::<Vec<_>>());
+                    anyhow::anyhow!("No curator stage result found")
+                })?;
+            tracing::debug!("Found curator result");
             
             let confidence_score = curator_result.analytics
                 .as_ref()
@@ -864,8 +884,9 @@ impl ConsensusPipeline {
                 ]
             )?;
             
+            tracing::debug!("Committing transaction");
             tx.commit()?;
-            tracing::info!("Successfully stored consensus result for conversation {}", conversation_id);
+            tracing::info!("Successfully stored consensus result for conversation {} in database", conversation_id);
             Ok(())
         }).await??;
         
