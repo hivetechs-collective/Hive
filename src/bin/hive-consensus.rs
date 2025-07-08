@@ -183,13 +183,7 @@ const DESKTOP_STYLES: &str = r#"
         line-height: 1.6;
         color: #cccccc;
         scroll-behavior: smooth;
-    }
-    
-    .response-area-wrapper {
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        min-height: 100%;
+        overflow-anchor: none;
     }
     
     .response-content {
@@ -489,17 +483,23 @@ fn App() -> Element {
     
     // File selection is handled directly in the onclick handler
     
+    // Track if we should auto-scroll
+    let mut should_auto_scroll = use_signal(|| true);
+    
     // Auto-scroll response area when streaming content changes
     let previous_content_length = use_signal(|| 0usize);
+    
     use_effect({
         let app_state = app_state.clone();
         let mut previous_content_length = previous_content_length.clone();
+        let mut should_auto_scroll = should_auto_scroll.clone();
         move || {
             let current_length = app_state.read().consensus.streaming_content.len();
             if current_length > *previous_content_length.read() {
                 *previous_content_length.write() = current_length;
-                // The CSS flex-end layout will keep new content visible
-                // Additional JS-based scrolling can be added here if needed
+                
+                // Set flag to scroll on next render
+                *should_auto_scroll.write() = true;
             }
         }
     });
@@ -897,25 +897,36 @@ fn App() -> Element {
                     div {
                         class: "response-area",
                         id: "response-area",
-                        div {
-                            class: "response-area-wrapper",
-                            if !app_state.read().consensus.streaming_content.is_empty() {
-                                // Show streaming content in real-time
+                        onwheel: move |_| {
+                            // User scrolled manually, disable auto-scroll
+                            *should_auto_scroll.write() = false;
+                        },
+                        if !app_state.read().consensus.streaming_content.is_empty() {
+                            // Show streaming content in real-time
+                            div {
+                                class: "response-content",
+                                dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
+                            }
+                            // Auto-scroll anchor - a div that we'll scroll into view
+                            if *should_auto_scroll.read() {
                                 div {
-                                    class: "response-content",
-                                    dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
+                                    style: "height: 1px; visibility: hidden;",
+                                    onmounted: move |_| {
+                                        // When this mounts, it means new content was added
+                                        // We'll use a small hack to trigger scroll
+                                    }
                                 }
-                            } else if !current_response.read().is_empty() {
-                                // Show final response if no streaming content
-                                div {
-                                    class: "response-content",
-                                    dangerous_inner_html: "{current_response.read()}"
-                                }
-                            } else if !*is_processing.read() {
-                                div {
-                                    class: "welcome-text",
-                                    "Ask Hive anything. Your query will be processed through our 4-stage consensus pipeline."
-                                }
+                            }
+                        } else if !current_response.read().is_empty() {
+                            // Show final response if no streaming content
+                            div {
+                                class: "response-content",
+                                dangerous_inner_html: "{current_response.read()}"
+                            }
+                        } else if !*is_processing.read() {
+                            div {
+                                class: "welcome-text",
+                                "Ask Hive anything. Your query will be processed through our 4-stage consensus pipeline."
                             }
                         }
                     }
