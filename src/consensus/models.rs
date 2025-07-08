@@ -5,6 +5,7 @@ use crate::core::database_simple::Database;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::Client;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::time::{Duration, Instant};
@@ -185,10 +186,21 @@ impl ModelManager {
         // Process and store models
         let conn = db.get_connection().await?;
         let mut stored_count = 0;
+        let mut skipped_count = 0;
 
         conn.execute("BEGIN TRANSACTION", [])?;
 
+        // Mark all models as potentially inactive first
+        let updated = conn.execute("UPDATE openrouter_models SET is_active = 0", [])?;
+        println!("🔄 Marked {} existing models as inactive", updated);
+        
         for model in models {
+            // Skip pseudo-models that aren't real endpoints
+            if model.id.starts_with("openrouter/") {
+                skipped_count += 1;
+                continue;
+            }
+            
             // Parse pricing
             let pricing_input = model.pricing.as_ref()
                 .and_then(|p| p.prompt.as_ref())
@@ -216,39 +228,137 @@ impl ModelManager {
 
             // Extract provider name
             let provider_name = model.id.split('/').next().unwrap_or("unknown").to_string();
-
-            // Insert or update model
-            conn.execute(
-                r#"
-                INSERT OR REPLACE INTO openrouter_models (
-                    openrouter_id, provider_name, model_name, context_window,
-                    pricing_input, pricing_output, capabilities_json, is_active,
-                    last_updated
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-                "#,
-                rusqlite::params![
-                    model.id,
-                    provider_name,
-                    model.name.clone(),
-                    model.context_length.unwrap_or(0) as i64,
-                    pricing_input,
-                    pricing_output,
-                    serde_json::to_string(&capabilities).unwrap_or_default(),
-                    true,
-                    Utc::now().to_rfc3339(),
-                ],
-            )?;
+            
+            // Check if model already exists
+            let existing_id: Option<i64> = conn.query_row(
+                "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
+                [&model.id],
+                |row| row.get(0)
+            ).optional()?;
+            
+            if let Some(internal_id) = existing_id {
+                // Update existing model, preserving internal_id
+                conn.execute(
+                    r#"
+                    UPDATE openrouter_models SET
+                        provider_id = ?2,
+                        provider_name = ?3,
+                        name = ?4,
+                        context_window = ?5,
+                        pricing_input = ?6,
+                        pricing_output = ?7,
+                        capabilities = ?8,
+                        is_active = ?9,
+                        last_updated = ?10
+                    WHERE internal_id = ?1
+                    "#,
+                    rusqlite::params![
+                        internal_id,
+                        provider_name,  // provider_id
+                        provider_name,
+                        model.name.clone(),
+                        model.context_length.unwrap_or(0) as i64,
+                        pricing_input,
+                        pricing_output,
+                        serde_json::to_string(&capabilities).unwrap_or_default(),
+                        true,
+                        Utc::now().to_rfc3339(),
+                    ],
+                )?;
+            } else {
+                // Check for potential rename by looking for similar models
+                let potential_rename: Option<i64> = conn.query_row(
+                    r#"
+                    SELECT internal_id FROM openrouter_models 
+                    WHERE provider_name = ?1 
+                    AND is_active = 0
+                    AND name LIKE ?2
+                    LIMIT 1
+                    "#,
+                    [&provider_name, &format!("%{}%", model.name.split('-').next().unwrap_or(""))],
+                    |row| row.get(0)
+                ).optional()?;
+                
+                if let Some(renamed_id) = potential_rename {
+                    // This looks like a rename - update the existing record
+                    conn.execute(
+                        r#"
+                        UPDATE openrouter_models SET
+                            openrouter_id = ?2,
+                            name = ?3,
+                            context_window = ?4,
+                            pricing_input = ?5,
+                            pricing_output = ?6,
+                            capabilities = ?7,
+                            is_active = ?8,
+                            last_updated = ?9
+                        WHERE internal_id = ?1
+                        "#,
+                        rusqlite::params![
+                            renamed_id,
+                            model.id,
+                            model.name.clone(),
+                            model.context_length.unwrap_or(0) as i64,
+                            pricing_input,
+                            pricing_output,
+                            serde_json::to_string(&capabilities).unwrap_or_default(),
+                            true,
+                            Utc::now().to_rfc3339(),
+                        ],
+                    )?;
+                } else {
+                    // Check if provider exists, if not create it
+                    let provider_exists: bool = conn.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM openrouter_providers WHERE id = ?1)",
+                        [&provider_name],
+                        |row| row.get(0)
+                    )?;
+                    
+                    if !provider_exists {
+                        conn.execute(
+                            "INSERT INTO openrouter_providers (id, name, display_name, model_count, average_cost, capabilities, last_updated, is_active, created_at) VALUES (?1, ?2, ?3, 0, 0.0, '[]', ?4, 1, ?4)",
+                            rusqlite::params![&provider_name, &provider_name, &provider_name, Utc::now().to_rfc3339()],
+                        )?;
+                    }
+                    
+                    // Genuinely new model - insert with auto-generated internal_id
+                    conn.execute(
+                        r#"
+                        INSERT INTO openrouter_models (
+                            openrouter_id, name, provider_id, provider_name, description, capabilities,
+                            pricing_input, pricing_output, context_window, created_at, last_updated, is_active
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                        "#,
+                        rusqlite::params![
+                            model.id,
+                            model.name.clone(),
+                            provider_name.clone(),  // provider_id
+                            provider_name,
+                            model.description.as_ref().unwrap_or(&"".to_string()).clone(),
+                            serde_json::to_string(&capabilities).unwrap_or_default(),
+                            pricing_input,
+                            pricing_output,
+                            model.context_length.unwrap_or(4096) as i64,
+                            Utc::now().timestamp_millis() as i64,  // created_at in milliseconds
+                            Utc::now().to_rfc3339(),  // last_updated
+                            true,  // is_active
+                        ],
+                    )?;
+                }
+            }
 
             stored_count += 1;
         }
 
         conn.execute("COMMIT", [])?;
+        
+        println!("💾 Committed transaction: {} models stored, {} skipped", stored_count, skipped_count);
 
         // Update rankings
         self.update_model_rankings(db).await?;
 
         self.last_sync = Some(Instant::now());
-        println!("✅ Stored {} models in database", stored_count);
+        println!("✅ Sync complete: {} models in database", stored_count);
 
         Ok(stored_count)
     }
@@ -380,9 +490,9 @@ impl ModelManager {
 
         let mut stmt = conn.prepare(
             r#"
-            SELECT om.internal_id, om.openrouter_id, om.provider_name, om.model_name,
+            SELECT om.internal_id, om.openrouter_id, om.provider_name, om.name,
                    om.context_window, om.pricing_input, om.pricing_output, 
-                   om.capabilities_json, om.is_active, om.last_updated,
+                   om.capabilities, om.is_active, om.last_updated,
                    mr.rank_position, mr.score
             FROM openrouter_models om
             JOIN model_rankings mr ON om.internal_id = mr.model_internal_id
@@ -430,9 +540,9 @@ impl ModelManager {
 
         let mut stmt = conn.prepare(
             r#"
-            SELECT internal_id, openrouter_id, provider_name, model_name,
+            SELECT internal_id, openrouter_id, provider_name, name,
                    context_window, pricing_input, pricing_output, 
-                   capabilities_json, is_active, last_updated
+                   capabilities, is_active, last_updated
             FROM openrouter_models
             WHERE internal_id = ?1
             "#
@@ -475,9 +585,9 @@ impl ModelManager {
 
         let mut stmt = conn.prepare(
             r#"
-            SELECT internal_id, openrouter_id, provider_name, model_name,
+            SELECT internal_id, openrouter_id, provider_name, name,
                    context_window, pricing_input, pricing_output, 
-                   capabilities_json, is_active, last_updated
+                   capabilities, is_active, last_updated
             FROM openrouter_models
             WHERE openrouter_id = ?1 AND is_active = 1
             "#

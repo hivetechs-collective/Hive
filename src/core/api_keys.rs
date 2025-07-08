@@ -128,7 +128,7 @@ impl ApiKeyManager {
                                  ON CONFLICT(key) DO UPDATE SET 
                                  value = excluded.value,
                                  updated_at = CURRENT_TIMESTAMP",
-                                params!["hive_api_key", hive_key, false, default_user_id],
+                                params!["hive_license_key", hive_key, false, default_user_id],
                             )?;
                         }
                     }
@@ -179,6 +179,12 @@ impl ApiKeyManager {
                     
                     if openrouter_key.is_some() || hive_key.is_some() {
                         debug!("Loaded API keys from database");
+                        if let Some(ref key) = openrouter_key {
+                            debug!("Found OpenRouter key in database: {} chars", key.len());
+                        }
+                        if let Some(ref key) = hive_key {
+                            debug!("Found Hive key in database: {} chars", key.len());
+                        }
                         return Ok(ApiKeyConfig {
                             openrouter_key,
                             hive_key,

@@ -424,7 +424,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             class: "settings-field",
                             label { 
                                 class: "settings-label",
-                                "Hive API Key (Optional)" 
+                                "Hive License Key" 
                             }
                             input {
                                 class: "settings-input",
@@ -951,14 +951,21 @@ pub fn OnboardingDialog(
                                     r#type: "password",
                                     value: "{temp_hive_key.read()}",
                                     placeholder: "hive-xxxx-xxxx-xxxx",
-                                    oninput: move |evt| *temp_hive_key.write() = evt.value().clone(),
+                                    oninput: move |evt| {
+                                        let value = evt.value().clone();
+                                        *temp_hive_key.write() = value;
+                                    },
+                                    onchange: move |evt| {
+                                        let value = evt.value().clone();
+                                        *temp_hive_key.write() = value;
+                                    },
                                 }
                                 
                                 div {
                                     class: "api-key-help",
                                     p { 
                                         class: "settings-hint",
-                                        "Your license key enables conversation sync and premium features." 
+                                        "Your license key is required for consensus to work properly. It enables conversation sync and premium features." 
                                     }
                                     p {
                                         style: "margin-top: 10px;",
