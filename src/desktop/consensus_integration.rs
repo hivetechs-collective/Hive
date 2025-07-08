@@ -264,6 +264,7 @@ pub fn use_consensus() -> Option<DesktopConsensusManager> {
             }
             Err(e) => {
                 tracing::error!("Failed to create consensus manager: {}", e);
+                tracing::error!("Error details: {:?}", e);
                 None
             }
         }

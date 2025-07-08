@@ -383,18 +383,6 @@ fn App() -> Element {
         });
     });
     
-    // Check consensus manager status (only once)
-    use_effect(move || {
-        let consensus_manager = consensus_manager.clone();
-        let mut show_onboarding = show_onboarding_dialog.clone();
-        let mut show_welcome = show_welcome_dialog.clone();
-        
-        if consensus_manager.is_none() {
-            // No consensus manager means no API key
-            *show_onboarding.write() = true;
-            *show_welcome.write() = false;
-        }
-    });
     
     // Load initial directory
     {
