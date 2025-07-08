@@ -932,6 +932,7 @@ impl ConsensusPipeline {
 
     /// Build memory context combining recent and thematic memories (matching TypeScript)
     async fn build_memory_context(&self, query: &str, database: Arc<Database>) -> Result<String> {
+        tracing::debug!("Building memory context for query: {}", query);
         let mut conn = database.get_connection().await?;
         let query = query.to_string();
         
@@ -941,6 +942,7 @@ impl ConsensusPipeline {
             
             // 1. Get recent context (past 24 hours) - matching TypeScript implementation
             let twenty_four_hours_ago = (Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
+            tracing::debug!("Looking for memories since: {}", twenty_four_hours_ago);
             
             let mut stmt = conn.prepare(
                 "SELECT ct.curator_output, kc.question, ct.confidence_score, ct.created_at
@@ -965,14 +967,25 @@ impl ConsensusPipeline {
                 recent_memories.push(result?);
             }
             
+            tracing::debug!("Found {} recent memories", recent_memories.len());
+            
             if !recent_memories.is_empty() {
                 context_parts.push("## Recent Context (24h):".to_string());
                 for (i, (answer, question, confidence, _)) in recent_memories.iter().enumerate() {
+                    tracing::debug!("Recent memory {}: Q: {}", i + 1, question);
+                    // Truncate the answer for display in context
+                    let answer_preview = if answer.len() > 500 {
+                        format!("{}...", &answer[..500])
+                    } else {
+                        answer.clone()
+                    };
                     context_parts.push(format!(
                         "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
-                        i + 1, question, answer, confidence * 100.0
+                        i + 1, question, answer_preview, confidence * 100.0
                     ));
                 }
+            } else {
+                tracing::debug!("No recent memories found in the past 24 hours");
             }
             
             // 2. Get thematic context - simple keyword matching for now
