@@ -182,6 +182,14 @@ const DESKTOP_STYLES: &str = r#"
         font-size: 14px;
         line-height: 1.6;
         color: #cccccc;
+        scroll-behavior: smooth;
+    }
+    
+    .response-area-wrapper {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-height: 100%;
     }
     
     .response-content {
@@ -480,6 +488,21 @@ fn App() -> Element {
     }
     
     // File selection is handled directly in the onclick handler
+    
+    // Auto-scroll response area when streaming content changes
+    let previous_content_length = use_signal(|| 0usize);
+    use_effect({
+        let app_state = app_state.clone();
+        let mut previous_content_length = previous_content_length.clone();
+        move || {
+            let current_length = app_state.read().consensus.streaming_content.len();
+            if current_length > *previous_content_length.read() {
+                *previous_content_length.write() = current_length;
+                // The CSS flex-end layout will keep new content visible
+                // Additional JS-based scrolling can be added here if needed
+            }
+        }
+    });
 
     // Handle menu actions
     let handle_menu_action = move |action: MenuAction| {
@@ -873,22 +896,26 @@ fn App() -> Element {
                     // Response display area (Claude Code style)
                     div {
                         class: "response-area",
-                        if !app_state.read().consensus.streaming_content.is_empty() {
-                            // Show streaming content in real-time
-                            div {
-                                class: "response-content",
-                                dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
-                            }
-                        } else if !current_response.read().is_empty() {
-                            // Show final response if no streaming content
-                            div {
-                                class: "response-content",
-                                dangerous_inner_html: "{current_response.read()}"
-                            }
-                        } else if !*is_processing.read() {
-                            div {
-                                class: "welcome-text",
-                                "Ask Hive anything. Your query will be processed through our 4-stage consensus pipeline."
+                        id: "response-area",
+                        div {
+                            class: "response-area-wrapper",
+                            if !app_state.read().consensus.streaming_content.is_empty() {
+                                // Show streaming content in real-time
+                                div {
+                                    class: "response-content",
+                                    dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
+                                }
+                            } else if !current_response.read().is_empty() {
+                                // Show final response if no streaming content
+                                div {
+                                    class: "response-content",
+                                    dangerous_inner_html: "{current_response.read()}"
+                                }
+                            } else if !*is_processing.read() {
+                                div {
+                                    class: "welcome-text",
+                                    "Ask Hive anything. Your query will be processed through our 4-stage consensus pipeline."
+                                }
                             }
                         }
                     }
