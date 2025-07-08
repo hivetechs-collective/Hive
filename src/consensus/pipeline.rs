@@ -788,7 +788,7 @@ impl ConsensusPipeline {
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     conversation_id,
-                    "default_user", // TODO: Get actual user ID when auth is implemented
+                    None::<String>, // user_id is optional, like TypeScript version
                     profile_id, // Use the actual profile ID from the pipeline
                     total_cost,
                     stage_results.iter().map(|s| s.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0)).sum::<u32>(),
