@@ -391,15 +391,14 @@ fn App() -> Element {
     });
     
     // Initialize app state
-    let app_state = use_signal(|| AppState::default());
+    let mut app_state = use_signal(|| AppState::default());
     use_context_provider(|| app_state.clone());
     
     // Get consensus manager
     let consensus_manager = use_consensus();
     
     // State management
-    let mut current_response = use_signal(String::new);  // Current streaming response
-    let mut streaming_content = use_signal(String::new);  // Live streaming content
+    let mut current_response = use_signal(String::new);  // Final response
     let mut input_value = use_signal(String::new);
     let mut is_processing = use_signal(|| false);
     let mut selected_file = use_signal(|| Some("__welcome__".to_string()));
@@ -874,7 +873,14 @@ fn App() -> Element {
                     // Response display area (Claude Code style)
                     div {
                         class: "response-area",
-                        if !current_response.read().is_empty() {
+                        if !app_state.read().consensus.streaming_content.is_empty() {
+                            // Show streaming content in real-time
+                            div {
+                                class: "response-content",
+                                dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
+                            }
+                        } else if !current_response.read().is_empty() {
+                            // Show final response if no streaming content
                             div {
                                 class: "response-content",
                                 dangerous_inner_html: "{current_response.read()}"
@@ -909,6 +915,7 @@ fn App() -> Element {
                                         // Clear input and response
                                         input_value.write().clear();
                                         current_response.write().clear();
+                                        app_state.write().consensus.streaming_content.clear();
                                         
                                         // Start processing
                                         *is_processing.write() = true;
@@ -918,60 +925,17 @@ fn App() -> Element {
                                             let mut current_response = current_response.clone();
                                             let mut is_processing = is_processing.clone();
                                             let mut app_state = app_state.clone();
-                                            let mut streaming_content = streaming_content.clone();
                                             
                                             spawn(async move {
                                                 // Update UI to show consensus is running
                                                 app_state.write().consensus.start_consensus();
                                                 
-                                                // Clear streaming content to start fresh
-                                                streaming_content.write().clear();
-                                                
-                                                // Use the streaming version to get real-time updates
-                                                match consensus.process_query_streaming(&user_msg).await {
-                                                    Ok((final_response, mut rx_stream)) => {
-                                                        // Spawn a task to handle streaming events
-                                                        let mut streaming_content_clone = streaming_content.clone();
-                                                        let mut current_response_clone = current_response.clone();
-                                                        let is_streaming_complete = use_signal(|| false);
-                                                        let mut is_streaming_complete_clone = is_streaming_complete.clone();
-                                                        
-                                                        spawn(async move {
-                                                            while let Some(event) = rx_stream.recv().await {
-                                                                match event {
-                                                                    hive_ai::desktop::consensus_integration::ConsensusUIEvent::StreamingChunk { stage: _, chunk, total_content: _ } => {
-                                                                        // Append the chunk to the streaming content
-                                                                        streaming_content_clone.write().push_str(&chunk);
-                                                                        
-                                                                        // Update the current response with the streaming content
-                                                                        let html = markdown::to_html(&streaming_content_clone.read());
-                                                                        *current_response_clone.write() = html;
-                                                                    }
-                                                                    hive_ai::desktop::consensus_integration::ConsensusUIEvent::StageCompleted { stage: _, cost: _ } => {
-                                                                        // A stage completed, but keep streaming
-                                                                    }
-                                                                    _ => {} // Handle other events if needed
-                                                                }
-                                                            }
-                                                            
-                                                            // Mark streaming as complete
-                                                            *is_streaming_complete_clone.write() = true;
-                                                        });
-                                                        
-                                                        // Handle the final response after streaming completes
-                                                        spawn(async move {
-                                                            // Wait for streaming to complete
-                                                            while !*is_streaming_complete.read() {
-                                                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                                                            }
-                                                            
-                                                            // If no streaming content was received, use the final response
-                                                            if streaming_content.read().is_empty() {
-                                                                let html = markdown::to_html(&final_response);
-                                                                *current_response.write() = html;
-                                                            }
-                                                            // Otherwise, keep the streamed content visible
-                                                        });
+                                                // Process the query - streaming will update app_state automatically
+                                                match consensus.process_query(&user_msg).await {
+                                                    Ok(final_response) => {
+                                                        // Set final response
+                                                        let html = markdown::to_html(&final_response);
+                                                        *current_response.write() = html;
                                                     }
                                                     Err(e) => {
                                                         *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);

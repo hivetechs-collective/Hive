@@ -390,6 +390,7 @@ pub struct ConsensusState {
     pub stages: Vec<StageInfo>,
     pub total_tokens: usize,
     pub estimated_cost: f64,
+    pub streaming_content: String,
 }
 
 impl ConsensusState {
@@ -407,6 +408,7 @@ impl ConsensusState {
             ],
             total_tokens: 0,
             estimated_cost: 0.0,
+            streaming_content: String::new(),
         }
     }
     
@@ -417,6 +419,7 @@ impl ConsensusState {
         self.progress = ConsensusProgress::default();
         self.total_tokens = 0;
         self.estimated_cost = 0.0;
+        self.streaming_content.clear();
     }
     
     pub fn update_progress(&mut self, stage: ConsensusStage, progress: u8) {
