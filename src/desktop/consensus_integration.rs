@@ -68,19 +68,26 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
             Stage::Curator => ConsensusStage::Curator,
         };
         
-        tracing::debug!("DesktopStreamingCallbacks: Sending chunk for stage {:?}: '{}'", stage, chunk);
-        
-        // Send the streaming chunk to update the UI in real-time
-        let result = self.event_sender.send(ConsensusUIEvent::StreamingChunk {
-            stage: consensus_stage,
-            chunk: chunk.to_string(),
-            total_content: total_content.to_string(),
-        });
-        
-        if let Err(e) = result {
-            tracing::error!("Failed to send streaming chunk to UI: {:?}", e);
+        // ONLY stream chunks from the Curator stage (final consensus result)
+        // Other stages run in background and show progress only
+        if matches!(stage, Stage::Curator) {
+            tracing::debug!("DesktopStreamingCallbacks: Sending Curator chunk: '{}'", chunk);
+            
+            // Send the streaming chunk to update the UI in real-time
+            let result = self.event_sender.send(ConsensusUIEvent::StreamingChunk {
+                stage: consensus_stage,
+                chunk: chunk.to_string(),
+                total_content: total_content.to_string(),
+            });
+            
+            if let Err(e) = result {
+                tracing::error!("Failed to send streaming chunk to UI: {:?}", e);
+            } else {
+                tracing::debug!("Successfully sent Curator streaming chunk to UI channel");
+            }
         } else {
-            tracing::debug!("Successfully sent streaming chunk to UI channel");
+            // For non-Curator stages, just log for debugging but don't stream to UI
+            tracing::debug!("DesktopStreamingCallbacks: Stage {:?} processing (not streaming): '{}'", stage, chunk.chars().take(50).collect::<String>());
         }
         
         Ok(())
@@ -175,15 +182,22 @@ impl StreamingCallbacks for DualChannelCallbacks {
             Stage::Curator => ConsensusStage::Curator,
         };
         
-        let event = ConsensusUIEvent::StreamingChunk {
-            stage: consensus_stage,
-            chunk: chunk.to_string(),
-            total_content: total_content.to_string(),
-        };
-        
-        // Send to both channels
-        let _ = self.stream_sender.send(event.clone());
-        let _ = self.internal_sender.send(event);
+        // ONLY stream chunks from the Curator stage (final consensus result)
+        // Other stages run in background and show progress only
+        if matches!(stage, Stage::Curator) {
+            let event = ConsensusUIEvent::StreamingChunk {
+                stage: consensus_stage,
+                chunk: chunk.to_string(),
+                total_content: total_content.to_string(),
+            };
+            
+            // Send to both channels
+            let _ = self.stream_sender.send(event.clone());
+            let _ = self.internal_sender.send(event);
+        } else {
+            // For non-Curator stages, just log for debugging but don't stream to UI
+            tracing::debug!("DualChannelCallbacks: Stage {:?} processing (not streaming): '{}'", stage, chunk.chars().take(50).collect::<String>());
+        }
         
         Ok(())
     }
