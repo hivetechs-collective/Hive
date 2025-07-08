@@ -202,6 +202,7 @@ impl OpenRouterClient {
                                         chunk_count += 1;
                                         
                                         if let Some(cb) = &callbacks {
+                                            tracing::debug!("OpenRouter: Forwarding chunk '{}' to callbacks", content);
                                             cb.on_chunk(content.to_string(), full_content.clone());
                                             
                                             // Estimate progress

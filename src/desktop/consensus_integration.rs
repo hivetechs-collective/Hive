@@ -68,14 +68,20 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
             Stage::Curator => ConsensusStage::Curator,
         };
         
-        tracing::trace!("DesktopStreamingCallbacks: Sending chunk for stage {:?}: '{}'", stage, chunk);
+        tracing::debug!("DesktopStreamingCallbacks: Sending chunk for stage {:?}: '{}'", stage, chunk);
         
         // Send the streaming chunk to update the UI in real-time
-        let _ = self.event_sender.send(ConsensusUIEvent::StreamingChunk {
+        let result = self.event_sender.send(ConsensusUIEvent::StreamingChunk {
             stage: consensus_stage,
             chunk: chunk.to_string(),
             total_content: total_content.to_string(),
         });
+        
+        if let Err(e) = result {
+            tracing::error!("Failed to send streaming chunk to UI: {:?}", e);
+        } else {
+            tracing::debug!("Successfully sent streaming chunk to UI channel");
+        }
         
         Ok(())
     }
@@ -315,12 +321,10 @@ pub async fn process_consensus_events(
                 let mut state = app_state.write();
                 state.consensus.add_tokens(count, cost);
             }
-            ConsensusUIEvent::StreamingChunk { stage, chunk, total_content } => {
-                // Handle streaming chunk - this will be picked up by the UI component
-                // The UI should display this chunk in real-time
-                let _ = stage; // We might use this to show which stage is streaming
-                let _ = chunk; // The actual text chunk to display
-                let _ = total_content; // The full content so far
+            ConsensusUIEvent::StreamingChunk { stage: _, chunk, total_content: _ } => {
+                // Update the streaming content in the consensus state
+                let mut state = app_state.write();
+                state.consensus.streaming_content.push_str(&chunk);
             }
         }
     }

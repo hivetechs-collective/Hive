@@ -732,8 +732,11 @@ impl OpenRouterStreamingCallbacks for TrackerForwardingCallbacks {
     
     fn on_chunk(&self, chunk: String, total_content: String) {
         // Forward to our consensus callbacks
-        tracing::trace!("TrackerForwardingCallbacks: Received chunk for stage {:?}: '{}'", self.stage, chunk);
-        let _ = self.tracker_callbacks.on_stage_chunk(self.stage, &chunk, &total_content);
+        tracing::debug!("TrackerForwardingCallbacks: Received chunk for stage {:?}: '{}'", self.stage, chunk);
+        let result = self.tracker_callbacks.on_stage_chunk(self.stage, &chunk, &total_content);
+        if let Err(e) = result {
+            tracing::error!("Failed to forward chunk: {}", e);
+        }
     }
     
     fn on_progress(&self, progress: crate::consensus::openrouter::StreamingProgress) {
