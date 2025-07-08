@@ -15,7 +15,7 @@ use crate::consensus::openrouter::{
     OpenRouterClient, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse,
     StreamingCallbacks as OpenRouterStreamingCallbacks, SimpleStreamingCallbacks
 };
-use crate::consensus::models::{ModelManager, DynamicModelSelector, ModelSelectionCriteria, BudgetConstraints, PerformanceTargets, UserPreferences};
+use crate::consensus::models::ModelManager;
 use crate::core::database_simple::Database;
 use anyhow::{Context, Result};
 use chrono::Utc;
@@ -34,7 +34,6 @@ pub struct ConsensusPipeline {
     // consensus_integration: Option<Arc<ConsensusIntegration>>,
     openrouter_client: Option<Arc<OpenRouterClient>>,
     model_manager: Option<Arc<ModelManager>>,
-    model_selector: Option<Arc<DynamicModelSelector>>,
     database: Option<Arc<Database>>,
     api_key: Option<String>,
 }
@@ -53,13 +52,12 @@ impl ConsensusPipeline {
         };
 
         // Initialize OpenRouter client and model management if API key is provided
-        let (openrouter_client, model_manager, model_selector) = if let Some(ref key) = api_key {
+        let (openrouter_client, model_manager) = if let Some(ref key) = api_key {
             let client = Arc::new(OpenRouterClient::new(key.clone()));
             let manager = Arc::new(ModelManager::new(Some(key.clone())));
-            let selector = Arc::new(DynamicModelSelector::new(Some(key.clone())));
-            (Some(client), Some(manager), Some(selector))
+            (Some(client), Some(manager))
         } else {
-            (None, None, None)
+            (None, None)
         };
 
         Self {
@@ -77,7 +75,6 @@ impl ConsensusPipeline {
             // consensus_integration: None,
             openrouter_client,
             model_manager,
-            model_selector,
             database: None, // Will be set later when needed
             api_key,
         }
@@ -171,44 +168,8 @@ impl ConsensusPipeline {
         for (i, stage_handler) in self.stages.iter().enumerate() {
             let stage = stage_handler.stage();
             
-            // Use dynamic model selection if available, otherwise fallback to profile
-            let model = if let (Some(selector), Some(db)) = (&self.model_selector, &self.database) {
-                // Create selection criteria
-                let criteria = ModelSelectionCriteria {
-                    stage: stage.as_str().to_string(),
-                    question_complexity: if question.len() > 500 { "production".to_string() } else { "basic".to_string() },
-                    question_category: "general".to_string(), // TODO: Improve categorization
-                    budget_constraints: Some(BudgetConstraints {
-                        max_cost_per_stage: Some(0.10),
-                        max_total_cost: Some(0.50),
-                        cost_efficiency_target: None,
-                        prioritize_cost: false,
-                    }),
-                    performance_targets: Some(PerformanceTargets {
-                        max_latency: Some(5000),
-                        min_success_rate: Some(0.95),
-                        prioritize_speed: false,
-                        prioritize_quality: true,
-                    }),
-                    user_preferences: None,
-                    profile_template: Some(self.profile.profile_name.clone()),
-                };
-
-                // Select optimal model
-                match selector.select_optimal_model(db, &criteria, Some(&conversation_id)).await {
-                    Ok(Some(candidate)) => candidate.openrouter_id,
-                    Ok(None) => {
-                        println!("⚠️ No optimal model found, using profile default");
-                        self.profile.get_model_for_stage(stage).to_string()
-                    }
-                    Err(e) => {
-                        println!("⚠️ Model selection failed: {}, using profile default", e);
-                        self.profile.get_model_for_stage(stage).to_string()
-                    }
-                }
-            } else {
-                self.profile.get_model_for_stage(stage).to_string()
-            };
+            // Use model directly from profile - the maintenance system ensures these are always valid
+            let model = self.profile.get_model_for_stage(stage).to_string();
 
             // Execute pre-stage hooks with enterprise integration
             // if let Some(integration) = &self.consensus_integration {

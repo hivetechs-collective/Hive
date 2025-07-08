@@ -244,24 +244,20 @@ impl TemplateMaintenanceManager {
         let conn = self.db.get_connection().await?;
         let mut validations = HashMap::new();
         
-        // Get all profiles
+        // Get all profiles - they now store OpenRouter IDs directly
         let profiles = {
             let mut stmt = conn.prepare(
-                "SELECT cp.id, cp.name, 
-                        gen.openrouter_id as generator,
-                        ref.openrouter_id as refiner,
-                        val.openrouter_id as validator,
-                        cur.openrouter_id as curator
-                 FROM consensus_profiles cp
-                 JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
-                 JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
-                 JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
-                 JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id"
+                "SELECT id, profile_name, 
+                        generator_model,
+                        refiner_model,
+                        validator_model,
+                        curator_model
+                 FROM consensus_profiles"
             )?;
             
             let profile_rows = stmt.query_map([], |row| {
                 Ok((
-                    row.get::<_, i64>(0)?.to_string(),
+                    row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     vec![
                         row.get::<_, String>(2)?,
@@ -294,15 +290,11 @@ impl TemplateMaintenanceManager {
     async fn migrate_profile(&self, profile_id: &str) -> Result<()> {
         let conn = self.db.get_connection().await?;
         
-        // Get current models
+        // Get current models - they are stored directly as OpenRouter IDs
         let (gen_id, ref_id, val_id, cur_id): (String, String, String, String) = conn.query_row(
-            "SELECT gen.openrouter_id, ref.openrouter_id, val.openrouter_id, cur.openrouter_id
-             FROM consensus_profiles cp
-             JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
-             JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
-             JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
-             JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
-             WHERE cp.id = ?1",
+            "SELECT generator_model, refiner_model, validator_model, curator_model
+             FROM consensus_profiles
+             WHERE id = ?1",
             [profile_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
         )?;
@@ -336,13 +328,13 @@ impl TemplateMaintenanceManager {
                 .ok_or_else(|| anyhow::anyhow!("No replacement found for curator model"))?
         };
         
-        // Update profile with new model IDs
+        // Update profile with new model IDs directly
         conn.execute(
             "UPDATE consensus_profiles 
-             SET generator_model_id = (SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1),
-                 refiner_model_id = (SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?2),
-                 validator_model_id = (SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?3),
-                 curator_model_id = (SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?4),
+             SET generator_model = ?1,
+                 refiner_model = ?2,
+                 validator_model = ?3,
+                 curator_model = ?4,
                  updated_at = datetime('now')
              WHERE id = ?5",
             [&gen_replacement, &ref_replacement, &val_replacement, &cur_replacement, profile_id]

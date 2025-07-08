@@ -8,14 +8,14 @@ use crate::consensus::types::{
     ContextInjectionStrategy, RetryPolicy, ResponseMetadata,
 };
 use crate::consensus::profiles::{ExpertProfileManager, TemplateFilter, TemplatePreferences};
-use crate::consensus::models::{ModelManager, DynamicModelSelector};
+use crate::consensus::models::ModelManager;
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::core::config;
 use crate::core::api_keys::ApiKeyManager;
 use crate::core::database_simple::Database;
 // use crate::core::Database; // TODO: Replace with actual database implementation
 use anyhow::{anyhow, Context, Result};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
@@ -29,7 +29,6 @@ pub struct ConsensusEngine {
     openrouter_api_key: Option<String>,
     profile_manager: Arc<ExpertProfileManager>,
     model_manager: Option<Arc<ModelManager>>,
-    model_selector: Option<Arc<DynamicModelSelector>>,
     temporal_provider: Arc<TemporalContextProvider>,
 }
 
@@ -46,13 +45,10 @@ impl ConsensusEngine {
         let profile_manager = Arc::new(ExpertProfileManager::new());
         
         // Initialize model management if API key is available
-        let (model_manager, model_selector) = if let Some(ref key) = openrouter_api_key {
-            (
-                Some(Arc::new(ModelManager::new(Some(key.clone())))),
-                Some(Arc::new(DynamicModelSelector::new(Some(key.clone())))),
-            )
+        let model_manager = if let Some(ref key) = openrouter_api_key {
+            Some(Arc::new(ModelManager::new(Some(key.clone()))))
         } else {
-            (None, None)
+            None
         };
         
         // Check if model maintenance needs to run
@@ -106,7 +102,6 @@ impl ConsensusEngine {
             openrouter_api_key,
             profile_manager,
             model_manager,
-            model_selector,
             temporal_provider: Arc::new(TemporalContextProvider::default()),
         })
     }
@@ -267,8 +262,8 @@ impl ConsensusEngine {
         if let Ok(db) = crate::core::database::get_database().await {
             let conn = db.get_connection()?;
             conn.execute(
-                "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile', ?1)",
-                rusqlite::params![&profile.profile_name],
+                "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
+                rusqlite::params![&profile.id],
             )?;
         }
 
@@ -324,10 +319,6 @@ impl ConsensusEngine {
         self.model_manager.as_deref()
     }
 
-    /// Get model selector if available
-    pub fn get_model_selector(&self) -> Option<&DynamicModelSelector> {
-        self.model_selector.as_deref()
-    }
 
     /// Get temporal context provider
     pub fn get_temporal_provider(&self) -> &TemporalContextProvider {
@@ -384,27 +375,31 @@ impl ConsensusEngine {
         // Use spawn_blocking for the query operation only
         let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
             // Query for default profile from consensus_profiles table
+            // Query for active profile from consensus_settings (matching TypeScript)
+            let active_profile_id: Option<String> = conn.query_row(
+                "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+                [],
+                |row| row.get(0)
+            ).optional()?;
+            
+            let profile_id = active_profile_id.unwrap_or_else(|| "balanced".to_string());
+            
+            // Query profile directly from consensus_profiles (TypeScript schema)
             let row = conn.query_row(
                 "SELECT 
-                    cp.id,
-                    cp.name,
-                    gen.openrouter_id as generator_model,
-                    ref.openrouter_id as refiner_model,
-                    val.openrouter_id as validator_model,
-                    cur.openrouter_id as curator_model
-                FROM consensus_profiles cp
-                JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
-                JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
-                JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
-                JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
-                WHERE cp.is_default = 1
+                    id,
+                    profile_name,
+                    generator_model,
+                    refiner_model,
+                    validator_model,
+                    curator_model
+                FROM consensus_profiles
+                WHERE id = ?1
                 LIMIT 1",
-                [],
+                params![profile_id],
                 |row| {
-                    // Convert INTEGER id to String
-                    let id: i64 = row.get(0)?;
                     Ok(ConsensusProfile {
-                        id: id.to_string(),
+                        id: row.get(0)?,
                         profile_name: row.get(1)?,
                         generator_model: row.get(2)?,
                         refiner_model: row.get(3)?,
@@ -437,25 +432,19 @@ impl ConsensusEngine {
             // Query for specific profile by name or ID from consensus_profiles table
             let row = conn.query_row(
                 "SELECT 
-                    cp.id,
-                    cp.name,
-                    gen.openrouter_id as generator_model,
-                    ref.openrouter_id as refiner_model,
-                    val.openrouter_id as validator_model,
-                    cur.openrouter_id as curator_model
-                FROM consensus_profiles cp
-                JOIN openrouter_models gen ON cp.generator_model_id = gen.internal_id
-                JOIN openrouter_models ref ON cp.refiner_model_id = ref.internal_id
-                JOIN openrouter_models val ON cp.validator_model_id = val.internal_id
-                JOIN openrouter_models cur ON cp.curator_model_id = cur.internal_id
-                WHERE cp.id = ?1 OR cp.name = ?1
+                    id,
+                    profile_name,
+                    generator_model,
+                    refiner_model,
+                    validator_model,
+                    curator_model
+                FROM consensus_profiles
+                WHERE id = ?1 OR profile_name = ?1
                 LIMIT 1",
                 params![profile_id],
                 |row| {
-                    // Convert INTEGER id to String
-                    let id: i64 = row.get(0)?;
                     Ok(ConsensusProfile {
-                        id: id.to_string(),
+                        id: row.get(0)?,
                         profile_name: row.get(1)?,
                         generator_model: row.get(2)?,
                         refiner_model: row.get(3)?,
@@ -500,7 +489,6 @@ impl ConsensusEngine {
             openrouter_api_key: self.openrouter_api_key.clone(),
             profile_manager: self.profile_manager.clone(),
             model_manager: self.model_manager.clone(),
-            model_selector: self.model_selector.clone(),
             temporal_provider: self.temporal_provider.clone(),
         }
     }

@@ -493,10 +493,10 @@ impl ModelManager {
             SELECT om.internal_id, om.openrouter_id, om.provider_name, om.name,
                    om.context_window, om.pricing_input, om.pricing_output, 
                    om.capabilities, om.is_active, om.last_updated,
-                   mr.rank_position, mr.score
+                   mr.rank_position, mr.relative_score
             FROM openrouter_models om
             JOIN model_rankings mr ON om.internal_id = mr.model_internal_id
-            WHERE mr.category = ?1 AND om.is_active = 1
+            WHERE mr.ranking_source = ?1 AND om.is_active = 1
             ORDER BY mr.rank_position ASC
             LIMIT ?2
             "#

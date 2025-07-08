@@ -211,20 +211,32 @@ impl ApiKeyManager {
     
     /// Check if valid API keys are configured
     pub async fn has_valid_keys() -> Result<bool> {
+        debug!("Checking if valid API keys exist...");
         let config = Self::load_from_database().await?;
         
         if let Some(key) = config.openrouter_key {
+            debug!("Found OpenRouter key in config: {} chars", key.len());
             // Validate format at minimum
-            if Self::validate_format(&key).is_ok() {
-                return Ok(true);
+            match Self::validate_format(&key) {
+                Ok(_) => {
+                    debug!("OpenRouter key format is valid");
+                    return Ok(true);
+                }
+                Err(e) => {
+                    debug!("OpenRouter key format validation failed: {}", e);
+                }
             }
+        } else {
+            debug!("No OpenRouter key found in database config");
         }
         
         // Check config.toml as fallback
+        debug!("Checking config.toml as fallback...");
         if let Ok(config) = crate::core::config::get_config().await {
             if let Some(openrouter) = config.openrouter {
                 if let Some(key) = openrouter.api_key {
                     if Self::validate_format(&key).is_ok() {
+                        debug!("Found valid key in config.toml, migrating to database");
                         // Migrate to database
                         let _ = Self::save_to_database(Some(&key), None).await;
                         return Ok(true);
@@ -233,6 +245,7 @@ impl ApiKeyManager {
             }
         }
         
+        debug!("No valid API keys found");
         Ok(false)
     }
     
