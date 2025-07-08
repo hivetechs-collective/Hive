@@ -68,26 +68,20 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
             Stage::Curator => ConsensusStage::Curator,
         };
         
-        // ONLY stream chunks from the Curator stage (final consensus result)
-        // Other stages run in background and show progress only
-        if matches!(stage, Stage::Curator) {
-            tracing::debug!("DesktopStreamingCallbacks: Sending Curator chunk: '{}'", chunk);
-            
-            // Send the streaming chunk to update the UI in real-time
-            let result = self.event_sender.send(ConsensusUIEvent::StreamingChunk {
-                stage: consensus_stage,
-                chunk: chunk.to_string(),
-                total_content: total_content.to_string(),
-            });
-            
-            if let Err(e) = result {
-                tracing::error!("Failed to send streaming chunk to UI: {:?}", e);
-            } else {
-                tracing::debug!("Successfully sent Curator streaming chunk to UI channel");
-            }
+        tracing::debug!("DesktopStreamingCallbacks: Sending chunk for stage {:?}: '{}'", stage, chunk);
+        
+        // Stream ALL stages so user sees the full pipeline progress in real-time
+        // Only the Curator result will be saved as the final answer
+        let result = self.event_sender.send(ConsensusUIEvent::StreamingChunk {
+            stage: consensus_stage,
+            chunk: chunk.to_string(),
+            total_content: total_content.to_string(),
+        });
+        
+        if let Err(e) = result {
+            tracing::error!("Failed to send streaming chunk to UI: {:?}", e);
         } else {
-            // For non-Curator stages, just log for debugging but don't stream to UI
-            tracing::debug!("DesktopStreamingCallbacks: Stage {:?} processing (not streaming): '{}'", stage, chunk.chars().take(50).collect::<String>());
+            tracing::debug!("Successfully sent streaming chunk to UI channel for stage {:?}", stage);
         }
         
         Ok(())
@@ -182,22 +176,17 @@ impl StreamingCallbacks for DualChannelCallbacks {
             Stage::Curator => ConsensusStage::Curator,
         };
         
-        // ONLY stream chunks from the Curator stage (final consensus result)
-        // Other stages run in background and show progress only
-        if matches!(stage, Stage::Curator) {
-            let event = ConsensusUIEvent::StreamingChunk {
-                stage: consensus_stage,
-                chunk: chunk.to_string(),
-                total_content: total_content.to_string(),
-            };
-            
-            // Send to both channels
-            let _ = self.stream_sender.send(event.clone());
-            let _ = self.internal_sender.send(event);
-        } else {
-            // For non-Curator stages, just log for debugging but don't stream to UI
-            tracing::debug!("DualChannelCallbacks: Stage {:?} processing (not streaming): '{}'", stage, chunk.chars().take(50).collect::<String>());
-        }
+        // Stream ALL stages so user sees the full pipeline progress in real-time
+        // Only the Curator result will be saved as the final answer
+        let event = ConsensusUIEvent::StreamingChunk {
+            stage: consensus_stage,
+            chunk: chunk.to_string(),
+            total_content: total_content.to_string(),
+        };
+        
+        // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
         
         Ok(())
     }
@@ -282,6 +271,9 @@ pub async fn process_consensus_events(
             ConsensusUIEvent::StageStarted { stage, model } => {
                 let mut state = app_state.write();
                 state.consensus.current_stage = Some(stage.clone());
+                
+                // Clear streaming content when new stage starts so each stage shows its own output
+                state.consensus.streaming_content.clear();
                 
                 let stage_index = match stage {
                     ConsensusStage::Generator => 0,
