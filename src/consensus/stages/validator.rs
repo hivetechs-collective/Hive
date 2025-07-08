@@ -56,7 +56,7 @@ impl ConsensusStage for ValidatorStage {
         messages.push(Message {
             role: "user".to_string(),
             content: format!(
-                "ORIGINAL QUESTION:\n{}\n\nREFINED RESPONSE TO VALIDATE:\n{}\n\nVALIDATION TASKS:\n{}",
+                "ORIGINAL QUESTION:\n{}\n\nEnhanced analysis from Refiner:\n{}\n\nVALIDATION TASKS:\n{}",
                 question,
                 refined_response,
                 self.get_validation_tasks_for_content(refined_response)
@@ -89,8 +89,17 @@ impl ValidatorStage {
     pub fn structure_validation_context(&self, context: &str, question: &str) -> String {
         let mut structured = String::new();
         
-        structured.push_str("🔍 VALIDATION REFERENCE CONTEXT:\n");
-        structured.push_str(context);
+        // Check if this is memory context (authoritative knowledge from curator)
+        if context.contains("## Memory Context") || context.contains("## Recent Context") {
+            structured.push_str("🧠 AUTHORITATIVE MEMORY CONTEXT:\n");
+            structured.push_str(context);
+            structured.push_str("\n\n⚡ CRITICAL: The above memory context contains VALIDATED CURATOR ANSWERS from previous conversations. ");
+            structured.push_str("These are the SOURCE OF TRUTH. Validate consistency with this authoritative knowledge. ");
+            structured.push_str("Flag any contradictions while respecting the established facts.\n");
+        } else {
+            structured.push_str("🔍 VALIDATION REFERENCE CONTEXT:\n");
+            structured.push_str(context);
+        }
         
         structured.push_str("\n\n🎯 VALIDATION INSTRUCTIONS:\n");
         structured.push_str("- Cross-reference information against provided context\n");
@@ -98,6 +107,11 @@ impl ValidatorStage {
         structured.push_str("- Check temporal accuracy for current information\n");
         structured.push_str("- Ensure consistency with project patterns and conventions\n");
         structured.push_str("- Validate security and safety considerations\n");
+        
+        if context.contains("## Memory Context") || context.contains("## Recent Context") {
+            structured.push_str("- Ensure consistency with authoritative curator knowledge\n");
+            structured.push_str("- Validate new information aligns with established facts\n");
+        }
         
         if context.contains("symbols:") || context.contains("dependencies:") {
             structured.push_str("- Verify code suggestions match actual repository structure\n");

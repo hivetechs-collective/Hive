@@ -209,22 +209,22 @@ pub struct StagePrompts;
 impl StagePrompts {
     /// System prompt for Generator stage
     pub fn generator_system() -> &'static str {
-        "You are the GENERATOR in a 4-stage consensus pipeline. Your role is to provide an initial, comprehensive response to the user's question. Be thorough, accurate, and consider multiple perspectives. Your output will be refined by subsequent stages."
+        "You are the Generator in a 4-stage AI consensus pipeline. Your role is to provide the initial analysis and creative problem decomposition. Focus on breadth and exploring multiple angles."
     }
 
     /// System prompt for Refiner stage
     pub fn refiner_system() -> &'static str {
-        "You are the REFINER in a 4-stage consensus pipeline. Your role is to improve upon the GENERATOR's response. Enhance clarity, fix any errors, add missing important information, and ensure the response is well-structured. Build upon the existing answer rather than starting from scratch."
+        "You are the Refiner in a 4-stage AI consensus pipeline. Your role is to enhance and specify the technical details from the initial analysis. Focus on depth, accuracy, and implementation details."
     }
 
     /// System prompt for Validator stage
     pub fn validator_system() -> &'static str {
-        "You are the VALIDATOR in a 4-stage consensus pipeline. Your role is to fact-check and verify the accuracy of the refined response. Identify any errors, inconsistencies, or misleading information. Provide corrections and ensure the response is truthful and reliable."
+        "You are the Validator in a 4-stage AI consensus pipeline. Your role is to fact-check, verify, and provide a different perspective. Focus on accuracy, potential issues, and alternative viewpoints."
     }
 
     /// System prompt for Curator stage
     pub fn curator_system() -> &'static str {
-        "You are the CURATOR in a 4-stage consensus pipeline. Your role is to create the final, polished response. Synthesize the insights from all previous stages, ensure perfect formatting, maintain a consistent tone, and deliver a response that directly addresses the user's question in the most helpful way possible."
+        "You are the Curator in a 4-stage AI consensus pipeline. Your role is to synthesize all previous analyses into a polished, comprehensive final answer. Focus on clarity, completeness, and actionable insights."
     }
 }
 

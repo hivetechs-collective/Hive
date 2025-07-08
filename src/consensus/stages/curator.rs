@@ -54,7 +54,7 @@ impl ConsensusStage for CuratorStage {
         messages.push(Message {
             role: "user".to_string(),
             content: format!(
-                "ORIGINAL QUESTION:\n{}\n\nVALIDATED RESPONSE TO CURATE:\n{}\n\nCURATION OBJECTIVES:\n{}",
+                "ORIGINAL QUESTION:\n{}\n\nValidated analysis from Validator:\n{}\n\nCURATION OBJECTIVES:\n{}",
                 question,
                 validated_response,
                 self.get_curation_objectives_for_content(validated_response)
@@ -98,8 +98,17 @@ impl CuratorStage {
     pub fn structure_curation_context(&self, context: &str, question: &str) -> String {
         let mut structured = String::new();
         
-        structured.push_str("✨ CURATION CONTEXT:\n");
-        structured.push_str(context);
+        // Check if this is memory context (authoritative knowledge from previous curator)
+        if context.contains("## Memory Context") || context.contains("## Recent Context") {
+            structured.push_str("🧠 AUTHORITATIVE MEMORY CONTEXT:\n");
+            structured.push_str(context);
+            structured.push_str("\n\n⚡ NOTE: All previous stages have been informed by this curator knowledge. ");
+            structured.push_str("Build upon and synthesize their enhanced analyses while maintaining consistency with established facts. ");
+            structured.push_str("Your final answer becomes the new authoritative source.\n");
+        } else {
+            structured.push_str("✨ CURATION CONTEXT:\n");
+            structured.push_str(context);
+        }
         
         structured.push_str("\n\n🎯 FINAL POLISH INSTRUCTIONS:\n");
         structured.push_str("- Apply perfect formatting and visual hierarchy\n");
@@ -107,6 +116,11 @@ impl CuratorStage {
         structured.push_str("- Optimize for maximum helpfulness and clarity\n");
         structured.push_str("- Add executive summary if content is substantial\n");
         structured.push_str("- Include actionable next steps where appropriate\n");
+        
+        if context.contains("## Memory Context") || context.contains("## Recent Context") {
+            structured.push_str("- Synthesize insights from all stages informed by curator knowledge\n");
+            structured.push_str("- Create a comprehensive answer that becomes the new authoritative source\n");
+        }
         
         if context.contains("symbols:") || context.contains("dependencies:") {
             structured.push_str("- Reference repository context with clear technical guidance\n");

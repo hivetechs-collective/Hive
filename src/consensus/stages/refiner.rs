@@ -48,7 +48,7 @@ impl ConsensusStage for RefinerStage {
         messages.push(Message {
             role: "user".to_string(),
             content: format!(
-                "ORIGINAL QUESTION:\n{}\n\nGENERATOR'S RESPONSE TO REFINE:\n{}\n\nREFINEMENT INSTRUCTIONS:\n{}",
+                "ORIGINAL QUESTION:\n{}\n\nInitial analysis from Generator:\n{}\n\nREFINEMENT INSTRUCTIONS:\n{}",
                 question,
                 generator_response,
                 self.build_improvement_instructions(&self.detect_response_type(generator_response))
