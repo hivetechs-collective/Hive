@@ -116,7 +116,7 @@ impl OpenRouterClient {
     pub async fn chat_completion(&self, request: OpenRouterRequest) -> Result<OpenRouterResponse> {
         let start_time = Instant::now();
         
-        println!("🚀 Calling OpenRouter API: {} (temp: {:.1})", 
+        tracing::info!("🚀 Calling OpenRouter API: {} (temp: {:.1})", 
                  request.model, request.temperature.unwrap_or(0.7));
 
         let response = self.build_request("/chat/completions")
@@ -137,7 +137,7 @@ impl OpenRouterClient {
             .context("Failed to parse OpenRouter response")?;
 
         let duration = start_time.elapsed();
-        println!("✅ OpenRouter response received in {:.2}s (tokens: {})", 
+        tracing::info!("✅ OpenRouter response received in {:.2}s (tokens: {})", 
                  duration.as_secs_f64(),
                  openrouter_response.usage.as_ref().map(|u| u.total_tokens).unwrap_or(0));
 
@@ -153,7 +153,7 @@ impl OpenRouterClient {
         request.stream = Some(true);
         
         let start_time = Instant::now();
-        println!("🌊 Starting streaming request: {} (temp: {:.1})", 
+        tracing::info!("🌊 Starting streaming request: {} (temp: {:.1})", 
                  request.model, request.temperature.unwrap_or(0.7));
 
         if let Some(cb) = &callbacks {
@@ -228,7 +228,7 @@ impl OpenRouterClient {
         }
 
         let duration = start_time.elapsed();
-        println!("✅ Streaming completed in {:.2}s ({} chunks, {} tokens)", 
+        tracing::debug!("✅ Streaming completed in {:.2}s ({} chunks, {} tokens)", 
                  duration.as_secs_f64(), chunk_count, total_tokens);
 
         let usage = if total_tokens > 0 {
@@ -383,7 +383,7 @@ impl RetryPolicy {
                     
                     if attempt < self.max_retries {
                         let delay = self.calculate_delay(attempt);
-                        println!("⚠️ Request failed (attempt {}), retrying in {:.1}s...", 
+                        tracing::info!("⚠️ Request failed (attempt {}), retrying in {:.1}s...", 
                                  attempt + 1, delay.as_secs_f64());
                         tokio::time::sleep(delay).await;
                     }
@@ -460,7 +460,7 @@ pub struct SimpleStreamingCallbacks {
 
 impl StreamingCallbacks for SimpleStreamingCallbacks {
     fn on_start(&self) {
-        println!("🌊 Starting stream for {}", self.model_name);
+        tracing::info!("🌊 Starting stream for {}", self.model_name);
     }
     
     fn on_chunk(&self, chunk: String, _total_content: String) {
@@ -471,19 +471,19 @@ impl StreamingCallbacks for SimpleStreamingCallbacks {
     fn on_progress(&self, progress: StreamingProgress) {
         if let Some(tokens) = progress.tokens {
             if tokens % 50 == 0 { // Progress every 50 tokens
-                println!("\n[{} tokens]", tokens);
+                tracing::info!("\n[{} tokens]", tokens);
             }
         }
     }
     
     fn on_error(&self, error: &anyhow::Error) {
-        eprintln!("❌ Streaming error for {}: {}", self.model_name, error);
+        tracing::error!("❌ Streaming error for {}: {}", self.model_name, error);
     }
     
     fn on_complete(&self, _final_content: String, usage: Option<Usage>) {
-        println!("\n✅ Stream completed for {}", self.model_name);
+        tracing::info!("\n✅ Stream completed for {}", self.model_name);
         if let Some(u) = usage {
-            println!("📊 Tokens: {} total ({} prompt + {} completion)", 
+            tracing::info!("📊 Tokens: {} total ({} prompt + {} completion)", 
                      u.total_tokens, u.prompt_tokens, u.completion_tokens);
         }
     }

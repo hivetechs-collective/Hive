@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use dioxus::prelude::*;
+use dioxus::events::KeyboardEvent;
 use rfd;
 
 const DESKTOP_STYLES: &str = r#"
@@ -158,11 +159,11 @@ const DESKTOP_STYLES: &str = r#"
     
     /* Chat panel (right) */
     .chat-panel {
-        width: 350px;
-        background: #252526;
-        border-left: 1px solid #3e3e42;
+        flex: 1;
+        background: #1e1e1e;
         display: flex;
         flex-direction: column;
+        min-width: 400px;
     }
     
     .panel-header {
@@ -173,80 +174,133 @@ const DESKTOP_STYLES: &str = r#"
         font-size: 14px;
     }
     
-    .messages-area {
+    /* Response area - Claude Code style */
+    .response-area {
         flex: 1;
         overflow-y: auto;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-    }
-    
-    .message {
-        padding: 12px 16px;
-        border-radius: 6px;
-        max-width: 85%;
+        padding: 20px 24px;
         font-size: 14px;
-        line-height: 1.5;
+        line-height: 1.6;
+        color: #cccccc;
     }
     
-    .user-message {
-        background: #007acc;
-        color: white;
-        align-self: flex-end;
+    .response-content {
+        /* Markdown content styling */
     }
     
-    .ai-message {
+    .response-content h1 {
+        font-size: 24px;
+        font-weight: 600;
+        margin: 24px 0 16px 0;
+        color: #ffffff;
+    }
+    
+    .response-content h2 {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 20px 0 12px 0;
+        color: #ffffff;
+    }
+    
+    .response-content h3 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 16px 0 8px 0;
+        color: #ffffff;
+    }
+    
+    .response-content p {
+        margin: 12px 0;
+    }
+    
+    .response-content code {
+        background: #2d2d30;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-size: 13px;
+    }
+    
+    .response-content pre {
         background: #2d2d30;
         border: 1px solid #3e3e42;
-        align-self: flex-start;
+        border-radius: 6px;
+        padding: 16px;
+        overflow-x: auto;
+        margin: 16px 0;
     }
     
-    /* Input area styles */
-    .input-area {
-        display: flex;
-        padding: 16px 20px;
-        gap: 12px;
-        background: #1e1e1e;
+    .response-content pre code {
+        background: none;
+        padding: 0;
+    }
+    
+    .response-content ul, .response-content ol {
+        margin: 12px 0;
+        padding-left: 24px;
+    }
+    
+    .response-content li {
+        margin: 6px 0;
+    }
+    
+    .response-content blockquote {
+        border-left: 3px solid #007acc;
+        padding-left: 16px;
+        margin: 16px 0;
+        color: #a0a0a0;
+    }
+    
+    .welcome-text {
+        color: #808080;
+        text-align: center;
+        margin-top: 40%;
+        transform: translateY(-50%);
+        font-size: 14px;
+    }
+    
+    .error {
+        color: #f48771;
+        background: #362121;
+        padding: 12px 16px;
+        border-radius: 6px;
+        border: 1px solid #5a1d1d;
+    }
+    
+    /* Input area - Claude Code style */
+    .input-container {
+        padding: 16px 24px;
+        background: #252526;
         border-top: 1px solid #3e3e42;
     }
     
-    .message-input {
-        flex: 1;
+    .query-input {
+        width: 100%;
         background: #3c3c3c;
         border: 1px solid #3e3e42;
         color: #cccccc;
-        padding: 10px 14px;
-        border-radius: 4px;
+        padding: 12px 16px;
+        border-radius: 6px;
         font-size: 14px;
         font-family: inherit;
-        outline: none;
-        transition: border-color 0.1s;
+        transition: border-color 0.2s;
+        resize: vertical;
+        min-height: 60px;
+        max-height: 200px;
     }
     
-    .message-input:focus {
+    .query-input:focus {
+        outline: none;
         border-color: #007acc;
     }
     
-    .send-button {
-        padding: 10px 20px;
-        background: #007acc;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 14px;
-        transition: background-color 0.1s;
-    }
-    
-    .send-button:hover {
-        background: #005a9e;
-    }
-    
-    .send-button:disabled {
-        opacity: 0.6;
+    .query-input:disabled {
+        opacity: 0.5;
         cursor: not-allowed;
+    }
+    
+    .query-input::placeholder {
+        color: #808080;
     }
     
     /* Status bar styles */
@@ -298,17 +352,23 @@ fn main() {
         .launch(App);
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct Message {
-    text: String,
-    is_user: bool,
-}
-
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
 use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, SettingsDialog, OnboardingDialog, WelcomeAction, DIALOG_STYLES};
-use hive_ai::desktop::consensus_integration::{DesktopConsensusManager, use_consensus};
+use hive_ai::desktop::consensus_integration::use_consensus;
+
+// Simple markdown to HTML converter
+mod markdown {
+    use pulldown_cmark::{html, Parser};
+    
+    pub fn to_html(markdown: &str) -> String {
+        let parser = Parser::new(markdown);
+        let mut html_output = String::new();
+        html::push_html(&mut html_output, parser);
+        html_output
+    }
+}
 use hive_ai::desktop::state::{AppState, ConsensusState};
 use std::path::PathBuf;
 use std::collections::HashMap;
@@ -338,10 +398,8 @@ fn App() -> Element {
     let consensus_manager = use_consensus();
     
     // State management
-    let mut messages = use_signal(|| vec![
-        Message { text: "🐝 Welcome to Hive Consensus!".to_string(), is_user: false },
-        Message { text: "This is the Rust-powered version with VS Code-style interface.".to_string(), is_user: false },
-    ]);
+    let mut current_response = use_signal(String::new);  // Current streaming response
+    let mut streaming_content = use_signal(String::new);  // Live streaming content
     let mut input_value = use_signal(String::new);
     let mut is_processing = use_signal(|| false);
     let mut selected_file = use_signal(|| Some("__welcome__".to_string()));
@@ -359,8 +417,8 @@ fn App() -> Element {
     let mut onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
     
     // API keys state
-    let mut openrouter_key = use_signal(String::new);
-    let mut hive_key = use_signal(String::new);
+    let openrouter_key = use_signal(String::new);
+    let hive_key = use_signal(String::new);
     
     // Check if we need to show onboarding (only once on mount)
     use_effect(move || {
@@ -425,7 +483,7 @@ fn App() -> Element {
     // File selection is handled directly in the onclick handler
 
     // Handle menu actions
-    let mut handle_menu_action = move |action: MenuAction| {
+    let handle_menu_action = move |action: MenuAction| {
         match action {
             MenuAction::OpenFolder => {
                 // Open folder dialog
@@ -803,159 +861,138 @@ fn App() -> Element {
                     // Panel header
                     div {
                         class: "panel-header",
-                        "🐝 Hive Consensus Chat"
+                        "🐝 Hive Consensus"
                     }
                     
-                    // Consensus progress display
+                    // Consensus progress display (always visible at the top)
                     if app_state.read().consensus.is_running {
                         ConsensusProgressDisplay { 
                             consensus_state: app_state.read().consensus.clone() 
                         }
                     }
                     
-                    // Messages
+                    // Response display area (Claude Code style)
                     div {
-                        class: "messages-area",
-                        for msg in messages.read().iter() {
+                        class: "response-area",
+                        if !current_response.read().is_empty() {
                             div {
-                                class: if msg.is_user { "message user-message" } else { "message ai-message" },
-                                "{msg.text}"
+                                class: "response-content",
+                                dangerous_inner_html: "{current_response.read()}"
+                            }
+                        } else if !*is_processing.read() {
+                            div {
+                                class: "welcome-text",
+                                "Ask Hive anything. Your query will be processed through our 4-stage consensus pipeline."
                             }
                         }
                     }
                     
-                    // Input area
+                    // Input box at the bottom (Claude Code style)
                     div {
-                        class: "input-area",
-                        input {
-                            class: "message-input",
+                        class: "input-container",
+                        textarea {
+                            class: "query-input",
                             value: "{input_value.read()}",
                             placeholder: "Ask Hive anything...",
                             disabled: *is_processing.read(),
+                            rows: "3",
                             oninput: move |evt| *input_value.write() = evt.value().clone(),
-                            onkeypress: {
+                            onkeydown: {
                                 let consensus_manager = consensus_manager.clone();
                                 move |evt: dioxus::events::KeyboardEvent| {
-                                if evt.code() == dioxus::events::Code::Enter && !input_value.read().is_empty() && !*is_processing.read() {
-                                    let user_msg = input_value.read().clone();
-                                    
-                                    // Add user message
-                                    messages.write().push(Message { text: user_msg.clone(), is_user: true });
-                                    
-                                    // Clear input
-                                    input_value.write().clear();
-                                    
-                                    // Start processing
-                                    *is_processing.write() = true;
-                                    
-                                    // Use consensus engine if available
-                                    if let Some(mut consensus) = consensus_manager.clone() {
-                                        let mut messages = messages.clone();
-                                        let mut is_processing = is_processing.clone();
-                                        let app_state = app_state.clone();
+                                    // Enter without shift submits
+                                    if evt.key() == dioxus::events::Key::Enter && !evt.modifiers().shift() && !input_value.read().is_empty() && !*is_processing.read() {
+                                        evt.prevent_default();
                                         
-                                        spawn(async move {
-                                            // Update UI to show consensus is running
+                                        let user_msg = input_value.read().clone();
+                                        
+                                        // Clear input and response
+                                        input_value.write().clear();
+                                        current_response.write().clear();
+                                        
+                                        // Start processing
+                                        *is_processing.write() = true;
+                                        
+                                        // Use consensus engine if available
+                                        if let Some(mut consensus) = consensus_manager.clone() {
+                                            let mut current_response = current_response.clone();
+                                            let mut is_processing = is_processing.clone();
                                             let mut app_state = app_state.clone();
-                                            app_state.write().consensus.start_consensus();
+                                            let mut streaming_content = streaming_content.clone();
                                             
-                                            match consensus.process_query(&user_msg).await {
-                                                Ok(response) => {
-                                                    messages.write().push(Message { 
-                                                        text: response, 
-                                                        is_user: false 
-                                                    });
+                                            spawn(async move {
+                                                // Update UI to show consensus is running
+                                                app_state.write().consensus.start_consensus();
+                                                
+                                                // Clear streaming content to start fresh
+                                                streaming_content.write().clear();
+                                                
+                                                // Use the streaming version to get real-time updates
+                                                match consensus.process_query_streaming(&user_msg).await {
+                                                    Ok((final_response, mut rx_stream)) => {
+                                                        // Spawn a task to handle streaming events
+                                                        let mut streaming_content_clone = streaming_content.clone();
+                                                        let mut current_response_clone = current_response.clone();
+                                                        let is_streaming_complete = use_signal(|| false);
+                                                        let mut is_streaming_complete_clone = is_streaming_complete.clone();
+                                                        
+                                                        spawn(async move {
+                                                            while let Some(event) = rx_stream.recv().await {
+                                                                match event {
+                                                                    hive_ai::desktop::consensus_integration::ConsensusUIEvent::StreamingChunk { stage: _, chunk, total_content: _ } => {
+                                                                        // Append the chunk to the streaming content
+                                                                        streaming_content_clone.write().push_str(&chunk);
+                                                                        
+                                                                        // Update the current response with the streaming content
+                                                                        let html = markdown::to_html(&streaming_content_clone.read());
+                                                                        *current_response_clone.write() = html;
+                                                                    }
+                                                                    hive_ai::desktop::consensus_integration::ConsensusUIEvent::StageCompleted { stage: _, cost: _ } => {
+                                                                        // A stage completed, but keep streaming
+                                                                    }
+                                                                    _ => {} // Handle other events if needed
+                                                                }
+                                                            }
+                                                            
+                                                            // Mark streaming as complete
+                                                            *is_streaming_complete_clone.write() = true;
+                                                        });
+                                                        
+                                                        // Handle the final response after streaming completes
+                                                        spawn(async move {
+                                                            // Wait for streaming to complete
+                                                            while !*is_streaming_complete.read() {
+                                                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                                                            }
+                                                            
+                                                            // If no streaming content was received, use the final response
+                                                            if streaming_content.read().is_empty() {
+                                                                let html = markdown::to_html(&final_response);
+                                                                *current_response.write() = html;
+                                                            }
+                                                            // Otherwise, keep the streamed content visible
+                                                        });
+                                                    }
+                                                    Err(e) => {
+                                                        *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);
+                                                    }
                                                 }
-                                                Err(e) => {
-                                                    messages.write().push(Message { 
-                                                        text: format!("❌ Error: {}", e), 
-                                                        is_user: false 
-                                                    });
-                                                }
-                                            }
-                                            
-                                            // Update UI to show consensus is complete
-                                            let mut app_state = app_state.clone();
-                                            app_state.write().consensus.complete_consensus();
+                                                
+                                                // Update UI to show consensus is complete
+                                                app_state.write().consensus.complete_consensus();
+                                                *is_processing.write() = false;
+                                            });
+                                        } else {
+                                            // Show error if consensus engine not initialized
+                                            *current_response.write() = "<div class='error'>⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.</div>".to_string();
                                             *is_processing.write() = false;
-                                        });
-                                    } else {
-                                        // Show onboarding if consensus engine not initialized
-                                        messages.write().push(Message { 
-                                            text: "⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.".to_string(), 
-                                            is_user: false 
-                                        });
-                                        *is_processing.write() = false;
-                                        
-                                        // Show onboarding dialog
-                                        *show_onboarding_dialog.write() = true;
+                                            
+                                            // Show onboarding dialog
+                                            *show_onboarding_dialog.write() = true;
+                                        }
                                     }
                                 }
-                            }}
-                        }
-                        button {
-                            class: "send-button",
-                            disabled: input_value.read().is_empty() || *is_processing.read(),
-                            onclick: {
-                                let consensus_manager = consensus_manager.clone();
-                                move |_| {
-                                if !input_value.read().is_empty() && !*is_processing.read() {
-                                    let user_msg = input_value.read().clone();
-                                    
-                                    // Add user message
-                                    messages.write().push(Message { text: user_msg.clone(), is_user: true });
-                                    
-                                    // Clear input
-                                    input_value.write().clear();
-                                    
-                                    // Start processing
-                                    *is_processing.write() = true;
-                                    
-                                    // Use consensus engine if available
-                                    if let Some(mut consensus) = consensus_manager.clone() {
-                                        let mut messages = messages.clone();
-                                        let mut is_processing = is_processing.clone();
-                                        let app_state = app_state.clone();
-                                        
-                                        spawn(async move {
-                                            // Update UI to show consensus is running
-                                            let mut app_state = app_state.clone();
-                                            app_state.write().consensus.start_consensus();
-                                            
-                                            match consensus.process_query(&user_msg).await {
-                                                Ok(response) => {
-                                                    messages.write().push(Message { 
-                                                        text: response, 
-                                                        is_user: false 
-                                                    });
-                                                }
-                                                Err(e) => {
-                                                    messages.write().push(Message { 
-                                                        text: format!("❌ Error: {}", e), 
-                                                        is_user: false 
-                                                    });
-                                                }
-                                            }
-                                            
-                                            // Update UI to show consensus is complete
-                                            let mut app_state = app_state.clone();
-                                            app_state.write().consensus.complete_consensus();
-                                            *is_processing.write() = false;
-                                        });
-                                    } else {
-                                        // Show onboarding if consensus engine not initialized
-                                        messages.write().push(Message { 
-                                            text: "⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.".to_string(), 
-                                            is_user: false 
-                                        });
-                                        *is_processing.write() = false;
-                                        
-                                        // Show onboarding dialog
-                                        *show_onboarding_dialog.write() = true;
-                                    }
-                                }
-                            }},
-                            if *is_processing.read() { "Processing..." } else { "Send" }
+                            }
                         }
                     }
                 }
