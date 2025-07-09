@@ -2445,10 +2445,14 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     let conn = db.get_connection()?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, name, is_default, created_at, 
-                generator_model, refiner_model, validator_model, curator_model
-         FROM consensus_profiles 
-         ORDER BY is_default DESC, created_at DESC"
+        "SELECT cp.id, cp.name, cp.is_default, cp.created_at, 
+                gm.name, rm.name, vm.name, cm.name
+         FROM consensus_profiles cp
+         LEFT JOIN openrouter_models gm ON cp.generator_model_id = gm.internal_id
+         LEFT JOIN openrouter_models rm ON cp.refiner_model_id = rm.internal_id
+         LEFT JOIN openrouter_models vm ON cp.validator_model_id = vm.internal_id
+         LEFT JOIN openrouter_models cm ON cp.curator_model_id = cm.internal_id
+         ORDER BY cp.is_default DESC, cp.created_at DESC"
     )?;
     
     let profiles = stmt.query_map([], |row| {
