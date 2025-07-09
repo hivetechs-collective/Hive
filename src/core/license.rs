@@ -174,6 +174,20 @@ impl LicenseManager {
 
         fs::write(&license_file, license_json).await
             .context("Failed to write license file")?;
+        
+        // Update user tier in database if available
+        if let Ok(db) = crate::core::get_database().await {
+            let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
+            let tier = self.parse_tier(&validation.tier);
+            
+            if let Err(e) = usage_tracker.update_user_tier(&validation.user_id, tier).await {
+                tracing::warn!("Failed to update user tier in database: {}", e);
+                // Don't fail the license storage operation
+            } else {
+                tracing::info!("Updated user {} to {} tier with {} daily limit", 
+                             validation.user_id, tier, validation.daily_limit);
+            }
+        }
 
         Ok(())
     }

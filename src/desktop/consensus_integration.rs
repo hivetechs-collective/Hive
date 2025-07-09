@@ -402,10 +402,13 @@ impl DesktopConsensusManager {
         let query = query.to_string();
         let callbacks_clone = callbacks.clone();
         
+        // Get user_id from app state
+        let user_id = self.app_state.read().user_id.clone();
+        
         // Spawn the consensus processing
         let handle = tokio::spawn(async move {
             let engine = engine.lock().await;
-            let result = engine.process_with_callbacks(&query, None, callbacks_clone).await;
+            let result = engine.process_with_callbacks(&query, None, callbacks_clone, user_id).await;
             
             result.map(|r| r.result.unwrap_or_else(|| "No response received".to_string()))
         });

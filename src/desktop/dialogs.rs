@@ -2,6 +2,7 @@
 
 use dioxus::prelude::*;
 use anyhow;
+use crate::desktop::state::AppState;
 
 /// Information about a consensus profile
 #[derive(Debug, Clone, PartialEq)]
@@ -10,6 +11,10 @@ pub struct ProfileInfo {
     pub name: String,
     pub is_default: bool,
     pub created_at: String,
+    pub generator_model: Option<String>,
+    pub refiner_model: Option<String>,
+    pub validator_model: Option<String>,
+    pub curator_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -317,6 +322,8 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut profiles = use_signal(|| Vec::<ProfileInfo>::new());
     let mut selected_profile = use_signal(|| String::new());
     let mut profiles_loading = use_signal(|| true);
+    let mut show_profile_details = use_signal(|| false);
+    let mut editing_profile_id = use_signal(|| None::<i32>);
     
     // Load existing keys and profiles from database on mount
     use_effect(move || {
@@ -451,10 +458,10 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                     // Consensus Profile Section
                     div {
                         class: "settings-section",
-                        h3 { "🧠 Consensus Profile" }
+                        h3 { "🧠 Consensus Profiles" }
                         p { 
                             class: "settings-description",
-                            "Choose your consensus processing profile based on your needs." 
+                            "Manage your consensus processing profiles. Each profile uses a 4-stage AI pipeline with different model configurations." 
                         }
                         
                         if *profiles_loading.read() {
@@ -470,17 +477,108 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 "No profiles found. Please complete onboarding to create expert profiles."
                             }
                         } else {
+                            // Show profile management UI
                             div {
-                                class: "profile-grid",
-                                for profile in profiles.read().iter() {
-                                    DatabaseProfileOption { 
-                                        profile_id: profile.id.to_string(),
-                                        name: profile.name.clone(),
-                                        is_selected: *selected_profile.read() == profile.id.to_string(),
-                                        is_default: profile.is_default,
-                                        on_select: move |id: String| {
-                                            *selected_profile.write() = id;
+                                style: "margin-top: 15px;",
+                                
+                                // Profile tabs
+                                div {
+                                    style: "display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid #333;",
+                                    button {
+                                        class: if *show_profile_details.read() { "tab-button" } else { "tab-button active" },
+                                        onclick: move |_| *show_profile_details.write() = false,
+                                        "Select Profile"
+                                    }
+                                    button {
+                                        class: if *show_profile_details.read() { "tab-button active" } else { "tab-button" },
+                                        onclick: move |_| *show_profile_details.write() = true,
+                                        "Edit Profiles"
+                                    }
+                                    button {
+                                        class: "tab-button",
+                                        style: "margin-left: auto;",
+                                        onclick: move |_| {
+                                            tracing::info!("Create new profile clicked");
+                                            // TODO: Show create profile dialog
                                         },
+                                        "+ New Profile"
+                                    }
+                                }
+                                
+                                // Content area
+                                if !*show_profile_details.read() {
+                                    // Profile selection grid
+                                    div {
+                                        class: "profile-grid",
+                                        for profile in profiles.read().iter() {
+                                            DatabaseProfileOption { 
+                                                profile_id: profile.id.to_string(),
+                                                name: profile.name.clone(),
+                                                is_selected: *selected_profile.read() == profile.id.to_string(),
+                                                is_default: profile.is_default,
+                                                on_select: move |id: String| {
+                                                    *selected_profile.write() = id;
+                                                },
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Profile details/edit view
+                                    div {
+                                        class: "profile-details-list",
+                                        style: "max-height: 400px; overflow-y: auto;",
+                                        
+                                        for profile in profiles.read().iter() {
+                                            ProfileDetailCard {
+                                                profile: profile.clone(),
+                                                on_edit: {
+                                                    let mut editing_profile_id = editing_profile_id.clone();
+                                                    let mut profiles = profiles.clone();
+                                                    let mut profiles_loading = profiles_loading.clone();
+                                                    move |profile_id: i32| {
+                                                        if profile_id == -1 {
+                                                            // Exit edit mode
+                                                            *editing_profile_id.write() = None;
+                                                            
+                                                            // Reload profiles to get updated data
+                                                            *profiles_loading.write() = true;
+                                                            spawn(async move {
+                                                                if let Ok(loaded_profiles) = load_existing_profiles().await {
+                                                                    *profiles.write() = loaded_profiles;
+                                                                }
+                                                                *profiles_loading.write() = false;
+                                                            });
+                                                        } else {
+                                                            // Enter edit mode
+                                                            tracing::info!("Edit profile {} clicked", profile_id);
+                                                            *editing_profile_id.write() = Some(profile_id);
+                                                        }
+                                                    }
+                                                },
+                                                on_delete: move |profile_id: i32| {
+                                                    tracing::info!("Delete profile {} clicked", profile_id);
+                                                    // TODO: Implement delete with confirmation
+                                                },
+                                                is_editing: *editing_profile_id.read() == Some(profile.id),
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Show current selection info
+                                if !*show_profile_details.read() && !selected_profile.read().is_empty() {
+                                    if let Some(current) = profiles.read().iter().find(|p| p.id.to_string() == *selected_profile.read()) {
+                                        div {
+                                            style: "margin-top: 15px; padding: 10px; background: #1e1e1e; border-radius: 6px; font-size: 13px;",
+                                            p {
+                                                style: "margin: 0 0 5px 0; color: #888;",
+                                                "Current selection:"
+                                            }
+                                            p {
+                                                style: "margin: 0; color: #4ade80; font-weight: 600;",
+                                                "✓ {current.name}"
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -509,6 +607,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             let mut is_validating = is_validating.clone();
                             let mut validation_error = validation_error.clone();
                             let mut show_settings = show_settings.clone();
+                            let app_state = use_context::<Signal<AppState>>();
                             
                             let selected_profile_id = selected_profile.read().clone();
                             
@@ -525,11 +624,54 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     }
                                 }
                                 
-                                // Save Hive key
+                                // Save and validate Hive key
                                 if !hive.is_empty() {
+                                    // First save to simple_db
                                     if let Err(e) = crate::desktop::simple_db::save_config("hive_license_key", &hive) {
                                         success = false;
                                         error_msg = format!("Failed to save Hive key: {}", e);
+                                    } else {
+                                        // Validate the license with HiveTechs servers
+                                        let license_manager = crate::core::license::LicenseManager::new(
+                                            crate::core::config::get_hive_config_dir()
+                                        );
+                                        
+                                        match license_manager.validate_license(&hive).await {
+                                            Ok(validation) => {
+                                                if validation.valid {
+                                                    // Store validated license (this will update usage tracker)
+                                                    if let Err(e) = license_manager.store_license(&hive, &validation).await {
+                                                        tracing::error!("Failed to store validated license: {}", e);
+                                                    } else {
+                                                        tracing::info!("License validated and stored successfully");
+                                                        
+                                                        // Update app state with usage info
+                                                        if let Ok(db) = crate::core::get_database().await {
+                                                            let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
+                                                            
+                                                            if let Ok(usage_display) = usage_tracker.get_usage_display(&validation.user_id).await {
+                                                                app_state.write().update_usage_info(
+                                                                    Some(validation.user_id),
+                                                                    &validation.tier,
+                                                                    usage_display.daily_used,
+                                                                    usage_display.daily_limit,
+                                                                    usage_display.is_trial,
+                                                                    usage_display.trial_days_left,
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    success = false;
+                                                    error_msg = validation.message.unwrap_or_else(|| "Invalid license key".to_string());
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("License validation failed: {}", e);
+                                                // Don't fail the save, just log the error
+                                                // The key is saved and can be validated later
+                                            }
+                                        }
                                     }
                                 }
                                 
@@ -613,6 +755,229 @@ fn DatabaseProfileOption(
             }
         }
     }
+}
+
+/// Profile detail card for viewing and editing profiles
+#[component]
+fn ProfileDetailCard(
+    profile: ProfileInfo,
+    on_edit: EventHandler<i32>,
+    on_delete: EventHandler<i32>,
+    is_editing: bool,
+) -> Element {
+    let mut generator_model = use_signal(|| profile.generator_model.clone().unwrap_or_default());
+    let mut refiner_model = use_signal(|| profile.refiner_model.clone().unwrap_or_default());
+    let mut validator_model = use_signal(|| profile.validator_model.clone().unwrap_or_default());
+    let mut curator_model = use_signal(|| profile.curator_model.clone().unwrap_or_default());
+    
+    rsx! {
+        div {
+            class: "profile-detail-card",
+            style: "margin-bottom: 15px; padding: 15px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 8px;",
+            
+            // Profile header
+            div {
+                style: "display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;",
+                div {
+                    h4 {
+                        style: "margin: 0; color: #ffffff; font-size: 16px;",
+                        "{profile.name}"
+                        if profile.is_default {
+                            span {
+                                style: "margin-left: 8px; padding: 2px 6px; background: #007acc; color: white; font-size: 11px; border-radius: 3px;",
+                                "DEFAULT"
+                            }
+                        }
+                    }
+                    p {
+                        style: "margin: 5px 0 0 0; color: #858585; font-size: 12px;",
+                        "Created: {profile.created_at}"
+                    }
+                }
+                
+                // Action buttons
+                div {
+                    style: "display: flex; gap: 8px;",
+                    if !is_editing {
+                        button {
+                            class: "icon-button",
+                            style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
+                            onclick: move |_| on_edit.call(profile.id as i32),
+                            "✏️ Edit"
+                        }
+                    } else {
+                        button {
+                            class: "icon-button",
+                            style: "padding: 4px 8px; background: #4a5568; border: none; border-radius: 4px; color: #4ade80; cursor: pointer; font-size: 12px;",
+                            onclick: move |_| {
+                                // Save changes
+                                let profile_id = profile.id;
+                                let gen = generator_model.read().clone();
+                                let ref_m = refiner_model.read().clone();
+                                let val = validator_model.read().clone();
+                                let cur = curator_model.read().clone();
+                                
+                                spawn(async move {
+                                    if let Err(e) = update_profile_models(profile_id, &gen, &ref_m, &val, &cur).await {
+                                        tracing::error!("Failed to update profile models: {}", e);
+                                    } else {
+                                        tracing::info!("Successfully updated profile {}", profile_id);
+                                    }
+                                });
+                                
+                                on_edit.call(-1); // Signal to exit edit mode
+                            },
+                            "💾 Save"
+                        }
+                        button {
+                            class: "icon-button",
+                            style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
+                            onclick: move |_| on_edit.call(-1), // Cancel edit
+                            "✖️ Cancel"
+                        }
+                    }
+                    if !profile.is_default {
+                        button {
+                            class: "icon-button",
+                            style: "padding: 4px 8px; background: #5a1e1e; border: none; border-radius: 4px; color: #ff6b6b; cursor: pointer; font-size: 12px;",
+                            onclick: move |_| on_delete.call(profile.id as i32),
+                            "🗑️ Delete"
+                        }
+                    }
+                }
+            }
+            
+            // Model configuration
+            div {
+                style: "display: grid; gap: 10px;",
+                
+                // Generator
+                div {
+                    style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
+                    label {
+                        style: "color: #cccccc; font-size: 13px; font-weight: 600;",
+                        "Generator:"
+                    }
+                    if is_editing {
+                        input {
+                            class: "model-input",
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
+                            value: "{generator_model.read()}",
+                            oninput: move |evt| *generator_model.write() = evt.value(),
+                            placeholder: "e.g., openai/gpt-4-turbo"
+                        }
+                    } else {
+                        span {
+                            style: "color: #858585; font-size: 13px;",
+                            "{profile.generator_model.as_ref().unwrap_or(&\"Not configured\".to_string())}"
+                        }
+                    }
+                }
+                
+                // Refiner
+                div {
+                    style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
+                    label {
+                        style: "color: #cccccc; font-size: 13px; font-weight: 600;",
+                        "Refiner:"
+                    }
+                    if is_editing {
+                        input {
+                            class: "model-input",
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
+                            value: "{refiner_model.read()}",
+                            oninput: move |evt| *refiner_model.write() = evt.value(),
+                            placeholder: "e.g., anthropic/claude-3-sonnet"
+                        }
+                    } else {
+                        span {
+                            style: "color: #858585; font-size: 13px;",
+                            "{profile.refiner_model.as_ref().unwrap_or(&\"Not configured\".to_string())}"
+                        }
+                    }
+                }
+                
+                // Validator
+                div {
+                    style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
+                    label {
+                        style: "color: #cccccc; font-size: 13px; font-weight: 600;",
+                        "Validator:"
+                    }
+                    if is_editing {
+                        input {
+                            class: "model-input",
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
+                            value: "{validator_model.read()}",
+                            oninput: move |evt| *validator_model.write() = evt.value(),
+                            placeholder: "e.g., google/gemini-pro"
+                        }
+                    } else {
+                        span {
+                            style: "color: #858585; font-size: 13px;",
+                            "{profile.validator_model.as_ref().unwrap_or(&\"Not configured\".to_string())}"
+                        }
+                    }
+                }
+                
+                // Curator
+                div {
+                    style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
+                    label {
+                        style: "color: #cccccc; font-size: 13px; font-weight: 600;",
+                        "Curator:"
+                    }
+                    if is_editing {
+                        input {
+                            class: "model-input",
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
+                            value: "{curator_model.read()}",
+                            oninput: move |evt| *curator_model.write() = evt.value(),
+                            placeholder: "e.g., mistralai/mixtral-8x7b"
+                        }
+                    } else {
+                        span {
+                            style: "color: #858585; font-size: 13px;",
+                            "{profile.curator_model.as_ref().unwrap_or(&\"Not configured\".to_string())}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Update profile models in the database
+async fn update_profile_models(
+    profile_id: i64,
+    generator_model: &str,
+    refiner_model: &str,
+    validator_model: &str,
+    curator_model: &str,
+) -> anyhow::Result<()> {
+    use crate::core::database_simple::Database;
+    
+    let db = Database::open_default().await?;
+    let conn = db.get_connection()?;
+    
+    conn.execute(
+        "UPDATE consensus_profiles SET 
+            generator_model = ?1,
+            refiner_model = ?2,
+            validator_model = ?3,
+            curator_model = ?4
+        WHERE id = ?5",
+        rusqlite::params![
+            generator_model,
+            refiner_model,
+            validator_model,
+            curator_model,
+            profile_id
+        ]
+    )?;
+    
+    tracing::info!("Updated profile {} models", profile_id);
+    Ok(())
 }
 
 /// Update the default profile in the database
@@ -1654,7 +2019,7 @@ pub fn OnboardingDialog(
                                 // Welcome -> License Key
                                 *current_step.write() = 2;
                             } else if step == 2 {
-                                // Save Hive key if provided
+                                // Save and validate Hive key if provided
                                 let h_key = temp_hive_key.read().clone();
                                 if !h_key.is_empty() {
                                     *hive_key.write() = h_key.clone();
@@ -1665,6 +2030,59 @@ pub fn OnboardingDialog(
                                         return;
                                     } else {
                                         tracing::info!("Hive key saved successfully to database");
+                                        
+                                        // Validate the license asynchronously
+                                        let app_state = use_context::<Signal<AppState>>();
+                                        let h_key_clone = h_key.clone();
+                                        let mut license_info = license_info.clone();
+                                        
+                                        spawn(async move {
+                                            let license_manager = crate::core::license::LicenseManager::new(
+                                                crate::core::config::get_hive_config_dir()
+                                            );
+                                            
+                                            match license_manager.validate_license(&h_key_clone).await {
+                                                Ok(validation) => {
+                                                    if validation.valid {
+                                                        // Store validated license (this will update usage tracker)
+                                                        if let Err(e) = license_manager.store_license(&h_key_clone, &validation).await {
+                                                            tracing::error!("Failed to store validated license: {}", e);
+                                                        } else {
+                                                            tracing::info!("License validated and stored successfully");
+                                                            
+                                                            // Update license info for display
+                                                            *license_info.write() = Some(LicenseValidationResult {
+                                                                valid: validation.valid,
+                                                                tier: validation.tier.clone(),
+                                                                daily_limit: validation.daily_limit,
+                                                                user_id: validation.user_id.clone(),
+                                                                email: validation.email.clone(),
+                                                            });
+                                                            
+                                                            // Update app state with usage info
+                                                            if let Ok(db) = crate::core::get_database().await {
+                                                                let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
+                                                                
+                                                                if let Ok(usage_display) = usage_tracker.get_usage_display(&validation.user_id).await {
+                                                                    app_state.write().update_usage_info(
+                                                                        Some(validation.user_id),
+                                                                        &validation.tier,
+                                                                        usage_display.daily_used,
+                                                                        usage_display.daily_limit,
+                                                                        usage_display.is_trial,
+                                                                        usage_display.trial_days_left,
+                                                                    );
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("License validation failed: {}", e);
+                                                    // Continue without validation - free tier
+                                                }
+                                            }
+                                        });
                                     }
                                 }
                                 // Move to next step
@@ -2685,5 +3103,60 @@ pub const DIALOG_STYLES: &str = r#"
     .progress-separator {
         margin: 0 5px;
         color: #858585;
+    }
+    
+    /* Tab button styles */
+    .tab-button {
+        padding: 8px 16px;
+        background: transparent;
+        border: none;
+        color: #858585;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+        font-size: 14px;
+    }
+    
+    .tab-button:hover {
+        color: #cccccc;
+    }
+    
+    .tab-button.active {
+        color: #ffffff;
+        border-bottom-color: #007acc;
+    }
+    
+    /* Profile detail card styles */
+    .profile-detail-card {
+        animation: fadeIn 0.3s ease-in;
+    }
+    
+    .icon-button {
+        transition: all 0.2s;
+    }
+    
+    .icon-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    .model-input {
+        transition: all 0.2s;
+    }
+    
+    .model-input:focus {
+        border-color: #007acc !important;
+        outline: none;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(5px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 "#;

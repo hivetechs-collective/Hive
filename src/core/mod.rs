@@ -16,6 +16,7 @@ pub mod database_working;
 
 // These modules require additional dependencies not in minimal build
 pub mod security;
+pub mod schema;
 // pub mod trust_dialog;
 // pub mod file_access;
 // pub mod security_config;
@@ -30,6 +31,9 @@ pub mod updater;
 
 // License management
 pub mod license;
+
+// Usage tracking
+pub mod usage_tracker;
 
 // Profile management
 pub mod profiles;

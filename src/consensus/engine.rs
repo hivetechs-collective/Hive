@@ -112,6 +112,16 @@ impl ConsensusEngine {
         query: &str,
         semantic_context: Option<String>,
     ) -> Result<ConsensusResult> {
+        self.process_with_user(query, semantic_context, None).await
+    }
+    
+    /// Process a query through the consensus pipeline with user_id
+    pub async fn process_with_user(
+        &self,
+        query: &str,
+        semantic_context: Option<String>,
+        user_id: Option<String>,
+    ) -> Result<ConsensusResult> {
         let config = self.config.read().await.clone();
         
         let profile = self.current_profile.read().await.clone();
@@ -123,7 +133,7 @@ impl ConsensusEngine {
         }
         
         pipeline
-            .run(query, semantic_context)
+            .run(query, semantic_context, user_id)
             .await
             .context("Failed to run consensus pipeline")
     }
@@ -134,6 +144,7 @@ impl ConsensusEngine {
         query: &str,
         semantic_context: Option<String>,
         callbacks: Arc<dyn StreamingCallbacks>,
+        user_id: Option<String>,
     ) -> Result<ConsensusResult> {
         let config = self.config.read().await.clone();
         
@@ -147,7 +158,7 @@ impl ConsensusEngine {
         }
         
         pipeline
-            .run(query, semantic_context)
+            .run(query, semantic_context, user_id)
             .await
             .context("Failed to run consensus pipeline with callbacks")
     }
@@ -166,13 +177,14 @@ impl ConsensusEngine {
         let engine = self.clone();
         let query = request.query.clone();
         let context = request.context.clone();
+        let user_id = request.user_id.clone();
         
         // Spawn async task to process consensus
         tokio::spawn(async move {
             let start_time = Instant::now();
             
             // Process through the actual consensus pipeline
-            match engine.process_with_callbacks(&query, context, callbacks).await {
+            match engine.process_with_callbacks(&query, context, callbacks, user_id).await {
                 Ok(result) => {
                     // Extract metrics from the result
                     let mut total_tokens = 0u32;

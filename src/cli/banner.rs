@@ -305,6 +305,49 @@ pub async fn show_status_info() -> Result<()> {
     }
     println!();
     
+    // License and Usage
+    println!(" {}:", style("License & Usage").bold());
+    
+    // Get license status
+    if let Ok(Some(license_info)) = crate::core::license::LicenseManager::new(
+        crate::core::config::get_hive_config_dir()
+    ).load_license().await {
+        println!("   License: {} tier", style(&license_info.tier.to_string()).cyan());
+        
+        // Get usage information
+        if let Ok(db) = crate::core::get_database().await {
+            let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
+            
+            if let Ok(usage_display) = usage_tracker.get_usage_display(&license_info.user_id).await {
+                if usage_display.is_trial {
+                    println!("   Trial: {} {} days remaining", 
+                        style("🎉").green(),
+                        style(usage_display.trial_days_left.unwrap_or(0)).green()
+                    );
+                } else if license_info.tier == crate::core::license::LicenseTier::Unlimited || 
+                          license_info.tier == crate::core::license::LicenseTier::Enterprise {
+                    println!("   Usage: {} Unlimited conversations", style("♾️").blue());
+                } else {
+                    println!("   Usage: {} {}/{} conversations today", 
+                        usage_display.status_emoji,
+                        style(usage_display.daily_used).color(usage_display.status_color),
+                        style(usage_display.daily_limit).dim()
+                    );
+                    if let Some(reset_time) = usage_display.reset_time {
+                        println!("   Reset: in {}", style(reset_time).dim());
+                    }
+                }
+            }
+        }
+    } else {
+        println!("   License: {}", style("⚠ Not configured").yellow());
+        println!("   Usage: {}/{} conversations (free tier)", 
+            style("0").dim(), 
+            style("10").dim()
+        );
+    }
+    println!();
+    
     // Health checks
     println!(" {}:", style("Health Checks").bold());
     

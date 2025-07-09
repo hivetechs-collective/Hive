@@ -201,6 +201,7 @@ pub struct ConsensusRequest {
     pub temporal_context: Option<TemporalContext>,
     pub profile_override: Option<String>,
     pub max_tokens: Option<u32>,
+    pub user_id: Option<String>,
 }
 
 /// Stage-specific prompts
