@@ -5,7 +5,7 @@ use anyhow::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::core::{
-    database_simple::{Database, get_statistics},
+    database::{DatabaseManager, get_database},
     config::get_config,
 };
 use crate::providers::openrouter::cost::{CostTracker, BudgetConfig};
@@ -13,7 +13,7 @@ use crate::consensus::engine::ConsensusEngine;
 
 /// System data provider that fetches real state
 pub struct SystemDataProvider {
-    database: Arc<RwLock<Option<Database>>>,
+    database: Arc<RwLock<Option<Arc<DatabaseManager>>>>,
     cost_tracker: Arc<RwLock<Option<CostTracker>>>,
     consensus_engine: Arc<RwLock<Option<ConsensusEngine>>>,
 }
@@ -31,7 +31,7 @@ impl SystemDataProvider {
     /// Initialize the data provider
     pub async fn initialize(&self) -> Result<()> {
         // Initialize database connection
-        match Database::open_default().await {
+        match get_database().await {
             Ok(db) => {
                 let mut database = self.database.write().await;
                 *database = Some(db);
@@ -60,12 +60,18 @@ impl SystemDataProvider {
 
     /// Get conversation count from database
     pub async fn get_conversation_count(&self) -> usize {
-        match get_statistics().await {
-            Ok(stats) => stats.conversation_count as usize,
-            Err(e) => {
-                tracing::debug!("Failed to get conversation count: {}", e);
-                0
+        let database = self.database.read().await;
+        
+        if let Some(db) = database.as_ref() {
+            match db.get_statistics().await {
+                Ok(stats) => stats.conversation_count as usize,
+                Err(e) => {
+                    tracing::debug!("Failed to get conversation count: {}", e);
+                    0
+                }
             }
+        } else {
+            0
         }
     }
 
@@ -108,7 +114,7 @@ impl SystemDataProvider {
         
         if let Some(db) = database.as_ref() {
             // Get approximate token count from current conversation
-            match db.get_connection().await {
+            match db.get_connection() {
                 Ok(conn) => {
                     // Get the most recent conversation's messages
                     let result: Result<(i64, Option<String>), rusqlite::Error> = conn.query_row(
@@ -199,9 +205,15 @@ impl SystemDataProvider {
 
     /// Get database size in MB
     pub async fn get_database_size_mb(&self) -> f64 {
-        match get_statistics().await {
-            Ok(stats) => stats.database_size_bytes as f64 / 1024.0 / 1024.0,
-            Err(_) => 0.0,
+        let database = self.database.read().await;
+        
+        if let Some(db) = database.as_ref() {
+            match db.get_statistics().await {
+                Ok(stats) => stats.database_size_bytes as f64 / 1024.0 / 1024.0,
+                Err(_) => 0.0,
+            }
+        } else {
+            0.0
         }
     }
 
@@ -230,7 +242,7 @@ impl SystemDataProvider {
         let database = self.database.read().await;
         
         if let Some(db) = database.as_ref() {
-            match db.get_connection().await {
+            match db.get_connection() {
                 Ok(conn) => {
                     // Get total cost from consensus_costs table
                     let total_cost: f64 = conn.query_row(

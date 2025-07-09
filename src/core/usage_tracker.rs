@@ -6,9 +6,9 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
-use crate::core::database_simple::Database;
+use crate::core::database::DatabaseManager;
 use crate::core::license::{LicenseTier, LicenseInfo};
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 
 /// User usage information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,12 +51,12 @@ pub struct UsageDisplay {
 
 /// Usage tracking service
 pub struct UsageTracker {
-    database: Arc<Database>,
+    database: Arc<DatabaseManager>,
 }
 
 impl UsageTracker {
     /// Create new usage tracker
-    pub fn new(database: Arc<Database>) -> Self {
+    pub fn new(database: Arc<DatabaseManager>) -> Self {
         Self { database }
     }
     
@@ -109,7 +109,7 @@ impl UsageTracker {
     
     /// Record successful conversation usage
     pub async fn record_conversation_usage(&self, user_id: &str, conversation_id: &str) -> Result<()> {
-        let mut conn = self.database.get_connection().await?;
+        let conn = self.database.get_connection()?;
         
         // Get current usage info
         let usage_info = self.get_or_create_user_usage(user_id).await?;
@@ -165,7 +165,7 @@ impl UsageTracker {
     
     /// Get or create user usage information
     async fn get_or_create_user_usage(&self, user_id: &str) -> Result<UserUsageInfo> {
-        let mut conn = self.database.get_connection().await?;
+        let conn = self.database.get_connection()?;
         
         // Try to get existing user
         let user_result: Option<(String, u32, u32, Option<String>, Option<String>, Option<String>)> = 
@@ -205,11 +205,13 @@ impl UsageTracker {
         
         // Parse dates
         let created_at = created_at_str
-            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+            .as_ref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|d| d.with_timezone(&Utc));
         
         let usage_reset_date = usage_reset_str
-            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+            .as_ref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
             .map(|d| d.with_timezone(&Utc));
         
         // Calculate trial status
@@ -336,7 +338,7 @@ impl UsageTracker {
             LicenseTier::Unlimited | LicenseTier::Enterprise => 999999,
         };
         
-        let mut conn = self.database.get_connection().await?;
+        let conn = self.database.get_connection()?;
         conn.execute(
             "UPDATE user_profiles 
              SET license_tier = ?1, 

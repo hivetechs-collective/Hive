@@ -105,7 +105,7 @@ pub fn App() -> Element {
     // Fetch and update usage information periodically
     use_effect(move || {
         let hive_key_value = hive_key.read().clone();
-        let app_state_clone = app_state.clone();
+        let mut app_state_clone = app_state.clone();
         
         spawn(async move {
             // Only fetch if we have a hive key
@@ -141,7 +141,7 @@ pub fn App() -> Element {
                 interval.tick().await;
                 
                 let hive_key_value = hive_key.read().clone();
-                let app_state_clone = app_state.clone();
+                let mut app_state_clone = app_state.clone();
                 
                 if !hive_key_value.is_empty() {
                     if let Ok(db) = crate::core::get_database().await {
@@ -164,7 +164,7 @@ pub fn App() -> Element {
                     }
                 }
             }
-        })
+        });
     });
     
     // Provide state to all child components

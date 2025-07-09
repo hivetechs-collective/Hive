@@ -1,5 +1,5 @@
 use crate::consensus::maintenance::TemplateMaintenanceManager;
-use crate::core::database_simple::Database;
+use crate::core::database::{DatabaseManager, DatabaseConfig};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -30,12 +30,13 @@ pub async fn run_maintenance_command() -> Result<()> {
     
     // Get database
     let db_path = crate::core::config::get_hive_config_dir().join("hive-ai.db");
-    let db_config = crate::core::database_simple::DatabaseConfig {
+    let db_config = DatabaseConfig {
         path: db_path,
         enable_wal: true,
         enable_foreign_keys: true,
+        ..Default::default()
     };
-    let db = Arc::new(Database::open(db_config).await?);
+    let db = Arc::new(DatabaseManager::new(db_config).await?);
     
     // Run maintenance
     let mut maintenance = TemplateMaintenanceManager::new(db, api_key);

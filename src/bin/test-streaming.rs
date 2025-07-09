@@ -47,8 +47,8 @@ async fn main() -> Result<()> {
     println!("Starting streaming test...");
     
     // Create database
-    use hive_ai::core::database_simple::Database;
-    let db = Arc::new(Database::open_default().await?);
+    use hive_ai::core::database::{DatabaseManager, DatabaseConfig};
+    let db = Arc::new(DatabaseManager::new(DatabaseConfig::default()).await?);
     
     // Create consensus engine
     let engine = match ConsensusEngine::new(Some(db)).await {

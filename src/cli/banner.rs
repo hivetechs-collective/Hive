@@ -330,7 +330,7 @@ pub async fn show_status_info() -> Result<()> {
                 } else {
                     println!("   Usage: {} {}/{} conversations today", 
                         usage_display.status_emoji,
-                        style(usage_display.daily_used).color(usage_display.status_color),
+                        style(usage_display.daily_used).cyan(),  // Using cyan as default instead of parsing hex color
                         style(usage_display.daily_limit).dim()
                     );
                     if let Some(reset_time) = usage_display.reset_time {
@@ -401,21 +401,24 @@ async fn get_conversation_count(config_dir: &std::path::Path) -> Result<usize> {
     }
     
     // Use the actual database to get conversation count
-    use crate::core::database_simple::get_statistics;
-    match get_statistics().await {
-        Ok(stats) => Ok(stats.conversation_count as usize),
-        Err(_) => {
-            // Fallback to file-based estimation
-            let metadata = tokio::fs::metadata(&db_path).await?;
-            if let Ok(modified) = metadata.modified() {
-                let age = std::time::SystemTime::now().duration_since(modified).unwrap_or_default();
-                let days = age.as_secs() / 86400;
-                let size_mb = metadata.len() / (1024 * 1024);
-                Ok((days * 2 + size_mb * 10) as usize)
-            } else {
-                Ok(0)
+    use crate::core::database::get_database;
+    match get_database().await {
+        Ok(db) => match db.get_statistics().await {
+            Ok(stats) => Ok(stats.conversation_count as usize),
+            Err(_) => {
+                // Fallback to file-based estimation
+                let metadata = tokio::fs::metadata(&db_path).await?;
+                if let Ok(modified) = metadata.modified() {
+                    let age = std::time::SystemTime::now().duration_since(modified).unwrap_or_default();
+                    let days = age.as_secs() / 86400;
+                    let size_mb = metadata.len() / (1024 * 1024);
+                    Ok((days * 2 + size_mb * 10) as usize)
+                } else {
+                    Ok(0)
+                }
             }
-        }
+        },
+        Err(_) => Ok(0)
     }
 }
 

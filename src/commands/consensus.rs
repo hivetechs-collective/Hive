@@ -29,8 +29,8 @@ pub async fn handle_consensus_test(
     let start_time = Instant::now();
     
     // Create consensus engine with database
-    use crate::core::database_simple::Database;
-    let db = Arc::new(Database::open_default().await?);
+    use crate::core::database::{DatabaseManager, DatabaseConfig};
+    let db = Arc::new(DatabaseManager::new(DatabaseConfig::default()).await?);
     let engine = ConsensusEngine::new(Some(db)).await
         .context("Failed to create consensus engine")?;
     

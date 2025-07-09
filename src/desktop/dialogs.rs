@@ -323,7 +323,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut selected_profile = use_signal(|| String::new());
     let mut profiles_loading = use_signal(|| true);
     let mut show_profile_details = use_signal(|| false);
-    let mut editing_profile_id = use_signal(|| None::<i32>);
+    let mut editing_profile_id = use_signal(|| None::<i64>);
     
     // Load existing keys and profiles from database on mount
     use_effect(move || {
@@ -535,7 +535,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                     let mut editing_profile_id = editing_profile_id.clone();
                                                     let mut profiles = profiles.clone();
                                                     let mut profiles_loading = profiles_loading.clone();
-                                                    move |profile_id: i32| {
+                                                    move |profile_id: i64| {
                                                         if profile_id == -1 {
                                                             // Exit edit mode
                                                             *editing_profile_id.write() = None;
@@ -555,7 +555,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                         }
                                                     }
                                                 },
-                                                on_delete: move |profile_id: i32| {
+                                                on_delete: move |profile_id: i64| {
                                                     tracing::info!("Delete profile {} clicked", profile_id);
                                                     // TODO: Implement delete with confirmation
                                                 },
@@ -610,6 +610,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             let app_state = use_context::<Signal<AppState>>();
                             
                             let selected_profile_id = selected_profile.read().clone();
+                            let mut app_state_clone = app_state.clone();
                             
                             spawn(async move {
                                 // Simple synchronous saves
@@ -650,7 +651,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                             let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
                                                             
                                                             if let Ok(usage_display) = usage_tracker.get_usage_display(&validation.user_id).await {
-                                                                app_state.write().update_usage_info(
+                                                                app_state_clone.write().update_usage_info(
                                                                     Some(validation.user_id),
                                                                     &validation.tier,
                                                                     usage_display.daily_used,
@@ -761,8 +762,8 @@ fn DatabaseProfileOption(
 #[component]
 fn ProfileDetailCard(
     profile: ProfileInfo,
-    on_edit: EventHandler<i32>,
-    on_delete: EventHandler<i32>,
+    on_edit: EventHandler<i64>,
+    on_delete: EventHandler<i64>,
     is_editing: bool,
 ) -> Element {
     let mut generator_model = use_signal(|| profile.generator_model.clone().unwrap_or_default());
@@ -802,7 +803,7 @@ fn ProfileDetailCard(
                         button {
                             class: "icon-button",
                             style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
-                            onclick: move |_| on_edit.call(profile.id as i32),
+                            onclick: move |_| on_edit.call(profile.id),
                             "✏️ Edit"
                         }
                     } else {
@@ -825,14 +826,14 @@ fn ProfileDetailCard(
                                     }
                                 });
                                 
-                                on_edit.call(-1); // Signal to exit edit mode
+                                on_edit.call(-1i64); // Signal to exit edit mode
                             },
                             "💾 Save"
                         }
                         button {
                             class: "icon-button",
                             style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
-                            onclick: move |_| on_edit.call(-1), // Cancel edit
+                            onclick: move |_| on_edit.call(-1i64), // Cancel edit
                             "✖️ Cancel"
                         }
                     }
@@ -840,7 +841,7 @@ fn ProfileDetailCard(
                         button {
                             class: "icon-button",
                             style: "padding: 4px 8px; background: #5a1e1e; border: none; border-radius: 4px; color: #ff6b6b; cursor: pointer; font-size: 12px;",
-                            onclick: move |_| on_delete.call(profile.id as i32),
+                            onclick: move |_| on_delete.call(profile.id),
                             "🗑️ Delete"
                         }
                     }
@@ -955,9 +956,15 @@ async fn update_profile_models(
     validator_model: &str,
     curator_model: &str,
 ) -> anyhow::Result<()> {
-    use crate::core::database_simple::Database;
+    use crate::core::database::{DatabaseManager, DatabaseConfig};
+    use crate::core::config::get_hive_config_dir;
     
-    let db = Database::open_default().await?;
+    let db_path = get_hive_config_dir().join("hive-ai.db");
+    let db_config = DatabaseConfig {
+        path: db_path,
+        ..Default::default()
+    };
+    let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
     
     conn.execute(
@@ -2035,6 +2042,7 @@ pub fn OnboardingDialog(
                                         let app_state = use_context::<Signal<AppState>>();
                                         let h_key_clone = h_key.clone();
                                         let mut license_info = license_info.clone();
+                                        let mut app_state_clone = app_state.clone();
                                         
                                         spawn(async move {
                                             let license_manager = crate::core::license::LicenseManager::new(
@@ -2064,7 +2072,7 @@ pub fn OnboardingDialog(
                                                                 let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
                                                                 
                                                                 if let Ok(usage_display) = usage_tracker.get_usage_display(&validation.user_id).await {
-                                                                    app_state.write().update_usage_info(
+                                                                    app_state_clone.write().update_usage_info(
                                                                         Some(validation.user_id),
                                                                         &validation.tier,
                                                                         usage_display.daily_used,
@@ -2437,7 +2445,8 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     let conn = db.get_connection()?;
     
     let mut stmt = conn.prepare(
-        "SELECT id, name, is_default, created_at 
+        "SELECT id, name, is_default, created_at, 
+                generator_model, refiner_model, validator_model, curator_model
          FROM consensus_profiles 
          ORDER BY is_default DESC, created_at DESC"
     )?;
@@ -2448,6 +2457,10 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
             name: row.get(1)?,
             is_default: row.get(2)?,
             created_at: row.get(3)?,
+            generator_model: row.get(4)?,
+            refiner_model: row.get(5)?,
+            validator_model: row.get(6)?,
+            curator_model: row.get(7)?,
         })
     })?
     .filter_map(Result::ok)
