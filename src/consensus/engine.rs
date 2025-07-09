@@ -382,7 +382,29 @@ impl ConsensusEngine {
                 |row| row.get(0)
             ).optional()?;
             
-            let profile_id = active_profile_id.unwrap_or_else(|| "balanced".to_string());
+            // If no active profile is set, try to get the first available profile
+            let profile_id = match active_profile_id {
+                Some(id) => id,
+                None => {
+                    tracing::warn!("No active profile set, attempting to select first available profile");
+                    
+                    // Get the first available profile
+                    let first_profile_id: String = conn.query_row(
+                        "SELECT id FROM consensus_profiles ORDER BY created_at ASC LIMIT 1",
+                        [],
+                        |row| row.get(0)
+                    ).map_err(|_| anyhow!("No profiles found. Please complete onboarding to create profiles."))?;
+                    
+                    // Set it as the active profile
+                    conn.execute(
+                        "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
+                        params![&first_profile_id],
+                    )?;
+                    
+                    tracing::info!("Automatically selected profile '{}' as active", first_profile_id);
+                    first_profile_id
+                }
+            };
             
             // Query profile directly from consensus_profiles (TypeScript schema)
             let row = conn.query_row(
