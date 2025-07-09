@@ -12,8 +12,7 @@ use crate::consensus::models::ModelManager;
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::core::config;
 use crate::core::api_keys::ApiKeyManager;
-use crate::core::database_simple::Database;
-// use crate::core::Database; // TODO: Replace with actual database implementation
+use crate::core::database::DatabaseManager;
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, OptionalExtension};
 use chrono::Utc;
@@ -23,7 +22,7 @@ use std::time::Instant;
 
 /// Main consensus engine that manages the consensus pipeline
 pub struct ConsensusEngine {
-    database: Option<Arc<Database>>,
+    database: Option<Arc<DatabaseManager>>,
     current_profile: Arc<RwLock<ConsensusProfile>>,
     config: Arc<RwLock<ConsensusConfig>>,
     openrouter_api_key: Option<String>,
@@ -34,7 +33,7 @@ pub struct ConsensusEngine {
 
 impl ConsensusEngine {
     /// Create a new consensus engine
-    pub async fn new(database: Option<Arc<Database>>) -> Result<Self> {
+    pub async fn new(database: Option<Arc<DatabaseManager>>) -> Result<Self> {
         // Load configuration from file system
         let hive_config = config::get_config().await?;
         
@@ -375,14 +374,14 @@ impl ConsensusEngine {
     }
 
     /// Load default consensus profile from database
-    async fn load_default_profile(database: &Option<Arc<Database>>) -> Result<ConsensusProfile> {
+    async fn load_default_profile(database: &Option<Arc<DatabaseManager>>) -> Result<ConsensusProfile> {
         tracing::info!("load_default_profile: Starting...");
         let db = database.as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
         
-        // Use the async connection method which handles spawning properly
-        let conn = db.get_connection().await?;
-        tracing::info!("load_default_profile: Got async connection, executing query...");
+        // Get a connection from the pool
+        let conn = db.get_connection()?;
+        tracing::info!("load_default_profile: Got connection, executing query...");
         
         // Use spawn_blocking for the query operation only
         let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
@@ -452,14 +451,14 @@ impl ConsensusEngine {
     }
 
     /// Load specific consensus profile by name or ID
-    async fn load_profile_by_name_or_id(database: &Option<Arc<Database>>, profile_name_or_id: &str) -> Result<ConsensusProfile> {
+    async fn load_profile_by_name_or_id(database: &Option<Arc<DatabaseManager>>, profile_name_or_id: &str) -> Result<ConsensusProfile> {
         let db = database.as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
         
         let profile_id = profile_name_or_id.to_string();
         
-        // Use the async connection method which handles spawning properly
-        let conn = db.get_connection().await?;
+        // Get a connection from the pool
+        let conn = db.get_connection()?;
         
         // Use spawn_blocking for the query operation only
         let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {

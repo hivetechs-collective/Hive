@@ -8,7 +8,7 @@
 
 use crate::consensus::models::{ModelInfo, ModelManager};
 use crate::consensus::profiles::ExpertTemplate;
-use crate::core::database_simple::Database;
+use crate::core::database::DatabaseManager;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{params, OptionalExtension};
@@ -49,7 +49,7 @@ pub struct ModelValidation {
 
 /// Template maintenance manager
 pub struct TemplateMaintenanceManager {
-    db: Arc<Database>,
+    db: Arc<DatabaseManager>,
     model_manager: ModelManager,
     config: MaintenanceConfig,
     last_maintenance: Option<DateTime<Utc>>,
@@ -57,7 +57,7 @@ pub struct TemplateMaintenanceManager {
 
 impl TemplateMaintenanceManager {
     /// Create new maintenance manager
-    pub fn new(db: Arc<Database>, api_key: Option<String>) -> Self {
+    pub fn new(db: Arc<DatabaseManager>, api_key: Option<String>) -> Self {
         Self {
             db,
             model_manager: ModelManager::new(api_key),
@@ -121,7 +121,7 @@ impl TemplateMaintenanceManager {
 
     /// Validate a specific model
     pub async fn validate_model(&self, model_id: &str) -> Result<ModelValidation> {
-        let conn = self.db.get_connection().await?;
+        let conn = self.db.get_connection()?;
         
         // Check if model exists and is active
         let exists: Option<(bool, String)> = conn.query_row(
@@ -162,7 +162,7 @@ impl TemplateMaintenanceManager {
 
     /// Find replacement for an unavailable model
     pub async fn find_model_replacement(&self, model_id: &str) -> Result<Option<String>> {
-        let conn = self.db.get_connection().await?;
+        let conn = self.db.get_connection()?;
         
         // Extract provider from model ID
         let provider = model_id.split('/').next().unwrap_or("unknown");
@@ -241,7 +241,7 @@ impl TemplateMaintenanceManager {
 
     /// Validate all user profiles
     async fn validate_all_profiles(&self) -> Result<HashMap<String, Vec<ModelValidation>>> {
-        let conn = self.db.get_connection().await?;
+        let conn = self.db.get_connection()?;
         let mut validations = HashMap::new();
         
         // Get all profiles - they now store OpenRouter IDs directly
@@ -292,7 +292,7 @@ impl TemplateMaintenanceManager {
 
     /// Migrate a profile to use valid models
     async fn migrate_profile(&self, profile_id: &str) -> Result<()> {
-        let conn = self.db.get_connection().await?;
+        let conn = self.db.get_connection()?;
         
         // Get current models - they are stored directly as OpenRouter IDs
         let (gen_id, ref_id, val_id, cur_id): (String, String, String, String) = conn.query_row(

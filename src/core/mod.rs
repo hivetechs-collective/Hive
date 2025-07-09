@@ -60,14 +60,11 @@ pub use config::{
 pub use error::{HiveError, ErrorCategory, Result, HiveResult};
 pub use logging::{LoggingConfig, initialize_logging, initialize_default_logging, PerfTimer, ErrorTracker, AnalyticsLogger};
 pub use temporal::{TemporalContext, BusinessHours, TimeContext, TimeOfDay};
-pub use database_simple::{
+// Re-export database functionality from unified database module
+pub use database::{
     DatabaseConfig, DatabaseHealthStatus, DatabaseStatistics,
-    initialize_database, get_health_status, get_statistics, generate_id, current_timestamp
+    initialize_database, get_database, generate_id, current_timestamp
 };
-pub use database::get_database;
-
-// Re-export Database type for convenience
-pub use database_simple::Database;
 pub use migrations_simple::{
     MigrationManager, Migration, MigrationResult, MigrationStatus, IntegrityReport,
     initialize_migrations, get_migration_status

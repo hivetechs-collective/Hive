@@ -14,8 +14,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-// Define embedding dimension constant
-const EMBEDDING_DIM: usize = 1536;
+// Use the public EMBEDDING_DIM constant defined below
 
 #[cfg(feature = "embeddings")]
 use candle_core::{Device, Tensor, DType};

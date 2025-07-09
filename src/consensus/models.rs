@@ -1,7 +1,7 @@
 // Model Management System - OpenRouter Integration and Model Rankings
 // Port of TypeScript dynamic-model-selector.ts and openrouter-rankings.ts
 
-use crate::core::database_simple::Database;
+use crate::core::database::DatabaseManager;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::Client;
@@ -153,7 +153,7 @@ impl ModelManager {
     }
 
     /// Sync models from OpenRouter API
-    pub async fn sync_models(&mut self, db: &Database) -> Result<u32> {
+    pub async fn sync_models(&mut self, db: &DatabaseManager) -> Result<u32> {
         let api_key = self.openrouter_api_key
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("OpenRouter API key not configured"))?;
@@ -184,7 +184,7 @@ impl ModelManager {
         println!("📥 Fetched {} models from OpenRouter", models.len());
 
         // Process and store models
-        let conn = db.get_connection().await?;
+        let conn = db.get_connection()?;
         let mut stored_count = 0;
         let mut skipped_count = 0;
 
@@ -364,10 +364,10 @@ impl ModelManager {
     }
 
     /// Update model rankings based on performance data
-    pub async fn update_model_rankings(&self, db: &Database) -> Result<()> {
+    pub async fn update_model_rankings(&self, db: &DatabaseManager) -> Result<()> {
         println!("📊 Updating model rankings...");
 
-        let conn = db.get_connection().await?;
+        let conn = db.get_connection()?;
 
         // Get all active models with performance data
         let mut stmt = conn.prepare(
@@ -485,8 +485,8 @@ impl ModelManager {
     }
 
     /// Get models by ranking position
-    pub async fn get_models_by_ranking(&self, db: &Database, category: &str, top_n: usize) -> Result<Vec<ModelInfo>> {
-        let conn = db.get_connection().await?;
+    pub async fn get_models_by_ranking(&self, db: &DatabaseManager, category: &str, top_n: usize) -> Result<Vec<ModelInfo>> {
+        let conn = db.get_connection()?;
 
         let mut stmt = conn.prepare(
             r#"
@@ -535,8 +535,8 @@ impl ModelManager {
     }
 
     /// Get model by internal ID
-    pub async fn get_model_by_id(&self, db: &Database, internal_id: u32) -> Result<Option<ModelInfo>> {
-        let conn = db.get_connection().await?;
+    pub async fn get_model_by_id(&self, db: &DatabaseManager, internal_id: u32) -> Result<Option<ModelInfo>> {
+        let conn = db.get_connection()?;
 
         let mut stmt = conn.prepare(
             r#"
@@ -580,8 +580,8 @@ impl ModelManager {
     }
 
     /// Get model by OpenRouter ID
-    pub async fn get_model_by_openrouter_id(&self, db: &Database, openrouter_id: &str) -> Result<Option<ModelInfo>> {
-        let conn = db.get_connection().await?;
+    pub async fn get_model_by_openrouter_id(&self, db: &DatabaseManager, openrouter_id: &str) -> Result<Option<ModelInfo>> {
+        let conn = db.get_connection()?;
 
         let mut stmt = conn.prepare(
             r#"
@@ -720,7 +720,7 @@ impl DynamicModelSelector {
     /// Select optimal model for a specific stage and criteria
     pub async fn select_optimal_model(
         &self,
-        db: &Database,
+        db: &DatabaseManager,
         criteria: &ModelSelectionCriteria,
         conversation_id: Option<&str>,
     ) -> Result<Option<ModelCandidate>> {
@@ -759,7 +759,7 @@ impl DynamicModelSelector {
     }
 
     /// Get candidate models based on criteria
-    async fn get_candidate_models(&self, db: &Database, criteria: &ModelSelectionCriteria) -> Result<Vec<ModelCandidate>> {
+    async fn get_candidate_models(&self, db: &DatabaseManager, criteria: &ModelSelectionCriteria) -> Result<Vec<ModelCandidate>> {
         let mut candidates = Vec::new();
 
         // Get models based on stage requirements
@@ -910,7 +910,7 @@ impl DynamicModelSelector {
     }
 
     /// Get fallback model for a stage
-    async fn get_fallback_model(&self, db: &Database, stage: &str) -> Result<Option<ModelCandidate>> {
+    async fn get_fallback_model(&self, db: &DatabaseManager, stage: &str) -> Result<Option<ModelCandidate>> {
         // Try to get any active model for the stage
         let models = match stage {
             "generator" | "curator" => {
@@ -960,12 +960,12 @@ impl DynamicModelSelector {
     /// Record model selection for learning
     async fn record_model_selection(
         &self,
-        db: &Database,
+        db: &DatabaseManager,
         model: &ModelCandidate,
         criteria: &ModelSelectionCriteria,
         conversation_id: &str,
     ) -> Result<()> {
-        let conn = db.get_connection().await?;
+        let conn = db.get_connection()?;
 
         conn.execute(
             r#"
