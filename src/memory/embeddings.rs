@@ -14,6 +14,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
+// Define embedding dimension constant
+const EMBEDDING_DIM: usize = 1536;
+
 #[cfg(feature = "embeddings")]
 use candle_core::{Device, Tensor, DType};
 #[cfg(feature = "embeddings")]
@@ -438,7 +441,7 @@ impl VectorStore {
 
 // Similarity calculation functions
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() {
         return 0.0;
     }

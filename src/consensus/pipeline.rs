@@ -18,6 +18,7 @@ use crate::consensus::openrouter::{
 use rusqlite::params;
 use crate::consensus::models::ModelManager;
 use crate::core::database_simple::Database;
+use crate::core::usage_tracker::UsageTracker;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use std::sync::Arc;
@@ -37,6 +38,7 @@ pub struct ConsensusPipeline {
     model_manager: Option<Arc<ModelManager>>,
     database: Option<Arc<Database>>,
     api_key: Option<String>,
+    usage_tracker: Option<Arc<UsageTracker>>,
 }
 
 impl ConsensusPipeline {
@@ -89,7 +91,9 @@ impl ConsensusPipeline {
 
     /// Set the database for model management
     pub fn with_database(mut self, database: Arc<Database>) -> Self {
-        self.database = Some(database);
+        self.database = Some(database.clone());
+        // Initialize usage tracker when database is set
+        self.usage_tracker = Some(Arc::new(UsageTracker::new(database)));
         self
     }
     
@@ -110,7 +114,28 @@ impl ConsensusPipeline {
         &self,
         question: &str,
         context: Option<String>,
+        user_id: Option<String>,
     ) -> Result<ConsensusResult> {
+        // Check usage limits before running consensus
+        if let (Some(user_id), Some(usage_tracker)) = (user_id.as_ref(), &self.usage_tracker) {
+            let usage_check = usage_tracker.check_usage_before_conversation(user_id).await?;
+            
+            if !usage_check.allowed {
+                return Err(anyhow::anyhow!(
+                    "Usage limit reached: {}. {} conversations remaining today.",
+                    usage_check.reason,
+                    usage_check.remaining_conversations
+                ));
+            }
+            
+            tracing::info!(
+                "Usage check passed for user {}: {} - {} remaining",
+                user_id,
+                usage_check.reason,
+                usage_check.remaining_conversations
+            );
+        }
+        
         // Check if maintenance has run recently
         if let Some(db) = &self.database {
             use crate::consensus::maintenance::TemplateMaintenanceManager;
@@ -372,6 +397,16 @@ impl ConsensusPipeline {
             }
         } else {
             tracing::warn!("No database available - consensus results will not be persisted!");
+        }
+        
+        // Record usage after successful consensus completion
+        if let (Some(user_id), Some(usage_tracker)) = (user_id.as_ref(), &self.usage_tracker) {
+            if let Err(e) = usage_tracker.record_conversation_usage(user_id, &conversation_id).await {
+                tracing::error!("Failed to record conversation usage: {}", e);
+                // Don't fail the consensus for usage tracking errors
+            } else {
+                tracing::info!("Recorded conversation usage for user {} (conversation: {})", user_id, conversation_id);
+            }
         }
 
         // Emit AfterConsensus hook event

@@ -36,6 +36,16 @@ pub struct AppState {
     
     /// Current model being used
     pub current_model: Option<String>,
+    
+    /// User license information
+    pub user_id: Option<String>,
+    pub license_tier: String,
+    
+    /// Usage tracking
+    pub daily_conversations_used: u32,
+    pub daily_conversations_limit: u32,
+    pub is_trial_active: bool,
+    pub trial_days_remaining: Option<i32>,
 }
 
 impl Default for AppState {
@@ -57,6 +67,12 @@ impl AppState {
             context_usage: 0,
             auto_accept: true,
             current_model: Some("claude-3-5-sonnet".to_string()),
+            user_id: None,
+            license_tier: "free".to_string(),
+            daily_conversations_used: 0,
+            daily_conversations_limit: 10,
+            is_trial_active: false,
+            trial_days_remaining: None,
         }
     }
     
@@ -81,6 +97,24 @@ impl AppState {
     /// Update context usage
     pub fn set_context_usage(&mut self, usage: u8) {
         self.context_usage = usage.min(100);
+    }
+    
+    /// Update usage tracking information
+    pub fn update_usage_info(
+        &mut self,
+        user_id: Option<String>,
+        tier: &str,
+        used: u32,
+        limit: u32,
+        is_trial: bool,
+        trial_days: Option<i32>,
+    ) {
+        self.user_id = user_id;
+        self.license_tier = tier.to_string();
+        self.daily_conversations_used = used;
+        self.daily_conversations_limit = limit;
+        self.is_trial_active = is_trial;
+        self.trial_days_remaining = trial_days;
     }
 }
 

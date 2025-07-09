@@ -102,6 +102,71 @@ pub fn App() -> Element {
         });
     });
     
+    // Fetch and update usage information periodically
+    use_effect(move || {
+        let hive_key_value = hive_key.read().clone();
+        let app_state_clone = app_state.clone();
+        
+        spawn(async move {
+            // Only fetch if we have a hive key
+            if !hive_key_value.is_empty() {
+                // Get usage information
+                if let Ok(db) = crate::core::get_database().await {
+                    let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
+                    
+                    // Extract user_id from license info if available
+                    if let Ok(Some(license_info)) = crate::core::license::LicenseManager::new(
+                        crate::core::config::get_hive_config_dir()
+                    ).load_license().await {
+                        if let Ok(usage_display) = usage_tracker.get_usage_display(&license_info.user_id).await {
+                            app_state_clone.write().update_usage_info(
+                                Some(license_info.user_id),
+                                &license_info.tier.to_string(),
+                                usage_display.daily_used,
+                                usage_display.daily_limit,
+                                usage_display.is_trial,
+                                usage_display.trial_days_left,
+                            );
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Set up periodic updates
+        spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+            
+            loop {
+                interval.tick().await;
+                
+                let hive_key_value = hive_key.read().clone();
+                let app_state_clone = app_state.clone();
+                
+                if !hive_key_value.is_empty() {
+                    if let Ok(db) = crate::core::get_database().await {
+                        let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
+                        
+                        if let Ok(Some(license_info)) = crate::core::license::LicenseManager::new(
+                            crate::core::config::get_hive_config_dir()
+                        ).load_license().await {
+                            if let Ok(usage_display) = usage_tracker.get_usage_display(&license_info.user_id).await {
+                                app_state_clone.write().update_usage_info(
+                                    Some(license_info.user_id),
+                                    &license_info.tier.to_string(),
+                                    usage_display.daily_used,
+                                    usage_display.daily_limit,
+                                    usage_display.is_trial,
+                                    usage_display.trial_days_left,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        })
+    });
+    
     // Provide state to all child components
     use_context_provider(move || app_state);
     use_context_provider(|| event_dispatcher);
@@ -427,6 +492,25 @@ fn StatusBar() -> Element {
             
             div {
                 class: "status-right",
+                // Usage Tracking
+                div {
+                    class: "status-item usage-tracker",
+                    style: format!("color: {}", get_usage_color(&state)),
+                    if state.is_trial_active {
+                        span {
+                            "🎉 Trial: {state.trial_days_remaining.unwrap_or(0)} days left"
+                        }
+                    } else if state.license_tier == "unlimited" || state.license_tier == "enterprise" {
+                        span {
+                            "♾️ Unlimited"
+                        }
+                    } else {
+                        span {
+                            "{get_usage_emoji(&state)} {state.daily_conversations_used}/{state.daily_conversations_limit}"
+                        }
+                    }
+                }
+                
                 // Cost Indicator
                 div {
                     class: "status-item",
@@ -458,5 +542,49 @@ fn StatusBar() -> Element {
                 }
             }
         }
+    }
+}
+
+/// Get usage color based on percentage used
+fn get_usage_color(state: &AppState) -> &'static str {
+    if state.is_trial_active {
+        "#10b981" // Green for trial
+    } else if state.license_tier == "unlimited" || state.license_tier == "enterprise" {
+        "#3b82f6" // Blue for unlimited
+    } else {
+        let percentage = if state.daily_conversations_limit > 0 {
+            (state.daily_conversations_used as f32 / state.daily_conversations_limit as f32) * 100.0
+        } else {
+            0.0
+        };
+        
+        if percentage >= 90.0 {
+            "#ef4444" // Red
+        } else if percentage >= 75.0 {
+            "#f97316" // Orange
+        } else if percentage >= 50.0 {
+            "#eab308" // Yellow
+        } else {
+            "#10b981" // Green
+        }
+    }
+}
+
+/// Get usage emoji based on percentage used
+fn get_usage_emoji(state: &AppState) -> &'static str {
+    let percentage = if state.daily_conversations_limit > 0 {
+        (state.daily_conversations_used as f32 / state.daily_conversations_limit as f32) * 100.0
+    } else {
+        0.0
+    };
+    
+    if percentage >= 90.0 {
+        "🔴"
+    } else if percentage >= 75.0 {
+        "🟠"
+    } else if percentage >= 50.0 {
+        "🟡"
+    } else {
+        "🟢"
     }
 }
