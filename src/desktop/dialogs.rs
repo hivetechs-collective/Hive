@@ -324,6 +324,8 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut profiles_loading = use_signal(|| true);
     let mut show_profile_details = use_signal(|| false);
     let mut editing_profile_id = use_signal(|| None::<i64>);
+    let mut show_create_profile = use_signal(|| false);
+    let mut new_profile_name = use_signal(|| String::new());
     
     // Load existing keys and profiles from database on mount
     use_effect(move || {
@@ -499,7 +501,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         style: "margin-left: auto;",
                                         onclick: move |_| {
                                             tracing::info!("Create new profile clicked");
-                                            // TODO: Show create profile dialog
+                                            *show_create_profile.write() = true;
                                         },
                                         "+ New Profile"
                                     }
@@ -695,6 +697,98 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             });
                         },
                         if *is_validating.read() { "Validating..." } else { "Save Settings" }
+                    }
+                }
+            }
+        }
+        
+        // Create Profile Dialog
+        if *show_create_profile.read() {
+            div {
+                class: "dialog-overlay",
+                style: "z-index: 1001;", // Higher z-index to appear above settings dialog
+                onclick: move |_| *show_create_profile.write() = false,
+                
+                div {
+                    class: "dialog",
+                    style: "width: 500px;",
+                    onclick: move |evt| evt.stop_propagation(),
+                    
+                    div {
+                        class: "dialog-header",
+                        h2 { "Create New Profile" }
+                        button {
+                            class: "dialog-close",
+                            onclick: move |_| *show_create_profile.write() = false,
+                            "×"
+                        }
+                    }
+                    
+                    div {
+                        class: "dialog-content",
+                        style: "padding: 20px;",
+                        
+                        div {
+                            class: "settings-field",
+                            label {
+                                class: "settings-label",
+                                "Profile Name"
+                            }
+                            input {
+                                class: "settings-input",
+                                r#type: "text",
+                                value: "{new_profile_name.read()}",
+                                placeholder: "Enter profile name",
+                                oninput: move |evt| *new_profile_name.write() = evt.value().clone(),
+                            }
+                        }
+                        
+                        p {
+                            style: "margin-top: 15px; color: #888; font-size: 13px;",
+                            "A new profile will be created with default model configurations. You can customize the models after creation."
+                        }
+                    }
+                    
+                    div {
+                        class: "dialog-footer",
+                        button {
+                            class: "button button-secondary",
+                            onclick: move |_| {
+                                *show_create_profile.write() = false;
+                                *new_profile_name.write() = String::new();
+                            },
+                            "Cancel"
+                        }
+                        button {
+                            class: "button button-primary",
+                            disabled: new_profile_name.read().trim().is_empty(),
+                            onclick: move |_| {
+                                let profile_name = new_profile_name.read().trim().to_string();
+                                if !profile_name.is_empty() {
+                                    *profiles_loading.write() = true;
+                                    *show_create_profile.write() = false;
+                                    
+                                    spawn(async move {
+                                        // Create profile with default models
+                                        match create_custom_profile(&profile_name).await {
+                                            Ok(_) => {
+                                                tracing::info!("Created profile: {}", profile_name);
+                                                // Reload profiles
+                                                if let Ok(loaded_profiles) = load_existing_profiles().await {
+                                                    *profiles.write() = loaded_profiles;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("Failed to create profile: {}", e);
+                                            }
+                                        }
+                                        *profiles_loading.write() = false;
+                                        *new_profile_name.write() = String::new();
+                                    });
+                                }
+                            },
+                            "Create Profile"
+                        }
                     }
                 }
             }
@@ -2445,21 +2539,28 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     let conn = db.get_connection()?;
     
     let mut stmt = conn.prepare(
-        "SELECT cp.id, cp.name, cp.is_default, cp.created_at, 
-                gm.name, rm.name, vm.name, cm.name
-         FROM consensus_profiles cp
-         LEFT JOIN openrouter_models gm ON cp.generator_model_id = gm.internal_id
-         LEFT JOIN openrouter_models rm ON cp.refiner_model_id = rm.internal_id
-         LEFT JOIN openrouter_models vm ON cp.validator_model_id = vm.internal_id
-         LEFT JOIN openrouter_models cm ON cp.curator_model_id = cm.internal_id
-         ORDER BY cp.is_default DESC, cp.created_at DESC"
+        "SELECT id, profile_name, profile_name, created_at, 
+                generator_model, refiner_model, validator_model, curator_model
+         FROM consensus_profiles 
+         ORDER BY created_at DESC"
     )?;
     
-    let profiles = stmt.query_map([], |row| {
+    let mut profiles_vec: Vec<ProfileInfo> = stmt.query_map([], |row| {
+        // Note: id is TEXT in database, but ProfileInfo expects i64
+        let id_str: String = row.get(0)?;
+        let id = id_str.parse::<i64>().unwrap_or_else(|_| {
+            // If it's not a number, use a hash of the string
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            id_str.hash(&mut hasher);
+            hasher.finish() as i64
+        });
+        
         Ok(ProfileInfo {
-            id: row.get(0)?,
+            id,
             name: row.get(1)?,
-            is_default: row.get(2)?,
+            is_default: false, // Will set first one as default below
             created_at: row.get(3)?,
             generator_model: row.get(4)?,
             refiner_model: row.get(5)?,
@@ -2470,7 +2571,12 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     .filter_map(Result::ok)
     .collect();
     
-    Ok(profiles)
+    // Set first profile as default
+    if let Some(first) = profiles_vec.first_mut() {
+        first.is_default = true;
+    }
+    
+    Ok(profiles_vec)
 }
 
 /// Load the current default profile from database
@@ -2495,11 +2601,21 @@ async fn load_default_profile() -> anyhow::Result<Option<(i64, String)>> {
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
     
-    // Query for the default profile
+    // Query for the first profile (since we don't have is_default column)
     let result = conn.query_row(
-        "SELECT id, name FROM consensus_profiles WHERE is_default = 1 LIMIT 1",
+        "SELECT id, profile_name FROM consensus_profiles ORDER BY created_at DESC LIMIT 1",
         [],
-        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        |row| {
+            let id_str: String = row.get(0)?;
+            let id = id_str.parse::<i64>().unwrap_or_else(|_| {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                id_str.hash(&mut hasher);
+                hasher.finish() as i64
+            });
+            Ok((id, row.get::<_, String>(1)?))
+        }
     ).optional()?;
     
     Ok(result)
@@ -2553,13 +2669,10 @@ async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
     
-    // First, unset all profiles as default
-    conn.execute("UPDATE consensus_profiles SET is_default = 0", [])?;
-    
-    // Then set the selected profile as default
+    // Since we don't have is_default column, store the active profile in consensus_settings
     conn.execute(
-        "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
-        [profile_id]
+        "INSERT OR REPLACE INTO consensus_settings (key, value, updated_at) VALUES ('active_profile_id', ?1, CURRENT_TIMESTAMP)",
+        [profile_id.to_string()]
     )?;
     
     Ok(())
@@ -2592,6 +2705,58 @@ pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
          VALUES ('onboarding_completed', 'true', datetime('now'), datetime('now'))",
         []
     )?;
+    
+    Ok(())
+}
+
+/// Create a custom profile with default model configuration
+async fn create_custom_profile(profile_name: &str) -> anyhow::Result<()> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    use uuid::Uuid;
+    
+    let db_path = get_hive_config_dir().join("hive-ai.db");
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let conn = db.get_connection()?;
+    
+    // Generate a UUID for the profile
+    let profile_id = Uuid::new_v4().to_string();
+    
+    // Use default fast models for the new profile
+    let default_models = [
+        "anthropic/claude-3-haiku",
+        "openai/gpt-3.5-turbo",
+        "anthropic/claude-3-haiku",
+        "openai/gpt-3.5-turbo",
+    ];
+    
+    // Create the profile with default configuration
+    conn.execute(
+        "INSERT INTO consensus_profiles (id, profile_name, generator_model, refiner_model, validator_model, curator_model, created_at, updated_at) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))",
+        rusqlite::params![
+            &profile_id,
+            profile_name,
+            default_models[0],
+            default_models[1],
+            default_models[2],
+            default_models[3],
+        ]
+    )?;
+    
+    tracing::info!("Created custom profile '{}' with ID: {}", profile_name, profile_id);
     
     Ok(())
 }
