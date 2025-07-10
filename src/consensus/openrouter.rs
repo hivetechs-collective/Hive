@@ -89,6 +89,7 @@ pub struct StreamingProgress {
     pub percentage: Option<f64>,
 }
 
+#[derive(Debug)]
 pub struct OpenRouterClient {
     client: Client,
     api_key: String,

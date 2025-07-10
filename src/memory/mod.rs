@@ -12,11 +12,14 @@ pub mod knowledge_graph;
 pub mod pattern_learning;
 pub mod retrieval;
 pub mod analytics;
+pub mod topic_extraction;
+pub mod thematic_clustering;
 
 #[cfg(test)]
 mod test;
 
 use anyhow::{Context as _, Result};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
@@ -26,6 +29,8 @@ pub use knowledge_graph::{KnowledgeGraph, Entity, Relationship, GraphQuery};
 pub use pattern_learning::{PatternLearner, Pattern, PatternType, PatternMetrics};
 pub use retrieval::{ContextRetriever, RetrievalStrategy, ContextWindow};
 pub use analytics::{MemoryAnalyzer, InsightGenerator, MemoryMetrics};
+pub use topic_extraction::{extract_topics, extract_topics_with_ai, find_topics_for_query, tag_conversation, find_conversations_by_topic};
+pub use thematic_clustering::{ThematicCluster, ConversationThread, ThreadType, MessageImportance};
 
 // Re-export core memory types for convenience
 pub use crate::core::memory::{
@@ -46,6 +51,8 @@ pub struct MemoryIntelligence {
     pub retriever: Arc<ContextRetriever>,
     /// Analytics engine
     pub analytics: Arc<RwLock<MemoryAnalyzer>>,
+    /// Thematic clustering engine
+    pub thematic: Arc<ThematicCluster>,
 }
 
 impl MemoryIntelligence {
@@ -59,6 +66,7 @@ impl MemoryIntelligence {
         let patterns = Arc::new(RwLock::new(PatternLearner::new()));
         let retriever = Arc::new(ContextRetriever::new(embeddings.clone()));
         let analytics = Arc::new(RwLock::new(MemoryAnalyzer::new()));
+        let thematic = Arc::new(ThematicCluster::new().await?);
         
         Ok(Self {
             embeddings,
@@ -66,6 +74,7 @@ impl MemoryIntelligence {
             patterns,
             retriever,
             analytics,
+            thematic,
         })
     }
     
@@ -169,6 +178,31 @@ impl MemoryIntelligence {
     pub async fn get_metrics(&self) -> Result<MemoryMetrics> {
         let analytics = self.analytics.read().await;
         Ok(analytics.get_metrics())
+    }
+    
+    /// Find relevant knowledge for consensus pipeline stage
+    pub async fn find_stage_knowledge(&self, query: &str, stage: &str) -> Result<String> {
+        self.thematic.find_relevant_knowledge_for_ai(query, stage).await
+    }
+    
+    /// Detect follow-up relationships
+    pub async fn detect_follow_up(&self, query: &str, recent_conversations: &[String]) -> Result<Option<ConversationThread>> {
+        self.thematic.detect_follow_up(query, recent_conversations).await
+    }
+    
+    /// Get curator knowledge base
+    pub async fn get_curator_knowledge(&self, query: &str) -> Result<String> {
+        self.thematic.get_curator_knowledge_base(query).await
+    }
+    
+    /// Get conversation clusters by topic
+    pub async fn get_conversation_clusters(&self, limit: Option<usize>) -> Result<HashMap<String, Vec<String>>> {
+        self.thematic.get_conversation_clusters(limit).await
+    }
+    
+    /// Tag a conversation with topics
+    pub async fn tag_conversation(&self, conversation_id: &str) -> Result<Vec<String>> {
+        tag_conversation(conversation_id).await
     }
 }
 

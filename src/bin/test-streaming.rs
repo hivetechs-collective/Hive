@@ -70,7 +70,8 @@ async fn main() -> Result<()> {
     match engine.process_with_callbacks(
         "What is 2+2?", 
         None,
-        callbacks
+        callbacks,
+        None
     ).await {
         Ok(result) => {
             println!("\nFinal result: {:?}", result.result);
