@@ -20,7 +20,7 @@ use crate::consensus::models::ModelManager;
 use crate::core::database::DatabaseManager;
 use crate::core::usage_tracker::UsageTracker;
 use anyhow::{Context, Result};
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
