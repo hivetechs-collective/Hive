@@ -13,6 +13,9 @@ use crate::consensus::temporal::TemporalContextProvider;
 use crate::core::config;
 use crate::core::api_keys::ApiKeyManager;
 use crate::core::database::DatabaseManager;
+use crate::core::config::get_hive_config_dir;
+use crate::subscription::{ConversationGateway, ConversationAuthorization, UsageTracker};
+use crate::core::license::LicenseManager;
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, OptionalExtension};
 use chrono::Utc;
@@ -21,6 +24,7 @@ use tokio::sync::{RwLock, mpsc};
 use std::time::Instant;
 
 /// Main consensus engine that manages the consensus pipeline
+#[derive(Clone)]
 pub struct ConsensusEngine {
     database: Option<Arc<DatabaseManager>>,
     current_profile: Arc<RwLock<ConsensusProfile>>,
@@ -29,6 +33,9 @@ pub struct ConsensusEngine {
     profile_manager: Arc<ExpertProfileManager>,
     model_manager: Option<Arc<ModelManager>>,
     temporal_provider: Arc<TemporalContextProvider>,
+    conversation_gateway: Arc<ConversationGateway>,
+    usage_tracker: Arc<RwLock<UsageTracker>>,
+    license_key: Option<String>,
 }
 
 impl ConsensusEngine {
@@ -39,6 +46,16 @@ impl ConsensusEngine {
         
         // Get OpenRouter API key from ApiKeyManager (checks database, config, and env)
         let openrouter_api_key = ApiKeyManager::get_openrouter_key().await.ok();
+        
+        // Get license key from license manager
+        let config_dir = get_hive_config_dir();
+        let license_manager = LicenseManager::new(config_dir.clone());
+        let license_info = license_manager.load_license().await?;
+        let license_key = license_info.map(|info| info.key);
+        
+        // Initialize subscription components
+        let conversation_gateway = Arc::new(ConversationGateway::new()?);
+        let usage_tracker = Arc::new(RwLock::new(UsageTracker::new(config_dir)));
         
         // Initialize profile manager
         let profile_manager = Arc::new(ExpertProfileManager::new());
@@ -102,6 +119,9 @@ impl ConsensusEngine {
             profile_manager,
             model_manager,
             temporal_provider: Arc::new(TemporalContextProvider::default()),
+            conversation_gateway,
+            usage_tracker,
+            license_key,
         })
     }
 
@@ -121,6 +141,46 @@ impl ConsensusEngine {
         semantic_context: Option<String>,
         user_id: Option<String>,
     ) -> Result<ConsensusResult> {
+        // Check subscription before processing
+        let conversation_auth = if let Some(ref license_key) = self.license_key {
+            // Check usage limits
+            let mut usage_tracker = self.usage_tracker.write().await;
+            let (allowed, notification) = usage_tracker.check_usage_before_conversation().await?;
+            
+            if let Some(notif) = notification {
+                tracing::info!("{}: {}", notif.title, notif.message);
+                
+                // If blocked, return error
+                if !allowed {
+                    return Err(anyhow!("{}\n\n{}", notif.title, notif.message));
+                }
+            }
+            
+            // Request conversation authorization from D1
+            match self.conversation_gateway.request_conversation_authorization(query, license_key).await {
+                Ok(auth) => Some(auth),
+                Err(e) => {
+                    tracing::error!("Failed to authorize conversation: {}", e);
+                    // Check if it's a usage limit error
+                    if let Some(gateway_err) = e.downcast_ref::<crate::subscription::conversation_gateway::GatewayError>() {
+                        match gateway_err {
+                            crate::subscription::conversation_gateway::GatewayError::UsageLimitExceeded { used, limit, plan } => {
+                                return Err(anyhow!(
+                                    "Usage limit exceeded: {}/{} conversations today on {} plan.\n\
+                                    Upgrade at: https://hivetechs.io/pricing",
+                                    used, limit, plan
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+                    return Err(e);
+                }
+            }
+        } else {
+            None
+        };
+        
         let config = self.config.read().await.clone();
         
         let profile = self.current_profile.read().await.clone();
@@ -131,10 +191,37 @@ impl ConsensusEngine {
             pipeline = pipeline.with_database(db.clone());
         }
         
-        pipeline
-            .run(query, semantic_context, user_id)
+        // Run the consensus pipeline
+        let result = pipeline
+            .run(query, semantic_context, user_id.clone())
             .await
-            .context("Failed to run consensus pipeline")
+            .context("Failed to run consensus pipeline")?;
+        
+        // Report conversation completion if authorized
+        if let Some(auth) = conversation_auth {
+            match self.conversation_gateway.report_conversation_completion(
+                &auth.conversation_token,
+                &result.conversation_id,
+                &auth.question_hash
+            ).await {
+                Ok(verification) => {
+                    if verification.verified {
+                        tracing::info!("Conversation verified ({} remaining)", verification.remaining_conversations);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to verify conversation completion: {}", e);
+                }
+            }
+            
+            // Record usage locally
+            let mut usage_tracker = self.usage_tracker.write().await;
+            if let Err(e) = usage_tracker.record_conversation_usage().await {
+                tracing::warn!("Failed to record usage: {}", e);
+            }
+        }
+        
+        Ok(result)
     }
 
     /// Process with custom callbacks
@@ -513,18 +600,6 @@ impl ConsensusEngine {
         })
     }
 
-    /// Clone the engine for concurrent use
-    pub fn clone(&self) -> Self {
-        Self {
-            database: self.database.clone(),
-            current_profile: self.current_profile.clone(),
-            config: self.config.clone(),
-            openrouter_api_key: self.openrouter_api_key.clone(),
-            profile_manager: self.profile_manager.clone(),
-            model_manager: self.model_manager.clone(),
-            temporal_provider: self.temporal_provider.clone(),
-        }
-    }
 }
 
 /// Validation result for prerequisites

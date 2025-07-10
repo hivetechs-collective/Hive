@@ -26,6 +26,7 @@ pub mod security;
 pub mod shell;
 pub mod install;
 pub mod startup;
+pub mod subscription;
 pub mod transformation;
 pub mod tui;
 pub mod desktop;
