@@ -27,6 +27,30 @@ impl Default for LicenseTier {
     }
 }
 
+impl LicenseTier {
+    pub fn daily_limit(&self) -> u32 {
+        match self {
+            Self::Free => 10,
+            Self::Basic => 50,
+            Self::Standard => 100,
+            Self::Premium => 200,
+            Self::Unlimited => u32::MAX,
+            Self::Enterprise => 600,
+        }
+    }
+
+    pub fn monthly_limit(&self) -> u32 {
+        match self {
+            Self::Free => 300,
+            Self::Basic => 1000,
+            Self::Standard => 2000,
+            Self::Premium => 4000,
+            Self::Unlimited => u32::MAX,
+            Self::Enterprise => 12000,
+        }
+    }
+}
+
 impl std::fmt::Display for LicenseTier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
