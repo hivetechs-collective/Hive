@@ -326,6 +326,13 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut editing_profile_id = use_signal(|| None::<i64>);
     let mut show_create_profile = use_signal(|| false);
     let mut new_profile_name = use_signal(|| String::new());
+    let mut create_profile_step = use_signal(|| 1); // Step 1: Name, Step 2-5: Model selection
+    let mut selected_generator = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
+    let mut selected_refiner = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
+    let mut selected_validator = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
+    let mut selected_curator = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
+    let mut show_model_browser = use_signal(|| false);
+    let mut current_stage_selection = use_signal(|| String::new());
     
     // Load existing keys and profiles from database on mount
     use_effect(move || {
@@ -702,93 +709,296 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
             }
         }
         
-        // Create Profile Dialog
+        // Create Profile Dialog - Multi-step wizard
         if *show_create_profile.read() {
             div {
                 class: "dialog-overlay",
                 style: "z-index: 1001;", // Higher z-index to appear above settings dialog
-                onclick: move |_| *show_create_profile.write() = false,
+                onclick: move |_| {
+                    *show_create_profile.write() = false;
+                    *create_profile_step.write() = 1;
+                    *new_profile_name.write() = String::new();
+                    *selected_generator.write() = None;
+                    *selected_refiner.write() = None;
+                    *selected_validator.write() = None;
+                    *selected_curator.write() = None;
+                },
                 
                 div {
                     class: "dialog",
-                    style: "width: 500px;",
+                    style: "width: 700px;",
                     onclick: move |evt| evt.stop_propagation(),
                     
                     div {
                         class: "dialog-header",
-                        h2 { "Create New Profile" }
+                        h2 { "Create New Profile - Step {create_profile_step.read()} of 5" }
                         button {
                             class: "dialog-close",
-                            onclick: move |_| *show_create_profile.write() = false,
+                            onclick: move |_| {
+                                *show_create_profile.write() = false;
+                                *create_profile_step.write() = 1;
+                                *new_profile_name.write() = String::new();
+                                *selected_generator.write() = None;
+                                *selected_refiner.write() = None;
+                                *selected_validator.write() = None;
+                                *selected_curator.write() = None;
+                            },
                             "×"
+                        }
+                    }
+                    
+                    // Progress indicator
+                    div {
+                        style: "padding: 15px 20px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
+                        div {
+                            style: "display: flex; justify-content: space-between; align-items: center;",
+                            for i in 1..=5 {
+                                div {
+                                    style: if i as i32 == *create_profile_step.read() {
+                                        "padding: 8px 12px; background: #007acc; color: white; border-radius: 4px; font-size: 12px; font-weight: 600;"
+                                    } else if i as i32 < *create_profile_step.read() {
+                                        "padding: 8px 12px; background: #4a5568; color: #a0aec0; border-radius: 4px; font-size: 12px;"
+                                    } else {
+                                        "padding: 8px 12px; background: #2d2d30; color: #666; border-radius: 4px; font-size: 12px;"
+                                    },
+                                    {match i {
+                                        1 => "1. Name",
+                                        2 => "2. Generator",
+                                        3 => "3. Refiner",
+                                        4 => "4. Validator",
+                                        5 => "5. Curator",
+                                        _ => ""
+                                    }}
+                                }
+                            }
                         }
                     }
                     
                     div {
                         class: "dialog-content",
-                        style: "padding: 20px;",
+                        style: "padding: 20px; min-height: 300px;",
                         
-                        div {
-                            class: "settings-field",
-                            label {
-                                class: "settings-label",
-                                "Profile Name"
-                            }
-                            input {
-                                class: "settings-input",
-                                r#type: "text",
-                                value: "{new_profile_name.read()}",
-                                placeholder: "Enter profile name",
-                                oninput: move |evt| *new_profile_name.write() = evt.value().clone(),
+                        // Step 1: Profile Name
+                        if *create_profile_step.read() == 1 {
+                            div {
+                                h3 {
+                                    style: "margin: 0 0 20px 0; color: #ffffff;",
+                                    "Choose a Profile Name"
+                                }
+                                p {
+                                    style: "margin-bottom: 20px; color: #cccccc; font-size: 14px;",
+                                    "Give your consensus profile a descriptive name that reflects its purpose."
+                                }
+                                
+                                div {
+                                    class: "settings-field",
+                                    label {
+                                        class: "settings-label",
+                                        "Profile Name"
+                                    }
+                                    input {
+                                        class: "settings-input",
+                                        r#type: "text",
+                                        value: "{new_profile_name.read()}",
+                                        placeholder: "e.g., Creative Writing, Code Review, Research Assistant",
+                                        oninput: move |evt| *new_profile_name.write() = evt.value().clone(),
+                                    }
+                                }
+                                
+                                div {
+                                    style: "margin-top: 30px; padding: 15px; background: #1e1e1e; border-radius: 6px;",
+                                    h4 {
+                                        style: "margin: 0 0 10px 0; color: #ffffff; font-size: 14px;",
+                                        "📋 What's Next?"
+                                    }
+                                    p {
+                                        style: "margin: 0; color: #cccccc; font-size: 13px; line-height: 1.6;",
+                                        "You'll select models for each stage of the consensus pipeline:"
+                                    }
+                                    ul {
+                                        style: "margin: 10px 0 0 20px; color: #cccccc; font-size: 13px;",
+                                        li { "🧠 Generator - Initial analysis and creative thinking" }
+                                        li { "⚡ Refiner - Technical enhancement and detail" }
+                                        li { "🔍 Validator - Fact-checking and quality assurance" }
+                                        li { "✨ Curator - Final polish and presentation" }
+                                    }
+                                }
                             }
                         }
                         
-                        p {
-                            style: "margin-top: 15px; color: #888; font-size: 13px;",
-                            "A new profile will be created with default model configurations. You can customize the models after creation."
+                        // Steps 2-5: Model Selection
+                        else if *create_profile_step.read() >= 2 && *create_profile_step.read() <= 5 {
+                            {
+                                let (stage_name, stage_key, current_selection) = match *create_profile_step.read() {
+                                    2 => ("Generator", "generator", selected_generator.clone()),
+                                    3 => ("Refiner", "refiner", selected_refiner.clone()),
+                                    4 => ("Validator", "validator", selected_validator.clone()),
+                                    5 => ("Curator", "curator", selected_curator.clone()),
+                                    _ => unreachable!()
+                                };
+                                
+                                rsx! {
+                                    div {
+                                        h3 {
+                                            style: "margin: 0 0 20px 0; color: #ffffff;",
+                                            "Select {stage_name} Model"
+                                        }
+                                        
+                                        if let Some(selected) = current_selection.read().as_ref() {
+                                            div {
+                                                style: "padding: 15px; background: #1e1e1e; border: 2px solid #007acc; border-radius: 6px; margin-bottom: 20px;",
+                                                h4 {
+                                                    style: "margin: 0 0 5px 0; color: #ffffff;",
+                                                    "✅ Selected: {selected.name}"
+                                                }
+                                                p {
+                                                    style: "margin: 0; color: #cccccc; font-size: 13px;",
+                                                    "{selected.provider_name} • {selected.openrouter_id}"
+                                                }
+                                                button {
+                                                    style: "margin-top: 10px; padding: 6px 12px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
+                                                    onclick: move |_| {
+                                                        *show_model_browser.write() = true;
+                                                        *current_stage_selection.write() = stage_key.to_string();
+                                                    },
+                                                    "Change Selection"
+                                                }
+                                            }
+                                        } else {
+                                            div {
+                                                style: "text-align: center; padding: 40px;",
+                                                p {
+                                                    style: "margin-bottom: 20px; color: #cccccc;",
+                                                    "No model selected yet. Click below to browse available models."
+                                                }
+                                                button {
+                                                    class: "button button-primary",
+                                                    style: "padding: 12px 24px; font-size: 16px;",
+                                                    onclick: move |_| {
+                                                        *show_model_browser.write() = true;
+                                                        *current_stage_selection.write() = stage_key.to_string();
+                                                    },
+                                                    "🔍 Browse Models"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     
                     div {
                         class: "dialog-footer",
-                        button {
-                            class: "button button-secondary",
-                            onclick: move |_| {
-                                *show_create_profile.write() = false;
-                                *new_profile_name.write() = String::new();
-                            },
-                            "Cancel"
-                        }
-                        button {
-                            class: "button button-primary",
-                            disabled: new_profile_name.read().trim().is_empty(),
-                            onclick: move |_| {
-                                let profile_name = new_profile_name.read().trim().to_string();
-                                if !profile_name.is_empty() {
-                                    *profiles_loading.write() = true;
-                                    *show_create_profile.write() = false;
-                                    
-                                    spawn(async move {
-                                        // Create profile with default models
-                                        match create_custom_profile(&profile_name).await {
-                                            Ok(_) => {
-                                                tracing::info!("Created profile: {}", profile_name);
-                                                // Reload profiles
-                                                if let Ok(loaded_profiles) = load_existing_profiles().await {
-                                                    *profiles.write() = loaded_profiles;
-                                                }
-                                            }
-                                            Err(e) => {
-                                                tracing::error!("Failed to create profile: {}", e);
-                                            }
-                                        }
-                                        *profiles_loading.write() = false;
-                                        *new_profile_name.write() = String::new();
-                                    });
+                        div {
+                            style: "display: flex; justify-content: space-between; width: 100%;",
+                            
+                            // Back button
+                            if *create_profile_step.read() > 1 {
+                                button {
+                                    class: "button button-secondary",
+                                    onclick: move |_| {
+                                        *create_profile_step.write() -= 1;
+                                    },
+                                    "← Back"
                                 }
-                            },
-                            "Create Profile"
+                            } else {
+                                div {} // Empty spacer
+                            }
+                            
+                            // Next/Create button
+                            if *create_profile_step.read() < 5 {
+                                button {
+                                    class: "button button-primary",
+                                    disabled: if *create_profile_step.read() == 1 {
+                                        new_profile_name.read().trim().is_empty()
+                                    } else {
+                                        match *create_profile_step.read() {
+                                            2 => selected_generator.read().is_none(),
+                                            3 => selected_refiner.read().is_none(),
+                                            4 => selected_validator.read().is_none(),
+                                            _ => false
+                                        }
+                                    },
+                                    onclick: move |_| {
+                                        *create_profile_step.write() += 1;
+                                    },
+                                    "Next →"
+                                }
+                            } else {
+                                button {
+                                    class: "button button-primary",
+                                    disabled: selected_curator.read().is_none(),
+                                    onclick: move |_| {
+                                        let profile_name = new_profile_name.read().trim().to_string();
+                                        let gen = selected_generator.read().clone();
+                                        let ref_m = selected_refiner.read().clone();
+                                        let val = selected_validator.read().clone();
+                                        let cur = selected_curator.read().clone();
+                                        
+                                        if !profile_name.is_empty() && gen.is_some() && ref_m.is_some() && val.is_some() && cur.is_some() {
+                                            *profiles_loading.write() = true;
+                                            *show_create_profile.write() = false;
+                                            
+                                            spawn(async move {
+                                                // Create profile with selected models
+                                                match create_custom_profile_with_models(
+                                                    &profile_name,
+                                                    gen.unwrap().internal_id,
+                                                    ref_m.unwrap().internal_id,
+                                                    val.unwrap().internal_id,
+                                                    cur.unwrap().internal_id
+                                                ).await {
+                                                    Ok(_) => {
+                                                        tracing::info!("Created profile: {}", profile_name);
+                                                        // Reload profiles
+                                                        if let Ok(loaded_profiles) = load_existing_profiles().await {
+                                                            *profiles.write() = loaded_profiles;
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::error!("Failed to create profile: {}", e);
+                                                    }
+                                                }
+                                                *profiles_loading.write() = false;
+                                                *new_profile_name.write() = String::new();
+                                                *create_profile_step.write() = 1;
+                                                *selected_generator.write() = None;
+                                                *selected_refiner.write() = None;
+                                                *selected_validator.write() = None;
+                                                *selected_curator.write() = None;
+                                            });
+                                        }
+                                    },
+                                    "Create Profile"
+                                }
+                            }
                         }
+                    }
+                }
+            }
+        }
+        
+        // Model Browser Dialog
+        if *show_model_browser.read() {
+            use crate::desktop::model_browser::ModelBrowserDialog;
+            ModelBrowserDialog {
+                show_browser: show_model_browser.clone(),
+                stage_name: match current_stage_selection.read().as_str() {
+                    "generator" => "Generator",
+                    "refiner" => "Refiner",
+                    "validator" => "Validator",
+                    "curator" => "Curator",
+                    _ => "Model"
+                }.to_string(),
+                stage_key: current_stage_selection.read().clone(),
+                on_select: move |model| {
+                    match current_stage_selection.read().as_str() {
+                        "generator" => *selected_generator.write() = Some(model),
+                        "refiner" => *selected_refiner.write() = Some(model),
+                        "validator" => *selected_validator.write() = Some(model),
+                        "curator" => *selected_curator.write() = Some(model),
+                        _ => {}
                     }
                 }
             }
@@ -864,6 +1074,8 @@ fn ProfileDetailCard(
     let mut refiner_model = use_signal(|| profile.refiner_model.clone().unwrap_or_default());
     let mut validator_model = use_signal(|| profile.validator_model.clone().unwrap_or_default());
     let mut curator_model = use_signal(|| profile.curator_model.clone().unwrap_or_default());
+    let mut show_model_browser = use_signal(|| false);
+    let mut editing_stage = use_signal(|| String::new());
     
     rsx! {
         div {
@@ -954,12 +1166,13 @@ fn ProfileDetailCard(
                         "Generator:"
                     }
                     if is_editing {
-                        input {
-                            class: "model-input",
-                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
-                            value: "{generator_model.read()}",
-                            oninput: move |evt| *generator_model.write() = evt.value(),
-                            placeholder: "e.g., openai/gpt-4-turbo"
+                        button {
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px; cursor: pointer; text-align: left; width: 100%;",
+                            onclick: move |_| {
+                                *show_model_browser.write() = true;
+                                *editing_stage.write() = "generator".to_string();
+                            },
+                            "{generator_model.read()}"
                         }
                     } else {
                         span {
@@ -977,12 +1190,13 @@ fn ProfileDetailCard(
                         "Refiner:"
                     }
                     if is_editing {
-                        input {
-                            class: "model-input",
-                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
-                            value: "{refiner_model.read()}",
-                            oninput: move |evt| *refiner_model.write() = evt.value(),
-                            placeholder: "e.g., anthropic/claude-3-sonnet"
+                        button {
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px; cursor: pointer; text-align: left; width: 100%;",
+                            onclick: move |_| {
+                                *show_model_browser.write() = true;
+                                *editing_stage.write() = "refiner".to_string();
+                            },
+                            "{refiner_model.read()}"
                         }
                     } else {
                         span {
@@ -1000,12 +1214,13 @@ fn ProfileDetailCard(
                         "Validator:"
                     }
                     if is_editing {
-                        input {
-                            class: "model-input",
-                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
-                            value: "{validator_model.read()}",
-                            oninput: move |evt| *validator_model.write() = evt.value(),
-                            placeholder: "e.g., google/gemini-pro"
+                        button {
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px; cursor: pointer; text-align: left; width: 100%;",
+                            onclick: move |_| {
+                                *show_model_browser.write() = true;
+                                *editing_stage.write() = "validator".to_string();
+                            },
+                            "{validator_model.read()}"
                         }
                     } else {
                         span {
@@ -1023,18 +1238,44 @@ fn ProfileDetailCard(
                         "Curator:"
                     }
                     if is_editing {
-                        input {
-                            class: "model-input",
-                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px;",
-                            value: "{curator_model.read()}",
-                            oninput: move |evt| *curator_model.write() = evt.value(),
-                            placeholder: "e.g., mistralai/mixtral-8x7b"
+                        button {
+                            style: "padding: 6px 10px; background: #1e1e1e; border: 1px solid #3e3e42; border-radius: 4px; color: #ffffff; font-size: 13px; cursor: pointer; text-align: left; width: 100%;",
+                            onclick: move |_| {
+                                *show_model_browser.write() = true;
+                                *editing_stage.write() = "curator".to_string();
+                            },
+                            "{curator_model.read()}"
                         }
                     } else {
                         span {
                             style: "color: #858585; font-size: 13px;",
                             "{profile.curator_model.as_ref().unwrap_or(&\"Not configured\".to_string())}"
                         }
+                    }
+                }
+            }
+        }
+        
+        // Model Browser Dialog for editing
+        if *show_model_browser.read() {
+            use crate::desktop::model_browser::ModelBrowserDialog;
+            ModelBrowserDialog {
+                show_browser: show_model_browser.clone(),
+                stage_name: match editing_stage.read().as_str() {
+                    "generator" => "Generator",
+                    "refiner" => "Refiner",
+                    "validator" => "Validator",
+                    "curator" => "Curator",
+                    _ => "Model"
+                }.to_string(),
+                stage_key: editing_stage.read().clone(),
+                on_select: move |model| {
+                    match editing_stage.read().as_str() {
+                        "generator" => *generator_model.write() = model.openrouter_id,
+                        "refiner" => *refiner_model.write() = model.openrouter_id,
+                        "validator" => *validator_model.write() = model.openrouter_id,
+                        "curator" => *curator_model.write() = model.openrouter_id,
+                        _ => {}
                     }
                 }
             }
@@ -2757,6 +2998,72 @@ async fn create_custom_profile(profile_name: &str) -> anyhow::Result<()> {
     )?;
     
     tracing::info!("Created custom profile '{}' with ID: {}", profile_name, profile_id);
+    
+    Ok(())
+}
+
+/// Create a custom profile with specific model selections using internal IDs
+async fn create_custom_profile_with_models(
+    profile_name: &str,
+    generator_internal_id: i64,
+    refiner_internal_id: i64,
+    validator_internal_id: i64,
+    curator_internal_id: i64,
+) -> anyhow::Result<()> {
+    use crate::core::database::DatabaseManager;
+    use crate::core::config::get_hive_config_dir;
+    use uuid::Uuid;
+    
+    let db_path = get_hive_config_dir().join("hive-ai.db");
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+    
+    let db = DatabaseManager::new(db_config).await?;
+    let conn = db.get_connection()?;
+    
+    // Generate a UUID for the profile
+    let profile_id = Uuid::new_v4().to_string();
+    
+    // First, get the OpenRouter IDs for the selected internal IDs
+    let mut get_model_id = |internal_id: i64| -> anyhow::Result<String> {
+        let openrouter_id: String = conn.query_row(
+            "SELECT openrouter_id FROM openrouter_models WHERE internal_id = ?",
+            rusqlite::params![internal_id],
+            |row| row.get(0)
+        )?;
+        Ok(openrouter_id)
+    };
+    
+    let generator_model = get_model_id(generator_internal_id)?;
+    let refiner_model = get_model_id(refiner_internal_id)?;
+    let validator_model = get_model_id(validator_internal_id)?;
+    let curator_model = get_model_id(curator_internal_id)?;
+    
+    // Create the profile with selected models
+    conn.execute(
+        "INSERT INTO consensus_profiles (id, profile_name, generator_model, refiner_model, validator_model, curator_model, created_at, updated_at) 
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))",
+        rusqlite::params![
+            &profile_id,
+            profile_name,
+            generator_model,
+            refiner_model,
+            validator_model,
+            curator_model,
+        ]
+    )?;
+    
+    tracing::info!("Created custom profile '{}' with ID: {} and models: G={}, R={}, V={}, C={}", 
+        profile_name, profile_id, generator_model, refiner_model, validator_model, curator_model);
     
     Ok(())
 }
