@@ -63,13 +63,13 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
 );
 
--- Topics: Searchable topic extraction
+-- Topics: Searchable topic extraction (TypeScript compatibility)
 CREATE TABLE IF NOT EXISTS conversation_topics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id TEXT NOT NULL,
     topic TEXT NOT NULL,
-    confidence REAL DEFAULT 1.0,
-    is_primary INTEGER DEFAULT 0,            -- Main topic flag
+    weight REAL DEFAULT 1.0,                  -- Matches TypeScript schema
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
 );
 
@@ -148,6 +148,30 @@ CREATE TABLE IF NOT EXISTS curator_truths (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
 );
 
+-- Knowledge conversations for authoritative answers (TypeScript compatibility)
+CREATE TABLE IF NOT EXISTS knowledge_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    final_answer TEXT NOT NULL,
+    source_of_truth TEXT NOT NULL, -- Curator output
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+);
+
+-- Conversation threading for follow-up detection (TypeScript compatibility)
+CREATE TABLE IF NOT EXISTS conversation_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    child_conversation_id TEXT NOT NULL,
+    parent_conversation_id TEXT NOT NULL,
+    thread_type TEXT CHECK (thread_type IN ('follow_up', 'clarification', 'list_reference', 'continuation')),
+    reference_text TEXT,
+    confidence_score REAL DEFAULT 1.0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (child_conversation_id) REFERENCES conversations(id),
+    FOREIGN KEY (parent_conversation_id) REFERENCES conversations(id)
+);
+
 -- Performance indices for fast querying
 CREATE INDEX IF NOT EXISTS idx_conversations_created ON conversations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_conversations_question ON conversations(question);
@@ -170,6 +194,11 @@ CREATE INDEX IF NOT EXISTS idx_consensus_metrics_confidence ON consensus_metrics
 CREATE INDEX IF NOT EXISTS idx_curator_truths_conv ON curator_truths(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_curator_truths_topic ON curator_truths(topic_summary);
 CREATE INDEX IF NOT EXISTS idx_curator_truths_confidence ON curator_truths(confidence_score DESC);
+CREATE INDEX IF NOT EXISTS idx_knowledge_conversations_conv ON knowledge_conversations(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_conversations_created ON knowledge_conversations(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversation_threads_child ON conversation_threads(child_conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_threads_parent ON conversation_threads(parent_conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_threads_type ON conversation_threads(thread_type);
 
 -- Full-text search virtual table
 CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(

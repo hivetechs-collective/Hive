@@ -973,15 +973,15 @@ impl ConsensusPipeline {
         tracing::debug!("Building memory context for query: {}", query);
         let mut conn = database.get_connection()?;
         let query = query.to_string();
-        
+
         // Use spawn_blocking for database queries
         let results = tokio::task::spawn_blocking(move || -> Result<String> {
             let mut context_parts = Vec::new();
-            
+
             // 1. Get recent context (past 24 hours) - matching TypeScript implementation
             let twenty_four_hours_ago = (Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
             tracing::debug!("Looking for memories since: {}", twenty_four_hours_ago);
-            
+
             let mut stmt = conn.prepare(
                 "SELECT ct.curator_output, kc.question, ct.confidence_score, ct.created_at
                  FROM curator_truths ct
@@ -990,7 +990,7 @@ impl ConsensusPipeline {
                  ORDER BY ct.created_at DESC, ct.confidence_score DESC
                  LIMIT 3"
             )?;
-            
+
             let recent_results = stmt.query_map([&twenty_four_hours_ago], |row| {
                 Ok((
                     row.get::<_, String>(0)?, // curator_output
@@ -999,14 +999,14 @@ impl ConsensusPipeline {
                     row.get::<_, String>(3)?, // created_at
                 ))
             })?;
-            
+
             let mut recent_memories = Vec::new();
             for result in recent_results {
                 recent_memories.push(result?);
             }
-            
+
             tracing::debug!("Found {} recent memories", recent_memories.len());
-            
+
             if !recent_memories.is_empty() {
                 context_parts.push("## Recent Context (24h):".to_string());
                 for (i, (answer, question, confidence, _)) in recent_memories.iter().enumerate() {
@@ -1019,7 +1019,7 @@ impl ConsensusPipeline {
             } else {
                 tracing::debug!("No recent memories found in the past 24 hours");
             }
-            
+
             // 2. Get thematic context - simple keyword matching for now
             // TODO: Implement proper semantic search with embeddings
             let keywords: Vec<String> = query
@@ -1028,13 +1028,13 @@ impl ConsensusPipeline {
                 .take(3)
                 .map(|w| format!("%{}%", w.to_lowercase()))
                 .collect();
-            
+
             if !keywords.is_empty() {
                 let keyword_query = keywords.iter()
                     .map(|_| "curator_output LIKE ?")
                     .collect::<Vec<_>>()
                     .join(" OR ");
-                
+
                 let full_query = format!(
                     "SELECT DISTINCT ct.curator_output, kc.question, ct.confidence_score, ct.created_at
                      FROM curator_truths ct
@@ -1045,13 +1045,13 @@ impl ConsensusPipeline {
                     keyword_query,
                     keywords.len() + 1
                 );
-                
+
                 let mut stmt = conn.prepare(&full_query)?;
                 let mut params: Vec<&dyn rusqlite::ToSql> = keywords.iter()
                     .map(|k| k as &dyn rusqlite::ToSql)
                     .collect();
                 params.push(&twenty_four_hours_ago);
-                
+
                 let thematic_results = stmt.query_map(&params[..], |row| {
                     Ok((
                         row.get::<_, String>(0)?, // curator_output
@@ -1060,12 +1060,12 @@ impl ConsensusPipeline {
                         row.get::<_, String>(3)?, // created_at (for temporal ordering)
                     ))
                 })?;
-                
+
                 let mut thematic_memories = Vec::new();
                 for result in thematic_results {
                     thematic_memories.push(result?);
                 }
-                
+
                 if !thematic_memories.is_empty() {
                     if !context_parts.is_empty() {
                         context_parts.push("".to_string()); // Empty line separator
@@ -1079,10 +1079,10 @@ impl ConsensusPipeline {
                     }
                 }
             }
-            
+
             Ok(context_parts.join("\n"))
         }).await??;
-        
+
         Ok(results)
     }
 }
