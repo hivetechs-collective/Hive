@@ -269,13 +269,19 @@ impl ConsensusPipeline {
             self.callbacks.on_stage_start(stage, &model)?;
 
             // Run the stage
+            // Only provide memory context to Generator stage (first stage)
+            let stage_context = match stage {
+                Stage::Generator => full_context.as_deref(),
+                _ => None, // Other stages don't get memory context directly
+            };
+            
             let stage_result = self
                 .run_single_stage(
                     stage,
                     stage_handler.as_ref(),
                     question,
                     previous_answer.as_deref(),
-                    full_context.as_deref(),
+                    stage_context,
                     &conversation_id,
                     &model,
                 )
@@ -978,20 +984,35 @@ impl ConsensusPipeline {
         let results = tokio::task::spawn_blocking(move || -> Result<String> {
             let mut context_parts = Vec::new();
 
-            // 1. Get recent context (past 24 hours) - matching TypeScript implementation
+            // TEMPORAL PRIORITY SYSTEM (matches TypeScript implementation)
+            // Priority 1: Recent conversations (24h) - NEWEST FIRST
             let twenty_four_hours_ago = (Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
-            tracing::debug!("Looking for memories since: {}", twenty_four_hours_ago);
+            tracing::debug!("Looking for recent curator knowledge since: {}", twenty_four_hours_ago);
 
+            // First check if this is a follow-up query (simple pattern matching)
+            let query_lower = query.to_lowercase();
+            let is_follow_up = [
+                "give me", "tell me more", "can you explain", "show me", "what about",
+                "examples", "code example", "how does", " it ", " that ", " this ",
+                " those ", " these ", " them ", " they "
+            ].iter().any(|pattern| query_lower.contains(pattern));
+            
+            tracing::debug!("Is follow-up query: {}", is_follow_up);
+
+            // TEMPORAL SEARCH: One conversation at a time, most recent first
+            // Step 1: Search backwards through time, one conversation at a time
+            let mut found_context = false;
+            let mut selected_memory: Option<(String, String, f64, String)> = None;
+            
+            // Get ALL conversations from the last 24 hours, ordered by recency
             let mut stmt = conn.prepare(
-                "SELECT ct.curator_output, kc.question, ct.confidence_score, ct.created_at
-                 FROM curator_truths ct
-                 JOIN knowledge_conversations kc ON kc.conversation_id = ct.conversation_id
-                 WHERE ct.created_at > ?1
-                 ORDER BY ct.created_at DESC, ct.confidence_score DESC
-                 LIMIT 3"
+                "SELECT source_of_truth, question, 1.0 as confidence_score, created_at
+                 FROM knowledge_conversations
+                 WHERE created_at > ?1
+                 ORDER BY created_at DESC"
             )?;
 
-            let recent_results = stmt.query_map([&twenty_four_hours_ago], |row| {
+            let all_recent_results = stmt.query_map([&twenty_four_hours_ago], |row| {
                 Ok((
                     row.get::<_, String>(0)?, // curator_output
                     row.get::<_, String>(1)?, // question
@@ -1000,83 +1021,200 @@ impl ConsensusPipeline {
                 ))
             })?;
 
-            let mut recent_memories = Vec::new();
-            for result in recent_results {
-                recent_memories.push(result?);
-            }
-
-            tracing::debug!("Found {} recent memories", recent_memories.len());
-
-            if !recent_memories.is_empty() {
-                context_parts.push("## Recent Context (24h):".to_string());
-                for (i, (answer, question, confidence, _)) in recent_memories.iter().enumerate() {
-                    tracing::debug!("Recent memory {}: Q: {}", i + 1, question);
-                    context_parts.push(format!(
-                        "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
-                        i + 1, question, answer, confidence * 100.0
-                    ));
+            // Search one by one until we find relevant context
+            for result in all_recent_results {
+                let (curator_output, question, confidence, created_at) = result?;
+                
+                // For follow-up queries, the most recent is ALWAYS relevant
+                if is_follow_up && selected_memory.is_none() {
+                    tracing::debug!("Follow-up detected - using most recent conversation: {}", question);
+                    selected_memory = Some((curator_output, question, confidence, created_at));
+                    found_context = true;
+                    break;
                 }
-            } else {
-                tracing::debug!("No recent memories found in the past 24 hours");
+                
+                // For non-follow-up, check if this conversation might be relevant
+                let query_words: Vec<String> = query.to_lowercase()
+                    .split_whitespace()
+                    .filter(|w| w.len() > 2)
+                    .map(|w| w.to_string())
+                    .collect();
+                
+                let conversation_relevant = query_words.iter().any(|word| {
+                    question.to_lowercase().contains(word) || 
+                    curator_output.to_lowercase().contains(word)
+                });
+                
+                if conversation_relevant {
+                    tracing::debug!("Found relevant conversation: {}", question);
+                    selected_memory = Some((curator_output, question, confidence, created_at));
+                    found_context = true;
+                    break;
+                }
+            }
+            
+            // If we found context in recent conversations, use it
+            if found_context && selected_memory.is_some() {
+                let (curator_output, question, _, created_at) = selected_memory.unwrap();
+                let date = chrono::DateTime::parse_from_rfc3339(&created_at)
+                    .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                    .unwrap_or_else(|_| "recent".to_string());
+                
+                context_parts.push("🧠 AUTHORITATIVE MEMORY CONTEXT:".to_string());
+                context_parts.push("Here is the most relevant recent conversation:".to_string());
+                context_parts.push("".to_string());
+                context_parts.push(format!(
+                    "From {}: Question: {}\n\nVerified Answer:\n{}\n\n---",
+                    date, question, curator_output
+                ));
+                context_parts.push("".to_string());
+                
+                if is_follow_up {
+                    context_parts.push("🚨 FOLLOW-UP DETECTED: This is a follow-up question.".to_string());
+                    context_parts.push("You MUST provide examples/clarification about the topic above.".to_string());
+                    context_parts.push("Do NOT reference any other topics or previous conversations.".to_string());
+                } else {
+                    context_parts.push("⚡ Use this context to inform your response.".to_string());
+                }
+                
+                return Ok(context_parts.join("\n"));
+            }
+            
+            tracing::debug!("No relevant context found in recent 24h conversations, falling back to thematic search");
+            
+            // If follow-up but no 24h context, try broader window (72 hours)
+            if is_follow_up {
+                let seventy_two_hours_ago = (Utc::now() - chrono::Duration::hours(72)).to_rfc3339();
+                tracing::debug!("Follow-up detected, checking broader window (72h)");
+                
+                let mut stmt = conn.prepare(
+                    "SELECT source_of_truth, question, 1.0 as confidence_score, created_at
+                     FROM knowledge_conversations
+                     WHERE created_at > ?1 AND created_at <= ?2
+                     ORDER BY created_at DESC
+                     LIMIT 3"
+                )?;
+                
+                let broader_results = stmt.query_map(
+                    rusqlite::params![&seventy_two_hours_ago, &twenty_four_hours_ago], 
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?, // source_of_truth (curator output)  
+                            row.get::<_, String>(1)?, // question
+                            row.get::<_, f64>(2)?,    // confidence_score
+                            row.get::<_, String>(3)?, // created_at
+                        ))
+                    }
+                )?;
+                
+                let mut broader_memories = Vec::new();
+                for result in broader_results {
+                    broader_memories.push(result?);
+                }
+                
+                if !broader_memories.is_empty() {
+                    context_parts.push("🔄 RECENT FOLLOW-UP CONTEXT (72h):".to_string());
+                    for (i, (curator_output, question, _confidence, created_at)) in broader_memories.iter().enumerate() {
+                        let date = chrono::DateTime::parse_from_rfc3339(created_at)
+                            .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                            .unwrap_or_else(|_| "recent".to_string());
+                        
+                        context_parts.push(format!(
+                            "RECENT CONVERSATION {} (from {}):\nQuestion: {}\n\nAnswer:\n{}\n\n---",
+                            i + 1, date, question, curator_output
+                        ));
+                    }
+                    
+                    return Ok(context_parts.join("\n"));
+                }
             }
 
-            // 2. Get thematic context - simple keyword matching for now
-            // TODO: Implement proper semantic search with embeddings
+            // 2. THEMATIC SEARCH: Search ALL memory, no time limits, but ordered by recency
+            tracing::debug!("Starting thematic search for: {}", query);
             let keywords: Vec<String> = query
                 .split_whitespace()
                 .filter(|w| w.len() > 3)
-                .take(3)
+                .take(5) // Take more keywords for better matching
                 .map(|w| format!("%{}%", w.to_lowercase()))
                 .collect();
 
             if !keywords.is_empty() {
                 let keyword_query = keywords.iter()
-                    .map(|_| "curator_output LIKE ?")
+                    .map(|_| "(source_of_truth LIKE ? OR question LIKE ?)")
                     .collect::<Vec<_>>()
                     .join(" OR ");
 
+                // Search ALL history, no time limit, ordered by recency
                 let full_query = format!(
-                    "SELECT DISTINCT ct.curator_output, kc.question, ct.confidence_score, ct.created_at
-                     FROM curator_truths ct
-                     JOIN knowledge_conversations kc ON kc.conversation_id = ct.conversation_id
-                     WHERE ({}) AND ct.created_at <= ?{}
-                     ORDER BY ct.created_at DESC, ct.confidence_score DESC
-                     LIMIT 2",
-                    keyword_query,
-                    keywords.len() + 1
+                    "SELECT DISTINCT source_of_truth, question, 0.8 as confidence_score, created_at
+                     FROM knowledge_conversations
+                     WHERE {}
+                     ORDER BY created_at DESC",
+                    keyword_query
                 );
 
                 let mut stmt = conn.prepare(&full_query)?;
-                let mut params: Vec<&dyn rusqlite::ToSql> = keywords.iter()
-                    .map(|k| k as &dyn rusqlite::ToSql)
-                    .collect();
-                params.push(&twenty_four_hours_ago);
+                
+                // Double the keywords for both source_of_truth and question matching
+                let mut params: Vec<&dyn rusqlite::ToSql> = Vec::new();
+                for keyword in &keywords {
+                    params.push(keyword as &dyn rusqlite::ToSql);
+                    params.push(keyword as &dyn rusqlite::ToSql);
+                }
 
                 let thematic_results = stmt.query_map(&params[..], |row| {
                     Ok((
                         row.get::<_, String>(0)?, // curator_output
                         row.get::<_, String>(1)?, // question
                         row.get::<_, f64>(2)?,    // confidence_score
-                        row.get::<_, String>(3)?, // created_at (for temporal ordering)
+                        row.get::<_, String>(3)?, // created_at
                     ))
                 })?;
 
-                let mut thematic_memories = Vec::new();
+                // Process thematic results one by one, most recent first
+                let mut found_thematic = false;
                 for result in thematic_results {
-                    thematic_memories.push(result?);
-                }
-
-                if !thematic_memories.is_empty() {
-                    if !context_parts.is_empty() {
-                        context_parts.push("".to_string()); // Empty line separator
+                    let (curator_output, question, _, created_at) = result?;
+                    
+                    // Skip if this was already checked in temporal search
+                    let created_dt = chrono::DateTime::parse_from_rfc3339(&created_at)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .unwrap_or_else(|_| chrono::Utc::now());
+                    if created_dt > chrono::Utc::now() - chrono::Duration::hours(24) {
+                        continue; // Already checked in temporal search
                     }
-                    context_parts.push("## Related Context:".to_string());
-                    for (i, (answer, question, confidence, _created_at)) in thematic_memories.iter().enumerate() {
+                    
+                    // For thematic search, be more selective - require stronger match
+                    let strong_match = keywords.iter()
+                        .filter(|k| k.len() > 5) // Only check meaningful keywords
+                        .any(|keyword| {
+                            let clean_keyword = keyword.replace("%", "").to_lowercase();
+                            question.to_lowercase().contains(&clean_keyword) ||
+                            curator_output.to_lowercase().contains(&clean_keyword)
+                        });
+                    
+                    if strong_match {
+                        tracing::debug!("Found thematic match: {}", question);
+                        let date = created_dt.format("%Y-%m-%d").to_string();
+                        
+                        context_parts.push("📚 THEMATIC CONTEXT:".to_string());
                         context_parts.push(format!(
-                            "{}. Q: {}\n   A: {} (confidence: {:.1}%)",
-                            i + 1, question, answer, confidence * 100.0
+                            "Related conversation from {}: Question: {}\n\nAnswer:\n{}\n\n---",
+                            date, question, curator_output
                         ));
+                        context_parts.push("".to_string());
+                        context_parts.push("⚡ This is older context that may be relevant to your query.".to_string());
+                        
+                        found_thematic = true;
+                        break; // Use only the most recent thematic match
                     }
+                }
+                
+                if !found_thematic && is_follow_up {
+                    // For follow-ups with no context found, provide a clear message
+                    context_parts.push("⚠️ NO RECENT CONTEXT FOUND".to_string());
+                    context_parts.push("This appears to be a follow-up question, but no recent conversation context was found.".to_string());
+                    context_parts.push("Please provide a complete, standalone answer.".to_string());
                 }
             }
 
