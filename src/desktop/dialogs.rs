@@ -326,12 +326,12 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut editing_profile_id = use_signal(|| None::<i64>);
     let mut show_create_profile = use_signal(|| false);
     let mut new_profile_name = use_signal(|| String::new());
-    let mut create_profile_step = use_signal(|| 1); // Step 1: Name, Step 2-5: Model selection
+    let mut create_profile_step = use_signal(|| 1); // Step 1: Name, Step 2-5: Model selection, Step 6: Confirmation
     let mut selected_generator = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
     let mut selected_refiner = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
     let mut selected_validator = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
     let mut selected_curator = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
-    let mut show_model_browser = use_signal(|| false);
+    let mut show_embedded_browser = use_signal(|| false);
     let mut current_stage_selection = use_signal(|| String::new());
     
     // Load existing keys and profiles from database on mount
@@ -568,6 +568,19 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                     tracing::info!("Delete profile {} clicked", profile_id);
                                                     // TODO: Implement delete with confirmation
                                                 },
+                                                on_reload_profiles: {
+                                                    let mut profiles = profiles.clone();
+                                                    let mut profiles_loading = profiles_loading.clone();
+                                                    move |_| {
+                                                        *profiles_loading.write() = true;
+                                                        spawn(async move {
+                                                            if let Ok(loaded_profiles) = load_existing_profiles().await {
+                                                                *profiles.write() = loaded_profiles;
+                                                            }
+                                                            *profiles_loading.write() = false;
+                                                        });
+                                                    }
+                                                },
                                                 is_editing: *editing_profile_id.read() == Some(profile.id),
                                             }
                                         }
@@ -731,7 +744,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                     
                     div {
                         class: "dialog-header",
-                        h2 { "Create New Profile - Step {create_profile_step.read()} of 5" }
+                        h2 { "🐝 Create New Profile" }
                         button {
                             class: "dialog-close",
                             onclick: move |_| {
@@ -754,12 +767,15 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             style: "display: flex; justify-content: space-between; align-items: center;",
                             for i in 1..=5 {
                                 div {
-                                    style: if i as i32 == *create_profile_step.read() {
-                                        "padding: 8px 12px; background: #007acc; color: white; border-radius: 4px; font-size: 12px; font-weight: 600;"
-                                    } else if i as i32 < *create_profile_step.read() {
-                                        "padding: 8px 12px; background: #4a5568; color: #a0aec0; border-radius: 4px; font-size: 12px;"
-                                    } else {
-                                        "padding: 8px 12px; background: #2d2d30; color: #666; border-radius: 4px; font-size: 12px;"
+                                    style: {
+                                        let step = *create_profile_step.read();
+                                        if i as i32 == step {
+                                            "padding: 8px 12px; background: #007acc; color: white; border-radius: 4px; font-size: 12px; font-weight: 600;"
+                                        } else if (i as i32) < step {
+                                            "padding: 8px 12px; background: #4a5568; color: #a0aec0; border-radius: 4px; font-size: 12px;"
+                                        } else {
+                                            "padding: 8px 12px; background: #2d2d30; color: #666; border-radius: 4px; font-size: 12px;"
+                                        }
                                     },
                                     {match i {
                                         1 => "1. Name",
@@ -776,229 +792,438 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                     
                     div {
                         class: "dialog-content",
-                        style: "padding: 20px; min-height: 300px;",
+                        style: "padding: 20px; min-height: 400px; max-height: 70vh; overflow-y: auto;",
                         
-                        // Step 1: Profile Name
-                        if *create_profile_step.read() == 1 {
+                        // Toggle between profile form and model browser
+                        if *show_embedded_browser.read() {
+                            // Embedded model browser
                             div {
-                                h3 {
-                                    style: "margin: 0 0 20px 0; color: #ffffff;",
-                                    "Choose a Profile Name"
-                                }
-                                p {
-                                    style: "margin-bottom: 20px; color: #cccccc; font-size: 14px;",
-                                    "Give your consensus profile a descriptive name that reflects its purpose."
+                                style: "height: 100%;",
+                                
+                                // Header with back button
+                                div {
+                                    style: "padding: 15px; border-bottom: 1px solid #3e3e42; background: #2d2d30;",
+                                    div {
+                                        style: "display: flex; align-items: center; gap: 15px;",
+                                        button {
+                                            class: "button button-secondary",
+                                            style: "padding: 8px 12px;",
+                                            onclick: move |_| *show_embedded_browser.write() = false,
+                                            "← Back to Profile"
+                                        }
+                                        h3 {
+                                            style: "margin: 0; color: #ffffff;",
+                                            "Select Model for ",
+                                            {match current_stage_selection.read().as_str() {
+                                                "generator" => "Generator Stage",
+                                                "refiner" => "Refiner Stage", 
+                                                "validator" => "Validator Stage",
+                                                "curator" => "Curator Stage",
+                                                _ => "Unknown Stage"
+                                            }}
+                                        }
+                                    }
                                 }
                                 
+                                // Embedded model browser content (simplified inline)
+                                div {
+                                    style: "height: calc(100% - 70px); overflow-y: auto; padding: 15px;",
+                                    EmbeddedModelBrowser {
+                                        stage_key: current_stage_selection.read().clone(),
+                                        on_select: move |model| {
+                                            // Update the appropriate stage selection
+                                            match current_stage_selection.read().as_str() {
+                                                "generator" => *selected_generator.write() = Some(model),
+                                                "refiner" => *selected_refiner.write() = Some(model),
+                                                "validator" => *selected_validator.write() = Some(model),
+                                                "curator" => *selected_curator.write() = Some(model),
+                                                _ => {}
+                                            }
+                                            // Go back to profile form
+                                            *show_embedded_browser.write() = false;
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // Profile creation form
+                            div {
+                                // Profile Name Section
+                                div {
+                                style: "margin-bottom: 30px;",
+                                h3 {
+                                    style: "margin: 0 0 15px 0; color: #ffffff; font-size: 18px;",
+                                    "📝 Profile Name"
+                                }
                                 div {
                                     class: "settings-field",
-                                    label {
-                                        class: "settings-label",
-                                        "Profile Name"
-                                    }
                                     input {
                                         class: "settings-input",
                                         r#type: "text",
                                         value: "{new_profile_name.read()}",
                                         placeholder: "e.g., Creative Writing, Code Review, Research Assistant",
+                                        style: "width: 100%; padding: 12px; font-size: 16px;",
                                         oninput: move |evt| *new_profile_name.write() = evt.value().clone(),
                                     }
                                 }
+                            }
+                            
+                            // Model Selection Section
+                            div {
+                                h3 {
+                                    style: "margin: 0 0 20px 0; color: #ffffff; font-size: 18px;",
+                                    "🎯 Select Models for Consensus Pipeline"
+                                }
+                                p {
+                                    style: "margin-bottom: 25px; color: #cccccc; font-size: 14px; line-height: 1.5;",
+                                    "Choose a model for each stage of the 4-stage consensus pipeline. Each stage serves a specific purpose in creating high-quality responses."
+                                }
                                 
+                                // Generator Stage
                                 div {
-                                    style: "margin-top: 30px; padding: 15px; background: #1e1e1e; border-radius: 6px;",
-                                    h4 {
-                                        style: "margin: 0 0 10px 0; color: #ffffff; font-size: 14px;",
-                                        "📋 What's Next?"
-                                    }
-                                    p {
-                                        style: "margin: 0; color: #cccccc; font-size: 13px; line-height: 1.6;",
-                                        "You'll select models for each stage of the consensus pipeline:"
-                                    }
-                                    ul {
-                                        style: "margin: 10px 0 0 20px; color: #cccccc; font-size: 13px;",
-                                        li { "🧠 Generator - Initial analysis and creative thinking" }
-                                        li { "⚡ Refiner - Technical enhancement and detail" }
-                                        li { "🔍 Validator - Fact-checking and quality assurance" }
-                                        li { "✨ Curator - Final polish and presentation" }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Steps 2-5: Model Selection
-                        else if *create_profile_step.read() >= 2 && *create_profile_step.read() <= 5 {
-                            {
-                                let (stage_name, stage_key, current_selection) = match *create_profile_step.read() {
-                                    2 => ("Generator", "generator", selected_generator.clone()),
-                                    3 => ("Refiner", "refiner", selected_refiner.clone()),
-                                    4 => ("Validator", "validator", selected_validator.clone()),
-                                    5 => ("Curator", "curator", selected_curator.clone()),
-                                    _ => unreachable!()
-                                };
-                                
-                                rsx! {
+                                    style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
                                     div {
-                                        h3 {
-                                            style: "margin: 0 0 20px 0; color: #ffffff;",
-                                            "Select {stage_name} Model"
+                                        style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;",
+                                        div {
+                                            h4 {
+                                                style: "margin: 0 0 5px 0; color: #ffffff; font-size: 16px;",
+                                                "🧠 Generator Stage"
+                                            }
+                                            p {
+                                                style: "margin: 0; color: #cccccc; font-size: 13px;",
+                                                "Initial analysis and creative problem decomposition"
+                                            }
                                         }
-                                        
-                                        if let Some(selected) = current_selection.read().as_ref() {
+                                        button {
+                                            class: "button button-primary",
+                                            style: "padding: 8px 16px; font-size: 14px;",
+                                            onclick: move |_| {
+                                                *show_embedded_browser.write() = true;
+                                                *current_stage_selection.write() = "generator".to_string();
+                                            },
+                                            "🔍 Browse Models"
+                                        }
+                                    }
+                                    if let Some(model) = selected_generator.read().as_ref() {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px solid #007acc;",
                                             div {
-                                                style: "padding: 15px; background: #1e1e1e; border: 2px solid #007acc; border-radius: 6px; margin-bottom: 20px;",
-                                                h4 {
-                                                    style: "margin: 0 0 5px 0; color: #ffffff;",
-                                                    "✅ Selected: {selected.name}"
-                                                }
-                                                p {
-                                                    style: "margin: 0; color: #cccccc; font-size: 13px;",
-                                                    "{selected.provider_name} • {selected.openrouter_id}"
+                                                style: "display: flex; justify-content: space-between; align-items: center;",
+                                                div {
+                                                    p {
+                                                        style: "margin: 0 0 3px 0; color: #ffffff; font-weight: 600;",
+                                                        "✅ {model.name}"
+                                                    }
+                                                    p {
+                                                        style: "margin: 0; color: #858585; font-size: 12px;",
+                                                        "{model.provider_name} • {model.openrouter_id}"
+                                                    }
                                                 }
                                                 button {
-                                                    style: "margin-top: 10px; padding: 6px 12px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
+                                                    style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
                                                     onclick: move |_| {
-                                                        *show_model_browser.write() = true;
-                                                        *current_stage_selection.write() = stage_key.to_string();
+                                                        *show_embedded_browser.write() = true;
+                                                        *current_stage_selection.write() = "generator".to_string();
                                                     },
-                                                    "Change Selection"
+                                                    "Change"
                                                 }
                                             }
-                                        } else {
-                                            div {
-                                                style: "text-align: center; padding: 40px;",
-                                                p {
-                                                    style: "margin-bottom: 20px; color: #cccccc;",
-                                                    "No model selected yet. Click below to browse available models."
-                                                }
-                                                button {
-                                                    class: "button button-primary",
-                                                    style: "padding: 12px 24px; font-size: 16px;",
-                                                    onclick: move |_| {
-                                                        *show_model_browser.write() = true;
-                                                        *current_stage_selection.write() = stage_key.to_string();
-                                                    },
-                                                    "🔍 Browse Models"
-                                                }
+                                        }
+                                    } else {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px dashed #858585;",
+                                            p {
+                                                style: "margin: 0; color: #858585; text-align: center;",
+                                                "No model selected"
                                             }
                                         }
                                     }
                                 }
-                            }
-                        }
-                    }
-                    
-                    div {
-                        class: "dialog-footer",
-                        div {
-                            style: "display: flex; justify-content: space-between; width: 100%;",
-                            
-                            // Back button
-                            if *create_profile_step.read() > 1 {
-                                button {
-                                    class: "button button-secondary",
-                                    onclick: move |_| {
-                                        *create_profile_step.write() -= 1;
-                                    },
-                                    "← Back"
-                                }
-                            } else {
-                                div {} // Empty spacer
-                            }
-                            
-                            // Next/Create button
-                            if *create_profile_step.read() < 5 {
-                                button {
-                                    class: "button button-primary",
-                                    disabled: if *create_profile_step.read() == 1 {
-                                        new_profile_name.read().trim().is_empty()
-                                    } else {
-                                        match *create_profile_step.read() {
-                                            2 => selected_generator.read().is_none(),
-                                            3 => selected_refiner.read().is_none(),
-                                            4 => selected_validator.read().is_none(),
-                                            _ => false
+                                
+                                // Refiner Stage
+                                div {
+                                    style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
+                                    div {
+                                        style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;",
+                                        div {
+                                            h4 {
+                                                style: "margin: 0 0 5px 0; color: #ffffff; font-size: 16px;",
+                                                "⚡ Refiner Stage"
+                                            }
+                                            p {
+                                                style: "margin: 0; color: #cccccc; font-size: 13px;",
+                                                "Technical enhancement and implementation details"
+                                            }
                                         }
-                                    },
-                                    onclick: move |_| {
-                                        *create_profile_step.write() += 1;
-                                    },
-                                    "Next →"
-                                }
-                            } else {
-                                button {
-                                    class: "button button-primary",
-                                    disabled: selected_curator.read().is_none(),
-                                    onclick: move |_| {
-                                        let profile_name = new_profile_name.read().trim().to_string();
-                                        let gen = selected_generator.read().clone();
-                                        let ref_m = selected_refiner.read().clone();
-                                        let val = selected_validator.read().clone();
-                                        let cur = selected_curator.read().clone();
-                                        
-                                        if !profile_name.is_empty() && gen.is_some() && ref_m.is_some() && val.is_some() && cur.is_some() {
-                                            *profiles_loading.write() = true;
-                                            *show_create_profile.write() = false;
-                                            
-                                            spawn(async move {
-                                                // Create profile with selected models
-                                                match create_custom_profile_with_models(
-                                                    &profile_name,
-                                                    gen.unwrap().internal_id,
-                                                    ref_m.unwrap().internal_id,
-                                                    val.unwrap().internal_id,
-                                                    cur.unwrap().internal_id
-                                                ).await {
-                                                    Ok(_) => {
-                                                        tracing::info!("Created profile: {}", profile_name);
-                                                        // Reload profiles
-                                                        if let Ok(loaded_profiles) = load_existing_profiles().await {
-                                                            *profiles.write() = loaded_profiles;
-                                                        }
+                                        button {
+                                            class: "button button-primary",
+                                            style: "padding: 8px 16px; font-size: 14px;",
+                                            onclick: move |_| {
+                                                *show_embedded_browser.write() = true;
+                                                *current_stage_selection.write() = "refiner".to_string();
+                                            },
+                                            "🔍 Browse Models"
+                                        }
+                                    }
+                                    if let Some(model) = selected_refiner.read().as_ref() {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px solid #007acc;",
+                                            div {
+                                                style: "display: flex; justify-content: space-between; align-items: center;",
+                                                div {
+                                                    p {
+                                                        style: "margin: 0 0 3px 0; color: #ffffff; font-weight: 600;",
+                                                        "✅ {model.name}"
                                                     }
-                                                    Err(e) => {
-                                                        tracing::error!("Failed to create profile: {}", e);
+                                                    p {
+                                                        style: "margin: 0; color: #858585; font-size: 12px;",
+                                                        "{model.provider_name} • {model.openrouter_id}"
                                                     }
                                                 }
-                                                *profiles_loading.write() = false;
-                                                *new_profile_name.write() = String::new();
-                                                *create_profile_step.write() = 1;
-                                                *selected_generator.write() = None;
-                                                *selected_refiner.write() = None;
-                                                *selected_validator.write() = None;
-                                                *selected_curator.write() = None;
-                                            });
+                                                button {
+                                                    style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
+                                                    onclick: move |_| {
+                                                        *show_embedded_browser.write() = true;
+                                                        *current_stage_selection.write() = "refiner".to_string();
+                                                    },
+                                                    "Change"
+                                                }
+                                            }
                                         }
-                                    },
-                                    "Create Profile"
+                                    } else {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px dashed #858585;",
+                                            p {
+                                                style: "margin: 0; color: #858585; text-align: center;",
+                                                "No model selected"
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Validator Stage
+                                div {
+                                    style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
+                                    div {
+                                        style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;",
+                                        div {
+                                            h4 {
+                                                style: "margin: 0 0 5px 0; color: #ffffff; font-size: 16px;",
+                                                "🔍 Validator Stage"
+                                            }
+                                            p {
+                                                style: "margin: 0; color: #cccccc; font-size: 13px;",
+                                                "Fact-checking and quality assurance with different perspective"
+                                            }
+                                        }
+                                        button {
+                                            class: "button button-primary",
+                                            style: "padding: 8px 16px; font-size: 14px;",
+                                            onclick: move |_| {
+                                                *show_embedded_browser.write() = true;
+                                                *current_stage_selection.write() = "validator".to_string();
+                                            },
+                                            "🔍 Browse Models"
+                                        }
+                                    }
+                                    if let Some(model) = selected_validator.read().as_ref() {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px solid #007acc;",
+                                            div {
+                                                style: "display: flex; justify-content: space-between; align-items: center;",
+                                                div {
+                                                    p {
+                                                        style: "margin: 0 0 3px 0; color: #ffffff; font-weight: 600;",
+                                                        "✅ {model.name}"
+                                                    }
+                                                    p {
+                                                        style: "margin: 0; color: #858585; font-size: 12px;",
+                                                        "{model.provider_name} • {model.openrouter_id}"
+                                                    }
+                                                }
+                                                button {
+                                                    style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
+                                                    onclick: move |_| {
+                                                        *show_embedded_browser.write() = true;
+                                                        *current_stage_selection.write() = "validator".to_string();
+                                                    },
+                                                    "Change"
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px dashed #858585;",
+                                            p {
+                                                style: "margin: 0; color: #858585; text-align: center;",
+                                                "No model selected"
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Curator Stage
+                                div {
+                                    style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
+                                    div {
+                                        style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;",
+                                        div {
+                                            h4 {
+                                                style: "margin: 0 0 5px 0; color: #ffffff; font-size: 16px;",
+                                                "✨ Curator Stage"
+                                            }
+                                            p {
+                                                style: "margin: 0; color: #cccccc; font-size: 13px;",
+                                                "Final synthesis and polishing for presentation"
+                                            }
+                                        }
+                                        button {
+                                            class: "button button-primary",
+                                            style: "padding: 8px 16px; font-size: 14px;",
+                                            onclick: move |_| {
+                                                *show_embedded_browser.write() = true;
+                                                *current_stage_selection.write() = "curator".to_string();
+                                            },
+                                            "🔍 Browse Models"
+                                        }
+                                    }
+                                    if let Some(model) = selected_curator.read().as_ref() {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px solid #007acc;",
+                                            div {
+                                                style: "display: flex; justify-content: space-between; align-items: center;",
+                                                div {
+                                                    p {
+                                                        style: "margin: 0 0 3px 0; color: #ffffff; font-weight: 600;",
+                                                        "✅ {model.name}"
+                                                    }
+                                                    p {
+                                                        style: "margin: 0; color: #858585; font-size: 12px;",
+                                                        "{model.provider_name} • {model.openrouter_id}"
+                                                    }
+                                                }
+                                                button {
+                                                    style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
+                                                    onclick: move |_| {
+                                                        *show_embedded_browser.write() = true;
+                                                        *current_stage_selection.write() = "curator".to_string();
+                                                    },
+                                                    "Change"
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        div {
+                                            style: "padding: 10px; background: #2d2d30; border-radius: 6px; border: 1px dashed #858585;",
+                                            p {
+                                                style: "margin: 0; color: #858585; text-align: center;",
+                                                "No model selected"
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
-        
-        // Model Browser Dialog
-        if *show_model_browser.read() {
-            use crate::desktop::model_browser::ModelBrowserDialog;
-            ModelBrowserDialog {
-                show_browser: show_model_browser.clone(),
-                stage_name: match current_stage_selection.read().as_str() {
-                    "generator" => "Generator",
-                    "refiner" => "Refiner",
-                    "validator" => "Validator",
-                    "curator" => "Curator",
-                    _ => "Model"
-                }.to_string(),
-                stage_key: current_stage_selection.read().clone(),
-                on_select: move |model| {
-                    match current_stage_selection.read().as_str() {
-                        "generator" => *selected_generator.write() = Some(model),
-                        "refiner" => *selected_refiner.write() = Some(model),
-                        "validator" => *selected_validator.write() = Some(model),
-                        "curator" => *selected_curator.write() = Some(model),
-                        _ => {}
+                    
+                    div {
+                        class: "dialog-footer",
+                        style: "padding: 20px; border-top: 1px solid #3e3e42; display: flex; justify-content: space-between; align-items: center;",
+                        
+                        // Progress indicator
+                        div {
+                            style: "color: #858585; font-size: 13px;",
+                            {
+                                if new_profile_name.read().trim().is_empty() {
+                                    rsx! { "⚪ Profile name required" }
+                                } else {
+                                    let models_selected = [
+                                        selected_generator.read().is_some(),
+                                        selected_refiner.read().is_some(),
+                                        selected_validator.read().is_some(),
+                                        selected_curator.read().is_some()
+                                    ].iter().filter(|&&x| x).count();
+                                    
+                                    if models_selected == 0 {
+                                        rsx! { "⚪ Select models for all 4 stages" }
+                                    } else if models_selected < 4 {
+                                        rsx! { "🟡 {models_selected}/4 models selected" }
+                                    } else {
+                                        rsx! { "🟢 Ready to create profile!" }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Action buttons
+                        div {
+                            style: "display: flex; gap: 10px;",
+                            button {
+                                class: "button button-secondary",
+                                onclick: move |_| {
+                                    *show_create_profile.write() = false;
+                                    *new_profile_name.write() = String::new();
+                                    *selected_generator.write() = None;
+                                    *selected_refiner.write() = None;
+                                    *selected_validator.write() = None;
+                                    *selected_curator.write() = None;
+                                },
+                                "Cancel"
+                            }
+                            button {
+                                class: "button button-primary",
+                                disabled: new_profile_name.read().trim().is_empty() || 
+                                         selected_generator.read().is_none() || 
+                                         selected_refiner.read().is_none() || 
+                                         selected_validator.read().is_none() || 
+                                         selected_curator.read().is_none(),
+                                onclick: move |_| {
+                                    let profile_name = new_profile_name.read().trim().to_string();
+                                    let gen = selected_generator.read().clone();
+                                    let ref_m = selected_refiner.read().clone();
+                                    let val = selected_validator.read().clone();
+                                    let cur = selected_curator.read().clone();
+                                    
+                                    if !profile_name.is_empty() && gen.is_some() && ref_m.is_some() && val.is_some() && cur.is_some() {
+                                        tracing::info!("Creating profile: {}", profile_name);
+                                        *profiles_loading.write() = true;
+                                        *show_create_profile.write() = false;
+                                        
+                                        spawn(async move {
+                                            // Create profile with selected models
+                                            match create_custom_profile_with_models(
+                                                &profile_name,
+                                                gen.unwrap().internal_id,
+                                                ref_m.unwrap().internal_id,
+                                                val.unwrap().internal_id,
+                                                cur.unwrap().internal_id
+                                            ).await {
+                                                Ok(_) => {
+                                                    tracing::info!("✅ Successfully created profile: {}", profile_name);
+                                                    // Reload profiles
+                                                    if let Ok(loaded_profiles) = load_existing_profiles().await {
+                                                        *profiles.write() = loaded_profiles;
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("❌ Failed to create profile: {}", e);
+                                                }
+                                            }
+                                            *profiles_loading.write() = false;
+                                            
+                                            // Reset form
+                                            *new_profile_name.write() = String::new();
+                                            *selected_generator.write() = None;
+                                            *selected_refiner.write() = None;
+                                            *selected_validator.write() = None;
+                                            *selected_curator.write() = None;
+                                        });
+                                    }
+                                },
+                                "🚀 Create Profile"
+                            }
+                        }
                     }
                 }
             }
@@ -1068,6 +1293,7 @@ fn ProfileDetailCard(
     profile: ProfileInfo,
     on_edit: EventHandler<i64>,
     on_delete: EventHandler<i64>,
+    on_reload_profiles: EventHandler<()>,
     is_editing: bool,
 ) -> Element {
     let mut generator_model = use_signal(|| profile.generator_model.clone().unwrap_or_default());
@@ -1143,12 +1369,36 @@ fn ProfileDetailCard(
                             "✖️ Cancel"
                         }
                     }
-                    if !profile.is_default {
-                        button {
-                            class: "icon-button",
-                            style: "padding: 4px 8px; background: #5a1e1e; border: none; border-radius: 4px; color: #ff6b6b; cursor: pointer; font-size: 12px;",
-                            onclick: move |_| on_delete.call(profile.id),
-                            "🗑️ Delete"
+                    
+                    // Profile activation controls
+                    if !is_editing {
+                        if !profile.is_default {
+                            button {
+                                class: "icon-button",
+                                style: "padding: 4px 8px; background: #1a5a1a; border: none; border-radius: 4px; color: #4ade80; cursor: pointer; font-size: 12px;",
+                                onclick: move |_| {
+                                    let profile_id = profile.id;
+                                    let reload_callback = on_reload_profiles.clone();
+                                    spawn(async move {
+                                        if let Err(e) = set_default_profile(profile_id).await {
+                                            tracing::error!("Failed to set default profile: {}", e);
+                                        } else {
+                                            tracing::info!("Set profile {} as default", profile_id);
+                                            reload_callback.call(());
+                                        }
+                                    });
+                                },
+                                "⭐ Set Default"
+                            }
+                        }
+                        
+                        if !profile.is_default {
+                            button {
+                                class: "icon-button",
+                                style: "padding: 4px 8px; background: #5a1e1e; border: none; border-radius: 4px; color: #ff6b6b; cursor: pointer; font-size: 12px;",
+                                onclick: move |_| on_delete.call(profile.id),
+                                "🗑️ Delete"
+                            }
                         }
                     }
                 }
@@ -1258,8 +1508,7 @@ fn ProfileDetailCard(
         
         // Model Browser Dialog for editing
         if *show_model_browser.read() {
-            use crate::desktop::model_browser::ModelBrowserDialog;
-            ModelBrowserDialog {
+            crate::desktop::model_browser::ModelBrowserDialog {
                 show_browser: show_model_browser.clone(),
                 stage_name: match editing_stage.read().as_str() {
                     "generator" => "Generator",
@@ -1269,7 +1518,7 @@ fn ProfileDetailCard(
                     _ => "Model"
                 }.to_string(),
                 stage_key: editing_stage.read().clone(),
-                on_select: move |model| {
+                on_select: move |model: crate::desktop::model_browser::ModelInfo| {
                     match editing_stage.read().as_str() {
                         "generator" => *generator_model.write() = model.openrouter_id,
                         "refiner" => *refiner_model.write() = model.openrouter_id,
@@ -3067,6 +3316,265 @@ async fn create_custom_profile_with_models(
     
     Ok(())
 }
+
+/// Embedded Model Browser Component for Profile Creation
+/// 
+/// This component provides a clean model selection interface that doesn't 
+/// use dialog overlays, preventing the UX flow issues with overlapping modals.
+#[component]
+pub fn EmbeddedModelBrowser(
+    stage_key: String,
+    on_select: EventHandler<crate::desktop::model_browser::ModelInfo>,
+) -> Element {
+    let mut models = use_signal(|| Vec::<crate::desktop::model_browser::ModelInfo>::new());
+    let mut filtered_models = use_signal(|| Vec::<crate::desktop::model_browser::ModelInfo>::new());
+    let mut search_query = use_signal(String::new);
+    let mut selected_provider = use_signal(|| String::from("all"));
+    let mut show_free_only = use_signal(|| false);
+    let mut loading = use_signal(|| true);
+    let mut error_message = use_signal(|| None::<String>);
+    
+    // Load models on first render
+    use_effect({
+        let stage_key_clone = stage_key.clone();
+        move || {
+            let stage_key = stage_key_clone.clone();
+            spawn(async move {
+                match crate::desktop::model_browser::load_all_models().await {
+                    Ok(loaded_models) => {
+                        let top_recommendations = crate::desktop::model_browser::get_top_recommendations(&loaded_models, &stage_key, 10);
+                        *filtered_models.write() = top_recommendations.clone();
+                        *models.write() = loaded_models;
+                        *loading.write() = false;
+                    }
+                    Err(e) => {
+                        *error_message.write() = Some(format!("Failed to load models: {}", e));
+                        *loading.write() = false;
+                    }
+                }
+            });
+        }
+    });
+    
+    // Filter models when search/filters change
+    use_effect({
+        let stage_key_clone = stage_key.clone();
+        move || {
+            let all_models = models.read().clone();
+            let query = search_query.read().to_lowercase();
+            let provider = selected_provider.read().clone();
+            let free_only = *show_free_only.read();
+            let stage_key = stage_key_clone.clone();
+            
+            let mut filtered: Vec<crate::desktop::model_browser::ModelInfo> = all_models.into_iter()
+                .filter(|model| {
+                    // Provider filter
+                    if provider != "all" && model.provider_name != provider {
+                        return false;
+                    }
+                    
+                    // Free filter
+                    if free_only && (model.pricing_input > 0.0 || model.pricing_output > 0.0) {
+                        return false;
+                    }
+                    
+                    // Search filter
+                    if !query.is_empty() {
+                        let search_text = format!("{} {} {}", 
+                            model.name.to_lowercase(),
+                            model.provider_name.to_lowercase(),
+                            model.description.as_ref().unwrap_or(&String::new()).to_lowercase()
+                        );
+                        if !search_text.contains(&query) {
+                            return false;
+                        }
+                    }
+                    
+                    true
+                })
+                .collect();
+            
+            // If no search query and showing all providers, show top recommendations
+            if query.is_empty() && provider == "all" && !free_only {
+                filtered = crate::desktop::model_browser::get_top_recommendations(&filtered, &stage_key, 20);
+            }
+            
+            *filtered_models.write() = filtered;
+        }
+    });
+    
+    // Get unique providers for filter dropdown
+    let providers = {
+        let mut provider_set: Vec<String> = models.read()
+            .iter()
+            .map(|m| m.provider_name.clone())
+            .collect();
+        provider_set.sort();
+        provider_set.dedup();
+        provider_set
+    };
+    
+    let recommendations = crate::desktop::model_browser::get_stage_recommendations();
+    let stage_info = recommendations.get(stage_key.as_str());
+    
+    rsx! {
+        div {
+            style: "width: 100%; height: 100%; display: flex; flex-direction: column;",
+            
+            // Stage info header
+            if let Some(info) = stage_info {
+                div {
+                    style: "padding: 15px; background: #1e1e1e; border-bottom: 1px solid #3e3e42;",
+                    div {
+                        style: "color: #cccccc; font-size: 14px; margin-bottom: 10px;",
+                        "{info.purpose}"
+                    }
+                    div {
+                        style: "display: flex; gap: 20px; font-size: 13px; color: #858585;",
+                        div {
+                            "💡 Best for: {info.best_for.join(\", \")}"
+                        }
+                        div {
+                            "🌡️ Temperature: {info.temperature_range.0}-{info.temperature_range.1}"
+                        }
+                    }
+                }
+            }
+            
+            // Filters
+            div {
+                style: "padding: 15px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
+                div {
+                    style: "display: flex; gap: 15px; align-items: center;",
+                    
+                    // Search
+                    input {
+                        r#type: "text",
+                        placeholder: "Search models...",
+                        value: "{search_query.read()}",
+                        style: "flex: 1; padding: 8px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 4px; color: #cccccc;",
+                        oninput: move |evt| *search_query.write() = evt.value(),
+                    }
+                    
+                    // Provider filter
+                    select {
+                        style: "padding: 8px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 4px; color: #cccccc;",
+                        value: "{selected_provider.read()}",
+                        onchange: move |evt| *selected_provider.write() = evt.value(),
+                        option { value: "all", "All Providers" }
+                        for provider in &providers {
+                            option { value: "{provider}", "{provider}" }
+                        }
+                    }
+                    
+                    // Free only checkbox
+                    label {
+                        style: "display: flex; align-items: center; gap: 5px; cursor: pointer;",
+                        input {
+                            r#type: "checkbox",
+                            checked: *show_free_only.read(),
+                            onchange: move |evt| *show_free_only.write() = evt.checked(),
+                        }
+                        "🆓 Free only"
+                    }
+                }
+            }
+            
+            // Model list
+            div {
+                style: "flex: 1; overflow-y: auto; padding: 15px;",
+                
+                if *loading.read() {
+                    div {
+                        style: "text-align: center; padding: 50px; color: #858585;",
+                        "Loading models..."
+                    }
+                } else if let Some(error) = error_message.read().as_ref() {
+                    div {
+                        style: "margin: 20px; padding: 15px; background: #5a1e1e; border: 1px solid #8b3a3a; border-radius: 4px; color: #ff6b6b;",
+                        "❌ {error}"
+                    }
+                } else if filtered_models.read().is_empty() {
+                    div {
+                        style: "text-align: center; padding: 50px; color: #858585;",
+                        "No models found matching your criteria"
+                    }
+                } else {
+                    for model in filtered_models.read().iter() {
+                        EmbeddedModelCard {
+                            model: model.clone(),
+                            on_select: move |model| {
+                                on_select.call(model);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Individual model card component for embedded browser
+#[component]
+fn EmbeddedModelCard(
+    model: crate::desktop::model_browser::ModelInfo,
+    on_select: EventHandler<crate::desktop::model_browser::ModelInfo>,
+) -> Element {
+    let is_free = model.pricing_input == 0.0 && model.pricing_output == 0.0;
+    let cost_per_1k = (model.pricing_input + model.pricing_output) * 1000.0;
+    
+    rsx! {
+        div {
+            style: "padding: 15px; margin-bottom: 10px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; cursor: pointer; transition: all 0.2s;",
+            onmouseover: move |_| {
+                // Hover styling handled by CSS
+            },
+            onclick: move |_| on_select.call(model.clone()),
+            
+            div {
+                style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;",
+                div {
+                    h4 {
+                        style: "margin: 0; color: #ffffff; font-size: 16px;",
+                        "{model.name}"
+                    }
+                    div {
+                        style: "color: #858585; font-size: 13px; margin-top: 2px;",
+                        "{model.provider_name} • {model.openrouter_id}"
+                    }
+                }
+                div {
+                    style: "text-align: right;",
+                    if is_free {
+                        span {
+                            style: "color: #4caf50; font-weight: 600;",
+                            "🆓 FREE"
+                        }
+                    } else {
+                        span {
+                            style: "color: #cccccc;",
+                            "💰 ${cost_per_1k:.4}/1k"
+                        }
+                    }
+                    if let Some(ctx) = model.context_window {
+                        div {
+                            style: "color: #858585; font-size: 12px; margin-top: 2px;",
+                            "{ctx} tokens"
+                        }
+                    }
+                }
+            }
+            
+            if let Some(desc) = &model.description {
+                p {
+                    style: "margin: 0; color: #cccccc; font-size: 13px; line-height: 1.4;",
+                    "{desc}"
+                }
+            }
+        }
+    }
+}
+
 
 /// CSS styles for dialogs
 pub const DIALOG_STYLES: &str = r#"

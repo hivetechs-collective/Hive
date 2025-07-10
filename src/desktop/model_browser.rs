@@ -220,73 +220,81 @@ pub fn ModelBrowserDialog(
     stage_key: String,
     on_select: EventHandler<ModelInfo>,
 ) -> Element {
-    let models = use_signal(|| Vec::<ModelInfo>::new());
-    let filtered_models = use_signal(|| Vec::<ModelInfo>::new());
-    let search_query = use_signal(String::new);
-    let selected_provider = use_signal(|| String::from("all"));
-    let show_free_only = use_signal(|| false);
-    let loading = use_signal(|| true);
-    let error_message = use_signal(|| None::<String>);
+    let mut models = use_signal(|| Vec::<ModelInfo>::new());
+    let mut filtered_models = use_signal(|| Vec::<ModelInfo>::new());
+    let mut search_query = use_signal(String::new);
+    let mut selected_provider = use_signal(|| String::from("all"));
+    let mut show_free_only = use_signal(|| false);
+    let mut loading = use_signal(|| true);
+    let mut error_message = use_signal(|| None::<String>);
     
     // Load models on first render
-    use_effect(move || {
-        spawn(async move {
-            match load_all_models().await {
-                Ok(loaded_models) => {
-                    let top_recommendations = get_top_recommendations(&loaded_models, &stage_key, 10);
-                    *filtered_models.write() = top_recommendations.clone();
-                    *models.write() = loaded_models;
-                    *loading.write() = false;
+    use_effect({
+        let stage_key_clone = stage_key.clone();
+        move || {
+            let stage_key = stage_key_clone.clone();
+            spawn(async move {
+                match load_all_models().await {
+                    Ok(loaded_models) => {
+                        let top_recommendations = get_top_recommendations(&loaded_models, &stage_key, 10);
+                        *filtered_models.write() = top_recommendations.clone();
+                        *models.write() = loaded_models;
+                        *loading.write() = false;
+                    }
+                    Err(e) => {
+                        *error_message.write() = Some(format!("Failed to load models: {}", e));
+                        *loading.write() = false;
+                    }
                 }
-                Err(e) => {
-                    *error_message.write() = Some(format!("Failed to load models: {}", e));
-                    *loading.write() = false;
-                }
-            }
-        });
+            });
+        }
     });
     
     // Filter models when search/filters change
-    use_effect(move || {
-        let all_models = models.read().clone();
-        let query = search_query.read().to_lowercase();
-        let provider = selected_provider.read().clone();
-        let free_only = *show_free_only.read();
-        
-        let mut filtered: Vec<ModelInfo> = all_models.into_iter()
-            .filter(|model| {
-                // Provider filter
-                if provider != "all" && model.provider_name != provider {
-                    return false;
-                }
-                
-                // Free filter
-                if free_only && (model.pricing_input > 0.0 || model.pricing_output > 0.0) {
-                    return false;
-                }
-                
-                // Search filter
-                if !query.is_empty() {
-                    let search_text = format!("{} {} {}", 
-                        model.name.to_lowercase(),
-                        model.provider_name.to_lowercase(),
-                        model.description.as_ref().unwrap_or(&String::new()).to_lowercase()
-                    );
-                    if !search_text.contains(&query) {
+    use_effect({
+        let stage_key_clone = stage_key.clone();
+        move || {
+            let all_models = models.read().clone();
+            let query = search_query.read().to_lowercase();
+            let provider = selected_provider.read().clone();
+            let free_only = *show_free_only.read();
+            let stage_key = stage_key_clone.clone();
+            
+            let mut filtered: Vec<ModelInfo> = all_models.into_iter()
+                .filter(|model| {
+                    // Provider filter
+                    if provider != "all" && model.provider_name != provider {
                         return false;
                     }
-                }
-                
-                true
-            })
-            .collect();
-        
-        // If no search query and showing all providers, show top recommendations
-        if query.is_empty() && provider == "all" && !free_only {
-            filtered = get_top_recommendations(&filtered, &stage_key, 20);
+                    
+                    // Free filter
+                    if free_only && (model.pricing_input > 0.0 || model.pricing_output > 0.0) {
+                        return false;
+                    }
+                    
+                    // Search filter
+                    if !query.is_empty() {
+                        let search_text = format!("{} {} {}", 
+                            model.name.to_lowercase(),
+                            model.provider_name.to_lowercase(),
+                            model.description.as_ref().unwrap_or(&String::new()).to_lowercase()
+                        );
+                        if !search_text.contains(&query) {
+                            return false;
+                        }
+                    }
+                    
+                    true
+                })
+                .collect();
+            
+            // If no search query and showing all providers, show top recommendations
+            if query.is_empty() && provider == "all" && !free_only {
+                filtered = get_top_recommendations(&filtered, &stage_key, 20);
+            }
+            
+            *filtered_models.write() = filtered;
         }
-        
-        *filtered_models.write() = filtered;
     });
     
     // Get unique providers for filter dropdown
@@ -439,15 +447,11 @@ fn ModelCard(
         div {
             class: "model-card",
             style: "padding: 15px; margin-bottom: 10px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; cursor: pointer; transition: all 0.2s;",
-            onmouseover: move |e| {
-                if let Some(element) = e.data.target() {
-                    let _ = element.set_attribute("style", "padding: 15px; margin-bottom: 10px; background: #323234; border: 1px solid #007acc; border-radius: 6px; cursor: pointer; transition: all 0.2s;");
-                }
+            onmouseover: move |_e| {
+                // Hover styling handled by CSS
             },
-            onmouseout: move |e| {
-                if let Some(element) = e.data.target() {
-                    let _ = element.set_attribute("style", "padding: 15px; margin-bottom: 10px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; cursor: pointer; transition: all 0.2s;");
-                }
+            onmouseout: move |_e| {
+                // Hover styling handled by CSS
             },
             onclick: move |_| on_select.call(model.clone()),
             
@@ -479,7 +483,7 @@ fn ModelCard(
                     if let Some(ctx) = model.context_window {
                         div {
                             style: "color: #858585; font-size: 12px; margin-top: 2px;",
-                            "{ctx.to_string().as_bytes().chunks(3).rev().map(|chunk| std::str::from_utf8(chunk).unwrap()).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(\",\")} tokens"
+                            "{ctx} tokens"
                         }
                     }
                 }
