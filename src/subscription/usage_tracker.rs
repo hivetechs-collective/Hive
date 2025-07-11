@@ -63,8 +63,7 @@ impl UsageTracker {
             let user_data = conn.query_row(
                 "SELECT 
                     id, email, subscription_tier, license_key,
-                    created_at, subscription_expires_at,
-                    COALESCE(credits_remaining, 0) as credits
+                    created_at
                 FROM users 
                 WHERE license_key IS NOT NULL 
                 LIMIT 1",
@@ -76,13 +75,11 @@ impl UsageTracker {
                         row.get::<_, String>(2)?,    // tier
                         row.get::<_, String>(3)?,    // license_key
                         row.get::<_, String>(4)?,    // created_at
-                        row.get::<_, Option<String>>(5)?, // expires_at
-                        row.get::<_, u32>(6)?,       // credits
                     ))
                 }
             ).optional()?;
             
-            let (user_id, email, tier_str, license_key, created_at, expires_at, credits) = match user_data {
+            let (user_id, email, tier_str, license_key, created_at) = match user_data {
                 Some(data) => data,
                 None => return Ok((None, None)),
             };
@@ -92,10 +89,8 @@ impl UsageTracker {
                 .unwrap_or_else(|_| Utc::now().into())
                 .with_timezone(&Utc);
             
-            let expires = expires_at
-                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|| Utc::now() + chrono::Duration::days(30));
+            // SECURITY: Don't store expiration date locally - D1 is the authority
+            let expires = Utc::now() + chrono::Duration::days(30); // Default placeholder
             
             // Calculate trial end date (7 days from creation)
             let trial_ends = created + chrono::Duration::days(7);
@@ -113,7 +108,7 @@ impl UsageTracker {
                 monthly_limit: tier.monthly_limit(),
                 expires_at: expires,
                 trial_ends_at: if is_in_trial { Some(trial_ends) } else { None },
-                credits_remaining: credits,
+                // SECURITY: Removed credits_remaining - only D1 knows balance
                 features: vec![], // TODO: Load features from database
                 cached_at: Utc::now(),
             };
@@ -171,7 +166,7 @@ impl UsageTracker {
             let usage = UsageStatistics {
                 daily_used,
                 monthly_used,
-                credits_remaining: credits,
+                // SECURITY: Removed credits_remaining - only D1 knows balance
                 last_conversation: last_conv_time,
             };
             
@@ -219,7 +214,7 @@ impl UsageTracker {
             self.usage = Some(UsageStatistics {
                 daily_used: 0,
                 monthly_used: 0,
-                credits_remaining: subscription.credits_remaining,
+                // SECURITY: Credits removed - only D1 knows balance
                 last_conversation: None,
             });
         }
@@ -232,39 +227,27 @@ impl UsageTracker {
         
         // Clone values we'll need
         let subscription_tier = subscription.tier.clone();
-        let credits_remaining = usage.credits_remaining;
         let daily_used = usage.daily_used;
         let monthly_used = usage.monthly_used;
 
         // Check if daily limit is exceeded
         if daily_used >= subscription.daily_limit {
-            // Check if user has credit packs
-            if credits_remaining > 0 {
-                Ok((true, Some(UsageNotification {
-                    notification_type: NotificationType::Info,
-                    title: "💳 Using Credit Pack".to_string(),
-                    message: format!(
-                        "Daily allowance exhausted. Using 1 of your {} purchased credits for this conversation.",
-                        credits_remaining
-                    ),
-                    action: Some(NotificationAction {
-                        label: "Buy More Credits".to_string(),
-                        url: "https://hivetechs.io/pricing".to_string(),
-                    }),
-                })))
-            } else {
-                let message = Self::generate_limit_reached_message(subscription, usage);
-                let url = Self::get_upgrade_url(&subscription_tier);
-                Ok((false, Some(UsageNotification {
-                    notification_type: NotificationType::Blocked,
-                    title: "🚫 Usage Limit Reached".to_string(),
-                    message,
-                    action: Some(NotificationAction {
-                        label: "Upgrade Now".to_string(),
-                        url,
-                    }),
-                })))
-            }
+            // SECURITY: Don't check credits locally - D1 will handle authorization
+            // The ConversationGateway will check with D1 if user has credit packs
+            let message = Self::generate_limit_reached_message(subscription, usage);
+            let url = Self::get_upgrade_url(&subscription_tier);
+            Ok((true, Some(UsageNotification {
+                notification_type: NotificationType::Warning,
+                title: "⚠️ Daily Limit Reached".to_string(),
+                message: format!(
+                    "{}\n\nNote: If you have credit packs, they will be used automatically.",
+                    message
+                ),
+                action: Some(NotificationAction {
+                    label: "View Plans".to_string(),
+                    url,
+                }),
+            })))
         } else {
             // Check for warning thresholds
             let notification = self.generate_usage_warning(subscription, usage, daily_percentage, monthly_percentage);
@@ -273,40 +256,13 @@ impl UsageTracker {
     }
 
     /// Record successful conversation usage
+    /// SECURITY: This only updates local tracking. D1 is the authority on actual usage.
     pub async fn record_conversation_usage(&mut self) -> Result<()> {
-        self.load_data().await?;
+        // SECURITY: This method should NOT be called anymore
+        // Usage is recorded in the database via conversation_usage table
+        // and verified by D1's post-conversation endpoint
         
-        let usage = self.usage.get_or_insert(UsageStatistics {
-            daily_used: 0,
-            monthly_used: 0,
-            credits_remaining: 0,
-            last_conversation: None,
-        });
-
-        // Check if we need to use credit packs
-        if let Some(subscription) = &self.subscription {
-            if usage.daily_used >= subscription.daily_limit {
-                // Daily allowance exhausted, use credit pack if available
-                if usage.credits_remaining > 0 {
-                    usage.credits_remaining -= 1;
-                    tracing::info!("Using credit pack. {} credits remaining", usage.credits_remaining);
-                }
-                // Still increment monthly count
-                usage.monthly_used += 1;
-            } else {
-                // Use daily allowance
-                usage.daily_used += 1;
-                usage.monthly_used += 1;
-            }
-        } else {
-            usage.daily_used += 1;
-            usage.monthly_used += 1;
-        }
-
-        usage.last_conversation = Some(Utc::now());
-        self.save_usage().await?;
-
-        tracing::info!("Conversation usage recorded");
+        tracing::warn!("record_conversation_usage called - this should use database instead");
         Ok(())
     }
 
@@ -412,9 +368,8 @@ impl UsageTracker {
         message.push_str(&format!("• Today: {}/{} conversations ({:.0}%)\n", usage.daily_used, subscription.daily_limit, daily_percentage));
         message.push_str(&format!("• This Month: {}/{} conversations ({:.0}%)\n\n", usage.monthly_used, subscription.monthly_limit, monthly_percentage));
         
-        if usage.credits_remaining > 0 {
-            message.push_str(&format!("**Good news!** You have {} credit pack conversations available when you reach your daily limit.\n\n", usage.credits_remaining));
-        }
+        // SECURITY: Don't show credit info - D1 handles this
+        // Credits are only known by D1, not stored locally
         
         message.push_str("**Avoid interruptions** by upgrading now or purchasing credits.");
         message
@@ -486,7 +441,7 @@ impl UsageTracker {
         let usage = self.usage.as_ref().unwrap_or(&UsageStatistics {
             daily_used: 0,
             monthly_used: 0,
-            credits_remaining: 0,
+            // SECURITY: Credits removed - only D1 knows balance
             last_conversation: None,
         });
 
@@ -505,9 +460,8 @@ impl UsageTracker {
         display.push_str(&format!("**This Month**: {}/{} conversations\n", usage.monthly_used, subscription.monthly_limit));
         display.push_str(&format!("{} {}%\n\n", monthly_bar, monthly_percentage));
         
-        if usage.credits_remaining > 0 {
-            display.push_str(&format!("💳 **Credit Packs**: {} conversations available\n\n", usage.credits_remaining));
-        }
+        // SECURITY: Don't show credit info - D1 handles this
+        // Credits are only known by D1, not stored locally
         
         // Status indicator
         let max_percentage = daily_percentage.max(monthly_percentage);
@@ -582,7 +536,7 @@ mod tests {
             monthly_limit: 1000,
             expires_at: Utc::now() + chrono::Duration::days(30),
             trial_ends_at: None,
-            credits_remaining: 5,
+            // SECURITY: Credits removed - only D1 knows balance
             features: vec![],
             cached_at: Utc::now(),
         });

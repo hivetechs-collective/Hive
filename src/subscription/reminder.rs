@@ -284,7 +284,7 @@ mod tests {
             monthly_limit: 4000,
             expires_at: Utc::now() + Duration::days(3),
             trial_ends_at: None,
-            credits_remaining: 0,
+            // SECURITY: Credits not tracked locally
             features: vec![],
             cached_at: Utc::now(),
         };
