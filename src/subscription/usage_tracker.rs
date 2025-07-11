@@ -47,32 +47,147 @@ impl UsageTracker {
         }
     }
 
-    /// Load subscription and usage data
+    /// Load subscription and usage data from database
     pub async fn load_data(&mut self) -> Result<()> {
-        // Load subscription from cache
-        let sub_cache_file = self.config_dir.join("subscription_cache.json");
-        if sub_cache_file.exists() {
-            let content = tokio::fs::read_to_string(&sub_cache_file).await?;
-            self.subscription = serde_json::from_str(&content).ok();
-        }
-
-        // Load usage data
-        let usage_file = self.config_dir.join("usage_stats.json");
-        if usage_file.exists() {
-            let content = tokio::fs::read_to_string(&usage_file).await?;
-            self.usage = serde_json::from_str(&content).ok();
-        }
-
+        use crate::core::database::get_database;
+        use chrono::{DateTime, Datelike, Timelike, Utc};
+        
+        let db = get_database().await?;
+        let conn = db.get_connection()?;
+        
+        // Load everything from unified database
+        let (subscription, usage) = tokio::task::spawn_blocking(move || -> Result<(Option<SubscriptionInfo>, Option<UsageStatistics>)> {
+            use rusqlite::OptionalExtension;
+            
+            // Get user and subscription info
+            let user_data = conn.query_row(
+                "SELECT 
+                    id, email, subscription_tier, license_key,
+                    created_at, subscription_expires_at,
+                    COALESCE(credits_remaining, 0) as credits
+                FROM users 
+                WHERE license_key IS NOT NULL 
+                LIMIT 1",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,    // id
+                        row.get::<_, String>(1)?,    // email
+                        row.get::<_, String>(2)?,    // tier
+                        row.get::<_, String>(3)?,    // license_key
+                        row.get::<_, String>(4)?,    // created_at
+                        row.get::<_, Option<String>>(5)?, // expires_at
+                        row.get::<_, u32>(6)?,       // credits
+                    ))
+                }
+            ).optional()?;
+            
+            let (user_id, email, tier_str, license_key, created_at, expires_at, credits) = match user_data {
+                Some(data) => data,
+                None => return Ok((None, None)),
+            };
+            
+            // Parse dates
+            let created = DateTime::parse_from_rfc3339(&created_at)
+                .unwrap_or_else(|_| Utc::now().into())
+                .with_timezone(&Utc);
+            
+            let expires = expires_at
+                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|| Utc::now() + chrono::Duration::days(30));
+            
+            // Calculate trial end date (7 days from creation)
+            let trial_ends = created + chrono::Duration::days(7);
+            let is_in_trial = Utc::now() < trial_ends;
+            
+            // Get tier info
+            let tier = SubscriptionTier::from_string(&tier_str);
+            
+            // Create subscription info
+            let subscription = SubscriptionInfo {
+                user_id: user_id.clone(),
+                email: email.clone(),
+                tier,
+                daily_limit: tier.daily_limit(),
+                monthly_limit: tier.monthly_limit(),
+                expires_at: expires,
+                trial_ends_at: if is_in_trial { Some(trial_ends) } else { None },
+                credits_remaining: credits,
+                features: vec![], // TODO: Load features from database
+                cached_at: Utc::now(),
+            };
+            
+            // Get usage statistics
+            let now = Utc::now();
+            let start_of_day = now
+                .with_hour(0).unwrap()
+                .with_minute(0).unwrap()
+                .with_second(0).unwrap()
+                .with_nanosecond(0).unwrap();
+            
+            let start_of_month = now
+                .with_day(1).unwrap()
+                .with_hour(0).unwrap()
+                .with_minute(0).unwrap()
+                .with_second(0).unwrap()
+                .with_nanosecond(0).unwrap();
+            
+            // Count daily conversations
+            let daily_used: u32 = conn.query_row(
+                "SELECT COUNT(*) FROM conversation_usage 
+                 WHERE license_key = ?1 
+                 AND timestamp >= ?2 
+                 AND verified = 1",
+                rusqlite::params![&license_key, start_of_day.to_rfc3339()],
+                |row| row.get(0)
+            ).unwrap_or(0);
+            
+            // Count monthly conversations
+            let monthly_used: u32 = conn.query_row(
+                "SELECT COUNT(*) FROM conversation_usage 
+                 WHERE license_key = ?1 
+                 AND timestamp >= ?2 
+                 AND verified = 1",
+                rusqlite::params![&license_key, start_of_month.to_rfc3339()],
+                |row| row.get(0)
+            ).unwrap_or(0);
+            
+            // Get last conversation time
+            let last_conversation: Option<String> = conn.query_row(
+                "SELECT timestamp FROM conversation_usage 
+                 WHERE license_key = ?1 
+                 AND verified = 1
+                 ORDER BY timestamp DESC 
+                 LIMIT 1",
+                rusqlite::params![&license_key],
+                |row| row.get(0)
+            ).optional()?;
+            
+            let last_conv_time = last_conversation
+                .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+                .map(|dt| dt.with_timezone(&Utc));
+            
+            let usage = UsageStatistics {
+                daily_used,
+                monthly_used,
+                credits_remaining: credits,
+                last_conversation: last_conv_time,
+            };
+            
+            Ok((Some(subscription), Some(usage)))
+        }).await??;
+        
+        self.subscription = subscription;
+        self.usage = usage;
+        
         Ok(())
     }
 
-    /// Save usage data
+    /// Save usage data is no longer needed - all data is in database
     pub async fn save_usage(&self) -> Result<()> {
-        if let Some(usage) = &self.usage {
-            let usage_file = self.config_dir.join("usage_stats.json");
-            let content = serde_json::to_string_pretty(usage)?;
-            tokio::fs::write(&usage_file, content).await?;
-        }
+        // No-op: All usage data is stored directly in the database
+        // through conversation_usage table and users.credits_remaining
         Ok(())
     }
 
