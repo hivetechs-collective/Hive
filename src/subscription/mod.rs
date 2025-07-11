@@ -221,6 +221,103 @@ impl SubscriptionDisplay {
                 self.username, tier_display, self.daily_remaining, self.daily_limit)
         }
     }
+    
+    /// Load subscription display info from database
+    pub async fn load_from_database() -> Result<Self> {
+        use crate::core::database::get_database;
+        use chrono::{Datelike, Timelike, Utc};
+        
+        let db = get_database().await?;
+        let conn = db.get_connection()?;
+        
+        // Query all subscription info from unified database
+        let result = tokio::task::spawn_blocking(move || -> Result<(String, String, String, u32, u32, bool)> {
+            use rusqlite::OptionalExtension;
+            
+            // Get user info
+            let user_result = conn.query_row(
+                "SELECT email, subscription_tier, license_key FROM users WHERE license_key IS NOT NULL LIMIT 1",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                }
+            ).optional()?;
+            
+            let (email, tier_str, license_key) = match user_result {
+                Some(data) => data,
+                None => return Ok(("No user".to_string(), "free".to_string(), String::new(), 0, 0, false)),
+            };
+            
+            // Get conversation count for today from conversation_usage table
+            let now = Utc::now();
+            let start_of_day = now
+                .with_hour(0).unwrap()
+                .with_minute(0).unwrap()
+                .with_second(0).unwrap()
+                .with_nanosecond(0).unwrap();
+            
+            let daily_used: u32 = conn.query_row(
+                "SELECT COUNT(*) FROM conversation_usage 
+                 WHERE license_key = ?1 
+                 AND timestamp >= ?2 
+                 AND verified = 1",
+                rusqlite::params![&license_key, start_of_day.to_rfc3339()],
+                |row| row.get(0)
+            ).unwrap_or(0);
+            
+            // Get credit pack balance from users table
+            let credits_remaining: u32 = conn.query_row(
+                "SELECT COALESCE(credits_remaining, 0) FROM users WHERE license_key = ?1",
+                rusqlite::params![&license_key],
+                |row| row.get(0)
+            ).unwrap_or(0);
+            
+            // Check if in trial period (first 7 days after user creation)
+            let is_trial = conn.query_row(
+                "SELECT 
+                    CAST((julianday('now') - julianday(created_at)) AS INTEGER) < 7 as is_trial
+                FROM users 
+                WHERE license_key = ?1",
+                rusqlite::params![&license_key],
+                |row| row.get::<_, bool>(0)
+            ).unwrap_or(false);
+            
+            Ok((email, tier_str, license_key, daily_used, credits_remaining, is_trial))
+        }).await??;
+        
+        let (username, subscription_tier, _license_key, daily_used, credits_remaining, is_trial) = result;
+        
+        // Parse tier
+        let tier = SubscriptionTier::from_string(&subscription_tier);
+        
+        // Calculate remaining daily conversations
+        let daily_limit = if is_trial {
+            u32::MAX // Unlimited during trial
+        } else {
+            tier.daily_limit()
+        };
+        
+        let daily_remaining = if daily_limit == u32::MAX {
+            u32::MAX
+        } else if daily_limit > daily_used {
+            daily_limit - daily_used
+        } else {
+            0
+        };
+        
+        Ok(SubscriptionDisplay {
+            username,
+            tier,
+            daily_remaining,
+            daily_limit,
+            credits_remaining,
+            is_trial,
+        })
+    }
 }
 
 #[cfg(test)]

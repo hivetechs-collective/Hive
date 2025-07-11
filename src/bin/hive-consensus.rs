@@ -421,6 +421,9 @@ fn App() -> Element {
     let openrouter_key = use_signal(String::new);
     let hive_key = use_signal(String::new);
     
+    // Subscription state
+    let subscription_display = use_signal(|| String::from("Loading..."));
+    
     // Check if we need to show onboarding (only once on mount)
     use_effect(move || {
         let mut show_onboarding_dialog = show_onboarding_dialog.clone();
@@ -440,6 +443,51 @@ fn App() -> Element {
                 }
             }
         });
+    });
+    
+    // Load subscription info periodically
+    use_effect({
+        let mut subscription_display = subscription_display.clone();
+        move || {
+            // Load immediately
+            spawn({
+                let mut subscription_display = subscription_display.clone();
+                async move {
+                    use hive_ai::subscription::SubscriptionDisplay;
+                    
+                    match SubscriptionDisplay::load_from_database().await {
+                        Ok(sub_info) => {
+                            *subscription_display.write() = sub_info.format();
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to load subscription info: {}", e);
+                            *subscription_display.write() = "FREE | 10/10 daily".to_string();
+                        }
+                    }
+                }
+            });
+            
+            // Refresh every 30 seconds using tokio interval
+            let mut subscription_display = subscription_display.clone();
+            spawn(async move {
+                use tokio::time::{interval, Duration};
+                let mut interval = interval(Duration::from_secs(30));
+                
+                loop {
+                    interval.tick().await;
+                    
+                    use hive_ai::subscription::SubscriptionDisplay;
+                    match SubscriptionDisplay::load_from_database().await {
+                        Ok(sub_info) => {
+                            *subscription_display.write() = sub_info.format();
+                        }
+                        Err(_) => {
+                            // Keep existing display on error
+                        }
+                    }
+                }
+            });
+        }
     });
     
     
@@ -1049,6 +1097,8 @@ fn App() -> Element {
                     }
                     "•"
                     "✓ 0 problems"
+                    "•"
+                    "{subscription_display.read()}"
                 }
                 div { 
                     class: "status-right",
