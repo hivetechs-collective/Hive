@@ -197,13 +197,13 @@ pub enum LicenseChange {
 }
 
 /// Subscription display information for UI
-/// SECURITY: This is display-only data. Credit info comes from D1 on-demand.
+/// SECURITY: This is display-only data. Actual remaining count comes from D1.
 pub struct SubscriptionDisplay {
     pub username: String,
     pub tier: SubscriptionTier,
     pub daily_remaining: u32,
     pub daily_limit: u32,
-    // SECURITY: Removed credits_remaining - must fetch from D1 when needed
+    pub total_remaining: Option<u32>, // From D1 (includes daily + credits)
     pub is_trial: bool,
 }
 
@@ -217,11 +217,17 @@ impl SubscriptionDisplay {
 
         if self.tier == SubscriptionTier::Unlimited {
             format!("{} | {} | Unlimited", self.username, tier_display)
-        } else if self.daily_remaining == 0 {
-            // SECURITY: Don't show credit info - D1 will handle authorization
-            format!("{} | {} | Daily limit reached", 
-                self.username, tier_display)
+        } else if let Some(total) = self.total_remaining {
+            // Show total remaining from D1 (includes daily + any credit packs)
+            if self.daily_remaining == 0 && total > 0 {
+                format!("{} | {} | {} credits remaining", 
+                    self.username, tier_display, total)
+            } else {
+                format!("{} | {} | {}/{} daily (Total: {})", 
+                    self.username, tier_display, self.daily_remaining, self.daily_limit, total)
+            }
         } else {
+            // Fallback when D1 info not available
             format!("{} | {} | {}/{} daily", 
                 self.username, tier_display, self.daily_remaining, self.daily_limit)
         }
@@ -314,8 +320,14 @@ impl SubscriptionDisplay {
             tier,
             daily_remaining,
             daily_limit,
+            total_remaining: None, // Will be updated from D1 responses
             is_trial,
         })
+    }
+    
+    /// Update display with fresh data from D1
+    pub fn update_from_d1(&mut self, total_remaining: u32) {
+        self.total_remaining = Some(total_remaining);
     }
 }
 
