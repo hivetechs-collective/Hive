@@ -44,6 +44,7 @@ pub struct AppState {
     /// Usage tracking
     pub daily_conversations_used: u32,
     pub daily_conversations_limit: u32,
+    pub total_conversations_remaining: Option<u32>, // From D1 (includes credits)
     pub is_trial_active: bool,
     pub trial_days_remaining: Option<i32>,
 }
@@ -71,6 +72,7 @@ impl AppState {
             license_tier: "free".to_string(),
             daily_conversations_used: 0,
             daily_conversations_limit: 10,
+            total_conversations_remaining: None,
             is_trial_active: false,
             trial_days_remaining: None,
         }

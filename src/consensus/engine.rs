@@ -35,6 +35,7 @@ pub struct ConsensusEngine {
     conversation_gateway: Arc<ConversationGateway>,
     usage_tracker: Arc<RwLock<UsageTracker>>,
     license_key: Option<String>,
+    last_auth_remaining: Arc<RwLock<Option<u32>>>, // Store last D1 remaining count
 }
 
 impl ConsensusEngine {
@@ -134,6 +135,7 @@ impl ConsensusEngine {
             conversation_gateway,
             usage_tracker,
             license_key,
+            last_auth_remaining: Arc::new(RwLock::new(None)),
         })
     }
 
@@ -175,6 +177,10 @@ impl ConsensusEngine {
             match self.conversation_gateway.request_conversation_authorization(query, license_key).await {
                 Ok(auth) => {
                     tracing::info!("Authorization successful! Remaining: {}", auth.remaining);
+                    
+                    // Store the remaining count for UI display
+                    *self.last_auth_remaining.write().await = Some(auth.remaining);
+                    
                     Some(auth)
                 },
                 Err(e) => {
@@ -364,6 +370,11 @@ impl ConsensusEngine {
         }
     }
 
+    /// Get last D1 authorization remaining count
+    pub async fn get_last_authorization_info(&self) -> Result<Option<u32>> {
+        Ok(*self.last_auth_remaining.read().await)
+    }
+    
     /// Set active profile
     pub async fn set_profile(&self, profile_name: &str) -> Result<()> {
         // Try to load from database first

@@ -456,7 +456,11 @@ fn App() -> Element {
                     use hive_ai::subscription::SubscriptionDisplay;
                     
                     match SubscriptionDisplay::load_from_database().await {
-                        Ok(sub_info) => {
+                        Ok(mut sub_info) => {
+                            // Get total remaining from app state if available
+                            if let Some(total) = app_state.read().total_conversations_remaining {
+                                sub_info.update_from_d1(total);
+                            }
                             *subscription_display.write() = sub_info.format();
                         }
                         Err(e) => {
@@ -478,7 +482,11 @@ fn App() -> Element {
                     
                     use hive_ai::subscription::SubscriptionDisplay;
                     match SubscriptionDisplay::load_from_database().await {
-                        Ok(sub_info) => {
+                        Ok(mut sub_info) => {
+                            // Get total remaining from app state if available
+                            if let Some(total) = app_state.read().total_conversations_remaining {
+                                sub_info.update_from_d1(total);
+                            }
                             *subscription_display.write() = sub_info.format();
                         }
                         Err(_) => {

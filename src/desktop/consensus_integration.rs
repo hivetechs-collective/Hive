@@ -24,6 +24,7 @@ pub enum ConsensusUIEvent {
     StageError { stage: ConsensusStage, error: String },
     TokenUpdate { count: usize, cost: f64 },
     StreamingChunk { stage: ConsensusStage, chunk: String, total_content: String },
+    D1Authorization { total_remaining: u32 }, // New event for D1 auth info
 }
 
 /// Desktop streaming callbacks that send events to UI
@@ -343,6 +344,12 @@ pub async fn process_consensus_events(
                 let mut state = app_state.write();
                 state.consensus.streaming_content.push_str(&chunk);
             }
+            ConsensusUIEvent::D1Authorization { total_remaining } => {
+                // Update app state with D1 authorization info
+                let mut state = app_state.write();
+                state.total_conversations_remaining = Some(total_remaining);
+                tracing::info!("Updated total conversations remaining: {}", total_remaining);
+            }
         }
     }
 }
@@ -405,9 +412,23 @@ impl DesktopConsensusManager {
         // Get user_id from app state
         let user_id = self.app_state.read().user_id.clone();
         
+        // Clone app state for D1 info update
+        let app_state_d1 = self.app_state.clone();
+        
         // Spawn the consensus processing
         let handle = tokio::spawn(async move {
             let engine = engine.lock().await;
+            
+            // First check the current D1 authorization info
+            if let Ok(auth_info) = engine.get_last_authorization_info().await {
+                if let Some(remaining) = auth_info {
+                    // Send D1 authorization event
+                    let _ = callbacks_clone.internal_sender.send(ConsensusUIEvent::D1Authorization { 
+                        total_remaining: remaining 
+                    });
+                }
+            }
+            
             let result = engine.process_with_callbacks(&query, None, callbacks_clone, user_id).await;
             
             result.map(|r| r.result.unwrap_or_else(|| "No response received".to_string()))
