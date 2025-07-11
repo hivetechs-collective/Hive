@@ -91,7 +91,9 @@ impl std::fmt::Display for SubscriptionTier {
     }
 }
 
-/// User subscription information
+/// User subscription information (cached from D1)
+/// SECURITY: This is READ-ONLY cache data. Never modify locally.
+/// Credits and limits are always verified with D1 before use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionInfo {
     pub user_id: String,
@@ -101,7 +103,7 @@ pub struct SubscriptionInfo {
     pub monthly_limit: u32,
     pub expires_at: DateTime<Utc>,
     pub trial_ends_at: Option<DateTime<Utc>>,
-    pub credits_remaining: u32,
+    // SECURITY: Removed credits_remaining - must fetch from D1
     pub features: Vec<String>,
     pub cached_at: DateTime<Utc>,
 }
@@ -140,12 +142,13 @@ pub struct ConversationVerification {
     pub usage_updated: bool,
 }
 
-/// Usage statistics
+/// Usage statistics (local tracking only)
+/// SECURITY: Credits are NOT tracked here - only D1 knows credit balance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageStatistics {
     pub daily_used: u32,
     pub monthly_used: u32,
-    pub credits_remaining: u32,
+    // SECURITY: Removed credits_remaining - must fetch from D1
     pub last_conversation: Option<DateTime<Utc>>,
 }
 
@@ -194,12 +197,13 @@ pub enum LicenseChange {
 }
 
 /// Subscription display information for UI
+/// SECURITY: This is display-only data. Credit info comes from D1 on-demand.
 pub struct SubscriptionDisplay {
     pub username: String,
     pub tier: SubscriptionTier,
     pub daily_remaining: u32,
     pub daily_limit: u32,
-    pub credits_remaining: u32,
+    // SECURITY: Removed credits_remaining - must fetch from D1 when needed
     pub is_trial: bool,
 }
 
@@ -213,9 +217,10 @@ impl SubscriptionDisplay {
 
         if self.tier == SubscriptionTier::Unlimited {
             format!("{} | {} | Unlimited", self.username, tier_display)
-        } else if self.daily_remaining == 0 && self.credits_remaining > 0 {
-            format!("{} | {} | Using credits ({} left)", 
-                self.username, tier_display, self.credits_remaining)
+        } else if self.daily_remaining == 0 {
+            // SECURITY: Don't show credit info - D1 will handle authorization
+            format!("{} | {} | Daily limit reached", 
+                self.username, tier_display)
         } else {
             format!("{} | {} | {}/{} daily", 
                 self.username, tier_display, self.daily_remaining, self.daily_limit)
@@ -231,7 +236,7 @@ impl SubscriptionDisplay {
         let conn = db.get_connection()?;
         
         // Query all subscription info from unified database
-        let result = tokio::task::spawn_blocking(move || -> Result<(String, String, String, u32, u32, bool)> {
+        let result = tokio::task::spawn_blocking(move || -> Result<(String, String, String, u32, bool)> {
             use rusqlite::OptionalExtension;
             
             // Get user info
@@ -249,7 +254,7 @@ impl SubscriptionDisplay {
             
             let (email, tier_str, license_key) = match user_result {
                 Some(data) => data,
-                None => return Ok(("No user".to_string(), "free".to_string(), String::new(), 0, 0, false)),
+                None => return Ok(("No user".to_string(), "free".to_string(), String::new(), 0, false)),
             };
             
             // Get conversation count for today from conversation_usage table
@@ -269,12 +274,7 @@ impl SubscriptionDisplay {
                 |row| row.get(0)
             ).unwrap_or(0);
             
-            // Get credit pack balance from users table
-            let credits_remaining: u32 = conn.query_row(
-                "SELECT COALESCE(credits_remaining, 0) FROM users WHERE license_key = ?1",
-                rusqlite::params![&license_key],
-                |row| row.get(0)
-            ).unwrap_or(0);
+            // SECURITY: DO NOT query credits_remaining - only D1 knows the balance
             
             // Check if in trial period (first 7 days after user creation)
             let is_trial = conn.query_row(
@@ -286,10 +286,10 @@ impl SubscriptionDisplay {
                 |row| row.get::<_, bool>(0)
             ).unwrap_or(false);
             
-            Ok((email, tier_str, license_key, daily_used, credits_remaining, is_trial))
+            Ok((email, tier_str, license_key, daily_used, is_trial))
         }).await??;
         
-        let (username, subscription_tier, _license_key, daily_used, credits_remaining, is_trial) = result;
+        let (username, subscription_tier, _license_key, daily_used, is_trial) = result;
         
         // Parse tier
         let tier = SubscriptionTier::from_string(&subscription_tier);
@@ -314,7 +314,6 @@ impl SubscriptionDisplay {
             tier,
             daily_remaining,
             daily_limit,
-            credits_remaining,
             is_trial,
         })
     }
@@ -342,7 +341,7 @@ mod tests {
             monthly_limit: 1000,
             expires_at: Utc::now() + Duration::days(30),
             trial_ends_at: Some(Utc::now() + Duration::days(5)),
-            credits_remaining: 0,
+            // Credits removed for security
             features: vec![],
             cached_at: Utc::now(),
         };
@@ -362,7 +361,7 @@ mod tests {
             tier: SubscriptionTier::Premium,
             daily_remaining: 180,
             daily_limit: 200,
-            credits_remaining: 0,
+            // Credits removed for security
             is_trial: false,
         };
 
