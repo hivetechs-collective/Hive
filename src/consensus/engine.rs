@@ -14,8 +14,7 @@ use crate::core::config;
 use crate::core::api_keys::ApiKeyManager;
 use crate::core::database::DatabaseManager;
 use crate::core::config::get_hive_config_dir;
-use crate::subscription::{ConversationGateway, ConversationAuthorization, UsageTracker};
-use crate::core::license::LicenseManager;
+use crate::subscription::{ConversationGateway, UsageTracker};
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, OptionalExtension};
 use chrono::Utc;
@@ -47,11 +46,24 @@ impl ConsensusEngine {
         // Get OpenRouter API key from ApiKeyManager (checks database, config, and env)
         let openrouter_api_key = ApiKeyManager::get_openrouter_key().await.ok();
         
-        // Get license key from license manager
+        // Get license key from database (users table)
         let config_dir = get_hive_config_dir();
-        let license_manager = LicenseManager::new(config_dir.clone());
-        let license_info = license_manager.load_license().await?;
-        let license_key = license_info.map(|info| info.key);
+        let license_key = if let Some(ref db) = database {
+            tracing::info!("Loading license from database");
+            match Self::get_license_from_database(db).await {
+                Ok(key) => {
+                    tracing::info!("License loaded from database: {}", key.is_some());
+                    key
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to load license from database: {}", e);
+                    None
+                }
+            }
+        } else {
+            tracing::warn!("No database available, running without license");
+            None
+        };
         
         // Initialize subscription components
         let conversation_gateway = Arc::new(ConversationGateway::new()?);
@@ -142,7 +154,9 @@ impl ConsensusEngine {
         user_id: Option<String>,
     ) -> Result<ConsensusResult> {
         // Check subscription before processing
+        tracing::info!("Checking subscription. License key present: {}", self.license_key.is_some());
         let conversation_auth = if let Some(ref license_key) = self.license_key {
+            tracing::info!("License key found, checking usage limits...");
             // Check usage limits
             let mut usage_tracker = self.usage_tracker.write().await;
             let (allowed, notification) = usage_tracker.check_usage_before_conversation().await?;
@@ -157,8 +171,12 @@ impl ConsensusEngine {
             }
             
             // Request conversation authorization from D1
+            tracing::info!("Requesting conversation authorization from D1...");
             match self.conversation_gateway.request_conversation_authorization(query, license_key).await {
-                Ok(auth) => Some(auth),
+                Ok(auth) => {
+                    tracing::info!("Authorization successful! Remaining: {}", auth.remaining);
+                    Some(auth)
+                },
                 Err(e) => {
                     tracing::error!("Failed to authorize conversation: {}", e);
                     // Check if it's a usage limit error
@@ -178,6 +196,7 @@ impl ConsensusEngine {
                 }
             }
         } else {
+            tracing::warn!("No license key found - running without subscription checks");
             None
         };
         
@@ -460,6 +479,24 @@ impl ConsensusEngine {
         templates.iter().map(|t| t.id.clone()).collect()
     }
 
+    /// Get license key from database
+    async fn get_license_from_database(database: &Arc<DatabaseManager>) -> Result<Option<String>> {
+        let conn = database.get_connection()?;
+        
+        // Query the users table for license key
+        // In TypeScript version, there's typically one user record
+        let license_key: Option<String> = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+            let key = conn.query_row(
+                "SELECT license_key FROM users WHERE license_key IS NOT NULL LIMIT 1",
+                [],
+                |row| row.get(0)
+            ).optional()?;
+            Ok(key)
+        }).await??;
+        
+        Ok(license_key)
+    }
+    
     /// Load default consensus profile from database
     async fn load_default_profile(database: &Option<Arc<DatabaseManager>>) -> Result<ConsensusProfile> {
         tracing::info!("load_default_profile: Starting...");

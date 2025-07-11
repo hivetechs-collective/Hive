@@ -19,32 +19,71 @@ pub struct SubscriptionReminder {
     pub last_checked: DateTime<Utc>,
 }
 
-/// Email notification service (placeholder for actual implementation)
+/// Email notification service that integrates with hivetechs.io API
 pub struct EmailService {
-    api_key: Option<String>,
-    from_email: String,
+    api_url: String,
+    client: reqwest::Client,
 }
 
 impl EmailService {
     pub fn new() -> Self {
+        let api_url = std::env::var("HIVE_API_ENDPOINT")
+            .unwrap_or_else(|_| "https://hivetechs.io".to_string());
+            
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .user_agent("hive-rust/2.0.0")
+            .build()
+            .unwrap_or_default();
+            
         Self {
-            api_key: std::env::var("HIVE_EMAIL_API_KEY").ok(),
-            from_email: "noreply@hivetechs.io".to_string(),
+            api_url,
+            client,
         }
     }
 
-    async fn send_email(&self, to: &str, subject: &str, body: &str) -> Result<()> {
-        // In production, this would integrate with an email service like SendGrid, SES, etc.
-        tracing::info!("Would send email to {} with subject: {}", to, subject);
-        tracing::debug!("Email body: {}", body);
+    async fn send_reminder_email(
+        &self,
+        license_key: &str,
+        email: &str,
+        trigger_type: &str,
+    ) -> Result<()> {
+        let url = format!("{}/api/trial/send-expiration-email", self.api_url);
         
-        // For now, just log the email
-        if self.api_key.is_some() {
-            // Would make actual API call here
+        let request_data = serde_json::json!({
+            "licenseKey": license_key,
+            "email": email,
+            "triggerType": trigger_type
+        });
+        
+        let response = self.client
+            .post(&url)
+            .json(&request_data)
+            .send()
+            .await
+            .context("Failed to send email request")?;
+            
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!(
+                "Email service returned error: {} - {}",
+                status,
+                error_text
+            ));
+        }
+        
+        let result: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse email response")?;
+            
+        if result["success"].as_bool() == Some(true) {
+            tracing::info!("Email sent successfully: {:?}", result["messageId"]);
             Ok(())
         } else {
-            tracing::warn!("Email API key not configured, skipping email send");
-            Ok(())
+            let error = result["error"].as_str().unwrap_or("Unknown error");
+            Err(anyhow::anyhow!("Failed to send email: {}", error))
         }
     }
 }
@@ -147,17 +186,19 @@ impl ReminderManager {
         days_remaining: u8,
         subscription: &SubscriptionInfo,
     ) -> Result<()> {
-        let subject = format!(
-            "Your Hive AI {} subscription expires in {} day{}",
-            subscription.tier,
-            days_remaining,
-            if days_remaining == 1 { "" } else { "s" }
-        );
-
-        let body = self.generate_email_body(days_remaining, subscription);
+        // Get license key from subscription
+        let license_key = self.get_license_key_for_user(&subscription.user_id).await?;
+        
+        // Map days to trigger type
+        let trigger_type = match days_remaining {
+            3 => "3-day",
+            2 => "1-day", // Note: API only supports 3-day and 1-day, not 2-day
+            1 => "1-day",
+            _ => return Ok(()), // Skip unsupported days
+        };
 
         self.email_service
-            .send_email(&reminder.email, &subject, &body)
+            .send_reminder_email(&license_key, &reminder.email, trigger_type)
             .await
             .context("Failed to send reminder email")?;
 
@@ -170,63 +211,14 @@ impl ReminderManager {
 
         Ok(())
     }
-
-    /// Generate email body based on days remaining
-    fn generate_email_body(&self, days_remaining: u8, subscription: &SubscriptionInfo) -> String {
-        let mut body = format!(
-            "Hi there,\n\n\
-            Your Hive AI {} subscription is expiring in {} day{}.\n\n",
-            subscription.tier,
-            days_remaining,
-            if days_remaining == 1 { "" } else { "s" }
-        );
-
-        match days_remaining {
-            3 => {
-                body.push_str(
-                    "We wanted to give you a heads up so you have time to renew if you'd like to continue \
-                    enjoying all the benefits of your subscription.\n\n\
-                    Your subscription includes:\n"
-                );
-                body.push_str(&format!("• {} daily conversations\n", subscription.daily_limit));
-                body.push_str(&format!("• {} monthly conversations\n", subscription.monthly_limit));
-                body.push_str("• Multi-model consensus pipeline\n");
-                body.push_str("• Advanced analytics and reporting\n");
-                body.push_str("• Priority support\n\n");
-                body.push_str("Renew now to ensure uninterrupted service.\n");
-            }
-            2 => {
-                body.push_str(
-                    "Your subscription is expiring soon! Don't lose access to your enhanced features.\n\n\
-                    After expiration, you'll be moved to the Free tier with:\n\
-                    • 10 daily conversations only\n\
-                    • Basic features\n\n\
-                    Renew today to keep your current benefits.\n"
-                );
-            }
-            1 => {
-                body.push_str(
-                    "⚠️ This is your final reminder!\n\n\
-                    Your subscription expires tomorrow. After that, you'll automatically be moved to the \
-                    Free tier with limited features.\n\n\
-                    Renew now to avoid any interruption in service.\n"
-                );
-            }
-            _ => {}
-        }
-
-        body.push_str(&format!(
-            "\n🔗 Renew your subscription: https://hivetechs.io/account/subscription\n\n\
-            If you have any questions or need assistance, please don't hesitate to reach out to \
-            our support team at support@hivetechs.io.\n\n\
-            Best regards,\n\
-            The Hive AI Team\n\n\
-            P.S. If you've already renewed, please disregard this email. Your subscription status \
-            will update within a few minutes."
-        ));
-
-        body
+    
+    /// Get license key for a user from database
+    async fn get_license_key_for_user(&self, user_id: &str) -> Result<String> {
+        // In a real implementation, this would query the database
+        // For now, return a placeholder or error
+        Err(anyhow::anyhow!("License key lookup not implemented - requires database integration"))
     }
+
 
     /// Check all subscriptions for reminders (batch process)
     pub async fn check_all_reminders(&self) -> Result<()> {
@@ -277,26 +269,4 @@ mod tests {
         assert!(reminders[0].reminder_sent.contains(&3));
     }
 
-    #[test]
-    fn test_email_body_generation() {
-        let temp_dir = TempDir::new().unwrap();
-        let manager = ReminderManager::new(temp_dir.path().to_path_buf());
-
-        let subscription = SubscriptionInfo {
-            user_id: "test".to_string(),
-            email: "test@example.com".to_string(),
-            tier: super::super::SubscriptionTier::Standard,
-            daily_limit: 100,
-            monthly_limit: 2000,
-            expires_at: Utc::now() + Duration::days(1),
-            trial_ends_at: None,
-            credits_remaining: 0,
-            features: vec![],
-            cached_at: Utc::now(),
-        };
-
-        let body = manager.generate_email_body(1, &subscription);
-        assert!(body.contains("final reminder"));
-        assert!(body.contains("expires tomorrow"));
-    }
 }

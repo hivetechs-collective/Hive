@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use super::{SubscriptionInfo, SubscriptionTier, UsageStatistics, CreditPack};
-use crate::core::license::{LicenseManager, LicenseStatus};
 
 /// Usage notification types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,45 +85,17 @@ impl UsageTracker {
         let subscription = match &self.subscription {
             Some(sub) if sub.is_cache_valid() => sub,
             _ => {
-                // Try to get subscription from license manager
-                let license_manager = LicenseManager::new(self.config_dir.clone());
-                let status = license_manager.check_license_status().await?;
-                
-                if !status.is_valid {
-                    return Ok((false, Some(UsageNotification {
-                        notification_type: NotificationType::Blocked,
-                        title: "No Valid License".to_string(),
-                        message: "Please configure your Hive license key to use consensus features.".to_string(),
-                        action: Some(NotificationAction {
-                            label: "Configure License".to_string(),
-                            url: "https://hivetechs.io/pricing".to_string(),
-                        }),
-                    })));
-                }
-
-                // Create basic subscription info from license
-                let sub = SubscriptionInfo {
-                    user_id: status.user_id.unwrap_or_default(),
-                    email: String::new(), // Will be filled from gateway
-                    tier: match status.tier {
-                        crate::core::license::LicenseTier::Free => SubscriptionTier::Free,
-                        crate::core::license::LicenseTier::Basic => SubscriptionTier::Basic,
-                        crate::core::license::LicenseTier::Standard => SubscriptionTier::Standard,
-                        crate::core::license::LicenseTier::Premium => SubscriptionTier::Premium,
-                        crate::core::license::LicenseTier::Unlimited => SubscriptionTier::Unlimited,
-                        crate::core::license::LicenseTier::Enterprise => SubscriptionTier::Team,
-                    },
-                    daily_limit: status.tier.daily_limit(),
-                    monthly_limit: status.tier.monthly_limit(),
-                    expires_at: Utc::now() + chrono::Duration::days(30), // Default
-                    trial_ends_at: None,
-                    credits_remaining: 0,
-                    features: vec![],
-                    cached_at: Utc::now(),
-                };
-                
-                self.subscription = Some(sub.clone());
-                &self.subscription.as_ref().unwrap()
+                // Without a valid subscription cache, we can't check usage
+                // The ConversationGateway will handle the actual authorization
+                return Ok((false, Some(UsageNotification {
+                    notification_type: NotificationType::Blocked,
+                    title: "No Valid Subscription".to_string(),
+                    message: "Please configure your Hive license key to use consensus features.".to_string(),
+                    action: Some(NotificationAction {
+                        label: "Configure License".to_string(),
+                        url: "https://hivetechs.io/pricing".to_string(),
+                    }),
+                })));
             }
         };
 
