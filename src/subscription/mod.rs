@@ -289,6 +289,7 @@ impl SubscriptionDisplay {
             };
             
             // Get conversation count for today from conversation_usage table
+            // Using UTC midnight as the reset point for global consistency
             let now = Utc::now();
             let start_of_day = now
                 .with_hour(0).unwrap()
@@ -299,10 +300,13 @@ impl SubscriptionDisplay {
             let daily_used: u32 = conn.query_row(
                 "SELECT COUNT(*) FROM conversation_usage 
                  WHERE user_id = ?1 
-                 AND timestamp >= ?2",
+                 AND datetime(timestamp) >= datetime(?2)",
                 rusqlite::params![&user_id, start_of_day.to_rfc3339()],
                 |row| row.get(0)
             ).unwrap_or(0);
+            
+            tracing::debug!("Daily usage query: user_id={}, start_of_day={}, count={}", 
+                         user_id, start_of_day.to_rfc3339(), daily_used);
             
             // SECURITY: DO NOT query credits_remaining - only D1 knows the balance
             

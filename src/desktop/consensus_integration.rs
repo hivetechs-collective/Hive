@@ -349,6 +349,9 @@ pub async fn process_consensus_events(
                 let mut state = app_state.write();
                 state.total_conversations_remaining = Some(total_remaining);
                 tracing::info!("Updated total conversations remaining: {}", total_remaining);
+                
+                // Trigger subscription display refresh to show updated counts immediately
+                state.subscription_refresh_trigger += 1;
             }
         }
     }
