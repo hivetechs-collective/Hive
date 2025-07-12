@@ -11,11 +11,17 @@ ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free';
 ALTER TABLE users ADD COLUMN last_d1_sync TEXT;
 
 -- Update conversation_usage to track D1 verification
+-- Add columns without UNIQUE constraint first to handle existing data
 ALTER TABLE conversation_usage ADD COLUMN license_key TEXT;
 ALTER TABLE conversation_usage ADD COLUMN verified INTEGER DEFAULT 0;
-ALTER TABLE conversation_usage ADD COLUMN conversation_token TEXT UNIQUE;
+ALTER TABLE conversation_usage ADD COLUMN conversation_token TEXT;
 ALTER TABLE conversation_usage ADD COLUMN question_hash TEXT;
 ALTER TABLE conversation_usage ADD COLUMN d1_verified_at TEXT;
+
+-- Create UNIQUE index on conversation_token (this achieves same effect as UNIQUE constraint)
+-- but only after ensuring no NULL or duplicate values exist
+CREATE UNIQUE INDEX idx_conversation_usage_token_unique ON conversation_usage(conversation_token) 
+WHERE conversation_token IS NOT NULL;
 
 -- Create index for performance
 CREATE INDEX idx_conversation_usage_license_key ON conversation_usage(license_key);

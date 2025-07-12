@@ -15,7 +15,7 @@ use crate::consensus::openrouter::{
     OpenRouterClient, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse,
     StreamingCallbacks as OpenRouterStreamingCallbacks, SimpleStreamingCallbacks
 };
-use rusqlite::params;
+use rusqlite::{params, OptionalExtension};
 use crate::consensus::models::ModelManager;
 use crate::core::database::DatabaseManager;
 use crate::core::usage_tracker::UsageTracker;
@@ -903,7 +903,32 @@ impl ConsensusPipeline {
                 ]
             )?;
             
-            // 4. Store curator truth (flagged as source of truth - critical for memory system)
+            // 4. Store conversation usage for tracking
+            // Get the user_id from the database (using the license key)
+            let user_id_result: Option<String> = tx.query_row(
+                "SELECT id FROM users WHERE license_key IS NOT NULL LIMIT 1",
+                [],
+                |row| row.get(0)
+            ).optional()?;
+            
+            if let Some(user_id) = user_id_result {
+                // Insert into conversation_usage table for tracking
+                tx.execute(
+                    "INSERT INTO conversation_usage (
+                        conversation_id, user_id, timestamp
+                    ) VALUES (?1, ?2, ?3)",
+                    params![
+                        conversation_id,
+                        user_id,
+                        &now
+                    ]
+                )?;
+                tracing::info!("Recorded conversation usage for user {}", user_id);
+            } else {
+                tracing::warn!("No user found with license key, skipping usage tracking");
+            }
+            
+            // 5. Store curator truth (flagged as source of truth - critical for memory system)
             tracing::debug!("Looking for curator stage result");
             let curator_result = stage_results.iter()
                 .find(|s| s.stage_name == "curator")

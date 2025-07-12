@@ -330,7 +330,38 @@ const DESKTOP_STYLES: &str = r#"
     }
 "#;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+    
+    // Create a runtime to initialize the database before launching desktop
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async {
+        // Initialize the database
+        let config = hive_ai::core::config::get_hive_config_dir();
+        let db_path = config.join("hive-ai.db");
+        let db_config = hive_ai::core::database::DatabaseConfig {
+            path: db_path,
+            max_connections: 10,
+            connection_timeout: std::time::Duration::from_secs(5),
+            idle_timeout: std::time::Duration::from_secs(300),
+            enable_wal: true,
+            enable_foreign_keys: true,
+            cache_size: 8192,
+            synchronous: "NORMAL".to_string(),
+            journal_mode: "WAL".to_string(),
+        };
+        hive_ai::core::database::initialize_database(Some(db_config)).await?;
+        Ok::<(), anyhow::Error>(())
+    })?;
+    
     // Launch the desktop app with proper title using Dioxus 0.6 LaunchBuilder
     use dioxus::desktop::{Config, WindowBuilder};
     
@@ -352,13 +383,15 @@ fn main() {
             ),
         )
         .launch(App);
+    
+    Ok(())
 }
 
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
 use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, SettingsDialog, OnboardingDialog, WelcomeAction, DIALOG_STYLES};
-use hive_ai::desktop::consensus_integration::use_consensus;
+use hive_ai::desktop::consensus_integration::use_consensus_with_version;
 
 // Simple markdown to HTML converter
 mod markdown {
@@ -396,8 +429,13 @@ fn App() -> Element {
     let mut app_state = use_signal(|| AppState::default());
     use_context_provider(|| app_state.clone());
     
+    // API keys state (needed before consensus manager)
+    let openrouter_key = use_signal(String::new);
+    let hive_key = use_signal(String::new);
+    let api_keys_version = use_signal(|| 0u32);  // Track when API keys change
+    
     // Get consensus manager
-    let consensus_manager = use_consensus();
+    let consensus_manager = use_consensus_with_version(*api_keys_version.read());
     
     // State management
     let mut current_response = use_signal(String::new);  // Final response
@@ -416,10 +454,6 @@ fn App() -> Element {
     let mut show_settings_dialog = use_signal(|| false);
     let mut show_onboarding_dialog = use_signal(|| false);
     let mut onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
-    
-    // API keys state
-    let openrouter_key = use_signal(String::new);
-    let hive_key = use_signal(String::new);
     
     // Subscription state
     let subscription_display = use_signal(|| String::from("Loading..."));
@@ -449,19 +483,26 @@ fn App() -> Element {
     use_effect({
         let mut subscription_display = subscription_display.clone();
         move || {
-            // Load immediately
+            // Load immediately with a small delay to ensure database is initialized
             spawn({
                 let mut subscription_display = subscription_display.clone();
                 async move {
+                    // Wait a bit for database initialization
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    
                     use hive_ai::subscription::SubscriptionDisplay;
                     
                     match SubscriptionDisplay::load_from_database().await {
                         Ok(mut sub_info) => {
+                            tracing::info!("Subscription loaded: user={}, tier={:?}, is_trial={}, daily_used={}, daily_remaining={}", 
+                                sub_info.username, sub_info.tier, sub_info.is_trial, sub_info.daily_used, sub_info.daily_remaining);
                             // Get total remaining from app state if available
                             if let Some(total) = app_state.read().total_conversations_remaining {
                                 sub_info.update_from_d1(total);
                             }
-                            *subscription_display.write() = sub_info.format();
+                            let formatted = sub_info.format();
+                            tracing::info!("Subscription display: {}", formatted);
+                            *subscription_display.write() = formatted;
                         }
                         Err(e) => {
                             tracing::warn!("Failed to load subscription info: {}", e);
@@ -1146,6 +1187,7 @@ fn App() -> Element {
                 openrouter_key: openrouter_key.clone(),
                 hive_key: hive_key.clone(),
                 current_step: onboarding_current_step.clone(),
+                api_keys_version: api_keys_version.clone(),
             }
         }
     }

@@ -154,6 +154,36 @@ fn get_embedded_migrations() -> Vec<Migration> {
             name: "indexes".to_string(),
             sql: include_str!("../../migrations/005_indexes.sql").to_string(),
         },
+        Migration {
+            version: 6,
+            name: "subscription_tracking".to_string(),
+            sql: include_str!("../../migrations/006_subscription_tracking.sql").to_string(),
+        },
+        Migration {
+            version: 7,
+            name: "user_profile".to_string(),
+            sql: include_str!("../../migrations/007_user_profile.sql").to_string(),
+        },
+        Migration {
+            version: 8,
+            name: "hive_api_keys".to_string(),
+            sql: include_str!("../../migrations/008_hive_api_keys.sql").to_string(),
+        },
+        Migration {
+            version: 9,
+            name: "consensus_profile_models".to_string(),
+            sql: include_str!("../../migrations/009_consensus_profile_models.sql").to_string(),
+        },
+        Migration {
+            version: 10,
+            name: "remove_local_credit_tracking".to_string(),
+            sql: include_str!("../../migrations/010_remove_local_credit_tracking.sql").to_string(),
+        },
+        Migration {
+            version: 11,
+            name: "add_licenses_table".to_string(),
+            sql: include_str!("../../migrations/011_add_licenses_table.sql").to_string(),
+        },
     ]
 }
 

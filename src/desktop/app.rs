@@ -30,6 +30,9 @@ pub fn App() -> Element {
     let mut show_command_palette = use_signal(|| false);
     let mut onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
     
+    // Track when API keys have been updated to force consensus re-initialization
+    let api_keys_version = use_signal(|| 0u32);
+    
     // API key states - initialize with values from database if available
     let mut openrouter_key = use_signal(|| {
         crate::desktop::simple_db::get_config("openrouter_api_key")
@@ -174,6 +177,7 @@ pub fn App() -> Element {
     use_context_provider(|| show_about.clone());
     use_context_provider(|| show_command_palette.clone());
     use_context_provider(|| show_onboarding.clone());
+    use_context_provider(|| api_keys_version.clone());
     
     // Global keyboard shortcuts
     let on_global_keydown = move |evt: KeyboardEvent| {
@@ -283,6 +287,7 @@ pub fn App() -> Element {
                 openrouter_key,
                 hive_key,
                 current_step: onboarding_current_step,
+                api_keys_version,
             }
             
             if *show_settings.read() {

@@ -430,10 +430,31 @@ fn main() -> Result<()> {
         }
     };
     
-    // Handle desktop mode before creating tokio runtime
+    // Handle desktop mode - create runtime to initialize database first
     if ui_mode == UIMode::Desktop {
         tracing::info!("Launching desktop GUI mode");
         let config = Config::default();
+        
+        // Create a runtime to initialize the database before launching desktop
+        let runtime = tokio::runtime::Runtime::new()?;
+        runtime.block_on(async {
+            // Initialize the database
+            let db_config = crate::core::database::DatabaseConfig {
+                path: config.database.path.clone(),
+                max_connections: config.database.connection_pool_size as u32,
+                connection_timeout: std::time::Duration::from_secs(5),
+                idle_timeout: std::time::Duration::from_secs(300),
+                enable_wal: config.database.enable_wal,
+                enable_foreign_keys: true,
+                cache_size: 8192,
+                synchronous: "NORMAL".to_string(),
+                journal_mode: "WAL".to_string(),
+            };
+            crate::core::database::initialize_database(Some(db_config)).await?;
+            Ok::<(), anyhow::Error>(())
+        })?;
+        
+        // Now launch the desktop app with database initialized
         launch_desktop_app(config)?;
         return Ok(());
     }

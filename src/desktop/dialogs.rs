@@ -1618,7 +1618,8 @@ pub fn OnboardingDialog(
     mut show_onboarding: Signal<bool>, 
     mut openrouter_key: Signal<String>, 
     mut hive_key: Signal<String>,
-    mut current_step: Signal<i32>
+    mut current_step: Signal<i32>,
+    mut api_keys_version: Signal<u32>
 ) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
@@ -2700,6 +2701,8 @@ pub fn OnboardingDialog(
                                     return;
                                 } else {
                                     tracing::info!("OpenRouter key saved successfully to database");
+                                    // Increment API keys version to trigger consensus re-initialization
+                                    *api_keys_version.write() += 1;
                                     // Move to profile selection
                                     *current_step.write() = 4;
                                 }

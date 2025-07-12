@@ -8,6 +8,8 @@ use anyhow::Context;
 use reqwest;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use rusqlite::{params, OptionalExtension};
+use chrono::{DateTime, Utc};
 use tokio::fs;
 
 /// License tiers available in the system
@@ -88,6 +90,7 @@ pub struct LicenseInfo {
     pub daily_limit: u32,
     pub features: Vec<String>,
     pub user_id: String,
+    pub email: Option<String>,
     pub expires_at: Option<String>,
     pub validated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -187,17 +190,33 @@ impl LicenseManager {
             daily_limit: validation.daily_limit,
             features: validation.features.clone(),
             user_id: validation.user_id.clone(),
+            email: validation.email.clone(),
             expires_at: validation.expires_at.clone(),
             validated_at: chrono::Utc::now(),
         };
 
-        // Store license in encrypted format
-        let license_file = self.config_dir.join("license.json");
-        let license_json = serde_json::to_string_pretty(&license_info)
-            .context("Failed to serialize license info")?;
-
-        fs::write(&license_file, license_json).await
-            .context("Failed to write license file")?;
+        // Store license in database
+        let db = crate::core::get_database().await?;
+        let conn = db.get_connection()?;
+        
+        let features_json = serde_json::to_string(&license_info.features)
+            .context("Failed to serialize features")?;
+        
+        conn.execute(
+            "INSERT OR REPLACE INTO licenses 
+             (key, tier, daily_limit, features, user_id, email, expires_at, validated_at, updated_at) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)",
+            params![
+                license_info.key,
+                license_info.tier.to_string(),
+                license_info.daily_limit,
+                features_json,
+                license_info.user_id,
+                license_info.email.as_ref().map(|s| s.as_str()),
+                license_info.expires_at.as_ref(),
+                license_info.validated_at.to_rfc3339()
+            ],
+        ).context("Failed to store license in database")?;
         
         // Update user tier in database if available
         if let Ok(db) = crate::core::get_database().await {
@@ -216,21 +235,54 @@ impl LicenseManager {
         Ok(())
     }
 
-    /// Load stored license
+    /// Load stored license from database
     pub async fn load_license(&self) -> Result<Option<LicenseInfo>> {
-        let license_file = self.config_dir.join("license.json");
+        let db = crate::core::get_database().await?;
+        let conn = db.get_connection()?;
         
-        if !license_file.exists() {
-            return Ok(None);
-        }
+        let mut stmt = conn.prepare(
+            "SELECT key, tier, daily_limit, features, user_id, email, expires_at, validated_at 
+             FROM licenses 
+             ORDER BY validated_at DESC 
+             LIMIT 1"
+        ).context("Failed to prepare statement")?;
+        
+        let license_info = stmt.query_row([], |row| {
+            let features_json: Option<String> = row.get(3)?;
+            let features = features_json
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .unwrap_or_default();
+            
+            let expires_at_str: Option<String> = row.get(6)?;
+            let validated_at_str: String = row.get(7)?;
+            let validated_at = DateTime::parse_from_rfc3339(&validated_at_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+            
+            let tier_str: String = row.get(1)?;
+            let tier = match tier_str.as_str() {
+                "free" | "Free" => LicenseTier::Free,
+                "basic" | "Basic" => LicenseTier::Basic,
+                "standard" | "Standard" => LicenseTier::Standard,
+                "premium" | "Premium" => LicenseTier::Premium,
+                "unlimited" | "Unlimited" => LicenseTier::Unlimited,
+                "enterprise" | "Enterprise" => LicenseTier::Enterprise,
+                _ => LicenseTier::Free,
+            };
+            
+            Ok(LicenseInfo {
+                key: row.get(0)?,
+                tier,
+                daily_limit: row.get(2)?,
+                features,
+                user_id: row.get(4)?,
+                email: row.get(5)?,
+                expires_at: row.get(6)?,
+                validated_at,
+            })
+        }).optional().map_err(|e| HiveError::DatabaseQuery { query: format!("Failed to load license: {}", e) })?;
 
-        let license_content = fs::read_to_string(&license_file).await
-            .context("Failed to read license file")?;
-
-        let license_info: LicenseInfo = serde_json::from_str(&license_content)
-            .context("Failed to parse license file")?;
-
-        Ok(Some(license_info))
+        Ok(license_info)
     }
 
     /// Check if license exists and is valid
@@ -315,14 +367,13 @@ impl LicenseManager {
         }
     }
 
-    /// Remove stored license
+    /// Remove stored license from database
     pub async fn remove_license(&self) -> Result<()> {
-        let license_file = self.config_dir.join("license.json");
+        let db = crate::core::get_database().await?;
+        let conn = db.get_connection()?;
         
-        if license_file.exists() {
-            fs::remove_file(&license_file).await
-                .context("Failed to remove license file")?;
-        }
+        conn.execute("DELETE FROM licenses", [])
+            .map_err(|e| HiveError::DatabaseQuery { query: format!("Failed to delete licenses: {}", e) })?;
 
         Ok(())
     }
