@@ -1,0 +1,7 @@
+name = "hive-tools"
+
+# D1 Database for user data
+[[d1_databases]]
+binding = "HIVE_DB"
+database_name = "hive-user-db"
+database_id = "b646eb8d-810f-41c1-ba12-b95a543b4884"

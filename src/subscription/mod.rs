@@ -256,10 +256,23 @@ impl SubscriptionDisplay {
         let result = tokio::task::spawn_blocking(move || -> Result<(String, String, String, u32, bool)> {
             use rusqlite::OptionalExtension;
             
-            // Get user info
-            let user_result = conn.query_row(
-                "SELECT id, email, tier, license_key FROM users WHERE license_key IS NOT NULL LIMIT 1",
+            // First, get the currently configured license key
+            let current_license_key = conn.query_row(
+                "SELECT value FROM configurations WHERE key = 'hive_license_key'",
                 [],
+                |row| row.get::<_, String>(0)
+            ).optional()?;
+            
+            if current_license_key.is_none() {
+                return Ok(("No license".to_string(), "free".to_string(), String::new(), 0, false));
+            }
+            
+            let license_key = current_license_key.unwrap();
+            
+            // Get user info that matches the current license key
+            let user_result = conn.query_row(
+                "SELECT id, email, tier, license_key FROM users WHERE license_key = ?1",
+                rusqlite::params![&license_key],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,

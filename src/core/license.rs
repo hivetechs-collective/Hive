@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use rusqlite::{params, OptionalExtension};
 use chrono::{DateTime, Utc};
 use tokio::fs;
+use sha2::{Sha256, Digest};
+use sysinfo::System;
 
 /// License tiers available in the system
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -116,9 +118,11 @@ impl LicenseManager {
         }
     }
 
-    /// Get device fingerprint for license validation
-    fn get_device_fingerprint(&self) -> String {
-        // Combine hostname and username for basic device identification
+    /// Get device fingerprint for license validation (matching conversation gateway)
+    async fn get_device_fingerprint(&self) -> Result<String> {
+        use sha2::{Sha256, Digest};
+        use sysinfo::System;
+        
         let hostname = hostname::get()
             .ok()
             .and_then(|h| h.to_str().map(|s| s.to_string()))
@@ -128,7 +132,22 @@ impl LicenseManager {
             .or_else(|_| std::env::var("USERNAME"))
             .unwrap_or_else(|_| "unknown".to_string());
         
-        format!("{}-{}", hostname, username)
+        let os_version = System::os_version().unwrap_or_default();
+        
+        let machine_data = serde_json::json!({
+            "hostname": hostname,
+            "platform": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "homedir": dirs::home_dir().map(|p| p.to_string_lossy().to_string()),
+            "username": username,
+            "os_version": os_version,
+        });
+        
+        let machine_string = serde_json::to_string(&machine_data)?;
+        let mut hasher = Sha256::new();
+        hasher.update(machine_string.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+        Ok(hash[..16].to_string())
     }
 
     /// Validate license key with HiveTechs servers
@@ -149,10 +168,10 @@ impl LicenseManager {
             .post(&validation_url)
             .header("Authorization", format!("Bearer {}", license_key))
             .json(&serde_json::json!({
-                "license_key": license_key,
-                "product": "hive-ai",
-                "version": "2.0.0",
-                "device_fingerprint": self.get_device_fingerprint()
+                "client_id": "hive-tools",
+                "session_token": license_key,
+                "fingerprint": self.get_device_fingerprint().await?,
+                "nonce": Utc::now().timestamp_millis().to_string()
             }))
             .send()
             .await
