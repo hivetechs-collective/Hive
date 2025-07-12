@@ -203,6 +203,7 @@ pub struct SubscriptionDisplay {
     pub tier: SubscriptionTier,
     pub daily_remaining: u32,
     pub daily_limit: u32,
+    pub daily_used: u32,
     pub total_remaining: Option<u32>, // From D1 (includes daily + credits)
     pub is_trial: bool,
 }
@@ -210,12 +211,22 @@ pub struct SubscriptionDisplay {
 impl SubscriptionDisplay {
     pub fn format(&self) -> String {
         let tier_display = if self.is_trial {
-            format!("{} (Trial)", self.tier)
+            "FREE (Trial)"
         } else {
-            self.tier.to_string()
+            match self.tier {
+                SubscriptionTier::Free => "FREE",
+                SubscriptionTier::Basic => "BASIC",
+                SubscriptionTier::Standard => "STANDARD",
+                SubscriptionTier::Premium => "PREMIUM",
+                SubscriptionTier::Unlimited => "UNLIMITED",
+                SubscriptionTier::Team => "TEAM",
+            }
         };
 
-        if self.tier == SubscriptionTier::Unlimited {
+        // During trial period, show unlimited but also track daily usage
+        if self.is_trial {
+            format!("{} | {} | Unlimited ({})", self.username, tier_display, self.daily_used)
+        } else if self.tier == SubscriptionTier::Unlimited {
             format!("{} | {} | Unlimited", self.username, tier_display)
         } else if let Some(total) = self.total_remaining {
             // Show total remaining from D1 (includes daily + any credit packs)
@@ -247,18 +258,19 @@ impl SubscriptionDisplay {
             
             // Get user info
             let user_result = conn.query_row(
-                "SELECT email, subscription_tier, license_key FROM users WHERE license_key IS NOT NULL LIMIT 1",
+                "SELECT id, email, tier, license_key FROM users WHERE license_key IS NOT NULL LIMIT 1",
                 [],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
                         row.get::<_, String>(1)?,
                         row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
                     ))
                 }
             ).optional()?;
             
-            let (email, tier_str, license_key) = match user_result {
+            let (user_id, email, tier_str, license_key) = match user_result {
                 Some(data) => data,
                 None => return Ok(("No user".to_string(), "free".to_string(), String::new(), 0, false)),
             };
@@ -273,10 +285,9 @@ impl SubscriptionDisplay {
             
             let daily_used: u32 = conn.query_row(
                 "SELECT COUNT(*) FROM conversation_usage 
-                 WHERE license_key = ?1 
-                 AND timestamp >= ?2 
-                 AND verified = 1",
-                rusqlite::params![&license_key, start_of_day.to_rfc3339()],
+                 WHERE user_id = ?1 
+                 AND timestamp >= ?2",
+                rusqlite::params![&user_id, start_of_day.to_rfc3339()],
                 |row| row.get(0)
             ).unwrap_or(0);
             
@@ -287,8 +298,8 @@ impl SubscriptionDisplay {
                 "SELECT 
                     CAST((julianday('now') - julianday(created_at)) AS INTEGER) < 7 as is_trial
                 FROM users 
-                WHERE license_key = ?1",
-                rusqlite::params![&license_key],
+                WHERE id = ?1",
+                rusqlite::params![&user_id],
                 |row| row.get::<_, bool>(0)
             ).unwrap_or(false);
             
@@ -320,6 +331,7 @@ impl SubscriptionDisplay {
             tier,
             daily_remaining,
             daily_limit,
+            daily_used,
             total_remaining: None, // Will be updated from D1 responses
             is_trial,
         })
@@ -373,10 +385,26 @@ mod tests {
             tier: SubscriptionTier::Premium,
             daily_remaining: 180,
             daily_limit: 200,
-            // Credits removed for security
+            daily_used: 20,
+            total_remaining: None,
             is_trial: false,
         };
 
         assert_eq!(display.format(), "user@example.com | PREMIUM | 180/200 daily");
+    }
+
+    #[test]
+    fn test_trial_display() {
+        let display = SubscriptionDisplay {
+            username: "trial@example.com".to_string(),
+            tier: SubscriptionTier::Free,
+            daily_remaining: u32::MAX,
+            daily_limit: u32::MAX,
+            daily_used: 5,
+            total_remaining: None,
+            is_trial: true,
+        };
+
+        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | Unlimited (5)");
     }
 }

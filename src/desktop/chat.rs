@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 use dioxus::events::{KeyboardEvent, MouseEvent};
-use crate::desktop::{state::*, components::*, events::KeyboardEventUtils, consensus_integration::{use_consensus, DesktopConsensusManager}};
+use crate::desktop::{state::*, components::*, events::KeyboardEventUtils, consensus_integration::{use_consensus_with_version, DesktopConsensusManager}};
 
 /// Chat Interface Component
 #[component]
@@ -197,12 +197,14 @@ fn process_message(
                     tracing::error!("Consensus manager not available but profiles exist");
                     let error_msg = ChatMessage {
                         id: uuid::Uuid::new_v4().to_string(),
-                        content: "Error: Consensus engine not initialized. Please restart the application.".to_string(),
+                        content: "⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.".to_string(),
                         message_type: MessageType::Error,
                         timestamp: chrono::Utc::now(),
                         metadata: MessageMetadata::default(),
                     };
                     app_state_clone.write().chat.add_message(error_msg);
+                    // Show onboarding to configure API keys
+                    show_onboarding_clone.set(true);
                 }
                 Err(e) => {
                     tracing::error!("Failed to load profiles: {}", e);
@@ -285,7 +287,8 @@ fn ChatInput() -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let mut input_text = use_signal(String::new);
     let mut is_composing = use_signal(|| false);
-    let consensus_manager = use_consensus();
+    let api_keys_version = use_context::<Signal<u32>>();
+    let consensus_manager = use_consensus_with_version(*api_keys_version.read());
     let mut show_onboarding = use_context::<Signal<bool>>();
     
     let on_send_click = {

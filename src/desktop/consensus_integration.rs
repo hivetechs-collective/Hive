@@ -364,17 +364,11 @@ pub struct DesktopConsensusManager {
 impl DesktopConsensusManager {
     /// Create a new desktop consensus manager
     pub async fn new(app_state: Signal<AppState>) -> Result<Self> {
-        // Check if we have valid API keys first
-        if !ApiKeyManager::has_valid_keys().await? {
-            return Err(anyhow::anyhow!(
-                "No valid OpenRouter API key configured. Please configure in Settings."
-            ));
-        }
+        // Use the global database instance that was initialized at startup
+        use crate::core::database::get_database;
+        let db = get_database().await?;
         
-        // Use unified database manager for desktop app
-        use crate::core::database::{DatabaseManager, DatabaseConfig};
-        let db = Arc::new(DatabaseManager::new(DatabaseConfig::default()).await?);
-        
+        // Create engine without checking keys - we'll check when processing
         let engine = ConsensusEngine::new(Some(db)).await?;
         
         Ok(Self {
@@ -383,8 +377,20 @@ impl DesktopConsensusManager {
         })
     }
     
+    /// Check if the consensus manager has valid API keys
+    pub async fn has_valid_keys(&self) -> bool {
+        ApiKeyManager::has_valid_keys().await.unwrap_or(false)
+    }
+    
     /// Process a query with UI updates and streaming
     pub async fn process_query_streaming(&mut self, query: &str) -> Result<(String, mpsc::UnboundedReceiver<ConsensusUIEvent>)> {
+        // Check if we have valid API keys before processing
+        if !ApiKeyManager::has_valid_keys().await? {
+            return Err(anyhow::anyhow!(
+                "No valid OpenRouter API key configured. Please configure in Settings."
+            ));
+        }
+        
         // Start consensus in UI
         self.app_state.write().consensus.start_consensus();
         
@@ -457,17 +463,39 @@ impl DesktopConsensusManager {
 
 /// Hook to use consensus in components
 pub fn use_consensus() -> Option<DesktopConsensusManager> {
+    use_consensus_with_version(0)
+}
+
+/// Hook to use consensus with version tracking for re-initialization
+pub fn use_consensus_with_version(api_keys_version: u32) -> Option<DesktopConsensusManager> {
     let app_state = use_context::<Signal<AppState>>();
     
     let resource = use_resource(move || async move {
-        match DesktopConsensusManager::new(app_state).await {
-            Ok(manager) => {
-                tracing::info!("Successfully created consensus manager");
-                Some(manager)
+        // Version is used to force re-evaluation when API keys change
+        let _version = api_keys_version;
+        
+        // First check if we have valid API keys
+        match ApiKeyManager::has_valid_keys().await {
+            Ok(true) => {
+                // Keys exist, try to create manager
+                match DesktopConsensusManager::new(app_state).await {
+                    Ok(manager) => {
+                        tracing::info!("Successfully created consensus manager with API keys");
+                        Some(manager)
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to create consensus manager: {}", e);
+                        tracing::error!("Error details: {:?}", e);
+                        None
+                    }
+                }
+            }
+            Ok(false) => {
+                tracing::info!("No valid API keys found, consensus manager not created");
+                None
             }
             Err(e) => {
-                tracing::error!("Failed to create consensus manager: {}", e);
-                tracing::error!("Error details: {:?}", e);
+                tracing::error!("Failed to check API keys: {}", e);
                 None
             }
         }
