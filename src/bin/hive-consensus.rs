@@ -479,16 +479,19 @@ fn App() -> Element {
         });
     });
     
-    // Load subscription info periodically
+    // Load subscription info periodically and on trigger changes
     use_effect({
         let mut subscription_display = subscription_display.clone();
+        let refresh_trigger = app_state.read().subscription_refresh_trigger;
         move || {
-            // Load immediately with a small delay to ensure database is initialized
+            // Load immediately when trigger changes or on initial load
             spawn({
                 let mut subscription_display = subscription_display.clone();
                 async move {
-                    // Wait a bit for database initialization
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    // Wait a bit for database initialization on first load
+                    if refresh_trigger == 0 {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    }
                     
                     use hive_ai::subscription::SubscriptionDisplay;
                     

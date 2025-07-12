@@ -47,6 +47,9 @@ pub struct AppState {
     pub total_conversations_remaining: Option<u32>, // From D1 (includes credits)
     pub is_trial_active: bool,
     pub trial_days_remaining: Option<i32>,
+    
+    /// Trigger for subscription display refresh
+    pub subscription_refresh_trigger: u32,
 }
 
 impl Default for AppState {
@@ -75,6 +78,7 @@ impl AppState {
             total_conversations_remaining: None,
             is_trial_active: false,
             trial_days_remaining: None,
+            subscription_refresh_trigger: 0,
         }
     }
     
