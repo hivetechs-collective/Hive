@@ -334,19 +334,29 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut show_embedded_browser = use_signal(|| false);
     let mut current_stage_selection = use_signal(|| String::new());
     
+    // Add visibility toggles for API keys
+    let mut show_openrouter_key = use_signal(|| false);
+    let mut show_hive_key = use_signal(|| false);
+    
+    // Local copies of keys for editing
+    let mut local_openrouter_key = use_signal(|| openrouter_key.read().clone());
+    let mut local_hive_key = use_signal(|| hive_key.read().clone());
+    
     // Load existing keys and profiles from database on mount
     use_effect(move || {
         // Load OpenRouter key if exists
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
             if !key.is_empty() && openrouter_key.read().is_empty() {
-                *openrouter_key.write() = key;
+                *openrouter_key.write() = key.clone();
+                *local_openrouter_key.write() = key;
             }
         }
         
         // Load Hive key if exists
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
             if !key.is_empty() && hive_key.read().is_empty() {
-                *hive_key.write() = key;
+                *hive_key.write() = key.clone();
+                *local_hive_key.write() = key;
             }
         }
         
@@ -412,12 +422,31 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 class: "settings-label",
                                 "OpenRouter API Key" 
                             }
-                            input {
-                                class: "settings-input",
-                                r#type: "password",
-                                value: "{openrouter_key.read()}",
-                                placeholder: "sk-or-v1-...",
-                                oninput: move |evt| *openrouter_key.write() = evt.value().clone(),
+                            div {
+                                style: "display: flex; gap: 10px; align-items: center;",
+                                input {
+                                    class: "settings-input",
+                                    style: "flex: 1;",
+                                    r#type: if *show_openrouter_key.read() { "text" } else { "password" },
+                                    value: "{local_openrouter_key.read()}",
+                                    placeholder: "sk-or-v1-...",
+                                    oninput: move |evt| *local_openrouter_key.write() = evt.value().clone(),
+                                }
+                                button {
+                                    class: "button button-secondary",
+                                    style: "padding: 8px 12px;",
+                                    onclick: move |_| {
+                                        let current = *show_openrouter_key.read();
+                                        *show_openrouter_key.write() = !current;
+                                    },
+                                    if *show_openrouter_key.read() { "Hide" } else { "Show" }
+                                }
+                                button {
+                                    class: "button button-secondary",
+                                    style: "padding: 8px 12px;",
+                                    onclick: move |_| *local_openrouter_key.write() = String::new(),
+                                    "Clear"
+                                }
                             }
                             p { 
                                 class: "settings-hint",
@@ -442,12 +471,31 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 class: "settings-label",
                                 "Hive License Key" 
                             }
-                            input {
-                                class: "settings-input",
-                                r#type: "password",
-                                value: "{hive_key.read()}",
-                                placeholder: "hive-...",
-                                oninput: move |evt| *hive_key.write() = evt.value().clone(),
+                            div {
+                                style: "display: flex; gap: 10px; align-items: center;",
+                                input {
+                                    class: "settings-input",
+                                    style: "flex: 1;",
+                                    r#type: if *show_hive_key.read() { "text" } else { "password" },
+                                    value: "{local_hive_key.read()}",
+                                    placeholder: "HIVE-XXXX-XXXX-XXXX-XXXX-XXXX",
+                                    oninput: move |evt| *local_hive_key.write() = evt.value().clone(),
+                                }
+                                button {
+                                    class: "button button-secondary",
+                                    style: "padding: 8px 12px;",
+                                    onclick: move |_| {
+                                        let current = *show_hive_key.read();
+                                        *show_hive_key.write() = !current;
+                                    },
+                                    if *show_hive_key.read() { "Hide" } else { "Show" }
+                                }
+                                button {
+                                    class: "button button-secondary",
+                                    style: "padding: 8px 12px;",
+                                    onclick: move |_| *local_hive_key.write() = String::new(),
+                                    "Clear"
+                                }
                             }
                             p { 
                                 class: "settings-hint",
@@ -624,8 +672,12 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             *is_validating.write() = true;
                             
                             // Save settings with validation
-                            let openrouter = openrouter_key.read().clone();
-                            let hive = hive_key.read().clone();
+                            let openrouter = local_openrouter_key.read().clone();
+                            let hive = local_hive_key.read().clone();
+                            
+                            // Update parent signals
+                            *openrouter_key.write() = openrouter.clone();
+                            *hive_key.write() = hive.clone();
                             let mut is_validating = is_validating.clone();
                             let mut validation_error = validation_error.clone();
                             let mut show_settings = show_settings.clone();
@@ -668,11 +720,51 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                     } else {
                                                         tracing::info!("License validated and stored successfully");
                                                         
-                                                        // Update app state with usage info
+                                                        // Update users table - replace any existing user with new license user
+                                                        if let Ok(db) = crate::core::get_database().await {
+                                                            if let Ok(conn) = db.get_connection() {
+                                                                // Use INSERT OR REPLACE to handle user switching cleanly
+                                                                // This will replace any existing user with the same ID or create a new one
+                                                                if let Err(e) = conn.execute(
+                                                                    "INSERT OR REPLACE INTO users (id, email, license_key, tier, created_at, updated_at) 
+                                                                     VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+                                                                    rusqlite::params![
+                                                                        &validation.user_id, 
+                                                                        &validation.email.as_ref().unwrap_or(&"".to_string()), 
+                                                                        &hive,
+                                                                        &validation.tier
+                                                                    ]
+                                                                ) {
+                                                                    tracing::error!("Failed to insert/update user: {}", e);
+                                                                } else {
+                                                                    tracing::info!("Updated user {} ({}) with license key {}", 
+                                                                        &validation.user_id, 
+                                                                        &validation.email.as_ref().unwrap_or(&"unknown".to_string()),
+                                                                        &hive
+                                                                    );
+                                                                }
+                                                                
+                                                                // Clean up any old users that don't match the current license key
+                                                                if let Err(e) = conn.execute(
+                                                                    "DELETE FROM users WHERE license_key != ?1",
+                                                                    rusqlite::params![&hive]
+                                                                ) {
+                                                                    tracing::error!("Failed to clean up old users: {}", e);
+                                                                } else {
+                                                                    tracing::info!("Cleaned up old users for license key change");
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        // IMMEDIATE UI REFRESH: Update app state with new user info right away
                                                         if let Ok(db) = crate::core::get_database().await {
                                                             let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
                                                             
                                                             if let Ok(usage_display) = usage_tracker.get_usage_display(&validation.user_id).await {
+                                                                tracing::info!("Immediately updating UI with new user: {} ({})", 
+                                                                    &validation.email.as_ref().unwrap_or(&"unknown".to_string()),
+                                                                    &validation.tier
+                                                                );
                                                                 app_state_clone.write().update_usage_info(
                                                                     Some(validation.user_id),
                                                                     &validation.tier,
@@ -683,6 +775,10 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                                 );
                                                             }
                                                         }
+                                                        
+                                                        // Force immediate UI refresh: directly update the app state
+                                                        // with the newly validated user information to ensure instant display update
+                                                        tracing::info!("License key change completed - UI should update immediately");
                                                     }
                                                 } else {
                                                     success = false;

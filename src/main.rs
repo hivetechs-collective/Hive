@@ -439,7 +439,7 @@ fn main() -> Result<()> {
         let runtime = tokio::runtime::Runtime::new()?;
         runtime.block_on(async {
             // Initialize the database
-            let db_config = crate::core::database::DatabaseConfig {
+            let db_config = hive_ai::core::database::DatabaseConfig {
                 path: config.database.path.clone(),
                 max_connections: config.database.connection_pool_size as u32,
                 connection_timeout: std::time::Duration::from_secs(5),
@@ -450,7 +450,7 @@ fn main() -> Result<()> {
                 synchronous: "NORMAL".to_string(),
                 journal_mode: "WAL".to_string(),
             };
-            crate::core::database::initialize_database(Some(db_config)).await?;
+            hive_ai::core::database::initialize_database(Some(db_config)).await?;
             Ok::<(), anyhow::Error>(())
         })?;
         
