@@ -201,7 +201,7 @@ impl ConversationGateway {
             user_id: result.user
                 .map(|u| u.id)
                 .or(result.user_id)
-                .ok_or_else(|| anyhow!("No user ID in response"))?,
+                .unwrap_or_else(|| "unknown".to_string()), // D1 doesn't always return user_id
             remaining: result.remaining
                 .or(result.remaining_conversations)
                 .unwrap_or(0),
