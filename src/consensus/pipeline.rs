@@ -19,6 +19,7 @@ use rusqlite::{params, OptionalExtension};
 use crate::consensus::models::ModelManager;
 use crate::core::database::DatabaseManager;
 use crate::core::usage_tracker::UsageTracker;
+use crate::subscription::conversation_gateway::ConversationGateway;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
@@ -164,6 +165,54 @@ impl ConsensusPipeline {
         let conversation_id = Uuid::new_v4().to_string();
         let pipeline_start = Instant::now();
         let mut total_cost = 0.0;
+
+        // UPDATE D1 AND REFRESH UI IMMEDIATELY BEFORE CONSENSUS STARTS
+        // This ensures the count is updated in real-time as soon as user initiates consensus
+        let license_key_for_d1 = if let Some(db) = &self.database {
+            // Get the current license key from configurations
+            let conn = db.get_connection()?;
+            let license_key = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+                // Get current license key only - D1 will validate and return user info
+                let license_key: Option<String> = conn.query_row(
+                    "SELECT value FROM configurations WHERE key = 'hive_license_key'",
+                    [],
+                    |row| row.get(0)
+                ).optional()?;
+                Ok(license_key)
+            }).await??;
+            
+            if let Some(license_key) = license_key {
+                tracing::info!("Starting consensus with license key: {}", 
+                             &license_key[..8]); // Log only first 8 chars for security
+                
+                // Call D1 to validate license and increment conversation count IMMEDIATELY
+                // D1 is the source of truth for user information
+                let gateway = ConversationGateway::new()?;
+                match gateway.request_conversation_authorization(question, &license_key).await {
+                    Ok(auth) => {
+                        tracing::info!("D1 authorization successful! {} conversations remaining today", 
+                                     auth.remaining);
+                        
+                        // Store the authorization for later verification
+                        // The remaining count is already updated in D1 and should refresh UI
+                        Some((license_key, auth))
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to authorize with D1: {}", e);
+                        // Return the error to stop consensus if authorization fails
+                        return Err(e);
+                    }
+                }
+            } else {
+                tracing::info!("No license key configured, running without D1 authorization");
+                None
+            }
+        } else {
+            None
+        };
+        
+        // Store the D1 authorization for later verification
+        let d1_auth = license_key_for_d1.map(|(_, auth)| auth);
 
         // Emit BeforeConsensus hook event
 //         // if let Some(hooks) = &self.hooks_system {
@@ -435,6 +484,28 @@ impl ConsensusPipeline {
 //                 tracing::warn!("Failed to dispatch AfterConsensus hook event: {}", e);
 //             }
 //         }
+
+        // Report conversation completion to D1 if we have authorization
+        if let Some(auth) = d1_auth {
+            let gateway = ConversationGateway::new()?;
+            match gateway.report_conversation_completion(
+                &auth.conversation_token,
+                &conversation_id,
+                &auth.question_hash
+            ).await {
+                Ok(verification) => {
+                    if verification.verified {
+                        tracing::info!("Conversation verified with D1 ({} remaining)", verification.remaining_conversations);
+                    } else {
+                        tracing::warn!("D1 verification failed but continuing");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to verify conversation completion with D1: {}", e);
+                    // Don't fail the whole consensus over verification
+                }
+            }
+        }
 
         Ok(result)
     }
@@ -903,27 +974,49 @@ impl ConsensusPipeline {
                 ]
             )?;
             
-            // 4. Store conversation usage for tracking
-            // Get the user_id from the database (using the license key)
-            let user_id_result: Option<String> = tx.query_row(
-                "SELECT id FROM users WHERE license_key IS NOT NULL LIMIT 1",
+            // 4. Store conversation usage for tracking - using current license key
+            // Get the currently configured license key first
+            let current_license_key: Option<String> = tx.query_row(
+                "SELECT value FROM configurations WHERE key = 'hive_license_key'",
                 [],
                 |row| row.get(0)
             ).optional()?;
             
+            // Then get the user_id that matches the current license key
+            let user_id_result: Option<String> = if let Some(license_key) = current_license_key {
+                tx.query_row(
+                    "SELECT id FROM users WHERE license_key = ?1",
+                    params![&license_key],
+                    |row| row.get(0)
+                ).optional()?
+            } else {
+                None
+            };
+            
             if let Some(user_id) = user_id_result {
-                // Insert into conversation_usage table for tracking
-                tx.execute(
-                    "INSERT INTO conversation_usage (
-                        conversation_id, user_id, timestamp
-                    ) VALUES (?1, ?2, ?3)",
-                    params![
-                        conversation_id,
-                        user_id,
-                        &now
-                    ]
-                )?;
-                tracing::info!("Recorded conversation usage for user {}", user_id);
+                // Check if we already recorded this at the start (to avoid duplicates)
+                let already_recorded: bool = tx.query_row(
+                    "SELECT 1 FROM conversation_usage WHERE conversation_id = ?1 AND user_id = ?2",
+                    params![conversation_id, &user_id],
+                    |_| Ok(true)
+                ).unwrap_or(false);
+                
+                if !already_recorded {
+                    // Insert into conversation_usage table for tracking
+                    tx.execute(
+                        "INSERT INTO conversation_usage (
+                            conversation_id, user_id, timestamp
+                        ) VALUES (?1, ?2, ?3)",
+                        params![
+                            conversation_id,
+                            user_id,
+                            &now
+                        ]
+                    )?;
+                    tracing::info!("Recorded conversation usage for user {}", user_id);
+                } else {
+                    tracing::debug!("Conversation usage already recorded for user {}", user_id);
+                }
             } else {
                 tracing::warn!("No user found with license key, skipping usage tracking");
             }

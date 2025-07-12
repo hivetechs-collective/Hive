@@ -155,56 +155,9 @@ impl ConsensusEngine {
         semantic_context: Option<String>,
         user_id: Option<String>,
     ) -> Result<ConsensusResult> {
-        // Check subscription before processing
-        tracing::info!("Checking subscription. License key present: {}", self.license_key.is_some());
-        let conversation_auth = if let Some(ref license_key) = self.license_key {
-            tracing::info!("License key found, checking usage limits...");
-            // Check usage limits
-            let mut usage_tracker = self.usage_tracker.write().await;
-            let (allowed, notification) = usage_tracker.check_usage_before_conversation().await?;
-            
-            if let Some(notif) = notification {
-                tracing::info!("{}: {}", notif.title, notif.message);
-                
-                // If blocked, return error
-                if !allowed {
-                    return Err(anyhow!("{}\n\n{}", notif.title, notif.message));
-                }
-            }
-            
-            // Request conversation authorization from D1
-            tracing::info!("Requesting conversation authorization from D1...");
-            match self.conversation_gateway.request_conversation_authorization(query, license_key).await {
-                Ok(auth) => {
-                    tracing::info!("Authorization successful! Remaining: {}", auth.remaining);
-                    
-                    // Store the remaining count for UI display
-                    *self.last_auth_remaining.write().await = Some(auth.remaining);
-                    
-                    Some(auth)
-                },
-                Err(e) => {
-                    tracing::error!("Failed to authorize conversation: {}", e);
-                    // Check if it's a usage limit error
-                    if let Some(gateway_err) = e.downcast_ref::<crate::subscription::conversation_gateway::GatewayError>() {
-                        match gateway_err {
-                            crate::subscription::conversation_gateway::GatewayError::UsageLimitExceeded { used, limit, plan } => {
-                                return Err(anyhow!(
-                                    "Usage limit exceeded: {}/{} conversations today on {} plan.\n\
-                                    Upgrade at: https://hivetechs.io/pricing",
-                                    used, limit, plan
-                                ));
-                            }
-                            _ => {}
-                        }
-                    }
-                    return Err(e);
-                }
-            }
-        } else {
-            tracing::warn!("No license key found - running without subscription checks");
-            None
-        };
+        // D1 authorization now happens immediately in the pipeline.run() method
+        // This ensures the UI updates right away when consensus starts
+        tracing::info!("Starting consensus processing (D1 auth handled by pipeline)");
         
         let config = self.config.read().await.clone();
         
@@ -216,35 +169,11 @@ impl ConsensusEngine {
             pipeline = pipeline.with_database(db.clone());
         }
         
-        // Run the consensus pipeline
+        // Run the consensus pipeline (D1 auth and verification happens inside)
         let result = pipeline
             .run(query, semantic_context, user_id.clone())
             .await
             .context("Failed to run consensus pipeline")?;
-        
-        // Report conversation completion if authorized
-        if let Some(auth) = conversation_auth {
-            match self.conversation_gateway.report_conversation_completion(
-                &auth.conversation_token,
-                &result.conversation_id,
-                &auth.question_hash
-            ).await {
-                Ok(verification) => {
-                    if verification.verified {
-                        tracing::info!("Conversation verified ({} remaining)", verification.remaining_conversations);
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to verify conversation completion: {}", e);
-                }
-            }
-            
-            // Record usage locally
-            let mut usage_tracker = self.usage_tracker.write().await;
-            if let Err(e) = usage_tracker.record_conversation_usage().await {
-                tracing::warn!("Failed to record usage: {}", e);
-            }
-        }
         
         Ok(result)
     }
@@ -494,11 +423,11 @@ impl ConsensusEngine {
     async fn get_license_from_database(database: &Arc<DatabaseManager>) -> Result<Option<String>> {
         let conn = database.get_connection()?;
         
-        // Query the users table for license key
-        // In TypeScript version, there's typically one user record
+        // Get the currently configured license key from configurations table
         let license_key: Option<String> = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+            // First check configurations table for the current license key
             let key = conn.query_row(
-                "SELECT license_key FROM users WHERE license_key IS NOT NULL LIMIT 1",
+                "SELECT value FROM configurations WHERE key = 'hive_license_key'",
                 [],
                 |row| row.get(0)
             ).optional()?;
