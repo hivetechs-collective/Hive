@@ -113,8 +113,10 @@ pub struct ConversationAuthorization {
     pub conversation_token: String,
     pub question_hash: String,
     pub user_id: String,
-    pub remaining: u32,
-    pub limit: u32,
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt", default)]
+    pub remaining: Option<u32>,
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt", default)]
+    pub limit: Option<u32>,
     pub expires_at: DateTime<Utc>,
 }
 
@@ -135,15 +137,16 @@ struct PreConversationResponse {
     allowed: bool,
     token: Option<String>,
     conversation_token: Option<String>,
-    #[serde(deserialize_with = "deserialize_unlimited_u32_opt")]
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt", default)]
     remaining: Option<u32>,
-    #[serde(deserialize_with = "deserialize_unlimited_u32_opt")]
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt", default)]
     remaining_conversations: Option<u32>,
     limits: Option<LimitsInfo>,
-    #[serde(deserialize_with = "deserialize_unlimited_u32_opt")]
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt", default)]
     plan_limit: Option<u32>,
     user: Option<UserInfo>,
     user_id: Option<String>,
+    email: Option<String>,
     expires_at: Option<String>,
     error: Option<String>,
     used_conversations: Option<u32>,
@@ -203,8 +206,8 @@ pub enum GatewayError {
     #[error("Authentication failed: {0}")]
     AuthenticationFailed(String),
     
-    #[error("Usage limit exceeded: {used}/{limit} conversations today")]
-    UsageLimitExceeded { used: u32, limit: u32, plan: String },
+    #[error("{} | {} | Daily limit reached ({}/{})", user.as_deref().unwrap_or("unknown"), plan, used, limit)]
+    UsageLimitExceeded { used: u32, limit: u32, plan: String, user: Option<String> },
     
     #[error("Network error: {0}")]
     NetworkError(String),
@@ -269,22 +272,73 @@ impl ConversationGateway {
                 }
             }
             
-            return Err(GatewayError::AuthenticationFailed(
+            // Extract user information from error response if available
+            let user_info = if let Ok(error_response) = serde_json::from_str::<PreConversationResponse>(&error_text) {
+                error_response.user
+                    .as_ref()
+                    .and_then(|u| {
+                        if !u.id.is_empty() {
+                            Some(u.id.clone())
+                        } else {
+                            u.email.clone()
+                        }
+                    })
+                    .or(error_response.user_id)
+                    .or(error_response.email)
+            } else {
+                None
+            };
+            
+            // Extract a more meaningful error message from the response
+            let error_msg = if error_text.contains("Invalid or inactive license") {
+                if let Some(user) = user_info {
+                    format!("{} | Invalid or inactive license", user)
+                } else {
+                    "Invalid or inactive license".to_string()
+                }
+            } else if error_text.contains("No active subscription") {
+                if let Some(user) = user_info {
+                    format!("{} | No active subscription", user)
+                } else {
+                    "No active subscription found".to_string()
+                }
+            } else {
                 format!("Authorization failed with status {}", status)
-            ).into());
+            };
+            
+            return Err(GatewayError::AuthenticationFailed(error_msg).into());
         }
 
-        let result: PreConversationResponse = response
-            .json()
-            .await
+        let response_text = response.text().await
             .map_err(|e| GatewayError::InvalidResponse(e.to_string()))?;
+        
+        // Log the raw response
+        tracing::info!("D1 raw response: {}", response_text);
+        
+        let result: PreConversationResponse = serde_json::from_str(&response_text)
+            .map_err(|e| GatewayError::InvalidResponse(format!("Failed to parse response: {} - Raw: {}", e, response_text)))?;
+
+        // Debug log the parsed response
+        tracing::info!("D1 parsed response: allowed={}, user={:?}, user_id={:?}, email={:?}, remaining={:?}, limit={:?}", 
+            result.allowed, result.user, result.user_id, result.email, result.remaining, result.plan_limit);
 
         if !result.allowed {
             let used = result.used_conversations.unwrap_or(0);
             let limit = result.plan_limit.unwrap_or(10);
             let plan = result.plan.unwrap_or_else(|| "FREE".to_string());
+            let user = result.user
+                .as_ref()
+                .and_then(|u| {
+                    if !u.id.is_empty() {
+                        Some(u.id.clone())
+                    } else {
+                        u.email.clone()
+                    }
+                })
+                .or(result.user_id.clone())
+                .or(result.email.clone());
             
-            return Err(GatewayError::UsageLimitExceeded { used, limit, plan }.into());
+            return Err(GatewayError::UsageLimitExceeded { used, limit, plan, user }.into());
         }
 
         tracing::info!("Conversation authorized ({} remaining)", 
@@ -297,16 +351,23 @@ impl ConversationGateway {
                 .ok_or_else(|| anyhow!("No conversation token in response"))?,
             question_hash,
             user_id: result.user
-                .map(|u| u.id)
-                .or(result.user_id)
+                .as_ref()
+                .and_then(|u| {
+                    // Try id first, then email
+                    if !u.id.is_empty() {
+                        Some(u.id.clone())
+                    } else {
+                        u.email.clone()
+                    }
+                })
+                .or(result.user_id.clone())
+                .or(result.email.clone())
                 .unwrap_or_else(|| "unknown".to_string()), // D1 doesn't always return user_id
             remaining: result.remaining
-                .or(result.remaining_conversations)
-                .unwrap_or(0),
+                .or(result.remaining_conversations), // Let it be None for unlimited
             limit: result.limits
                 .map(|l| l.daily)
-                .or(result.plan_limit)
-                .unwrap_or(10),
+                .or(result.plan_limit), // Let it be None for unlimited
             expires_at: if let Some(expires) = result.expires_at {
                 DateTime::parse_from_rfc3339(&expires)?
                     .with_timezone(&Utc)

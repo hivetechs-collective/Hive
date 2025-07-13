@@ -514,9 +514,13 @@ fn App() -> Element {
     use_context_provider(|| app_state.clone());
     
     // API keys state (needed before consensus manager)
-    let openrouter_key = use_signal(String::new);
-    let hive_key = use_signal(String::new);
+    let mut openrouter_key = use_signal(String::new);
+    let mut hive_key = use_signal(String::new);
     let api_keys_version = use_signal(|| 0u32);  // Track when API keys change
+    let mut api_config = use_signal(|| hive_ai::core::api_keys::ApiKeyConfig {
+        openrouter_key: None,
+        hive_key: None,
+    });
     
     // Get consensus manager
     let consensus_manager = use_consensus_with_version(*api_keys_version.read());
@@ -537,11 +541,33 @@ fn App() -> Element {
     let mut show_command_palette = use_signal(|| false);
     let mut show_settings_dialog = use_signal(|| false);
     let mut show_onboarding_dialog = use_signal(|| false);
-    let mut show_upgrade_dialog = use_signal(|| false);
-    let mut onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
+    let show_upgrade_dialog = use_signal(|| false);
+    let onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
     
     // Subscription state
     let subscription_display = use_signal(|| String::from("Loading..."));
+    let error_shown = use_signal(|| false);
+    
+    // Also load the api config on mount
+    use_effect({
+        let mut api_config = api_config.clone();
+        let mut hive_key = hive_key.clone();
+        let mut openrouter_key = openrouter_key.clone();
+        move || {
+            spawn(async move {
+                use hive_ai::core::api_keys::ApiKeyManager;
+                if let Ok(config) = ApiKeyManager::load_from_database().await {
+                    *api_config.write() = config.clone();
+                    if let Some(key) = config.hive_key {
+                        *hive_key.write() = key;
+                    }
+                    if let Some(key) = config.openrouter_key {
+                        *openrouter_key.write() = key;
+                    }
+                }
+            });
+        }
+    });
     
     // Check if we need to show onboarding (only once on mount)
     use_effect(move || {
@@ -556,8 +582,12 @@ fn App() -> Element {
             } else {
                 // Load existing key for settings
                 if let Ok(config) = ApiKeyManager::load_from_database().await {
+                    *api_config.write() = config.clone();
                     if let Some(key) = config.openrouter_key {
                         *openrouter_key.write() = key;
+                    }
+                    if let Some(key) = config.hive_key {
+                        *hive_key.write() = key;
                     }
                 }
             }
@@ -568,6 +598,9 @@ fn App() -> Element {
     use_effect({
         let hive_key = hive_key.clone();
         let subscription_display = subscription_display.clone();
+        let mut show_upgrade_dialog = show_upgrade_dialog.clone();
+        let mut error_shown = error_shown.clone();
+        let mut app_state = app_state.clone();
         move || {
             let key = hive_key.read().clone();
             if !key.is_empty() {
@@ -581,28 +614,54 @@ fn App() -> Element {
                         
                         use hive_ai::subscription::conversation_gateway::ConversationGateway;
                         match ConversationGateway::new() {
-                            Ok(gateway) => match gateway.request_conversation_authorization("license_changed", &key_clone).await {
-                                Ok(auth) => {
-                                    let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
-                                    
-                                    let display = if auth.limit == u32::MAX {
-                                        // Unlimited plan
-                                        format!("{} | {} | Unlimited conversations", 
-                                            auth.user_id, tier_display)
-                                    } else if auth.remaining == 0 {
-                                        let used = auth.limit.saturating_sub(auth.remaining);
-                                        format!("{} | {} | Daily limit reached ({}/{})", 
-                                            auth.user_id, tier_display, used, auth.limit)
-                                    } else {
-                                        format!("{} | {} | {} remaining today", 
-                                            auth.user_id, tier_display, auth.remaining)
-                                    };
-                                    
-                                    *subscription_display.write() = display;
-                                    app_state.write().total_conversations_remaining = Some(auth.remaining);
-                                }
-                                Err(e) => {
-                                    *subscription_display.write() = format!("Authentication failed: {}", e.to_string().split(":").last().unwrap_or("Unknown"));
+                            Ok(gateway) => {
+                                // First validate the license to get user profile
+                                match gateway.validate_license_key(&key_clone).await {
+                                    Ok(profile) => {
+                                        let email = profile.email.clone();
+                                        let tier = profile.tier.to_uppercase();
+                                        
+                                        // Then try to get conversation authorization
+                                        match gateway.request_conversation_authorization("license_changed", &key_clone).await {
+                                            Ok(auth) => {
+                                                let limit = auth.limit.unwrap_or(u32::MAX);
+                                                let remaining = auth.remaining.unwrap_or(u32::MAX);
+                                                
+                                                if limit == u32::MAX {
+                                                    *subscription_display.write() = format!("{} | {} | Unlimited conversations", email, tier);
+                                                } else if remaining == 0 {
+                                                    *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit - remaining, limit);
+                                                    
+                                                    if !*error_shown.read() {
+                                                        *show_upgrade_dialog.write() = true;
+                                                        *error_shown.write() = true;
+                                                    }
+                                                } else {
+                                                    *subscription_display.write() = format!("{} | {} | {} conversations remaining today", email, tier, remaining);
+                                                }
+                                                app_state.write().total_conversations_remaining = Some(remaining);
+                                            }
+                                            Err(e) => {
+                                                // Authorization failed - likely hit daily limit
+                                                let error_msg = e.to_string();
+                                                if error_msg.contains("Daily conversation limit reached") || error_msg.contains("Daily limit reached") {
+                                                    // Parse the limit from error if possible, otherwise use default
+                                                    let limit = if tier == "FREE" { 10 } else { 50 }; // Adjust based on tier
+                                                    *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit, limit);
+                                                } else {
+                                                    // Some other error
+                                                    *subscription_display.write() = format!("{} | {} | Limited access", email, tier);
+                                                }
+                                                app_state.write().total_conversations_remaining = Some(0);
+                                            }
+                                        }
+                                    }
+                                    Err(_) => {
+                                        // D1 returned 401 - license is invalid/inactive
+                                        // Since we can't get user info, just show the status
+                                        *subscription_display.write() = "Invalid or inactive license".to_string();
+                                        app_state.write().total_conversations_remaining = Some(0);
+                                    }
                                 }
                             }
                             Err(_) => {
@@ -621,11 +680,18 @@ fn App() -> Element {
     // Load subscription info periodically and on trigger changes
     use_effect({
         let mut subscription_display = subscription_display.clone();
+        let mut show_upgrade_dialog = show_upgrade_dialog.clone();
+        let mut error_shown = error_shown.clone();
+        let mut app_state = app_state.clone();
         let refresh_trigger = app_state.read().subscription_refresh_trigger;
         move || {
             // Load immediately when trigger changes or on initial load
             spawn({
                 let mut subscription_display = subscription_display.clone();
+                let mut show_upgrade_dialog = show_upgrade_dialog.clone();
+                let mut error_shown = error_shown.clone();
+                let mut app_state = app_state.clone();
+                let mut api_config = api_config.clone();
                 async move {
                     // Wait a bit for database initialization on first load
                     if refresh_trigger == 0 {
@@ -638,61 +704,58 @@ fn App() -> Element {
                     
                     match ApiKeyManager::load_from_database().await {
                         Ok(config) => {
+                            *api_config.write() = config.clone();
                             if let Some(hive_key) = config.hive_key {
                                 match ConversationGateway::new() {
-                                    Ok(gateway) => match gateway.request_conversation_authorization("subscription_check", &hive_key).await {
-                                    Ok(auth) => {
-                                        let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
-                                        let remaining = auth.remaining;
-                                        let used = auth.limit.saturating_sub(remaining);
-                                        
-                                        let display = if auth.limit == u32::MAX {
-                                            // Unlimited plan
-                                            format!("{} | {} | Unlimited conversations", 
-                                                auth.user_id, tier_display)
-                                        } else if remaining == 0 {
-                                            format!("{} | {} | Daily limit reached ({}/{})", 
-                                                auth.user_id, tier_display, used, auth.limit)
-                                        } else {
-                                            format!("{} | {} | {} remaining today", 
-                                                auth.user_id, tier_display, remaining)
-                                        };
-                                        
-                                        *subscription_display.write() = display;
-                                        
-                                        // Update app state with D1 data
-                                        app_state.write().total_conversations_remaining = Some(remaining);
-                                    }
-                                    Err(e) => {
-                                        if e.to_string().contains("Daily conversation limit reached") {
-                                            // Make a proper D1 call to get actual user info and limits
-                                            match gateway.request_conversation_authorization("subscription_info", &hive_key).await {
-                                                Ok(auth) => {
-                                                    let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
-                                                    let used = auth.limit.saturating_sub(auth.remaining);
-                                                    
-                                                    let display = if auth.limit == u32::MAX {
-                                                        format!("{} | {} | Unlimited conversations", 
-                                                            auth.user_id, tier_display)
-                                                    } else {
-                                                        format!("{} | {} | Daily limit reached ({}/{})", 
-                                                            auth.user_id, tier_display, used, auth.limit)
-                                                    };
-                                                    
-                                                    *subscription_display.write() = display;
-                                                    app_state.write().total_conversations_remaining = Some(auth.remaining);
-                                                }
-                                                Err(_) => {
-                                                    *subscription_display.write() = "Unable to verify subscription".to_string();
+                                    Ok(gateway) => {
+                                        // First validate the license to get user profile
+                                        match gateway.validate_license_key(&hive_key).await {
+                                            Ok(profile) => {
+                                                let email = profile.email.clone();
+                                                let tier = profile.tier.to_uppercase();
+                                                
+                                                // Then try to get conversation authorization
+                                                match gateway.request_conversation_authorization("subscription_check", &hive_key).await {
+                                                    Ok(auth) => {
+                                                        let limit = auth.limit.unwrap_or(u32::MAX);
+                                                        let remaining = auth.remaining.unwrap_or(u32::MAX);
+                                                        
+                                                        if limit == u32::MAX {
+                                                            *subscription_display.write() = format!("{} | {} | Unlimited conversations", email, tier);
+                                                        } else if remaining == 0 {
+                                                            *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit - remaining, limit);
+                                                            
+                                                            if !*error_shown.read() {
+                                                                *show_upgrade_dialog.write() = true;
+                                                                *error_shown.write() = true;
+                                                            }
+                                                        } else {
+                                                            *subscription_display.write() = format!("{} | {} | {} conversations remaining today", email, tier, remaining);
+                                                        }
+                                                        app_state.write().total_conversations_remaining = Some(remaining);
+                                                    }
+                                                    Err(e) => {
+                                                        // Authorization failed - likely hit daily limit
+                                                        let error_msg = e.to_string();
+                                                        if error_msg.contains("Daily conversation limit reached") || error_msg.contains("Daily limit reached") {
+                                                            // Parse the limit from error if possible, otherwise use default
+                                                            let limit = if tier == "FREE" { 10 } else { 50 }; // Adjust based on tier
+                                                            *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit, limit);
+                                                        } else {
+                                                            // Some other error
+                                                            *subscription_display.write() = format!("{} | {} | Limited access", email, tier);
+                                                        }
+                                                        app_state.write().total_conversations_remaining = Some(0);
+                                                    }
                                                 }
                                             }
-                                        } else {
-                                            *subscription_display.write() = "Unable to verify subscription".to_string();
+                                            Err(_) => {
+                                                *subscription_display.write() = "Invalid license key".to_string();
+                                            }
                                         }
                                     }
-                                    }
                                     Err(_) => {
-                                        *subscription_display.write() = "FREE | Gateway initialization failed".to_string();
+                                        *subscription_display.write() = "Gateway initialization failed".to_string();
                                     }
                                 }
                             } else {
@@ -725,27 +788,61 @@ fn App() -> Element {
                                 match ConversationGateway::new() {
                                     Ok(gateway) => match gateway.request_conversation_authorization("subscription_refresh", &hive_key).await {
                                     Ok(auth) => {
-                                        let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
-                                        let remaining = auth.remaining;
-                                        let used = auth.limit.saturating_sub(remaining);
-                                        
-                                        let display = if remaining == 0 {
-                                            format!("{} | {} | Daily limit reached ({}/{})", 
-                                                auth.user_id, tier_display, used, auth.limit)
-                                        } else {
-                                            format!("{} | {} | {} remaining today", 
-                                                auth.user_id, tier_display, remaining)
-                                        };
-                                        
-                                        *subscription_display.write() = display;
-                                        app_state.write().total_conversations_remaining = Some(remaining);
+                                        // First validate the license to get user profile
+                                        match gateway.validate_license_key(&hive_key).await {
+                                            Ok(profile) => {
+                                                let email = profile.email.clone();
+                                                let tier = profile.tier.to_uppercase();
+                                                let limit = auth.limit.unwrap_or(u32::MAX);
+                                                let remaining = auth.remaining.unwrap_or(u32::MAX);
+                                                
+                                                if limit == u32::MAX {
+                                                    *subscription_display.write() = format!("{} | {} | Unlimited conversations", email, tier);
+                                                } else if remaining == 0 {
+                                                    *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit - remaining, limit);
+                                                    
+                                                    if !*error_shown.read() {
+                                                        *show_upgrade_dialog.write() = true;
+                                                        *error_shown.write() = true;
+                                                    }
+                                                } else {
+                                                    *subscription_display.write() = format!("{} | {} | {} conversations remaining today", email, tier, remaining);
+                                                }
+                                                app_state.write().total_conversations_remaining = Some(remaining);
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("Failed to get user profile: {}", e);
+                                                // Keep existing display on profile fetch error
+                                            }
+                                        }
                                     }
                                     Err(e) => {
-                                        if e.to_string().contains("Daily conversation limit reached") {
-                                            *subscription_display.write() = "FREE | Daily limit reached (10/10)".to_string();
-                                            app_state.write().total_conversations_remaining = Some(0);
+                                        // Parse the error to extract usage information
+                                        let error_msg = e.to_string();
+                                        
+                                        // Don't overwrite the display if we have user info
+                                        // The validate_license_key call already set up the proper display
+                                        if error_msg.contains("Daily limit reached") || error_msg.contains("Daily conversation limit reached") {
+                                            // We already have the user info from validate_license_key
+                                            // Just ensure the upgrade dialog shows
+                                            if !*error_shown.read() {
+                                                *show_upgrade_dialog.write() = true;
+                                                *error_shown.write() = true;
+                                            }
+                                        } else if subscription_display.read().contains("@") {
+                                            // We have user info, don't overwrite with generic error
+                                            // Keep the existing display
+                                        } else {
+                                            // Only update display if we don't have user info
+                                            let display = if error_msg.contains("Invalid or inactive license") {
+                                                "Invalid or inactive license".to_string()
+                                            } else if error_msg.contains("missing field") {
+                                                "License validation error".to_string()
+                                            } else {
+                                                error_msg.split(':').last().unwrap_or("Unknown error").trim().to_string()
+                                            };
+                                            *subscription_display.write() = display;
                                         }
-                                        // Keep existing display on other errors
                                     }
                                     }
                                     Err(_) => {

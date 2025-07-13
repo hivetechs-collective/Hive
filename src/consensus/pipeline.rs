@@ -190,12 +190,13 @@ impl ConsensusPipeline {
                 let gateway = ConversationGateway::new()?;
                 match gateway.request_conversation_authorization(question, &license_key).await {
                     Ok(auth) => {
+                        let remaining = auth.remaining.unwrap_or(u32::MAX);
                         tracing::info!("D1 authorization successful! {} conversations remaining today", 
-                                     auth.remaining);
+                                     if remaining == u32::MAX { "Unlimited".to_string() } else { remaining.to_string() });
                         
                         // Notify callbacks immediately about D1 authorization
                         // This updates the UI count right away, not after consensus completes
-                        if let Err(e) = self.callbacks.on_d1_authorization(auth.remaining) {
+                        if let Err(e) = self.callbacks.on_d1_authorization(remaining) {
                             tracing::warn!("Failed to notify D1 authorization: {}", e);
                         }
                         
