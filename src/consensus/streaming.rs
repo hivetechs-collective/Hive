@@ -74,6 +74,12 @@ pub trait StreamingCallbacks: Send + Sync {
     fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
         Ok(())
     }
+    
+    /// Called when D1 authorization is received (optional)
+    fn on_d1_authorization(&self, remaining: u32) -> Result<()> {
+        // Default implementation does nothing
+        Ok(())
+    }
 }
 
 /// Progress information

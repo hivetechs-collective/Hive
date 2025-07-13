@@ -206,6 +206,8 @@ pub struct SubscriptionDisplay {
     pub daily_used: u32,
     pub total_remaining: Option<u32>, // From D1 (includes daily + credits)
     pub is_trial: bool,
+    pub average_daily_usage: Option<f32>, // Average since account creation
+    pub days_active: u32, // Days since account creation
 }
 
 impl SubscriptionDisplay {
@@ -223,25 +225,52 @@ impl SubscriptionDisplay {
             }
         };
 
-        // During trial period, show unlimited but also track daily usage
-        if self.is_trial {
-            format!("{} | {} | Unlimited ({})", self.username, tier_display, self.daily_used)
-        } else if self.tier == SubscriptionTier::Unlimited {
-            format!("{} | {} | Unlimited", self.username, tier_display)
-        } else if let Some(total) = self.total_remaining {
-            // Show total remaining from D1 (includes daily + any credit packs)
-            if self.daily_remaining == 0 && total > 0 {
+        // Format average usage
+        let avg_display = if let Some(avg) = self.average_daily_usage {
+            format!(" | Avg: {:.1}/day", avg)
+        } else {
+            String::new()
+        };
+
+        // Always prefer D1's authoritative count when available
+        let base_display = if let Some(total) = self.total_remaining {
+            if self.is_trial {
+                // During trial, show remaining from D1
+                if total == 0 {
+                    format!("{} | {} | Trial limit reached for today", self.username, tier_display)
+                } else {
+                    format!("{} | {} | {} remaining today", self.username, tier_display, total)
+                }
+            } else if self.tier == SubscriptionTier::Unlimited {
+                format!("{} | {} | Unlimited", self.username, tier_display)
+            } else if total == 0 {
+                // Out of conversations
+                format!("{} | {} | Daily limit reached (0/{} daily)", 
+                    self.username, tier_display, self.daily_limit)
+            } else if self.daily_remaining == 0 && total > 0 {
+                // Using credit packs
                 format!("{} | {} | {} credits remaining", 
                     self.username, tier_display, total)
             } else {
-                format!("{} | {} | {}/{} daily (Total: {})", 
-                    self.username, tier_display, self.daily_remaining, self.daily_limit, total)
+                // Normal display with daily and total
+                format!("{} | {} | {} remaining today", 
+                    self.username, tier_display, total)
             }
         } else {
-            // Fallback when D1 info not available
-            format!("{} | {} | {}/{} daily", 
-                self.username, tier_display, self.daily_remaining, self.daily_limit)
-        }
+            // Fallback when D1 info not available (local display only)
+            if self.is_trial {
+                format!("{} | {} | Unlimited ({} used today)", self.username, tier_display, self.daily_used)
+            } else if self.daily_remaining == 0 {
+                format!("{} | {} | Daily limit reached (0/{} daily)", 
+                    self.username, tier_display, self.daily_limit)
+            } else {
+                format!("{} | {} | {}/{} daily", 
+                    self.username, tier_display, self.daily_remaining, self.daily_limit)
+            }
+        };
+        
+        // Append average usage
+        format!("{}{}", base_display, avg_display)
     }
     
     /// Load subscription display info from database
@@ -253,7 +282,7 @@ impl SubscriptionDisplay {
         let conn = db.get_connection()?;
         
         // Query all subscription info from unified database
-        let result = tokio::task::spawn_blocking(move || -> Result<(String, String, String, u32, bool)> {
+        let result = tokio::task::spawn_blocking(move || -> Result<(String, String, String, u32, bool, Option<f32>, u32)> {
             use rusqlite::OptionalExtension;
             
             // First, get the currently configured license key
@@ -264,7 +293,7 @@ impl SubscriptionDisplay {
             ).optional()?;
             
             if current_license_key.is_none() {
-                return Ok(("No license".to_string(), "free".to_string(), String::new(), 0, false));
+                return Ok(("No license".to_string(), "free".to_string(), String::new(), 0, false, None, 0));
             }
             
             let license_key = current_license_key.unwrap();
@@ -285,7 +314,7 @@ impl SubscriptionDisplay {
             
             let (user_id, email, tier_str, license_key) = match user_result {
                 Some(data) => data,
-                None => return Ok(("No user".to_string(), "free".to_string(), String::new(), 0, false)),
+                None => return Ok(("No user".to_string(), "free".to_string(), String::new(), 0, false, None, 0)),
             };
             
             // Get conversation count for today from conversation_usage table
@@ -320,10 +349,31 @@ impl SubscriptionDisplay {
                 |row| row.get::<_, bool>(0)
             ).unwrap_or(false);
             
-            Ok((email, tier_str, license_key, daily_used, is_trial))
+            // Calculate average daily usage since account creation
+            let (total_conversations, days_active): (u32, u32) = conn.query_row(
+                "SELECT 
+                    COUNT(*) as total_conversations,
+                    MAX(1, CAST((julianday('now') - julianday(MIN(u.created_at))) AS INTEGER) + 1) as days_active
+                FROM conversation_usage cu
+                JOIN users u ON cu.user_id = u.id
+                WHERE cu.user_id = ?1",
+                rusqlite::params![&user_id],
+                |row| Ok((row.get(0)?, row.get(1)?))
+            ).unwrap_or((0, 1));
+            
+            let average_daily_usage = if days_active > 0 {
+                Some(total_conversations as f32 / days_active as f32)
+            } else {
+                None
+            };
+            
+            tracing::debug!("Average usage calculation: total={}, days={}, avg={:?}", 
+                         total_conversations, days_active, average_daily_usage);
+            
+            Ok((email, tier_str, license_key, daily_used, is_trial, average_daily_usage, days_active))
         }).await??;
         
-        let (username, subscription_tier, _license_key, daily_used, is_trial) = result;
+        let (username, subscription_tier, _license_key, daily_used, is_trial, average_daily_usage, days_active) = result;
         
         // Parse tier
         let tier = SubscriptionTier::from_string(&subscription_tier);
@@ -351,12 +401,28 @@ impl SubscriptionDisplay {
             daily_used,
             total_remaining: None, // Will be updated from D1 responses
             is_trial,
+            average_daily_usage,
+            days_active,
         })
     }
     
     /// Update display with fresh data from D1
     pub fn update_from_d1(&mut self, total_remaining: u32) {
         self.total_remaining = Some(total_remaining);
+    }
+    
+    /// Get recommended tier based on average daily usage
+    pub fn recommended_tier(&self) -> Option<(SubscriptionTier, &'static str)> {
+        let avg = self.average_daily_usage?;
+        
+        Some(match avg {
+            _ if avg <= 8.0 => (SubscriptionTier::Free, "Your FREE plan is perfect!"),
+            _ if avg <= 40.0 => (SubscriptionTier::Basic, "Upgrade to BASIC (50/day) - Save 70% vs credits"),
+            _ if avg <= 80.0 => (SubscriptionTier::Standard, "Upgrade to STANDARD (100/day) - Best value"),
+            _ if avg <= 150.0 => (SubscriptionTier::Premium, "Upgrade to PREMIUM (200/day)"),
+            _ if avg <= 500.0 => (SubscriptionTier::Unlimited, "Go UNLIMITED - No daily limits"),
+            _ => (SubscriptionTier::Team, "Contact us for TEAM plan - 600/day"),
+        })
     }
 }
 
@@ -405,9 +471,11 @@ mod tests {
             daily_used: 20,
             total_remaining: None,
             is_trial: false,
+            average_daily_usage: Some(15.5),
+            days_active: 10,
         };
 
-        assert_eq!(display.format(), "user@example.com | PREMIUM | 180/200 daily");
+        assert_eq!(display.format(), "user@example.com | PREMIUM | 180/200 daily | Avg: 15.5/day");
     }
 
     #[test]
@@ -420,8 +488,78 @@ mod tests {
             daily_used: 5,
             total_remaining: None,
             is_trial: true,
+            average_daily_usage: Some(3.2),
+            days_active: 3,
         };
 
-        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | Unlimited (5)");
+        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | Unlimited (5 used today) | Avg: 3.2/day");
+    }
+    
+    #[test]
+    fn test_trial_display_with_d1() {
+        let display = SubscriptionDisplay {
+            username: "trial@example.com".to_string(),
+            tier: SubscriptionTier::Free,
+            daily_remaining: u32::MAX,
+            daily_limit: u32::MAX,
+            daily_used: 5,
+            total_remaining: Some(995), // From D1
+            is_trial: true,
+            average_daily_usage: Some(4.0),
+            days_active: 2,
+        };
+
+        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | 995 remaining today | Avg: 4.0/day");
+    }
+    
+    #[test]
+    fn test_trial_limit_reached() {
+        let display = SubscriptionDisplay {
+            username: "trial@example.com".to_string(),
+            tier: SubscriptionTier::Free,
+            daily_remaining: 0,
+            daily_limit: 10,
+            daily_used: 1000,
+            total_remaining: Some(0), // From D1
+            is_trial: true,
+            average_daily_usage: Some(250.0),
+            days_active: 4,
+        };
+
+        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | Trial limit reached for today | Avg: 250.0/day");
+    }
+    
+    #[test]
+    fn test_daily_limit_reached() {
+        let display = SubscriptionDisplay {
+            username: "user@example.com".to_string(),
+            tier: SubscriptionTier::Basic,
+            daily_remaining: 0,
+            daily_limit: 50,
+            daily_used: 50,
+            total_remaining: Some(0), // From D1
+            is_trial: false,
+            average_daily_usage: Some(45.5),
+            days_active: 30,
+        };
+
+        assert_eq!(display.format(), "user@example.com | BASIC | Daily limit reached (0/50 daily) | Avg: 45.5/day");
+    }
+    
+    #[test]
+    fn test_credit_pack_usage() {
+        let display = SubscriptionDisplay {
+            username: "user@example.com".to_string(),
+            tier: SubscriptionTier::Basic,
+            daily_remaining: 0,
+            daily_limit: 50,
+            daily_used: 50,
+            total_remaining: Some(25), // Using credit pack
+            is_trial: false,
+            average_daily_usage: Some(48.0),
+            days_active: 15,
+        };
+
+        assert_eq!(display.format(), "user@example.com | BASIC | 25 credits remaining | Avg: 48.0/day");
     }
 }

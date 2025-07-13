@@ -193,6 +193,12 @@ impl ConsensusPipeline {
                         tracing::info!("D1 authorization successful! {} conversations remaining today", 
                                      auth.remaining);
                         
+                        // Notify callbacks immediately about D1 authorization
+                        // This updates the UI count right away, not after consensus completes
+                        if let Err(e) = self.callbacks.on_d1_authorization(auth.remaining) {
+                            tracing::warn!("Failed to notify D1 authorization: {}", e);
+                        }
+                        
                         // Store the authorization for later verification
                         // The remaining count is already updated in D1 and should refresh UI
                         Some((license_key, auth))
