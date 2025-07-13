@@ -564,6 +564,60 @@ fn App() -> Element {
         });
     });
     
+    // Watch for license key changes and refresh subscription immediately
+    use_effect({
+        let hive_key = hive_key.clone();
+        let subscription_display = subscription_display.clone();
+        move || {
+            let key = hive_key.read().clone();
+            if !key.is_empty() {
+                // When license key changes, immediately refresh subscription display
+                spawn({
+                    let key_clone = key.clone();
+                    let mut subscription_display = subscription_display.clone();
+                    async move {
+                        // Wait a moment for the key to be saved to database
+                        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        
+                        use hive_ai::subscription::conversation_gateway::ConversationGateway;
+                        match ConversationGateway::new() {
+                            Ok(gateway) => match gateway.request_conversation_authorization("license_changed", &key_clone).await {
+                                Ok(auth) => {
+                                    let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
+                                    
+                                    let display = if auth.limit == u32::MAX {
+                                        // Unlimited plan
+                                        format!("{} | {} | Unlimited conversations", 
+                                            auth.user_id, tier_display)
+                                    } else if auth.remaining == 0 {
+                                        let used = auth.limit.saturating_sub(auth.remaining);
+                                        format!("{} | {} | Daily limit reached ({}/{})", 
+                                            auth.user_id, tier_display, used, auth.limit)
+                                    } else {
+                                        format!("{} | {} | {} remaining today", 
+                                            auth.user_id, tier_display, auth.remaining)
+                                    };
+                                    
+                                    *subscription_display.write() = display;
+                                    app_state.write().total_conversations_remaining = Some(auth.remaining);
+                                }
+                                Err(e) => {
+                                    *subscription_display.write() = format!("Authentication failed: {}", e.to_string().split(":").last().unwrap_or("Unknown"));
+                                }
+                            }
+                            Err(_) => {
+                                *subscription_display.write() = "Gateway initialization failed".to_string();
+                            }
+                        }
+                    }
+                });
+                
+                // Also trigger the periodic refresh mechanism
+                app_state.write().subscription_refresh_trigger += 1;
+            }
+        }
+    });
+
     // Load subscription info periodically and on trigger changes
     use_effect({
         let mut subscription_display = subscription_display.clone();
@@ -592,7 +646,11 @@ fn App() -> Element {
                                         let remaining = auth.remaining;
                                         let used = auth.limit.saturating_sub(remaining);
                                         
-                                        let display = if remaining == 0 {
+                                        let display = if auth.limit == u32::MAX {
+                                            // Unlimited plan
+                                            format!("{} | {} | Unlimited conversations", 
+                                                auth.user_id, tier_display)
+                                        } else if remaining == 0 {
                                             format!("{} | {} | Daily limit reached ({}/{})", 
                                                 auth.user_id, tier_display, used, auth.limit)
                                         } else {
@@ -607,10 +665,29 @@ fn App() -> Element {
                                     }
                                     Err(e) => {
                                         if e.to_string().contains("Daily conversation limit reached") {
-                                            *subscription_display.write() = "FREE | Daily limit reached (10/10)".to_string();
-                                            app_state.write().total_conversations_remaining = Some(0);
+                                            // Make a proper D1 call to get actual user info and limits
+                                            match gateway.request_conversation_authorization("subscription_info", &hive_key).await {
+                                                Ok(auth) => {
+                                                    let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
+                                                    let used = auth.limit.saturating_sub(auth.remaining);
+                                                    
+                                                    let display = if auth.limit == u32::MAX {
+                                                        format!("{} | {} | Unlimited conversations", 
+                                                            auth.user_id, tier_display)
+                                                    } else {
+                                                        format!("{} | {} | Daily limit reached ({}/{})", 
+                                                            auth.user_id, tier_display, used, auth.limit)
+                                                    };
+                                                    
+                                                    *subscription_display.write() = display;
+                                                    app_state.write().total_conversations_remaining = Some(auth.remaining);
+                                                }
+                                                Err(_) => {
+                                                    *subscription_display.write() = "Unable to verify subscription".to_string();
+                                                }
+                                            }
                                         } else {
-                                            *subscription_display.write() = "FREE | Unable to verify".to_string();
+                                            *subscription_display.write() = "Unable to verify subscription".to_string();
                                         }
                                     }
                                     }
