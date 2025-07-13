@@ -473,7 +473,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
-use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, SettingsDialog, OnboardingDialog, WelcomeAction, UpgradeDialog, DIALOG_STYLES};
+use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, SettingsDialog, OnboardingDialog, WelcomeAction, UpgradeDialog, UpdateAvailableDialog, NoUpdatesDialog, UpdateErrorDialog, DIALOG_STYLES};
 use hive_ai::desktop::consensus_integration::use_consensus_with_version;
 use hive_ai::desktop::assets::get_logo_html;
 
@@ -543,6 +543,13 @@ fn App() -> Element {
     let mut show_onboarding_dialog = use_signal(|| false);
     let show_upgrade_dialog = use_signal(|| false);
     let onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
+    
+    // Update dialog state
+    let mut show_update_available_dialog = use_signal(|| false);
+    let mut show_no_updates_dialog = use_signal(|| false);
+    let mut show_update_error_dialog = use_signal(|| false);
+    let mut update_info = use_signal(|| ("".to_string(), "".to_string(), "".to_string(), "".to_string())); // version, date, download_url, changelog_url
+    let mut update_error_message = use_signal(String::new);
     
     // Subscription state
     let subscription_display = use_signal(|| String::from("Loading..."));
@@ -1090,6 +1097,44 @@ fn App() -> Element {
                     match webbrowser::open(url) {
                         Ok(_) => println!("Opening documentation: {}", url),
                         Err(e) => eprintln!("Failed to open browser: {}", e),
+                    }
+                });
+            },
+            MenuAction::CheckForUpdates => {
+                // Check for updates
+                let mut show_update_available_dialog = show_update_available_dialog.clone();
+                let mut show_no_updates_dialog = show_no_updates_dialog.clone();
+                let mut show_update_error_dialog = show_update_error_dialog.clone();
+                let mut update_info = update_info.clone();
+                let mut update_error_message = update_error_message.clone();
+                
+                spawn(async move {
+                    use hive_ai::updates::{UpdateChecker, UpdateChannel};
+                    
+                    println!("Checking for updates...");
+                    let checker = UpdateChecker::new(hive_ai::VERSION.to_string(), UpdateChannel::Stable);
+                    
+                    match checker.check_for_updates().await {
+                        Ok(Some(update)) => {
+                            println!("Update available: {} ({})", update.version, update.release_date.format("%Y-%m-%d"));
+                            // Store update information and show dialog
+                            *update_info.write() = (
+                                update.version.clone(),
+                                update.release_date.format("%B %d, %Y").to_string(),
+                                update.download_url.clone(),
+                                update.changelog_url.clone()
+                            );
+                            *show_update_available_dialog.write() = true;
+                        }
+                        Ok(None) => {
+                            println!("You're running the latest version ({})", hive_ai::VERSION);
+                            *show_no_updates_dialog.write() = true;
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to check for updates: {}", e);
+                            *update_error_message.write() = e.to_string();
+                            *show_update_error_dialog.write() = true;
+                        }
                     }
                 });
             },
@@ -1649,6 +1694,31 @@ fn App() -> Element {
                 daily_used: 10,
                 daily_limit: 10,
                 average_usage: 16.0,
+            }
+        }
+        
+        // Update dialogs
+        if *show_update_available_dialog.read() {
+            UpdateAvailableDialog {
+                show: show_update_available_dialog.clone(),
+                version: update_info.read().0.clone(),
+                release_date: update_info.read().1.clone(),
+                download_url: update_info.read().2.clone(),
+                changelog_url: update_info.read().3.clone(),
+            }
+        }
+        
+        if *show_no_updates_dialog.read() {
+            NoUpdatesDialog {
+                show: show_no_updates_dialog.clone(),
+                current_version: hive_ai::VERSION.to_string(),
+            }
+        }
+        
+        if *show_update_error_dialog.read() {
+            UpdateErrorDialog {
+                show: show_update_error_dialog.clone(),
+                error_message: update_error_message.read().clone(),
             }
         }
     }

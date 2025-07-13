@@ -18,3 +18,11 @@ pub fn get_logo_html() -> String {
         get_logo_data_url()
     )
 }
+
+/// Get the logo as an HTML image element sized for About dialog
+pub fn get_about_logo_html() -> String {
+    format!(
+        r#"<img src="{}" alt="HiveTechs Logo" style="width: 48px; height: 48px; object-fit: contain; border-radius: 8px;" />"#,
+        get_logo_data_url()
+    )
+}

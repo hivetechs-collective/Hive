@@ -31,9 +31,10 @@ pub mod transformation;
 pub mod tui;
 pub mod desktop;
 pub mod interactive_tui;
+pub mod updates;
 
 // Version constant
-pub const VERSION: &str = "2.0.0";
+pub const VERSION: &str = "2.0.2";
 
 // Re-export core types
 pub use core::{

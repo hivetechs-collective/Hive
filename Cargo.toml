@@ -147,6 +147,7 @@ num_cpus = "1.16"
 serde_yaml = "0.9"
 base64 = "0.22"
 glob = "0.3"
+open = "5.3.2"
 
 [dev-dependencies]
 tempfile = "3.8"
