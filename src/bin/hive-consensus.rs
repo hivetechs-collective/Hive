@@ -587,7 +587,7 @@ fn App() -> Element {
     let mut should_auto_scroll = use_signal(|| true);
     
     // Auto-scroll response area when streaming content changes
-    let previous_content_length = use_signal(|| 0usize);
+    let mut previous_content_length = use_signal(|| 0usize);
     
     use_effect({
         let app_state = app_state.clone();
@@ -1092,6 +1092,9 @@ fn App() -> Element {
                                         
                                         // Re-enable auto-scroll for new query
                                         *should_auto_scroll.write() = true;
+                                        
+                                        // Reset content length tracker to ensure scrolling works
+                                        *previous_content_length.write() = 0;
                                         
                                         // Start processing
                                         *is_processing.write() = true;
