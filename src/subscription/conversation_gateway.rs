@@ -8,12 +8,104 @@
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::json;
 use sha2::{Sha256, Digest};
 use std::collections::HashMap;
 
 use super::{SubscriptionInfo, SubscriptionTier, ConversationVerification};
+
+/// Custom deserializer for handling "unlimited" strings or numbers
+fn deserialize_unlimited_u32<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    use std::fmt;
+
+    struct UnlimitedVisitor;
+
+    impl<'de> Visitor<'de> for UnlimitedVisitor {
+        type Value = u32;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a number or the string 'unlimited'")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(value as u32)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value == "unlimited" {
+                Ok(u32::MAX) // Use max value to represent unlimited
+            } else {
+                value.parse().map_err(de::Error::custom)
+            }
+        }
+    }
+
+    deserializer.deserialize_any(UnlimitedVisitor)
+}
+
+/// Optional version of the unlimited deserializer
+fn deserialize_unlimited_u32_opt<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    use std::fmt;
+
+    struct UnlimitedOptVisitor;
+
+    impl<'de> Visitor<'de> for UnlimitedOptVisitor {
+        type Value = Option<u32>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a number, the string 'unlimited', or null")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserialize_unlimited_u32(deserializer).map(Some)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(value as u32))
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value == "unlimited" {
+                Ok(Some(u32::MAX))
+            } else {
+                value.parse().map(Some).map_err(de::Error::custom)
+            }
+        }
+    }
+
+    deserializer.deserialize_option(UnlimitedOptVisitor)
+}
 
 /// Conversation authorization token
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,9 +135,12 @@ struct PreConversationResponse {
     allowed: bool,
     token: Option<String>,
     conversation_token: Option<String>,
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt")]
     remaining: Option<u32>,
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt")]
     remaining_conversations: Option<u32>,
     limits: Option<LimitsInfo>,
+    #[serde(deserialize_with = "deserialize_unlimited_u32_opt")]
     plan_limit: Option<u32>,
     user: Option<UserInfo>,
     user_id: Option<String>,
@@ -57,6 +152,7 @@ struct PreConversationResponse {
 
 #[derive(Debug, Deserialize)]
 struct LimitsInfo {
+    #[serde(deserialize_with = "deserialize_unlimited_u32")]
     daily: u32,
 }
 
@@ -95,7 +191,9 @@ struct ValidateResponse {
 
 #[derive(Debug, Deserialize)]
 struct UsageInfo {
+    #[serde(deserialize_with = "deserialize_unlimited_u32")]
     remaining: u32,
+    #[serde(deserialize_with = "deserialize_unlimited_u32")]
     limit: u32,
 }
 
