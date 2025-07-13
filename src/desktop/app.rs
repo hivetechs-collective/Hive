@@ -11,6 +11,7 @@ use crate::desktop::{
     events::{EventDispatcher, KeyboardEventUtils},
     styles::get_global_styles,
     dialogs::{SettingsDialog, AboutDialog, CommandPalette, OnboardingDialog},
+    components::HiveLogoSmall,
 };
 use crate::core::api_keys::ApiKeyManager;
 
@@ -390,11 +391,8 @@ fn MenuBar() -> Element {
             
             div {
                 style: "{title_style}",
-                // Using text icon instead of emoji for modern look
-                span { 
-                    style: "font-weight: 600; font-size: 14px;",
-                    "◆" 
-                }
+                // HiveTechs Logo
+                HiveLogoSmall {}
                 span { 
                     style: "font-weight: 400;",
                     "HiveTechs Consensus" 
