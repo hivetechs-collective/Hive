@@ -145,7 +145,10 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
                 
                 div {
                     class: "dialog-content",
-                    div { class: "app-icon", "🐝" }
+                    div { 
+                        class: "app-icon",
+                        dangerous_inner_html: "{crate::desktop::assets::get_about_logo_html()}"
+                    }
                     h3 { "Hive Consensus" }
                     p { "Version {env!(\"CARGO_PKG_VERSION\")}" }
                     p { "A VS Code-inspired AI development environment" }
@@ -4449,3 +4452,195 @@ pub const DIALOG_STYLES: &str = r#"
         }
     }
 "#;
+
+/// Update available dialog
+#[component]
+pub fn UpdateAvailableDialog(
+    show: Signal<bool>, 
+    version: String,
+    release_date: String,
+    download_url: String,
+    changelog_url: String,
+) -> Element {
+    if !*show.read() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div {
+            class: "dialog-overlay",
+            onclick: move |_| *show.write() = false,
+            
+            div {
+                class: "dialog-box",
+                onclick: move |e| e.stop_propagation(),
+                
+                div {
+                    class: "dialog-header",
+                    h2 { "🚀 Update Available" }
+                    button {
+                        class: "dialog-close",
+                        onclick: move |_| *show.write() = false,
+                        "×"
+                    }
+                }
+                
+                div {
+                    class: "dialog-content",
+                    style: "text-align: center;",
+                    
+                    div {
+                        style: "font-size: 18px; color: var(--hive-yellow); margin-bottom: 10px;",
+                        "Version {version} is available!"
+                    }
+                    
+                    p {
+                        style: "color: #cccccc; margin-bottom: 20px;",
+                        "Released on {release_date}"
+                    }
+                    
+                    div {
+                        style: "display: flex; gap: 10px; justify-content: center;",
+                        
+                        button {
+                            class: "dialog-button primary",
+                            onclick: move |_| {
+                                // Open download URL
+                                let url = download_url.clone();
+                                spawn(async move {
+                                    if let Err(e) = open::that(&url) {
+                                        eprintln!("Failed to open download URL: {}", e);
+                                    }
+                                });
+                                *show.write() = false;
+                            },
+                            "Download Now"
+                        }
+                        
+                        button {
+                            class: "dialog-button secondary",
+                            onclick: move |_| {
+                                // Open changelog URL
+                                let url = changelog_url.clone();
+                                spawn(async move {
+                                    if let Err(e) = open::that(&url) {
+                                        eprintln!("Failed to open changelog: {}", e);
+                                    }
+                                });
+                            },
+                            "View Changelog"
+                        }
+                        
+                        button {
+                            class: "dialog-button",
+                            onclick: move |_| *show.write() = false,
+                            "Later"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// No updates available dialog
+#[component]
+pub fn NoUpdatesDialog(show: Signal<bool>, current_version: String) -> Element {
+    if !*show.read() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div {
+            class: "dialog-overlay",
+            onclick: move |_| *show.write() = false,
+            
+            div {
+                class: "dialog-box",
+                onclick: move |e| e.stop_propagation(),
+                
+                div {
+                    class: "dialog-header",
+                    h2 { "✅ Up to Date" }
+                    button {
+                        class: "dialog-close",
+                        onclick: move |_| *show.write() = false,
+                        "×"
+                    }
+                }
+                
+                div {
+                    class: "dialog-content",
+                    style: "text-align: center;",
+                    
+                    div {
+                        style: "font-size: 18px; color: var(--hive-green); margin-bottom: 10px;",
+                        "You're running the latest version!"
+                    }
+                    
+                    p {
+                        style: "color: #cccccc; margin-bottom: 20px;",
+                        "Version {current_version} is the most recent release."
+                    }
+                    
+                    button {
+                        class: "dialog-button primary",
+                        onclick: move |_| *show.write() = false,
+                        "OK"
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Update check error dialog
+#[component]
+pub fn UpdateErrorDialog(show: Signal<bool>, error_message: String) -> Element {
+    if !*show.read() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div {
+            class: "dialog-overlay",
+            onclick: move |_| *show.write() = false,
+            
+            div {
+                class: "dialog-box",
+                onclick: move |e| e.stop_propagation(),
+                
+                div {
+                    class: "dialog-header",
+                    h2 { "❌ Update Check Failed" }
+                    button {
+                        class: "dialog-close",
+                        onclick: move |_| *show.write() = false,
+                        "×"
+                    }
+                }
+                
+                div {
+                    class: "dialog-content",
+                    style: "text-align: center;",
+                    
+                    div {
+                        style: "font-size: 16px; color: #ff6b6b; margin-bottom: 10px;",
+                        "Failed to check for updates"
+                    }
+                    
+                    p {
+                        style: "color: #cccccc; margin-bottom: 20px; font-size: 14px;",
+                        "{error_message}"
+                    }
+                    
+                    button {
+                        class: "dialog-button primary",
+                        onclick: move |_| *show.write() = false,
+                        "OK"
+                    }
+                }
+            }
+        }
+    }
+}

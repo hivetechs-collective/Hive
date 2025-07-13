@@ -14,6 +14,7 @@ pub enum MenuAction {
     Settings,
     Welcome,
     Documentation,
+    CheckForUpdates,
     About,
 }
 
@@ -208,6 +209,8 @@ pub fn MenuBar(on_action: EventHandler<MenuAction>) -> Element {
         ("Help", vec![
             MenuItem::new("Welcome", MenuAction::Welcome, None),
             MenuItem::new("Documentation", MenuAction::Documentation, None),
+            MenuItem::separator(),
+            MenuItem::new("Check for Updates...", MenuAction::CheckForUpdates, None),
             MenuItem::separator(),
             MenuItem::new("About", MenuAction::About, None),
         ]),
