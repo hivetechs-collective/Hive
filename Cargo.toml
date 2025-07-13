@@ -175,6 +175,10 @@ path = "src/bin/hive-consensus.rs"
 name = "test-streaming"
 path = "src/bin/test-streaming.rs"
 
+[[bin]]
+name = "test-d1"
+path = "src/bin/test_d1.rs"
+
 [package.metadata.bundle]
 name = "Hive"
 identifier = "com.hivetechs.hive"

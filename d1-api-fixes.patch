@@ -1,0 +1,120 @@
+--- secure-worker.js.original
++++ secure-worker.js.fixed
+@@ -140,11 +140,16 @@ async function verifyAuth(request, env) {
+     
+     const token = authHeader.replace('Bearer ', '');
+     
+-    // Validate license key against database
++    // Validate license key against database (don't filter by account_status here)
+     const user = await env.DB.prepare(
+-      'SELECT license_key, id, account_status FROM users WHERE license_key = ? AND account_status = ?'
+-    ).bind(token, 'active').first();
++      'SELECT license_key, id, account_status FROM users WHERE license_key = ?'
++    ).bind(token).first();
+     
++    // Check if account exists and is not completely deactivated
++    if (!user || (user.account_status === 'suspended' || user.account_status === 'deleted')) {
++      return { valid: false, error: 'Invalid or inactive license' };
++    }
++    
+     if (!user) {
+       return { valid: false, error: 'Invalid or inactive license' };
+     }
+@@ -245,6 +250,9 @@ async function handlePreConversation(request, env) {
+   // Check usage limits
+   const usageCheck = await checkUsageAllowed(env.DB, license_key);
+   
++  // Get user info for response regardless of usage status
++  const user = await getUserByLicense(env.DB, license_key);
++  
+   if (!usageCheck.allowed) {
+     return new Response(JSON.stringify({
+       allowed: false,
+@@ -252,7 +260,18 @@ async function handlePreConversation(request, env) {
+       plan: usageCheck.plan,
+       used_conversations: usageCheck.used,
+       plan_limit: usageCheck.limit,
+-      type: usageCheck.type
++      type: usageCheck.type,
++      // Include user information even when limit reached
++      user: {
++        id: user.id,
++        email: user.email,
++        subscription_tier: user.subscription_plan_id || 'free'
++      },
++      user_id: user.id,
++      email: user.email,
++      remaining: 0,
++      remaining_conversations: 0,
++      limits: { daily: usageCheck.limit }
+     }), {
+       status: 403,
+       headers: { 'Content-Type': 'application/json' }
+@@ -277,7 +296,15 @@ async function handlePreConversation(request, env) {
+     conversation_token: conversationToken,
+     remaining_conversations: usageCheck.remaining,
+     plan_limit: usageCheck.limit,
+-    expires_at: expiresAt.toISOString()
++    expires_at: expiresAt.toISOString(),
++    // Include user information in success response
++    user: {
++      id: user.id,
++      email: user.email,
++      subscription_tier: user.subscription_plan_id || 'free'
++    },
++    user_id: user.id,
++    email: user.email
+   }), {
+     status: 200,
+     headers: { 'Content-Type': 'application/json' }
+@@ -752,11 +779,11 @@ async function handleSessionValidation(request, env) {
+ 
+     // Look up user by session_token (license key)
+     const user = await env.DB.prepare(
+-      'SELECT * FROM users WHERE license_key = ? AND account_status = ?'
+-    ).bind(data.session_token, 'active').first();
++      'SELECT * FROM users WHERE license_key = ?'
++    ).bind(data.session_token).first();
+     
+-    if (!user) {
++    if (!user || (user.account_status === 'suspended' || user.account_status === 'deleted')) {
+       return new Response(JSON.stringify({
+         error: 'Invalid session token'
+       }), {
+@@ -780,17 +807,32 @@ async function handleSessionValidation(request, env) {
+       console.error('Error logging device fingerprint:', error);
+     }
+ 
+-    // Return 2025 format response (obfuscated)
++    // Get usage information for the user
++    const usageCheck = await checkUsageAllowed(env.DB, user.license_key);
++    
++    // Always return full user profile with current usage information
+     return new Response(JSON.stringify({
+       valid: true,
++      user_id: user.id,
++      email: user.email,
+       tier: user.subscription_tier || 'free',
+-      email: user.email,
+-      user_id: user.id,
+-      daily_limit: getTierLimits(user.subscription_tier || 'free').daily,
++      // Return actual limits from usageCheck, not hardcoded
++      limits: {
++        daily: usageCheck.limit === 'unlimited' ? 999999 : (usageCheck.limit || 10)
++      },
++      // Include current usage status
++      usage: {
++        remaining: usageCheck.remaining === 'unlimited' ? 999999 : (usageCheck.remaining || 0),
++        limit: usageCheck.limit === 'unlimited' ? 999999 : (usageCheck.limit || 10)
++      },
+       features: getFeaturesByTier(user.subscription_tier || 'free'),
++      status: 'active',
++      daily_limit: usageCheck.limit === 'unlimited' ? 999999 : (usageCheck.limit || 10),
++      // Legacy session_info for compatibility
+       session_info: {
+         user_id: user.id,
+         subscription_status: user.subscription_tier || 'free',
++        conversations_remaining: usageCheck.remaining === 'unlimited' ? 999999 : (usageCheck.remaining || 0),
+         daily_limit: getTierLimits(user.subscription_tier || 'free').daily,
+         max_devices: user.max_devices || 2,
+         active_devices: 1
