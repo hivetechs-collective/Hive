@@ -61,6 +61,14 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         Ok(())
     }
     
+    fn on_d1_authorization(&self, remaining: u32) -> Result<()> {
+        // Send D1 authorization event immediately when received
+        let _ = self.event_sender.send(ConsensusUIEvent::D1Authorization { 
+            total_remaining: remaining 
+        });
+        Ok(())
+    }
+    
     fn on_stage_chunk(&self, stage: Stage, chunk: &str, total_content: &str) -> Result<()> {
         let consensus_stage = match stage {
             Stage::Generator => ConsensusStage::Generator,
@@ -163,6 +171,18 @@ impl StreamingCallbacks for DualChannelCallbacks {
         };
         
         // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
+        
+        Ok(())
+    }
+    
+    fn on_d1_authorization(&self, remaining: u32) -> Result<()> {
+        // Send D1 authorization event to both channels immediately
+        let event = ConsensusUIEvent::D1Authorization { 
+            total_remaining: remaining 
+        };
+        
         let _ = self.stream_sender.send(event.clone());
         let _ = self.internal_sender.send(event);
         
@@ -428,15 +448,8 @@ impl DesktopConsensusManager {
         let handle = tokio::spawn(async move {
             let engine = engine.lock().await;
             
-            // First check the current D1 authorization info
-            if let Ok(auth_info) = engine.get_last_authorization_info().await {
-                if let Some(remaining) = auth_info {
-                    // Send D1 authorization event
-                    let _ = callbacks_clone.internal_sender.send(ConsensusUIEvent::D1Authorization { 
-                        total_remaining: remaining 
-                    });
-                }
-            }
+            // D1 authorization is now sent immediately when received in the pipeline
+            // No need to check here as it would be outdated by the time consensus completes
             
             let result = engine.process_with_callbacks(&query, None, callbacks_clone, user_id).await;
             
