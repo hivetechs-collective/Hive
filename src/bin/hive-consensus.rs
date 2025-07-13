@@ -5,6 +5,17 @@ use dioxus::document::eval;
 use rfd;
 
 const DESKTOP_STYLES: &str = r#"
+    /* HiveTechs Brand Colors */
+    :root {
+        --hive-yellow: #FFC107;
+        --hive-yellow-light: #FFD54F;
+        --hive-yellow-dark: #FFAD00;
+        --hive-blue: #007BFF;
+        --hive-green: #28A745;
+        --hive-dark-bg: #0E1414;
+        --hive-dark-bg-secondary: #181E21;
+    }
+    
     /* VS Code-style CSS */
     body {
         margin: 0;
@@ -51,7 +62,7 @@ const DESKTOP_STYLES: &str = r#"
     
     .current-path {
         font-size: 11px;
-        color: #858585;
+        color: var(--text-muted);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -59,8 +70,8 @@ const DESKTOP_STYLES: &str = r#"
     
     .open-folder-button {
         padding: 6px 12px;
-        background: #007acc;
-        color: white;
+        background: var(--hive-yellow);
+        color: #000;
         border: none;
         border-radius: 4px;
         cursor: pointer;
@@ -70,16 +81,20 @@ const DESKTOP_STYLES: &str = r#"
     }
     
     .open-folder-button:hover {
-        background: #005a9e;
+        background: var(--hive-yellow-light);
     }
     
     .sidebar-section-title {
         font-size: 11px;
         font-weight: 600;
         text-transform: uppercase;
-        color: #858585;
+        color: var(--text-muted);
         padding: 10px 20px 5px 20px;
         letter-spacing: 0.5px;
+        background: linear-gradient(to right, var(--hive-yellow), transparent);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
     
     .sidebar-item {
@@ -98,8 +113,9 @@ const DESKTOP_STYLES: &str = r#"
     }
     
     .sidebar-item.active {
-        background: #094771;
-        color: #ffffff;
+        background: rgba(255, 193, 7, 0.2);
+        color: var(--hive-yellow);
+        border-left: 3px solid var(--hive-yellow);
     }
     
     /* Code editor area (center) */
@@ -194,7 +210,10 @@ const DESKTOP_STYLES: &str = r#"
         font-size: 24px;
         font-weight: 600;
         margin: 24px 0 16px 0;
-        color: #ffffff;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
     
     .response-content h2 {
@@ -263,10 +282,11 @@ const DESKTOP_STYLES: &str = r#"
     
     .error {
         color: #f48771;
-        background: #362121;
+        background: linear-gradient(135deg, #362121 0%, #2a1515 100%);
         padding: 12px 16px;
         border-radius: 6px;
         border: 1px solid #5a1d1d;
+        box-shadow: 0 4px 12px rgba(244, 135, 113, 0.2);
     }
     
     /* Input area - Claude Code style */
@@ -293,7 +313,9 @@ const DESKTOP_STYLES: &str = r#"
     
     .query-input:focus {
         outline: none;
-        border-color: #007acc;
+        border-color: var(--hive-yellow);
+        box-shadow: 0 0 0 1px var(--hive-yellow), 0 0 20px rgba(255, 193, 7, 0.2);
+        background: var(--dark-900);
     }
     
     .query-input:disabled {
@@ -308,13 +330,14 @@ const DESKTOP_STYLES: &str = r#"
     /* Status bar styles */
     .status-bar {
         height: 24px;
-        background: #007acc;
+        background: var(--hive-yellow);
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 0 15px;
         font-size: 12px;
-        color: white;
+        color: #000;
+        font-weight: 500;
     }
     
     .status-left, .status-right {
@@ -327,6 +350,46 @@ const DESKTOP_STYLES: &str = r#"
         display: flex;
         align-items: center;
         gap: 5px;
+    }
+    
+    /* Animations */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    @keyframes glow {
+        0%, 100% { box-shadow: 0 0 20px rgba(255, 193, 7, 0.3); }
+        50% { box-shadow: 0 0 30px rgba(255, 193, 7, 0.5); }
+    }
+    
+    /* Progress animations */
+    .consensus-stage-running {
+        animation: pulse 2s ease-in-out infinite;
+    }
+    
+    /* Button improvements */
+    .btn-primary {
+        background: var(--gradient-primary);
+        color: var(--black);
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(255, 193, 7, 0.4);
+    }
+    
+    /* Logo glow effect */
+    .hive-logo {
+        filter: drop-shadow(0 0 10px rgba(255, 193, 7, 0.5));
+        animation: glow 3s ease-in-out infinite;
     }
 "#;
 
@@ -376,7 +439,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_cfg(
             Config::new().with_window(
                 WindowBuilder::new()
-                    .with_title("Hive Consensus")
+                    .with_title("HiveTechs Consensus - AI-Powered Development")
                     .with_resizable(true)
                     .with_inner_size(dioxus::desktop::LogicalSize::new(1200.0, 800.0))
                     .with_min_inner_size(dioxus::desktop::LogicalSize::new(800.0, 600.0))
@@ -885,18 +948,28 @@ fn App() -> Element {
                 // Sidebar (left)
                 div {
                     class: "sidebar",
+                    style: "background: #0E1414; border-right: 1px solid #2D3336; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);",
                     
                     // Sidebar header with current path and open folder button
                     div {
                         class: "sidebar-header",
+                        style: "background: #181E21; border-bottom: 1px solid #2D3336; position: relative; overflow: hidden;",
+                        div {
+                            style: "position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%);"
+                        }
                         div {
                             class: "current-path",
+                            style: "color: #9CA3AF;",
                             title: "{current_dir.read().display()}",
                             "{current_dir.read().display()}"
                         }
                     }
                     
-                    div { class: "sidebar-section-title", "EXPLORER" }
+                    div { 
+                        class: "sidebar-section-title", 
+                        style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px;",
+                        "EXPLORER" 
+                    }
                     
                     // File tree
                     for file in file_tree.read().iter() {
@@ -919,10 +992,26 @@ fn App() -> Element {
                         }
                     }
                     
-                    div { class: "sidebar-section-title", style: "margin-top: 20px;", "ACTIONS" }
-                    div { class: "sidebar-item", "🔍 Search" }
-                    div { class: "sidebar-item", "📊 Analytics" }
-                    div { class: "sidebar-item", "🧠 Memory" }
+                    div { 
+                        class: "sidebar-section-title", 
+                        style: "margin-top: 20px; background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px;",
+                        "ACTIONS" 
+                    }
+                    div { 
+                        class: "sidebar-item", 
+                        style: "transition: all 0.3s ease;",
+                        "🔍 Search" 
+                    }
+                    div { 
+                        class: "sidebar-item", 
+                        style: "transition: all 0.3s ease;",
+                        "📊 Analytics" 
+                    }
+                    div { 
+                        class: "sidebar-item", 
+                        style: "transition: all 0.3s ease;",
+                        "🧠 Memory" 
+                    }
                     div { 
                         class: "sidebar-item",
                         onclick: move |_| *show_settings_dialog.write() = true,
@@ -934,6 +1023,7 @@ fn App() -> Element {
                 // Code editor area (center)
                 div {
                     class: "editor-container",
+                    style: "background: #0E1414; position: relative;",
                     
                     // Editor tabs
                     div {
@@ -992,7 +1082,52 @@ fn App() -> Element {
                     // Panel header
                     div {
                         class: "panel-header",
-                        "🐝 Hive Consensus"
+                        style: "background: linear-gradient(135deg, #0E1414 0%, #181E21 100%); border-bottom: 2px solid #FFC107; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); padding: 14px 20px;",
+                        span {
+                            style: "display: inline-flex; align-items: center; gap: 8px;",
+                            // Inline SVG logo
+                            svg {
+                                width: "20",
+                                height: "20",
+                                view_box: "0 0 32 32",
+                                fill: "none",
+                                // Hexagon outline
+                                path {
+                                    d: "M16 4L26 9V23L16 28L6 23V9L16 4Z",
+                                    stroke: "#FFC107",
+                                    stroke_width: "2",
+                                    fill: "none"
+                                }
+                                // Inner wings
+                                circle {
+                                    cx: "12",
+                                    cy: "16",
+                                    r: "4",
+                                    fill: "#FFC107",
+                                    opacity: "0.7"
+                                }
+                                circle {
+                                    cx: "20",
+                                    cy: "16",
+                                    r: "4",
+                                    fill: "#FFC107",
+                                    opacity: "0.7"
+                                }
+                                // Center body
+                                rect {
+                                    x: "14",
+                                    y: "12",
+                                    width: "4",
+                                    height: "8",
+                                    fill: "#FFC107",
+                                    rx: "2"
+                                }
+                            }
+                            span {
+                                style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 16px;",
+                                "HiveTechs Consensus"
+                            }
+                        }
                     }
                     
                     // Consensus progress display (always visible at the top)
@@ -1069,8 +1204,10 @@ fn App() -> Element {
                     // Input box at the bottom (Claude Code style)
                     div {
                         class: "input-container",
+                        style: "background: #181E21; border-top: 1px solid #2D3336; backdrop-filter: blur(10px);",
                         textarea {
                             class: "query-input",
+                            style: "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF;",
                             value: "{input_value.read()}",
                             placeholder: "Ask Hive anything...",
                             disabled: *is_processing.read(),
@@ -1144,24 +1281,29 @@ fn App() -> Element {
             // Status bar
             div {
                 class: "status-bar",
+                style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);",
                 div { 
                     class: "status-left",
+                    style: "color: #000; font-weight: 600;",
                     div {
                         class: "git-branch",
-                        "🌿 main"
+                        style: "display: flex; align-items: center; gap: 5px;",
+                        span { style: "color: #000;", "🐝" }
+                        span { style: "color: #000; font-weight: 700;", "main" }
                     }
-                    "•"
-                    "✓ 0 problems"
-                    "•"
-                    "{subscription_display.read()}"
+                    span { style: "color: #000;", " • " }
+                    span { style: "color: #000;", "✓ 0 problems" }
+                    span { style: "color: #000;", " • " }
+                    span { style: "color: #000; font-weight: 700;", "{subscription_display.read()}" }
                 }
                 div { 
                     class: "status-right",
+                    style: "color: #000; font-weight: 600;",
                     "Ln 1, Col 1",
-                    "•",
+                    span { style: "color: #000;", " • " },
                     "UTF-8",
-                    "•",
-                    "Rust"
+                    span { style: "color: #000;", " • " },
+                    span { style: "color: #000; font-weight: 700;", "Rust" }
                 }
             }
         }
@@ -1316,7 +1458,7 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                         span { 
                             style: match stage.status {
                                 hive_ai::desktop::state::StageStatus::Waiting => "color: #666666; font-size: 11px;",
-                                hive_ai::desktop::state::StageStatus::Running => "color: #007acc; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Running => "color: #FFC107; font-size: 11px;",
                                 hive_ai::desktop::state::StageStatus::Completed => "color: #4caf50; font-size: 11px;",
                                 hive_ai::desktop::state::StageStatus::Error => "color: #f44336; font-size: 11px;",
                             },
@@ -1336,7 +1478,7 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                             style: format!("background: {}; height: 100%; width: {}%; transition: width 0.3s;",
                                 match stage.status {
                                     hive_ai::desktop::state::StageStatus::Waiting => "#666666",
-                                    hive_ai::desktop::state::StageStatus::Running => "#007acc",
+                                    hive_ai::desktop::state::StageStatus::Running => "#FFC107",
                                     hive_ai::desktop::state::StageStatus::Completed => "#4caf50",
                                     hive_ai::desktop::state::StageStatus::Error => "#f44336",
                                 },

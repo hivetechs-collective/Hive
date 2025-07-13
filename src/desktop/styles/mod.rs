@@ -5,6 +5,7 @@
 pub mod components;
 pub mod theme;
 pub mod example;
+pub mod hivetechs_theme;
 
 /// Get the complete global CSS styles for VS Code theming
 pub fn get_global_styles() -> String {
@@ -18,11 +19,15 @@ pub fn get_global_styles() -> String {
 {platform_adjustments}
 
 /* Dialog styles */
-{dialog_styles}"#,
+{dialog_styles}
+
+/* HiveTechs Brand Theme */
+{hivetechs_theme}"#,
         base_styles = get_base_styles(),
         platform_fonts = get_platform_fonts(),
         platform_adjustments = theme::platform_adjustments(),
-        dialog_styles = crate::desktop::dialogs::DIALOG_STYLES
+        dialog_styles = crate::desktop::dialogs::DIALOG_STYLES,
+        hivetechs_theme = hivetechs_theme::get_hivetechs_theme()
     )
 }
 
