@@ -234,35 +234,31 @@ impl SubscriptionDisplay {
 
         // Always prefer D1's authoritative count when available
         let base_display = if let Some(total) = self.total_remaining {
-            if self.is_trial {
-                // During trial, show remaining from D1
-                if total == 0 {
-                    format!("{} | {} | Trial limit reached for today", self.username, tier_display)
-                } else {
-                    format!("{} | {} | {} remaining today", self.username, tier_display, total)
-                }
-            } else if self.tier == SubscriptionTier::Unlimited {
+            if self.tier == SubscriptionTier::Unlimited {
                 format!("{} | {} | Unlimited", self.username, tier_display)
             } else if total == 0 {
-                // Out of conversations
-                format!("{} | {} | Daily limit reached (0/{} daily)", 
-                    self.username, tier_display, self.daily_limit)
+                // Out of conversations - show clear limit reached message
+                format!("{} | {} | Daily limit reached ({}/{})", 
+                    self.username, tier_display, self.daily_used, self.daily_limit)
             } else if self.daily_remaining == 0 && total > 0 {
                 // Using credit packs
                 format!("{} | {} | {} credits remaining", 
                     self.username, tier_display, total)
+            } else if self.is_trial && total > 0 {
+                // During trial, show remaining from D1
+                format!("{} | {} | {} remaining (trial)", self.username, tier_display, total)
             } else {
-                // Normal display with daily and total
+                // Normal display with remaining
                 format!("{} | {} | {} remaining today", 
                     self.username, tier_display, total)
             }
         } else {
             // Fallback when D1 info not available (local display only)
-            if self.is_trial {
-                format!("{} | {} | Unlimited ({} used today)", self.username, tier_display, self.daily_used)
-            } else if self.daily_remaining == 0 {
-                format!("{} | {} | Daily limit reached (0/{} daily)", 
-                    self.username, tier_display, self.daily_limit)
+            if self.daily_remaining == 0 {
+                format!("{} | {} | Daily limit reached ({}/{})", 
+                    self.username, tier_display, self.daily_used, self.daily_limit)
+            } else if self.is_trial {
+                format!("{} | {} | {} remaining (trial)", self.username, tier_display, self.daily_remaining)
             } else {
                 format!("{} | {} | {}/{} daily", 
                     self.username, tier_display, self.daily_remaining, self.daily_limit)
@@ -409,6 +405,13 @@ impl SubscriptionDisplay {
     /// Update display with fresh data from D1
     pub fn update_from_d1(&mut self, total_remaining: u32) {
         self.total_remaining = Some(total_remaining);
+        
+        // If D1 says we have 0 remaining and we're on a free plan, 
+        // we're definitely not in trial (trial gives unlimited)
+        if total_remaining == 0 && self.tier == SubscriptionTier::Free {
+            self.is_trial = false;
+            self.daily_remaining = 0;
+        }
     }
     
     /// Get recommended tier based on average daily usage

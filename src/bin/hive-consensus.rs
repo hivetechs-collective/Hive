@@ -391,6 +391,26 @@ const DESKTOP_STYLES: &str = r#"
         filter: drop-shadow(0 0 10px rgba(255, 193, 7, 0.5));
         animation: glow 3s ease-in-out infinite;
     }
+    
+    /* Sidebar brand section */
+    .sidebar-brand {
+        transition: transform 0.3s ease;
+    }
+    
+    .sidebar-brand:hover {
+        transform: scale(1.05);
+    }
+    
+    /* File tree improvements */
+    .sidebar-item {
+        transition: all 0.3s ease;
+    }
+    
+    .sidebar-item:hover {
+        background: rgba(255, 193, 7, 0.1);
+        border-left: 3px solid #FFC107;
+        padding-left: 17px;
+    }
 "#;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -453,8 +473,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::menu_bar::{MenuBar, MenuAction};
-use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, SettingsDialog, OnboardingDialog, WelcomeAction, DIALOG_STYLES};
+use hive_ai::desktop::dialogs::{AboutDialog, WelcomeTab, CommandPalette, SettingsDialog, OnboardingDialog, WelcomeAction, UpgradeDialog, DIALOG_STYLES};
 use hive_ai::desktop::consensus_integration::use_consensus_with_version;
+use hive_ai::desktop::assets::get_logo_html;
 
 // Simple markdown to HTML converter
 mod markdown {
@@ -516,6 +537,7 @@ fn App() -> Element {
     let mut show_command_palette = use_signal(|| false);
     let mut show_settings_dialog = use_signal(|| false);
     let mut show_onboarding_dialog = use_signal(|| false);
+    let mut show_upgrade_dialog = use_signal(|| false);
     let mut onboarding_current_step = use_signal(|| 1);  // Persist onboarding step
     
     // Subscription state
@@ -556,29 +578,58 @@ fn App() -> Element {
                         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                     }
                     
-                    use hive_ai::subscription::SubscriptionDisplay;
+                    // Load subscription info directly from D1, not local database
+                    use hive_ai::subscription::conversation_gateway::ConversationGateway;
+                    use hive_ai::core::api_keys::ApiKeyManager;
                     
-                    match SubscriptionDisplay::load_from_database().await {
-                        Ok(mut sub_info) => {
-                            tracing::info!("Subscription loaded: user={}, tier={:?}, is_trial={}, daily_used={}, daily_remaining={}", 
-                                sub_info.username, sub_info.tier, sub_info.is_trial, sub_info.daily_used, sub_info.daily_remaining);
-                            // Get total remaining from app state if available
-                            if let Some(total) = app_state.read().total_conversations_remaining {
-                                sub_info.update_from_d1(total);
+                    match ApiKeyManager::load_from_database().await {
+                        Ok(config) => {
+                            if let Some(hive_key) = config.hive_key {
+                                match ConversationGateway::new() {
+                                    Ok(gateway) => match gateway.request_conversation_authorization("subscription_check", &hive_key).await {
+                                    Ok(auth) => {
+                                        let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
+                                        let remaining = auth.remaining;
+                                        let used = auth.limit.saturating_sub(remaining);
+                                        
+                                        let display = if remaining == 0 {
+                                            format!("{} | {} | Daily limit reached ({}/{})", 
+                                                auth.user_id, tier_display, used, auth.limit)
+                                        } else {
+                                            format!("{} | {} | {} remaining today", 
+                                                auth.user_id, tier_display, remaining)
+                                        };
+                                        
+                                        *subscription_display.write() = display;
+                                        
+                                        // Update app state with D1 data
+                                        app_state.write().total_conversations_remaining = Some(remaining);
+                                    }
+                                    Err(e) => {
+                                        if e.to_string().contains("Daily conversation limit reached") {
+                                            *subscription_display.write() = "FREE | Daily limit reached (10/10)".to_string();
+                                            app_state.write().total_conversations_remaining = Some(0);
+                                        } else {
+                                            *subscription_display.write() = "FREE | Unable to verify".to_string();
+                                        }
+                                    }
+                                    }
+                                    Err(_) => {
+                                        *subscription_display.write() = "FREE | Gateway initialization failed".to_string();
+                                    }
+                                }
+                            } else {
+                                *subscription_display.write() = "No license configured".to_string();
                             }
-                            let formatted = sub_info.format();
-                            tracing::info!("Subscription display: {}", formatted);
-                            *subscription_display.write() = formatted;
                         }
-                        Err(e) => {
-                            tracing::warn!("Failed to load subscription info: {}", e);
-                            *subscription_display.write() = "FREE | 10/10 daily".to_string();
+                        Err(_) => {
+                            *subscription_display.write() = "No license configured".to_string();
                         }
                     }
                 }
             });
             
-            // Refresh every 30 seconds using tokio interval
+            // Refresh every 30 seconds using D1 only (not local database)
             let mut subscription_display = subscription_display.clone();
             spawn(async move {
                 use tokio::time::{interval, Duration};
@@ -587,17 +638,47 @@ fn App() -> Element {
                 loop {
                     interval.tick().await;
                     
-                    use hive_ai::subscription::SubscriptionDisplay;
-                    match SubscriptionDisplay::load_from_database().await {
-                        Ok(mut sub_info) => {
-                            // Get total remaining from app state if available
-                            if let Some(total) = app_state.read().total_conversations_remaining {
-                                sub_info.update_from_d1(total);
+                    // Use D1 as the only source of truth, same as initial load
+                    use hive_ai::subscription::conversation_gateway::ConversationGateway;
+                    use hive_ai::core::api_keys::ApiKeyManager;
+                    
+                    match ApiKeyManager::load_from_database().await {
+                        Ok(config) => {
+                            if let Some(hive_key) = config.hive_key {
+                                match ConversationGateway::new() {
+                                    Ok(gateway) => match gateway.request_conversation_authorization("subscription_refresh", &hive_key).await {
+                                    Ok(auth) => {
+                                        let tier_display = if auth.limit == 10 { "FREE" } else { "PREMIUM" };
+                                        let remaining = auth.remaining;
+                                        let used = auth.limit.saturating_sub(remaining);
+                                        
+                                        let display = if remaining == 0 {
+                                            format!("{} | {} | Daily limit reached ({}/{})", 
+                                                auth.user_id, tier_display, used, auth.limit)
+                                        } else {
+                                            format!("{} | {} | {} remaining today", 
+                                                auth.user_id, tier_display, remaining)
+                                        };
+                                        
+                                        *subscription_display.write() = display;
+                                        app_state.write().total_conversations_remaining = Some(remaining);
+                                    }
+                                    Err(e) => {
+                                        if e.to_string().contains("Daily conversation limit reached") {
+                                            *subscription_display.write() = "FREE | Daily limit reached (10/10)".to_string();
+                                            app_state.write().total_conversations_remaining = Some(0);
+                                        }
+                                        // Keep existing display on other errors
+                                    }
+                                    }
+                                    Err(_) => {
+                                        // Keep existing display on gateway initialization error
+                                    }
+                                }
                             }
-                            *subscription_display.write() = sub_info.format();
                         }
                         Err(_) => {
-                            // Keep existing display on error
+                            // Keep existing display on API key load error
                         }
                     }
                 }
@@ -950,16 +1031,36 @@ fn App() -> Element {
                     class: "sidebar",
                     style: "background: #0E1414; border-right: 1px solid #2D3336; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);",
                     
-                    // Sidebar header with current path and open folder button
+                    // Logo section at the top
                     div {
-                        class: "sidebar-header",
-                        style: "background: #181E21; border-bottom: 1px solid #2D3336; position: relative; overflow: hidden;",
+                        style: "padding: 20px; display: flex; flex-direction: column; align-items: center; background: #181E21; border-bottom: 1px solid #2D3336; position: relative;",
+                        // Top gradient line
                         div {
                             style: "position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%);"
                         }
+                        // Logo Image
+                        div {
+                            style: "width: 64px; height: 64px; margin-bottom: 12px; border-radius: 8px; overflow: hidden; background: #2A2A2A;",
+                            dangerous_inner_html: get_logo_html()
+                        }
+                        // Brand name
+                        div {
+                            style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 18px; text-align: center;",
+                            "HiveTechs"
+                        }
+                        div {
+                            style: "color: #9CA3AF; font-size: 11px; margin-top: 4px;",
+                            "AI Consensus Platform"
+                        }
+                    }
+                    
+                    // Sidebar header with current path
+                    div {
+                        class: "sidebar-header",
+                        style: "background: #181E21; border-bottom: 1px solid #2D3336; padding: 10px 20px;",
                         div {
                             class: "current-path",
-                            style: "color: #9CA3AF;",
+                            style: "color: #9CA3AF; font-size: 11px;",
                             title: "{current_dir.read().display()}",
                             "{current_dir.read().display()}"
                         }
@@ -999,24 +1100,28 @@ fn App() -> Element {
                     }
                     div { 
                         class: "sidebar-item", 
-                        style: "transition: all 0.3s ease;",
-                        "🔍 Search" 
+                        style: "transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
+                        span { style: "color: #FFC107;", "🔍" }
+                        "Search" 
                     }
                     div { 
                         class: "sidebar-item", 
-                        style: "transition: all 0.3s ease;",
-                        "📊 Analytics" 
+                        style: "transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
+                        span { style: "color: #007BFF;", "📊" }
+                        "Analytics" 
                     }
                     div { 
                         class: "sidebar-item", 
-                        style: "transition: all 0.3s ease;",
-                        "🧠 Memory" 
+                        style: "transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
+                        span { style: "color: #8A2BE2;", "🧠" }
+                        "Memory" 
                     }
                     div { 
                         class: "sidebar-item",
                         onclick: move |_| *show_settings_dialog.write() = true,
-                        style: "cursor: pointer;",
-                        "⚙️ Settings" 
+                        style: "cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
+                        span { style: "color: #28A745;", "⚙️" }
+                        "Settings" 
                     }
                 }
                 
@@ -1241,6 +1346,7 @@ fn App() -> Element {
                                             let mut current_response = current_response.clone();
                                             let mut is_processing = is_processing.clone();
                                             let mut app_state = app_state.clone();
+                                            let mut show_upgrade_dialog = show_upgrade_dialog.clone();
                                             
                                             spawn(async move {
                                                 // Update UI to show consensus is running
@@ -1254,7 +1360,30 @@ fn App() -> Element {
                                                         *current_response.write() = html;
                                                     }
                                                     Err(e) => {
-                                                        *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);
+                                                        let error_msg = e.to_string();
+                                                        let full_error_chain = format!("{:?}", e);
+                                                        
+                                                        // Debug: Log the full error to understand the structure
+                                                        tracing::error!("Full error: {}", error_msg);
+                                                        tracing::error!("Error chain: {}", full_error_chain);
+                                                        
+                                                        // Check for subscription limit errors at any level of the error chain
+                                                        if error_msg.contains("Daily conversation limit reached") || 
+                                                           error_msg.contains("no credits available") ||
+                                                           error_msg.contains("Authentication failed") ||
+                                                           error_msg.contains("Failed to authorize with D1") ||
+                                                           full_error_chain.contains("Daily conversation limit reached") ||
+                                                           full_error_chain.contains("no credits available") ||
+                                                           full_error_chain.contains("Authentication failed") ||
+                                                           full_error_chain.contains("Failed to authorize with D1") {
+                                                            // Show upgrade dialog for subscription limit errors
+                                                            tracing::info!("Detected subscription limit error, showing upgrade dialog");
+                                                            *show_upgrade_dialog.write() = true;
+                                                            *current_response.write() = String::new(); // Clear response area
+                                                        } else {
+                                                            // Show technical errors normally
+                                                            *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);
+                                                        }
                                                     }
                                                 }
                                                 
@@ -1288,7 +1417,7 @@ fn App() -> Element {
                     div {
                         class: "git-branch",
                         style: "display: flex; align-items: center; gap: 5px;",
-                        span { style: "color: #000;", "🐝" }
+                        span { style: "color: #FFC107; font-weight: 600; font-size: 14px;", "H" }
                         span { style: "color: #000; font-weight: 700;", "main" }
                     }
                     span { style: "color: #000;", " • " }
@@ -1336,6 +1465,16 @@ fn App() -> Element {
                 hive_key: hive_key.clone(),
                 current_step: onboarding_current_step.clone(),
                 api_keys_version: api_keys_version.clone(),
+            }
+        }
+        
+        if *show_upgrade_dialog.read() {
+            UpgradeDialog {
+                show_upgrade: show_upgrade_dialog.clone(),
+                user_email: "verone.lazio@gmail.com".to_string(),
+                daily_used: 10,
+                daily_limit: 10,
+                average_usage: 16.0,
             }
         }
     }

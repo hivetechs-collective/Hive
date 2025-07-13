@@ -2,6 +2,7 @@
 
 use dioxus::prelude::*;
 use anyhow;
+use chrono::Timelike;
 use crate::desktop::state::AppState;
 
 /// Information about a consensus profile
@@ -3674,6 +3675,186 @@ fn EmbeddedModelCard(
     }
 }
 
+/// Subscription upgrade dialog when user hits conversation limit
+#[component]
+pub fn UpgradeDialog(
+    show_upgrade: Signal<bool>,
+    user_email: String,
+    daily_used: u32,
+    daily_limit: u32,
+    average_usage: f32,
+) -> Element {
+    let recommended_plan = if average_usage <= 50.0 { "Basic" } else if average_usage <= 100.0 { "Standard" } else if average_usage <= 200.0 { "Premium" } else { "Unlimited" };
+    let recommended_price = match recommended_plan {
+        "Basic" => "$5/month",
+        "Standard" => "$10/month", 
+        "Premium" => "$20/month",
+        _ => "$30/month",
+    };
+    
+    let hours_until_reset = 24 - chrono::Utc::now().hour();
+    
+    rsx! {
+        div {
+            class: "dialog-overlay",
+            onclick: move |e| e.stop_propagation(),
+            
+            div {
+                class: "dialog upgrade-dialog",
+                style: "max-width: 600px; width: 90%; background: #0E1414 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1);",
+                onclick: move |e| e.stop_propagation(),
+                
+                div {
+                    class: "dialog-header",
+                    style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); color: white; position: relative;",
+                    // Top gradient line (matching app style)
+                    div {
+                        style: "position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%);"
+                    }
+                    h2 { style: "margin: 0; color: white; font-weight: 700;", "🚀 Daily Conversation Limit Reached" }
+                    button {
+                        class: "dialog-close",
+                        style: "color: white; font-size: 24px;",
+                        onclick: move |_| *show_upgrade.write() = false,
+                        "×"
+                    }
+                }
+                
+                div {
+                    class: "dialog-content",
+                    style: "padding: 30px !important; background: #0E1414 !important; color: #FFFFFF !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; border-radius: 0 0 8px 8px !important;",
+                    
+                    div {
+                        style: "text-align: center; margin-bottom: 25px;",
+                        div {
+                            style: "font-size: 18px; color: #FF6B6B; font-weight: 600; margin-bottom: 10px;",
+                            "You've used all {daily_used} of your daily conversations"
+                        }
+                        div {
+                            style: "color: #9CA3AF !important; font-size: 14px !important; font-weight: 500 !important;",
+                            "Your FREE plan includes {daily_limit} conversations per day"
+                        }
+                    }
+                    
+                    div {
+                        style: "background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(0, 123, 255, 0.1) 100%) !important; border: 2px solid #FFC107 !important; border-radius: 8px !important; padding: 20px !important; margin-bottom: 25px !important;",
+                        h3 { style: "margin: 0 0 15px 0 !important; color: #FFFFFF !important; font-weight: 700 !important;", "🎯 Recommended for you: {recommended_plan} Plan" }
+                        div {
+                            style: "color: #9CA3AF !important; margin-bottom: 10px !important; font-weight: 500 !important;",
+                            "Based on your {average_usage:.1} conversations/day average"
+                        }
+                        div {
+                            style: "font-size: 20px; font-weight: 600; background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;",
+                            "{recommended_price}"
+                        }
+                    }
+                    
+                    div {
+                        style: "margin-bottom: 25px;",
+                        h4 { style: "margin: 0 0 15px 0 !important; color: #FFFFFF !important; font-weight: 600 !important;", "Your Options:" }
+                        
+                        div {
+                            style: "display: grid; gap: 15px;",
+                            
+                            // Option 1: Wait
+                            div {
+                                style: "border: 2px solid #2D3336 !important; background: #181E21 !important; border-radius: 8px !important; padding: 15px !important; transition: all 0.2s;",
+                                div {
+                                    style: "font-weight: 600 !important; color: #FFFFFF !important; margin-bottom: 5px !important;",
+                                    "⏰ Wait for Reset"
+                                }
+                                div {
+                                    style: "color: #9CA3AF !important; font-size: 14px !important; font-weight: 500 !important;",
+                                    "Your conversations reset in ~{hours_until_reset} hours (midnight UTC)"
+                                }
+                            }
+                            
+                            // Option 2: Upgrade
+                            div {
+                                style: "border: 2px solid #007BFF; border-radius: 8px; padding: 15px; background: linear-gradient(135deg, rgba(255, 193, 7, 0.05) 0%, rgba(0, 123, 255, 0.05) 100%);",
+                                div {
+                                    style: "font-weight: 700; background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 5px;",
+                                    "🚀 Upgrade Subscription"
+                                }
+                                div {
+                                    style: "color: #9CA3AF !important; font-size: 14px !important; margin-bottom: 10px !important; font-weight: 500 !important;",
+                                    "Get more daily conversations and unlock full potential"
+                                }
+                                button {
+                                    style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); color: #000000; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;",
+                                    onclick: move |_| {
+                                        let _ = std::process::Command::new("open")
+                                            .arg("https://hivetechs.io/pricing")
+                                            .spawn();
+                                    },
+                                    "View Plans & Pricing"
+                                }
+                            }
+                            
+                            // Option 3: Credit Packs
+                            div {
+                                style: "border: 2px solid #28a745; border-radius: 8px; padding: 15px; background: linear-gradient(135deg, rgba(40, 167, 69, 0.05) 0%, rgba(255, 193, 7, 0.05) 100%);",
+                                div {
+                                    style: "font-weight: 700; color: #28a745; margin-bottom: 5px;",
+                                    "💳 Buy Credit Pack"
+                                }
+                                div {
+                                    style: "color: #9CA3AF !important; font-size: 14px !important; margin-bottom: 10px !important; font-weight: 500 !important;",
+                                    "Get immediate conversations without changing your plan"
+                                }
+                                div {
+                                    style: "display: flex; gap: 10px; flex-wrap: wrap;",
+                                    button {
+                                        style: "background: #28a745; color: #FFFFFF; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;",
+                                        onclick: move |_| {
+                                            let _ = std::process::Command::new("open")
+                                                .arg("https://hivetechs.io/checkout/credits?pack=25")
+                                                .spawn();
+                                        },
+                                        "+25 for $3"
+                                    }
+                                    button {
+                                        style: "background: #28a745; color: #FFFFFF; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;",
+                                        onclick: move |_| {
+                                            let _ = std::process::Command::new("open")
+                                                .arg("https://hivetechs.io/checkout/credits?pack=75")
+                                                .spawn();
+                                        },
+                                        "+75 for $7"
+                                    }
+                                    button {
+                                        style: "background: #28a745; color: #FFFFFF; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;",
+                                        onclick: move |_| {
+                                            let _ = std::process::Command::new("open")
+                                                .arg("https://hivetechs.io/checkout/credits?pack=200")
+                                                .spawn();
+                                        },
+                                        "+200 for $15"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    div {
+                        style: "text-align: center !important; padding-top: 20px !important; border-top: 1px solid #2D3336 !important; color: #9CA3AF !important; font-size: 13px !important; font-weight: 500 !important;",
+                        "Questions? Visit "
+                        a {
+                            href: "https://hivetechs.io/support",
+                            style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-weight: 600; text-decoration: none;",
+                            onclick: move |_| {
+                                let _ = std::process::Command::new("open")
+                                    .arg("https://hivetechs.io/support")
+                                    .spawn();
+                            },
+                            "hivetechs.io/support"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// CSS styles for dialogs
 pub const DIALOG_STYLES: &str = r#"
@@ -3691,13 +3872,25 @@ pub const DIALOG_STYLES: &str = r#"
     }
     
     .dialog-box {
-        background: #2d2d30;
+        background: #0E1414 !important;
         border: 1px solid #3e3e42;
         border-radius: 8px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         max-width: 90%;
         max-height: 90vh;
         overflow: auto;
+    }
+    
+    .upgrade-dialog {
+        background: #0E1414 !important;
+        color: #FFFFFF !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+    }
+    
+    .dialog-content {
+        background: #0E1414 !important;
+        color: #FFFFFF !important;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
     }
     
     .about-dialog {
