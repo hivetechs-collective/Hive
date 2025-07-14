@@ -163,27 +163,25 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
             Stage::Curator => ConsensusStage::Curator,
         };
 
-        let cost = if let Some(usage) = &result.usage {
+        let cost = if let Some(analytics) = &result.analytics {
+            // Use actual cost from consensus pipeline analytics (calculated with real database pricing)
+            tracing::info!(
+                "💰 Using real analytics cost: ${:.6} for model {}",
+                analytics.cost,
+                result.model
+            );
+            analytics.cost
+        } else if let Some(usage) = &result.usage {
+            tracing::warn!(
+                "⚠️ No analytics cost data, using fallback calculation for {} tokens on model {}",
+                usage.total_tokens,
+                result.model
+            );
+            // Fallback calculation (should rarely be used now)
             let tokens = usage.total_tokens as f64;
-            
-            // Use actual cost from analytics if available, otherwise calculate with real pricing
-            if let Some(analytics) = &result.analytics {
-                analytics.cost
-            } else {
-                // Better cost calculation using actual OpenRouter pricing
-                // These rates are approximate OpenRouter pricing per 1M tokens
-                let cost_per_million = match result.model.as_str() {
-                    "anthropic/claude-3-5-sonnet-20241022" => 3.0, // $3.00 per 1M input tokens
-                    "anthropic/claude-3-haiku" => 0.25, // $0.25 per 1M input tokens
-                    "openai/gpt-4-turbo" => 10.0, // $10.00 per 1M input tokens
-                    "anthropic/claude-3-opus" => 15.0, // $15.00 per 1M input tokens
-                    "openai/gpt-4o" => 2.5, // $2.50 per 1M input tokens
-                    _ => 5.0, // Default fallback rate
-                };
-                
-                (tokens / 1_000_000.0) * cost_per_million
-            }
+            tokens * 0.000001 // Very rough fallback estimate
         } else {
+            tracing::warn!("⚠️ No usage or analytics data available for cost calculation");
             0.0
         };
 
@@ -313,27 +311,25 @@ impl StreamingCallbacks for DualChannelCallbacks {
             Stage::Curator => ConsensusStage::Curator,
         };
 
-        let cost = if let Some(usage) = &result.usage {
+        let cost = if let Some(analytics) = &result.analytics {
+            // Use actual cost from consensus pipeline analytics (calculated with real database pricing)
+            tracing::info!(
+                "💰 Using real analytics cost: ${:.6} for model {}",
+                analytics.cost,
+                result.model
+            );
+            analytics.cost
+        } else if let Some(usage) = &result.usage {
+            tracing::warn!(
+                "⚠️ No analytics cost data, using fallback calculation for {} tokens on model {}",
+                usage.total_tokens,
+                result.model
+            );
+            // Fallback calculation (should rarely be used now)
             let tokens = usage.total_tokens as f64;
-            
-            // Use actual cost from analytics if available, otherwise calculate with real pricing
-            if let Some(analytics) = &result.analytics {
-                analytics.cost
-            } else {
-                // Better cost calculation using actual OpenRouter pricing
-                // These rates are approximate OpenRouter pricing per 1M tokens
-                let cost_per_million = match result.model.as_str() {
-                    "anthropic/claude-3-5-sonnet-20241022" => 3.0, // $3.00 per 1M input tokens
-                    "anthropic/claude-3-haiku" => 0.25, // $0.25 per 1M input tokens
-                    "openai/gpt-4-turbo" => 10.0, // $10.00 per 1M input tokens
-                    "anthropic/claude-3-opus" => 15.0, // $15.00 per 1M input tokens
-                    "openai/gpt-4o" => 2.5, // $2.50 per 1M input tokens
-                    _ => 5.0, // Default fallback rate
-                };
-                
-                (tokens / 1_000_000.0) * cost_per_million
-            }
+            tokens * 0.000001 // Very rough fallback estimate
         } else {
+            tracing::warn!("⚠️ No usage or analytics data available for cost calculation");
             0.0
         };
 
