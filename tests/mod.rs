@@ -1,16 +1,16 @@
 //! HiveTechs Consensus Testing Framework
 //! Comprehensive testing suite for production readiness validation
 
-pub mod unit;
+pub mod acceptance;
 pub mod integration;
 pub mod performance;
-pub mod acceptance;
 pub mod security;
+pub mod unit;
 
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
-use anyhow::Result;
 
 /// Test execution result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,13 +146,21 @@ impl TestRunner {
     }
 
     /// Execute a test with timing and error handling
-    pub async fn execute_test<F, Fut>(&mut self, name: &str, category: TestCategory, test_fn: F) -> TestResult
+    pub async fn execute_test<F, Fut>(
+        &mut self,
+        name: &str,
+        category: TestCategory,
+        test_fn: F,
+    ) -> TestResult
     where
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<HashMap<String, f64>>>,
     {
         let start = Instant::now();
-        let timeout = self.config.timeout_limits.get(&category)
+        let timeout = self
+            .config
+            .timeout_limits
+            .get(&category)
             .cloned()
             .unwrap_or(Duration::from_secs(60));
 
@@ -193,14 +201,32 @@ impl TestRunner {
     /// Generate comprehensive test report
     pub fn generate_report(&self) -> TestReport {
         let total_tests = self.results.len();
-        let passed = self.results.iter().filter(|r| r.status == TestStatus::Passed).count();
-        let failed = self.results.iter().filter(|r| r.status == TestStatus::Failed).count();
-        let errors = self.results.iter().filter(|r| r.status == TestStatus::Error).count();
-        let timeouts = self.results.iter().filter(|r| r.status == TestStatus::Timeout).count();
+        let passed = self
+            .results
+            .iter()
+            .filter(|r| r.status == TestStatus::Passed)
+            .count();
+        let failed = self
+            .results
+            .iter()
+            .filter(|r| r.status == TestStatus::Failed)
+            .count();
+        let errors = self
+            .results
+            .iter()
+            .filter(|r| r.status == TestStatus::Error)
+            .count();
+        let timeouts = self
+            .results
+            .iter()
+            .filter(|r| r.status == TestStatus::Timeout)
+            .count();
 
         let mut category_results = HashMap::new();
         for result in &self.results {
-            let entry = category_results.entry(result.category.clone()).or_insert(CategorySummary::default());
+            let entry = category_results
+                .entry(result.category.clone())
+                .or_insert(CategorySummary::default());
             entry.total += 1;
             match result.status {
                 TestStatus::Passed => entry.passed += 1,
@@ -220,7 +246,11 @@ impl TestRunner {
             failed,
             errors,
             timeouts,
-            success_rate: if total_tests > 0 { (passed as f64 / total_tests as f64) * 100.0 } else { 0.0 },
+            success_rate: if total_tests > 0 {
+                (passed as f64 / total_tests as f64) * 100.0
+            } else {
+                0.0
+            },
             category_results,
             performance_validation,
             coverage_percentage: 0.0, // To be filled by coverage tool
@@ -313,10 +343,10 @@ pub struct PerformanceValidation {
 
 /// Test utilities and helpers
 pub mod utils {
+    use anyhow::Result;
     use std::path::Path;
     use tempfile::TempDir;
     use tokio::process::Command;
-    use anyhow::Result;
 
     /// Create temporary directory for testing
     pub fn create_temp_dir() -> Result<TempDir> {
@@ -336,8 +366,9 @@ pub mod utils {
             &conversation_id,
             "Test conversation",
             &serde_json::json!({"test": "data"}),
-            "test_user"
-        ).await?;
+            "test_user",
+        )
+        .await?;
 
         Ok(())
     }
@@ -348,10 +379,7 @@ pub mod utils {
         args: &[&str],
         timeout: std::time::Duration,
     ) -> Result<std::process::Output> {
-        let output = tokio::time::timeout(
-            timeout,
-            Command::new(cmd).args(args).output()
-        ).await??;
+        let output = tokio::time::timeout(timeout, Command::new(cmd).args(args).output()).await??;
 
         Ok(output)
     }
@@ -366,9 +394,7 @@ pub mod utils {
                 .await?;
 
             if output.status.success() {
-                let rss_kb = String::from_utf8(output.stdout)?
-                    .trim()
-                    .parse::<u64>()?;
+                let rss_kb = String::from_utf8(output.stdout)?.trim().parse::<u64>()?;
                 Ok(rss_kb * 1024) // Convert KB to bytes
             } else {
                 anyhow::bail!("Failed to get memory usage for PID {}", pid);
@@ -401,7 +427,13 @@ pub mod utils {
     pub async fn generate_coverage_report() -> Result<f64> {
         // Run cargo tarpaulin for coverage
         let output = Command::new("cargo")
-            .args(&["tarpaulin", "--output-dir", "target/coverage", "--out", "Json"])
+            .args(&[
+                "tarpaulin",
+                "--output-dir",
+                "target/coverage",
+                "--out",
+                "Json",
+            ])
             .output()
             .await;
 
@@ -422,7 +454,12 @@ pub mod utils {
             _ => {
                 // Fallback to llvm-cov if tarpaulin is not available
                 let output = Command::new("cargo")
-                    .args(&["llvm-cov", "--json", "--output-path", "target/coverage/llvm-cov.json"])
+                    .args(&[
+                        "llvm-cov",
+                        "--json",
+                        "--output-path",
+                        "target/coverage/llvm-cov.json",
+                    ])
                     .output()
                     .await;
 
@@ -437,8 +474,14 @@ pub mod utils {
                             if let Some(data) = report.get("data") {
                                 if let Some(totals) = data.get(0).and_then(|d| d.get("totals")) {
                                     if let Some(lines) = totals.get("lines") {
-                                        let covered = lines.get("covered").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                                        let count = lines.get("count").and_then(|v| v.as_f64()).unwrap_or(1.0);
+                                        let covered = lines
+                                            .get("covered")
+                                            .and_then(|v| v.as_f64())
+                                            .unwrap_or(0.0);
+                                        let count = lines
+                                            .get("count")
+                                            .and_then(|v| v.as_f64())
+                                            .unwrap_or(1.0);
                                         return Ok((covered / count) * 100.0);
                                     }
                                 }
