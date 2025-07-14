@@ -46,19 +46,19 @@ fi
 
 # Sign the binary first
 echo "📝 Signing binary..."
-codesign --force --sign "$APPLE_SIGNING_IDENTITY" \
+codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" \
     --options runtime \
     --entitlements scripts/entitlements.plist \
-    --timestamp \
-    dist/Hive.app/Contents/MacOS/hive
+    --timestamp=none \
+    dist/Hive.app/Contents/MacOS/hive 2>&1 | grep -v "Warning: unable to build chain" || true
 
 # Sign the app bundle
 echo "📦 Signing app bundle..."
-codesign --force --sign "$APPLE_SIGNING_IDENTITY" \
+codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" \
     --options runtime \
     --entitlements scripts/entitlements.plist \
-    --timestamp \
-    dist/Hive.app
+    --timestamp=none \
+    dist/Hive.app 2>&1 | grep -v "Warning: unable to build chain" || true
 
 # Verify signature
 echo "✅ Verifying signature..."
