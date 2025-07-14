@@ -47,6 +47,7 @@ pub enum ConsensusUIEvent {
     D1Authorization {
         total_remaining: u32,
     }, // New event for D1 auth info
+    AnalyticsRefresh, // New event for analytics refresh after consensus completion
 }
 
 /// Desktop streaming callbacks that send events to UI
@@ -88,6 +89,12 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         let _ = self.event_sender.send(ConsensusUIEvent::D1Authorization {
             total_remaining: remaining,
         });
+        Ok(())
+    }
+
+    fn on_analytics_refresh(&self) -> Result<()> {
+        // Send analytics refresh event after consensus completion
+        let _ = self.event_sender.send(ConsensusUIEvent::AnalyticsRefresh);
         Ok(())
     }
 
@@ -157,7 +164,25 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         };
 
         let cost = if let Some(usage) = &result.usage {
-            usage.total_tokens as f64 * 0.0001
+            let tokens = usage.total_tokens as f64;
+            
+            // Use actual cost from analytics if available, otherwise calculate with real pricing
+            if let Some(analytics) = &result.analytics {
+                analytics.cost
+            } else {
+                // Better cost calculation using actual OpenRouter pricing
+                // These rates are approximate OpenRouter pricing per 1M tokens
+                let cost_per_million = match result.model.as_str() {
+                    "anthropic/claude-3-5-sonnet-20241022" => 3.0, // $3.00 per 1M input tokens
+                    "anthropic/claude-3-haiku" => 0.25, // $0.25 per 1M input tokens
+                    "openai/gpt-4-turbo" => 10.0, // $10.00 per 1M input tokens
+                    "anthropic/claude-3-opus" => 15.0, // $15.00 per 1M input tokens
+                    "openai/gpt-4o" => 2.5, // $2.50 per 1M input tokens
+                    _ => 5.0, // Default fallback rate
+                };
+                
+                (tokens / 1_000_000.0) * cost_per_million
+            }
         } else {
             0.0
         };
@@ -222,6 +247,16 @@ impl StreamingCallbacks for DualChannelCallbacks {
         Ok(())
     }
 
+    fn on_analytics_refresh(&self) -> Result<()> {
+        // Send analytics refresh event to both channels after consensus completion
+        let event = ConsensusUIEvent::AnalyticsRefresh;
+
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
+
+        Ok(())
+    }
+
     fn on_stage_chunk(&self, stage: Stage, chunk: &str, total_content: &str) -> Result<()> {
         let consensus_stage = match stage {
             Stage::Generator => ConsensusStage::Generator,
@@ -279,7 +314,25 @@ impl StreamingCallbacks for DualChannelCallbacks {
         };
 
         let cost = if let Some(usage) = &result.usage {
-            usage.total_tokens as f64 * 0.0001
+            let tokens = usage.total_tokens as f64;
+            
+            // Use actual cost from analytics if available, otherwise calculate with real pricing
+            if let Some(analytics) = &result.analytics {
+                analytics.cost
+            } else {
+                // Better cost calculation using actual OpenRouter pricing
+                // These rates are approximate OpenRouter pricing per 1M tokens
+                let cost_per_million = match result.model.as_str() {
+                    "anthropic/claude-3-5-sonnet-20241022" => 3.0, // $3.00 per 1M input tokens
+                    "anthropic/claude-3-haiku" => 0.25, // $0.25 per 1M input tokens
+                    "openai/gpt-4-turbo" => 10.0, // $10.00 per 1M input tokens
+                    "anthropic/claude-3-opus" => 15.0, // $15.00 per 1M input tokens
+                    "openai/gpt-4o" => 2.5, // $2.50 per 1M input tokens
+                    _ => 5.0, // Default fallback rate
+                };
+                
+                (tokens / 1_000_000.0) * cost_per_million
+            }
         } else {
             0.0
         };
@@ -384,6 +437,12 @@ pub async fn process_consensus_events(
                 }
 
                 state.consensus.estimated_cost += cost;
+
+                // If this is the Curator stage (final stage), trigger analytics refresh
+                if matches!(stage, ConsensusStage::Curator) {
+                    state.analytics_refresh_trigger += 1;
+                    tracing::info!("Consensus completed - triggered analytics refresh");
+                }
             }
             ConsensusUIEvent::StageError { stage, error: _ } => {
                 let mut state = app_state.write();
@@ -420,6 +479,12 @@ pub async fn process_consensus_events(
 
                 // Trigger subscription display refresh to show updated counts immediately
                 state.subscription_refresh_trigger += 1;
+            }
+            ConsensusUIEvent::AnalyticsRefresh => {
+                // Trigger analytics refresh after consensus completion and database storage
+                let mut state = app_state.write();
+                state.analytics_refresh_trigger += 1;
+                tracing::info!("Analytics refresh triggered - new data available");
             }
         }
     }

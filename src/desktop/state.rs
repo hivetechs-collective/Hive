@@ -50,6 +50,9 @@ pub struct AppState {
 
     /// Trigger for subscription display refresh
     pub subscription_refresh_trigger: u32,
+
+    /// Trigger for analytics refresh after consensus completion
+    pub analytics_refresh_trigger: u32,
 }
 
 impl Default for AppState {
@@ -79,6 +82,7 @@ impl AppState {
             is_trial_active: false,
             trial_days_remaining: None,
             subscription_refresh_trigger: 0,
+            analytics_refresh_trigger: 0,
         }
     }
 

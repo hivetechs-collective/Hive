@@ -1136,6 +1136,13 @@ impl ConsensusPipeline {
         })
         .await??;
 
+        // Trigger analytics refresh now that new data is in the database
+        if let Err(e) = self.callbacks.on_analytics_refresh() {
+            tracing::warn!("Failed to trigger analytics refresh: {}", e);
+        } else {
+            tracing::info!("Analytics refresh triggered after consensus completion");
+        }
+
         Ok(())
     }
 
