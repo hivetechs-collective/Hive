@@ -69,6 +69,12 @@ pub trait StreamingCallbacks: Send + Sync {
         // Default implementation does nothing
         Ok(())
     }
+
+    /// Called when analytics should be refreshed after consensus completion
+    fn on_analytics_refresh(&self) -> Result<()> {
+        // Default implementation does nothing
+        Ok(())
+    }
 }
 
 /// Progress information
