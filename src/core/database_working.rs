@@ -115,6 +115,9 @@ impl DatabaseManager {
 
         // Create minimal schema
         manager.create_schema().await?;
+        
+        // Check and fix schema mismatches
+        manager.check_and_fix_schema().await?;
 
         Ok(manager)
     }
@@ -338,6 +341,28 @@ impl DatabaseManager {
             idle_connections: pool_state.idle_connections,
         })
     }
+    
+    /// Check and fix schema mismatches
+    async fn check_and_fix_schema(&self) -> Result<()> {
+        use crate::core::db_migration::{fix_schema_mismatches, needs_migration};
+        use std::ops::DerefMut;
+        
+        let mut conn = self.get_connection()?;
+        
+        // Convert from pooled connection to regular connection for migration
+        let raw_conn = conn.deref_mut();
+        
+        // Check if migration is needed
+        if needs_migration(raw_conn)? {
+            info!("Database schema migration needed, applying fixes...");
+            fix_schema_mismatches(raw_conn)?;
+            info!("Database schema migration completed successfully");
+        } else {
+            info!("Database schema is up to date");
+        }
+        
+        Ok(())
+    }
 }
 
 /// Database health status information
@@ -475,8 +500,8 @@ pub struct Conversation {
     pub user_id: Option<String>,
     pub consensus_profile_id: Option<String>,
     pub total_cost: f64,
-    pub input_tokens: i32,
-    pub output_tokens: i32,
+    pub total_tokens_input: i32,
+    pub total_tokens_output: i32,
     pub start_time: Option<String>,
     pub end_time: Option<String>,
     pub success_rate: String,
@@ -502,8 +527,8 @@ impl Conversation {
             user_id,
             consensus_profile_id,
             total_cost: 0.0,
-            input_tokens: 0,
-            output_tokens: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
             start_time: Some(current_timestamp()),
             end_time: None,
             success_rate: "0".to_string(), // Will be calculated after completion
@@ -517,7 +542,7 @@ impl Conversation {
 
         conn.execute(
             "INSERT INTO conversations (
-                id, user_id, consensus_profile_id, total_cost, input_tokens, output_tokens,
+                id, user_id, consensus_profile_id, total_cost, total_tokens_input, total_tokens_output,
                 start_time, end_time, success_rate, quality_score, consensus_improvement,
                 confidence_level, success, created_at, updated_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
@@ -526,8 +551,8 @@ impl Conversation {
                 &conversation.user_id,
                 &conversation.consensus_profile_id,
                 &conversation.total_cost,
-                &conversation.input_tokens,
-                &conversation.output_tokens,
+                &conversation.total_tokens_input,
+                &conversation.total_tokens_output,
                 &conversation.start_time,
                 &conversation.end_time,
                 &conversation.success_rate,

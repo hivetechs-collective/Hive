@@ -41,6 +41,9 @@ pub mod profiles;
 // Migration tool
 pub mod migrator;
 
+// Database migration fixes
+pub mod db_migration;
+
 // Uninstaller
 pub mod uninstaller;
 

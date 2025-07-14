@@ -686,8 +686,8 @@ pub struct Conversation {
     pub user_id: Option<String>,
     pub consensus_profile_id: Option<String>,
     pub total_cost: f64,
-    pub input_tokens: i32,
-    pub output_tokens: i32,
+    pub total_tokens_input: i32,
+    pub total_tokens_output: i32,
     pub start_time: Option<String>,
     pub end_time: Option<String>,
     pub success_rate: String,
@@ -713,8 +713,8 @@ impl Conversation {
             user_id,
             consensus_profile_id,
             total_cost: 0.0,
-            input_tokens: 0,
-            output_tokens: 0,
+            total_tokens_input: 0,
+            total_tokens_output: 0,
             start_time: Some(current_timestamp()),
             end_time: None,
             success_rate: "0".to_string(), // Will be calculated after completion
@@ -728,7 +728,7 @@ impl Conversation {
 
         conn.execute(
             "INSERT INTO conversations (
-                id, user_id, consensus_profile_id, total_cost, input_tokens, output_tokens,
+                id, user_id, consensus_profile_id, total_cost, total_tokens_input, total_tokens_output,
                 start_time, end_time, success_rate, quality_score, consensus_improvement,
                 confidence_level, success, created_at, updated_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
@@ -737,8 +737,8 @@ impl Conversation {
                 &conversation.user_id,
                 &conversation.consensus_profile_id,
                 &conversation.total_cost,
-                &conversation.input_tokens,
-                &conversation.output_tokens,
+                &conversation.total_tokens_input,
+                &conversation.total_tokens_output,
                 &conversation.start_time,
                 &conversation.end_time,
                 &conversation.success_rate,
@@ -761,7 +761,7 @@ impl Conversation {
 
         let conversation = conn
             .query_row(
-                "SELECT id, user_id, consensus_profile_id, total_cost, input_tokens, output_tokens,
+                "SELECT id, user_id, consensus_profile_id, total_cost, total_tokens_input, total_tokens_output,
                         start_time, end_time, success_rate, quality_score, consensus_improvement,
                         confidence_level, success, created_at, updated_at
                  FROM conversations WHERE id = ?1",
@@ -772,8 +772,8 @@ impl Conversation {
                         user_id: row.get(1)?,
                         consensus_profile_id: row.get(2)?,
                         total_cost: row.get(3)?,
-                        input_tokens: row.get(4)?,
-                        output_tokens: row.get(5)?,
+                        total_tokens_input: row.get(4)?,
+                        total_tokens_output: row.get(5)?,
                         start_time: row.get(6)?,
                         end_time: row.get(7)?,
                         success_rate: row.get(8)?,
@@ -802,18 +802,18 @@ impl Conversation {
         let conn = db.get_connection()?;
 
         self.total_cost += cost;
-        self.input_tokens += input_tokens;
-        self.output_tokens += output_tokens;
+        self.total_tokens_input += input_tokens;
+        self.total_tokens_output += output_tokens;
         self.updated_at = current_timestamp();
 
         conn.execute(
             "UPDATE conversations
-             SET total_cost = ?1, input_tokens = ?2, output_tokens = ?3, updated_at = ?4
+             SET total_cost = ?1, total_tokens_input = ?2, total_tokens_output = ?3, updated_at = ?4
              WHERE id = ?5",
             params![
                 &self.total_cost,
-                &self.input_tokens,
-                &self.output_tokens,
+                &self.total_tokens_input,
+                &self.total_tokens_output,
                 &self.updated_at,
                 &self.id,
             ],
@@ -1393,8 +1393,8 @@ mod tests {
         // Update metrics
         conv.update_metrics(0.05, 100, 200).await?;
         assert_eq!(conv.total_cost, 0.05);
-        assert_eq!(conv.input_tokens, 100);
-        assert_eq!(conv.output_tokens, 200);
+        assert_eq!(conv.total_tokens_input, 100);
+        assert_eq!(conv.total_tokens_output, 200);
 
         // Complete conversation
         conv.complete().await?;

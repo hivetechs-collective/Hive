@@ -180,6 +180,18 @@ path = "src/bin/test-streaming.rs"
 name = "test-d1"
 path = "src/bin/test_d1.rs"
 
+[[bin]]
+name = "fix-db-schema"
+path = "src/bin/fix_db_schema.rs"
+
+[[bin]]
+name = "test-consensus-cost"
+path = "src/bin/test_consensus_cost.rs"
+
+[[bin]]
+name = "test-consensus-simple"
+path = "src/bin/test_consensus_simple.rs"
+
 [package.metadata.bundle]
 name = "Hive"
 identifier = "com.hivetechs.hive"
