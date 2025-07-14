@@ -128,18 +128,20 @@ aws s3 cp dist/ s3://releases-hivetechs/stable/ --recursive
 ## ✅ Task Checklist
 
 ### Core Distribution (Today)
-- [ ] **Build secure release binaries** for all platforms
-- [ ] **Create platform installers** (.dmg, .exe, AppImage)
-- [ ] **Set up Cloudflare R2** bucket with proper structure
-- [ ] **Upload binaries** to stable channel
-- [ ] **Create downloads page** on hivetechs.io
+- [x] **Build secure release binaries** for macOS ARM
+- [ ] **Build secure release binaries** for macOS Intel, Windows, Linux
+- [x] **Create platform installers** (.app bundle for macOS)
+- [ ] **Create platform installers** (.exe for Windows, AppImage for Linux)
+- [x] **Set up Cloudflare R2** bucket with proper structure
+- [x] **Upload binaries** to stable channel (macOS ARM only)
+- [x] **Create downloads page** on hivetechs.io
 - [ ] **Test download flow** on all platforms
 
 ### Auto-Update System (Today)
-- [ ] **Create releases.json** metadata file
-- [ ] **Implement update checker** in desktop app
-- [ ] **Add "Check for Updates"** to Help menu
-- [ ] **Test update notification** system
+- [x] **Create releases.json** metadata file
+- [x] **Implement update checker** in desktop app
+- [x] **Add "Check for Updates"** to Help menu
+- [x] **Test update notification** system
 
 ### Security Verification (Today)
 - [ ] **Verify no source code** in distributed binaries
