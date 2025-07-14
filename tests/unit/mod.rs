@@ -1,5 +1,5 @@
 //! Unit tests module
-//! 
+//!
 //! This module contains unit tests for individual components
 
 pub mod analysis;
