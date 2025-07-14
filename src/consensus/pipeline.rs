@@ -779,15 +779,39 @@ impl ConsensusPipeline {
                         total_tokens: u.total_tokens,
                     });
 
-                    // Calculate cost
+                    // Calculate cost using real database pricing (matches TypeScript implementation)
                     let cost = if let Some(ref usage) = usage {
-                        openrouter_client.estimate_cost(
-                            model,
-                            usage.prompt_tokens,
-                            usage.completion_tokens,
-                            Some(0.001), // Default input price
-                            Some(0.002), // Default output price
-                        )
+                        if let Some(ref db) = self.database {
+                            match db.calculate_model_cost(
+                                model,
+                                usage.prompt_tokens,
+                                usage.completion_tokens,
+                            ).await {
+                                Ok(calculated_cost) => {
+                                    tracing::info!(
+                                        "💰 Calculated cost for {}: ${:.6} ({} input + {} output tokens)",
+                                        model,
+                                        calculated_cost,
+                                        usage.prompt_tokens,
+                                        usage.completion_tokens
+                                    );
+                                    calculated_cost
+                                },
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to calculate model cost for {}: {} - using fallback",
+                                        model,
+                                        e
+                                    );
+                                    // Fallback to rough estimate
+                                    usage.prompt_tokens as f64 * 0.000001 + usage.completion_tokens as f64 * 0.000002
+                                }
+                            }
+                        } else {
+                            tracing::warn!("No database available for cost calculation - using fallback");
+                            // Fallback to rough estimate
+                            usage.prompt_tokens as f64 * 0.000001 + usage.completion_tokens as f64 * 0.000002
+                        }
                     } else {
                         0.0
                     };

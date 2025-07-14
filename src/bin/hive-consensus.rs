@@ -35,21 +35,21 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
             let (total_queries, total_cost, most_recent_cost) = tokio::task::spawn_blocking(move || -> Result<(u64, f64, f64), Box<dyn std::error::Error + Send + Sync>> {
                 // Get total conversation count
                 let count: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE success = 1",
+                    "SELECT COUNT(*) FROM conversations",
                     [],
                     |row| row.get(0)
                 ).unwrap_or(0);
                 
-                // Get total cost
+                // Get total cost from all conversations (stored by consensus pipeline)
                 let cost: f64 = connection.query_row(
-                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations WHERE success = 1",
+                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations",
                     [],
                     |row| row.get(0)
                 ).unwrap_or(0.0);
                 
                 // Get most recent conversation cost
                 let recent_cost: f64 = connection.query_row(
-                    "SELECT COALESCE(total_cost, 0.0) FROM conversations WHERE success = 1 ORDER BY created_at DESC LIMIT 1",
+                    "SELECT COALESCE(total_cost, 0.0) FROM conversations ORDER BY created_at DESC LIMIT 1",
                     [],
                     |row| row.get(0)
                 ).unwrap_or(0.0);
@@ -64,13 +64,13 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
             let connection = db.get_connection()?;
             let (today_queries, today_cost) = tokio::task::spawn_blocking(move || -> Result<(u64, f64), Box<dyn std::error::Error + Send + Sync>> {
                 let count: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE success = 1 AND created_at >= ?1",
+                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1",
                     [&today_start_str],
                     |row| row.get(0)
                 ).unwrap_or(0);
                 
                 let cost: f64 = connection.query_row(
-                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations WHERE success = 1 AND created_at >= ?1",
+                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations WHERE created_at >= ?1",
                     [&today_start_str],
                     |row| row.get(0)
                 ).unwrap_or(0.0);

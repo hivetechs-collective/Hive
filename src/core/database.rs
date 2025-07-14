@@ -369,6 +369,145 @@ impl DatabaseManager {
         Ok(())
     }
 
+    /// Calculate model cost based on usage and real pricing from database
+    /// This matches the TypeScript calculateModelCost function exactly
+    pub async fn calculate_model_cost(
+        &self,
+        model_openrouter_id: &str,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+    ) -> Result<f64> {
+        let conn = self.get_connection()?;
+        
+        tracing::info!(
+            "💰 Looking up model pricing for: {} (prompt: {}, completion: {})",
+            model_openrouter_id,
+            prompt_tokens,
+            completion_tokens
+        );
+
+        // Look up model pricing by openrouter_id
+        let model_data = conn
+            .query_row(
+                "SELECT internal_id, openrouter_id, pricing_input, pricing_output FROM openrouter_models WHERE openrouter_id = ?",
+                [model_openrouter_id],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, f64>(2)?,
+                        row.get::<_, f64>(3)?,
+                    ))
+                },
+            )
+            .optional()?;
+
+        let (internal_id, openrouter_id, pricing_input, pricing_output) = match model_data {
+            Some(data) => data,
+            None => {
+                tracing::warn!("⚠️ Model not found: {} - using fallback pricing", model_openrouter_id);
+                // Return fallback cost calculation
+                let fallback_input_cost = prompt_tokens as f64 * 0.000001; // $1 per 1M tokens fallback
+                let fallback_output_cost = completion_tokens as f64 * 0.000002; // $2 per 1M tokens fallback
+                return Ok(fallback_input_cost + fallback_output_cost);
+            }
+        };
+
+        tracing::info!(
+            "💰 Found model: {} (internal_id: {}, pricing_input: {}, pricing_output: {})",
+            openrouter_id,
+            internal_id,
+            pricing_input,
+            pricing_output
+        );
+
+        // Calculate cost exactly like TypeScript implementation
+        // Pricing is stored per-token, so multiply by token count directly (not divide by 1000)
+        let input_cost = prompt_tokens as f64 * pricing_input;
+        let output_cost = completion_tokens as f64 * pricing_output;
+        let total_cost = input_cost + output_cost;
+
+        tracing::info!(
+            "💰 Cost calculation: input=${:.6}, output=${:.6}, total=${:.6}",
+            input_cost,
+            output_cost,
+            total_cost
+        );
+
+        Ok(total_cost)
+    }
+
+    /// Store conversation with cost data
+    pub async fn store_conversation_with_cost(
+        &self,
+        conversation_id: &str,
+        user_id: Option<&str>,
+        title: &str,
+        total_cost: f64,
+        total_tokens_input: u32,
+        total_tokens_output: u32,
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+        
+        conn.execute(
+            "INSERT OR REPLACE INTO conversations 
+             (id, user_id, title, total_cost, total_tokens_input, total_tokens_output, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))",
+            params![
+                conversation_id,
+                user_id,
+                title,
+                total_cost,
+                total_tokens_input,
+                total_tokens_output
+            ],
+        )?;
+
+        tracing::info!(
+            "💰 Stored conversation {} with total cost: ${:.6}",
+            conversation_id,
+            total_cost
+        );
+
+        Ok(())
+    }
+
+    /// Update conversation cost (for incremental updates during consensus stages)
+    pub async fn update_conversation_cost(
+        &self,
+        conversation_id: &str,
+        additional_cost: f64,
+        additional_input_tokens: u32,
+        additional_output_tokens: u32,
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+        
+        conn.execute(
+            "UPDATE conversations 
+             SET total_cost = COALESCE(total_cost, 0.0) + ?2,
+                 total_tokens_input = COALESCE(total_tokens_input, 0) + ?3,
+                 total_tokens_output = COALESCE(total_tokens_output, 0) + ?4,
+                 updated_at = datetime('now')
+             WHERE id = ?1",
+            params![
+                conversation_id,
+                additional_cost,
+                additional_input_tokens,
+                additional_output_tokens
+            ],
+        )?;
+
+        tracing::info!(
+            "💰 Updated conversation {} cost by ${:.6} ({} input + {} output tokens)",
+            conversation_id,
+            additional_cost,
+            additional_input_tokens,
+            additional_output_tokens
+        );
+
+        Ok(())
+    }
+
     /// Gracefully close all database connections
     pub async fn close(&self) {
         info!("Database connections will be closed when pool is dropped");
