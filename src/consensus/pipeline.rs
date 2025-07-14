@@ -1050,23 +1050,28 @@ impl ConsensusPipeline {
             
             let rows_affected = tx.execute(
                 "INSERT OR REPLACE INTO conversations (
-                    id, user_id, consensus_profile_id, total_cost,
-                    input_tokens, output_tokens, start_time, end_time,
-                    success, quality_score, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    id, user_id, title, profile_id, context_type,
+                    total_cost, total_tokens_input, total_tokens_output,
+                    performance_score, quality_rating, is_archived, is_favorite,
+                    tags, metadata, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 params![
                     conversation_id,
                     None::<String>, // user_id is optional, like TypeScript version
+                    question.chars().take(100).collect::<String>(), // title from question (truncated)
                     profile_id,     // Use the actual profile ID from the pipeline
+                    "consensus",    // context_type
                     total_cost,
                     total_input_tokens,
                     total_output_tokens,
-                    &now,    // start_time
-                    &now,    // end_time
-                    1i32,    // success (true)
-                    0.95f64, // quality_score (default high quality)
-                    &now,    // created_at
-                    &now     // updated_at
+                    0.95f64,       // performance_score (default high)
+                    5i32,          // quality_rating (default excellent)
+                    0i32,          // is_archived (false)
+                    0i32,          // is_favorite (false)
+                    "[]",          // tags (empty JSON array)
+                    "{}",          // metadata (empty JSON object)
+                    &now,          // created_at
+                    &now           // updated_at
                 ],
             )?;
             tracing::debug!(
@@ -1079,10 +1084,10 @@ impl ConsensusPipeline {
                 // Store user message (question) - only for first stage
                 if stage_result.stage_name == "generator" {
                     tx.execute(
-                        "INSERT INTO conversation_messages (
-                            id, conversation_id, role, content, stage, model_name, 
-                            sequence_number, created_at
-                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                        "INSERT INTO messages (
+                            id, conversation_id, role, content, stage, model_used, 
+                            timestamp
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                         params![
                             uuid::Uuid::new_v4().to_string(),
                             conversation_id,
@@ -1090,7 +1095,6 @@ impl ConsensusPipeline {
                             question,
                             None::<String>, // User message has no stage
                             None::<String>, // User message has no model
-                            0i32,           // First message in sequence
                             &now
                         ],
                     )?;
@@ -1115,10 +1119,10 @@ impl ConsensusPipeline {
                 );
                 
                 tx.execute(
-                    "INSERT INTO conversation_messages (
-                        id, conversation_id, role, content, stage, model_name,
-                        cost, tokens_input, tokens_output, sequence_number, created_at
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    "INSERT INTO messages (
+                        id, conversation_id, role, content, stage, model_used,
+                        timestamp
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                     params![
                         uuid::Uuid::new_v4().to_string(),
                         conversation_id,
@@ -1126,10 +1130,6 @@ impl ConsensusPipeline {
                         stage_result.answer,
                         stage_result.stage_name,
                         stage_result.model,
-                        stage_cost,
-                        input_tokens,
-                        output_tokens,
-                        sequence_number,
                         &now
                     ],
                 )?;
