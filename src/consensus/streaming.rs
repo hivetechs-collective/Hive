@@ -1,22 +1,19 @@
 // Streaming support for consensus pipeline
 // Provides real-time updates and progress tracking
 
-use crate::consensus::types::{Stage, StageResult, ResponseMetadata};
+use crate::consensus::types::{ResponseMetadata, Stage, StageResult};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use std::time::Instant;
+use tokio::sync::mpsc;
 
 /// Events emitted during consensus processing
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ConsensusEvent {
     /// Stage has started
-    StageStarted {
-        stage: Stage,
-        model: String,
-    },
+    StageStarted { stage: Stage, model: String },
     /// Token received from model
     Token {
         stage: Stage,
@@ -31,21 +28,13 @@ pub enum ConsensusEvent {
         percentage: f32,
     },
     /// Stage completed
-    StageCompleted {
-        stage: Stage,
-        result: StageResult,
-    },
+    StageCompleted { stage: Stage, result: StageResult },
     /// Error occurred
-    Error {
-        stage: Stage,
-        error: String,
-    },
+    Error { stage: Stage, error: String },
     /// Pipeline completed
     Completed,
     /// Final response ready
-    FinalResponse {
-        content: String,
-    },
+    FinalResponse { content: String },
 }
 
 /// Callbacks for streaming consensus
@@ -74,7 +63,7 @@ pub trait StreamingCallbacks: Send + Sync {
     fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
         Ok(())
     }
-    
+
     /// Called when D1 authorization is received (optional)
     fn on_d1_authorization(&self, remaining: u32) -> Result<()> {
         // Default implementation does nothing
@@ -118,8 +107,9 @@ impl StreamingCallbacks for ConsoleCallbacks {
             let bar_width = 20;
             let filled = (bar_width as f32 * progress.percentage / 100.0) as usize;
             let empty = bar_width - filled;
-            
-            print!("\r{} → [{}{}] {:.0}%",
+
+            print!(
+                "\r{} → [{}{}] {:.0}%",
                 stage.display_name(),
                 "█".repeat(filled),
                 "░".repeat(empty),
@@ -133,10 +123,7 @@ impl StreamingCallbacks for ConsoleCallbacks {
 
     fn on_stage_complete(&self, stage: Stage, _result: &StageResult) -> Result<()> {
         if self.show_progress {
-            tracing::info!("{} → [{}] 100% ✓", 
-                stage.display_name(),
-                "█".repeat(20)
-            );
+            tracing::info!("{} → [{}] 100% ✓", stage.display_name(), "█".repeat(20));
         }
         Ok(())
     }
@@ -175,7 +162,7 @@ impl ProgressTracker {
         // Estimate total if not set (based on typical response sizes)
         if self.estimated_total.is_none() {
             self.estimated_total = Some(match self.stage {
-                Stage::Generator => 500,  // Typically longer
+                Stage::Generator => 500, // Typically longer
                 Stage::Refiner => 400,
                 Stage::Validator => 300,
                 Stage::Curator => 350,
@@ -188,7 +175,8 @@ impl ProgressTracker {
             0.0
         };
 
-        self.callbacks.on_stage_chunk(self.stage, chunk, &self.content)?;
+        self.callbacks
+            .on_stage_chunk(self.stage, chunk, &self.content)?;
         self.callbacks.on_stage_progress(
             self.stage,
             ProgressInfo {
@@ -223,12 +211,27 @@ impl ProgressTracker {
 /// Streaming response for TUI integration
 #[derive(Debug, Clone)]
 pub enum StreamingResponse {
-    StageStarted { stage: ConsensusStage, model: String },
-    StageProgress { stage: ConsensusStage, progress: u16 },
-    StageCompleted { stage: ConsensusStage },
-    TokenReceived { token: String },
-    Error { stage: ConsensusStage, error: String },
-    Complete { response: ConsensusResponseResult },
+    StageStarted {
+        stage: ConsensusStage,
+        model: String,
+    },
+    StageProgress {
+        stage: ConsensusStage,
+        progress: u16,
+    },
+    StageCompleted {
+        stage: ConsensusStage,
+    },
+    TokenReceived {
+        token: String,
+    },
+    Error {
+        stage: ConsensusStage,
+        error: String,
+    },
+    Complete {
+        response: ConsensusResponseResult,
+    },
 }
 
 /// Consensus stage enum for TUI
@@ -246,7 +249,6 @@ pub struct ConsensusResponseResult {
     pub content: String,
     pub metadata: ResponseMetadata,
 }
-
 
 /// Enhanced progress tracker with quality metrics
 pub struct EnhancedProgressTracker {
@@ -295,7 +297,8 @@ impl EnhancedProgressTracker {
             0.0
         };
 
-        self.callbacks.on_stage_chunk(self.stage, chunk, &self.content)?;
+        self.callbacks
+            .on_stage_chunk(self.stage, chunk, &self.content)?;
         self.callbacks.on_stage_progress(
             self.stage,
             ProgressInfo {
@@ -387,7 +390,7 @@ impl ConsensusMetrics {
             Stage::Validator => 2,
             Stage::Curator => 3,
         };
-        
+
         self.stage_progress[index] = progress;
         self.stage_quality[index] = quality;
         self.overall_progress = self.stage_progress.iter().sum::<f32>() / 4.0;
@@ -400,7 +403,7 @@ impl ConsensusMetrics {
     pub fn get_stage_name(&self, index: usize) -> &'static str {
         match index {
             0 => "Generator",
-            1 => "Refiner", 
+            1 => "Refiner",
             2 => "Validator",
             3 => "Curator",
             _ => "Unknown",
@@ -411,7 +414,7 @@ impl ConsensusMetrics {
         let progress = self.stage_progress[index];
         let quality = self.stage_quality[index];
         let name = self.get_stage_name(index);
-        
+
         let status = if progress >= 100.0 {
             "✓"
         } else if progress > 0.0 {
@@ -419,8 +422,14 @@ impl ConsensusMetrics {
         } else {
             "○"
         };
-        
-        format!("{} {} {:.0}% (Q: {:.1})", status, name, progress, quality * 100.0)
+
+        format!(
+            "{} {} {:.0}% (Q: {:.1})",
+            status,
+            name,
+            progress,
+            quality * 100.0
+        )
     }
 }
 
@@ -443,12 +452,12 @@ impl StreamingCallbacks for ChannelStreamingCallbacks {
             Stage::Validator => ConsensusStage::Validator,
             Stage::Curator => ConsensusStage::Curator,
         };
-        
+
         let _ = self.sender.send(StreamingResponse::StageStarted {
             stage: consensus_stage,
             model: model.to_string(),
         });
-        
+
         Ok(())
     }
 
@@ -466,14 +475,14 @@ impl StreamingCallbacks for ChannelStreamingCallbacks {
             Stage::Validator => ConsensusStage::Validator,
             Stage::Curator => ConsensusStage::Curator,
         };
-        
+
         let progress_u16 = (progress.percentage as u16).min(100);
-        
+
         let _ = self.sender.send(StreamingResponse::StageProgress {
             stage: consensus_stage,
             progress: progress_u16,
         });
-        
+
         Ok(())
     }
 
@@ -484,11 +493,11 @@ impl StreamingCallbacks for ChannelStreamingCallbacks {
             Stage::Validator => ConsensusStage::Validator,
             Stage::Curator => ConsensusStage::Curator,
         };
-        
+
         let _ = self.sender.send(StreamingResponse::StageCompleted {
             stage: consensus_stage,
         });
-        
+
         Ok(())
     }
 
@@ -499,12 +508,12 @@ impl StreamingCallbacks for ChannelStreamingCallbacks {
             Stage::Validator => ConsensusStage::Validator,
             Stage::Curator => ConsensusStage::Curator,
         };
-        
+
         let _ = self.sender.send(StreamingResponse::Error {
             stage: consensus_stage,
             error: error.to_string(),
         });
-        
+
         Ok(())
     }
 }

@@ -2,16 +2,16 @@
 //!
 //! Provides caching, connection pooling, and performance monitoring
 
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::{RwLock, Semaphore};
-use std::time::{Duration, Instant};
-use tracing::{info, debug, warn, error};
-use tokio::time::sleep;
+use anyhow::{anyhow, Result};
 use lru::LruCache;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{RwLock, Semaphore};
+use tokio::time::sleep;
+use tracing::{debug, error, info, warn};
 
 /// Performance manager for MCP operations
 pub struct PerformanceManager {
@@ -160,10 +160,10 @@ impl PerformanceManager {
     pub async fn start_monitoring(&self) -> Result<()> {
         // Start metrics collection task
         self.start_metrics_collection().await;
-        
+
         // Start connection pool maintenance
         self.connection_pool.start_maintenance().await?;
-        
+
         // Start cache cleanup
         self.start_cache_cleanup().await;
 
@@ -178,7 +178,7 @@ impl PerformanceManager {
         }
 
         let mut cache = self.cache.write().await;
-        
+
         // Check if entry exists and is valid
         let (is_hit, result) = if let Some(cached_result) = cache.cache.get_mut(cache_key) {
             // Check TTL
@@ -191,13 +191,13 @@ impl PerformanceManager {
         } else {
             (false, None)
         };
-        
+
         if is_hit {
             cache.hit_count += 1;
             debug!("Cache hit for key: {}", cache_key);
             return result;
         }
-        
+
         // Handle expired entries
         if !is_hit && result.is_none() {
             if let Some(_) = cache.cache.pop(cache_key) {
@@ -211,17 +211,13 @@ impl PerformanceManager {
     }
 
     /// Cache tool result
-    pub async fn cache_result(
-        &self,
-        cache_key: String,
-        result: serde_json::Value,
-    ) -> Result<()> {
+    pub async fn cache_result(&self, cache_key: String, result: serde_json::Value) -> Result<()> {
         if !self.config.cache_enabled {
             return Ok(());
         }
 
         let cache_key_for_debug = cache_key.clone(); // Clone for the debug message
-        
+
         let cached_result = CachedToolResult {
             result,
             cached_at: Instant::now(),
@@ -232,31 +228,24 @@ impl PerformanceManager {
 
         let mut cache = self.cache.write().await;
         cache.cache.put(cache_key, cached_result);
-        
+
         debug!("Cached result for key: {}", cache_key_for_debug);
         Ok(())
     }
 
     /// Generate cache key for tool call
-    pub fn generate_cache_key(
-        &self,
-        tool_name: &str,
-        arguments: &serde_json::Value,
-    ) -> String {
-        use sha2::{Sha256, Digest};
-        
+    pub fn generate_cache_key(&self, tool_name: &str, arguments: &serde_json::Value) -> String {
+        use sha2::{Digest, Sha256};
+
         let mut hasher = Sha256::new();
         hasher.update(tool_name.as_bytes());
         hasher.update(arguments.to_string().as_bytes());
-        
+
         format!("tool_{}_{:x}", tool_name, hasher.finalize())
     }
 
     /// Start request tracking
-    pub async fn start_request_tracking(
-        &self,
-        tool_name: String,
-    ) -> RequestTracker {
+    pub async fn start_request_tracking(&self, tool_name: String) -> RequestTracker {
         let mut metrics = self.metrics.write().await;
         metrics.total_requests += 1;
         metrics.active_tool_executions += 1;
@@ -279,9 +268,9 @@ impl PerformanceManager {
         let response_time_ms = tracker.start_time.elapsed().as_millis() as f64;
 
         let mut metrics = self.metrics.write().await;
-        
+
         metrics.active_tool_executions = metrics.active_tool_executions.saturating_sub(1);
-        
+
         if success {
             metrics.successful_requests += 1;
         } else {
@@ -292,16 +281,16 @@ impl PerformanceManager {
         if metrics.min_response_time_ms == 0.0 || response_time_ms < metrics.min_response_time_ms {
             metrics.min_response_time_ms = response_time_ms;
         }
-        
+
         if response_time_ms > metrics.max_response_time_ms {
             metrics.max_response_time_ms = response_time_ms;
         }
 
         // Calculate moving average
         let total_completed = metrics.successful_requests + metrics.failed_requests;
-        metrics.average_response_time_ms = 
-            (metrics.average_response_time_ms * (total_completed - 1) as f64 + response_time_ms) 
-            / total_completed as f64;
+        metrics.average_response_time_ms =
+            (metrics.average_response_time_ms * (total_completed - 1) as f64 + response_time_ms)
+                / total_completed as f64;
 
         // Update cache hit rate
         let cache = self.cache.read().await;
@@ -397,7 +386,7 @@ impl PerformanceManager {
     /// Get cache statistics
     pub async fn get_cache_statistics(&self) -> CacheStatistics {
         let cache = self.cache.read().await;
-        
+
         CacheStatistics {
             hit_count: cache.hit_count,
             miss_count: cache.miss_count,
@@ -419,10 +408,10 @@ impl PerformanceManager {
 
         tokio::spawn(async move {
             let mut interval_timer = tokio::time::interval(Duration::from_secs(interval));
-            
+
             loop {
                 interval_timer.tick().await;
-                
+
                 // Collect system metrics
                 if let Err(e) = Self::collect_system_metrics(&metrics).await {
                     warn!("Failed to collect system metrics: {}", e);
@@ -434,7 +423,7 @@ impl PerformanceManager {
     /// Collect system metrics
     async fn collect_system_metrics(metrics: &Arc<RwLock<PerformanceMetrics>>) -> Result<()> {
         let mut metrics_write = metrics.write().await;
-        
+
         // Update memory usage (simplified)
         if let Ok(memory_info) = Self::get_memory_usage() {
             metrics_write.memory_usage_mb = memory_info;
@@ -444,7 +433,8 @@ impl PerformanceManager {
         let total_requests = metrics_write.successful_requests + metrics_write.failed_requests;
         if total_requests > 0 {
             // This is a simplified calculation - in production, you'd track over time windows
-            metrics_write.throughput_requests_per_second = total_requests as f64 / 60.0; // Rough estimate
+            metrics_write.throughput_requests_per_second = total_requests as f64 / 60.0;
+            // Rough estimate
         }
 
         Ok(())
@@ -460,18 +450,20 @@ impl PerformanceManager {
     /// Start cache cleanup task
     async fn start_cache_cleanup(&self) {
         let cache = self.cache.clone();
-        
+
         tokio::spawn(async move {
             let mut cleanup_interval = tokio::time::interval(Duration::from_secs(300)); // Every 5 minutes
-            
+
             loop {
                 cleanup_interval.tick().await;
-                
+
                 let mut cache_write = cache.write().await;
                 let current_size = cache_write.cache.len();
-                
+
                 // Remove expired entries
-                let keys_to_remove: Vec<String> = cache_write.cache.iter()
+                let keys_to_remove: Vec<String> = cache_write
+                    .cache
+                    .iter()
                     .filter(|(_, cached_result)| {
                         cached_result.cached_at.elapsed() > cached_result.ttl
                     })
@@ -518,23 +510,27 @@ impl ConnectionPool {
     /// Get connection from pool
     pub async fn get_connection(&self) -> Result<PooledConnection> {
         // Acquire semaphore permit
-        let _permit = self.semaphore.acquire().await
+        let _permit = self
+            .semaphore
+            .acquire()
+            .await
             .map_err(|e| anyhow!("Failed to acquire connection permit: {}", e))?;
 
         // Try to get existing connection
         {
             let mut connections = self.connections.write().await;
             if let Some(mut connection) = connections.pop() {
-                if connection.is_healthy && 
-                   connection.last_used.elapsed().as_secs() < self.config.max_idle_time_seconds {
+                if connection.is_healthy
+                    && connection.last_used.elapsed().as_secs() < self.config.max_idle_time_seconds
+                {
                     connection.last_used = Instant::now();
                     connection.use_count += 1;
-                    
+
                     // Update metrics
                     let mut metrics = self.metrics.write().await;
                     metrics.active_connections += 1;
                     metrics.idle_connections = connections.len();
-                    
+
                     return Ok(connection);
                 }
             }
@@ -547,7 +543,7 @@ impl ConnectionPool {
     /// Create new connection
     async fn create_new_connection(&self) -> Result<PooledConnection> {
         let start_time = Instant::now();
-        
+
         // Simulate connection creation delay
         sleep(Duration::from_millis(10)).await;
 
@@ -565,11 +561,11 @@ impl ConnectionPool {
             let mut metrics = self.metrics.write().await;
             metrics.total_connections += 1;
             metrics.active_connections += 1;
-            
+
             let connection_time = start_time.elapsed().as_millis() as f64;
-            metrics.average_connection_time_ms = 
+            metrics.average_connection_time_ms =
                 (metrics.average_connection_time_ms + connection_time) / 2.0;
-            
+
             if metrics.active_connections > metrics.peak_connections {
                 metrics.peak_connections = metrics.active_connections;
             }
@@ -600,13 +596,12 @@ impl ConnectionPool {
         let config = self.config.clone();
 
         tokio::spawn(async move {
-            let mut maintenance_interval = tokio::time::interval(
-                Duration::from_secs(config.health_check_interval_seconds)
-            );
-            
+            let mut maintenance_interval =
+                tokio::time::interval(Duration::from_secs(config.health_check_interval_seconds));
+
             loop {
                 maintenance_interval.tick().await;
-                
+
                 if let Err(e) = Self::perform_maintenance(&connections, &metrics, &config).await {
                     error!("Connection pool maintenance failed: {}", e);
                 }
@@ -625,24 +620,28 @@ impl ConnectionPool {
     ) -> Result<()> {
         let mut connections_write = connections.write().await;
         let initial_count = connections_write.len();
-        
+
         // Remove unhealthy or expired connections
         connections_write.retain(|conn| {
-            conn.is_healthy && 
-            conn.last_used.elapsed().as_secs() < config.max_idle_time_seconds
+            conn.is_healthy && conn.last_used.elapsed().as_secs() < config.max_idle_time_seconds
         });
 
         let removed_count = initial_count - connections_write.len();
-        
+
         // Update metrics
         {
             let mut metrics_write = metrics.write().await;
             metrics_write.idle_connections = connections_write.len();
-            metrics_write.total_connections = metrics_write.total_connections.saturating_sub(removed_count);
+            metrics_write.total_connections = metrics_write
+                .total_connections
+                .saturating_sub(removed_count);
         }
 
         if removed_count > 0 {
-            debug!("Removed {} stale connections during maintenance", removed_count);
+            debug!(
+                "Removed {} stale connections during maintenance",
+                removed_count
+            );
         }
 
         Ok(())

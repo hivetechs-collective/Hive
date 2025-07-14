@@ -148,7 +148,7 @@ _hive_analyze_targets() {
     local -a targets
     # Prefer git repositories and common project directories
     targets=($(find . -maxdepth 2 -type d \( -name ".git" -o -name "src" -o -name "lib" -o -name "app" -o -name "packages" \) -exec dirname {} \; 2>/dev/null | sort -u))
-    
+
     if [[ ${#targets} -eq 0 ]]; then
         _directories
     else
@@ -191,24 +191,24 @@ _hive_models() {
 # Question suggestions based on context
 _hive_question_suggestions() {
     local -a suggestions=()
-    
+
     # Context-aware suggestions
     if [[ -f "Cargo.toml" ]]; then
         suggestions+=("How can I optimize this Rust project?" "What are the security issues in this codebase?" "Suggest performance improvements for this Rust code")
     fi
-    
+
     if [[ -f "package.json" ]]; then
         suggestions+=("Analyze the dependencies in this Node.js project" "How can I improve the TypeScript code quality?" "What are potential security vulnerabilities?")
     fi
-    
+
     if [[ -f "requirements.txt" || -f "pyproject.toml" ]]; then
         suggestions+=("Review this Python codebase for best practices" "Suggest optimizations for this Python project" "How can I improve error handling?")
     fi
-    
+
     if [[ -d ".git" ]]; then
         suggestions+=("Analyze the git history for patterns" "What are the main development trends?" "Review recent commits for quality")
     fi
-    
+
     # General suggestions
     suggestions+=(
         "Explain this code"
@@ -220,7 +220,7 @@ _hive_question_suggestions() {
         "Create tests for this"
         "Refactor this code"
     )
-    
+
     if [[ ${#suggestions} -gt 0 ]]; then
         _describe 'question suggestions' suggestions
     fi
@@ -471,7 +471,7 @@ _hive_config_keys() {
 _hive_smart_directories() {
     local -a dirs
     dirs=($(find . -maxdepth 2 -type d -name ".git" -exec dirname {} \; 2>/dev/null | head -20))
-    
+
     if [[ ${#dirs} -gt 0 ]]; then
         _alternative \
             'git-repos:git repositories:compadd -d dirs -a dirs' \
@@ -484,7 +484,7 @@ _hive_smart_directories() {
 # Context-aware file completion
 _hive_smart_files() {
     local exts=()
-    
+
     # Suggest relevant files based on project type
     if [[ -f "Cargo.toml" ]]; then
         exts+=("rs")
@@ -498,7 +498,7 @@ _hive_smart_files() {
     if [[ -f "go.mod" ]]; then
         exts+=("go")
     fi
-    
+
     if [[ ${#exts} -gt 0 ]]; then
         local pattern=""
         for ext in "${exts[@]}"; do
@@ -541,28 +541,28 @@ if [[ -n "$ZSH_VERSION" ]]; then
     compdef _hive hs
     compdef _hive hm
     compdef _hive ht
-    
+
     # Zsh hooks for context detection
     autoload -Uz add-zsh-hook
-    
+
     _hive_detect_context() {
         local context=""
-        
+
         if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             context="git"
         fi
-        
+
         [[ -f "Cargo.toml" ]] && context="$context rust"
         [[ -f "package.json" ]] && context="$context javascript"
         [[ -f "requirements.txt" || -f "pyproject.toml" ]] && context="$context python"
         [[ -f "go.mod" ]] && context="$context go"
-        
+
         export HIVE_CONTEXT="$context"
     }
-    
+
     add-zsh-hook chpwd _hive_detect_context
     _hive_detect_context  # Initial detection
-    
+
     # Smart command suggestions
     _hive_suggest_commands() {
         if [[ -n "$HIVE_CONTEXT" ]]; then
@@ -579,7 +579,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             esac
         fi
     }
-    
+
     # Show suggestions on directory change (occasionally)
     _hive_maybe_suggest() {
         # Show suggestions 20% of the time
@@ -587,7 +587,7 @@ if [[ -n "$ZSH_VERSION" ]]; then
             _hive_suggest_commands
         fi
     }
-    
+
     add-zsh-hook chpwd _hive_maybe_suggest
 fi
 
@@ -606,25 +606,25 @@ mod tests {
     #[test]
     fn test_zsh_completions_generation() {
         let completions = generate_zsh_completions();
-        
+
         // Basic structure checks
         assert!(completions.contains("#compdef hive"));
         assert!(completions.contains("_hive()"));
         assert!(completions.contains("compdef _hive hive"));
-        
+
         // Check for command completions
         assert!(completions.contains("_hive_commands"));
         assert!(completions.contains("analyze:Analyze and understand"));
-        
+
         // Check for subcommand completions
         assert!(completions.contains("_hive_analyze_command"));
         assert!(completions.contains("_hive_ask_command"));
         assert!(completions.contains("_hive_memory_command"));
-        
+
         // Check for aliases
         assert!(completions.contains("alias ha='hive analyze'"));
         assert!(completions.contains("alias hq='hive ask'"));
-        
+
         // Check for zsh-specific features
         assert!(completions.contains("add-zsh-hook"));
         assert!(completions.contains("_hive_detect_context"));
@@ -633,13 +633,13 @@ mod tests {
     #[test]
     fn test_zsh_completions_context_awareness() {
         let completions = generate_zsh_completions();
-        
+
         // Should contain context detection logic
         assert!(completions.contains("HIVE_CONTEXT"));
         assert!(completions.contains("git rev-parse"));
         assert!(completions.contains("Cargo.toml"));
         assert!(completions.contains("package.json"));
-        
+
         // Should contain smart suggestions
         assert!(completions.contains("_hive_suggest_commands"));
         assert!(completions.contains("Rust project detected"));

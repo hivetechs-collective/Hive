@@ -1,51 +1,51 @@
 //! Hook Security - Security validation and policies for hooks
 
+use super::{registry::HookAction, Hook};
+use anyhow::{anyhow, Result};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::time::Duration;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use regex::Regex;
-use super::{Hook, registry::HookAction};
 
 /// Security policy for a hook
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityPolicy {
     #[serde(default)]
     pub require_approval: bool,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_message: Option<String>,
-    
+
     #[serde(default)]
     pub allowed_commands: Vec<String>,
-    
+
     #[serde(default)]
     pub allowed_domains: Vec<String>,
-    
+
     #[serde(default)]
     pub blocked_domains: Vec<String>,
-    
+
     #[serde(default)]
     pub allowed_script_languages: Vec<String>,
-    
+
     #[serde(default = "default_max_execution_time")]
     pub max_execution_time: u64, // seconds
-    
+
     #[serde(default = "default_stop_on_error")]
     pub stop_on_error: bool,
-    
+
     #[serde(default)]
     pub sandbox_mode: bool,
-    
+
     #[serde(default)]
     pub allow_network: bool,
-    
+
     #[serde(default)]
     pub allow_file_system: bool,
-    
+
     #[serde(default)]
     pub max_memory_mb: Option<u64>,
-    
+
     #[serde(default)]
     pub required_permissions: Vec<String>,
 }
@@ -116,7 +116,7 @@ impl HookSecurityValidator {
             max_action_count: 50,
         })
     }
-    
+
     /// Validate a hook's security
     pub fn validate_hook(&self, hook: &Hook) -> Result<()> {
         // Check action count
@@ -127,18 +127,18 @@ impl HookSecurityValidator {
                 self.max_action_count
             ));
         }
-        
+
         // Validate each action
         for action in &hook.actions {
             self.validate_action(action, &hook.security)?;
         }
-        
+
         // Validate security policy
         self.validate_security_policy(&hook.security)?;
-        
+
         Ok(())
     }
-    
+
     /// Validate a single action
     fn validate_action(&self, action: &HookAction, policy: &SecurityPolicy) -> Result<()> {
         match action {
@@ -153,25 +153,35 @@ impl HookSecurityValidator {
             }
             _ => {} // Other actions are safe
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate command action
-    fn validate_command_action(&self, command: &str, args: &[String], policy: &SecurityPolicy) -> Result<()> {
+    fn validate_command_action(
+        &self,
+        command: &str,
+        args: &[String],
+        policy: &SecurityPolicy,
+    ) -> Result<()> {
         // Check if command is dangerous
         if self.dangerous_commands.contains(command) {
-            return Err(anyhow!("Command '{}' is not allowed for security reasons", command));
+            return Err(anyhow!(
+                "Command '{}' is not allowed for security reasons",
+                command
+            ));
         }
-        
+
         // Check if command is in allowed list
-        if !policy.allowed_commands.is_empty() && !policy.allowed_commands.contains(&command.to_string()) {
+        if !policy.allowed_commands.is_empty()
+            && !policy.allowed_commands.contains(&command.to_string())
+        {
             return Err(anyhow!(
                 "Command '{}' is not in the allowed commands list",
                 command
             ));
         }
-        
+
         // Check for dangerous patterns in arguments
         let full_command = format!("{} {}", command, args.join(" "));
         for pattern in &self.dangerous_patterns {
@@ -182,28 +192,33 @@ impl HookSecurityValidator {
                 ));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate script action
-    fn validate_script_action(&self, language: &str, content: &str, policy: &SecurityPolicy) -> Result<()> {
+    fn validate_script_action(
+        &self,
+        language: &str,
+        content: &str,
+        policy: &SecurityPolicy,
+    ) -> Result<()> {
         // Check if language is allowed
-        if !policy.allowed_script_languages.is_empty() && 
-           !policy.allowed_script_languages.contains(&language.to_string()) {
-            return Err(anyhow!(
-                "Script language '{}' is not allowed",
-                language
-            ));
+        if !policy.allowed_script_languages.is_empty()
+            && !policy
+                .allowed_script_languages
+                .contains(&language.to_string())
+        {
+            return Err(anyhow!("Script language '{}' is not allowed", language));
         }
-        
+
         // Check for dangerous patterns in script
         for pattern in &self.dangerous_patterns {
             if pattern.is_match(content) {
                 return Err(anyhow!("Script contains dangerous pattern"));
             }
         }
-        
+
         // Language-specific checks
         match language {
             "bash" | "sh" => self.validate_shell_script(content)?,
@@ -211,42 +226,42 @@ impl HookSecurityValidator {
             "javascript" | "js" => self.validate_javascript_script(content)?,
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate HTTP action
     fn validate_http_action(&self, url: &str, policy: &SecurityPolicy) -> Result<()> {
         if !policy.allow_network {
             return Err(anyhow!("Network access is not allowed for this hook"));
         }
-        
+
         // Parse URL
-        let parsed_url = url::Url::parse(url)
-            .map_err(|_| anyhow!("Invalid URL: {}", url))?;
-        
+        let parsed_url = url::Url::parse(url).map_err(|_| anyhow!("Invalid URL: {}", url))?;
+
         // Check scheme
         if parsed_url.scheme() != "https" && parsed_url.scheme() != "http" {
             return Err(anyhow!("Only HTTP/HTTPS URLs are allowed"));
         }
-        
+
         // Check domain
         if let Some(host) = parsed_url.host_str() {
             // Check blocked domains
             if policy.blocked_domains.iter().any(|d| host.contains(d)) {
                 return Err(anyhow!("Domain '{}' is blocked", host));
             }
-            
+
             // Check allowed domains if specified
-            if !policy.allowed_domains.is_empty() && 
-               !policy.allowed_domains.iter().any(|d| host.contains(d)) {
+            if !policy.allowed_domains.is_empty()
+                && !policy.allowed_domains.iter().any(|d| host.contains(d))
+            {
                 return Err(anyhow!("Domain '{}' is not in allowed domains list", host));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate security policy itself
     fn validate_security_policy(&self, policy: &SecurityPolicy) -> Result<()> {
         // Check execution time
@@ -256,7 +271,7 @@ impl HookSecurityValidator {
                 policy.max_execution_time
             ));
         }
-        
+
         // Check memory limit
         if let Some(memory_mb) = policy.max_memory_mb {
             if memory_mb == 0 || memory_mb > 8192 {
@@ -266,18 +281,21 @@ impl HookSecurityValidator {
                 ));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate a command for execution
     pub fn validate_command(&self, command: &str) -> Result<()> {
         if self.dangerous_commands.contains(command) {
-            return Err(anyhow!("Command '{}' is not allowed for security reasons", command));
+            return Err(anyhow!(
+                "Command '{}' is not allowed for security reasons",
+                command
+            ));
         }
         Ok(())
     }
-    
+
     /// Validate a script language
     pub fn validate_script_language(&self, language: &str) -> Result<()> {
         let allowed_languages = ["bash", "sh", "python", "javascript", "js", "ruby"];
@@ -286,7 +304,7 @@ impl HookSecurityValidator {
         }
         Ok(())
     }
-    
+
     /// Validate a URL
     pub fn validate_url(&self, url: &str) -> Result<()> {
         let parsed = url::Url::parse(url)?;
@@ -295,22 +313,20 @@ impl HookSecurityValidator {
         }
         Ok(())
     }
-    
+
     /// Get list of dangerous commands
     fn get_dangerous_commands() -> HashSet<String> {
         [
-            "rm", "del", "rmdir", "format",
-            "dd", "mkfs", "fdisk",
-            "chmod", "chown", "chgrp",
-            "kill", "killall", "pkill",
-            "shutdown", "reboot", "halt",
-            "passwd", "useradd", "userdel",
-            "sudo", "su", "doas",
-            "nc", "netcat", "ncat",
-            "curl", "wget", // Allow these but validate URLs
-        ].iter().map(|s| s.to_string()).collect()
+            "rm", "del", "rmdir", "format", "dd", "mkfs", "fdisk", "chmod", "chown", "chgrp",
+            "kill", "killall", "pkill", "shutdown", "reboot", "halt", "passwd", "useradd",
+            "userdel", "sudo", "su", "doas", "nc", "netcat", "ncat", "curl",
+            "wget", // Allow these but validate URLs
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
     }
-    
+
     /// Compile dangerous patterns
     fn compile_dangerous_patterns() -> Result<Vec<Regex>> {
         let patterns = [
@@ -324,31 +340,30 @@ impl HookSecurityValidator {
             r"eval\s*\(",
             r"exec\s*\(",
         ];
-        
-        patterns.iter()
+
+        patterns
+            .iter()
             .map(|p| Regex::new(p).map_err(Into::into))
             .collect()
     }
-    
+
     /// Validate shell script
     fn validate_shell_script(&self, content: &str) -> Result<()> {
         // Check for dangerous shell constructs
-        let dangerous_constructs = [
-            "eval ",
-            "source /dev/stdin",
-            "bash -c",
-            "sh -c",
-        ];
-        
+        let dangerous_constructs = ["eval ", "source /dev/stdin", "bash -c", "sh -c"];
+
         for construct in &dangerous_constructs {
             if content.contains(construct) {
-                return Err(anyhow!("Script contains dangerous construct: {}", construct));
+                return Err(anyhow!(
+                    "Script contains dangerous construct: {}",
+                    construct
+                ));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate Python script
     fn validate_python_script(&self, content: &str) -> Result<()> {
         // Check for dangerous Python constructs
@@ -360,17 +375,20 @@ impl HookSecurityValidator {
             "open('/etc/passwd'",
             "subprocess.call(['rm'",
         ];
-        
+
         for construct in &dangerous_constructs {
             if content.contains(construct) {
-                return Err(anyhow!("Script contains dangerous construct: {}", construct));
+                return Err(anyhow!(
+                    "Script contains dangerous construct: {}",
+                    construct
+                ));
             }
         }
-        
+
         Ok(())
     }
-    
-    /// Validate JavaScript script  
+
+    /// Validate JavaScript script
     fn validate_javascript_script(&self, content: &str) -> Result<()> {
         // Check for dangerous JavaScript constructs
         let dangerous_constructs = [
@@ -380,13 +398,16 @@ impl HookSecurityValidator {
             "exec(",
             "spawn(",
         ];
-        
+
         for construct in &dangerous_constructs {
             if content.contains(construct) {
-                return Err(anyhow!("Script contains dangerous construct: {}", construct));
+                return Err(anyhow!(
+                    "Script contains dangerous construct: {}",
+                    construct
+                ));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -404,30 +425,32 @@ impl SecurityContext {
     pub fn has_permission(&self, permission: &str) -> bool {
         self.permissions.contains(permission) || self.permissions.contains("admin")
     }
-    
+
     pub fn is_path_trusted(&self, path: &str) -> bool {
-        self.trusted_paths.iter().any(|trusted| path.starts_with(trusted))
+        self.trusted_paths
+            .iter()
+            .any(|trusted| path.starts_with(trusted))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_dangerous_command_detection() {
         let validator = HookSecurityValidator::new().unwrap();
-        
+
         assert!(validator.validate_command("rm").is_err());
         assert!(validator.validate_command("echo").is_ok());
         assert!(validator.validate_command("sudo").is_err());
         assert!(validator.validate_command("cargo").is_ok());
     }
-    
+
     #[test]
     fn test_url_validation() {
         let validator = HookSecurityValidator::new().unwrap();
-        
+
         assert!(validator.validate_url("https://api.github.com").is_ok());
         assert!(validator.validate_url("http://localhost:8080").is_ok());
         assert!(validator.validate_url("ftp://example.com").is_err());

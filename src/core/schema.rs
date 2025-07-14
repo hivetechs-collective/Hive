@@ -14,10 +14,10 @@ pub const SCHEMA_VERSION: i32 = 1;
 pub fn initialize_schema(conn: &Connection) -> Result<()> {
     // Enable foreign keys
     conn.execute("PRAGMA foreign_keys = ON", [])?;
-    
+
     // Create schema version table
     create_schema_version_table(conn)?;
-    
+
     // Create all core tables
     create_openrouter_models_table(conn)?;
     create_model_rankings_table(conn)?;
@@ -35,35 +35,39 @@ pub fn initialize_schema(conn: &Connection) -> Result<()> {
     create_cost_tracking_table(conn)?;
     create_configuration_table(conn)?;
     create_security_trust_table(conn)?;
-    
+
     // Create indexes for performance
     create_indexes(conn)?;
-    
+
     // Insert default data
     insert_default_data(conn)?;
-    
+
     Ok(())
 }
 
 /// Check if schema needs migration
 pub fn check_schema_version(conn: &Connection) -> Result<bool> {
-    let current_version: i32 = conn.query_row(
-        "SELECT version FROM schema_version ORDER BY id DESC LIMIT 1",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(0);
-    
+    let current_version: i32 = conn
+        .query_row(
+            "SELECT version FROM schema_version ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
     Ok(current_version < SCHEMA_VERSION)
 }
 
 /// Run database migrations
 pub fn migrate_schema(conn: &Connection) -> Result<()> {
-    let current_version: i32 = conn.query_row(
-        "SELECT version FROM schema_version ORDER BY id DESC LIMIT 1",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(0);
-    
+    let current_version: i32 = conn
+        .query_row(
+            "SELECT version FROM schema_version ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
     if current_version < SCHEMA_VERSION {
         // Run migrations from current version to latest
         for version in (current_version + 1)..=SCHEMA_VERSION {
@@ -73,12 +77,14 @@ pub fn migrate_schema(conn: &Connection) -> Result<()> {
                     update_schema_version(conn, 1)?;
                 }
                 _ => {
-                    return Err(HiveError::Migration { message: format!("Unknown migration version: {}", version) });
+                    return Err(HiveError::Migration {
+                        message: format!("Unknown migration version: {}", version),
+                    });
                 }
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -92,7 +98,7 @@ fn create_schema_version_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -102,7 +108,7 @@ fn update_schema_version(conn: &Connection, version: i32) -> Result<()> {
         "INSERT INTO schema_version (version) VALUES (?1)",
         [version],
     )?;
-    
+
     Ok(())
 }
 
@@ -133,7 +139,7 @@ fn create_openrouter_models_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -152,7 +158,7 @@ fn create_model_rankings_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -186,7 +192,7 @@ fn create_consensus_profiles_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -214,7 +220,7 @@ fn create_conversations_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -245,7 +251,7 @@ fn create_conversation_messages_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -267,7 +273,7 @@ fn create_conversation_memory_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -292,7 +298,7 @@ fn create_analytics_events_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -315,7 +321,7 @@ fn create_user_profiles_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -338,7 +344,7 @@ fn create_sync_queue_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -357,7 +363,7 @@ fn create_cloudflare_sync_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -377,7 +383,7 @@ fn create_thematic_clusters_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -397,7 +403,7 @@ fn create_context_continuity_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -420,7 +426,7 @@ fn create_performance_metrics_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -445,7 +451,7 @@ fn create_cost_tracking_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -463,7 +469,7 @@ fn create_configuration_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -483,7 +489,7 @@ fn create_security_trust_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     Ok(())
 }
 
@@ -491,54 +497,120 @@ fn create_security_trust_table(conn: &Connection) -> Result<()> {
 fn create_indexes(conn: &Connection) -> Result<()> {
     // OpenRouter models indexes
     conn.execute("CREATE INDEX IF NOT EXISTS idx_openrouter_models_provider ON openrouter_models (provider_name)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_openrouter_models_active ON openrouter_models (is_active)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_openrouter_models_active ON openrouter_models (is_active)",
+        [],
+    )?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_openrouter_models_pricing ON openrouter_models (pricing_input, pricing_output)", [])?;
-    
+
     // Model rankings indexes
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_model_rankings_model ON model_rankings (model_internal_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_model_rankings_source ON model_rankings (ranking_source)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_model_rankings_position ON model_rankings (rank_position)", [])?;
-    
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_model_rankings_model ON model_rankings (model_internal_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_model_rankings_source ON model_rankings (ranking_source)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_model_rankings_position ON model_rankings (rank_position)",
+        [],
+    )?;
+
     // Consensus profiles indexes
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_consensus_profiles_user ON consensus_profiles (user_id)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_consensus_profiles_user ON consensus_profiles (user_id)",
+        [],
+    )?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_consensus_profiles_default ON consensus_profiles (is_default)", [])?;
-    
+
     // Conversations indexes
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations (user_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_profile ON conversations (profile_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_created ON conversations (created_at)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations (is_archived)", [])?;
-    
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations (user_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversations_profile ON conversations (profile_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversations_created ON conversations (created_at)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversations_archived ON conversations (is_archived)",
+        [],
+    )?;
+
     // Conversation messages indexes
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_conversation ON conversation_messages (conversation_id)", [])?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_sequence ON conversation_messages (conversation_id, sequence_number)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_model ON conversation_messages (model_id)", [])?;
-    
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_model ON conversation_messages (model_id)",
+        [],
+    )?;
+
     // Analytics events indexes
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events (event_type)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_analytics_user ON analytics_events (user_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON analytics_events (timestamp)", [])?;
-    
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events (event_type)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analytics_user ON analytics_events (user_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON analytics_events (timestamp)",
+        [],
+    )?;
+
     // Memory and clustering indexes
     conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_conversation ON conversation_memory (conversation_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_cluster ON conversation_memory (cluster_id)", [])?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_memory_cluster ON conversation_memory (cluster_id)",
+        [],
+    )?;
     conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_importance ON conversation_memory (importance_score)", [])?;
-    
+
     // Performance metrics indexes
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_performance_type ON performance_metrics (metric_type)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_performance_model ON performance_metrics (model_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_performance_timestamp ON performance_metrics (timestamp)", [])?;
-    
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_performance_type ON performance_metrics (metric_type)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_performance_model ON performance_metrics (model_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_performance_timestamp ON performance_metrics (timestamp)",
+        [],
+    )?;
+
     // Cost tracking indexes
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cost_user ON cost_tracking (user_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cost_model ON cost_tracking (model_id)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_cost_created ON cost_tracking (created_at)", [])?;
-    
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cost_user ON cost_tracking (user_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cost_model ON cost_tracking (model_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cost_created ON cost_tracking (created_at)",
+        [],
+    )?;
+
     // Sync queue indexes
     conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_queue_priority ON sync_queue (priority DESC, created_at)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_queue_table ON sync_queue (table_name)", [])?;
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_sync_queue_synced ON sync_queue (synced_at)", [])?;
-    
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sync_queue_table ON sync_queue (table_name)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sync_queue_synced ON sync_queue (synced_at)",
+        [],
+    )?;
+
     Ok(())
 }
 
@@ -546,54 +618,119 @@ fn create_indexes(conn: &Connection) -> Result<()> {
 fn insert_default_data(conn: &Connection) -> Result<()> {
     // Insert default configuration values
     let default_configs = vec![
-        ("app_version", "2.0.0", "string", "Current application version"),
-        ("schema_version", "1", "number", "Current database schema version"),
-        ("openrouter_api_key", "", "string", "OpenRouter API key for model access"),
+        (
+            "app_version",
+            "2.0.0",
+            "string",
+            "Current application version",
+        ),
+        (
+            "schema_version",
+            "1",
+            "number",
+            "Current database schema version",
+        ),
+        (
+            "openrouter_api_key",
+            "",
+            "string",
+            "OpenRouter API key for model access",
+        ),
         ("license_key", "", "string", "Hive AI license key"),
-        ("max_conversation_length", "50", "number", "Maximum messages per conversation"),
-        ("default_temperature_generator", "0.7", "number", "Default temperature for generator stage"),
-        ("default_temperature_refiner", "0.5", "number", "Default temperature for refiner stage"),
-        ("default_temperature_validator", "0.3", "number", "Default temperature for validator stage"),
-        ("default_temperature_curator", "0.6", "number", "Default temperature for curator stage"),
-        ("enable_analytics", "true", "boolean", "Enable analytics collection"),
-        ("enable_cloudflare_sync", "false", "boolean", "Enable Cloudflare D1 synchronization"),
-        ("auto_create_clusters", "true", "boolean", "Automatically create thematic clusters"),
-        ("performance_monitoring", "true", "boolean", "Enable performance monitoring"),
+        (
+            "max_conversation_length",
+            "50",
+            "number",
+            "Maximum messages per conversation",
+        ),
+        (
+            "default_temperature_generator",
+            "0.7",
+            "number",
+            "Default temperature for generator stage",
+        ),
+        (
+            "default_temperature_refiner",
+            "0.5",
+            "number",
+            "Default temperature for refiner stage",
+        ),
+        (
+            "default_temperature_validator",
+            "0.3",
+            "number",
+            "Default temperature for validator stage",
+        ),
+        (
+            "default_temperature_curator",
+            "0.6",
+            "number",
+            "Default temperature for curator stage",
+        ),
+        (
+            "enable_analytics",
+            "true",
+            "boolean",
+            "Enable analytics collection",
+        ),
+        (
+            "enable_cloudflare_sync",
+            "false",
+            "boolean",
+            "Enable Cloudflare D1 synchronization",
+        ),
+        (
+            "auto_create_clusters",
+            "true",
+            "boolean",
+            "Automatically create thematic clusters",
+        ),
+        (
+            "performance_monitoring",
+            "true",
+            "boolean",
+            "Enable performance monitoring",
+        ),
         ("cost_tracking", "true", "boolean", "Enable cost tracking"),
-        ("security_trust_mode", "strict", "string", "Security trust mode: strict, moderate, permissive"),
+        (
+            "security_trust_mode",
+            "strict",
+            "string",
+            "Security trust mode: strict, moderate, permissive",
+        ),
     ];
-    
+
     for (key, value, type_str, description) in default_configs {
         conn.execute(
             "INSERT OR IGNORE INTO configuration (key, value, type, description) VALUES (?1, ?2, ?3, ?4)",
             [key, value, type_str, description],
         )?;
     }
-    
+
     // Insert initial schema version
     conn.execute(
         "INSERT OR IGNORE INTO schema_version (version) VALUES (?1)",
         [SCHEMA_VERSION],
     )?;
-    
+
     // Insert initial Cloudflare sync status
     conn.execute(
         "INSERT OR IGNORE INTO cloudflare_sync_status (id, sync_status) VALUES (1, 'idle')",
         [],
     )?;
-    
+
     Ok(())
 }
 
 /// Health check for database schema
 pub fn health_check(conn: &Connection) -> Result<Vec<String>> {
     let mut issues = Vec::new();
-    
+
     // Check if all required tables exist
     let required_tables = vec![
         "schema_version",
         "openrouter_models",
-        "model_rankings", 
+        "model_rankings",
         "consensus_profiles",
         "conversations",
         "conversation_messages",
@@ -609,46 +746,55 @@ pub fn health_check(conn: &Connection) -> Result<Vec<String>> {
         "configuration",
         "security_trust",
     ];
-    
+
     for table in required_tables {
-        let exists: bool = conn.query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
-            [table],
-            |row| row.get(0),
-        ).unwrap_or(false);
-        
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
         if !exists {
             issues.push(format!("Missing table: {}", table));
         }
     }
-    
+
     // Check schema version
-    let current_version: i32 = conn.query_row(
-        "SELECT version FROM schema_version ORDER BY id DESC LIMIT 1",
-        [],
-        |row| row.get(0),
-    ).unwrap_or(0);
-    
+    let current_version: i32 = conn
+        .query_row(
+            "SELECT version FROM schema_version ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
     if current_version < SCHEMA_VERSION {
-        issues.push(format!("Schema outdated: current {}, expected {}", current_version, SCHEMA_VERSION));
+        issues.push(format!(
+            "Schema outdated: current {}, expected {}",
+            current_version, SCHEMA_VERSION
+        ));
     }
-    
+
     // Check for foreign key issues
-    let fk_errors: i32 = conn.query_row("PRAGMA foreign_key_check", [], |row| row.get(0)).unwrap_or(0);
+    let fk_errors: i32 = conn
+        .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
+        .unwrap_or(0);
     if fk_errors > 0 {
         issues.push(format!("Foreign key constraint violations: {}", fk_errors));
     }
-    
+
     Ok(issues)
 }
 
 /// Repair database schema issues
 pub fn repair_schema(conn: &Connection) -> Result<Vec<String>> {
     let mut repairs = Vec::new();
-    
+
     // Check and repair missing tables
     let issues = health_check(conn)?;
-    
+
     for issue in issues {
         if issue.starts_with("Missing table:") {
             let table_name = issue.replace("Missing table: ", "");
@@ -675,11 +821,11 @@ pub fn repair_schema(conn: &Connection) -> Result<Vec<String>> {
             repairs.push("Schema migrated to latest version".to_string());
         }
     }
-    
+
     // Recreate indexes if needed
     create_indexes(conn)?;
     repairs.push("Indexes recreated".to_string());
-    
+
     Ok(repairs)
 }
 
@@ -691,16 +837,18 @@ mod tests {
     #[test]
     fn test_schema_initialization() {
         let conn = Connection::open_in_memory().unwrap();
-        
+
         assert!(initialize_schema(&conn).is_ok());
-        
+
         // Verify tables exist
-        let table_count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
-        
+        let table_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
         assert!(table_count >= 15); // Should have at least 15 tables
     }
 
@@ -708,7 +856,7 @@ mod tests {
     fn test_health_check() {
         let conn = Connection::open_in_memory().unwrap();
         initialize_schema(&conn).unwrap();
-        
+
         let issues = health_check(&conn).unwrap();
         assert!(issues.is_empty());
     }

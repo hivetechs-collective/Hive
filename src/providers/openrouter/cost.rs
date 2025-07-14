@@ -1,8 +1,7 @@
 /// Cost Tracking and Optimization
-/// 
+///
 /// Comprehensive cost tracking system for OpenRouter API usage with
 /// budget management, cost optimization, and detailed analytics.
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
@@ -137,7 +136,7 @@ impl CostCalculator {
         let mut calculator = Self {
             model_pricing: HashMap::new(),
         };
-        
+
         // Initialize with known pricing
         calculator.initialize_default_pricing();
         calculator
@@ -146,27 +145,48 @@ impl CostCalculator {
     /// Initialize default model pricing
     fn initialize_default_pricing(&mut self) {
         // Claude models
-        self.model_pricing.insert("anthropic/claude-3-opus".to_string(), (0.015, 0.075));
-        self.model_pricing.insert("anthropic/claude-3-sonnet".to_string(), (0.003, 0.015));
-        self.model_pricing.insert("anthropic/claude-3-haiku".to_string(), (0.00025, 0.00125));
-        
+        self.model_pricing
+            .insert("anthropic/claude-3-opus".to_string(), (0.015, 0.075));
+        self.model_pricing
+            .insert("anthropic/claude-3-sonnet".to_string(), (0.003, 0.015));
+        self.model_pricing
+            .insert("anthropic/claude-3-haiku".to_string(), (0.00025, 0.00125));
+
         // OpenAI models
-        self.model_pricing.insert("openai/gpt-4".to_string(), (0.03, 0.06));
-        self.model_pricing.insert("openai/gpt-4-turbo".to_string(), (0.01, 0.03));
-        self.model_pricing.insert("openai/gpt-4o-mini".to_string(), (0.00015, 0.0006));
-        self.model_pricing.insert("openai/gpt-3.5-turbo".to_string(), (0.0005, 0.0015));
-        
+        self.model_pricing
+            .insert("openai/gpt-4".to_string(), (0.03, 0.06));
+        self.model_pricing
+            .insert("openai/gpt-4-turbo".to_string(), (0.01, 0.03));
+        self.model_pricing
+            .insert("openai/gpt-4o-mini".to_string(), (0.00015, 0.0006));
+        self.model_pricing
+            .insert("openai/gpt-3.5-turbo".to_string(), (0.0005, 0.0015));
+
         // Google models
-        self.model_pricing.insert("google/gemini-pro".to_string(), (0.00125, 0.00375));
-        self.model_pricing.insert("google/gemini-pro-vision".to_string(), (0.00125, 0.00375));
-        
+        self.model_pricing
+            .insert("google/gemini-pro".to_string(), (0.00125, 0.00375));
+        self.model_pricing
+            .insert("google/gemini-pro-vision".to_string(), (0.00125, 0.00375));
+
         // Meta models
-        self.model_pricing.insert("meta-llama/llama-3-70b-instruct".to_string(), (0.0008, 0.0008));
-        self.model_pricing.insert("meta-llama/llama-3-8b-instruct".to_string(), (0.0002, 0.0002));
-        
+        self.model_pricing.insert(
+            "meta-llama/llama-3-70b-instruct".to_string(),
+            (0.0008, 0.0008),
+        );
+        self.model_pricing.insert(
+            "meta-llama/llama-3-8b-instruct".to_string(),
+            (0.0002, 0.0002),
+        );
+
         // Mistral models
-        self.model_pricing.insert("mistralai/mixtral-8x7b-instruct".to_string(), (0.0006, 0.0006));
-        self.model_pricing.insert("mistralai/mistral-7b-instruct".to_string(), (0.0002, 0.0002));
+        self.model_pricing.insert(
+            "mistralai/mixtral-8x7b-instruct".to_string(),
+            (0.0006, 0.0006),
+        );
+        self.model_pricing.insert(
+            "mistralai/mistral-7b-instruct".to_string(),
+            (0.0002, 0.0002),
+        );
     }
 
     /// Update pricing from model metadata
@@ -211,16 +231,8 @@ impl CostCalculator {
     }
 
     /// Calculate cost from usage info
-    pub fn calculate_from_usage(
-        &self,
-        model_id: &str,
-        usage: &UsageInfo,
-    ) -> Result<CostEstimate> {
-        self.calculate_cost(
-            model_id,
-            usage.prompt_tokens,
-            usage.completion_tokens,
-        )
+    pub fn calculate_from_usage(&self, model_id: &str, usage: &UsageInfo) -> Result<CostEstimate> {
+        self.calculate_cost(model_id, usage.prompt_tokens, usage.completion_tokens)
     }
 
     /// Get model pricing
@@ -238,7 +250,7 @@ impl CostCalculator {
     ) -> Result<f32> {
         let cost_a = self.calculate_cost(model_a, avg_input_tokens, avg_output_tokens)?;
         let cost_b = self.calculate_cost(model_b, avg_input_tokens, avg_output_tokens)?;
-        
+
         Ok(cost_a.total_cost - cost_b.total_cost)
     }
 }
@@ -271,7 +283,7 @@ impl CostTracker {
         metadata: Option<HashMap<String, String>>,
     ) -> Result<()> {
         let cost_estimate = self.calculator.calculate_from_usage(model_id, usage)?;
-        
+
         let entry = CostEntry {
             id: uuid::Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
@@ -300,7 +312,7 @@ impl CostTracker {
     pub async fn get_budget_status(&self) -> Result<BudgetStatus> {
         let entries = self.entries.read().await;
         let budget = self.budget.read().await;
-        
+
         let now = Utc::now();
         let today_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
         let month_start = now
@@ -331,7 +343,7 @@ impl CostTracker {
         let (daily_remaining, daily_percentage) = if let Some(limit) = budget.daily_limit {
             let remaining = limit - daily_spent;
             let percentage = daily_spent / limit;
-            
+
             if percentage >= budget.alert_threshold {
                 alerts.push(BudgetAlert {
                     level: if percentage >= 1.0 {
@@ -348,7 +360,7 @@ impl CostTracker {
                     timestamp: now,
                 });
             }
-            
+
             (Some(remaining), Some(percentage))
         } else {
             (None, None)
@@ -358,7 +370,7 @@ impl CostTracker {
         let (monthly_remaining, monthly_percentage) = if let Some(limit) = budget.monthly_limit {
             let remaining = limit - monthly_spent;
             let percentage = monthly_spent / limit;
-            
+
             if percentage >= budget.alert_threshold {
                 alerts.push(BudgetAlert {
                     level: if percentage >= 1.0 {
@@ -375,7 +387,7 @@ impl CostTracker {
                     timestamp: now,
                 });
             }
-            
+
             (Some(remaining), Some(percentage))
         } else {
             (None, None)
@@ -395,7 +407,7 @@ impl CostTracker {
     /// Check if request is within budget
     pub async fn check_budget(&self, estimated_cost: f32) -> Result<bool> {
         let budget = self.budget.read().await;
-        
+
         if !budget.enforce_limits {
             return Ok(true);
         }
@@ -433,7 +445,7 @@ impl CostTracker {
         end_date: Option<DateTime<Utc>>,
     ) -> Result<CostAnalytics> {
         let entries = self.entries.read().await;
-        
+
         let filtered_entries: Vec<&CostEntry> = entries
             .iter()
             .filter(|e| {
@@ -503,7 +515,7 @@ impl CostTracker {
             average_cost_per_request,
             average_tokens_per_request,
             cost_by_model: HashMap::new(), // Rebuilt above
-            cost_by_type: HashMap::new(),   // Rebuilt above
+            cost_by_type: HashMap::new(),  // Rebuilt above
             top_expensive_models,
             cost_trend,
         })
@@ -543,7 +555,7 @@ impl CostTracker {
                     model_id: "openai/gpt-4".to_string(),
                     alternative_model: "openai/gpt-4-turbo".to_string(),
                     potential_savings: cost * 0.66, // GPT-4 Turbo is ~1/3 the cost
-                    quality_tradeoff: 0.05, // Minimal quality difference
+                    quality_tradeoff: 0.05,         // Minimal quality difference
                     reasoning: format!(
                         "GPT-4 Turbo offers similar quality at 1/3 the cost. \
                         You've used GPT-4 {} times this week for ${:.2}.",
@@ -584,19 +596,19 @@ impl CostTracker {
         let cutoff_date = Utc::now() - chrono::Duration::days(days_to_keep);
         let mut entries = self.entries.write().await;
         let initial_count = entries.len();
-        
+
         entries.retain(|e| e.timestamp > cutoff_date);
-        
+
         let removed = initial_count - entries.len();
         log::info!("Cleaned up {} old cost entries", removed);
-        
+
         Ok(removed)
     }
 
     /// Check budget alerts (internal)
     async fn check_budget_alerts(&self) -> Result<()> {
         let status = self.get_budget_status().await?;
-        
+
         for alert in &status.alerts {
             match alert.level {
                 AlertLevel::Info => log::info!("Budget alert: {}", alert.message),
@@ -604,7 +616,7 @@ impl CostTracker {
                 AlertLevel::Critical => log::error!("Budget critical: {}", alert.message),
             }
         }
-        
+
         Ok(())
     }
 }
@@ -616,11 +628,11 @@ mod tests {
     #[test]
     fn test_cost_calculation() {
         let calculator = CostCalculator::new();
-        
+
         let cost = calculator
             .calculate_cost("openai/gpt-4", 1000, 500)
             .unwrap();
-        
+
         assert_eq!(cost.input_tokens, 1000);
         assert_eq!(cost.output_tokens, 500);
         assert_eq!(cost.input_cost, 0.03); // $0.03 per 1k tokens
@@ -637,9 +649,9 @@ mod tests {
             alert_threshold: 0.8,
             enforce_limits: true,
         };
-        
+
         let tracker = CostTracker::new(budget);
-        
+
         // Test budget check
         assert!(tracker.check_budget(0.5).await.unwrap());
         assert!(!tracker.check_budget(2.0).await.unwrap()); // Exceeds per-request limit

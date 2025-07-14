@@ -1,16 +1,16 @@
 //! Trust Dialog System for Claude Code-style security
-//! 
+//!
 //! Provides secure directory access with user consent and persistent trust decisions.
 
+use anyhow::Result;
+use chrono::{DateTime, Utc};
+use console::{style, Style};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
-use dialoguer::{theme::ColorfulTheme, Confirm, Select, Input};
-use console::{style, Style};
 
 /// Trust decision for a directory
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,7 +77,7 @@ impl Default for TrustDialogConfig {
         Self {
             enabled: true,
             auto_trust_git: true,
-            trust_timeout: 86400, // 24 hours
+            trust_timeout: 86400,                   // 24 hours
             max_auto_trust_size: 100 * 1024 * 1024, // 100MB
             trusted_extensions: vec![
                 "md".to_string(),
@@ -115,7 +115,10 @@ impl TrustDialogSystem {
     }
 
     /// Set audit logger for security event logging
-    pub fn with_audit_logger(mut self, logger: Arc<crate::security::audit::EnterpriseAuditLogger>) -> Self {
+    pub fn with_audit_logger(
+        mut self,
+        logger: Arc<crate::security::audit::EnterpriseAuditLogger>,
+    ) -> Self {
         self.audit_logger = Some(logger);
         self
     }
@@ -128,12 +131,12 @@ impl TrustDialogSystem {
 
         let content = tokio::fs::read_to_string(store_path).await?;
         let decisions: Vec<TrustDecision> = serde_json::from_str(&content)?;
-        
+
         let mut store = self.trust_store.write().await;
         for decision in decisions {
             store.insert(decision.path.clone(), decision);
         }
-        
+
         Ok(())
     }
 
@@ -141,10 +144,10 @@ impl TrustDialogSystem {
     pub async fn save_trust_store(&self, store_path: &Path) -> Result<()> {
         let store = self.trust_store.read().await;
         let decisions: Vec<TrustDecision> = store.values().cloned().collect();
-        
+
         let content = serde_json::to_string_pretty(&decisions)?;
         tokio::fs::write(store_path, content).await?;
-        
+
         Ok(())
     }
 
@@ -161,7 +164,7 @@ impl TrustDialogSystem {
 
         // Check existing trust decisions
         let store = self.trust_store.read().await;
-        
+
         // Check for exact match
         if let Some(decision) = store.get(path) {
             return Ok(self.is_decision_valid(decision, operation).await?);
@@ -211,10 +214,12 @@ impl TrustDialogSystem {
                 user_id: None,
                 reason: Some("Auto-trusted based on configuration".to_string()),
                 scope: TrustScope::Recursive,
-                expires_at: Some(Utc::now() + chrono::Duration::seconds(self.config.trust_timeout as i64)),
+                expires_at: Some(
+                    Utc::now() + chrono::Duration::seconds(self.config.trust_timeout as i64),
+                ),
                 conditions: vec![],
             };
-            
+
             self.store_decision(decision).await?;
             return Ok(true);
         }
@@ -231,34 +236,44 @@ impl TrustDialogSystem {
     /// Show interactive trust dialog
     async fn show_trust_dialog(&self, path: &Path, operation: Option<&str>) -> Result<bool> {
         let theme = ColorfulTheme::default();
-        
+
         println!();
         println!("{}", style("🛡️  Security Trust Dialog").bold().cyan());
-        println!("{}", style("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━").dim());
+        println!(
+            "{}",
+            style(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            )
+            .dim()
+        );
         println!();
-        
-        println!("{} {}", 
+
+        println!(
+            "{} {}",
             style("Directory:").bold(),
             style(path.display()).yellow()
         );
-        
+
         if let Some(op) = operation {
-            println!("{} {}", 
-                style("Operation:").bold(),
-                style(op).yellow()
-            );
+            println!("{} {}", style("Operation:").bold(), style(op).yellow());
         }
-        
+
         println!();
-        
+
         // Show directory information
         self.show_directory_info(path).await?;
-        
+
         println!();
-        println!("{}", style("Hive needs permission to access this directory.").yellow());
-        println!("{}", style("This is a security measure to protect your files.").dim());
+        println!(
+            "{}",
+            style("Hive needs permission to access this directory.").yellow()
+        );
+        println!(
+            "{}",
+            style("This is a security measure to protect your files.").dim()
+        );
         println!();
-        
+
         // Trust options
         let options = vec![
             "Trust this directory (this session only)",
@@ -267,13 +282,13 @@ impl TrustDialogSystem {
             "Trust permanently",
             "Deny access",
         ];
-        
+
         let selection = Select::with_theme(&theme)
             .with_prompt("Choose trust level")
             .items(&options)
             .default(0)
             .interact()?;
-        
+
         match selection {
             0 => {
                 // Session only
@@ -299,7 +314,9 @@ impl TrustDialogSystem {
                     user_id: None,
                     reason: Some("User granted recursive trust".to_string()),
                     scope: TrustScope::Recursive,
-                    expires_at: Some(Utc::now() + chrono::Duration::seconds(self.config.trust_timeout as i64)),
+                    expires_at: Some(
+                        Utc::now() + chrono::Duration::seconds(self.config.trust_timeout as i64),
+                    ),
                     conditions: vec![],
                 };
                 self.store_decision(decision).await?;
@@ -310,12 +327,12 @@ impl TrustDialogSystem {
                 let operations = Input::<String>::with_theme(&theme)
                     .with_prompt("Enter operations (comma-separated)")
                     .interact()?;
-                
+
                 let ops: Vec<String> = operations
                     .split(',')
                     .map(|s| s.trim().to_string())
                     .collect();
-                
+
                 let decision = TrustDecision {
                     path: path.to_path_buf(),
                     trusted: true,
@@ -323,7 +340,9 @@ impl TrustDialogSystem {
                     user_id: None,
                     reason: Some("User granted operation-specific trust".to_string()),
                     scope: TrustScope::Operations(ops),
-                    expires_at: Some(Utc::now() + chrono::Duration::seconds(self.config.trust_timeout as i64)),
+                    expires_at: Some(
+                        Utc::now() + chrono::Duration::seconds(self.config.trust_timeout as i64),
+                    ),
                     conditions: vec![],
                 };
                 self.store_decision(decision).await?;
@@ -334,7 +353,7 @@ impl TrustDialogSystem {
                 let confirm = Confirm::with_theme(&theme)
                     .with_prompt("Are you sure you want to trust this directory permanently?")
                     .interact()?;
-                
+
                 if confirm {
                     let decision = TrustDecision {
                         path: path.to_path_buf(),
@@ -354,7 +373,10 @@ impl TrustDialogSystem {
             }
             4 => {
                 // Deny access
-                println!("{}", style("Access denied. Hive will not read files from this directory.").red());
+                println!(
+                    "{}",
+                    style("Access denied. Hive will not read files from this directory.").red()
+                );
                 Ok(false)
             }
             _ => Ok(false),
@@ -375,7 +397,8 @@ impl TrustDialogSystem {
 
         // Show directory size
         if let Ok(size) = self.get_directory_size(path).await {
-            println!("{} {}", 
+            println!(
+                "{} {}",
                 style("📊 Directory size:").bold(),
                 style(format_bytes(size)).cyan()
             );
@@ -383,15 +406,13 @@ impl TrustDialogSystem {
 
         // Show file count
         if let Ok(count) = self.count_files(path).await {
-            println!("{} {}", 
-                style("📄 File count:").bold(),
-                style(count).cyan()
-            );
+            println!("{} {}", style("📄 File count:").bold(), style(count).cyan());
         }
 
         // Show recent modification
         if let Ok(modified) = self.get_last_modified(path).await {
-            println!("{} {}", 
+            println!(
+                "{} {}",
                 style("🕒 Last modified:").bold(),
                 style(modified.format("%Y-%m-%d %H:%M:%S UTC")).cyan()
             );
@@ -405,16 +426,18 @@ impl TrustDialogSystem {
         let path = decision.path.clone();
         let mut store = self.trust_store.write().await;
         store.insert(path, decision.clone());
-        
+
         // Log security event
         if let Some(logger) = &self.audit_logger {
-            logger.log_security_event(
-                crate::security::audit::AuditEventType::TrustDecision,
-                format!("Trust decision made for path: {}", decision.path.display()),
-                decision.user_id.clone(),
-            ).await?;
+            logger
+                .log_security_event(
+                    crate::security::audit::AuditEventType::TrustDecision,
+                    format!("Trust decision made for path: {}", decision.path.display()),
+                    decision.user_id.clone(),
+                )
+                .await?;
         }
-        
+
         Ok(())
     }
 
@@ -451,7 +474,11 @@ impl TrustDialogSystem {
     }
 
     /// Check if decision is still valid
-    async fn is_decision_valid(&self, decision: &TrustDecision, operation: Option<&str>) -> Result<bool> {
+    async fn is_decision_valid(
+        &self,
+        decision: &TrustDecision,
+        operation: Option<&str>,
+    ) -> Result<bool> {
         if !decision.trusted {
             return Ok(false);
         }
@@ -500,9 +527,7 @@ impl TrustDialogSystem {
                 }
                 Ok(true)
             }
-            TrustCondition::IsGitRepository => {
-                Ok(path.join(".git").exists())
-            }
+            TrustCondition::IsGitRepository => Ok(path.join(".git").exists()),
             TrustCondition::MaxSize(max_size) => {
                 if let Ok(size) = self.get_directory_size(path).await {
                     Ok(size <= *max_size)
@@ -511,7 +536,8 @@ impl TrustDialogSystem {
                 }
             }
             TrustCondition::FileExtensions(extensions) => {
-                self.contains_only_specific_extensions(path, extensions).await
+                self.contains_only_specific_extensions(path, extensions)
+                    .await
             }
         }
     }
@@ -520,7 +546,7 @@ impl TrustDialogSystem {
     async fn get_directory_size(&self, path: &Path) -> Result<u64> {
         let mut total_size = 0;
         let mut entries = tokio::fs::read_dir(path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let metadata = entry.metadata().await?;
             if metadata.is_file() {
@@ -529,7 +555,7 @@ impl TrustDialogSystem {
                 total_size += Box::pin(self.get_directory_size(&entry.path())).await?;
             }
         }
-        
+
         Ok(total_size)
     }
 
@@ -537,7 +563,7 @@ impl TrustDialogSystem {
     async fn count_files(&self, path: &Path) -> Result<usize> {
         let mut count = 0;
         let mut entries = tokio::fs::read_dir(path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let metadata = entry.metadata().await?;
             if metadata.is_file() {
@@ -546,7 +572,7 @@ impl TrustDialogSystem {
                 count += Box::pin(self.count_files(&entry.path())).await?;
             }
         }
-        
+
         Ok(count)
     }
 
@@ -560,13 +586,17 @@ impl TrustDialogSystem {
     /// Check if directory contains only trusted extensions
     async fn contains_only_trusted_extensions(&self, path: &Path) -> Result<bool> {
         let mut entries = tokio::fs::read_dir(path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let metadata = entry.metadata().await?;
             if metadata.is_file() {
                 if let Some(extension) = entry.path().extension() {
                     if let Some(ext_str) = extension.to_str() {
-                        if !self.config.trusted_extensions.contains(&ext_str.to_string()) {
+                        if !self
+                            .config
+                            .trusted_extensions
+                            .contains(&ext_str.to_string())
+                        {
                             return Ok(false);
                         }
                     } else {
@@ -581,14 +611,18 @@ impl TrustDialogSystem {
                 }
             }
         }
-        
+
         Ok(true)
     }
 
     /// Check if directory contains only specific extensions
-    async fn contains_only_specific_extensions(&self, path: &Path, extensions: &[String]) -> Result<bool> {
+    async fn contains_only_specific_extensions(
+        &self,
+        path: &Path,
+        extensions: &[String],
+    ) -> Result<bool> {
         let mut entries = tokio::fs::read_dir(path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let metadata = entry.metadata().await?;
             if metadata.is_file() {
@@ -604,12 +638,14 @@ impl TrustDialogSystem {
                     return Ok(false);
                 }
             } else if metadata.is_dir() {
-                if !Box::pin(self.contains_only_specific_extensions(&entry.path(), extensions)).await? {
+                if !Box::pin(self.contains_only_specific_extensions(&entry.path(), extensions))
+                    .await?
+                {
                     return Ok(false);
                 }
             }
         }
-        
+
         Ok(true)
     }
 
@@ -617,16 +653,18 @@ impl TrustDialogSystem {
     pub async fn revoke_trust(&self, path: &Path) -> Result<()> {
         let mut store = self.trust_store.write().await;
         store.remove(path);
-        
+
         // Log security event
         if let Some(logger) = &self.audit_logger {
-            logger.log_security_event(
-                crate::security::audit::AuditEventType::TrustRevoked,
-                format!("Trust revoked for path: {}", path.display()),
-                None,
-            ).await?;
+            logger
+                .log_security_event(
+                    crate::security::audit::AuditEventType::TrustRevoked,
+                    format!("Trust revoked for path: {}", path.display()),
+                    None,
+                )
+                .await?;
         }
-        
+
         Ok(())
     }
 
@@ -641,7 +679,7 @@ impl TrustDialogSystem {
         let mut store = self.trust_store.write().await;
         let now = Utc::now();
         let mut expired_count = 0;
-        
+
         store.retain(|_, decision| {
             if let Some(expires_at) = decision.expires_at {
                 if now > expires_at {
@@ -651,30 +689,30 @@ impl TrustDialogSystem {
             }
             true
         });
-        
+
         Ok(expired_count)
     }
 
     /// Check if a directory is trusted
     pub async fn is_directory_trusted(&self, path: &Path) -> Result<bool> {
         let store = self.trust_store.read().await;
-        
+
         // Check exact path first
         if let Some(decision) = store.get(path) {
             if !decision.trusted {
                 return Ok(false);
             }
-            
+
             // Check if expired
             if let Some(expires_at) = decision.expires_at {
                 if Utc::now() > expires_at {
                     return Ok(false);
                 }
             }
-            
+
             return Ok(true);
         }
-        
+
         // Check parent directories if recursive trust is enabled
         let mut current = path;
         while let Some(parent) = current.parent() {
@@ -692,7 +730,7 @@ impl TrustDialogSystem {
             }
             current = parent;
         }
-        
+
         Ok(false)
     }
 
@@ -700,43 +738,43 @@ impl TrustDialogSystem {
     pub async fn request_directory_trust(&self, path: &Path, reason: &str) -> Result<bool> {
         // Show trust dialog
         let theme = ColorfulTheme::default();
-        
+
         println!("\n{}", style("🔐 Directory Access Request").bold().yellow());
         println!("{}", style("─".repeat(50)).dim());
         println!("Path: {}", style(path.display()).cyan());
         println!("Reason: {}", style(reason).italic());
         println!();
-        
+
         let trust = Confirm::with_theme(&theme)
             .with_prompt("Do you trust this directory?")
             .interact()?;
-        
+
         if trust {
             let scope_options = vec![
                 "This directory only",
                 "This directory and subdirectories",
                 "This session only",
             ];
-            
+
             let scope_idx = Select::with_theme(&theme)
                 .with_prompt("Select trust scope")
                 .items(&scope_options)
                 .default(0)
                 .interact()?;
-            
+
             let scope = match scope_idx {
                 0 => TrustScope::Directory,
                 1 => TrustScope::Recursive,
                 2 => TrustScope::Session,
                 _ => TrustScope::Directory,
             };
-            
+
             let expires_at = if matches!(scope, TrustScope::Session) {
                 Some(Utc::now() + chrono::Duration::hours(24))
             } else {
                 None
             };
-            
+
             let decision = TrustDecision {
                 path: path.to_path_buf(),
                 trusted: true,
@@ -747,15 +785,17 @@ impl TrustDialogSystem {
                 expires_at,
                 conditions: vec![],
             };
-            
+
             let mut store = self.trust_store.write().await;
             store.insert(path.to_path_buf(), decision);
-            
+
             // Log audit event if configured
             if let Some(logger) = &self.audit_logger {
-                logger.log_trust_decision(path, true, Some(reason.to_string())).await?;
+                logger
+                    .log_trust_decision(path, true, Some(reason.to_string()))
+                    .await?;
             }
-            
+
             Ok(true)
         } else {
             Ok(false)
@@ -766,12 +806,12 @@ impl TrustDialogSystem {
     pub async fn revoke_directory_trust(&self, path: &Path) -> Result<()> {
         let mut store = self.trust_store.write().await;
         store.remove(path);
-        
+
         // Log audit event if configured
         if let Some(logger) = &self.audit_logger {
             logger.log_trust_revoked(path).await?;
         }
-        
+
         Ok(())
     }
 
@@ -780,7 +820,7 @@ impl TrustDialogSystem {
         let mut store = self.trust_store.write().await;
         let now = Utc::now();
         let mut expired_count = 0;
-        
+
         store.retain(|_, decision| {
             if let Some(expires_at) = decision.expires_at {
                 if now > expires_at {
@@ -790,7 +830,7 @@ impl TrustDialogSystem {
             }
             true
         });
-        
+
         Ok(expired_count)
     }
 }
@@ -800,12 +840,12 @@ fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     let mut size = bytes as f64;
     let mut unit_index = 0;
-    
+
     while size >= 1024.0 && unit_index < UNITS.len() - 1 {
         size /= 1024.0;
         unit_index += 1;
     }
-    
+
     if unit_index == 0 {
         format!("{} {}", size as u64, UNITS[unit_index])
     } else {
@@ -822,15 +862,15 @@ mod tests {
     async fn test_trust_dialog_creation() {
         let config = TrustDialogConfig::default();
         let trust_dialog = TrustDialogSystem::new(config);
-        
+
         // Test with disabled config
         let mut disabled_config = TrustDialogConfig::default();
         disabled_config.enabled = false;
         let disabled_dialog = TrustDialogSystem::new(disabled_config);
-        
+
         let temp_dir = tempdir().unwrap();
         let path = temp_dir.path();
-        
+
         // Should always trust when disabled
         assert!(disabled_dialog.is_trusted(path, None).await.unwrap());
     }
@@ -839,24 +879,27 @@ mod tests {
     async fn test_auto_trust_git_repository() {
         let config = TrustDialogConfig::default();
         let trust_dialog = TrustDialogSystem::new(config);
-        
+
         let temp_dir = tempdir().unwrap();
         let git_dir = temp_dir.path().join(".git");
         tokio::fs::create_dir(&git_dir).await.unwrap();
-        
+
         // Should auto-trust git repository
-        assert!(trust_dialog.should_auto_trust(temp_dir.path()).await.unwrap());
+        assert!(trust_dialog
+            .should_auto_trust(temp_dir.path())
+            .await
+            .unwrap());
     }
 
     #[tokio::test]
     async fn test_trust_store_persistence() {
         let config = TrustDialogConfig::default();
         let trust_dialog = TrustDialogSystem::new(config);
-        
+
         let temp_dir = tempdir().unwrap();
         let store_path = temp_dir.path().join("trust_store.json");
         let test_path = temp_dir.path().join("test_dir");
-        
+
         // Create a trust decision
         let decision = TrustDecision {
             path: test_path.clone(),
@@ -868,15 +911,15 @@ mod tests {
             expires_at: None,
             conditions: vec![],
         };
-        
+
         trust_dialog.store_decision(decision).await.unwrap();
-        
+
         // Save and reload
         trust_dialog.save_trust_store(&store_path).await.unwrap();
-        
+
         let new_dialog = TrustDialogSystem::new(TrustDialogConfig::default());
         new_dialog.load_trust_store(&store_path).await.unwrap();
-        
+
         // Should be trusted
         assert!(new_dialog.is_trusted(&test_path, None).await.unwrap());
     }

@@ -1,10 +1,10 @@
 //! Syntax-aware code modification to preserve correctness
 
-use anyhow::{Result, anyhow};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use crate::analysis::TreeSitterParser;
 use crate::core::Language;
+use anyhow::{anyhow, Result};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Handles syntax-aware code modifications
 pub struct SyntaxAwareModifier {
@@ -27,11 +27,11 @@ impl SyntaxAwareModifier {
         // Parse original to ensure it's valid
         let mut parser = self.parser.lock().await;
         let _original_ast = parser.parse(original)?;
-        
+
         // Split content into lines
         let mut lines: Vec<&str> = original.lines().collect();
         let (start_line, end_line) = line_range;
-        
+
         // Validate line range
         if start_line == 0 || start_line > lines.len() || end_line > lines.len() {
             return Err(anyhow!("Invalid line range: {:?}", line_range));
@@ -39,7 +39,7 @@ impl SyntaxAwareModifier {
 
         // Extract indentation from the first line being replaced
         let indentation = self.extract_indentation(lines[start_line - 1]);
-        
+
         // Apply indentation to modification lines
         let modified_lines: Vec<String> = modification
             .lines()
@@ -62,10 +62,10 @@ impl SyntaxAwareModifier {
         );
 
         let result = lines.join("\n");
-        
+
         // Verify the result is still syntactically valid
         self.verify_syntax(&result, language).await?;
-        
+
         Ok(result)
     }
 
@@ -83,7 +83,7 @@ impl SyntaxAwareModifier {
             Err(e) => Err(anyhow!("Syntax validation failed: {}", e)),
         }
     }
-    
+
     /// Verify that code is syntactically valid (sync version - blocks on parser lock)
     pub fn verify_syntax_sync(&self, content: &str, language: Language) -> Result<()> {
         // Since we can't use async in sync context, we'll skip validation for now
@@ -100,7 +100,7 @@ impl SyntaxAwareModifier {
         language: Language,
     ) -> Result<String> {
         let lines: Vec<&str> = original.lines().collect();
-        
+
         if after_line > lines.len() {
             return Err(anyhow!("Line {} is beyond file length", after_line));
         }
@@ -114,16 +114,16 @@ impl SyntaxAwareModifier {
 
         // Format the insertion with proper indentation
         let formatted_insertion = self.format_with_indentation(insertion, &indentation);
-        
+
         // Insert the new content
         let mut result_lines = lines.to_vec();
         result_lines.insert(after_line, &formatted_insertion);
-        
+
         let result = result_lines.join("\n");
-        
+
         // Verify syntax
         self.verify_syntax_sync(&result, language)?;
-        
+
         Ok(result)
     }
 
@@ -132,11 +132,11 @@ impl SyntaxAwareModifier {
         // Look at the current line and potentially the next line
         let current_line = lines[line_idx];
         let current_indent = self.extract_indentation(current_line);
-        
+
         // Check if this line opens a block (ends with {, :, etc.)
-        let opens_block = current_line.trim_end().ends_with('{') 
-            || current_line.trim_end().ends_with(':');
-        
+        let opens_block =
+            current_line.trim_end().ends_with('{') || current_line.trim_end().ends_with(':');
+
         if opens_block {
             // Increase indentation
             if current_indent.contains('\t') {
@@ -174,7 +174,7 @@ impl SyntaxAwareModifier {
     ) -> Result<String> {
         let lines: Vec<&str> = original.lines().collect();
         let (start_line, end_line) = line_range;
-        
+
         if start_line == 0 || start_line > lines.len() || end_line > lines.len() {
             return Err(anyhow!("Invalid line range for removal"));
         }
@@ -187,21 +187,25 @@ impl SyntaxAwareModifier {
 
         let mut result_lines = lines.to_vec();
         result_lines.drain((start_line - 1)..end_line);
-        
+
         let result = result_lines.join("\n");
-        
+
         // Verify syntax
         self.verify_syntax_sync(&result, language)?;
-        
+
         Ok(result)
     }
 
     /// Check if removing content would break syntax
     fn would_break_syntax(&self, content: &str) -> bool {
         // Count opening and closing braces/brackets/parens
-        let opens = content.matches(|c| c == '{' || c == '[' || c == '(').count();
-        let closes = content.matches(|c| c == '}' || c == ']' || c == ')').count();
-        
+        let opens = content
+            .matches(|c| c == '{' || c == '[' || c == '(')
+            .count();
+        let closes = content
+            .matches(|c| c == '}' || c == ']' || c == ')')
+            .count();
+
         opens != closes
     }
 
@@ -215,14 +219,16 @@ impl SyntaxAwareModifier {
         // Sort modifications by line number in reverse order
         // This ensures we don't invalidate line numbers as we apply changes
         let mut sorted_mods = modifications;
-        sorted_mods.sort_by(|a, b| b.1.0.cmp(&a.1.0));
-        
+        sorted_mods.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+
         let mut result = original.to_string();
-        
+
         for (modification, line_range) in sorted_mods {
-            result = self.apply_modification(&result, &modification, line_range, language).await?;
+            result = self
+                .apply_modification(&result, &modification, line_range, language)
+                .await?;
         }
-        
+
         Ok(result)
     }
 }

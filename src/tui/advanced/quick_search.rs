@@ -125,17 +125,17 @@ impl QuickSearch {
         self.input.clear();
         self.cursor_pos = 0;
         self.file_to_open = None;
-        
+
         // If files not loaded or search root changed, reload
         if self.all_files.is_empty() {
             self.is_loading = true;
             self.load_files().await?;
             self.is_loading = false;
         }
-        
+
         self.filter_files();
         self.list_state.select(Some(0));
-        
+
         Ok(())
     }
 
@@ -151,10 +151,10 @@ impl QuickSearch {
     async fn load_files(&mut self) -> Result<()> {
         self.all_files.clear();
         self.scan_directory(&self.search_root.clone(), 0).await?;
-        
+
         // Sort by name for consistent ordering
         self.all_files.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        
+
         Ok(())
     }
 
@@ -165,21 +165,21 @@ impl QuickSearch {
         }
 
         let mut entries = fs::read_dir(dir).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
-            
+
             // Skip ignored files/directories
             if self.should_ignore(&name, &path) {
                 continue;
             }
-            
+
             if path.is_file() {
                 let metadata = entry.metadata().await?;
                 let relative_path = self.get_relative_path(&path);
                 let file_type = Self::determine_file_type(&path);
-                
+
                 let file_entry = FileEntry {
                     path: path.clone(),
                     name,
@@ -188,14 +188,14 @@ impl QuickSearch {
                     modified: metadata.modified().ok(),
                     file_type,
                 };
-                
+
                 self.all_files.push(file_entry);
             } else if path.is_dir() {
                 // Recursively scan subdirectory
                 Box::pin(self.scan_directory(&path, depth + 1)).await?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -205,7 +205,7 @@ impl QuickSearch {
         if name.starts_with('.') && name != ".." {
             return true;
         }
-        
+
         // Check against ignore patterns
         for pattern in &self.ignored_patterns {
             if pattern.contains('*') {
@@ -217,7 +217,7 @@ impl QuickSearch {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -248,37 +248,37 @@ impl QuickSearch {
         if let Some(ext) = path.extension() {
             match ext.to_string_lossy().to_lowercase().as_str() {
                 // Source code
-                "rs" | "js" | "ts" | "py" | "java" | "cpp" | "c" | "h" | "hpp" | 
+                "rs" | "js" | "ts" | "py" | "java" | "cpp" | "c" | "h" | "hpp" |
                 "go" | "php" | "rb" | "swift" | "kt" | "cs" | "scala" | "clj" => {
                     FileTypeCategory::Source
                 }
-                
+
                 // Configuration
-                "toml" | "json" | "yaml" | "yml" | "xml" | "ini" | "conf" | 
+                "toml" | "json" | "yaml" | "yml" | "xml" | "ini" | "conf" |
                 "config" | "cfg" | "env" => {
                     FileTypeCategory::Config
                 }
-                
+
                 // Documentation
                 "md" | "txt" | "rst" | "adoc" | "tex" | "pdf" | "doc" | "docx" => {
                     FileTypeCategory::Documentation
                 }
-                
+
                 // Images
                 "png" | "jpg" | "jpeg" | "gif" | "bmp" | "svg" | "ico" | "webp" => {
                     FileTypeCategory::Image
                 }
-                
+
                 // Archives
                 "zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar" => {
                     FileTypeCategory::Archive
                 }
-                
+
                 // Data
                 "csv" | "db" | "sql" | "sqlite" => {
                     FileTypeCategory::Data
                 }
-                
+
                 _ => FileTypeCategory::Other,
             }
         } else {
@@ -291,33 +291,33 @@ impl QuickSearch {
         if self.input.is_empty() {
             // Show recent files first, then all files
             let mut files = Vec::new();
-            
+
             // Add recent files first
             for recent_path in &self.recent_files {
                 if let Some(file_entry) = self.all_files.iter().find(|f| &f.path == recent_path) {
                     files.push((file_entry.clone(), 1000)); // High score for recent files
                 }
             }
-            
+
             // Add remaining files
             for file_entry in &self.all_files {
                 if !self.recent_files.contains(&file_entry.path) {
                     files.push((file_entry.clone(), 0));
                 }
             }
-            
+
             self.filtered_files = files;
         } else {
             // Fuzzy match files
             let mut matches = Vec::new();
-            
+
             for file_entry in &self.all_files {
                 // Try to match against file name and relative path
                 let name_score = self.matcher.fuzzy_match(&file_entry.name, &self.input);
                 let path_score = self.matcher.fuzzy_match(&file_entry.relative_path, &self.input);
-                
+
                 let best_score = name_score.max(path_score);
-                
+
                 if let Some(score) = best_score {
                     // Boost score for recent files
                     let final_score = if self.recent_files.contains(&file_entry.path) {
@@ -325,17 +325,17 @@ impl QuickSearch {
                     } else {
                         score
                     };
-                    
+
                     matches.push((file_entry.clone(), final_score));
                 }
             }
-            
+
             // Sort by score (highest first)
             matches.sort_by(|a, b| b.1.cmp(&a.1));
-            
+
             self.filtered_files = matches;
         }
-        
+
         // Reset selection to first item
         if !self.filtered_files.is_empty() {
             self.list_state.select(Some(0));
@@ -425,10 +425,10 @@ impl QuickSearch {
     fn add_to_recent(&mut self, path: PathBuf) {
         // Remove if already exists
         self.recent_files.retain(|p| p != &path);
-        
+
         // Add to front
         self.recent_files.insert(0, path);
-        
+
         // Keep only last 20 recent files
         if self.recent_files.len() > 20 {
             self.recent_files.truncate(20);
@@ -456,7 +456,7 @@ impl QuickSearch {
 
         // Create centered popup area
         let popup_area = Self::centered_rect(90, 70, area);
-        
+
         // Clear the area
         frame.render_widget(Clear, popup_area);
 
@@ -471,7 +471,7 @@ impl QuickSearch {
 
         // Render input area
         self.render_input(frame, chunks[0], theme);
-        
+
         // Render file list
         self.render_file_list(frame, chunks[1], theme);
     }
@@ -529,8 +529,8 @@ impl QuickSearch {
             .block(
                 Block::default()
                     .borders(Borders::ALL)
-                    .title(format!("Files ({}/{})", 
-                        self.filtered_files.len(), 
+                    .title(format!("Files ({}/{})",
+                        self.filtered_files.len(),
                         self.all_files.len()
                     ))
             )
@@ -573,7 +573,7 @@ impl QuickSearch {
                 Span::styled(type_icon, Style::default().fg(type_color)),
                 Span::raw(" "),
                 Span::styled(
-                    &file_entry.name, 
+                    &file_entry.name,
                     theme.text_style().add_modifier(Modifier::BOLD)
                 ),
                 Span::styled(recent_indicator, Style::default().fg(theme.accent_color())),

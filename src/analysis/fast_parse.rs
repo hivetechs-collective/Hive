@@ -1,19 +1,19 @@
 //! High-Speed File Parsing Optimization
-//! 
+//!
 //! Implements aggressive parsing optimizations to achieve <2ms/file target.
 //! This module provides revolutionary parsing performance through SIMD operations,
 //! memory mapping, and intelligent caching.
 
+use anyhow::Result;
+use memmap2::Mmap;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
-use anyhow::Result;
-use memmap2::Mmap;
-use serde::{Deserialize, Serialize};
 
-use crate::core::performance::{HotPathCache, PerfTimer, simd};
+use crate::core::performance::{simd, HotPathCache, PerfTimer};
 
 /// Fast parsing configuration
 #[derive(Debug, Clone)]
@@ -36,7 +36,7 @@ impl Default for FastParseConfig {
             enable_incremental_parsing: true,
             cache_parsed_files: true,
             max_file_size: 50 * 1024 * 1024, // 50MB
-            chunk_size: 64 * 1024, // 64KB
+            chunk_size: 64 * 1024,           // 64KB
         }
     }
 }
@@ -124,7 +124,7 @@ impl FastFileParser {
     /// Parse file with all optimizations enabled
     pub async fn parse_file_optimized(&self, path: &Path) -> Result<ParsedFile> {
         let _timer = PerfTimer::new("parse_file_optimized");
-        
+
         // Check cache first
         if self.config.cache_parsed_files {
             let path_str = path.to_string_lossy().to_string();
@@ -167,7 +167,7 @@ impl FastFileParser {
     /// Parse multiple files in parallel
     pub async fn parse_files_parallel(&self, paths: &[PathBuf]) -> Result<Vec<ParsedFile>> {
         let _timer = PerfTimer::new("parse_files_parallel");
-        
+
         if !self.config.enable_parallel_parsing {
             // Sequential fallback
             let mut results = Vec::new();
@@ -179,16 +179,19 @@ impl FastFileParser {
 
         // Parallel processing with controlled concurrency
         let semaphore = Arc::new(tokio::sync::Semaphore::new(num_cpus::get()));
-        let tasks: Vec<_> = paths.iter().map(|path| {
-            let path = path.clone();
-            let semaphore = semaphore.clone();
-            let parser = self.clone();
-            
-            tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
-                parser.parse_file_optimized(&path).await
+        let tasks: Vec<_> = paths
+            .iter()
+            .map(|path| {
+                let path = path.clone();
+                let semaphore = semaphore.clone();
+                let parser = self.clone();
+
+                tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.unwrap();
+                    parser.parse_file_optimized(&path).await
+                })
             })
-        }).collect();
+            .collect();
 
         let mut results = Vec::new();
         for task in tasks {
@@ -240,15 +243,16 @@ impl FastFileParser {
 
         // Detect language efficiently
         let language = self.detect_language_simd(path, content).await?;
-        
+
         // Fast line counting with SIMD
         let line_count = self.count_lines_simd(content).await;
-        
+
         // Chunked parsing for large files
         if content.len() > self.config.chunk_size {
             self.parse_chunked_simd(path, content, &language).await
         } else {
-            self.parse_small_file_simd(path, content, &language, line_count).await
+            self.parse_small_file_simd(path, content, &language, line_count)
+                .await
         }
     }
 
@@ -263,12 +267,12 @@ impl FastFileParser {
         // Use tree-sitter for AST parsing
         let mut parsers = self.parsers.write().await;
         let mut parser = parsers.get_parser(&language)?;
-        
+
         let tree = parser.parse(content_str.as_bytes(), None);
         let ast_nodes = tree.map(|t| self.count_ast_nodes(&t)).unwrap_or(0);
 
         // Extract symbols, functions, and classes
-        let (symbols, functions, classes, imports) = 
+        let (symbols, functions, classes, imports) =
             self.extract_code_elements(&content_str, &language).await?;
 
         let checksum = self.calculate_checksum(content);
@@ -375,7 +379,12 @@ impl FastFileParser {
     }
 
     /// Parse large files in chunks using SIMD
-    async fn parse_chunked_simd(&self, path: &Path, content: &[u8], language: &str) -> Result<ParsedFile> {
+    async fn parse_chunked_simd(
+        &self,
+        path: &Path,
+        content: &[u8],
+        language: &str,
+    ) -> Result<ParsedFile> {
         let _timer = PerfTimer::new("chunked_simd_parse");
 
         let chunk_size = self.config.chunk_size;
@@ -384,13 +393,15 @@ impl FastFileParser {
 
         // Process chunks in parallel
         let chunk_results: Vec<_> = if self.config.enable_parallel_parsing {
-            let tasks: Vec<_> = chunks.into_iter().enumerate().map(|(i, chunk)| {
-                let language = language.to_string();
-                let chunk_data = chunk.to_vec(); // Copy chunk data to owned Vec
-                tokio::spawn(async move {
-                    Self::parse_chunk_simd(i, &chunk_data, &language)
+            let tasks: Vec<_> = chunks
+                .into_iter()
+                .enumerate()
+                .map(|(i, chunk)| {
+                    let language = language.to_string();
+                    let chunk_data = chunk.to_vec(); // Copy chunk data to owned Vec
+                    tokio::spawn(async move { Self::parse_chunk_simd(i, &chunk_data, &language) })
                 })
-            }).collect();
+                .collect();
 
             let mut results = Vec::new();
             for task in tasks {
@@ -398,7 +409,9 @@ impl FastFileParser {
             }
             results
         } else {
-            chunks.into_iter().enumerate()
+            chunks
+                .into_iter()
+                .enumerate()
                 .map(|(i, chunk)| Self::parse_chunk_simd(i, chunk, language))
                 .collect::<Result<Vec<_>>>()?
         };
@@ -446,10 +459,11 @@ impl FastFileParser {
         let _timer = PerfTimer::new("small_file_simd");
 
         let content_str = String::from_utf8_lossy(content);
-        
+
         // Fast symbol extraction using SIMD-optimized patterns
-        let (symbols, functions, classes, imports) = 
-            self.extract_code_elements_simd(&content_str, language).await?;
+        let (symbols, functions, classes, imports) = self
+            .extract_code_elements_simd(&content_str, language)
+            .await?;
 
         // Estimate AST nodes without full parsing for speed
         let ast_nodes = self.estimate_ast_nodes_simd(content, language).await;
@@ -472,11 +486,15 @@ impl FastFileParser {
     }
 
     /// Parse individual chunk with SIMD optimizations
-    fn parse_chunk_simd(chunk_id: usize, content: &[u8], language: &str) -> Result<ChunkParseResult> {
+    fn parse_chunk_simd(
+        chunk_id: usize,
+        content: &[u8],
+        language: &str,
+    ) -> Result<ChunkParseResult> {
         // Simplified chunk parsing for demonstration
         let content_str = String::from_utf8_lossy(content);
         let line_count = content_str.lines().count();
-        
+
         Ok(ChunkParseResult {
             chunk_id,
             symbols: Vec::new(),
@@ -495,7 +513,7 @@ impl FastFileParser {
     ) -> Result<(Vec<Symbol>, Vec<Function>, Vec<Class>, Vec<String>)> {
         // SIMD-optimized regex patterns for common language constructs
         let patterns = self.get_language_patterns(language);
-        
+
         // Use pre-compiled regexes for performance
         let mut symbols = Vec::new();
         let mut functions = Vec::new();
@@ -547,7 +565,7 @@ impl FastFileParser {
         let line_count = self.count_lines_simd(content).await;
         let brace_count = content.iter().filter(|&&b| b == b'{' || b == b'}').count();
         let paren_count = content.iter().filter(|&&b| b == b'(' || b == b')').count();
-        
+
         // Rough AST node estimation
         line_count + brace_count + paren_count
     }
@@ -603,7 +621,7 @@ impl FastFileParser {
 
     /// Calculate file checksum for caching
     fn calculate_checksum(&self, content: &[u8]) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(content);
         format!("{:x}", hasher.finalize())
@@ -632,7 +650,11 @@ impl Clone for FastFileParser {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
-            file_cache: HotPathCache::new(if self.config.cache_parsed_files { 10000 } else { 0 }),
+            file_cache: HotPathCache::new(if self.config.cache_parsed_files {
+                10000
+            } else {
+                0
+            }),
             parsers: self.parsers.clone(),
         }
     }
@@ -680,27 +702,30 @@ impl ParserPool {
                     parser.set_language(tree_sitter_rust::language())?;
                     self.rust_parser = Some(parser);
                 }
-                self.rust_parser.as_mut()
+                self.rust_parser
+                    .as_mut()
                     .ok_or_else(|| anyhow::anyhow!("Rust parser not initialized"))
-            },
+            }
             "javascript" | "typescript" => {
                 if self.js_parser.is_none() {
                     let mut parser = tree_sitter::Parser::new();
                     parser.set_language(tree_sitter_javascript::language())?;
                     self.js_parser = Some(parser);
                 }
-                self.js_parser.as_mut()
+                self.js_parser
+                    .as_mut()
                     .ok_or_else(|| anyhow::anyhow!("JavaScript parser not initialized"))
-            },
+            }
             "python" => {
                 if self.python_parser.is_none() {
                     let mut parser = tree_sitter::Parser::new();
                     parser.set_language(tree_sitter_python::language())?;
                     self.python_parser = Some(parser);
                 }
-                self.python_parser.as_mut()
+                self.python_parser
+                    .as_mut()
                     .ok_or_else(|| anyhow::anyhow!("Python parser not initialized"))
-            },
+            }
             _ => Err(anyhow::anyhow!("Unsupported language: {}", language)),
         }
     }
@@ -709,9 +734,9 @@ impl ParserPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::test;
-    use tempfile::NamedTempFile;
     use std::io::Write;
+    use tempfile::NamedTempFile;
+    use tokio::test;
 
     #[test]
     async fn test_fast_parse_performance() {
@@ -720,8 +745,12 @@ mod tests {
 
         // Create a test file
         let mut temp_file = NamedTempFile::new().unwrap();
-        writeln!(temp_file, "fn main() {{\n    println!(\"Hello, world!\");\n}}").unwrap();
-        
+        writeln!(
+            temp_file,
+            "fn main() {{\n    println!(\"Hello, world!\");\n}}"
+        )
+        .unwrap();
+
         let start = Instant::now();
         let result = parser.parse_file_optimized(temp_file.path()).await.unwrap();
         let elapsed = start.elapsed();
@@ -746,10 +775,15 @@ mod tests {
         // Create multiple test files
         let mut temp_files = Vec::new();
         let mut paths = Vec::new();
-        
+
         for i in 0..5 {
             let mut temp_file = NamedTempFile::new().unwrap();
-            writeln!(temp_file, "fn test_{}() {{\n    // Test function {}\n}}", i, i).unwrap();
+            writeln!(
+                temp_file,
+                "fn test_{}() {{\n    // Test function {}\n}}",
+                i, i
+            )
+            .unwrap();
             paths.push(temp_file.path().to_path_buf());
             temp_files.push(temp_file);
         }
@@ -759,7 +793,7 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert_eq!(results.len(), 5);
-        
+
         // Parallel parsing should be efficient
         let avg_time_per_file = elapsed / results.len() as u32;
         assert!(avg_time_per_file < Duration::from_millis(2));
@@ -773,14 +807,14 @@ mod tests {
         // Test Rust file
         let mut rust_file = NamedTempFile::with_suffix(".rs").unwrap();
         writeln!(rust_file, "fn main() {{}}").unwrap();
-        
+
         let result = parser.parse_file_optimized(rust_file.path()).await.unwrap();
         assert_eq!(result.language, "rust");
 
         // Test Python file
         let mut py_file = NamedTempFile::with_suffix(".py").unwrap();
         writeln!(py_file, "def hello():\n    pass").unwrap();
-        
+
         let result = parser.parse_file_optimized(py_file.path()).await.unwrap();
         assert_eq!(result.language, "python");
     }
@@ -806,9 +840,9 @@ mod tests {
 
         let content = b"Hello world, this is a test";
         let pattern = b"world";
-        
+
         assert!(parser.contains_pattern_simd(content, pattern));
-        
+
         let missing_pattern = b"missing";
         assert!(!parser.contains_pattern_simd(content, missing_pattern));
     }

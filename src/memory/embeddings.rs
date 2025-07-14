@@ -1,5 +1,5 @@
 //! Vector embeddings engine using candle for semantic search
-//! 
+//!
 //! This module provides:
 //! - Efficient vector embeddings generation
 //! - Similarity search with multiple metrics
@@ -17,7 +17,7 @@ use tracing::{debug, info, warn};
 // Use the public EMBEDDING_DIM constant defined below
 
 #[cfg(feature = "embeddings")]
-use candle_core::{Device, Tensor, DType};
+use candle_core::{DType, Device, Tensor};
 #[cfg(feature = "embeddings")]
 use candle_nn::VarBuilder;
 #[cfg(feature = "embeddings")]
@@ -118,11 +118,14 @@ impl EmbeddingEngine {
     pub async fn new() -> Result<Self> {
         Self::with_config(EmbeddingConfig::default()).await
     }
-    
+
     /// Create with custom configuration
     pub async fn with_config(config: EmbeddingConfig) -> Result<Self> {
-        info!("Initializing embedding engine with model: {}", config.model_name);
-        
+        info!(
+            "Initializing embedding engine with model: {}",
+            config.model_name
+        );
+
         // Determine device
         #[cfg(feature = "embeddings")]
         let device = if config.use_gpu && candle_core::utils::cuda_is_available() {
@@ -130,12 +133,12 @@ impl EmbeddingEngine {
         } else {
             Device::Cpu
         };
-        
+
         #[cfg(not(feature = "embeddings"))]
         let device = ();
-        
+
         debug!("Using device: {:?}", device);
-        
+
         let engine = Self {
             model: None,
             #[cfg(feature = "embeddings")]
@@ -144,35 +147,35 @@ impl EmbeddingEngine {
             config,
             cache: Arc::new(RwLock::new(HashMap::new())),
         };
-        
+
         // Load model lazily on first use
         Ok(engine)
     }
-    
+
     /// Ensure model is loaded
     async fn ensure_model_loaded(&mut self) -> Result<()> {
         #[cfg(feature = "embeddings")]
         if self.model.is_some() && self.tokenizer.is_some() {
             return Ok(());
         }
-        
+
         #[cfg(not(feature = "embeddings"))]
         if self.model.is_some() {
             return Ok(());
         }
-        
+
         info!("Loading embedding model: {}", self.config.model_name);
-        
+
         // Create model directory if it doesn't exist
         tokio::fs::create_dir_all(&self.config.model_path).await?;
-        
+
         // For now, we'll use a placeholder implementation
         // In production, this would download and load the actual model
         warn!("Using placeholder embeddings - actual model loading not implemented");
-        
+
         Ok(())
     }
-    
+
     /// Encode text into embeddings
     pub async fn encode(&self, text: &str) -> Result<Vec<f32>> {
         // Check cache first
@@ -183,10 +186,10 @@ impl EmbeddingEngine {
                 return Ok(embedding.clone());
             }
         }
-        
+
         // Generate embedding
         let embedding = self.generate_embedding(text).await?;
-        
+
         // Cache the result
         {
             let mut cache = self.cache.write().await;
@@ -194,24 +197,24 @@ impl EmbeddingEngine {
                 cache.insert(text.to_string(), embedding.clone());
             }
         }
-        
+
         Ok(embedding)
     }
-    
+
     /// Encode multiple texts in batch
     pub async fn encode_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let mut embeddings = Vec::new();
-        
+
         // Process in batches
         for chunk in texts.chunks(self.config.batch_size) {
             for text in chunk {
                 embeddings.push(self.encode(text).await?);
             }
         }
-        
+
         Ok(embeddings)
     }
-    
+
     /// Calculate similarity between two embeddings
     pub fn similarity(
         &self,
@@ -226,7 +229,7 @@ impl EmbeddingEngine {
             SimilarityMetric::Manhattan => -manhattan_distance(embedding1, embedding2),
         }
     }
-    
+
     /// Find most similar embeddings
     pub async fn find_similar(
         &self,
@@ -242,45 +245,45 @@ impl EmbeddingEngine {
                 (id.clone(), score)
             })
             .collect();
-        
+
         // Sort by similarity (descending)
         similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         // Take top k
         similarities.truncate(top_k);
-        
+
         similarities
     }
-    
+
     /// Generate embedding (placeholder implementation)
     async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
         // For now, use a deterministic hash-based embedding
         // In production, this would use the actual model
         let mut embedding = vec![0.0; EMBEDDING_DIM];
         let bytes = text.as_bytes();
-        
+
         // Create a pseudo-random but deterministic embedding
         for (i, chunk) in bytes.chunks(4).enumerate() {
             let mut value = 0u32;
             for &byte in chunk {
                 value = value.wrapping_mul(31).wrapping_add(byte as u32);
             }
-            
+
             // Map to [-1, 1] range
             let normalized = (value as f64 / u32::MAX as f64) * 2.0 - 1.0;
             embedding[i % EMBEDDING_DIM] = normalized as f32;
         }
-        
+
         // Add some structure based on text length and content
         let text_len = text.len() as f32;
         for i in 0..EMBEDDING_DIM {
             let freq = (i as f32 * std::f32::consts::PI * 2.0) / EMBEDDING_DIM as f32;
             embedding[i] += (freq.sin() * text_len / 100.0).tanh() * 0.1;
         }
-        
+
         // Normalize the embedding
         normalize_embedding(&mut embedding);
-        
+
         Ok(embedding)
     }
 }
@@ -343,7 +346,7 @@ impl VectorStore {
     pub fn new() -> Self {
         Self::with_config(VectorStoreConfig::default())
     }
-    
+
     /// Create with custom configuration
     pub fn with_config(config: VectorStoreConfig) -> Self {
         Self {
@@ -352,7 +355,7 @@ impl VectorStore {
             config,
         }
     }
-    
+
     /// Add an embedding to the store
     pub async fn add(
         &self,
@@ -367,26 +370,26 @@ impl VectorStore {
                 vector.len()
             ));
         }
-        
+
         let embedding = StoredEmbedding {
             id: id.clone(),
             vector,
             metadata,
             timestamp: chrono::Utc::now(),
         };
-        
+
         let mut embeddings = self.embeddings.write().await;
         embeddings.insert(id, embedding);
-        
+
         // Check if we need to rebuild index
         if self.config.use_index && embeddings.len() % self.config.index_rebuild_threshold == 0 {
             // In production, rebuild index here
             debug!("Index rebuild triggered at {} embeddings", embeddings.len());
         }
-        
+
         Ok(())
     }
-    
+
     /// Search for similar embeddings
     pub async fn search(
         &self,
@@ -395,7 +398,7 @@ impl VectorStore {
         top_k: usize,
     ) -> Result<Vec<(StoredEmbedding, f32)>> {
         let embeddings = self.embeddings.read().await;
-        
+
         let mut results: Vec<(StoredEmbedding, f32)> = embeddings
             .values()
             .map(|embedding| {
@@ -408,29 +411,29 @@ impl VectorStore {
                 (embedding.clone(), score)
             })
             .collect();
-        
+
         // Sort by score (descending)
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        
+
         // Take top k
         results.truncate(top_k);
-        
+
         Ok(results)
     }
-    
+
     /// Get embedding by ID
     pub async fn get(&self, id: &str) -> Option<StoredEmbedding> {
         let embeddings = self.embeddings.read().await;
         embeddings.get(id).cloned()
     }
-    
+
     /// Remove embedding by ID
     pub async fn remove(&self, id: &str) -> Result<()> {
         let mut embeddings = self.embeddings.write().await;
         embeddings.remove(id);
         Ok(())
     }
-    
+
     /// Get total number of embeddings
     pub async fn len(&self) -> usize {
         let embeddings = self.embeddings.read().await;
@@ -444,15 +447,15 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() {
         return 0.0;
     }
-    
+
     let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
     let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    
+
     if norm_a == 0.0 || norm_b == 0.0 {
         return 0.0;
     }
-    
+
     dot_product / (norm_a * norm_b)
 }
 
@@ -460,7 +463,7 @@ fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() {
         return f32::INFINITY;
     }
-    
+
     a.iter()
         .zip(b.iter())
         .map(|(x, y)| (x - y).powi(2))
@@ -472,7 +475,7 @@ fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() {
         return 0.0;
     }
-    
+
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
@@ -480,11 +483,8 @@ fn manhattan_distance(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() {
         return f32::INFINITY;
     }
-    
-    a.iter()
-        .zip(b.iter())
-        .map(|(x, y)| (x - y).abs())
-        .sum()
+
+    a.iter().zip(b.iter()).map(|(x, y)| (x - y).abs()).sum()
 }
 
 fn normalize_embedding(embedding: &mut [f32]) {
@@ -499,57 +499,57 @@ fn normalize_embedding(embedding: &mut [f32]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_embedding_generation() -> Result<()> {
         let engine = EmbeddingEngine::new().await?;
-        
+
         let text = "Hello, world!";
         let embedding = engine.encode(text).await?;
-        
+
         assert_eq!(embedding.len(), EMBEDDING_DIM);
-        
+
         // Test that same text produces same embedding
         let embedding2 = engine.encode(text).await?;
         assert_eq!(embedding, embedding2);
-        
+
         Ok(())
     }
-    
+
     #[test]
     fn test_similarity_metrics() {
         let a = vec![1.0, 0.0, 0.0];
         let b = vec![1.0, 0.0, 0.0];
         let c = vec![0.0, 1.0, 0.0];
-        
+
         // Cosine similarity
         assert!((cosine_similarity(&a, &b) - 1.0).abs() < 0.001);
         assert!((cosine_similarity(&a, &c) - 0.0).abs() < 0.001);
-        
+
         // Euclidean distance
         assert!((euclidean_distance(&a, &b) - 0.0).abs() < 0.001);
         assert!((euclidean_distance(&a, &c) - std::f32::consts::SQRT_2).abs() < 0.001);
-        
+
         // Dot product
         assert!((dot_product(&a, &b) - 1.0).abs() < 0.001);
         assert!((dot_product(&a, &c) - 0.0).abs() < 0.001);
     }
-    
+
     #[tokio::test]
     async fn test_vector_store() -> Result<()> {
         let store = VectorStore::new();
-        
+
         let id = "test1".to_string();
         let vector = vec![0.1; EMBEDDING_DIM];
         let metadata = HashMap::new();
-        
+
         store.add(id.clone(), vector.clone(), metadata).await?;
-        
+
         assert_eq!(store.len().await, 1);
-        
+
         let retrieved = store.get(&id).await.unwrap();
         assert_eq!(retrieved.vector, vector);
-        
+
         Ok(())
     }
 }

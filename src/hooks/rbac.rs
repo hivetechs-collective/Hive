@@ -1,11 +1,11 @@
 //! Role-Based Access Control for Enterprise Hooks
 
+use super::{HookId, SecurityPolicy};
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use super::{HookId, SecurityPolicy};
 
 /// User role definition
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,25 +27,25 @@ pub enum Permission {
     EnableHook,
     DisableHook,
     ViewHook,
-    
+
     // Hook execution permissions
     ExecuteHook,
     ApproveHookExecution,
     DenyHookExecution,
-    
+
     // Security permissions
     ManageSecurity,
     ViewAuditLogs,
     ManageApprovals,
-    
+
     // Administrative permissions
     ManageUsers,
     ManageRoles,
     ManageTeams,
-    
+
     // System permissions
     SystemAdmin,
-    
+
     // Custom permissions
     Custom(String),
 }
@@ -130,12 +130,12 @@ impl HookRbacManager {
             teams: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
+
     /// Initialize default roles (should be called after creation)
     pub async fn initialize(&self) -> Result<()> {
         self.initialize_default_roles().await
     }
-    
+
     /// Initialize default roles
     async fn initialize_default_roles(&self) -> Result<()> {
         let default_roles = vec![
@@ -157,7 +157,9 @@ impl HookRbacManager {
                     Permission::ViewHook,
                     Permission::ManageSecurity,
                     Permission::ViewAuditLogs,
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 inherits: vec![],
             },
             Role {
@@ -168,7 +170,9 @@ impl HookRbacManager {
                     Permission::ModifyHook,
                     Permission::ViewHook,
                     Permission::ExecuteHook,
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 inherits: vec![],
             },
             Role {
@@ -179,61 +183,73 @@ impl HookRbacManager {
                     Permission::ApproveHookExecution,
                     Permission::DenyHookExecution,
                     Permission::ViewAuditLogs,
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 inherits: vec![],
             },
             Role {
                 name: "viewer".to_string(),
                 description: "Read-only access to hooks".to_string(),
-                permissions: [
-                    Permission::ViewHook,
-                    Permission::ViewAuditLogs,
-                ].into_iter().collect(),
+                permissions: [Permission::ViewHook, Permission::ViewAuditLogs]
+                    .into_iter()
+                    .collect(),
                 inherits: vec![],
             },
         ];
-        
+
         let mut roles = self.roles.write().await;
         for role in default_roles {
             roles.insert(role.name.clone(), role);
         }
-        
+
         Ok(())
     }
-    
+
     /// Check if user has permission for hook operation
-    pub async fn check_permission(&self, user_id: &str, permission: &Permission, hook_id: Option<&HookId>) -> Result<bool> {
-        let user = self.get_user(user_id).await?
+    pub async fn check_permission(
+        &self,
+        user_id: &str,
+        permission: &Permission,
+        hook_id: Option<&HookId>,
+    ) -> Result<bool> {
+        let user = self
+            .get_user(user_id)
+            .await?
             .ok_or_else(|| anyhow!("User not found: {}", user_id))?;
-        
+
         if !user.active {
             return Ok(false);
         }
-        
+
         // Check if user has direct permission
         if user.direct_permissions.contains(permission) {
             return Ok(true);
         }
-        
+
         // Check role-based permissions
         let user_permissions = self.get_user_permissions(&user).await?;
-        if user_permissions.contains(permission) || user_permissions.contains(&Permission::SystemAdmin) {
+        if user_permissions.contains(permission)
+            || user_permissions.contains(&Permission::SystemAdmin)
+        {
             return Ok(true);
         }
-        
+
         // Check hook-specific access if hook_id provided
         if let Some(hook_id) = hook_id {
             return self.check_hook_access(user_id, hook_id).await;
         }
-        
+
         Ok(false)
     }
-    
+
     /// Check if user has access to specific hook
     pub async fn check_hook_access(&self, user_id: &str, hook_id: &HookId) -> Result<bool> {
-        let user = self.get_user(user_id).await?
+        let user = self
+            .get_user(user_id)
+            .await?
             .ok_or_else(|| anyhow!("User not found: {}", user_id))?;
-        
+
         // Check team-based hook access
         for team_name in &user.teams {
             if let Some(team) = self.get_team(team_name).await? {
@@ -241,12 +257,12 @@ impl HookRbacManager {
                 if team.hook_access.denied_hooks.contains(hook_id) {
                     return Ok(false);
                 }
-                
+
                 // Check explicit allowances
                 if team.hook_access.allowed_hooks.contains(hook_id) {
                     return Ok(true);
                 }
-                
+
                 // Check pattern matching
                 for pattern in &team.hook_access.hook_patterns {
                     if self.matches_pattern(&hook_id.0, pattern) {
@@ -255,23 +271,23 @@ impl HookRbacManager {
                 }
             }
         }
-        
+
         // Default deny if no explicit access granted
         Ok(false)
     }
-    
+
     /// Get all permissions for a user (including inherited)
     async fn get_user_permissions(&self, user: &User) -> Result<HashSet<Permission>> {
         let mut permissions = user.direct_permissions.clone();
-        
+
         let roles = self.roles.read().await;
-        
+
         for role_name in &user.roles {
             if let Some(role) = roles.get(role_name) {
                 permissions.extend(self.get_role_permissions_sync(role, &roles)?);
             }
         }
-        
+
         // Add team-based permissions
         for team_name in &user.teams {
             if let Some(team) = self.get_team(team_name).await? {
@@ -282,119 +298,123 @@ impl HookRbacManager {
                 }
             }
         }
-        
+
         Ok(permissions)
     }
-    
+
     /// Get permissions for a role (including inherited)
-    fn get_role_permissions_sync(&self, role: &Role, roles: &HashMap<String, Role>) -> Result<HashSet<Permission>> {
+    fn get_role_permissions_sync(
+        &self,
+        role: &Role,
+        roles: &HashMap<String, Role>,
+    ) -> Result<HashSet<Permission>> {
         let mut permissions = role.permissions.clone();
-        
+
         for inherited_role_name in &role.inherits {
             if let Some(inherited_role) = roles.get(inherited_role_name) {
                 permissions.extend(self.get_role_permissions_sync(inherited_role, roles)?);
             }
         }
-        
+
         Ok(permissions)
     }
-    
+
     /// Create a new user
     pub async fn create_user(&self, user: User) -> Result<()> {
         let mut users = self.users.write().await;
-        
+
         if users.contains_key(&user.id) {
             return Err(anyhow!("User already exists: {}", user.id));
         }
-        
+
         users.insert(user.id.clone(), user);
         Ok(())
     }
-    
+
     /// Get user by ID
     pub async fn get_user(&self, user_id: &str) -> Result<Option<User>> {
         let users = self.users.read().await;
         Ok(users.get(user_id).cloned())
     }
-    
+
     /// Update user
     pub async fn update_user(&self, user: User) -> Result<()> {
         let mut users = self.users.write().await;
         users.insert(user.id.clone(), user);
         Ok(())
     }
-    
+
     /// Delete user
     pub async fn delete_user(&self, user_id: &str) -> Result<()> {
         let mut users = self.users.write().await;
         users.remove(user_id);
         Ok(())
     }
-    
+
     /// Create a new role
     pub async fn create_role(&self, role: Role) -> Result<()> {
         let mut roles = self.roles.write().await;
-        
+
         if roles.contains_key(&role.name) {
             return Err(anyhow!("Role already exists: {}", role.name));
         }
-        
+
         roles.insert(role.name.clone(), role);
         Ok(())
     }
-    
+
     /// Get role by name
     pub async fn get_role(&self, role_name: &str) -> Result<Option<Role>> {
         let roles = self.roles.read().await;
         Ok(roles.get(role_name).cloned())
     }
-    
+
     /// Update role
     pub async fn update_role(&self, role: Role) -> Result<()> {
         let mut roles = self.roles.write().await;
         roles.insert(role.name.clone(), role);
         Ok(())
     }
-    
+
     /// Delete role
     pub async fn delete_role(&self, role_name: &str) -> Result<()> {
         let mut roles = self.roles.write().await;
         roles.remove(role_name);
         Ok(())
     }
-    
+
     /// Create a new team
     pub async fn create_team(&self, team: Team) -> Result<()> {
         let mut teams = self.teams.write().await;
-        
+
         if teams.contains_key(&team.name) {
             return Err(anyhow!("Team already exists: {}", team.name));
         }
-        
+
         teams.insert(team.name.clone(), team);
         Ok(())
     }
-    
+
     /// Get team by name
     pub async fn get_team(&self, team_name: &str) -> Result<Option<Team>> {
         let teams = self.teams.read().await;
         Ok(teams.get(team_name).cloned())
     }
-    
+
     /// Update team
     pub async fn update_team(&self, team: Team) -> Result<()> {
         let mut teams = self.teams.write().await;
         teams.insert(team.name.clone(), team);
         Ok(())
     }
-    
+
     /// Delete team
     pub async fn delete_team(&self, team_name: &str) -> Result<()> {
         let mut teams = self.teams.write().await;
         teams.remove(team_name);
         Ok(())
     }
-    
+
     /// Add user to team
     pub async fn add_user_to_team(&self, user_id: &str, team_name: &str) -> Result<()> {
         // Add user to team members
@@ -406,7 +426,7 @@ impl HookRbacManager {
                 return Err(anyhow!("Team not found: {}", team_name));
             }
         }
-        
+
         // Add team to user
         {
             let mut users = self.users.write().await;
@@ -416,10 +436,10 @@ impl HookRbacManager {
                 return Err(anyhow!("User not found: {}", user_id));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Remove user from team
     pub async fn remove_user_from_team(&self, user_id: &str, team_name: &str) -> Result<()> {
         // Remove user from team members
@@ -429,7 +449,7 @@ impl HookRbacManager {
                 team.members.remove(user_id);
             }
         }
-        
+
         // Remove team from user
         {
             let mut users = self.users.write().await;
@@ -437,16 +457,17 @@ impl HookRbacManager {
                 user.teams.remove(team_name);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Assign role to user
     pub async fn assign_role(&self, user_id: &str, role_name: &str) -> Result<()> {
         let mut users = self.users.write().await;
-        let user = users.get_mut(user_id)
+        let user = users
+            .get_mut(user_id)
             .ok_or_else(|| anyhow!("User not found: {}", user_id))?;
-        
+
         // Verify role exists
         {
             let roles = self.roles.read().await;
@@ -454,66 +475,67 @@ impl HookRbacManager {
                 return Err(anyhow!("Role not found: {}", role_name));
             }
         }
-        
+
         user.roles.insert(role_name.to_string());
         Ok(())
     }
-    
+
     /// Remove role from user
     pub async fn remove_role(&self, user_id: &str, role_name: &str) -> Result<()> {
         let mut users = self.users.write().await;
-        let user = users.get_mut(user_id)
+        let user = users
+            .get_mut(user_id)
             .ok_or_else(|| anyhow!("User not found: {}", user_id))?;
-        
+
         user.roles.remove(role_name);
         Ok(())
     }
-    
+
     /// List all users
     pub async fn list_users(&self) -> Result<Vec<User>> {
         let users = self.users.read().await;
         Ok(users.values().cloned().collect())
     }
-    
+
     /// List all roles
     pub async fn list_roles(&self) -> Result<Vec<Role>> {
         let roles = self.roles.read().await;
         Ok(roles.values().cloned().collect())
     }
-    
+
     /// List all teams
     pub async fn list_teams(&self) -> Result<Vec<Team>> {
         let teams = self.teams.read().await;
         Ok(teams.values().cloned().collect())
     }
-    
+
     /// Simple pattern matching for hook names
     fn matches_pattern(&self, hook_name: &str, pattern: &str) -> bool {
         if pattern == "*" {
             return true;
         }
-        
+
         // Simple glob matching
         if pattern.contains('*') {
             let regex_pattern = pattern
                 .replace('.', r"\.")
                 .replace('*', ".*")
                 .replace('?', ".");
-            
+
             if let Ok(regex) = regex::Regex::new(&format!("^{}$", regex_pattern)) {
                 return regex.is_match(hook_name);
             }
         }
-        
+
         hook_name == pattern
     }
-    
+
     /// Get RBAC statistics
     pub async fn get_statistics(&self) -> RbacStatistics {
         let users = self.users.read().await;
         let roles = self.roles.read().await;
         let teams = self.teams.read().await;
-        
+
         RbacStatistics {
             total_users: users.len(),
             active_users: users.values().filter(|u| u.active).count(),
@@ -539,11 +561,11 @@ pub struct RbacStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_permission_checking() {
         let rbac = HookRbacManager::new();
-        
+
         // Create test user with developer role
         let user = User {
             id: "test_user".to_string(),
@@ -555,24 +577,22 @@ mod tests {
             active: true,
             created_at: chrono::Utc::now(),
         };
-        
+
         rbac.create_user(user).await.unwrap();
-        
+
         // Test permission checking
-        let has_permission = rbac.check_permission(
-            "test_user",
-            &Permission::CreateHook,
-            None
-        ).await.unwrap();
-        
+        let has_permission = rbac
+            .check_permission("test_user", &Permission::CreateHook, None)
+            .await
+            .unwrap();
+
         assert!(has_permission);
-        
-        let no_permission = rbac.check_permission(
-            "test_user",
-            &Permission::DeleteHook,
-            None
-        ).await.unwrap();
-        
+
+        let no_permission = rbac
+            .check_permission("test_user", &Permission::DeleteHook, None)
+            .await
+            .unwrap();
+
         assert!(!no_permission);
     }
 }

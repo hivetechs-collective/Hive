@@ -1,17 +1,17 @@
 //! Hybrid Mode Engine for Complex Tasks
-//! 
+//!
 //! Intelligently combines planning and execution modes for optimal
 //! task completion with dynamic mode transitions.
 
-use crate::core::error::{HiveResult, HiveError};
-use crate::planning::{ModeType, PlanningContext, Task};
 use crate::consensus::ConsensusEngine;
-use crate::modes::switcher::EnhancedModeSwitcher;
+use crate::core::error::{HiveError, HiveResult};
 use crate::modes::context::ContextManager;
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::collections::HashMap;
+use crate::modes::switcher::EnhancedModeSwitcher;
+use crate::planning::{ModeType, PlanningContext, Task};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Hybrid mode engine for complex task execution
@@ -57,10 +57,10 @@ struct ProgressTracker {
 /// Strategy for allocating modes
 #[derive(Debug, Clone, PartialEq)]
 enum AllocationStrategy {
-    Adaptive,      // Dynamically adjust based on progress
-    Balanced,      // Equal distribution between modes
-    Performance,   // Optimize for speed
-    Quality,       // Optimize for quality
+    Adaptive,    // Dynamically adjust based on progress
+    Balanced,    // Equal distribution between modes
+    Performance, // Optimize for speed
+    Quality,     // Optimize for quality
 }
 
 /// Type of task for mode affinity
@@ -151,28 +151,28 @@ impl HybridModeEngine {
             progress_tracker: Arc::new(RwLock::new(ProgressTracker::new())),
         })
     }
-    
+
     /// Create a hybrid task from query
     pub async fn create_hybrid_task(
         &self,
         query: &str,
-        context: &PlanningContext
+        context: &PlanningContext,
     ) -> HiveResult<HybridTask> {
         // Analyze task complexity
         let complexity = self.task_analyzer.analyze_complexity(query)?;
-        
+
         // Use AI to decompose into segments
         let segments = self.decompose_task(query, context).await?;
-        
+
         // Allocate modes to segments
         let allocated_segments = self.mode_allocator.allocate_modes(segments, complexity)?;
-        
+
         // Identify transition points
         let transitions = self.identify_transitions(&allocated_segments)?;
-        
+
         // Estimate duration
         let estimated_duration = self.estimate_duration(&allocated_segments)?;
-        
+
         Ok(HybridTask {
             id: uuid::Uuid::new_v4().to_string(),
             description: query.to_string(),
@@ -182,87 +182,97 @@ impl HybridModeEngine {
             mode_transitions: transitions,
         })
     }
-    
+
     /// Execute hybrid task with mode transitions
     pub async fn execute_with_transitions(
         &self,
         task: &HybridTask,
         switcher: &Arc<RwLock<EnhancedModeSwitcher>>,
-        context_manager: &Arc<RwLock<ContextManager>>
+        context_manager: &Arc<RwLock<ContextManager>>,
     ) -> HiveResult<HybridTask> {
         let start_time = std::time::Instant::now();
         let mut current_mode = ModeType::Hybrid;
         let mut mode_durations = HashMap::new();
         let mut segments_completed = 0;
         let mut mode_switches = 0;
-        
+
         // Initialize progress tracking
         {
             let mut tracker = self.progress_tracker.write().await;
             tracker.start_task(&task.id, &task.segments[0].id, &current_mode);
         }
-        
+
         // Execute segments with coordination
         for (i, segment) in task.segments.iter().enumerate() {
             // Check if mode switch is needed
             if segment.mode != current_mode {
                 let mode_start = std::time::Instant::now();
-                
+
                 // Preserve context
                 let context_snapshot = {
                     let ctx_manager = context_manager.read().await;
                     ctx_manager.capture_snapshot(&current_mode).await?
                 };
-                
+
                 // Switch mode
                 let switcher_guard = switcher.read().await;
-                let switch_result = switcher_guard.switch_with_intelligence(
-                    &current_mode,
-                    &segment.mode,
-                    Some(&context_snapshot),
-                    &self.consensus_engine
-                ).await?;
-                
+                let switch_result = switcher_guard
+                    .switch_with_intelligence(
+                        &current_mode,
+                        &segment.mode,
+                        Some(&context_snapshot),
+                        &self.consensus_engine,
+                    )
+                    .await?;
+
                 if !switch_result.success {
                     return Err(HiveError::Planning(format!(
                         "Failed to switch from {:?} to {:?} for segment {}",
                         current_mode, segment.mode, segment.id
                     )));
                 }
-                
+
                 // Update duration tracking
                 let duration = mode_start.elapsed();
-                *mode_durations.entry(current_mode).or_insert(std::time::Duration::ZERO) += duration;
-                
+                *mode_durations
+                    .entry(current_mode)
+                    .or_insert(std::time::Duration::ZERO) += duration;
+
                 current_mode = segment.mode.clone();
                 mode_switches += 1;
             }
-            
+
             // Execute segment
             self.execute_segment(segment, &current_mode).await?;
             segments_completed += 1;
-            
+
             // Update progress
             {
                 let mut tracker = self.progress_tracker.write().await;
-                tracker.update_progress(&task.id, &segment.id, (i + 1) as f32 / task.segments.len() as f32);
+                tracker.update_progress(
+                    &task.id,
+                    &segment.id,
+                    (i + 1) as f32 / task.segments.len() as f32,
+                );
             }
-            
+
             // Check for parallelization opportunities
             if i < task.segments.len() - 1 && segment.can_parallelize {
-                self.check_parallel_execution(&task.segments[i + 1], &current_mode).await?;
+                self.check_parallel_execution(&task.segments[i + 1], &current_mode)
+                    .await?;
             }
         }
-        
+
         // Final duration update
         let final_duration = start_time.elapsed();
         let sum_duration = mode_durations.values().sum::<std::time::Duration>();
-        *mode_durations.entry(current_mode).or_insert(std::time::Duration::ZERO) += 
-            final_duration - sum_duration;
-        
+        *mode_durations
+            .entry(current_mode)
+            .or_insert(std::time::Duration::ZERO) += final_duration - sum_duration;
+
         // Generate insights
         let insights = self.generate_insights(task, &mode_durations, segments_completed)?;
-        
+
         Ok(HybridTask {
             id: task.id.clone(),
             description: format!("{} (Completed)", task.description),
@@ -272,11 +282,11 @@ impl HybridModeEngine {
             mode_transitions: task.mode_transitions.clone(),
         })
     }
-    
+
     /// Get execution statistics
     pub async fn get_statistics(&self) -> HiveResult<HybridExecutionStatistics> {
         let tracker = self.progress_tracker.read().await;
-        
+
         Ok(HybridExecutionStatistics {
             total_tasks: tracker.tasks.len(),
             average_progress: tracker.overall_progress,
@@ -284,13 +294,13 @@ impl HybridModeEngine {
             average_mode_switches: self.calculate_average_switches(&tracker.tasks),
         })
     }
-    
+
     // Private helper methods
-    
+
     async fn decompose_task(
         &self,
         query: &str,
-        context: &PlanningContext
+        context: &PlanningContext,
     ) -> HiveResult<Vec<TaskSegment>> {
         let prompt = format!(
             r#"Decompose this task into 3-5 logical segments for hybrid execution:
@@ -309,20 +319,19 @@ For each segment provide:
 4. Whether it can be parallelized
 
 Return as JSON array of segments."#,
-            query,
-            context.project_type,
-            context.team_size
+            query, context.project_type, context.team_size
         );
-        
+
         let result = self.consensus_engine.process(&prompt, None).await?;
-        
+
         // Parse segments or use fallback
-        let segments = self.parse_segments(&result.result.unwrap_or_default())
+        let segments = self
+            .parse_segments(&result.result.unwrap_or_default())
             .unwrap_or_else(|_| self.create_default_segments(query));
-        
+
         Ok(segments)
     }
-    
+
     fn parse_segments(&self, response: &str) -> HiveResult<Vec<TaskSegment>> {
         // In real implementation, would parse JSON response
         // For now, create sample segments
@@ -356,7 +365,7 @@ Return as JSON array of segments."#,
             },
         ])
     }
-    
+
     fn create_default_segments(&self, query: &str) -> Vec<TaskSegment> {
         vec![
             TaskSegment {
@@ -379,10 +388,10 @@ Return as JSON array of segments."#,
             },
         ]
     }
-    
+
     fn identify_transitions(&self, segments: &[TaskSegment]) -> HiveResult<Vec<ModeTransition>> {
         let mut transitions = Vec::new();
-        
+
         for i in 0..segments.len() - 1 {
             if segments[i].mode != segments[i + 1].mode {
                 transitions.push(ModeTransition {
@@ -394,10 +403,10 @@ Return as JSON array of segments."#,
                 });
             }
         }
-        
+
         Ok(transitions)
     }
-    
+
     fn get_transition_reason(&self, from: &TaskSegment, to: &TaskSegment) -> String {
         match (&from.mode, &to.mode) {
             (ModeType::Planning, ModeType::Execution) => {
@@ -412,30 +421,25 @@ Return as JSON array of segments."#,
             _ => "Task requirements dictate mode change".to_string(),
         }
     }
-    
+
     fn estimate_duration(&self, segments: &[TaskSegment]) -> HiveResult<std::time::Duration> {
-        let total: std::time::Duration = segments.iter()
-            .map(|s| s.estimated_duration)
-            .sum();
-        
+        let total: std::time::Duration = segments.iter().map(|s| s.estimated_duration).sum();
+
         // Add transition overhead
-        let transitions = segments.windows(2)
+        let transitions = segments
+            .windows(2)
             .filter(|w| w[0].mode != w[1].mode)
             .count();
-        
+
         let transition_overhead = std::time::Duration::from_millis(100 * transitions as u64);
-        
+
         Ok(total + transition_overhead)
     }
-    
-    async fn execute_segment(
-        &self,
-        segment: &TaskSegment,
-        mode: &ModeType
-    ) -> HiveResult<()> {
+
+    async fn execute_segment(&self, segment: &TaskSegment, mode: &ModeType) -> HiveResult<()> {
         // Simulate segment execution
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        
+
         // In real implementation, would execute based on mode
         match mode {
             ModeType::Planning => {
@@ -449,53 +453,61 @@ Return as JSON array of segments."#,
             }
             _ => {}
         }
-        
+
         Ok(())
     }
-    
+
     async fn check_parallel_execution(
         &self,
         next_segment: &TaskSegment,
-        current_mode: &ModeType
+        current_mode: &ModeType,
     ) -> HiveResult<()> {
         if next_segment.can_parallelize && next_segment.mode == *current_mode {
             // In real implementation, would start parallel execution
         }
         Ok(())
     }
-    
+
     fn generate_insights(
         &self,
         task: &HybridTask,
         mode_durations: &HashMap<ModeType, std::time::Duration>,
-        segments_completed: usize
+        segments_completed: usize,
     ) -> HiveResult<ExecutionInsights> {
         let efficiency_score = segments_completed as f32 / task.segments.len() as f32;
-        
-        let optimal_sequence: Vec<ModeType> = task.segments.iter()
-            .map(|s| s.mode.clone())
-            .collect();
-        
+
+        let optimal_sequence: Vec<ModeType> =
+            task.segments.iter().map(|s| s.mode.clone()).collect();
+
         let mut bottlenecks = Vec::new();
         let mut recommendations = Vec::new();
-        
+
         // Identify bottlenecks
         for segment in &task.segments {
             if segment.complexity > 0.7 {
-                bottlenecks.push(format!("High complexity in segment: {}", segment.description));
+                bottlenecks.push(format!(
+                    "High complexity in segment: {}",
+                    segment.description
+                ));
             }
         }
-        
+
         // Generate recommendations
         if task.mode_transitions.len() > task.segments.len() / 2 {
-            recommendations.push("Consider consolidating segments to reduce mode switches".to_string());
+            recommendations
+                .push("Consider consolidating segments to reduce mode switches".to_string());
         }
-        
-        if mode_durations.get(&ModeType::Planning).unwrap_or(&std::time::Duration::ZERO) 
-            > &(task.estimated_duration / 3) {
-            recommendations.push("Planning phase took significant time, consider more execution focus".to_string());
+
+        if mode_durations
+            .get(&ModeType::Planning)
+            .unwrap_or(&std::time::Duration::ZERO)
+            > &(task.estimated_duration / 3)
+        {
+            recommendations.push(
+                "Planning phase took significant time, consider more execution focus".to_string(),
+            );
         }
-        
+
         Ok(ExecutionInsights {
             optimal_mode_sequence: optimal_sequence,
             bottlenecks,
@@ -503,7 +515,7 @@ Return as JSON array of segments."#,
             recommendations,
         })
     }
-    
+
     fn calculate_average_switches(&self, tasks: &HashMap<String, TaskProgress>) -> f32 {
         // In real implementation, would track mode switches per task
         2.5 // Placeholder
@@ -518,12 +530,12 @@ impl TaskAnalyzer {
             risk_assessor: RiskAssessor::new(),
         }
     }
-    
+
     fn analyze_complexity(&self, query: &str) -> HiveResult<f32> {
         let base_complexity = self.complexity_calculator.calculate(query)?;
         let dependency_factor = self.dependency_analyzer.analyze(query)?;
         let risk_factor = self.risk_assessor.assess(query)?;
-        
+
         Ok((base_complexity + dependency_factor * 0.3 + risk_factor * 0.2).min(1.0))
     }
 }
@@ -535,7 +547,7 @@ impl ComplexityCalculator {
     fn new() -> Self {
         Self
     }
-    
+
     fn calculate(&self, query: &str) -> HiveResult<f32> {
         let words = query.split_whitespace().count();
         let complexity = (words as f32 / 50.0).min(1.0);
@@ -550,13 +562,14 @@ impl DependencyAnalyzer {
     fn new() -> Self {
         Self
     }
-    
+
     fn analyze(&self, query: &str) -> HiveResult<f32> {
         let dependency_words = ["depends", "requires", "after", "before", "then"];
-        let count = query.split_whitespace()
+        let count = query
+            .split_whitespace()
             .filter(|w| dependency_words.contains(&w.to_lowercase().as_str()))
             .count();
-        
+
         Ok((count as f32 / 5.0).min(1.0))
     }
 }
@@ -568,13 +581,14 @@ impl RiskAssessor {
     fn new() -> Self {
         Self
     }
-    
+
     fn assess(&self, query: &str) -> HiveResult<f32> {
         let risk_words = ["critical", "urgent", "important", "careful", "security"];
-        let count = query.split_whitespace()
+        let count = query
+            .split_whitespace()
             .filter(|w| risk_words.contains(&w.to_lowercase().as_str()))
             .count();
-        
+
         Ok((count as f32 / 3.0).min(1.0))
     }
 }
@@ -582,36 +596,45 @@ impl RiskAssessor {
 impl ModeAllocator {
     fn new() -> Self {
         let mut mode_affinity_matrix = HashMap::new();
-        
+
         // Define task type affinities for modes
-        mode_affinity_matrix.insert(TaskType::Design, vec![
-            (ModeType::Planning, 0.9),
-            (ModeType::Analysis, 0.7),
-            (ModeType::Hybrid, 0.5),
-        ]);
-        
-        mode_affinity_matrix.insert(TaskType::Implementation, vec![
-            (ModeType::Execution, 0.9),
-            (ModeType::Hybrid, 0.6),
-            (ModeType::Planning, 0.3),
-        ]);
-        
-        mode_affinity_matrix.insert(TaskType::Analysis, vec![
-            (ModeType::Analysis, 0.9),
-            (ModeType::Planning, 0.5),
-            (ModeType::Hybrid, 0.4),
-        ]);
-        
+        mode_affinity_matrix.insert(
+            TaskType::Design,
+            vec![
+                (ModeType::Planning, 0.9),
+                (ModeType::Analysis, 0.7),
+                (ModeType::Hybrid, 0.5),
+            ],
+        );
+
+        mode_affinity_matrix.insert(
+            TaskType::Implementation,
+            vec![
+                (ModeType::Execution, 0.9),
+                (ModeType::Hybrid, 0.6),
+                (ModeType::Planning, 0.3),
+            ],
+        );
+
+        mode_affinity_matrix.insert(
+            TaskType::Analysis,
+            vec![
+                (ModeType::Analysis, 0.9),
+                (ModeType::Planning, 0.5),
+                (ModeType::Hybrid, 0.4),
+            ],
+        );
+
         Self {
             allocation_strategy: AllocationStrategy::Adaptive,
             mode_affinity_matrix,
         }
     }
-    
+
     fn allocate_modes(
         &self,
         mut segments: Vec<TaskSegment>,
-        overall_complexity: f32
+        overall_complexity: f32,
     ) -> HiveResult<Vec<TaskSegment>> {
         match self.allocation_strategy {
             AllocationStrategy::Adaptive => {
@@ -648,7 +671,7 @@ impl ModeAllocator {
                 }
             }
         }
-        
+
         Ok(segments)
     }
 }
@@ -671,20 +694,23 @@ impl ProgressTracker {
             mode_distribution: HashMap::new(),
         }
     }
-    
+
     fn start_task(&mut self, task_id: &str, segment_id: &str, mode: &ModeType) {
-        self.tasks.insert(task_id.to_string(), TaskProgress {
-            task_id: task_id.to_string(),
-            current_segment: segment_id.to_string(),
-            current_mode: mode.clone(),
-            completion_percentage: 0.0,
-            start_time: Utc::now(),
-            elapsed_time: std::time::Duration::ZERO,
-        });
-        
+        self.tasks.insert(
+            task_id.to_string(),
+            TaskProgress {
+                task_id: task_id.to_string(),
+                current_segment: segment_id.to_string(),
+                current_mode: mode.clone(),
+                completion_percentage: 0.0,
+                start_time: Utc::now(),
+                elapsed_time: std::time::Duration::ZERO,
+            },
+        );
+
         *self.mode_distribution.entry(mode.clone()).or_insert(0) += 1;
     }
-    
+
     fn update_progress(&mut self, task_id: &str, segment_id: &str, progress: f32) {
         if let Some(task_progress) = self.tasks.get_mut(task_id) {
             task_progress.current_segment = segment_id.to_string();
@@ -694,11 +720,14 @@ impl ProgressTracker {
                 .to_std()
                 .unwrap_or_default();
         }
-        
+
         // Update overall progress
-        self.overall_progress = self.tasks.values()
+        self.overall_progress = self
+            .tasks
+            .values()
             .map(|t| t.completion_percentage)
-            .sum::<f32>() / self.tasks.len().max(1) as f32;
+            .sum::<f32>()
+            / self.tasks.len().max(1) as f32;
     }
 }
 
@@ -714,22 +743,22 @@ pub struct HybridExecutionStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_hybrid_engine_creation() {
         // Test engine initialization
     }
-    
+
     #[tokio::test]
     async fn test_task_creation() {
         // Test hybrid task creation
     }
-    
+
     #[tokio::test]
     async fn test_mode_allocation() {
         // Test mode allocation strategies
     }
-    
+
     #[tokio::test]
     async fn test_hybrid_execution() {
         // Test execution with mode transitions

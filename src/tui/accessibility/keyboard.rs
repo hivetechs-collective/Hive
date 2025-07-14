@@ -85,7 +85,7 @@ impl KeyboardNavigation {
     pub fn remove_focusable_element(&mut self, element_id: &str) {
         if let Some(pos) = self.focus_order.iter().position(|x| x == element_id) {
             self.focus_order.remove(pos);
-            
+
             // Adjust current focus index if necessary
             if self.current_focus_index >= self.focus_order.len() && !self.focus_order.is_empty() {
                 self.current_focus_index = self.focus_order.len() - 1;
@@ -100,7 +100,7 @@ impl KeyboardNavigation {
         }
 
         let old_index = self.current_focus_index;
-        
+
         match direction {
             NavigationDirection::Next => {
                 if self.current_focus_index < self.focus_order.len() - 1 {
@@ -160,45 +160,29 @@ impl KeyboardNavigation {
 
         // Handle standard navigation keys
         match (key.modifiers, key.code) {
-            (KeyModifiers::NONE, KeyCode::Tab) => {
-                self.navigate(NavigationDirection::Next)
-            }
-            (KeyModifiers::SHIFT, KeyCode::Tab) => {
-                self.navigate(NavigationDirection::Previous)
-            }
-            (KeyModifiers::CONTROL, KeyCode::Home) => {
-                self.navigate(NavigationDirection::First)
-            }
-            (KeyModifiers::CONTROL, KeyCode::End) => {
-                self.navigate(NavigationDirection::Last)
-            }
-            (KeyModifiers::NONE, KeyCode::Up) => {
-                self.navigate(NavigationDirection::Up)
-            }
-            (KeyModifiers::NONE, KeyCode::Down) => {
-                self.navigate(NavigationDirection::Down)
-            }
-            (KeyModifiers::NONE, KeyCode::Left) => {
-                self.navigate(NavigationDirection::Left)
-            }
-            (KeyModifiers::NONE, KeyCode::Right) => {
-                self.navigate(NavigationDirection::Right)
-            }
-            (KeyModifiers::NONE, KeyCode::Enter) => {
-                FocusResult::Action("activate".to_string())
-            }
-            (KeyModifiers::NONE, KeyCode::Char(' ')) => {
-                FocusResult::Action("select".to_string())
-            }
-            (KeyModifiers::NONE, KeyCode::Esc) => {
-                FocusResult::Action("escape".to_string())
-            }
+            (KeyModifiers::NONE, KeyCode::Tab) => self.navigate(NavigationDirection::Next),
+            (KeyModifiers::SHIFT, KeyCode::Tab) => self.navigate(NavigationDirection::Previous),
+            (KeyModifiers::CONTROL, KeyCode::Home) => self.navigate(NavigationDirection::First),
+            (KeyModifiers::CONTROL, KeyCode::End) => self.navigate(NavigationDirection::Last),
+            (KeyModifiers::NONE, KeyCode::Up) => self.navigate(NavigationDirection::Up),
+            (KeyModifiers::NONE, KeyCode::Down) => self.navigate(NavigationDirection::Down),
+            (KeyModifiers::NONE, KeyCode::Left) => self.navigate(NavigationDirection::Left),
+            (KeyModifiers::NONE, KeyCode::Right) => self.navigate(NavigationDirection::Right),
+            (KeyModifiers::NONE, KeyCode::Enter) => FocusResult::Action("activate".to_string()),
+            (KeyModifiers::NONE, KeyCode::Char(' ')) => FocusResult::Action("select".to_string()),
+            (KeyModifiers::NONE, KeyCode::Esc) => FocusResult::Action("escape".to_string()),
             _ => FocusResult::Stayed,
         }
     }
 
     /// Add custom keyboard shortcut
-    pub fn add_shortcut(&mut self, key_code: KeyCode, modifiers: KeyModifiers, action: String, description: String) {
+    pub fn add_shortcut(
+        &mut self,
+        key_code: KeyCode,
+        modifiers: KeyModifiers,
+        action: String,
+        description: String,
+    ) {
         let key = format!("{:?}+{:?}", modifiers, key_code);
         let binding = KeyBinding {
             key_code,
@@ -222,7 +206,10 @@ impl KeyboardNavigation {
             ("Shift+Tab".to_string(), "Previous element".to_string()),
             ("Ctrl+Home".to_string(), "First element".to_string()),
             ("Ctrl+End".to_string(), "Last element".to_string()),
-            ("Arrow Keys".to_string(), "Navigate within element".to_string()),
+            (
+                "Arrow Keys".to_string(),
+                "Navigate within element".to_string(),
+            ),
             ("Enter".to_string(), "Activate element".to_string()),
             ("Space".to_string(), "Select/toggle element".to_string()),
             ("Escape".to_string(), "Cancel/close".to_string()),
@@ -244,7 +231,7 @@ impl KeyboardNavigation {
     /// Get shortcuts for current context
     pub fn get_context_shortcuts(&self, context: &str) -> Vec<(String, String)> {
         let mut shortcuts = self.get_all_shortcuts();
-        
+
         // Add context-specific shortcuts
         match context {
             "explorer" => {
@@ -275,7 +262,7 @@ impl KeyboardNavigation {
             }
             _ => {}
         }
-        
+
         shortcuts
     }
 
@@ -283,12 +270,12 @@ impl KeyboardNavigation {
     pub fn is_reserved_key(&self, key_code: KeyCode, modifiers: KeyModifiers) -> bool {
         matches!(
             (modifiers, key_code),
-            (KeyModifiers::NONE, KeyCode::Tab) |
-            (KeyModifiers::SHIFT, KeyCode::Tab) |
-            (KeyModifiers::CONTROL, KeyCode::Home) |
-            (KeyModifiers::CONTROL, KeyCode::End) |
-            (KeyModifiers::NONE, KeyCode::Enter) |
-            (KeyModifiers::NONE, KeyCode::Esc)
+            (KeyModifiers::NONE, KeyCode::Tab)
+                | (KeyModifiers::SHIFT, KeyCode::Tab)
+                | (KeyModifiers::CONTROL, KeyCode::Home)
+                | (KeyModifiers::CONTROL, KeyCode::End)
+                | (KeyModifiers::NONE, KeyCode::Enter)
+                | (KeyModifiers::NONE, KeyCode::Esc)
         )
     }
 
@@ -315,7 +302,8 @@ impl KeyboardNavigation {
             "Ctrl+Shift+P: Command palette",
             "Ctrl+`: Toggle terminal",
             "Ctrl+Q: Quit application",
-        ].join("\n")
+        ]
+        .join("\n")
     }
 
     /// Reset focus to first element

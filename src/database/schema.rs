@@ -56,11 +56,11 @@ pub fn create_default_profiles(conn: &Connection) -> Result<()> {
     ];
 
     let profile_count = profiles.len();
-    
+
     for (name, generator, refiner, validator, curator) in profiles {
         conn.execute(
             "INSERT INTO consensus_profiles (
-                id, profile_name, generator_model, refiner_model, 
+                id, profile_name, generator_model, refiner_model,
                 validator_model, curator_model
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
@@ -133,7 +133,7 @@ pub fn seed_openrouter_models(conn: &Connection) -> Result<()> {
     }
 
     let model_count = models.len();
-    
+
     // Then insert models
     for (id, name, provider_id, input_cost, output_cost, context_window) in models {
         conn.execute(
@@ -163,7 +163,7 @@ pub fn create_default_user(conn: &Connection) -> Result<String> {
     info!("Creating default user");
 
     let user_id = uuid::Uuid::new_v4().to_string();
-    
+
     conn.execute(
         "INSERT OR IGNORE INTO users (id, tier) VALUES (?1, 'FREE')",
         params![&user_id],

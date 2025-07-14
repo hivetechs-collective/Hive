@@ -12,19 +12,19 @@ impl FileAnalyzer {
     pub fn new() -> Self {
         Self
     }
-    
+
     /// Find files relevant to a given query
     pub async fn find_files(&self, path: &Path, query: Option<&str>) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
-        
+
         // Define common source file extensions
         let extensions = vec![
-            "rs", "py", "js", "ts", "jsx", "tsx", "java", "c", "cpp", "cc", "h", "hpp",
-            "go", "rb", "php", "swift", "kt", "scala", "cs", "vb", "f#", "ml", "clj",
-            "ex", "exs", "erl", "hrl", "lua", "r", "jl", "nim", "zig", "dart", "vue",
-            "svelte", "sql", "sh", "bash", "zsh", "fish", "ps1", "psm1", "psd1"
+            "rs", "py", "js", "ts", "jsx", "tsx", "java", "c", "cpp", "cc", "h", "hpp", "go", "rb",
+            "php", "swift", "kt", "scala", "cs", "vb", "f#", "ml", "clj", "ex", "exs", "erl",
+            "hrl", "lua", "r", "jl", "nim", "zig", "dart", "vue", "svelte", "sql", "sh", "bash",
+            "zsh", "fish", "ps1", "psm1", "psd1",
         ];
-        
+
         // Walk directory
         for entry in WalkDir::new(path)
             .follow_links(true)
@@ -32,20 +32,29 @@ impl FileAnalyzer {
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            
+
             // Skip hidden directories and common build/dependency directories
             if path.is_dir() {
-                let dir_name = path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
-                
-                if dir_name.starts_with('.') || 
-                   matches!(dir_name, "target" | "node_modules" | "dist" | "build" | 
-                            "__pycache__" | ".git" | ".svn" | "vendor" | "deps") {
+                let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+                if dir_name.starts_with('.')
+                    || matches!(
+                        dir_name,
+                        "target"
+                            | "node_modules"
+                            | "dist"
+                            | "build"
+                            | "__pycache__"
+                            | ".git"
+                            | ".svn"
+                            | "vendor"
+                            | "deps"
+                    )
+                {
                     continue;
                 }
             }
-            
+
             // Check if it's a file with a relevant extension
             if path.is_file() {
                 if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
@@ -64,10 +73,10 @@ impl FileAnalyzer {
                 }
             }
         }
-        
+
         // Sort by path for consistent ordering
         files.sort();
-        
+
         Ok(files)
     }
 }

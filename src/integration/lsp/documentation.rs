@@ -537,7 +537,7 @@ impl ContextualDocumentationProvider {
         if matches!(symbol.kind.as_str(), \"function\" | \"method\") {
             let lines = context.lines().count();
             let conditions = context.matches(\"if\").count() + context.matches(\"while\").count() + context.matches(\"for\").count();
-            
+
             let time_complexity = if conditions == 0 {
                 \"O(1)\".to_string()
             } else if conditions == 1 {
@@ -765,14 +765,14 @@ impl ContextualDocumentationProvider {
     /// Generate examples for different symbol types
     async fn generate_function_example(&self, symbol: &SymbolInfo, language: &str) -> Result<ExampleDoc> {
         let mut example_code = format!(\"{}(\", symbol.name);
-        
+
         for (i, param) in symbol.parameters.iter().enumerate() {
             if i > 0 {
                 example_code.push_str(\", \");
             }
             example_code.push_str(&self.generate_example_value(&param.type_name.clone().unwrap_or(\"unknown\".to_string())));
         }
-        
+
         example_code.push(')');
 
         Ok(ExampleDoc {
@@ -835,8 +835,8 @@ impl ContextualDocumentationProvider {
         let symbol_start_char = (symbol.column - 1) as u32;
         let symbol_end_char = symbol_start_char + symbol.name.len() as u32;
 
-        position.line == symbol_line 
-            && position.character >= symbol_start_char 
+        position.line == symbol_line
+            && position.character >= symbol_start_char
             && position.character <= symbol_end_char
     }
 
@@ -924,7 +924,7 @@ impl ContextualDocumentationProvider {
 
     fn create_hover_from_documentation(&self, documentation: &DocumentationContent, symbol: &SymbolInfo) -> Result<EnhancedHover> {
         let content = format!(\"**{}**\\n\\n{}\", documentation.summary, documentation.description);
-        
+
         Ok(EnhancedHover {
             base: Hover {
                 contents: MarkupContent {
@@ -1015,7 +1015,7 @@ mod tests {
 
         let content = \"function test() { return; }\";
         let position = Position { line: 0, character: 5 };
-        
+
         let word = provider.extract_word_at_position(content, &position).unwrap();
         assert_eq!(word, Some(\"function\".to_string()));
     }
@@ -1031,7 +1031,7 @@ mod tests {
 
         let text = \"myFunction(arg1, arg2,\";
         let context = provider.parse_function_call(text);
-        
+
         assert!(context.is_some());
         let context = context.unwrap();
         assert_eq!(context.function_name, \"myFunction\");

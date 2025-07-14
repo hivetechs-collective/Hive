@@ -10,8 +10,8 @@ pub mod dark;
 pub mod light;
 pub mod solarized;
 
-use ratatui::style::{Color, Style, Modifier};
-use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use ratatui::style::{Color, Modifier, Style};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Serializable wrapper for ratatui Color
 #[derive(Debug, Clone, PartialEq)]
@@ -40,12 +40,8 @@ impl Serialize for SerializableColor {
             Color::LightMagenta => serializer.serialize_str("light_magenta"),
             Color::LightCyan => serializer.serialize_str("light_cyan"),
             Color::White => serializer.serialize_str("white"),
-            Color::Rgb(r, g, b) => {
-                serializer.serialize_str(&format!("rgb({},{},{})", r, g, b))
-            }
-            Color::Indexed(i) => {
-                serializer.serialize_str(&format!("indexed({})", i))
-            }
+            Color::Rgb(r, g, b) => serializer.serialize_str(&format!("rgb({},{},{})", r, g, b)),
+            Color::Indexed(i) => serializer.serialize_str(&format!("indexed({})", i)),
         }
     }
 }
@@ -75,7 +71,7 @@ impl<'de> Deserialize<'de> for SerializableColor {
             "light_cyan" => Color::LightCyan,
             "white" => Color::White,
             s if s.starts_with("rgb(") && s.ends_with(")") => {
-                let inner = &s[4..s.len()-1];
+                let inner = &s[4..s.len() - 1];
                 let parts: Vec<&str> = inner.split(',').collect();
                 if parts.len() == 3 {
                     let r = parts[0].parse().map_err(serde::de::Error::custom)?;
@@ -87,7 +83,7 @@ impl<'de> Deserialize<'de> for SerializableColor {
                 }
             }
             s if s.starts_with("indexed(") && s.ends_with(")") => {
-                let inner = &s[8..s.len()-1];
+                let inner = &s[8..s.len() - 1];
                 let index = inner.parse().map_err(serde::de::Error::custom)?;
                 Color::Indexed(index)
             }
@@ -151,20 +147,20 @@ pub struct ColorPalette {
     pub background: SerializableColor,
     pub foreground: SerializableColor,
     pub accent: SerializableColor,
-    
+
     // Status colors
     pub error: SerializableColor,
     pub warning: SerializableColor,
     pub success: SerializableColor,
     pub info: SerializableColor,
     pub muted: SerializableColor,
-    
+
     // UI element colors
     pub border_active: SerializableColor,
     pub border_inactive: SerializableColor,
     pub selection_bg: SerializableColor,
     pub selection_fg: SerializableColor,
-    
+
     // Syntax highlighting colors
     pub keyword: SerializableColor,
     pub string: SerializableColor,
@@ -173,19 +169,19 @@ pub struct ColorPalette {
     pub variable: SerializableColor,
     pub number: SerializableColor,
     pub operator: SerializableColor,
-    
+
     // File explorer colors
     pub directory: SerializableColor,
     pub file: SerializableColor,
     pub symlink: SerializableColor,
     pub executable: SerializableColor,
-    
+
     // Terminal colors
     pub command: SerializableColor,
     pub output: SerializableColor,
     pub system_message: SerializableColor,
     pub line_number: SerializableColor,
-    
+
     // Editor colors
     pub heading: SerializableColor,
     pub code_block: SerializableColor,
@@ -446,7 +442,7 @@ impl Theme {
         self.colors.border_active = SerializableColor(Color::White);
         self.colors.selection_bg = SerializableColor(Color::White);
         self.colors.selection_fg = SerializableColor(Color::Black);
-        
+
         // Make text more prominent
         self.styles.text = Style::default()
             .fg(Color::White)
@@ -470,12 +466,12 @@ impl Theme {
     /// Load theme from configuration
     pub fn from_config(config: &ThemeConfig) -> Self {
         let mut theme = Self::new(config.variant.clone());
-        
+
         // Apply custom colors if provided
         if let Some(custom_colors) = &config.custom_colors {
             theme.apply_custom_colors(custom_colors);
         }
-        
+
         theme
     }
 
@@ -557,7 +553,11 @@ fn parse_color(color_str: &str) -> Option<Color> {
 
 /// Get available theme variants
 pub fn available_themes() -> Vec<ThemeVariant> {
-    vec![ThemeVariant::Dark, ThemeVariant::Light, ThemeVariant::Solarized]
+    vec![
+        ThemeVariant::Dark,
+        ThemeVariant::Light,
+        ThemeVariant::Solarized,
+    ]
 }
 
 /// Get theme variant by name
@@ -581,8 +581,7 @@ impl ThemeManager {
     pub fn new(config_dir: &std::path::Path) -> Self {
         let config_path = config_dir.join("theme.toml");
         let current_theme = if config_path.exists() {
-            Self::load_theme_config(&config_path)
-                .unwrap_or_else(|_| Theme::default())
+            Self::load_theme_config(&config_path).unwrap_or_else(|_| Theme::default())
         } else {
             Theme::default()
         };
@@ -605,8 +604,13 @@ impl ThemeManager {
     }
 
     /// Apply accessibility settings
-    pub fn apply_accessibility(&mut self, high_contrast: bool, reduce_motion: bool) -> anyhow::Result<()> {
-        self.current_theme.apply_accessibility(high_contrast, reduce_motion);
+    pub fn apply_accessibility(
+        &mut self,
+        high_contrast: bool,
+        reduce_motion: bool,
+    ) -> anyhow::Result<()> {
+        self.current_theme
+            .apply_accessibility(high_contrast, reduce_motion);
         self.save_theme_config()
     }
 

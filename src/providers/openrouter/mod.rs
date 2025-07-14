@@ -1,8 +1,7 @@
 /// OpenRouter Provider Module
-/// 
+///
 /// Comprehensive integration with OpenRouter API providing access to 323+ AI models
 /// with streaming, cost tracking, performance monitoring, and intelligent routing.
-
 pub mod client;
 pub mod cost;
 pub mod models;
@@ -15,15 +14,15 @@ pub use client::{
     OpenRouterMessage, OpenRouterResponse, UsageInfo,
 };
 
-pub use models::{ModelSelector, ModelSelectionStrategy, TaskComplexity};
+pub use models::{ModelSelectionStrategy, ModelSelector, TaskComplexity};
 
 pub use streaming::{StreamingCallbacks, StreamingClient, StreamingOptions, StreamingResponse};
 
 pub use cost::{CostCalculator, CostEstimate, CostTracker};
 
 pub use performance::{
-    ModelPerformance, PerformanceMetrics, PerformanceTracker, ScoringWeights, 
-    ABTestConfig, ABTestStatus, ModelRanking, TaskRecommendation, HealthStatus, CircuitState
+    ABTestConfig, ABTestStatus, CircuitState, HealthStatus, ModelPerformance, ModelRanking,
+    PerformanceMetrics, PerformanceTracker, ScoringWeights, TaskRecommendation,
 };
 
 /// Create a new OpenRouter client with the provided API key

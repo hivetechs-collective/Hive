@@ -25,19 +25,19 @@ pub async fn list_files(
     }
 
     let mut entries = Vec::new();
-    
+
     match fs::read_dir(&target_path) {
         Ok(dir_entries) => {
             for entry in dir_entries {
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     let metadata = entry.metadata().ok();
-                    
+
                     let relative_path = path.strip_prefix(base_path)
                         .unwrap_or(&path)
                         .to_string_lossy()
                         .to_string();
-                    
+
                     let file_entry = FileEntry {
                         name: entry.file_name().to_string_lossy().to_string(),
                         path: relative_path,
@@ -50,7 +50,7 @@ pub async fn list_files(
                         }),
                         extension: path.extension().map(|e| e.to_string_lossy().to_string()),
                     };
-                    
+
                     entries.push(file_entry);
                 }
             }
@@ -75,7 +75,7 @@ pub async fn get_file_content(
     Path(file_path): Path<String>,
 ) -> Result<String, StatusCode> {
     let full_path = state.workspace_path.join(&file_path);
-    
+
     if !full_path.exists() {
         return Err(StatusCode::NOT_FOUND);
     }
@@ -118,7 +118,7 @@ pub async fn handle_chat(
 fn is_binary_file(path: &Path) -> bool {
     match path.extension().and_then(|e| e.to_str()) {
         Some(ext) => {
-            matches!(ext.to_lowercase().as_str(), 
+            matches!(ext.to_lowercase().as_str(),
                 "exe" | "bin" | "so" | "dll" | "dylib" | "a" | "o" | "obj" |
                 "jpg" | "jpeg" | "png" | "gif" | "bmp" | "ico" | "webp" |
                 "mp3" | "wav" | "ogg" | "flac" | "mp4" | "avi" | "mkv" |

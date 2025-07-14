@@ -1,5 +1,5 @@
 //! Enterprise Security and Compliance Module
-//! 
+//!
 //! Provides comprehensive security features including:
 //! - Multi-factor authentication
 //! - Advanced audit logging
@@ -7,48 +7,48 @@
 //! - Session management
 //! - API key management
 
-pub mod auth;
 pub mod audit;
+pub mod auth;
 pub mod compliance;
 pub mod permissions;
 pub mod rbac;
 pub mod teams;
 pub mod trust_dialog;
 
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 // Re-export key types
-pub use auth::{
-    AuthenticationManager, AuthProvider, SessionManager, Session,
-    ApiKeyManager, ApiKey, MfaProvider, MfaChallenge,
-};
 pub use audit::{
-    EnterpriseAuditLogger, AuditEvent, AuditEventType, AuditFilter,
-    AuditStatistics, ComplianceReport, RetentionPolicy,
+    AuditEvent, AuditEventType, AuditFilter, AuditStatistics, ComplianceReport,
+    EnterpriseAuditLogger, RetentionPolicy,
+};
+pub use auth::{
+    ApiKey, ApiKeyManager, AuthProvider, AuthenticationManager, MfaChallenge, MfaProvider, Session,
+    SessionManager,
 };
 pub use compliance::{
-    ComplianceManager, ComplianceStandard, ComplianceRule, ComplianceViolation,
-    ComplianceStatus, ComplianceReport as ComplianceReportType,
+    ComplianceManager, ComplianceReport as ComplianceReportType, ComplianceRule,
+    ComplianceStandard, ComplianceStatus, ComplianceViolation,
 };
 pub use permissions::{
-    PermissionManager, ResourcePermission, PermissionScope, PermissionContext,
-    PermissionInheritance, PermissionTemplate,
+    PermissionContext, PermissionInheritance, PermissionManager, PermissionScope,
+    PermissionTemplate, ResourcePermission,
 };
 pub use rbac::{
-    EnterpriseRbacManager, EnterpriseRole, EnterpriseUser, SecurityGroup,
-    AccessPolicy, RoleInheritance,
+    AccessPolicy, EnterpriseRbacManager, EnterpriseRole, EnterpriseUser, RoleInheritance,
+    SecurityGroup,
 };
 pub use teams::{
-    TeamManager, EnterpriseTeam, TeamHierarchy, TeamRole,
-    TeamPermissions, TeamAccess, TeamInvitation,
+    EnterpriseTeam, TeamAccess, TeamHierarchy, TeamInvitation, TeamManager, TeamPermissions,
+    TeamRole,
 };
 pub use trust_dialog::{
-    TrustDecision, TrustScope, TrustCondition, TrustDialogConfig, TrustDialogSystem,
+    TrustCondition, TrustDecision, TrustDialogConfig, TrustDialogSystem, TrustScope,
 };
 
 /// Main enterprise security system
@@ -147,23 +147,19 @@ impl SecuritySystem {
     /// Create a new enterprise security system
     pub async fn new(config: SecurityConfig, db_path: Option<std::path::PathBuf>) -> Result<Self> {
         let auth_manager = Arc::new(AuthenticationManager::new(config.clone()).await?);
-        let audit_logger = Arc::new(EnterpriseAuditLogger::new(
-            db_path.clone(),
-            config.audit_retention_days,
-        ).await?);
-        let compliance_manager = Arc::new(ComplianceManager::new(
-            config.compliance_standards.clone(),
-            audit_logger.clone(),
-        ).await?);
+        let audit_logger = Arc::new(
+            EnterpriseAuditLogger::new(db_path.clone(), config.audit_retention_days).await?,
+        );
+        let compliance_manager = Arc::new(
+            ComplianceManager::new(config.compliance_standards.clone(), audit_logger.clone())
+                .await?,
+        );
         let permission_manager = Arc::new(PermissionManager::new().await?);
-        let rbac_manager = Arc::new(EnterpriseRbacManager::new(
-            permission_manager.clone(),
-            audit_logger.clone(),
-        ).await?);
-        let team_manager = Arc::new(TeamManager::new(
-            rbac_manager.clone(),
-            audit_logger.clone(),
-        ).await?);
+        let rbac_manager = Arc::new(
+            EnterpriseRbacManager::new(permission_manager.clone(), audit_logger.clone()).await?,
+        );
+        let team_manager =
+            Arc::new(TeamManager::new(rbac_manager.clone(), audit_logger.clone()).await?);
         let trust_dialog_system = Arc::new(TrustDialogSystem::new(config.trust_dialog.clone()));
 
         Ok(Self {
@@ -182,33 +178,49 @@ impl SecuritySystem {
     pub async fn initialize(&self) -> Result<()> {
         // Initialize authentication system
         self.auth_manager.initialize().await?;
-        
+
         // Initialize RBAC with default roles
         self.rbac_manager.initialize_default_roles().await?;
-        
+
         // Initialize compliance monitoring
         self.compliance_manager.initialize_monitoring().await?;
-        
+
         // Set up audit logging
         self.audit_logger.initialize().await?;
-        
+
         // Log system initialization
-        self.audit_logger.log_system_event(
-            AuditEventType::SystemInit,
-            "Security system initialized".to_string(),
-            None,
-        ).await?;
+        self.audit_logger
+            .log_system_event(
+                AuditEventType::SystemInit,
+                "Security system initialized".to_string(),
+                None,
+            )
+            .await?;
 
         Ok(())
     }
 
     // Authentication methods
-    pub async fn authenticate_user(&self, username: &str, password: &str, mfa_token: Option<&str>) -> Result<Session> {
-        self.auth_manager.authenticate(username, password, mfa_token).await
+    pub async fn authenticate_user(
+        &self,
+        username: &str,
+        password: &str,
+        mfa_token: Option<&str>,
+    ) -> Result<Session> {
+        self.auth_manager
+            .authenticate(username, password, mfa_token)
+            .await
     }
 
-    pub async fn create_api_key(&self, user_id: &str, name: &str, permissions: Vec<String>) -> Result<ApiKey> {
-        self.auth_manager.create_api_key(user_id, name, permissions).await
+    pub async fn create_api_key(
+        &self,
+        user_id: &str,
+        name: &str,
+        permissions: Vec<String>,
+    ) -> Result<ApiKey> {
+        self.auth_manager
+            .create_api_key(user_id, name, permissions)
+            .await
     }
 
     pub async fn validate_session(&self, session_token: &str) -> Result<Session> {
@@ -218,63 +230,88 @@ impl SecuritySystem {
     // RBAC methods
     pub async fn create_user(&self, user: EnterpriseUser) -> Result<()> {
         let result = self.rbac_manager.create_user(user.clone()).await;
-        
-        self.audit_logger.log_user_event(
-            AuditEventType::UserCreated,
-            &user.id,
-            format!("User created: {}", user.full_name),
-        ).await?;
-        
+
+        self.audit_logger
+            .log_user_event(
+                AuditEventType::UserCreated,
+                &user.id,
+                format!("User created: {}", user.full_name),
+            )
+            .await?;
+
         result
     }
 
-    pub async fn assign_role(&self, user_id: &str, role_name: &str, assigner_id: &str) -> Result<()> {
+    pub async fn assign_role(
+        &self,
+        user_id: &str,
+        role_name: &str,
+        assigner_id: &str,
+    ) -> Result<()> {
         // Check if assigner has permission
-        if !self.rbac_manager.check_permission(
-            assigner_id,
-            "manage_users",
-            None,
-        ).await? {
+        if !self
+            .rbac_manager
+            .check_permission(assigner_id, "manage_users", None)
+            .await?
+        {
             return Err(anyhow::anyhow!("Insufficient permissions to assign roles"));
         }
 
         let result = self.rbac_manager.assign_role(user_id, role_name).await;
-        
-        self.audit_logger.log_user_event(
-            AuditEventType::RoleAssigned,
-            user_id,
-            format!("Role '{}' assigned by {}", role_name, assigner_id),
-        ).await?;
-        
+
+        self.audit_logger
+            .log_user_event(
+                AuditEventType::RoleAssigned,
+                user_id,
+                format!("Role '{}' assigned by {}", role_name, assigner_id),
+            )
+            .await?;
+
         result
     }
 
-    pub async fn check_permission(&self, user_id: &str, permission: &str, resource: Option<&str>) -> Result<bool> {
-        self.rbac_manager.check_permission(user_id, permission, resource).await
+    pub async fn check_permission(
+        &self,
+        user_id: &str,
+        permission: &str,
+        resource: Option<&str>,
+    ) -> Result<bool> {
+        self.rbac_manager
+            .check_permission(user_id, permission, resource)
+            .await
     }
 
     // Team management methods
     pub async fn create_team(&self, team: EnterpriseTeam, creator_id: &str) -> Result<()> {
         let result = self.team_manager.create_team(team.clone()).await;
-        
-        self.audit_logger.log_team_event(
-            AuditEventType::TeamCreated,
-            &team.name,
-            format!("Team created by {}", creator_id),
-        ).await?;
-        
+
+        self.audit_logger
+            .log_team_event(
+                AuditEventType::TeamCreated,
+                &team.name,
+                format!("Team created by {}", creator_id),
+            )
+            .await?;
+
         result
     }
 
-    pub async fn add_user_to_team(&self, user_id: &str, team_name: &str, adder_id: &str) -> Result<()> {
+    pub async fn add_user_to_team(
+        &self,
+        user_id: &str,
+        team_name: &str,
+        adder_id: &str,
+    ) -> Result<()> {
         let result = self.team_manager.add_user_to_team(user_id, team_name).await;
-        
-        self.audit_logger.log_team_event(
-            AuditEventType::UserAddedToTeam,
-            team_name,
-            format!("User {} added to team by {}", user_id, adder_id),
-        ).await?;
-        
+
+        self.audit_logger
+            .log_team_event(
+                AuditEventType::UserAddedToTeam,
+                team_name,
+                format!("User {} added to team by {}", user_id, adder_id),
+            )
+            .await?;
+
         result
     }
 
@@ -317,53 +354,76 @@ impl SecuritySystem {
 
     pub async fn update_config(&mut self, config: SecurityConfig) -> Result<()> {
         self.config = config.clone();
-        
+
         // Update component configurations
         self.auth_manager.update_config(config.clone()).await?;
-        self.audit_logger.update_retention_policy(config.audit_retention_days).await?;
-        
-        self.audit_logger.log_system_event(
-            AuditEventType::ConfigChanged,
-            "Security configuration updated".to_string(),
-            None,
-        ).await?;
-        
+        self.audit_logger
+            .update_retention_policy(config.audit_retention_days)
+            .await?;
+
+        self.audit_logger
+            .log_system_event(
+                AuditEventType::ConfigChanged,
+                "Security configuration updated".to_string(),
+                None,
+            )
+            .await?;
+
         Ok(())
     }
 
     // Emergency procedures
     pub async fn emergency_lockdown(&self, reason: &str, initiator_id: &str) -> Result<()> {
         // Revoke all active sessions except system accounts
-        self.auth_manager.revoke_all_sessions_except_system().await?;
-        
+        self.auth_manager
+            .revoke_all_sessions_except_system()
+            .await?;
+
         // Log emergency action
-        self.audit_logger.log_security_event(
-            AuditEventType::EmergencyLockdown,
-            format!("Emergency lockdown initiated by {}: {}", initiator_id, reason),
-            Some(initiator_id.to_string()),
-        ).await?;
-        
+        self.audit_logger
+            .log_security_event(
+                AuditEventType::EmergencyLockdown,
+                format!(
+                    "Emergency lockdown initiated by {}: {}",
+                    initiator_id, reason
+                ),
+                Some(initiator_id.to_string()),
+            )
+            .await?;
+
         Ok(())
     }
 
-    pub async fn reset_user_password(&self, user_id: &str, new_password: &str, admin_id: &str) -> Result<()> {
+    pub async fn reset_user_password(
+        &self,
+        user_id: &str,
+        new_password: &str,
+        admin_id: &str,
+    ) -> Result<()> {
         // Verify admin has permission
-        if !self.rbac_manager.check_permission(
-            admin_id,
-            "manage_users",
-            None,
-        ).await? {
-            return Err(anyhow::anyhow!("Insufficient permissions to reset passwords"));
+        if !self
+            .rbac_manager
+            .check_permission(admin_id, "manage_users", None)
+            .await?
+        {
+            return Err(anyhow::anyhow!(
+                "Insufficient permissions to reset passwords"
+            ));
         }
 
-        let result = self.auth_manager.reset_password(user_id, new_password).await;
-        
-        self.audit_logger.log_user_event(
-            AuditEventType::PasswordReset,
-            user_id,
-            format!("Password reset by admin {}", admin_id),
-        ).await?;
-        
+        let result = self
+            .auth_manager
+            .reset_password(user_id, new_password)
+            .await;
+
+        self.audit_logger
+            .log_user_event(
+                AuditEventType::PasswordReset,
+                user_id,
+                format!("Password reset by admin {}", admin_id),
+            )
+            .await?;
+
         result
     }
 
@@ -393,13 +453,23 @@ impl SecuritySystem {
     }
 
     // Trust dialog methods
-    pub async fn is_directory_trusted(&self, path: &std::path::Path, operation: Option<&str>) -> Result<bool> {
+    pub async fn is_directory_trusted(
+        &self,
+        path: &std::path::Path,
+        operation: Option<&str>,
+    ) -> Result<bool> {
         self.trust_dialog_system.is_directory_trusted(path).await
     }
 
-    pub async fn request_directory_trust(&self, path: &std::path::Path, operation: Option<&str>) -> Result<bool> {
+    pub async fn request_directory_trust(
+        &self,
+        path: &std::path::Path,
+        operation: Option<&str>,
+    ) -> Result<bool> {
         let reason = operation.unwrap_or("Access files in this directory");
-        self.trust_dialog_system.request_directory_trust(path, reason).await
+        self.trust_dialog_system
+            .request_directory_trust(path, reason)
+            .await
     }
 
     pub async fn revoke_directory_trust(&self, path: &std::path::Path) -> Result<()> {
@@ -473,16 +543,16 @@ mod tests {
     async fn test_security_system_initialization() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("security_test.db");
-        
+
         let config = SecurityConfig::default();
         let security_system = SecuritySystem::new(config, Some(db_path)).await.unwrap();
-        
+
         security_system.initialize().await.unwrap();
-        
+
         // Verify default roles are created
         let roles = security_system.rbac().list_roles().await.unwrap();
         assert!(!roles.is_empty());
-        
+
         // Verify audit logging is working
         let metrics = security_system.get_security_metrics().await.unwrap();
         assert_eq!(metrics.total_users, 0); // No users created yet
@@ -492,7 +562,7 @@ mod tests {
     async fn test_user_lifecycle() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("security_lifecycle.db");
-        
+
         let config = SecurityConfig::default();
         let security_system = SecuritySystem::new(config, Some(db_path)).await.unwrap();
         security_system.initialize().await.unwrap();
@@ -523,7 +593,7 @@ mod tests {
         };
 
         security_system.create_user(user).await.unwrap();
-        
+
         // Verify user can be retrieved
         let retrieved_user = security_system.rbac().get_user("test_user").await.unwrap();
         assert!(retrieved_user.is_some());

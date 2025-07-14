@@ -1,12 +1,12 @@
 //! Multi-level cache management system
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
-use std::fs;
-use tokio::fs as afs;
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use tokio::fs as afs;
 
 /// Cache manager for Hive AI
 #[derive(Debug, Clone)]
@@ -137,13 +137,13 @@ impl CacheManager {
     pub async fn new(cache_dir: PathBuf) -> Result<Self> {
         // Create cache directory
         afs::create_dir_all(&cache_dir).await?;
-        
+
         // Load or create configuration
         let config = Self::load_or_create_config(&cache_dir).await?;
-        
+
         // Initialize cache levels
         let levels = Self::initialize_cache_levels(&cache_dir, &config).await?;
-        
+
         Ok(Self {
             cache_dir,
             config,
@@ -154,7 +154,7 @@ impl CacheManager {
     /// Load or create cache configuration
     async fn load_or_create_config(cache_dir: &PathBuf) -> Result<CacheConfig> {
         let config_path = cache_dir.join("cache_config.toml");
-        
+
         if config_path.exists() {
             let content = afs::read_to_string(&config_path).await?;
             let config: CacheConfig = toml::from_str(&content)?;
@@ -168,9 +168,12 @@ impl CacheManager {
     }
 
     /// Initialize cache levels
-    async fn initialize_cache_levels(cache_dir: &PathBuf, config: &CacheConfig) -> Result<Vec<CacheLevel>> {
+    async fn initialize_cache_levels(
+        cache_dir: &PathBuf,
+        config: &CacheConfig,
+    ) -> Result<Vec<CacheLevel>> {
         let mut levels = Vec::new();
-        
+
         // L1: Memory cache (not persistent)
         levels.push(CacheLevel {
             name: "memory".to_string(),
@@ -179,7 +182,7 @@ impl CacheManager {
             ttl: Duration::hours(1),
             eviction_policy: EvictionPolicy::LRU,
         });
-        
+
         // L2: Disk cache - frequently accessed
         levels.push(CacheLevel {
             name: "hot".to_string(),
@@ -188,7 +191,7 @@ impl CacheManager {
             ttl: Duration::days(7),
             eviction_policy: EvictionPolicy::LFU,
         });
-        
+
         // L3: Disk cache - less frequently accessed
         levels.push(CacheLevel {
             name: "cold".to_string(),
@@ -197,12 +200,12 @@ impl CacheManager {
             ttl: Duration::days(30),
             eviction_policy: EvictionPolicy::TTL,
         });
-        
+
         // Create level directories
         for level in &levels {
             afs::create_dir_all(&level.directory).await?;
         }
-        
+
         Ok(levels)
     }
 
@@ -210,24 +213,24 @@ impl CacheManager {
     pub async fn store<T: Serialize>(&self, key: &str, data: &T, level: &str) -> Result<()> {
         let cache_level = self.get_level(level)?;
         let entry_path = cache_level.directory.join(format!("{}.cache", key));
-        
+
         // Serialize data
         let serialized = if self.config.compression {
             self.compress_data(&bincode::serialize(data)?)?
         } else {
             bincode::serialize(data)?
         };
-        
+
         // Encrypt if enabled
         let final_data = if self.config.encryption {
             self.encrypt_data(&serialized)?
         } else {
             serialized
         };
-        
+
         // Write to file
         afs::write(&entry_path, final_data).await?;
-        
+
         // Update metadata
         let size = fs::metadata(&entry_path)?.len();
         let entry = CacheEntry {
@@ -241,14 +244,14 @@ impl CacheManager {
             version: crate::VERSION.to_string(),
             metadata: HashMap::new(),
         };
-        
+
         self.update_entry_metadata(&entry).await?;
-        
+
         // Check if cleanup is needed
         if self.config.auto_cleanup {
             self.cleanup_if_needed().await?;
         }
-        
+
         Ok(())
     }
 
@@ -260,18 +263,22 @@ impl CacheManager {
                 return Ok(Some(data));
             }
         }
-        
+
         Ok(None)
     }
 
     /// Retrieve data from specific cache level
-    async fn retrieve_from_level<T: for<'de> Deserialize<'de>>(&self, key: &str, level: &CacheLevel) -> Result<Option<T>> {
+    async fn retrieve_from_level<T: for<'de> Deserialize<'de>>(
+        &self,
+        key: &str,
+        level: &CacheLevel,
+    ) -> Result<Option<T>> {
         let entry_path = level.directory.join(format!("{}.cache", key));
-        
+
         if !entry_path.exists() {
             return Ok(None);
         }
-        
+
         // Check if entry is expired
         if let Ok(entry) = self.get_entry_metadata(key, &level.name).await {
             if let Some(expires_at) = entry.expires_at {
@@ -282,30 +289,30 @@ impl CacheManager {
                 }
             }
         }
-        
+
         // Read file
         let data = afs::read(&entry_path).await?;
-        
+
         // Decrypt if needed
         let decrypted_data = if self.config.encryption {
             self.decrypt_data(&data)?
         } else {
             data
         };
-        
+
         // Decompress if needed
         let decompressed_data = if self.config.compression {
             self.decompress_data(&decrypted_data)?
         } else {
             decrypted_data
         };
-        
+
         // Deserialize
         let result: T = bincode::deserialize(&decompressed_data)?;
-        
+
         // Update access statistics
         self.update_access_stats(key, &level.name).await?;
-        
+
         Ok(Some(result))
     }
 
@@ -321,31 +328,31 @@ impl CacheManager {
     async fn remove_entry(&self, key: &str, level_name: &str) -> Result<()> {
         let level = self.get_level(level_name)?;
         let entry_path = level.directory.join(format!("{}.cache", key));
-        
+
         if entry_path.exists() {
             afs::remove_file(&entry_path).await?;
         }
-        
+
         // Remove metadata
         let metadata_path = level.directory.join(format!("{}.meta", key));
         if metadata_path.exists() {
             afs::remove_file(&metadata_path).await?;
         }
-        
+
         Ok(())
     }
 
     /// Clear all cache
     pub async fn clear(&self) -> Result<()> {
         println!("🧹 Clearing cache...");
-        
+
         for level in &self.levels {
             if level.directory.exists() {
                 afs::remove_dir_all(&level.directory).await?;
                 afs::create_dir_all(&level.directory).await?;
             }
         }
-        
+
         println!("✅ Cache cleared");
         Ok(())
     }
@@ -353,19 +360,21 @@ impl CacheManager {
     /// Cleanup expired entries
     pub async fn cleanup(&self) -> Result<()> {
         println!("🧹 Cleaning up cache...");
-        
+
         let mut removed_count = 0;
         let mut freed_space = 0;
-        
+
         for level in &self.levels {
             let (level_removed, level_freed) = self.cleanup_level(level).await?;
             removed_count += level_removed;
             freed_space += level_freed;
         }
-        
-        println!("✅ Cache cleanup completed: {} entries removed, {} bytes freed", 
-                 removed_count, freed_space);
-        
+
+        println!(
+            "✅ Cache cleanup completed: {} entries removed, {} bytes freed",
+            removed_count, freed_space
+        );
+
         Ok(())
     }
 
@@ -373,22 +382,23 @@ impl CacheManager {
     async fn cleanup_level(&self, level: &CacheLevel) -> Result<(u64, u64)> {
         let mut removed_count = 0;
         let mut freed_space = 0;
-        
+
         if !level.directory.exists() {
             return Ok((0, 0));
         }
-        
+
         let mut entries = fs::read_dir(&level.directory)?;
         while let Some(entry) = entries.next() {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().map_or(false, |ext| ext == "cache") {
-                let key = path.file_stem()
+                let key = path
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("")
                     .to_string();
-                
+
                 // Check if entry should be removed
                 if self.should_remove_entry(&key, &level.name).await? {
                     let size = entry.metadata()?.len();
@@ -398,7 +408,7 @@ impl CacheManager {
                 }
             }
         }
-        
+
         Ok((removed_count, freed_space))
     }
 
@@ -411,14 +421,14 @@ impl CacheManager {
                     return Ok(true);
                 }
             }
-            
+
             // Check retention policy
             let retention_cutoff = Utc::now() - Duration::days(self.config.retention_days as i64);
             if entry.created_at < retention_cutoff {
                 return Ok(true);
             }
         }
-        
+
         Ok(false)
     }
 
@@ -427,12 +437,12 @@ impl CacheManager {
         let mut total_size = 0;
         let mut entry_count = 0;
         let mut level_stats = Vec::new();
-        
+
         for level in &self.levels {
             let (size, count) = self.get_level_stats(level).await?;
             total_size += size;
             entry_count += count;
-            
+
             level_stats.push(CacheLevelStats {
                 name: level.name.clone(),
                 size,
@@ -440,13 +450,13 @@ impl CacheManager {
                 hit_rate: 0.0, // TODO: Implement hit rate tracking
             });
         }
-        
+
         Ok(CacheStats {
             total_size,
             entry_count,
-            hit_rate: 0.0, // TODO: Implement hit rate tracking
-            miss_rate: 0.0, // TODO: Implement miss rate tracking
-            eviction_count: 0, // TODO: Implement eviction tracking
+            hit_rate: 0.0,      // TODO: Implement hit rate tracking
+            miss_rate: 0.0,     // TODO: Implement miss rate tracking
+            eviction_count: 0,  // TODO: Implement eviction tracking
             last_cleanup: None, // TODO: Track last cleanup time
             levels: level_stats,
         })
@@ -456,22 +466,22 @@ impl CacheManager {
     async fn get_level_stats(&self, level: &CacheLevel) -> Result<(u64, u64)> {
         let mut size = 0;
         let mut count = 0;
-        
+
         if !level.directory.exists() {
             return Ok((0, 0));
         }
-        
+
         let mut entries = fs::read_dir(&level.directory)?;
         while let Some(entry) = entries.next() {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.extension().map_or(false, |ext| ext == "cache") {
                 size += entry.metadata()?.len();
                 count += 1;
             }
         }
-        
+
         Ok((size, count))
     }
 
@@ -485,12 +495,21 @@ impl CacheManager {
 
     /// Update entry metadata
     async fn update_entry_metadata(&self, entry: &CacheEntry) -> Result<()> {
-        let level = self.get_level(&entry.path.parent().unwrap().file_name().unwrap().to_str().unwrap())?;
+        let level = self.get_level(
+            &entry
+                .path
+                .parent()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap(),
+        )?;
         let metadata_path = level.directory.join(format!("{}.meta", entry.key));
-        
+
         let json = serde_json::to_string_pretty(entry)?;
         afs::write(&metadata_path, json).await?;
-        
+
         Ok(())
     }
 
@@ -498,14 +517,14 @@ impl CacheManager {
     async fn get_entry_metadata(&self, key: &str, level_name: &str) -> Result<CacheEntry> {
         let level = self.get_level(level_name)?;
         let metadata_path = level.directory.join(format!("{}.meta", key));
-        
+
         if !metadata_path.exists() {
             return Err(anyhow::anyhow!("Entry metadata not found"));
         }
-        
+
         let content = afs::read_to_string(&metadata_path).await?;
         let entry: CacheEntry = serde_json::from_str(&content)?;
-        
+
         Ok(entry)
     }
 
@@ -516,19 +535,19 @@ impl CacheManager {
             entry.access_count += 1;
             self.update_entry_metadata(&entry).await?;
         }
-        
+
         Ok(())
     }
 
     /// Cleanup if needed
     async fn cleanup_if_needed(&self) -> Result<()> {
         let stats = self.get_stats().await?;
-        
+
         // Check if we're over the size limit
         if stats.total_size > self.config.max_size {
             self.cleanup().await?;
         }
-        
+
         Ok(())
     }
 
@@ -537,7 +556,7 @@ impl CacheManager {
         use flate2::write::GzEncoder;
         use flate2::Compression;
         use std::io::Write;
-        
+
         let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
         encoder.write_all(data)?;
         Ok(encoder.finish()?)
@@ -547,7 +566,7 @@ impl CacheManager {
     fn decompress_data(&self, data: &[u8]) -> Result<Vec<u8>> {
         use flate2::read::GzDecoder;
         use std::io::Read;
-        
+
         let mut decoder = GzDecoder::new(data);
         let mut result = Vec::new();
         decoder.read_to_end(&mut result)?;
@@ -559,7 +578,7 @@ impl CacheManager {
         if !self.config.encryption {
             return Ok(data.to_vec());
         }
-        
+
         // For now, encryption is disabled by default
         // In production, this would use a proper encryption library like `aes-gcm`
         // with secure key derivation and random nonces
@@ -571,7 +590,7 @@ impl CacheManager {
         if !self.config.encryption {
             return Ok(data.to_vec());
         }
-        
+
         // For now, encryption is disabled by default
         // In production, this would use the same encryption library to decrypt
         Ok(data.to_vec())
@@ -588,11 +607,8 @@ impl VersionedCache {
     /// Create a new versioned cache
     pub async fn new(cache_dir: PathBuf, version: String) -> Result<Self> {
         let cache = CacheManager::new(cache_dir).await?;
-        
-        Ok(Self {
-            cache,
-            version,
-        })
+
+        Ok(Self { cache, version })
     }
 
     /// Store data with version
@@ -610,23 +626,23 @@ impl VersionedCache {
     /// Invalidate all cache entries for previous versions
     pub async fn invalidate_old_versions(&self) -> Result<()> {
         println!("🔄 Invalidating old cache versions...");
-        
+
         for level in &self.cache.levels {
             if !level.directory.exists() {
                 continue;
             }
-            
+
             let mut entries = fs::read_dir(&level.directory)?;
             while let Some(entry) = entries.next() {
                 let entry = entry?;
                 let path = entry.path();
-                
+
                 if path.extension().map_or(false, |ext| ext == "cache") {
                     if let Some(filename) = path.file_stem().and_then(|s| s.to_str()) {
                         // Check if this is a versioned entry for a different version
                         if filename.contains('_') && !filename.ends_with(&self.version) {
                             afs::remove_file(&path).await?;
-                            
+
                             // Remove metadata
                             let metadata_path = path.with_extension("meta");
                             if metadata_path.exists() {
@@ -637,7 +653,7 @@ impl VersionedCache {
                 }
             }
         }
-        
+
         println!("✅ Old cache versions invalidated");
         Ok(())
     }
@@ -653,7 +669,7 @@ impl CrossPlatformCache {
     pub async fn new() -> Result<Self> {
         let cache_dir = Self::get_cache_dir()?;
         let cache = CacheManager::new(cache_dir).await?;
-        
+
         Ok(Self { cache })
     }
 
@@ -664,7 +680,7 @@ impl CrossPlatformCache {
             let home = std::env::var("HOME")?;
             Ok(PathBuf::from(home).join("Library/Caches/hive"))
         }
-        
+
         #[cfg(target_os = "linux")]
         {
             if let Ok(xdg_cache) = std::env::var("XDG_CACHE_HOME") {
@@ -674,13 +690,13 @@ impl CrossPlatformCache {
                 Ok(PathBuf::from(home).join(".cache/hive"))
             }
         }
-        
+
         #[cfg(target_os = "windows")]
         {
             let appdata = std::env::var("LOCALAPPDATA")?;
             Ok(PathBuf::from(appdata).join("Hive\\cache"))
         }
-        
+
         #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
         {
             let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
@@ -698,7 +714,7 @@ impl CrossPlatformCache {
         } else {
             "hot" // Linux default
         };
-        
+
         self.cache.store(key, data, level).await
     }
 

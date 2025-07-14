@@ -1,5 +1,5 @@
 //! MCP Server Demo
-//! 
+//!
 //! This example demonstrates the MCP server functionality
 
 use hive_ai::integration::mcp::protocol::*;
@@ -7,11 +7,11 @@ use serde_json::json;
 
 fn main() {
     println!("🚀 Hive AI MCP Server Demo\n");
-    
+
     // Show protocol version
     println!("📡 MCP Protocol Version: {}", MCP_VERSION);
     println!();
-    
+
     // Demo: Initialize request
     println!("1️⃣  Initialize Request Example:");
     let init_request = McpMessage {
@@ -31,10 +31,10 @@ fn main() {
             }),
         }),
     };
-    
+
     println!("{}", serde_json::to_string_pretty(&init_request).unwrap());
     println!();
-    
+
     // Demo: Initialize response
     println!("2️⃣  Initialize Response Example:");
     let init_response = McpMessage {
@@ -55,10 +55,10 @@ fn main() {
             }),
         }),
     };
-    
+
     println!("{}", serde_json::to_string_pretty(&init_response).unwrap());
     println!();
-    
+
     // Demo: List tools
     println!("3️⃣  Available Tools:");
     let tools = vec![
@@ -105,12 +105,12 @@ fn main() {
             }),
         },
     ];
-    
+
     for tool in &tools {
         println!("  🛠️  {} - {}", tool.name, tool.description);
     }
     println!();
-    
+
     // Demo: Call tool request
     println!("4️⃣  Tool Call Example:");
     let tool_call = McpMessage {
@@ -126,10 +126,10 @@ fn main() {
             }),
         }),
     };
-    
+
     println!("{}", serde_json::to_string_pretty(&tool_call).unwrap());
     println!();
-    
+
     // Demo: Resources
     println!("5️⃣  Available Resources:");
     let resources = vec![
@@ -152,12 +152,12 @@ fn main() {
             mime_type: Some("text/x-rust".to_string()),
         },
     ];
-    
+
     for resource in &resources {
         println!("  📁 {} - {}", resource.uri, resource.name);
     }
     println!();
-    
+
     // Demo: Error handling
     println!("6️⃣  Error Response Example:");
     let error_response = McpMessage {
@@ -167,10 +167,10 @@ fn main() {
             error: McpError::custom(-32000, "Tool not found: unknown_tool".to_string()),
         }),
     };
-    
+
     println!("{}", serde_json::to_string_pretty(&error_response).unwrap());
     println!();
-    
+
     println!("✅ MCP Protocol Implementation Complete!");
     println!("💡 Use 'hive serve' to start the MCP server on port 7777");
 }

@@ -7,28 +7,28 @@
 //! - Integrated terminal
 //! - VS Code-like keybindings and navigation
 
-pub mod panels;
-pub mod explorer;
-pub mod editor;
-pub mod terminal;
-pub mod layout;
-pub mod keybindings;
 pub mod consensus;
-pub mod menu_bar;
 pub mod dialogs;
+pub mod editor;
+pub mod explorer;
+pub mod keybindings;
+pub mod layout;
+pub mod menu_bar;
+pub mod panels;
+pub mod terminal;
 
+use self::dialogs::{DialogManager, DialogResult, DialogType};
+use self::menu_bar::{MenuAction, MenuBar, MenuResult};
+use crate::core::temporal::TemporalContext;
+use crate::tui::accessibility::AccessibilityManager;
+use crate::tui::themes::Theme;
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     Frame,
 };
-use crate::tui::themes::Theme;
-use crate::tui::accessibility::AccessibilityManager;
-use crate::core::temporal::TemporalContext;
-use self::menu_bar::{MenuBar, MenuResult, MenuAction};
-use self::dialogs::{DialogManager, DialogType, DialogResult};
 
 /// Advanced TUI application state
 pub struct AdvancedTuiApp {
@@ -36,7 +36,7 @@ pub struct AdvancedTuiApp {
     active_panel: PanelType,
     /// File explorer panel
     pub explorer: explorer::ExplorerPanel,
-    /// Code editor panel  
+    /// Code editor panel
     pub editor: editor::EditorPanel,
     /// Terminal panel
     pub terminal: terminal::TerminalPanel,
@@ -75,7 +75,7 @@ impl AdvancedTuiApp {
         let theme = Theme::default();
         let accessibility = AccessibilityManager::new();
         let temporal = TemporalContext::new();
-        
+
         Ok(Self {
             active_panel: PanelType::Explorer,
             explorer: explorer::ExplorerPanel::new().await?,
@@ -96,22 +96,22 @@ impl AdvancedTuiApp {
     /// Render the advanced TUI interface
     pub fn render(&mut self, frame: &mut Frame) {
         let size = frame.size();
-        
+
         // Apply accessibility adjustments
         self.accessibility.adjust_for_screen_reader(&mut self.theme);
-        
+
         // Create main layout
         let chunks = self.layout.calculate_layout(size, &self.theme);
-        
+
         // Render title bar with menu
         self.render_title_bar(frame, chunks.title_bar);
-        
+
         // Render main content area
         self.render_main_content(frame, chunks.main_content);
-        
+
         // Render status bar
         self.render_status_bar(frame, chunks.status_bar);
-        
+
         // Render overlays (command palette, quick search, dialogs)
         self.render_overlays(frame, size);
     }
@@ -141,7 +141,7 @@ impl AdvancedTuiApp {
                 DialogResult::Continue => return Ok(false),
             }
         }
-        
+
         // Handle menu bar input
         if self.menu_bar.is_active() {
             match self.menu_bar.handle_key_event(key) {
@@ -157,34 +157,28 @@ impl AdvancedTuiApp {
                 MenuResult::None => {}
             }
         }
-        
+
         // Handle global keybindings
         if self.handle_global_keybindings(key).await? {
             return Ok(self.should_quit);
         }
-        
+
         // Handle overlay keybindings
         if self.command_palette_open || self.quick_search_open {
             return self.handle_overlay_keybindings(key).await;
         }
-        
+
         // Handle panel-specific keybindings
         match self.active_panel {
-            PanelType::Explorer => {
-                self.explorer.handle_key_event(key, &self.theme).await?
-            }
-            PanelType::Editor => {
-                self.editor.handle_key_event(key, &self.theme).await?
-            }
-            PanelType::Terminal => {
-                self.terminal.handle_key_event(key, &self.theme).await?
-            }
+            PanelType::Explorer => self.explorer.handle_key_event(key, &self.theme).await?,
+            PanelType::Editor => self.editor.handle_key_event(key, &self.theme).await?,
+            PanelType::Terminal => self.terminal.handle_key_event(key, &self.theme).await?,
             PanelType::ConsensusProgress => {
                 // Consensus panel is read-only, just navigate
                 false
             }
         };
-        
+
         Ok(self.should_quit)
     }
 
@@ -217,7 +211,7 @@ impl AdvancedTuiApp {
             MenuAction::Exit => {
                 self.should_quit = true;
             }
-            
+
             // View menu actions
             MenuAction::CommandPalette => {
                 self.command_palette_open = true;
@@ -234,7 +228,7 @@ impl AdvancedTuiApp {
             MenuAction::ToggleConsensus => {
                 self.layout.toggle_consensus();
             }
-            
+
             // Help menu actions
             MenuAction::ShowWelcome => {
                 self.dialog_manager.show_dialog(DialogType::Welcome)?;
@@ -245,12 +239,12 @@ impl AdvancedTuiApp {
             MenuAction::ShowAbout => {
                 self.dialog_manager.show_dialog(DialogType::About)?;
             }
-            
+
             MenuAction::Separator => {}
         }
         Ok(())
     }
-    
+
     /// Apply theme by name
     fn apply_theme(&mut self, theme_name: &str) {
         // TODO: Implement theme switching
@@ -326,7 +320,7 @@ impl AdvancedTuiApp {
                 self.menu_bar.handle_key_event(key);
                 Ok(true)
             }
-            _ => Ok(false)
+            _ => Ok(false),
         }
     }
 
@@ -372,56 +366,69 @@ impl AdvancedTuiApp {
 
     /// Render title bar with menu bar
     fn render_title_bar(&mut self, frame: &mut Frame, area: Rect) {
+        use ratatui::style::{Modifier, Style};
+        use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Paragraph};
-        use ratatui::style::{Style, Modifier};
-        use ratatui::text::{Span, Line};
-        
+
         // Split title bar into menu area and title area
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),  // Menu bar
-                Constraint::Length(1),  // Title
+                Constraint::Length(1), // Menu bar
+                Constraint::Length(1), // Title
             ])
             .split(area);
-        
+
         // Render menu bar
         self.menu_bar.render(frame, chunks[0], &self.theme);
-        
+
         // Render title
         let title = format!(
             "🐝 HiveTechs Consensus | {} | {}",
             self.temporal.current_time_formatted(),
             self.active_panel_name()
         );
-        
-        let title_widget = Paragraph::new(Line::from(vec![
-            Span::styled(title, Style::default().add_modifier(Modifier::BOLD))
-        ]))
+
+        let title_widget = Paragraph::new(Line::from(vec![Span::styled(
+            title,
+            Style::default().add_modifier(Modifier::BOLD),
+        )]))
         .style(self.theme.title_bar_style())
         .alignment(ratatui::layout::Alignment::Center);
-        
+
         frame.render_widget(title_widget, chunks[1]);
     }
 
     /// Render main content area with panels
     fn render_main_content(&mut self, frame: &mut Frame, area: Rect) {
         let layout = self.layout.get_main_layout(area);
-        
+
         // Render explorer panel
-        self.explorer.render(frame, layout.explorer, &self.theme, 
-                           self.active_panel == PanelType::Explorer);
-        
+        self.explorer.render(
+            frame,
+            layout.explorer,
+            &self.theme,
+            self.active_panel == PanelType::Explorer,
+        );
+
         // Render editor panel
-        self.editor.render(frame, layout.editor, &self.theme,
-                         self.active_panel == PanelType::Editor);
-        
+        self.editor.render(
+            frame,
+            layout.editor,
+            &self.theme,
+            self.active_panel == PanelType::Editor,
+        );
+
         // Render terminal panel (if visible)
         if layout.terminal.height > 0 {
-            self.terminal.render(frame, layout.terminal, &self.theme,
-                               self.active_panel == PanelType::Terminal);
+            self.terminal.render(
+                frame,
+                layout.terminal,
+                &self.theme,
+                self.active_panel == PanelType::Terminal,
+            );
         }
-        
+
         // Render consensus progress panel
         if layout.consensus.width > 0 {
             self.render_consensus_panel(frame, layout.consensus);
@@ -430,21 +437,22 @@ impl AdvancedTuiApp {
 
     /// Render status bar with current status and shortcuts
     fn render_status_bar(&self, frame: &mut Frame, area: Rect) {
+        use ratatui::style::{Color, Style};
+        use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Paragraph};
-        use ratatui::text::{Span, Line};
-        use ratatui::style::{Style, Color};
-        
+
         let status_text = format!(
             "F1:Explorer F2:Editor F3:Terminal F4:Consensus | Ctrl+P:Search Ctrl+Shift+P:Commands | {}",
             self.get_current_status()
         );
-        
-        let status_widget = Paragraph::new(Line::from(vec![
-            Span::styled(status_text, Style::default().fg(Color::Gray))
-        ]))
+
+        let status_widget = Paragraph::new(Line::from(vec![Span::styled(
+            status_text,
+            Style::default().fg(Color::Gray),
+        )]))
         .block(Block::default().borders(Borders::TOP))
         .style(self.theme.status_bar_style());
-        
+
         frame.render_widget(status_widget, area);
     }
 
@@ -452,12 +460,12 @@ impl AdvancedTuiApp {
     fn render_overlays(&mut self, frame: &mut Frame, area: Rect) {
         // Render dialogs first (they should be on top)
         self.dialog_manager.render(frame, area, &self.theme);
-        
+
         // Then render command palette and quick search
         if self.command_palette_open {
             self.render_command_palette(frame, area);
         }
-        
+
         if self.quick_search_open {
             self.render_quick_search(frame, area);
         }
@@ -465,9 +473,9 @@ impl AdvancedTuiApp {
 
     /// Render consensus progress panel
     fn render_consensus_panel(&self, frame: &mut Frame, area: Rect) {
+        use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Paragraph};
-        use ratatui::text::{Span, Line};
-        
+
         let consensus_widget = Paragraph::new(vec![
             Line::from(vec![Span::raw("🧠 Consensus Progress")]),
             Line::from(vec![Span::raw("")]),
@@ -476,62 +484,60 @@ impl AdvancedTuiApp {
             Line::from(vec![Span::raw("Validator: Idle")]),
             Line::from(vec![Span::raw("Curator: Idle")]),
         ])
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title("Consensus")
-            .border_style(if self.active_panel == PanelType::ConsensusProgress {
-                self.theme.active_border_style()
-            } else {
-                self.theme.inactive_border_style()
-            }))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title("Consensus")
+                .border_style(if self.active_panel == PanelType::ConsensusProgress {
+                    self.theme.active_border_style()
+                } else {
+                    self.theme.inactive_border_style()
+                }),
+        )
         .style(self.theme.panel_style());
-        
+
         frame.render_widget(consensus_widget, area);
     }
 
     /// Render command palette overlay
     fn render_command_palette(&self, frame: &mut Frame, area: Rect) {
+        use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Clear, Paragraph};
-        use ratatui::text::{Span, Line};
-        
+
         // Center the command palette
         let popup_area = layout::centered_rect(60, 20, area);
-        
+
         frame.render_widget(Clear, popup_area);
-        
+
         let command_palette = Paragraph::new(vec![
             Line::from(vec![Span::raw("Command Palette")]),
             Line::from(vec![Span::raw("")]),
             Line::from(vec![Span::raw("> Type command...")]),
         ])
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title("Commands"))
+        .block(Block::default().borders(Borders::ALL).title("Commands"))
         .style(self.theme.popup_style());
-        
+
         frame.render_widget(command_palette, popup_area);
     }
 
-    /// Render quick search overlay  
+    /// Render quick search overlay
     fn render_quick_search(&self, frame: &mut Frame, area: Rect) {
+        use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Clear, Paragraph};
-        use ratatui::text::{Span, Line};
-        
+
         // Center the quick search
         let popup_area = layout::centered_rect(60, 20, area);
-        
+
         frame.render_widget(Clear, popup_area);
-        
+
         let quick_search = Paragraph::new(vec![
             Line::from(vec![Span::raw("Quick File Search")]),
             Line::from(vec![Span::raw("")]),
             Line::from(vec![Span::raw("> Search files...")]),
         ])
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .title("Go to File"))
+        .block(Block::default().borders(Borders::ALL).title("Go to File"))
         .style(self.theme.popup_style());
-        
+
         frame.render_widget(quick_search, popup_area);
     }
 
@@ -540,7 +546,7 @@ impl AdvancedTuiApp {
         match self.active_panel {
             PanelType::Explorer => "Explorer",
             PanelType::Editor => "Editor",
-            PanelType::Terminal => "Terminal", 
+            PanelType::Terminal => "Terminal",
             PanelType::ConsensusProgress => "Consensus",
         }
     }
@@ -550,11 +556,15 @@ impl AdvancedTuiApp {
         format!(
             "Theme: {} | Mode: {} | Time: {}",
             self.theme.name(),
-            if self.accessibility.screen_reader_mode() { "Accessible" } else { "Standard" },
+            if self.accessibility.screen_reader_mode() {
+                "Accessible"
+            } else {
+                "Standard"
+            },
             self.temporal.current_time_formatted()
         )
     }
-    
+
     /// Check if should quit
     pub fn should_quit(&self) -> bool {
         self.should_quit

@@ -32,13 +32,13 @@ fn ExpertTemplateOption(
     rsx! {
         div {
             class: if is_selected { "template-option selected" } else { "template-option" },
-            style: if is_selected { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s;" 
-            } else { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;" 
+            style: if is_selected {
+                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+            } else {
+                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
             },
             onclick: move |_| on_select.call(()),
-            
+
             div {
                 style: "display: flex; align-items: center; margin-bottom: 8px;",
                 h4 {
@@ -52,12 +52,12 @@ fn ExpertTemplateOption(
                     }
                 }
             }
-            
+
             p {
                 style: "margin: 0 0 8px 0; color: #cccccc; font-size: 13px;",
                 "{description}"
             }
-            
+
             p {
                 style: "margin: 0; color: #858585; font-size: 12px;",
                 "Use cases: {use_cases}"
@@ -76,13 +76,13 @@ fn ExistingProfileOption(
     rsx! {
         div {
             class: if is_selected { "profile-option selected" } else { "profile-option" },
-            style: if is_selected { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;" 
-            } else { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;" 
+            style: if is_selected {
+                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;"
+            } else {
+                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;"
             },
             onclick: move |_| on_select.call(()),
-            
+
             div {
                 style: "display: flex; align-items: center; justify-content: space-between;",
                 h4 {
@@ -102,7 +102,7 @@ fn ExistingProfileOption(
                     }
                 }
             }
-            
+
             p {
                 style: "margin: 5px 0 0 0; color: #858585; font-size: 12px;",
                 "Created: {profile.created_at}"
@@ -122,11 +122,11 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show_about.write() = false,
-            
+
             div {
                 class: "dialog-box about-dialog",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     h2 { "About Hive Consensus" }
@@ -136,14 +136,14 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content",
                     div { class: "app-icon", "🐝" }
                     h3 { "Hive Consensus" }
                     p { "Version {env!(\"CARGO_PKG_VERSION\")}" }
                     p { "A VS Code-inspired AI development environment" }
-                    
+
                     div {
                         class: "dialog-features",
                         h4 { "Features:" }
@@ -155,7 +155,7 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
                             li { "✓ Git integration" }
                         }
                     }
-                    
+
                     p {
                         class: "dialog-footer-text",
                         "Built with Rust and Dioxus"
@@ -176,36 +176,36 @@ pub fn WelcomeTab(show_welcome: Signal<bool>, on_action: EventHandler<WelcomeAct
     rsx! {
         div {
             class: "welcome-tab",
-            
+
             div {
                 class: "welcome-header",
                 h1 { "Welcome to Hive Consensus" }
                 p { "Get started with your AI-powered development environment" }
             }
-            
+
             div {
                 class: "welcome-sections",
-                
+
                 div {
                     class: "welcome-section",
                     h3 { "🚀 Quick Start" }
-                    button { 
+                    button {
                         class: "welcome-button",
                         onclick: move |_| on_action.call(WelcomeAction::OpenFolder),
                         "Open Folder"
                     }
-                    button { 
+                    button {
                         class: "welcome-button",
                         onclick: move |_| on_action.call(WelcomeAction::OpenRecent),
                         "Open Recent"
                     }
-                    button { 
+                    button {
                         class: "welcome-button",
                         onclick: move |_| on_action.call(WelcomeAction::NewFile),
                         "New File"
                     }
                 }
-                
+
                 div {
                     class: "welcome-section",
                     h3 { "💡 Tips" }
@@ -215,28 +215,28 @@ pub fn WelcomeTab(show_welcome: Signal<bool>, on_action: EventHandler<WelcomeAct
                         li { "Click files to view and edit them" }
                     }
                 }
-                
+
                 div {
                     class: "welcome-section",
                     h3 { "📚 Resources" }
-                    a { 
+                    a {
                         href: "#",
                         class: "welcome-link",
                         "Documentation"
                     }
-                    a { 
+                    a {
                         href: "#",
                         class: "welcome-link",
                         "Keyboard Shortcuts"
                     }
-                    a { 
+                    a {
                         href: "#",
                         class: "welcome-link",
                         "Report Issue"
                     }
                 }
             }
-            
+
             button {
                 class: "welcome-close",
                 onclick: move |_| *show_welcome.write() = false,
@@ -250,7 +250,7 @@ pub fn WelcomeTab(show_welcome: Signal<bool>, on_action: EventHandler<WelcomeAct
 #[component]
 pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
     let mut search_query = use_signal(String::new);
-    
+
     if !*show_palette.read() {
         return rsx! {};
     }
@@ -268,7 +268,7 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
 
     let filtered_commands: Vec<_> = COMMANDS.iter()
         .filter(|(cmd, _)| {
-            (*search_query.read()).is_empty() || 
+            (*search_query.read()).is_empty() ||
             cmd.to_lowercase().contains(&(*search_query.read()).to_lowercase())
         })
         .collect();
@@ -277,11 +277,11 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show_palette.write() = false,
-            
+
             div {
                 class: "command-palette",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 input {
                     class: "command-palette-input",
                     placeholder: "Type a command...",
@@ -289,7 +289,7 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
                     oninput: move |evt| *search_query.write() = evt.value().clone(),
                     autofocus: true,
                 }
-                
+
                 div {
                     class: "command-palette-results",
                     for (cmd, shortcut) in filtered_commands {
@@ -314,17 +314,17 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
 pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String>, hive_key: Signal<String>) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
-    
+
     rsx! {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show_settings.write() = false,
-            
+
             div {
                 class: "dialog settings-dialog",
                 style: "width: 600px; max-height: 80vh; overflow-y: auto;",
                 onclick: move |evt| evt.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     h2 { "⚙️ Settings" }
@@ -334,25 +334,25 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content settings-content",
-                    
+
                     // API Keys Section
                     div {
                         class: "settings-section",
                         h3 { "🔑 API Keys" }
-                        p { 
+                        p {
                             class: "settings-description",
-                            "Configure your API keys to enable Hive Consensus functionality." 
+                            "Configure your API keys to enable Hive Consensus functionality."
                         }
-                        
+
                         // OpenRouter API Key
                         div {
                             class: "settings-field",
-                            label { 
+                            label {
                                 class: "settings-label",
-                                "OpenRouter API Key" 
+                                "OpenRouter API Key"
                             }
                             input {
                                 class: "settings-input",
@@ -361,7 +361,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 placeholder: "sk-or-v1-...",
                                 oninput: move |evt| *openrouter_key.write() = evt.value().clone(),
                             }
-                            p { 
+                            p {
                                 class: "settings-hint",
                                 "Get your API key from ",
                                 a {
@@ -376,13 +376,13 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 }
                             }
                         }
-                        
+
                         // Hive API Key
                         div {
                             class: "settings-field",
-                            label { 
+                            label {
                                 class: "settings-label",
-                                "Hive API Key (Optional)" 
+                                "Hive API Key (Optional)"
                             }
                             input {
                                 class: "settings-input",
@@ -391,12 +391,12 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 placeholder: "hive-...",
                                 oninput: move |evt| *hive_key.write() = evt.value().clone(),
                             }
-                            p { 
+                            p {
                                 class: "settings-hint",
-                                "Used for syncing conversations and advanced features" 
+                                "Used for syncing conversations and advanced features"
                             }
                         }
-                        
+
                         // Show validation error if any
                         if let Some(error) = validation_error.read().as_ref() {
                             div {
@@ -405,37 +405,37 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             }
                         }
                     }
-                    
+
                     // Consensus Profile Section
                     div {
                         class: "settings-section",
                         h3 { "🧠 Consensus Profile" }
-                        p { 
+                        p {
                             class: "settings-description",
-                            "Choose your consensus processing profile based on your needs." 
+                            "Choose your consensus processing profile based on your needs."
                         }
-                        
+
                         div {
                             class: "profile-grid",
-                            ProfileOption { 
+                            ProfileOption {
                                 name: "Balanced",
                                 description: "Best overall performance and quality",
                                 models: "Claude 3.5 Sonnet, GPT-4 Turbo, Claude 3 Opus, GPT-4o",
                                 is_selected: true,
                             }
-                            ProfileOption { 
+                            ProfileOption {
                                 name: "Speed",
                                 description: "Faster responses with good quality",
                                 models: "Claude 3 Haiku, GPT-3.5 Turbo",
                                 is_selected: false,
                             }
-                            ProfileOption { 
+                            ProfileOption {
                                 name: "Quality",
                                 description: "Highest quality responses",
                                 models: "Claude 3 Opus, GPT-4o",
                                 is_selected: false,
                             }
-                            ProfileOption { 
+                            ProfileOption {
                                 name: "Cost",
                                 description: "Most cost-effective option",
                                 models: "Llama 3.2, Mistral 7B",
@@ -444,7 +444,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                         }
                     }
                 }
-                
+
                 div {
                     class: "dialog-footer",
                     button {
@@ -459,14 +459,14 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             // Clear previous error
                             *validation_error.write() = None;
                             *is_validating.write() = true;
-                            
+
                             // Save settings with validation
                             let openrouter = openrouter_key.read().clone();
                             let hive = hive_key.read().clone();
                             let mut is_validating = is_validating.clone();
                             let mut validation_error = validation_error.clone();
                             let mut show_settings = show_settings.clone();
-                            
+
                             spawn(async move {
                                 match save_api_keys(&openrouter, &hive).await {
                                     Ok(_) => {
@@ -516,8 +516,8 @@ fn ProfileOption(name: &'static str, description: &'static str, models: &'static
 /// Onboarding Dialog for first-time users
 #[component]
 pub fn OnboardingDialog(
-    mut show_onboarding: Signal<bool>, 
-    mut openrouter_key: Signal<String>, 
+    mut show_onboarding: Signal<bool>,
+    mut openrouter_key: Signal<String>,
     mut hive_key: Signal<String>,
     mut current_step: Signal<i32>
 ) -> Element {
@@ -526,11 +526,11 @@ pub fn OnboardingDialog(
     let mut selected_profile = use_signal(|| "balanced".to_string());
     let mut temp_openrouter_key = use_signal(|| openrouter_key.read().clone());
     let mut temp_hive_key = use_signal(|| hive_key.read().clone());
-    
+
     // Track if keys already exist
     let has_existing_openrouter = !openrouter_key.read().is_empty();
     let has_existing_hive = !hive_key.read().is_empty();
-    
+
     // Profile configuration state
     let mut profile_mode = use_signal(|| "expert".to_string()); // expert, existing, custom
     let mut selected_template = use_signal(|| String::new());
@@ -542,10 +542,10 @@ pub fn OnboardingDialog(
     let mut profiles_created = use_signal(|| Vec::<String>::new());
     let mut show_profile_success = use_signal(|| false);
     let mut continue_creating_profiles = use_signal(|| false);
-    
+
     // License validation result
     let mut license_info = use_signal(|| None::<LicenseValidationResult>);
-    
+
     // Load existing profiles on mount
     use_effect(move || {
         let mut existing_profiles = existing_profiles.clone();
@@ -555,13 +555,13 @@ pub fn OnboardingDialog(
             }
         });
     });
-    
+
     // Check onboarding state ONLY on initial mount to determine starting step
     use_effect(move || {
         let openrouter_key = openrouter_key.clone();
         let mut current_step = current_step.clone();
         let mut existing_profiles = existing_profiles.clone();
-        
+
         // Only run this check once on mount
         spawn(async move {
             // If we have keys, check if profiles exist to determine starting step
@@ -569,7 +569,7 @@ pub fn OnboardingDialog(
                 // Load profiles to check if any exist
                 if let Ok(profiles) = load_existing_profiles().await {
                     *existing_profiles.write() = profiles.clone();
-                    
+
                     if profiles.is_empty() {
                         // We have keys but no profiles, go directly to profile step
                         tracing::info!("Keys exist but no profiles - starting at profile configuration step");
@@ -581,12 +581,12 @@ pub fn OnboardingDialog(
             }
         });
     });
-    
+
     // Early return if dialog should not be shown
     if !*show_onboarding.read() {
         return rsx! {};
     }
-    
+
     rsx! {
         div {
             class: "dialog-overlay",
@@ -595,12 +595,12 @@ pub fn OnboardingDialog(
                 tracing::info!("Overlay clicked - closing onboarding dialog");
                 show_onboarding.set(false);
             },
-            
+
             div {
                 class: "dialog onboarding-dialog",
                 style: "width: 700px;",
                 onclick: move |evt| evt.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     style: "display: flex; justify-content: space-between; align-items: center;",
@@ -615,7 +615,7 @@ pub fn OnboardingDialog(
                         "×"
                     }
                 }
-                
+
                 // Progress indicator
                 div {
                     class: "onboarding-progress",
@@ -650,18 +650,18 @@ pub fn OnboardingDialog(
                         "5. Complete"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content onboarding-content",
-                    
+
                     if *current_step.read() == 1 {
                         div {
                             class: "onboarding-step",
                             h3 { "Let's get you started!" }
-                            p { 
-                                "Hive Consensus uses advanced AI models to provide the best possible responses through a 4-stage consensus process." 
+                            p {
+                                "Hive Consensus uses advanced AI models to provide the best possible responses through a 4-stage consensus process."
                             }
-                            
+
                             div {
                                 class: "features-list",
                                 div { class: "feature-item", "✅ 4-stage consensus pipeline" }
@@ -669,7 +669,7 @@ pub fn OnboardingDialog(
                                 div { class: "feature-item", "✅ VS Code-like interface" }
                                 div { class: "feature-item", "✅ Full file system access" }
                             }
-                            
+
                             p {
                                 style: "margin-top: 20px; color: #cccccc;",
                                 "To get started, you'll need to configure your license key and API access."
@@ -679,10 +679,10 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🏷️ Configure Your Hive License" }
-                            p { 
-                                "Enter your Hive license key to unlock all features and enable cloud sync." 
+                            p {
+                                "Enter your Hive license key to unlock all features and enable cloud sync."
                             }
-                            
+
                             // Show existing key message if applicable
                             if has_existing_hive {
                                 div {
@@ -690,7 +690,7 @@ pub fn OnboardingDialog(
                                     "✅ A Hive license key is already configured. Enter a new key to update it or click Skip to keep the current one."
                                 }
                             }
-                            
+
                             // Show current license info if saved
                             if let Some(license) = license_info.read().as_ref() {
                                 div {
@@ -703,14 +703,14 @@ pub fn OnboardingDialog(
                                         style: "display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;",
                                         div {
                                             "🎯 Tier: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.tier}"
                                             }
                                         }
                                         div {
                                             "💬 Daily Limit: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.daily_limit}"
                                             }
@@ -718,12 +718,12 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             div {
                                 class: "settings-field",
-                                label { 
+                                label {
                                     class: "settings-label",
-                                    "Hive License Key" 
+                                    "Hive License Key"
                                 }
                                 input {
                                     class: "settings-input",
@@ -732,12 +732,12 @@ pub fn OnboardingDialog(
                                     placeholder: "hive-xxxx-xxxx-xxxx",
                                     oninput: move |evt| *temp_hive_key.write() = evt.value().clone(),
                                 }
-                                
+
                                 div {
                                     class: "api-key-help",
-                                    p { 
+                                    p {
                                         class: "settings-hint",
-                                        "Your license key enables conversation sync and premium features." 
+                                        "Your license key enables conversation sync and premium features."
                                     }
                                     p {
                                         style: "margin-top: 10px;",
@@ -755,7 +755,7 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             // Show validation error if any
                             if let Some(error) = validation_error.read().as_ref() {
                                 div {
@@ -768,10 +768,10 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🔗 Configure Your OpenRouter API Key" }
-                            p { 
-                                "To use Hive Consensus, you'll need an OpenRouter API key. This gives you access to 323+ models from various providers." 
+                            p {
+                                "To use Hive Consensus, you'll need an OpenRouter API key. This gives you access to 323+ models from various providers."
                             }
-                            
+
                             // Show existing key message if applicable
                             if has_existing_openrouter {
                                 div {
@@ -779,7 +779,7 @@ pub fn OnboardingDialog(
                                     "✅ An OpenRouter API key already exists. Enter a new key to update it."
                                 }
                             }
-                            
+
                             // Show current key status
                             if !openrouter_key.read().is_empty() {
                                 div {
@@ -795,12 +795,12 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             div {
                                 class: "settings-field",
-                                label { 
+                                label {
                                     class: "settings-label",
-                                    "OpenRouter API Key" 
+                                    "OpenRouter API Key"
                                 }
                                 input {
                                     class: "settings-input",
@@ -809,10 +809,10 @@ pub fn OnboardingDialog(
                                     placeholder: "sk-or-v1-...",
                                     oninput: move |evt| *temp_openrouter_key.write() = evt.value().clone(),
                                 }
-                                
+
                                 div {
                                     class: "api-key-help",
-                                    p { 
+                                    p {
                                         "Don't have an API key? ",
                                         a {
                                             href: "#",
@@ -825,13 +825,13 @@ pub fn OnboardingDialog(
                                             "Get one from OpenRouter"
                                         }
                                     }
-                                    p { 
+                                    p {
                                         class: "settings-hint",
-                                        "OpenRouter provides unified access to models from OpenAI, Anthropic, Google, Meta, and more." 
+                                        "OpenRouter provides unified access to models from OpenAI, Anthropic, Google, Meta, and more."
                                     }
                                 }
                             }
-                            
+
                             // Show validation error if any
                             if let Some(error) = validation_error.read().as_ref() {
                                 div {
@@ -844,19 +844,19 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🧠 Configure Your Consensus Profile" }
-                            p { 
-                                "Choose from expert-crafted profiles or create your own. Each profile uses a 4-stage AI consensus pipeline." 
+                            p {
+                                "Choose from expert-crafted profiles or create your own. Each profile uses a 4-stage AI consensus pipeline."
                             }
-                            
+
                             // Show license info if available
                             if let Some(license) = license_info.read().as_ref() {
                                 div {
                                     style: "margin: 15px 0; padding: 15px; background: #1e3a2e; border: 1px solid #2e5a3e; border-radius: 6px;",
                                     div {
                                         style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
-                                        span { 
+                                        span {
                                             style: "font-size: 18px;",
-                                            "✅" 
+                                            "✅"
                                         }
                                         span {
                                             style: "color: #4ade80; font-weight: 600;",
@@ -867,14 +867,14 @@ pub fn OnboardingDialog(
                                         style: "display: grid; grid-template-columns: 1fr 1fr; gap: 10px; color: #cccccc; font-size: 13px;",
                                         div {
                                             "🎯 Tier: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.tier}"
                                             }
                                         }
                                         div {
                                             "💬 Daily Conversations: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.daily_limit}"
                                             }
@@ -883,7 +883,7 @@ pub fn OnboardingDialog(
                                             div {
                                                 style: "grid-column: span 2;",
                                                 "📧 Account: ",
-                                                span { 
+                                                span {
                                                     style: "color: #858585;",
                                                     "{email}"
                                                 }
@@ -892,7 +892,7 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             // Profile selection mode tabs
                             div {
                                 class: "profile-tabs",
@@ -908,7 +908,7 @@ pub fn OnboardingDialog(
                                     style: "padding: 8px 16px; background: transparent; border: none; color: #cccccc; cursor: pointer; border-bottom: 2px solid transparent;",
                                     onclick: move |_| {
                                         *profile_mode.write() = "existing".to_string();
-                                        
+
                                         // Load existing profiles when tab is clicked
                                         let mut existing_profiles = existing_profiles.clone();
                                         spawn(async move {
@@ -926,24 +926,24 @@ pub fn OnboardingDialog(
                                     "🛠️ Custom Profile"
                                 }
                             }
-                            
+
                             // Profile content based on selected mode
                             div {
                                 class: "profile-content",
                                 style: "max-height: 400px; overflow-y: auto; padding: 10px 0;",
-                                
+
                                 if *profile_mode.read() == "expert" {
                                     div {
                                         p {
                                             style: "margin-bottom: 15px; color: #cccccc;",
                                             "Select an expert template optimized for specific use cases:"
                                         }
-                                        
+
                                         // Expert templates grid
                                         div {
                                             class: "expert-templates-grid",
                                             style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;",
-                                            
+
                                             // Lightning Fast
                                             ExpertTemplateOption {
                                                 id: "lightning-fast",
@@ -953,7 +953,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "lightning-fast",
                                                 on_select: move |_| *selected_template.write() = "lightning-fast".to_string(),
                                             }
-                                            
+
                                             // Precision Architect
                                             ExpertTemplateOption {
                                                 id: "precision-architect",
@@ -963,7 +963,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "precision-architect",
                                                 on_select: move |_| *selected_template.write() = "precision-architect".to_string(),
                                             }
-                                            
+
                                             // Budget Optimizer
                                             ExpertTemplateOption {
                                                 id: "budget-optimizer",
@@ -973,7 +973,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "budget-optimizer",
                                                 on_select: move |_| *selected_template.write() = "budget-optimizer".to_string(),
                                             }
-                                            
+
                                             // Research Specialist
                                             ExpertTemplateOption {
                                                 id: "research-specialist",
@@ -983,7 +983,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "research-specialist",
                                                 on_select: move |_| *selected_template.write() = "research-specialist".to_string(),
                                             }
-                                            
+
                                             // Debug Specialist
                                             ExpertTemplateOption {
                                                 id: "debug-specialist",
@@ -993,7 +993,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "debug-specialist",
                                                 on_select: move |_| *selected_template.write() = "debug-specialist".to_string(),
                                             }
-                                            
+
                                             // Balanced Generalist
                                             ExpertTemplateOption {
                                                 id: "balanced-generalist",
@@ -1003,7 +1003,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "balanced-generalist",
                                                 on_select: move |_| *selected_template.write() = "balanced-generalist".to_string(),
                                             }
-                                            
+
                                             // Enterprise Architect
                                             ExpertTemplateOption {
                                                 id: "enterprise-architect",
@@ -1013,7 +1013,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "enterprise-architect",
                                                 on_select: move |_| *selected_template.write() = "enterprise-architect".to_string(),
                                             }
-                                            
+
                                             // Creative Innovator
                                             ExpertTemplateOption {
                                                 id: "creative-innovator",
@@ -1023,7 +1023,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "creative-innovator",
                                                 on_select: move |_| *selected_template.write() = "creative-innovator".to_string(),
                                             }
-                                            
+
                                             // Teaching Assistant
                                             ExpertTemplateOption {
                                                 id: "teaching-assistant",
@@ -1033,7 +1033,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "teaching-assistant",
                                                 on_select: move |_| *selected_template.write() = "teaching-assistant".to_string(),
                                             }
-                                            
+
                                             // Debugging Detective
                                             ExpertTemplateOption {
                                                 id: "debugging-detective",
@@ -1044,7 +1044,7 @@ pub fn OnboardingDialog(
                                                 on_select: move |_| *selected_template.write() = "debugging-detective".to_string(),
                                             }
                                         }
-                                        
+
                                         // Show profile creation options prominently at the top
                                         div {
                                             style: "margin-bottom: 20px; padding: 15px; background: #2d3748; border: 2px solid #4a5568; border-radius: 8px;",
@@ -1065,11 +1065,11 @@ pub fn OnboardingDialog(
                                                         let mut profiles_created = profiles_created.clone();
                                                         let mut show_profile_success = show_profile_success.clone();
                                                         let mut existing_profiles = existing_profiles.clone();
-                                                        
+
                                                         spawn(async move {
                                                             *is_creating_profile.write() = true;
                                                             *profile_error.write() = None;
-                                                            
+
                                                             let templates = vec![
                                                                 ("lightning-fast", "Lightning Fast"),
                                                                 ("precision-architect", "Precision Architect"),
@@ -1082,7 +1082,7 @@ pub fn OnboardingDialog(
                                                                 ("teaching-assistant", "Teaching Assistant"),
                                                                 ("debugging-detective", "Debugging Detective")
                                                             ];
-                                                            
+
                                                             let mut created = Vec::new();
                                                             for (template_id, name) in templates {
                                                                 match create_profile_from_template(template_id, name).await {
@@ -1095,11 +1095,11 @@ pub fn OnboardingDialog(
                                                                     }
                                                                 }
                                                             }
-                                                            
+
                                                             *profiles_created.write() = created;
                                                             *show_profile_success.write() = true;
                                                             *is_creating_profile.write() = false;
-                                                            
+
                                                             // Reload profiles
                                                             if let Ok(profiles) = load_existing_profiles().await {
                                                                 *existing_profiles.write() = profiles;
@@ -1125,7 +1125,7 @@ pub fn OnboardingDialog(
                                                 }
                                             }
                                         }
-                                        
+
                                         // Profile name input for template
                                         if !selected_template.read().is_empty() {
                                             div {
@@ -1145,7 +1145,7 @@ pub fn OnboardingDialog(
                                                     style: "margin-top: 5px; font-size: 12px; color: #858585;",
                                                     "Give your profile a memorable name (e.g., 'My Production Config')"
                                                 }
-                                                
+
                                                 // Create profile button
                                                 button {
                                                     class: "button button-primary",
@@ -1154,7 +1154,7 @@ pub fn OnboardingDialog(
                                                     onclick: move |_| {
                                                         let template_id = selected_template.read().clone();
                                                         let profile_name_val = profile_name.read().clone();
-                                                        
+
                                                         if !template_id.is_empty() && !profile_name_val.is_empty() {
                                                             tracing::info!("Creating profile from template: {} as {}", template_id, profile_name_val);
                                                             let name_for_spawn = profile_name_val.clone();
@@ -1165,11 +1165,11 @@ pub fn OnboardingDialog(
                                                             let mut show_profile_success = show_profile_success.clone();
                                                             let mut existing_profiles = existing_profiles.clone();
                                                             let mut selected_profile = selected_profile.clone();
-                                                            
+
                                                             spawn(async move {
                                                                 *is_creating_profile.write() = true;
                                                                 *profile_error.write() = None;
-                                                                
+
                                                                 match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
                                                                     Ok(_) => {
                                                                         tracing::info!("Profile created successfully: {}", name_for_spawn);
@@ -1178,7 +1178,7 @@ pub fn OnboardingDialog(
                                                                         *profiles_created.write() = created;
                                                                         *show_profile_success.write() = true;
                                                                         *selected_profile.write() = name_for_spawn;
-                                                                        
+
                                                                         // Reload profiles
                                                                         if let Ok(profiles) = load_existing_profiles().await {
                                                                             *existing_profiles.write() = profiles;
@@ -1189,7 +1189,7 @@ pub fn OnboardingDialog(
                                                                         *profile_error.write() = Some(e.to_string());
                                                                     }
                                                                 }
-                                                                
+
                                                                 *is_creating_profile.write() = false;
                                                             });
                                                         }
@@ -1209,7 +1209,7 @@ pub fn OnboardingDialog(
                                                 "Select from your existing profiles:"
                                             }
                                         }
-                                        
+
                                         // Load and display existing profiles
                                         if !existing_profiles.read().is_empty() {
                                             div {
@@ -1220,7 +1220,7 @@ pub fn OnboardingDialog(
                                                         let profile_id = profile.id;
                                                         let is_selected = *selected_profile_id.read() == Some(profile_id);
                                                         let mut selected_profile_id = selected_profile_id.clone();
-                                                        
+
                                                         rsx! {
                                                             ExistingProfileOption {
                                                                 profile: profile,
@@ -1243,7 +1243,7 @@ pub fn OnboardingDialog(
                                             style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 6px; color: #e9c46a;",
                                             "⚠️ Custom profile creation is an advanced feature. For best results, use expert templates."
                                         }
-                                        
+
                                         // TODO: Implement custom model selection UI
                                         // This would involve loading available models and allowing selection for each stage
                                         div {
@@ -1258,30 +1258,30 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🎉 You're all set!" }
-                            p { 
-                                "Hive Consensus is ready to use. Here are some things you can try:" 
+                            p {
+                                "Hive Consensus is ready to use. Here are some things you can try:"
                             }
-                            
+
                             div {
                                 class: "suggestions-list",
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "💡 Ask about your code: \"What does this function do?\"" 
+                                    "💡 Ask about your code: \"What does this function do?\""
                                 }
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "🔧 Request help: \"How can I optimize this algorithm?\"" 
+                                    "🔧 Request help: \"How can I optimize this algorithm?\""
                                 }
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "📚 Learn concepts: \"Explain async/await in Rust\"" 
+                                    "📚 Learn concepts: \"Explain async/await in Rust\""
                                 }
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "🐛 Debug issues: \"Why is this code not working?\"" 
+                                    "🐛 Debug issues: \"Why is this code not working?\""
                                 }
                             }
-                            
+
                             div {
                                 style: "margin-top: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px;",
                                 p {
@@ -1300,7 +1300,7 @@ pub fn OnboardingDialog(
                         }
                     }
                 }
-                
+
                 div {
                     class: "dialog-footer onboarding-footer",
                     if *current_step.read() > 1 {
@@ -1316,7 +1316,7 @@ pub fn OnboardingDialog(
                             "Back"
                         }
                     }
-                    
+
                     // Skip button for optional Hive license key
                     if *current_step.read() == 2 {
                         button {
@@ -1328,7 +1328,7 @@ pub fn OnboardingDialog(
                             "Skip"
                         }
                     }
-                    
+
                     // Show different buttons for profile creation step
                     if *current_step.read() == 4 && *show_profile_success.read() {
                         // After creating profiles, show options to create more or continue
@@ -1363,16 +1363,16 @@ pub fn OnboardingDialog(
                                 "Skip to Finish"
                             }
                         }
-                        
+
                         // Normal Next/Get Started button
                         button {
                             class: "button button-primary",
-                            disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) || 
+                            disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) ||
                                      *is_validating.read() || *is_creating_profile.read() { true } else { false },
                             onclick: move |_| {
                             let step = *current_step.read();
                             tracing::info!("Button clicked at step: {}", step);
-                            
+
                             if step == 1 {
                                 // Welcome -> License Key
                                 *current_step.write() = 2;
@@ -1396,13 +1396,13 @@ pub fn OnboardingDialog(
                                 if or_key.is_empty() {
                                     return;
                                 }
-                                
+
                                 // Simple validation - just check it starts with sk-or-v1-
                                 if !or_key.starts_with("sk-or-v1-") {
                                     *validation_error.write() = Some("Invalid key format. OpenRouter keys start with 'sk-or-v1-'".to_string());
                                     return;
                                 }
-                                
+
                                 // Save the key
                                 *openrouter_key.write() = or_key.clone();
                                 if let Err(e) = crate::desktop::simple_db::save_config("openrouter_api_key", &or_key) {
@@ -1420,7 +1420,7 @@ pub fn OnboardingDialog(
                                 let template_id = selected_template.read().clone();
                                 let profile_name_val = profile_name.read().clone();
                                 let existing_id = *selected_profile_id.read();
-                                
+
                                 if mode == "expert" && !template_id.is_empty() {
                                     // Create profile from template
                                     let name = if profile_name_val.is_empty() {
@@ -1438,7 +1438,7 @@ pub fn OnboardingDialog(
                                     } else {
                                         profile_name_val
                                     };
-                                    
+
                                     tracing::info!("Creating profile from template: {} as {}", template_id, name);
                                     let name_for_spawn = name.clone();
                                     let template_for_spawn = template_id.clone();
@@ -1448,11 +1448,11 @@ pub fn OnboardingDialog(
                                     let mut show_profile_success = show_profile_success.clone();
                                     let mut existing_profiles = existing_profiles.clone();
                                     let mut selected_profile = selected_profile.clone();
-                                    
+
                                     spawn(async move {
                                         *is_creating_profile.write() = true;
                                         *profile_error.write() = None;
-                                        
+
                                         match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
                                             Ok(_) => {
                                                 tracing::info!("Profile created successfully: {}", name_for_spawn);
@@ -1461,7 +1461,7 @@ pub fn OnboardingDialog(
                                                 *profiles_created.write() = created;
                                                 *show_profile_success.write() = true;
                                                 *selected_profile.write() = name_for_spawn;
-                                                
+
                                                 // Reload profiles
                                                 if let Ok(profiles) = load_existing_profiles().await {
                                                     *existing_profiles.write() = profiles;
@@ -1472,10 +1472,10 @@ pub fn OnboardingDialog(
                                                 *profile_error.write() = Some(e.to_string());
                                             }
                                         }
-                                        
+
                                         *is_creating_profile.write() = false;
                                     });
-                                    
+
                                 } else if mode == "existing" && existing_id.is_some() {
                                     // Set existing profile as default
                                     if let Some(profile_id) = existing_id {
@@ -1483,7 +1483,7 @@ pub fn OnboardingDialog(
                                         let mut selected_profile = selected_profile.clone();
                                         let existing_profiles = existing_profiles.clone();
                                         let mut show_profile_success = show_profile_success.clone();
-                                        
+
                                         spawn(async move {
                                             if let Err(e) = set_default_profile(profile_id).await {
                                                 tracing::error!("Failed to set default profile: {}", e);
@@ -1497,7 +1497,7 @@ pub fn OnboardingDialog(
                                             }
                                         });
                                     }
-                                    
+
                                     // Move to step 5 after setting existing profile
                                     *current_step.write() = 5;
                                 } else if !existing_profiles.read().is_empty() || !profiles_created.read().is_empty() {
@@ -1509,26 +1509,26 @@ pub fn OnboardingDialog(
                                     tracing::info!("No profiles selected - moving to completion");
                                     *current_step.write() = 5;
                                 }
-                                
+
                                 // Note: We don't automatically move to step 5 anymore
                                 // User must click "Continue to Finish" after creating profiles
                             } else if step == 5 {
                                 // Save onboarding completion and close
                                 tracing::info!("Get Started clicked - saving completion and closing");
-                                
+
                                 // Simple save - no async
                                 if let Err(e) = crate::desktop::simple_db::mark_onboarding_complete() {
                                     tracing::error!("Failed to mark onboarding complete: {}", e);
                                 }
-                                
+
                                 // Close the dialog
                                 tracing::info!("Current show_onboarding value: {}", show_onboarding.read());
-                                
+
                                 // Use set() method for better reactivity
                                 show_onboarding.set(false);
-                                
+
                                 tracing::info!("After set - show_onboarding value: {}", show_onboarding.read());
-                                
+
                                 // Don't reset the step - this causes the dialog to loop back
                                 // current_step.set(1);  // REMOVED - this was causing the loop!
                             } else {
@@ -1536,14 +1536,14 @@ pub fn OnboardingDialog(
                                 tracing::warn!("Unexpected step in button handler: {}", step);
                             }
                             },
-                            if *is_validating.read() { 
-                                "Validating..." 
-                            } else if *is_creating_profile.read() { 
-                                "Creating Profile..." 
-                            } else if *current_step.read() < 5 { 
-                                "Next" 
-                            } else { 
-                                "Get Started" 
+                            if *is_validating.read() {
+                                "Validating..."
+                            } else if *is_creating_profile.read() {
+                                "Creating Profile..."
+                            } else if *current_step.read() < 5 {
+                                "Next"
+                            } else {
+                                "Get Started"
                             }
                         }
                     }
@@ -1568,7 +1568,7 @@ fn save_hive_key_sync(hive_key: &str) -> anyhow::Result<()> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
     use rusqlite::params;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -1581,19 +1581,19 @@ fn save_hive_key_sync(hive_key: &str) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     // Use sync version
     let db = std::sync::Arc::new(tokio::runtime::Handle::current().block_on(async {
         DatabaseManager::new(db_config).await
     })?);
-    
+
     let conn = db.get_connection()?;
-    
+
     conn.execute(
         "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at) VALUES ('hive_license_key', ?, datetime('now'), datetime('now'))",
         params![hive_key],
     )?;
-    
+
     tracing::info!("Hive key saved to configurations table");
     Ok(())
 }
@@ -1603,7 +1603,7 @@ fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
     use rusqlite::params;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -1616,18 +1616,18 @@ fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = std::sync::Arc::new(tokio::runtime::Handle::current().block_on(async {
         DatabaseManager::new(db_config).await
     })?);
-    
+
     let conn = db.get_connection()?;
-    
+
     conn.execute(
         "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at) VALUES ('openrouter_api_key', ?, datetime('now'), datetime('now'))",
         params![openrouter_key],
     )?;
-    
+
     tracing::info!("OpenRouter key saved to configurations table");
     Ok(())
 }
@@ -1636,23 +1636,23 @@ fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
 async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<Option<LicenseValidationResult>> {
     use crate::core::api_keys::ApiKeyManager;
     use crate::core::{license::LicenseManager, config::get_hive_config_dir};
-    
+
     tracing::info!("save_api_keys called - OpenRouter: {} chars, Hive: {} chars",
                  openrouter_key.len(), if hive_key.is_empty() { 0 } else { hive_key.len() });
-    
+
     let mut license_result = None;
-    
+
     // Validate Hive license key if provided
     if !hive_key.is_empty() {
         tracing::info!("Validating Hive license key...");
         let license_manager = LicenseManager::new(get_hive_config_dir());
-        
+
         match license_manager.validate_license(hive_key).await {
             Ok(validation) => {
                 if validation.valid {
                     // Store license
                     license_manager.store_license(hive_key, &validation).await?;
-                    
+
                     license_result = Some(LicenseValidationResult {
                         valid: validation.valid,
                         tier: validation.tier.clone(),
@@ -1660,11 +1660,11 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
                         user_id: validation.user_id.clone(),
                         email: validation.email.clone(),
                     });
-                    
-                    tracing::info!("License validated - tier: {}, daily_limit: {}", 
+
+                    tracing::info!("License validated - tier: {}, daily_limit: {}",
                                  validation.tier, validation.daily_limit);
                 } else {
-                    return Err(anyhow::anyhow!("Invalid license key: {}", 
+                    return Err(anyhow::anyhow!("Invalid license key: {}",
                         validation.message.unwrap_or_else(|| "Unknown error".to_string())));
                 }
             }
@@ -1674,11 +1674,11 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
             }
         }
     }
-    
+
     // Validate OpenRouter key format first
     if !openrouter_key.is_empty() {
         ApiKeyManager::validate_format(openrouter_key)?;
-        
+
         // Test with live API call
         match ApiKeyManager::test_openrouter_key(openrouter_key).await {
             Ok(true) => {
@@ -1697,7 +1697,7 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
     } else {
         return Err(anyhow::anyhow!("OpenRouter API key is required"));
     }
-    
+
     Ok(license_result)
 }
 
@@ -1708,14 +1708,14 @@ async fn save_profile_preference(profile: &str) -> anyhow::Result<()> {
     // 1. Create the profile in the pipeline_profiles table
     // 2. Set it as the default profile
     // 3. Configure the appropriate models for each stage
-    
+
     tracing::info!("User selected profile: {}", profile);
-    
+
     // TODO: When database is fully implemented:
     // - Create profile in pipeline_profiles table
     // - Set appropriate models for each stage based on profile type
     // - Mark as default profile
-    
+
     Ok(())
 }
 
@@ -1723,12 +1723,12 @@ async fn save_profile_preference(profile: &str) -> anyhow::Result<()> {
 pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     if !db_path.exists() {
         return Ok(vec![]);
     }
-    
+
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
         max_connections: 10,
@@ -1740,16 +1740,16 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     let mut stmt = conn.prepare(
-        "SELECT id, name, is_default, created_at 
-         FROM consensus_profiles 
+        "SELECT id, name, is_default, created_at
+         FROM consensus_profiles
          ORDER BY is_default DESC, created_at DESC"
     )?;
-    
+
     let profiles = stmt.query_map([], |row| {
         Ok(ProfileInfo {
             id: row.get(0)?,
@@ -1760,7 +1760,7 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     })?
     .filter_map(Result::ok)
     .collect();
-    
+
     Ok(profiles)
 }
 
@@ -1769,7 +1769,7 @@ async fn create_profile_from_template(template_id: &str, profile_name: &str) -> 
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
     use crate::core::profiles::ExpertTemplateManager;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -1782,12 +1782,12 @@ async fn create_profile_from_template(template_id: &str, profile_name: &str) -> 
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let template_manager = ExpertTemplateManager::new(db);
-    
+
     template_manager.create_profile_from_template(template_id, profile_name, None).await?;
-    
+
     Ok(())
 }
 
@@ -1795,7 +1795,7 @@ async fn create_profile_from_template(template_id: &str, profile_name: &str) -> 
 async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -1808,19 +1808,19 @@ async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     // First, unset all profiles as default
     conn.execute("UPDATE consensus_profiles SET is_default = 0", [])?;
-    
+
     // Then set the selected profile as default
     conn.execute(
         "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
         [profile_id]
     )?;
-    
+
     Ok(())
 }
 
@@ -1828,7 +1828,7 @@ async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
 pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -1841,17 +1841,17 @@ pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     // Store onboarding completion in configurations table
     conn.execute(
-        "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at) 
+        "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at)
          VALUES ('onboarding_completed', 'true', datetime('now'), datetime('now'))",
         []
     )?;
-    
+
     Ok(())
 }
 
@@ -1869,7 +1869,7 @@ pub const DIALOG_STYLES: &str = r#"
         justify-content: center;
         z-index: 1000;
     }
-    
+
     .dialog-box {
         background: #2d2d30;
         border: 1px solid #3e3e42;
@@ -1879,11 +1879,11 @@ pub const DIALOG_STYLES: &str = r#"
         max-height: 90vh;
         overflow: auto;
     }
-    
+
     .about-dialog {
         width: 500px;
     }
-    
+
     .dialog-header {
         display: flex;
         justify-content: space-between;
@@ -1891,13 +1891,13 @@ pub const DIALOG_STYLES: &str = r#"
         padding: 20px;
         border-bottom: 1px solid #3e3e42;
     }
-    
+
     .dialog-header h2 {
         margin: 0;
         font-size: 20px;
         color: #ffffff;
     }
-    
+
     .dialog-close {
         background: none;
         border: none;
@@ -1911,95 +1911,95 @@ pub const DIALOG_STYLES: &str = r#"
         align-items: center;
         justify-content: center;
     }
-    
+
     .dialog-close:hover {
         color: #ffffff;
         background: #3e3e42;
         border-radius: 4px;
     }
-    
+
     .dialog-content {
         padding: 30px;
         text-align: center;
     }
-    
+
     .app-icon {
         font-size: 64px;
         margin-bottom: 20px;
     }
-    
+
     .dialog-content h3 {
         margin: 10px 0;
         font-size: 24px;
         color: #ffffff;
     }
-    
+
     .dialog-content p {
         margin: 10px 0;
         color: #cccccc;
     }
-    
+
     .dialog-features {
         margin: 30px 0;
         text-align: left;
     }
-    
+
     .dialog-features h4 {
         margin-bottom: 10px;
         color: #ffffff;
     }
-    
+
     .dialog-features ul {
         list-style: none;
         padding: 0;
     }
-    
+
     .dialog-features li {
         padding: 5px 0;
         color: #cccccc;
     }
-    
+
     .dialog-footer-text {
         margin-top: 30px;
         font-size: 12px;
         color: #858585;
     }
-    
+
     /* Welcome tab styles */
     .welcome-tab {
         padding: 40px;
         max-width: 800px;
         margin: 0 auto;
     }
-    
+
     .welcome-header {
         text-align: center;
         margin-bottom: 40px;
     }
-    
+
     .welcome-header h1 {
         font-size: 36px;
         margin-bottom: 10px;
     }
-    
+
     .welcome-sections {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
         gap: 30px;
         margin-bottom: 40px;
     }
-    
+
     .welcome-section {
         background: #2d2d30;
         padding: 20px;
         border-radius: 8px;
         border: 1px solid #3e3e42;
     }
-    
+
     .welcome-section h3 {
         margin-bottom: 15px;
     }
-    
+
     .welcome-button {
         display: block;
         width: 100%;
@@ -2011,61 +2011,61 @@ pub const DIALOG_STYLES: &str = r#"
         border-radius: 4px;
         cursor: pointer;
     }
-    
+
     .welcome-button:hover {
         background: #005a9e;
     }
-    
+
     .welcome-link {
         display: block;
         padding: 5px 0;
         color: #007acc;
         text-decoration: none;
     }
-    
+
     .welcome-link:hover {
         text-decoration: underline;
     }
-    
+
     /* Template and profile option styles */
     .template-option, .profile-option {
         transition: all 0.2s ease;
     }
-    
+
     .template-option:hover, .profile-option:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
-    
+
     .template-option.selected, .profile-option.selected {
         background: #1e1e1e !important;
         border-color: #007acc !important;
     }
-    
+
     .expert-templates-grid {
         max-height: 350px;
         overflow-y: auto;
         padding-right: 10px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar {
         width: 8px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar-track {
         background: #1e1e1e;
         border-radius: 4px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar-thumb {
         background: #3e3e42;
         border-radius: 4px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar-thumb:hover {
         background: #4e4e52;
     }
-    
+
     .welcome-close {
         display: block;
         margin: 0 auto;
@@ -2076,11 +2076,11 @@ pub const DIALOG_STYLES: &str = r#"
         border-radius: 4px;
         cursor: pointer;
     }
-    
+
     .welcome-close:hover {
         background: #4e4e52;
     }
-    
+
     /* Command palette styles */
     .command-palette {
         background: #252526;
@@ -2091,7 +2091,7 @@ pub const DIALOG_STYLES: &str = r#"
         overflow: hidden;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
-    
+
     .command-palette-input {
         width: 100%;
         padding: 15px 20px;
@@ -2102,74 +2102,74 @@ pub const DIALOG_STYLES: &str = r#"
         font-size: 16px;
         outline: none;
     }
-    
+
     .command-palette-results {
         max-height: 350px;
         overflow-y: auto;
     }
-    
+
     .command-palette-item {
         display: flex;
         justify-content: space-between;
         padding: 10px 20px;
         cursor: pointer;
     }
-    
+
     .command-palette-item:hover {
         background: #094771;
     }
-    
+
     .command-name {
         color: #cccccc;
     }
-    
+
     .command-shortcut {
         color: #858585;
         font-size: 12px;
     }
-    
+
     /* Settings dialog styles */
     .settings-dialog {
         width: 600px;
     }
-    
+
     .settings-content {
         padding: 0;
         text-align: left;
     }
-    
+
     .settings-section {
         padding: 20px 30px;
         border-bottom: 1px solid #3e3e42;
     }
-    
+
     .settings-section:last-child {
         border-bottom: none;
     }
-    
+
     .settings-section h3 {
         margin: 0 0 10px 0;
         color: #ffffff;
         font-size: 16px;
     }
-    
+
     .settings-description {
         margin: 0 0 20px 0;
         color: #858585;
         font-size: 13px;
     }
-    
+
     .settings-field {
         margin-bottom: 20px;
     }
-    
+
     .settings-label {
         display: block;
         margin-bottom: 8px;
         color: #cccccc;
         font-size: 14px;
     }
-    
+
     .settings-input {
         width: 100%;
         padding: 8px 12px;
@@ -2179,33 +2179,33 @@ pub const DIALOG_STYLES: &str = r#"
         color: #ffffff;
         font-size: 14px;
     }
-    
+
     .settings-input:focus {
         outline: none;
         border-color: #007acc;
     }
-    
+
     .settings-hint {
         margin: 5px 0 0 0;
         font-size: 12px;
         color: #858585;
     }
-    
+
     .settings-hint a {
         color: #007acc;
         text-decoration: none;
     }
-    
+
     .settings-hint a:hover {
         text-decoration: underline;
     }
-    
+
     .profile-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 15px;
     }
-    
+
     .profile-option {
         padding: 15px;
         background: #1e1e1e;
@@ -2214,34 +2214,34 @@ pub const DIALOG_STYLES: &str = r#"
         cursor: pointer;
         transition: all 0.2s;
     }
-    
+
     .profile-option:hover {
         border-color: #007acc;
     }
-    
+
     .profile-option.selected {
         border-color: #007acc;
         background: #094771;
     }
-    
+
     .profile-option h4 {
         margin: 0 0 5px 0;
         color: #ffffff;
         font-size: 14px;
     }
-    
+
     .profile-description {
         margin: 0 0 8px 0;
         color: #cccccc;
         font-size: 12px;
     }
-    
+
     .profile-models {
         margin: 0;
         color: #858585;
         font-size: 11px;
     }
-    
+
     /* Dialog footer */
     .dialog-footer {
         display: flex;
@@ -2251,7 +2251,7 @@ pub const DIALOG_STYLES: &str = r#"
         border-top: 1px solid #3e3e42;
         background: #252526;
     }
-    
+
     .button {
         padding: 8px 16px;
         border: none;
@@ -2260,57 +2260,57 @@ pub const DIALOG_STYLES: &str = r#"
         cursor: pointer;
         transition: background 0.2s;
     }
-    
+
     .button-primary {
         background: #007acc;
         color: white;
     }
-    
+
     .button-primary:hover {
         background: #005a9e;
     }
-    
+
     .button-secondary {
         background: #3e3e42;
         color: #cccccc;
     }
-    
+
     .button-secondary:hover {
         background: #4e4e52;
     }
-    
+
     /* Onboarding dialog styles */
     .onboarding-dialog {
         width: 600px;
     }
-    
+
     .onboarding-content {
         padding: 30px;
         text-align: left;
     }
-    
+
     .onboarding-step h3 {
         margin: 0 0 15px 0;
         color: #ffffff;
         font-size: 20px;
     }
-    
+
     .onboarding-step p {
         margin: 0 0 20px 0;
         color: #cccccc;
         line-height: 1.5;
     }
-    
+
     .features-list {
         margin: 20px 0;
     }
-    
+
     .feature-item {
         padding: 8px 0;
         color: #cccccc;
         font-size: 14px;
     }
-    
+
     .api-key-help {
         margin-top: 15px;
         padding: 15px;
@@ -2318,19 +2318,19 @@ pub const DIALOG_STYLES: &str = r#"
         border-radius: 6px;
         border: 1px solid #3e3e42;
     }
-    
+
     .api-key-help p {
         margin: 0 0 10px 0;
     }
-    
+
     .api-key-help p:last-child {
         margin: 0;
     }
-    
+
     .suggestions-list {
         margin-top: 20px;
     }
-    
+
     .suggestion-item {
         padding: 10px 15px;
         margin: 8px 0;
@@ -2340,11 +2340,11 @@ pub const DIALOG_STYLES: &str = r#"
         font-size: 14px;
         color: #cccccc;
     }
-    
+
     .onboarding-footer {
         justify-content: space-between;
     }
-    
+
     .dialog {
         background: #2d2d30;
         border: 1px solid #3e3e42;
@@ -2352,7 +2352,7 @@ pub const DIALOG_STYLES: &str = r#"
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         overflow: hidden;
     }
-    
+
     /* Progress indicator styles */
     .onboarding-progress {
         display: flex;
@@ -2361,7 +2361,7 @@ pub const DIALOG_STYLES: &str = r#"
         padding: 20px;
         border-bottom: 1px solid #3e3e42;
     }
-    
+
     .progress-step {
         padding: 8px 16px;
         border-radius: 20px;
@@ -2370,12 +2370,12 @@ pub const DIALOG_STYLES: &str = r#"
         font-size: 13px;
         transition: all 0.3s;
     }
-    
+
     .progress-step.active {
         background: #007acc;
         color: #ffffff;
     }
-    
+
     .progress-separator {
         margin: 0 5px;
         color: #858585;

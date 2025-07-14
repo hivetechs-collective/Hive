@@ -1,26 +1,29 @@
 // Consensus Engine - Main entry point for consensus functionality
 // Manages profiles, configuration, and pipeline execution
 
-use crate::consensus::pipeline::ConsensusPipeline;
-use crate::consensus::streaming::{StreamingCallbacks, StreamingResponse, ConsensusStage, ConsensusResponseResult, ChannelStreamingCallbacks};
-use crate::consensus::types::{
-    ConsensusConfig, ConsensusProfile, ConsensusResult, ConsensusRequest,
-    ContextInjectionStrategy, RetryPolicy, ResponseMetadata,
-};
-use crate::consensus::profiles::{ExpertProfileManager, TemplateFilter, TemplatePreferences};
 use crate::consensus::models::ModelManager;
+use crate::consensus::pipeline::ConsensusPipeline;
+use crate::consensus::profiles::{ExpertProfileManager, TemplateFilter, TemplatePreferences};
+use crate::consensus::streaming::{
+    ChannelStreamingCallbacks, ConsensusResponseResult, ConsensusStage, StreamingCallbacks,
+    StreamingResponse,
+};
 use crate::consensus::temporal::TemporalContextProvider;
-use crate::core::config;
+use crate::consensus::types::{
+    ConsensusConfig, ConsensusProfile, ConsensusRequest, ConsensusResult, ContextInjectionStrategy,
+    ResponseMetadata, RetryPolicy,
+};
 use crate::core::api_keys::ApiKeyManager;
-use crate::core::database::DatabaseManager;
+use crate::core::config;
 use crate::core::config::get_hive_config_dir;
+use crate::core::database::DatabaseManager;
 use crate::subscription::{ConversationGateway, UsageTracker};
 use anyhow::{anyhow, Context, Result};
-use rusqlite::{params, OptionalExtension};
 use chrono::Utc;
+use rusqlite::{params, OptionalExtension};
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
 use std::time::Instant;
+use tokio::sync::{mpsc, RwLock};
 
 /// Main consensus engine that manages the consensus pipeline
 #[derive(Clone)]
@@ -43,10 +46,10 @@ impl ConsensusEngine {
     pub async fn new(database: Option<Arc<DatabaseManager>>) -> Result<Self> {
         // Load configuration from file system
         let hive_config = config::get_config().await?;
-        
+
         // Get OpenRouter API key from ApiKeyManager (checks database, config, and env)
         let openrouter_api_key = ApiKeyManager::get_openrouter_key().await.ok();
-        
+
         // Get license key from database (users table)
         let config_dir = get_hive_config_dir();
         let license_key = if let Some(ref db) = database {
@@ -65,44 +68,48 @@ impl ConsensusEngine {
             tracing::warn!("No database available, running without license");
             None
         };
-        
+
         // Initialize subscription components
         let conversation_gateway = Arc::new(ConversationGateway::new()?);
         let usage_tracker = Arc::new(RwLock::new(UsageTracker::new(config_dir)));
-        
+
         // Initialize profile manager
         let profile_manager = Arc::new(ExpertProfileManager::new());
-        
+
         // Initialize model management if API key is available
         let model_manager = if let Some(ref key) = openrouter_api_key {
             Some(Arc::new(ModelManager::new(Some(key.clone()))))
         } else {
             None
         };
-        
+
         // Check if model maintenance needs to run
         if let (Some(db), Some(_)) = (&database, &openrouter_api_key) {
             use crate::consensus::maintenance::TemplateMaintenanceManager;
-            
-            let mut maintenance = TemplateMaintenanceManager::new(
-                db.clone(), 
-                openrouter_api_key.clone()
-            );
-            
+
+            let mut maintenance =
+                TemplateMaintenanceManager::new(db.clone(), openrouter_api_key.clone());
+
             if maintenance.needs_maintenance() {
                 tracing::info!("Running initial model maintenance...");
                 match maintenance.run_maintenance().await {
                     Ok(report) => {
-                        tracing::info!("Model maintenance complete: {} models synced, {} profiles migrated", 
-                                     report.models_synced, report.migrated_profiles.len());
+                        tracing::info!(
+                            "Model maintenance complete: {} models synced, {} profiles migrated",
+                            report.models_synced,
+                            report.migrated_profiles.len()
+                        );
                     }
                     Err(e) => {
-                        tracing::warn!("Initial model maintenance failed: {}. Will retry during consensus.", e);
+                        tracing::warn!(
+                            "Initial model maintenance failed: {}. Will retry during consensus.",
+                            e
+                        );
                     }
                 }
             }
         }
-        
+
         // Load default profile from database (matching TypeScript behavior)
         tracing::info!("Loading default profile from database...");
         let profile = match Self::load_default_profile(&database).await {
@@ -112,7 +119,9 @@ impl ConsensusEngine {
             }
             Err(e) => {
                 tracing::error!("Failed to load default profile: {}", e);
-                return Err(e).context("No consensus profile found. Please complete onboarding to create profiles");
+                return Err(e).context(
+                    "No consensus profile found. Please complete onboarding to create profiles",
+                );
             }
         };
 
@@ -147,7 +156,7 @@ impl ConsensusEngine {
     ) -> Result<ConsensusResult> {
         self.process_with_user(query, semantic_context, None).await
     }
-    
+
     /// Process a query through the consensus pipeline with user_id
     pub async fn process_with_user(
         &self,
@@ -158,23 +167,23 @@ impl ConsensusEngine {
         // D1 authorization now happens immediately in the pipeline.run() method
         // This ensures the UI updates right away when consensus starts
         tracing::info!("Starting consensus processing (D1 auth handled by pipeline)");
-        
+
         let config = self.config.read().await.clone();
-        
+
         let profile = self.current_profile.read().await.clone();
         let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone());
-        
+
         // Set database if available
         if let Some(ref db) = self.database {
             pipeline = pipeline.with_database(db.clone());
         }
-        
+
         // Run the consensus pipeline (D1 auth and verification happens inside)
         let result = pipeline
             .run(query, semantic_context, user_id.clone())
             .await
             .context("Failed to run consensus pipeline")?;
-        
+
         Ok(result)
     }
 
@@ -187,16 +196,16 @@ impl ConsensusEngine {
         user_id: Option<String>,
     ) -> Result<ConsensusResult> {
         let config = self.config.read().await.clone();
-        
+
         let profile = self.current_profile.read().await.clone();
         let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone())
             .with_callbacks(callbacks);
-        
+
         // Set database if available
         if let Some(ref db) = self.database {
             pipeline = pipeline.with_database(db.clone());
         }
-        
+
         pipeline
             .run(query, semantic_context, user_id)
             .await
@@ -209,28 +218,31 @@ impl ConsensusEngine {
         request: ConsensusRequest,
     ) -> Result<mpsc::UnboundedReceiver<StreamingResponse>> {
         let (sender, receiver) = mpsc::unbounded_channel();
-        
+
         // Create streaming callbacks that send to channel
         let callbacks = Arc::new(ChannelStreamingCallbacks::new(sender.clone()));
-        
+
         // Clone necessary data for the async task
         let engine = self.clone();
         let query = request.query.clone();
         let context = request.context.clone();
         let user_id = request.user_id.clone();
-        
+
         // Spawn async task to process consensus
         tokio::spawn(async move {
             let start_time = Instant::now();
-            
+
             // Process through the actual consensus pipeline
-            match engine.process_with_callbacks(&query, context, callbacks, user_id).await {
+            match engine
+                .process_with_callbacks(&query, context, callbacks, user_id)
+                .await
+            {
                 Ok(result) => {
                     // Extract metrics from the result
                     let mut total_tokens = 0u32;
                     let mut total_cost = 0.0f64;
                     let mut models_used = Vec::new();
-                    
+
                     for stage in &result.stages {
                         models_used.push(stage.model.clone());
                         if let Some(usage) = &stage.usage {
@@ -240,10 +252,12 @@ impl ConsensusEngine {
                             total_cost += analytics.cost;
                         }
                     }
-                    
+
                     // Send completion event
                     let response = ConsensusResponseResult {
-                        content: result.result.unwrap_or_else(|| "No response generated".to_string()),
+                        content: result
+                            .result
+                            .unwrap_or_else(|| "No response generated".to_string()),
                         metadata: ResponseMetadata {
                             total_tokens,
                             cost: total_cost,
@@ -251,7 +265,7 @@ impl ConsensusEngine {
                             models_used,
                         },
                     };
-                    
+
                     let _ = sender.send(StreamingResponse::Complete { response });
                 }
                 Err(e) => {
@@ -262,14 +276,14 @@ impl ConsensusEngine {
                 }
             }
         });
-        
+
         Ok(receiver)
     }
 
     /// Get available profiles
     pub async fn get_profiles(&self) -> Result<Vec<ConsensusProfile>> {
         use crate::core::database::{get_database, ConsensusProfile as DbProfile};
-        
+
         // Try to load from database
         match DbProfile::list_all().await {
             Ok(db_profiles) => {
@@ -303,7 +317,7 @@ impl ConsensusEngine {
     pub async fn get_last_authorization_info(&self) -> Result<Option<u32>> {
         Ok(*self.last_auth_remaining.read().await)
     }
-    
+
     /// Set active profile
     pub async fn set_profile(&self, profile_name: &str) -> Result<()> {
         // Try to load from database first
@@ -328,15 +342,16 @@ impl ConsensusEngine {
 
         Ok(())
     }
-    
+
     /// Load profile by name from database
     async fn load_profile_by_name(profile_name: &str) -> Result<ConsensusProfile> {
         use crate::core::database::{get_database, ConsensusProfile as DbProfile};
-        
+
         let db = get_database().await?;
-        let db_profile = DbProfile::find_by_name(profile_name).await?
+        let db_profile = DbProfile::find_by_name(profile_name)
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Profile '{}' not found", profile_name))?;
-        
+
         Ok(ConsensusProfile {
             id: db_profile.id,
             profile_name: db_profile.profile_name,
@@ -376,7 +391,6 @@ impl ConsensusEngine {
         self.model_manager.as_deref()
     }
 
-
     /// Get temporal context provider
     pub fn get_temporal_provider(&self) -> &TemporalContextProvider {
         &self.temporal_provider
@@ -393,7 +407,11 @@ impl ConsensusEngine {
     }
 
     /// Create expert profile from template
-    pub async fn create_expert_profile(&self, template_id: &str, profile_name: Option<&str>) -> Result<()> {
+    pub async fn create_expert_profile(
+        &self,
+        template_id: &str,
+        profile_name: Option<&str>,
+    ) -> Result<()> {
         // Implementation would create profile from template
         // For now, return success
         println!("✅ Expert profile created from template: {}", template_id);
@@ -401,7 +419,11 @@ impl ConsensusEngine {
     }
 
     /// Find best template for a question
-    pub fn find_best_template(&self, question: &str, _preferences: Option<&TemplatePreferences>) -> Vec<String> {
+    pub fn find_best_template(
+        &self,
+        question: &str,
+        _preferences: Option<&TemplatePreferences>,
+    ) -> Vec<String> {
         // Use get_recommended_for_use_case as a simple implementation
         let templates = self.profile_manager.get_recommended_for_use_case(question);
         templates.into_iter().map(|t| t.id.clone()).collect()
@@ -422,31 +444,38 @@ impl ConsensusEngine {
     /// Get license key from database
     async fn get_license_from_database(database: &Arc<DatabaseManager>) -> Result<Option<String>> {
         let conn = database.get_connection()?;
-        
+
         // Get the currently configured license key from configurations table
-        let license_key: Option<String> = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
-            // First check configurations table for the current license key
-            let key = conn.query_row(
-                "SELECT value FROM configurations WHERE key = 'hive_license_key'",
-                [],
-                |row| row.get(0)
-            ).optional()?;
-            Ok(key)
-        }).await??;
-        
+        let license_key: Option<String> =
+            tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+                // First check configurations table for the current license key
+                let key = conn
+                    .query_row(
+                        "SELECT value FROM configurations WHERE key = 'hive_license_key'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                Ok(key)
+            })
+            .await??;
+
         Ok(license_key)
     }
-    
+
     /// Load default consensus profile from database
-    async fn load_default_profile(database: &Option<Arc<DatabaseManager>>) -> Result<ConsensusProfile> {
+    async fn load_default_profile(
+        database: &Option<Arc<DatabaseManager>>,
+    ) -> Result<ConsensusProfile> {
         tracing::info!("load_default_profile: Starting...");
-        let db = database.as_ref()
+        let db = database
+            .as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
-        
+
         // Get a connection from the pool
         let conn = db.get_connection()?;
         tracing::info!("load_default_profile: Got connection, executing query...");
-        
+
         // Use spawn_blocking for the query operation only
         let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
             // Query for default profile from consensus_profiles table
@@ -456,34 +485,34 @@ impl ConsensusEngine {
                 [],
                 |row| row.get(0)
             ).optional()?;
-            
+
             // If no active profile is set, try to get the first available profile
             let profile_id = match active_profile_id {
                 Some(id) => id,
                 None => {
                     tracing::warn!("No active profile set, attempting to select first available profile");
-                    
+
                     // Get the first available profile
                     let first_profile_id: String = conn.query_row(
                         "SELECT id FROM consensus_profiles ORDER BY created_at ASC LIMIT 1",
                         [],
                         |row| row.get(0)
                     ).map_err(|_| anyhow!("No profiles found. Please complete onboarding to create profiles."))?;
-                    
+
                     // Set it as the active profile
                     conn.execute(
                         "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
                         params![&first_profile_id],
                     )?;
-                    
+
                     tracing::info!("Automatically selected profile '{}' as active", first_profile_id);
                     first_profile_id
                 }
             };
-            
+
             // Query profile directly from consensus_profiles (TypeScript schema)
             let row = conn.query_row(
-                "SELECT 
+                "SELECT
                     id,
                     profile_name,
                     generator_model,
@@ -507,28 +536,32 @@ impl ConsensusEngine {
                     })
                 },
             )?;
-            
+
             Ok(row)
         }).await??;
-        
+
         Ok(profile)
     }
 
     /// Load specific consensus profile by name or ID
-    async fn load_profile_by_name_or_id(database: &Option<Arc<DatabaseManager>>, profile_name_or_id: &str) -> Result<ConsensusProfile> {
-        let db = database.as_ref()
+    async fn load_profile_by_name_or_id(
+        database: &Option<Arc<DatabaseManager>>,
+        profile_name_or_id: &str,
+    ) -> Result<ConsensusProfile> {
+        let db = database
+            .as_ref()
             .ok_or_else(|| anyhow!("Database not available"))?;
-        
+
         let profile_id = profile_name_or_id.to_string();
-        
+
         // Get a connection from the pool
         let conn = db.get_connection()?;
-        
+
         // Use spawn_blocking for the query operation only
         let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
             // Query for specific profile by name or ID from consensus_profiles table
             let row = conn.query_row(
-                "SELECT 
+                "SELECT
                     id,
                     profile_name,
                     generator_model,
@@ -552,10 +585,11 @@ impl ConsensusEngine {
                     })
                 },
             )?;
-            
+
             Ok(row)
-        }).await??;
-        
+        })
+        .await??;
+
         Ok(profile)
     }
 
@@ -565,7 +599,9 @@ impl ConsensusEngine {
 
         // Check OpenRouter API key from configuration
         if self.openrouter_api_key.is_none() {
-            errors.push("OpenRouter API key not configured. Run 'hive setup' to configure.".to_string());
+            errors.push(
+                "OpenRouter API key not configured. Run 'hive setup' to configure.".to_string(),
+            );
         }
 
         // Check database connection
@@ -576,7 +612,6 @@ impl ConsensusEngine {
             errors,
         })
     }
-
 }
 
 /// Validation result for prerequisites

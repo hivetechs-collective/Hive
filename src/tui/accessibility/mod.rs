@@ -7,14 +7,14 @@
 //! - Keyboard-only navigation
 //! - Text scaling
 
-pub mod screen_reader;
 pub mod high_contrast;
-pub mod motion;
 pub mod keyboard;
+pub mod motion;
+pub mod screen_reader;
 
+use crate::tui::themes::Theme;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use crate::tui::themes::Theme;
 
 /// Accessibility manager for TUI
 pub struct AccessibilityManager {
@@ -94,7 +94,7 @@ impl AccessibilityManager {
         self.detect_high_contrast();
         self.detect_motion_preferences();
         self.detect_keyboard_preferences();
-        
+
         Ok(())
     }
 
@@ -103,11 +103,11 @@ impl AccessibilityManager {
         if self.settings.screen_reader_enabled {
             self.screen_reader.adjust_theme(theme);
         }
-        
+
         if self.settings.high_contrast_enabled {
             self.high_contrast.adjust_theme(theme);
         }
-        
+
         if self.settings.focus_indicators {
             self.enhance_focus_indicators(theme);
         }
@@ -155,10 +155,12 @@ impl AccessibilityManager {
     /// Update accessibility settings
     pub fn update_settings(&mut self, settings: AccessibilitySettings) {
         self.settings = settings;
-        
+
         // Update sub-components
-        self.screen_reader.set_enabled(self.settings.screen_reader_enabled);
-        self.high_contrast.set_enabled(self.settings.high_contrast_enabled);
+        self.screen_reader
+            .set_enabled(self.settings.screen_reader_enabled);
+        self.high_contrast
+            .set_enabled(self.settings.high_contrast_enabled);
         self.motion.set_reduce_motion(self.settings.reduce_motion);
         self.keyboard.set_keyboard_only(self.settings.keyboard_only);
     }
@@ -171,14 +173,14 @@ impl AccessibilityManager {
     /// Check compliance with accessibility standards
     pub fn check_compliance(&self, level: ComplianceLevel) -> ComplianceReport {
         let mut report = ComplianceReport::new(level);
-        
+
         // Check various compliance criteria
         self.check_color_contrast(&mut report);
         self.check_keyboard_navigation(&mut report);
         self.check_screen_reader_support(&mut report);
         self.check_focus_management(&mut report);
         self.check_text_alternatives(&mut report);
-        
+
         report
     }
 
@@ -242,17 +244,17 @@ impl AccessibilityManager {
         {
             self.settings.screen_reader_enabled = self.detect_macos_voiceover().await?;
         }
-        
+
         #[cfg(target_os = "windows")]
         {
             self.settings.screen_reader_enabled = self.detect_windows_narrator().await?;
         }
-        
+
         #[cfg(target_os = "linux")]
         {
             self.settings.screen_reader_enabled = self.detect_linux_orca().await?;
         }
-        
+
         Ok(())
     }
 
@@ -305,7 +307,9 @@ impl AccessibilityManager {
     /// Enhance focus indicators in theme
     fn enhance_focus_indicators(&self, theme: &mut Theme) {
         // Make focus indicators more prominent
-        theme.styles.active_border = theme.styles.active_border
+        theme.styles.active_border = theme
+            .styles
+            .active_border
             .add_modifier(ratatui::style::Modifier::BOLD)
             .add_modifier(ratatui::style::Modifier::UNDERLINED);
     }
@@ -319,31 +323,51 @@ impl AccessibilityManager {
     /// Check color contrast compliance
     fn check_color_contrast(&self, report: &mut ComplianceReport) {
         // TODO: Implement color contrast checking
-        report.add_check("Color Contrast", true, "All color combinations meet WCAG standards");
+        report.add_check(
+            "Color Contrast",
+            true,
+            "All color combinations meet WCAG standards",
+        );
     }
 
     /// Check keyboard navigation compliance
     fn check_keyboard_navigation(&self, report: &mut ComplianceReport) {
         // TODO: Implement keyboard navigation checking
-        report.add_check("Keyboard Navigation", true, "All interactive elements are keyboard accessible");
+        report.add_check(
+            "Keyboard Navigation",
+            true,
+            "All interactive elements are keyboard accessible",
+        );
     }
 
     /// Check screen reader support compliance
     fn check_screen_reader_support(&self, report: &mut ComplianceReport) {
         // TODO: Implement screen reader support checking
-        report.add_check("Screen Reader Support", self.settings.screen_reader_enabled, "Screen reader support is available");
+        report.add_check(
+            "Screen Reader Support",
+            self.settings.screen_reader_enabled,
+            "Screen reader support is available",
+        );
     }
 
     /// Check focus management compliance
     fn check_focus_management(&self, report: &mut ComplianceReport) {
         // TODO: Implement focus management checking
-        report.add_check("Focus Management", true, "Focus is properly managed throughout the interface");
+        report.add_check(
+            "Focus Management",
+            true,
+            "Focus is properly managed throughout the interface",
+        );
     }
 
     /// Check text alternatives compliance
     fn check_text_alternatives(&self, report: &mut ComplianceReport) {
         // TODO: Implement text alternatives checking
-        report.add_check("Text Alternatives", true, "All non-text content has appropriate text alternatives");
+        report.add_check(
+            "Text Alternatives",
+            true,
+            "All non-text content has appropriate text alternatives",
+        );
     }
 }
 
@@ -407,7 +431,7 @@ impl ComplianceReport {
             passed,
             description: description.to_string(),
         });
-        
+
         if !passed {
             self.overall_compliant = false;
         }
@@ -428,9 +452,16 @@ impl ComplianceReport {
     pub fn summary(&self) -> String {
         let passed = self.checks.iter().filter(|c| c.passed).count();
         let total = self.checks.len();
-        format!("Accessibility Compliance: {}/{} checks passed ({})", 
-                passed, total, 
-                if self.overall_compliant { "COMPLIANT" } else { "NON-COMPLIANT" })
+        format!(
+            "Accessibility Compliance: {}/{} checks passed ({})",
+            passed,
+            total,
+            if self.overall_compliant {
+                "COMPLIANT"
+            } else {
+                "NON-COMPLIANT"
+            }
+        )
     }
 }
 

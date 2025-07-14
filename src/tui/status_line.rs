@@ -40,21 +40,23 @@ impl StatusLine {
             theme: StatusTheme::default(),
         }
     }
-    
+
     /// Draw the professional status line
     pub fn draw(&self, frame: &mut Frame, area: Rect, status: &TuiStatus) {
         let status_text = self.format_status_text(status);
-        
+
         let paragraph = Paragraph::new(status_text)
-            .style(Style::default()
-                .bg(self.theme.background_color)
-                .fg(self.theme.text_color))
+            .style(
+                Style::default()
+                    .bg(self.theme.background_color)
+                    .fg(self.theme.text_color),
+            )
             .block(Block::default().borders(Borders::NONE))
             .alignment(Alignment::Center);
-        
+
         frame.render_widget(paragraph, area);
     }
-    
+
     /// Format the status line text with all information
     fn format_status_text(&self, status: &TuiStatus) -> String {
         // Auto-accept status
@@ -63,40 +65,30 @@ impl StatusLine {
         } else {
             "⏸⏸ auto-accept: OFF"
         };
-        
+
         // Context information
-        let context_text = format!(
-            "Context: {}%",
-            status.context_percentage
-        );
-        
+        let context_text = format!("Context: {}%", status.context_percentage);
+
         // Current mode
-        let mode_text = format!(
-            "Mode: {}",
-            status.current_mode
-        );
-        
+        let mode_text = format!("Mode: {}", status.current_mode);
+
         // Cost information
         let cost_text = if status.cost_estimate > 0.0 {
             format!("Cost: ${:.3}", status.cost_estimate)
         } else {
             "Cost: $0.000".to_string()
         };
-        
+
         // Keyboard shortcuts hint
         let shortcuts_hint = "F1-F4: Panels | Shift+Tab: Toggle | ?: Help | Ctrl+C: Exit";
-        
+
         // Combine all status information
         format!(
             "{}  |  {}  |  {}  |  {}  |  {}",
-            auto_accept_text,
-            context_text,
-            mode_text,
-            cost_text,
-            shortcuts_hint
+            auto_accept_text, context_text, mode_text, cost_text, shortcuts_hint
         )
     }
-    
+
     /// Get warning color for low context
     fn get_context_color(&self, percentage: u8) -> Color {
         if percentage < 20 {
@@ -117,13 +109,13 @@ impl StatusLine {
             "⏸⏸ auto-accept: OFF".to_string()
         }
     }
-    
+
     /// Format context percentage with warning if low
     pub fn format_context_percentage(percentage: u8) -> String {
         let warning = if percentage < 20 { " ⚠️" } else { "" };
         format!("Context: {}%{}", percentage, warning)
     }
-    
+
     /// Format cost with appropriate precision
     pub fn format_cost(cost: f64) -> String {
         if cost < 0.001 {
@@ -134,12 +126,12 @@ impl StatusLine {
             format!("Cost: ${:.2}", cost)
         }
     }
-    
+
     /// Format current mode with appropriate styling
     pub fn format_mode(mode: &str) -> String {
         format!("Mode: {}", mode)
     }
-    
+
     /// Get full shortcuts help text
     pub fn get_shortcuts_help() -> String {
         "F1-F4: Panels | Shift+Tab: Toggle | ?: Help | Ctrl+C: Exit".to_string()

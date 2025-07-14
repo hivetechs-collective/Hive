@@ -1,5 +1,5 @@
 //! Analytics engine for comprehensive metrics and insights
-//! 
+//!
 //! This module provides:
 //! - Real-time metrics collection and aggregation
 //! - Performance dashboards with visualizations
@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::core::database::{ActivityLog, get_database};
+use crate::core::database::{get_database, ActivityLog};
 
 /// Analytics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,10 +400,25 @@ impl AnalyticsEngine {
         let mut store = self.metrics_store.write().await;
 
         // Record database metrics
-        self.record_metric(&mut store, "conversations.total", stats.conversation_count as f64, "count")?;
-        self.record_metric(&mut store, "messages.total", stats.message_count as f64, "count")?;
+        self.record_metric(
+            &mut store,
+            "conversations.total",
+            stats.conversation_count as f64,
+            "count",
+        )?;
+        self.record_metric(
+            &mut store,
+            "messages.total",
+            stats.message_count as f64,
+            "count",
+        )?;
         self.record_metric(&mut store, "users.total", stats.user_count as f64, "count")?;
-        self.record_metric(&mut store, "models.available", stats.model_count as f64, "count")?;
+        self.record_metric(
+            &mut store,
+            "models.available",
+            stats.model_count as f64,
+            "count",
+        )?;
 
         // Calculate activity metrics
         let mut event_counts: HashMap<String, u64> = HashMap::new();
@@ -422,13 +437,22 @@ impl AnalyticsEngine {
 
         // Record activity metrics
         for (event_type, count) in event_counts {
-            self.record_metric(&mut store, &format!("events.{}", event_type), count as f64, "count")?;
+            self.record_metric(
+                &mut store,
+                &format!("events.{}", event_type),
+                count as f64,
+                "count",
+            )?;
         }
 
         self.record_metric(&mut store, "cost.total", total_cost, "usd")?;
         if !activities.is_empty() {
-            self.record_metric(&mut store, "latency.average", 
-                (total_duration as f64) / (activities.len() as f64), "ms")?;
+            self.record_metric(
+                &mut store,
+                "latency.average",
+                (total_duration as f64) / (activities.len() as f64),
+                "ms",
+            )?;
         }
 
         info!("Metrics collection completed");
@@ -447,7 +471,8 @@ impl AnalyticsEngine {
         let mut report = String::new();
 
         // Add header
-        report.push_str(&format!("# {} Report\n\n", 
+        report.push_str(&format!(
+            "# {} Report\n\n",
             match report_type {
                 ReportType::Executive => "Executive Analytics",
                 ReportType::Operational => "Operational Metrics",
@@ -458,7 +483,10 @@ impl AnalyticsEngine {
         ));
 
         report.push_str(&format!("**Period**: {:?}\n", period));
-        report.push_str(&format!("**Generated**: {}\n\n", Utc::now().format("%Y-%m-%d %H:%M:%S UTC")));
+        report.push_str(&format!(
+            "**Generated**: {}\n\n",
+            Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
+        ));
 
         // Add summary section
         report.push_str("## Summary\n\n");
@@ -641,12 +669,12 @@ impl AnalyticsEngine {
 
     async fn start_metrics_collection(&self) -> Result<()> {
         let engine = Arc::new(self.clone());
-        
+
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(
-                tokio::time::Duration::from_secs(engine.config.update_interval_secs)
-            );
-            
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
+                engine.config.update_interval_secs,
+            ));
+
             loop {
                 interval.tick().await;
                 if let Err(e) = engine.collect_metrics().await {
@@ -676,14 +704,15 @@ impl AnalyticsEngine {
         );
 
         // Update time series
-        let series = store.time_series.entry(name.to_string()).or_insert_with(|| {
-            TimeSeries {
+        let series = store
+            .time_series
+            .entry(name.to_string())
+            .or_insert_with(|| TimeSeries {
                 name: name.to_string(),
                 data_points: VecDeque::new(),
                 metric_type: MetricType::Gauge,
                 unit: unit.to_string(),
-            }
-        });
+            });
 
         series.data_points.push_back(DataPoint {
             timestamp: Utc::now(),
@@ -713,7 +742,9 @@ impl AnalyticsEngine {
 
             // Calculate trend
             let recent = series.data_points.back().map(|p| p.value).unwrap_or(0.0);
-            let previous = series.data_points.iter()
+            let previous = series
+                .data_points
+                .iter()
                 .rev()
                 .nth(10)
                 .map(|p| p.value)
@@ -784,11 +815,17 @@ impl AnalyticsEngine {
         Ok(insights)
     }
 
-    fn create_line_chart_data(&self, series: &TimeSeries, hours: usize) -> Result<serde_json::Value> {
+    fn create_line_chart_data(
+        &self,
+        series: &TimeSeries,
+        hours: usize,
+    ) -> Result<serde_json::Value> {
         let now = Utc::now();
         let cutoff = now - Duration::hours(hours as i64);
 
-        let points: Vec<_> = series.data_points.iter()
+        let points: Vec<_> = series
+            .data_points
+            .iter()
             .filter(|p| p.timestamp > cutoff)
             .map(|p| {
                 serde_json::json!({
@@ -881,26 +918,35 @@ impl CostAnalyzer {
         let mut model_costs = HashMap::new();
 
         // Add common model pricing (example values)
-        model_costs.insert("gpt-4".to_string(), ModelPricing {
-            provider: "openai".to_string(),
-            input_cost_per_1k: 0.03,
-            output_cost_per_1k: 0.06,
-            minimum_cost: 0.0,
-        });
+        model_costs.insert(
+            "gpt-4".to_string(),
+            ModelPricing {
+                provider: "openai".to_string(),
+                input_cost_per_1k: 0.03,
+                output_cost_per_1k: 0.06,
+                minimum_cost: 0.0,
+            },
+        );
 
-        model_costs.insert("claude-3-opus".to_string(), ModelPricing {
-            provider: "anthropic".to_string(),
-            input_cost_per_1k: 0.015,
-            output_cost_per_1k: 0.075,
-            minimum_cost: 0.0,
-        });
+        model_costs.insert(
+            "claude-3-opus".to_string(),
+            ModelPricing {
+                provider: "anthropic".to_string(),
+                input_cost_per_1k: 0.015,
+                output_cost_per_1k: 0.075,
+                minimum_cost: 0.0,
+            },
+        );
 
-        model_costs.insert("claude-3-sonnet".to_string(), ModelPricing {
-            provider: "anthropic".to_string(),
-            input_cost_per_1k: 0.003,
-            output_cost_per_1k: 0.015,
-            minimum_cost: 0.0,
-        });
+        model_costs.insert(
+            "claude-3-sonnet".to_string(),
+            ModelPricing {
+                provider: "anthropic".to_string(),
+                input_cost_per_1k: 0.003,
+                output_cost_per_1k: 0.015,
+                minimum_cost: 0.0,
+            },
+        );
 
         Self {
             model_costs,
@@ -919,9 +965,7 @@ impl TrendAnalyzer {
                 threshold_multiplier: 2.5,
                 min_data_points: 20,
             },
-            predictor: TrendPredictor {
-                horizon_days: 7,
-            },
+            predictor: TrendPredictor { horizon_days: 7 },
         }
     }
 }
@@ -931,36 +975,39 @@ impl DashboardBuilder {
         let mut templates = HashMap::new();
 
         // Create default dashboard template
-        templates.insert("default".to_string(), DashboardTemplate {
-            name: "Default Dashboard".to_string(),
-            layout: DashboardLayout::Grid { rows: 3, cols: 2 },
-            widgets: vec![
-                Widget {
-                    widget_type: WidgetType::LineChart,
-                    title: "Query Volume".to_string(),
-                    position: (0, 0),
-                    size: (1, 2),
-                },
-                Widget {
-                    widget_type: WidgetType::Gauge,
-                    title: "Average Latency".to_string(),
-                    position: (1, 0),
-                    size: (1, 1),
-                },
-                Widget {
-                    widget_type: WidgetType::BarChart,
-                    title: "Cost by Model".to_string(),
-                    position: (1, 1),
-                    size: (1, 1),
-                },
-                Widget {
-                    widget_type: WidgetType::Table,
-                    title: "Recent Activity".to_string(),
-                    position: (2, 0),
-                    size: (1, 2),
-                },
-            ],
-        });
+        templates.insert(
+            "default".to_string(),
+            DashboardTemplate {
+                name: "Default Dashboard".to_string(),
+                layout: DashboardLayout::Grid { rows: 3, cols: 2 },
+                widgets: vec![
+                    Widget {
+                        widget_type: WidgetType::LineChart,
+                        title: "Query Volume".to_string(),
+                        position: (0, 0),
+                        size: (1, 2),
+                    },
+                    Widget {
+                        widget_type: WidgetType::Gauge,
+                        title: "Average Latency".to_string(),
+                        position: (1, 0),
+                        size: (1, 1),
+                    },
+                    Widget {
+                        widget_type: WidgetType::BarChart,
+                        title: "Cost by Model".to_string(),
+                        position: (1, 1),
+                        size: (1, 1),
+                    },
+                    Widget {
+                        widget_type: WidgetType::Table,
+                        title: "Recent Activity".to_string(),
+                        position: (2, 0),
+                        size: (1, 2),
+                    },
+                ],
+            },
+        );
 
         Self { templates }
     }
@@ -971,39 +1018,43 @@ impl ReportGenerator {
         let mut templates = HashMap::new();
 
         // Executive report template
-        templates.insert(ReportType::Executive, ReportTemplate {
-            name: "Executive Report".to_string(),
-            sections: vec![
-                ReportSection {
-                    title: "Executive Summary".to_string(),
-                    content_type: ReportContentType::Summary,
-                    data_source: "aggregated_metrics".to_string(),
-                },
-                ReportSection {
-                    title: "Key Performance Indicators".to_string(),
-                    content_type: ReportContentType::Chart,
-                    data_source: "kpi_metrics".to_string(),
-                },
-                ReportSection {
-                    title: "Cost Analysis".to_string(),
-                    content_type: ReportContentType::Analysis,
-                    data_source: "cost_metrics".to_string(),
-                },
-                ReportSection {
-                    title: "Strategic Recommendations".to_string(),
-                    content_type: ReportContentType::Recommendations,
-                    data_source: "insights".to_string(),
-                },
-            ],
-            format: ReportFormat::Html,
-        });
+        templates.insert(
+            ReportType::Executive,
+            ReportTemplate {
+                name: "Executive Report".to_string(),
+                sections: vec![
+                    ReportSection {
+                        title: "Executive Summary".to_string(),
+                        content_type: ReportContentType::Summary,
+                        data_source: "aggregated_metrics".to_string(),
+                    },
+                    ReportSection {
+                        title: "Key Performance Indicators".to_string(),
+                        content_type: ReportContentType::Chart,
+                        data_source: "kpi_metrics".to_string(),
+                    },
+                    ReportSection {
+                        title: "Cost Analysis".to_string(),
+                        content_type: ReportContentType::Analysis,
+                        data_source: "cost_metrics".to_string(),
+                    },
+                    ReportSection {
+                        title: "Strategic Recommendations".to_string(),
+                        content_type: ReportContentType::Recommendations,
+                        data_source: "insights".to_string(),
+                    },
+                ],
+                format: ReportFormat::Html,
+            },
+        );
 
         Self { templates }
     }
 }
 
 /// Global analytics engine instance
-static ANALYTICS_ENGINE: tokio::sync::OnceCell<Arc<AnalyticsEngine>> = tokio::sync::OnceCell::const_new();
+static ANALYTICS_ENGINE: tokio::sync::OnceCell<Arc<AnalyticsEngine>> =
+    tokio::sync::OnceCell::const_new();
 
 /// Initialize the analytics engine
 pub async fn initialize_analytics(config: Option<AnalyticsConfig>) -> Result<()> {

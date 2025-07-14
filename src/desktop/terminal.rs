@@ -1,5 +1,5 @@
 //! Terminal Panel Component for Dioxus Desktop
-//! 
+//!
 //! VS Code-like integrated terminal experience
 
 use dioxus::prelude::*;
@@ -28,10 +28,10 @@ pub fn Terminal() -> Element {
             .to_string_lossy()
             .to_string()
     });
-    
+
     // Auto-scroll to bottom flag
     let mut should_scroll = use_signal(|| true);
-    
+
     // Initialize with prompt
     use_effect(move || {
         if output_lines.read().is_empty() {
@@ -42,38 +42,38 @@ pub fn Terminal() -> Element {
             });
         }
     });
-    
+
     // Execute command function
     let execute_command = move |command: String| {
         if command.trim().is_empty() {
             return;
         }
-        
+
         let mut output_lines = output_lines.clone();
         let mut is_running = is_running.clone();
         let mut current_directory = current_directory.clone();
         let mut command_history = command_history.clone();
         let mut should_scroll = should_scroll.clone();
-        
+
         // Add command to output
         output_lines.write().push_back(TerminalLine {
             text: format!("{}> {}", current_directory.read(), command),
             line_type: LineType::Command,
             timestamp: Local::now(),
         });
-        
+
         // Add to history
         command_history.write().push_back(command.clone());
         if command_history.read().len() > MAX_HISTORY {
             command_history.write().pop_front();
         }
-        
+
         // Parse command
         let parts: Vec<&str> = command.split_whitespace().collect();
         if parts.is_empty() {
             return;
         }
-        
+
         // Handle built-in commands
         match parts[0] {
             "clear" => {
@@ -97,7 +97,7 @@ pub fn Terminal() -> Element {
                     } else {
                         std::path::PathBuf::from(parts[1])
                     };
-                    
+
                     match std::env::set_current_dir(&new_path) {
                         Ok(_) => {
                             let new_dir = std::env::current_dir()
@@ -132,7 +132,7 @@ pub fn Terminal() -> Element {
                         });
                     }
                 }
-                
+
                 // Add new prompt
                 output_lines.write().push_back(TerminalLine {
                     text: format!("{}> ", current_directory.read()),
@@ -144,13 +144,13 @@ pub fn Terminal() -> Element {
             }
             _ => {}
         }
-        
+
         // Execute external command
         is_running.set(true);
         spawn(async move {
             let shell = if cfg!(windows) { "cmd" } else { "sh" };
             let shell_arg = if cfg!(windows) { "/C" } else { "-c" };
-            
+
             match Command::new(shell)
                 .arg(shell_arg)
                 .arg(&command)
@@ -163,44 +163,44 @@ pub fn Terminal() -> Element {
                     if let Some(stdout) = child.stdout.take() {
                         let reader = BufReader::new(stdout);
                         let mut lines = reader.lines();
-                        
+
                         while let Ok(Some(line)) = lines.next_line().await {
                             output_lines.write().push_back(TerminalLine {
                                 text: line,
                                 line_type: LineType::Output,
                                 timestamp: Local::now(),
                             });
-                            
+
                             // Limit output size
                             while output_lines.read().len() > MAX_OUTPUT_LINES {
                                 output_lines.write().pop_front();
                             }
-                            
+
                             should_scroll.set(true);
                         }
                     }
-                    
+
                     // Read stderr
                     if let Some(stderr) = child.stderr.take() {
                         let reader = BufReader::new(stderr);
                         let mut lines = reader.lines();
-                        
+
                         while let Ok(Some(line)) = lines.next_line().await {
                             output_lines.write().push_back(TerminalLine {
                                 text: line,
                                 line_type: LineType::Error,
                                 timestamp: Local::now(),
                             });
-                            
+
                             // Limit output size
                             while output_lines.read().len() > MAX_OUTPUT_LINES {
                                 output_lines.write().pop_front();
                             }
-                            
+
                             should_scroll.set(true);
                         }
                     }
-                    
+
                     // Wait for completion
                     match child.wait().await {
                         Ok(status) => {
@@ -229,19 +229,19 @@ pub fn Terminal() -> Element {
                     });
                 }
             }
-            
+
             // Add new prompt
             output_lines.write().push_back(TerminalLine {
                 text: format!("{}> ", current_directory.read()),
                 line_type: LineType::Prompt,
                 timestamp: Local::now(),
             });
-            
+
             is_running.set(false);
             should_scroll.set(true);
         });
     };
-    
+
     // Handle input submission
     let on_submit = move |_| {
         let command = input_text.read().clone();
@@ -249,7 +249,7 @@ pub fn Terminal() -> Element {
         input_text.set(String::new());
         history_index.set(None);
     };
-    
+
     // Handle key events for history navigation
     let on_keydown = move |evt: Event<KeyboardData>| {
         match evt.data().key() {
@@ -284,7 +284,7 @@ pub fn Terminal() -> Element {
             _ => {}
         }
     };
-    
+
     let terminal_style = "
         display: flex;
         flex-direction: column;
@@ -294,7 +294,7 @@ pub fn Terminal() -> Element {
         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
         font-size: 13px;
     ";
-    
+
     let output_style = "
         flex: 1;
         overflow-y: auto;
@@ -302,7 +302,7 @@ pub fn Terminal() -> Element {
         background: #000000;
         line-height: 1.4;
     ";
-    
+
     let input_container_style = "
         display: flex;
         align-items: center;
@@ -310,7 +310,7 @@ pub fn Terminal() -> Element {
         background: #1a1a1a;
         border-top: 1px solid #333333;
     ";
-    
+
     let input_style = "
         flex: 1;
         background: transparent;
@@ -321,17 +321,17 @@ pub fn Terminal() -> Element {
         outline: none;
         padding: 4px;
     ";
-    
+
     let prompt_style = "
         color: #4ec9b0;
         margin-right: 8px;
         font-weight: 600;
     ";
-    
+
     rsx! {
         div {
             style: "{terminal_style}",
-            
+
             // Output area
             div {
                 style: "{output_style}",
@@ -341,7 +341,7 @@ pub fn Terminal() -> Element {
                         should_scroll.set(false);
                     }
                 },
-                
+
                 // Render output lines
                 for (idx, line) in output_lines.read().iter().enumerate() {
                     TerminalLineComponent {
@@ -350,16 +350,16 @@ pub fn Terminal() -> Element {
                     }
                 }
             }
-            
+
             // Input area
             div {
                 style: "{input_container_style}",
-                
+
                 span {
                     style: "{prompt_style}",
                     "$"
                 }
-                
+
                 input {
                     style: "{input_style}",
                     r#type: "text",
@@ -407,13 +407,13 @@ fn TerminalLineComponent(line: TerminalLine) -> Element {
         LineType::Success => "color: #4ec9b0;",
         LineType::Prompt => "color: #dcdcaa; font-weight: 600;",
     };
-    
+
     let timestamp_style = "color: #666666; font-size: 11px; margin-right: 8px;";
-    
+
     rsx! {
         div {
             style: "margin: 2px 0; display: flex; align-items: baseline;",
-            
+
             // Optional timestamp (could be toggled)
             if matches!(line.line_type, LineType::Command | LineType::Error) {
                 span {
@@ -421,7 +421,7 @@ fn TerminalLineComponent(line: TerminalLine) -> Element {
                     {format!("[{}]", line.timestamp.format("%H:%M:%S"))}
                 }
             }
-            
+
             // Line content
             pre {
                 style: "{line_style} margin: 0; font-family: inherit; white-space: pre-wrap; word-break: break-all;",

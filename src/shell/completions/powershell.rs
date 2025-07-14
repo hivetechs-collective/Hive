@@ -10,22 +10,22 @@ pub fn generate_powershell_completions() -> String {
 # Register the argument completer for the hive command
 Register-ArgumentCompleter -Native -CommandName hive -ScriptBlock {
     param($commandName, $wordToComplete, $cursorPosition)
-    
+
     # Parse the command line to understand context
     $line = $wordToComplete
     $words = $line -split '\s+'
-    
+
     # Remove empty entries
     $words = $words | Where-Object { $_ -ne '' }
-    
+
     # If we only have 'hive', suggest main commands
     if ($words.Count -le 1) {
         return Get-HiveMainCommands | Where-Object { $_ -like "$wordToComplete*" }
     }
-    
+
     # Get the subcommand
     $subcommand = $words[1]
-    
+
     # Handle subcommand completions
     switch ($subcommand) {
         'analyze' { return Get-HiveAnalyzeCompletions $words $wordToComplete }
@@ -110,7 +110,7 @@ function Get-HiveAnalyzeCompletions($words, $wordToComplete) {
     if ($words[-2] -eq '--format') {
         return @('text', 'json', 'yaml', 'markdown', 'table', 'html') | Where-Object { $_ -like "$wordToComplete*" }
     }
-    
+
     # If completing an option
     if ($wordToComplete.StartsWith('-')) {
         return @(
@@ -126,7 +126,7 @@ function Get-HiveAnalyzeCompletions($words, $wordToComplete) {
             [System.Management.Automation.CompletionResult]::new('--metrics', '--metrics', 'ParameterName', 'Include quantitative code metrics and statistics')
         ) + (Get-HiveGlobalOptions) | Where-Object { $_.CompletionText -like "$wordToComplete*" }
     }
-    
+
     # Directory completion for analyze target
     return Get-HiveProjectDirectories $wordToComplete
 }
@@ -149,7 +149,7 @@ function Get-HiveAskCompletions($words, $wordToComplete) {
     if ($words[-2] -eq '--stream') {
         return @('true', 'false') | Where-Object { $_ -like "$wordToComplete*" }
     }
-    
+
     # If completing an option
     if ($wordToComplete.StartsWith('-')) {
         return @(
@@ -165,7 +165,7 @@ function Get-HiveAskCompletions($words, $wordToComplete) {
             [System.Management.Automation.CompletionResult]::new('--follow-up', '--follow-up', 'ParameterName', 'Enable automatic follow-up questions')
         ) + (Get-HiveGlobalOptions) | Where-Object { $_.CompletionText -like "$wordToComplete*" }
     }
-    
+
     # Context-aware question suggestions
     return Get-HiveQuestionSuggestions $wordToComplete
 }
@@ -223,7 +223,7 @@ function Get-HiveMemoryCompletions($words, $wordToComplete) {
             [System.Management.Automation.CompletionResult]::new('vacuum', 'vacuum', 'ParameterValue', '🧹 Clean up and compact memory database')
         ) | Where-Object { $_.CompletionText -like "$wordToComplete*" }
     }
-    
+
     return @()
 }
 
@@ -254,7 +254,7 @@ function Get-HiveConfigCompletions($words, $wordToComplete) {
             [System.Management.Automation.CompletionResult]::new('list', 'list', 'ParameterValue', '📋 List all available configuration keys')
         ) | Where-Object { $_.CompletionText -like "$wordToComplete*" }
     }
-    
+
     return @()
 }
 
@@ -294,14 +294,14 @@ function Get-HiveShellCompletions($words, $wordToComplete) {
             [System.Management.Automation.CompletionResult]::new('uninstall', 'uninstall', 'ParameterValue', '🗑️ Remove shell integration with optional config preservation')
         ) | Where-Object { $_.CompletionText -like "$wordToComplete*" }
     }
-    
+
     return @()
 }
 
 # Helper functions for context-aware completions
 function Get-HiveProjectDirectories($wordToComplete) {
     $results = @()
-    
+
     # Look for common project directories
     $projectDirs = @('src', 'lib', 'app', 'packages', 'components')
     foreach ($dir in $projectDirs) {
@@ -309,22 +309,22 @@ function Get-HiveProjectDirectories($wordToComplete) {
             $results += [System.Management.Automation.CompletionResult]::new($dir, $dir, 'ParameterValue', "Project directory: $dir")
         }
     }
-    
+
     # Look for git repositories
     $gitDirs = Get-ChildItem -Directory -Depth 1 | Where-Object { Test-Path (Join-Path $_.FullName '.git') } | Select-Object -First 10
     foreach ($dir in $gitDirs) {
         $results += [System.Management.Automation.CompletionResult]::new($dir.Name, $dir.Name, 'ParameterValue', "Git repository: $($dir.Name)")
     }
-    
+
     # Add current directory option
     $results += [System.Management.Automation.CompletionResult]::new('.', '.', 'ParameterValue', 'Current directory')
-    
+
     return $results | Where-Object { $_.CompletionText -like "$wordToComplete*" }
 }
 
 function Get-HiveQuestionSuggestions($wordToComplete) {
     $suggestions = @()
-    
+
     # Context-aware suggestions
     if (Test-Path 'Cargo.toml') {
         $suggestions += @(
@@ -333,7 +333,7 @@ function Get-HiveQuestionSuggestions($wordToComplete) {
             'Suggest performance improvements for this Rust code'
         )
     }
-    
+
     if (Test-Path 'package.json') {
         $suggestions += @(
             'Analyze the dependencies in this Node.js project',
@@ -341,7 +341,7 @@ function Get-HiveQuestionSuggestions($wordToComplete) {
             'What are potential security vulnerabilities?'
         )
     }
-    
+
     if (Test-Path 'requirements.txt' -or Test-Path 'pyproject.toml') {
         $suggestions += @(
             'Review this Python codebase for best practices',
@@ -349,7 +349,7 @@ function Get-HiveQuestionSuggestions($wordToComplete) {
             'How can I improve error handling?'
         )
     }
-    
+
     if (Test-Path '.git' -PathType Container) {
         $suggestions += @(
             'Analyze the git history for patterns',
@@ -357,7 +357,7 @@ function Get-HiveQuestionSuggestions($wordToComplete) {
             'Review recent commits for quality'
         )
     }
-    
+
     # General suggestions
     $suggestions += @(
         'Explain this code',
@@ -369,14 +369,14 @@ function Get-HiveQuestionSuggestions($wordToComplete) {
         'Create tests for this',
         'Refactor this code'
     )
-    
+
     $results = @()
     foreach ($suggestion in $suggestions) {
         if ($suggestion -like "*$wordToComplete*") {
             $results += [System.Management.Automation.CompletionResult]::new("`"$suggestion`"", $suggestion, 'ParameterValue', $suggestion)
         }
     }
-    
+
     return $results
 }
 
@@ -432,13 +432,13 @@ function Invoke-HiveQuickAsk {
     <#
     .SYNOPSIS
     Ask Hive AI a quick question with speed profile
-    
+
     .DESCRIPTION
     Wrapper function for hive ask with speed profile and streaming enabled
-    
+
     .PARAMETER Question
     The question to ask Hive AI
-    
+
     .EXAMPLE
     Invoke-HiveQuickAsk "How can I optimize this PowerShell script?"
     #>
@@ -447,7 +447,7 @@ function Invoke-HiveQuickAsk {
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$Question
     )
-    
+
     hive ask $Question --profile=speed --stream
 }
 
@@ -455,13 +455,13 @@ function Invoke-HiveAnalyzeCurrent {
     <#
     .SYNOPSIS
     Analyze the current directory with Hive AI
-    
+
     .DESCRIPTION
     Analyze the current directory with specified depth and generate recommendations
-    
+
     .PARAMETER Depth
     Analysis depth level (quick, standard, comprehensive)
-    
+
     .EXAMPLE
     Invoke-HiveAnalyzeCurrent -Depth standard
     #>
@@ -471,7 +471,7 @@ function Invoke-HiveAnalyzeCurrent {
         [ValidateSet('quick', 'standard', 'comprehensive')]
         [string]$Depth = 'standard'
     )
-    
+
     hive analyze . --depth=$Depth --recommendations --format=text
 }
 
@@ -479,13 +479,13 @@ function Invoke-HivePlanFeature {
     <#
     .SYNOPSIS
     Plan a new feature with Hive AI
-    
+
     .DESCRIPTION
     Create an interactive plan for a new feature using Hive AI's planning mode
-    
+
     .PARAMETER Description
     Description of the feature to plan
-    
+
     .EXAMPLE
     Invoke-HivePlanFeature "Add user authentication system"
     #>
@@ -494,7 +494,7 @@ function Invoke-HivePlanFeature {
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$Description
     )
-    
+
     hive plan $Description --template=feature --interactive
 }
 
@@ -502,16 +502,16 @@ function Search-HiveMemory {
     <#
     .SYNOPSIS
     Search Hive AI memory with formatted output
-    
+
     .DESCRIPTION
     Search conversation history and knowledge base with table formatting
-    
+
     .PARAMETER SearchTerm
     Term to search for in memory
-    
+
     .PARAMETER Limit
     Maximum number of results to return
-    
+
     .EXAMPLE
     Search-HiveMemory "PowerShell optimization" -Limit 5
     #>
@@ -519,11 +519,11 @@ function Search-HiveMemory {
     param(
         [Parameter(Mandatory = $true, Position = 0)]
         [string]$SearchTerm,
-        
+
         [Parameter(Position = 1)]
         [int]$Limit = 10
     )
-    
+
     hive memory search $SearchTerm --format=table --limit=$Limit
 }
 
@@ -531,45 +531,45 @@ function Get-HiveContext {
     <#
     .SYNOPSIS
     Detect and display project context
-    
+
     .DESCRIPTION
     Analyze the current directory to detect project type and suggest relevant Hive AI commands
-    
+
     .EXAMPLE
     Get-HiveContext
     #>
     [CmdletBinding()]
     param()
-    
+
     $context = @()
-    
+
     if (Test-Path '.git' -PathType Container) {
         $context += 'git'
     }
-    
+
     if (Test-Path 'Cargo.toml') {
         $context += 'rust'
     }
-    
+
     if (Test-Path 'package.json') {
         $context += 'javascript'
     }
-    
+
     if (Test-Path 'requirements.txt' -or Test-Path 'pyproject.toml') {
         $context += 'python'
     }
-    
+
     if (Test-Path 'go.mod') {
         $context += 'go'
     }
-    
+
     if (Test-Path '*.ps1' -or Test-Path '*.psm1' -or Test-Path '*.psd1') {
         $context += 'powershell'
     }
-    
+
     if ($context.Count -gt 0) {
         Write-Host "🔍 Detected context: $($context -join ', ')" -ForegroundColor Cyan
-        
+
         switch ($context) {
             { $_ -contains 'rust' } {
                 Write-Host "💡 Try: hive analyze . --focus=performance" -ForegroundColor Yellow
@@ -618,19 +618,19 @@ mod tests {
     #[test]
     fn test_powershell_completions_generation() {
         let completions = generate_powershell_completions();
-        
+
         // Basic structure checks
         assert!(completions.contains("Register-ArgumentCompleter"));
         assert!(completions.contains("-CommandName hive"));
-        
+
         // Check for main command function
         assert!(completions.contains("Get-HiveMainCommands"));
         assert!(completions.contains("System.Management.Automation.CompletionResult"));
-        
+
         // Check for subcommand completions
         assert!(completions.contains("Get-HiveAnalyzeCompletions"));
         assert!(completions.contains("Get-HiveAskCompletions"));
-        
+
         // Check for PowerShell-specific features
         assert!(completions.contains("Set-Alias"));
         assert!(completions.contains("Invoke-HiveQuickAsk"));
@@ -640,12 +640,12 @@ mod tests {
     #[test]
     fn test_powershell_completions_functions() {
         let completions = generate_powershell_completions();
-        
+
         // Should contain PowerShell functions
         assert!(completions.contains("function Invoke-HiveQuickAsk"));
         assert!(completions.contains("function Invoke-HiveAnalyzeCurrent"));
         assert!(completions.contains("function Get-HiveContext"));
-        
+
         // Should contain parameter definitions
         assert!(completions.contains("[Parameter(Mandatory = $true)]"));
         assert!(completions.contains("[ValidateSet("));
@@ -654,7 +654,7 @@ mod tests {
     #[test]
     fn test_powershell_completions_context_awareness() {
         let completions = generate_powershell_completions();
-        
+
         // Should contain context detection
         assert!(completions.contains("Test-Path 'Cargo.toml'"));
         assert!(completions.contains("Test-Path 'package.json'"));

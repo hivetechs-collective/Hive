@@ -1,62 +1,62 @@
 //! Dioxus Desktop Application - VS Code-like Interface
-//! 
+//!
 //! 100% Rust implementation providing professional development experience
 
 pub mod app;
+pub mod assets;
+pub mod chat;
 pub mod components;
-pub mod layout;
+pub mod consensus;
+pub mod consensus_integration;
+pub mod dialogs;
+pub mod events;
 pub mod file_explorer;
 pub mod file_system;
-pub mod chat;
-pub mod consensus;
-pub mod state;
-pub mod events;
-pub mod styles;
-pub mod menu_bar;
-pub mod dialogs;
-pub mod consensus_integration;
-pub mod simple_db;
-pub mod model_browser;
-pub mod assets;
+pub mod layout;
 pub mod logo_svg;
+pub mod menu_bar;
+pub mod model_browser;
+pub mod simple_db;
+pub mod state;
+pub mod styles;
 
 pub use app::App;
 
 // Re-export commonly used styling components
+pub use dialogs::{AboutDialog, CommandPalette, WelcomeTab, DIALOG_STYLES};
+pub use menu_bar::{MenuAction, MenuBar};
 pub use styles::components::{
-    VsCodeButton, VsCodePanel, FileTreeItem, VsCodeTab, StatusBarItem,
-    ButtonVariant, PanelStyle, IconSize
+    ButtonVariant, FileTreeItem, IconSize, PanelStyle, StatusBarItem, VsCodeButton, VsCodePanel,
+    VsCodeTab,
 };
-pub use styles::theme::{Theme, ThemeProvider, ThemeSwitcher, use_theme};
-pub use menu_bar::{MenuBar, MenuAction};
-pub use dialogs::{AboutDialog, WelcomeTab, CommandPalette, DIALOG_STYLES};
+pub use styles::theme::{use_theme, Theme, ThemeProvider, ThemeSwitcher};
 
+use crate::core::config::Config as HiveConfig;
 use anyhow::Result;
 use dioxus::prelude::*;
-use dioxus_desktop::{Config, WindowBuilder, LogicalSize};
-use crate::core::config::Config as HiveConfig;
+use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
 
 /// Launch the Dioxus desktop application
 pub fn launch_desktop_app(config: HiveConfig) -> Result<()> {
     tracing::info!("Launching HiveTechs Consensus Desktop Application");
-    
+
     // Configure the desktop window
     let window_config = WindowBuilder::new()
         .with_title("HiveTechs Consensus")
         .with_min_inner_size(LogicalSize::new(800, 600))
         .with_inner_size(LogicalSize::new(1200, 800))
         .with_resizable(true);
-    
+
     let desktop_config = Config::new()
         .with_window(window_config)
         .with_custom_head(include_str!("styles/global_head.html").to_string())
         .with_custom_index(create_custom_index());
-    
+
     // Launch the Dioxus app
     LaunchBuilder::desktop()
         .with_cfg(desktop_config)
         .launch(app::App);
-    
+
     Ok(())
 }
 
@@ -78,4 +78,3 @@ fn create_custom_index() -> String {
         &styles::get_global_styles()
     )
 }
-

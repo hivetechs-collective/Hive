@@ -1,22 +1,23 @@
 //! Security management commands for enterprise features
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
 use serde_json;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 use uuid;
 
-use crate::security::{
-    SecuritySystem, SecurityConfig, PasswordPolicy, EncryptionConfig,
-    EnterpriseUser, EnterpriseTeam, EnterpriseRole, SecurityGroup,
-    AuditFilter,
-};
-use crate::security::teams::{TeamType, TeamAccess, TeamSettings, TeamPermissions, MemberStatus};
-use crate::security::permissions::{PermissionSubject, PermissionScope, PermissionCondition, ConditionType, ConditionOperator};
 use crate::security::audit::AuditEventType;
+use crate::security::permissions::{
+    ConditionOperator, ConditionType, PermissionCondition, PermissionScope, PermissionSubject,
+};
 use crate::security::rbac::RiskLevel;
+use crate::security::teams::{MemberStatus, TeamAccess, TeamPermissions, TeamSettings, TeamType};
+use crate::security::{
+    AuditFilter, EncryptionConfig, EnterpriseRole, EnterpriseTeam, EnterpriseUser, PasswordPolicy,
+    SecurityConfig, SecurityGroup, SecuritySystem,
+};
 
 /// Security management commands
 #[derive(Debug, Subcommand)]
@@ -24,35 +25,34 @@ pub enum SecurityCommands {
     /// User management
     #[command(subcommand)]
     User(UserCommands),
-    
+
     /// Team management
     #[command(subcommand)]
     Team(TeamCommands),
-    
+
     /// Role management
     #[command(subcommand)]
     Role(RoleCommands),
-    
+
     /// Permission management
     #[command(subcommand)]
     Permission(PermissionCommands),
-    
+
     /// Security groups
     #[command(subcommand)]
     Group(GroupCommands),
-    
+
     /// Audit trail
     #[command(subcommand)]
     Audit(AuditCommands),
-    
+
     /// Security configuration
     #[command(subcommand)]
     Config(ConfigCommands),
-    
+
     /// Security status
     Status,
 }
-
 
 #[derive(Debug, Subcommand)]
 pub enum UserCommands {
@@ -394,7 +394,7 @@ pub async fn handle_security(commands: SecurityCommands) -> Result<()> {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("hive")
         .join("security.db");
-    
+
     let security_system = SecuritySystem::new(security_config, Some(db_path)).await?;
     security_system.initialize().await?;
 
@@ -402,25 +402,40 @@ pub async fn handle_security(commands: SecurityCommands) -> Result<()> {
         SecurityCommands::User(user_cmd) => handle_user_commands(user_cmd, &security_system).await,
         SecurityCommands::Role(role_cmd) => handle_role_commands(role_cmd, &security_system).await,
         SecurityCommands::Team(team_cmd) => handle_team_commands(team_cmd, &security_system).await,
-        SecurityCommands::Permission(perm_cmd) => handle_permission_commands(perm_cmd, &security_system).await,
-        SecurityCommands::Group(group_cmd) => handle_group_commands(group_cmd, &security_system).await,
-        SecurityCommands::Audit(audit_cmd) => handle_audit_commands(audit_cmd, &security_system).await,
-        SecurityCommands::Config(config_cmd) => handle_config_commands(config_cmd, &security_system).await,
+        SecurityCommands::Permission(perm_cmd) => {
+            handle_permission_commands(perm_cmd, &security_system).await
+        }
+        SecurityCommands::Group(group_cmd) => {
+            handle_group_commands(group_cmd, &security_system).await
+        }
+        SecurityCommands::Audit(audit_cmd) => {
+            handle_audit_commands(audit_cmd, &security_system).await
+        }
+        SecurityCommands::Config(config_cmd) => {
+            handle_config_commands(config_cmd, &security_system).await
+        }
         SecurityCommands::Status => handle_status_command(&security_system).await,
     }
 }
 
-async fn handle_user_commands(command: UserCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_user_commands(
+    command: UserCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
         UserCommands::List => {
             // Note: list_users method not implemented yet
             let users: Vec<crate::security::rbac::EnterpriseUser> = vec![];
             println!("🔐 Enterprise Users ({} total)", users.len());
-            println!("{:<20} {:<25} {:<30} {:<10} {:<10}", "ID", "Username", "Email", "Active", "MFA");
+            println!(
+                "{:<20} {:<25} {:<30} {:<10} {:<10}",
+                "ID", "Username", "Email", "Active", "MFA"
+            );
             println!("{}", "-".repeat(95));
-            
+
             for user in users {
-                println!("{:<20} {:<25} {:<30} {:<10} {:<10}",
+                println!(
+                    "{:<20} {:<25} {:<30} {:<10} {:<10}",
                     user.id,
                     user.username,
                     user.email,
@@ -428,9 +443,16 @@ async fn handle_user_commands(command: UserCommands, security_system: &SecurityS
                     if user.mfa_enabled { "✅" } else { "❌" }
                 );
             }
-        },
-        
-        UserCommands::Create { id, username, email, name, department, mfa } => {
+        }
+
+        UserCommands::Create {
+            id,
+            username,
+            email,
+            name,
+            department,
+            mfa,
+        } => {
             let mut metadata = HashMap::new();
             if let Some(dept) = department {
                 metadata.insert("department".to_string(), dept);
@@ -462,8 +484,8 @@ async fn handle_user_commands(command: UserCommands, security_system: &SecurityS
 
             security_system.create_user(user).await?;
             println!("✅ User '{}' created successfully", id);
-        },
-        
+        }
+
         UserCommands::Get { user_id } => {
             if let Some(user) = security_system.rbac().get_user(&user_id).await? {
                 println!("🔐 User Details: {}", user.id);
@@ -471,74 +493,100 @@ async fn handle_user_commands(command: UserCommands, security_system: &SecurityS
                 println!("Email: {}", user.email);
                 println!("Full Name: {}", user.full_name);
                 println!("Active: {}", if user.active { "✅" } else { "❌" });
-                println!("MFA Enabled: {}", if user.mfa_enabled { "✅" } else { "❌" });
-                println!("Account Locked: {}", if user.account_locked { "🔒" } else { "🔓" });
+                println!(
+                    "MFA Enabled: {}",
+                    if user.mfa_enabled { "✅" } else { "❌" }
+                );
+                println!(
+                    "Account Locked: {}",
+                    if user.account_locked { "🔒" } else { "🔓" }
+                );
                 println!("Roles: {}", user.roles.join(", "));
                 println!("Teams: {}", user.teams.join(", "));
-                println!("Created: {}", user.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
-                
+                println!(
+                    "Created: {}",
+                    user.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+                );
+
                 if let Some(last_login) = user.last_login {
                     println!("Last Login: {}", last_login.format("%Y-%m-%d %H:%M:%S UTC"));
                 }
             } else {
                 return Err(anyhow!("User not found: {}", user_id));
             }
-        },
-        
+        }
+
         UserCommands::AssignRole { user_id, role } => {
-            security_system.assign_role(&user_id, &role, "admin").await?;
+            security_system
+                .assign_role(&user_id, &role, "admin")
+                .await?;
             println!("✅ Role '{}' assigned to user '{}'", role, user_id);
-        },
-        
+        }
+
         UserCommands::RemoveRole { user_id, role } => {
             // Note: remove_role method not implemented yet
             println!("❌ Remove role functionality not yet implemented");
             println!("✅ Role '{}' removed from user '{}'", role, user_id);
-        },
-        
+        }
+
         UserCommands::Lock { user_id, reason } => {
             // In a real implementation, this would lock the user account
             println!("🔒 User '{}' locked. Reason: {}", user_id, reason);
-        },
-        
+        }
+
         UserCommands::Unlock { user_id } => {
             // In a real implementation, this would unlock the user account
             println!("🔓 User '{}' unlocked", user_id);
-        },
-        
+        }
+
         UserCommands::ResetPassword { user_id, password } => {
-            security_system.reset_user_password(&user_id, &password, "admin").await?;
+            security_system
+                .reset_user_password(&user_id, &password, "admin")
+                .await?;
             println!("✅ Password reset for user '{}'", user_id);
-        },
+        }
     }
-    
+
     Ok(())
 }
 
-async fn handle_role_commands(command: RoleCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_role_commands(
+    command: RoleCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
         RoleCommands::List => {
             let roles = security_system.rbac().list_roles().await?;
             println!("🎭 Enterprise Roles ({} total)", roles.len());
-            println!("{:<20} {:<30} {:<15} {:<10}", "ID", "Name", "Risk Level", "Active");
+            println!(
+                "{:<20} {:<30} {:<15} {:<10}",
+                "ID", "Name", "Risk Level", "Active"
+            );
             println!("{}", "-".repeat(75));
-            
+
             for role in roles {
-                println!("{:<20} {:<30} {:<15} {:<10}",
+                println!(
+                    "{:<20} {:<30} {:<15} {:<10}",
                     role.id,
                     role.name,
                     format!("{:?}", role.risk_level),
                     if role.active { "✅" } else { "❌" }
                 );
             }
-        },
-        
-        RoleCommands::Create { id, name, description, permissions, risk_level } => {
+        }
+
+        RoleCommands::Create {
+            id,
+            name,
+            description,
+            permissions,
+            risk_level,
+        } => {
             let perm_set: std::collections::HashSet<String> = permissions
                 .split(',')
                 .map(|s| s.trim().to_string())
                 .collect();
-            
+
             let risk = match risk_level.as_deref() {
                 Some("low") => RiskLevel::Low,
                 Some("medium") => RiskLevel::Medium,
@@ -568,10 +616,10 @@ async fn handle_role_commands(command: RoleCommands, security_system: &SecurityS
             // Note: create_role method not implemented yet
             println!("❌ Create role functionality not yet implemented");
             println!("✅ Role '{}' created successfully", id);
-        },
-        
+        }
+
         RoleCommands::Get { role_id } => {
-            // Note: get_role method not implemented yet  
+            // Note: get_role method not implemented yet
             let role: Option<EnterpriseRole> = None;
             if let Some(role) = role {
                 println!("🎭 Role Details: {}", role.id);
@@ -579,17 +627,34 @@ async fn handle_role_commands(command: RoleCommands, security_system: &SecurityS
                 println!("Description: {}", role.description);
                 println!("Risk Level: {:?}", role.risk_level);
                 println!("Active: {}", if role.active { "✅" } else { "❌" });
-                println!("Requires Approval: {}", if role.requires_approval { "✅" } else { "❌" });
-                println!("Permissions: {}", role.permissions.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "));
+                println!(
+                    "Requires Approval: {}",
+                    if role.requires_approval { "✅" } else { "❌" }
+                );
+                println!(
+                    "Permissions: {}",
+                    role.permissions
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
                 println!("Parent Roles: {}", role.parent_roles.join(", "));
                 println!("Child Roles: {}", role.child_roles.join(", "));
-                println!("Created: {}", role.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                println!(
+                    "Created: {}",
+                    role.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+                );
             } else {
                 return Err(anyhow!("Role not found: {}", role_id));
             }
-        },
-        
-        RoleCommands::UpdatePermissions { role_id, add, remove } => {
+        }
+
+        RoleCommands::UpdatePermissions {
+            role_id,
+            add,
+            remove,
+        } => {
             // Note: get_role method not implemented yet
             let role: Option<EnterpriseRole> = None;
             if let Some(mut role) = role {
@@ -598,36 +663,43 @@ async fn handle_role_commands(command: RoleCommands, security_system: &SecurityS
                         role.permissions.insert(perm.trim().to_string());
                     }
                 }
-                
+
                 if let Some(remove_perms) = remove {
                     for perm in remove_perms.split(',') {
                         role.permissions.remove(perm.trim());
                     }
                 }
-                
+
                 // Note: update_role method not implemented yet
                 println!("❌ Update role functionality not yet implemented");
                 println!("✅ Role '{}' permissions updated", role_id);
             } else {
                 return Err(anyhow!("Role not found: {}", role_id));
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
-async fn handle_team_commands(command: TeamCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_team_commands(
+    command: TeamCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
         TeamCommands::List => {
             // Note: list_teams method not implemented yet
             let teams: Vec<EnterpriseTeam> = vec![];
             println!("👥 Enterprise Teams ({} total)", teams.len());
-            println!("{:<20} {:<30} {:<15} {:<10} {:<10}", "ID", "Name", "Type", "Members", "Active");
+            println!(
+                "{:<20} {:<30} {:<15} {:<10} {:<10}",
+                "ID", "Name", "Type", "Members", "Active"
+            );
             println!("{}", "-".repeat(85));
-            
+
             for team in teams {
-                println!("{:<20} {:<30} {:<15} {:<10} {:<10}",
+                println!(
+                    "{:<20} {:<30} {:<15} {:<10} {:<10}",
                     team.id,
                     team.name,
                     format!("{:?}", team.team_type),
@@ -635,9 +707,15 @@ async fn handle_team_commands(command: TeamCommands, security_system: &SecurityS
                     if team.active { "✅" } else { "❌" }
                 );
             }
-        },
-        
-        TeamCommands::Create { id, name, description, team_type, parent } => {
+        }
+
+        TeamCommands::Create {
+            id,
+            name,
+            description,
+            team_type,
+            parent,
+        } => {
             let team_type_enum = match team_type.to_lowercase().as_str() {
                 "department" => TeamType::Department,
                 "project" => TeamType::Project,
@@ -669,8 +747,8 @@ async fn handle_team_commands(command: TeamCommands, security_system: &SecurityS
 
             security_system.create_team(team, "admin").await?;
             println!("✅ Team '{}' created successfully", id);
-        },
-        
+        }
+
         TeamCommands::Get { team_id } => {
             if let Some(team) = security_system.teams().get_team(&team_id).await? {
                 println!("👥 Team Details: {}", team.id);
@@ -680,8 +758,11 @@ async fn handle_team_commands(command: TeamCommands, security_system: &SecurityS
                 println!("Active: {}", if team.active { "✅" } else { "❌" });
                 println!("Members: {}", team.members.len());
                 println!("Roles: {}", team.roles.len());
-                println!("Created: {}", team.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
-                
+                println!(
+                    "Created: {}",
+                    team.created_at.format("%Y-%m-%d %H:%M:%S UTC")
+                );
+
                 if !team.members.is_empty() {
                     println!("\nMembers:");
                     for member in &team.members {
@@ -691,35 +772,51 @@ async fn handle_team_commands(command: TeamCommands, security_system: &SecurityS
             } else {
                 return Err(anyhow!("Team not found: {}", team_id));
             }
-        },
-        
-        TeamCommands::AddUser { team_id, user_id, role: _ } => {
-            security_system.add_user_to_team(&user_id, &team_id, "admin").await?;
+        }
+
+        TeamCommands::AddUser {
+            team_id,
+            user_id,
+            role: _,
+        } => {
+            security_system
+                .add_user_to_team(&user_id, &team_id, "admin")
+                .await?;
             println!("✅ User '{}' added to team '{}'", user_id, team_id);
-        },
-        
+        }
+
         TeamCommands::RemoveUser { team_id, user_id } => {
-            security_system.teams().remove_user_from_team(&user_id, &team_id).await?;
+            security_system
+                .teams()
+                .remove_user_from_team(&user_id, &team_id)
+                .await?;
             println!("✅ User '{}' removed from team '{}'", user_id, team_id);
-        },
-        
-        TeamCommands::Invite { team_id, email, role, message } => {
-            let invitation_id = security_system.teams().create_invitation(
-                &team_id,
-                &email,
-                &role,
-                "admin",
-                message,
-                false,
-                None,
-            ).await?;
-            println!("✅ Invitation sent to '{}' for team '{}' (ID: {})", email, team_id, invitation_id);
-        },
-        
+        }
+
+        TeamCommands::Invite {
+            team_id,
+            email,
+            role,
+            message,
+        } => {
+            let invitation_id = security_system
+                .teams()
+                .create_invitation(&team_id, &email, &role, "admin", message, false, None)
+                .await?;
+            println!(
+                "✅ Invitation sent to '{}' for team '{}' (ID: {})",
+                email, team_id, invitation_id
+            );
+        }
+
         TeamCommands::Hierarchy { root_team } => {
-            if let Some(hierarchy) = security_system.teams().get_team_hierarchy(&root_team).await? {
+            if let Some(hierarchy) = security_system
+                .teams()
+                .get_team_hierarchy(&root_team)
+                .await?
+            {
                 println!("🌳 Team Hierarchy (Root: {})", hierarchy.root_team);
-                
+
                 for (team_id, level) in &hierarchy.levels {
                     let indent = "  ".repeat(*level as usize);
                     println!("{}└─ {} (Level {})", indent, team_id, level);
@@ -727,25 +824,44 @@ async fn handle_team_commands(command: TeamCommands, security_system: &SecurityS
             } else {
                 println!("No hierarchy found for team: {}", root_team);
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
-async fn handle_permission_commands(command: PermissionCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_permission_commands(
+    command: PermissionCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
-        PermissionCommands::Check { user_id, permission, resource } => {
-            let has_permission = security_system.check_permission(&user_id, &permission, resource.as_deref()).await?;
-            
+        PermissionCommands::Check {
+            user_id,
+            permission,
+            resource,
+        } => {
+            let has_permission = security_system
+                .check_permission(&user_id, &permission, resource.as_deref())
+                .await?;
+
             if has_permission {
                 println!("✅ User '{}' has permission '{}'", user_id, permission);
             } else {
-                println!("❌ User '{}' does NOT have permission '{}'", user_id, permission);
+                println!(
+                    "❌ User '{}' does NOT have permission '{}'",
+                    user_id, permission
+                );
             }
-        },
-        
-        PermissionCommands::Grant { permission, resource_type, resource_id, subject_type, subject_id, scope } => {
+        }
+
+        PermissionCommands::Grant {
+            permission,
+            resource_type,
+            resource_id,
+            subject_type,
+            subject_id,
+            scope,
+        } => {
             let subject = match subject_type.as_str() {
                 "user" => PermissionSubject::User(subject_id),
                 "role" => PermissionSubject::Role(subject_id),
@@ -753,7 +869,7 @@ async fn handle_permission_commands(command: PermissionCommands, security_system
                 "api_key" => PermissionSubject::ApiKey(subject_id),
                 _ => return Err(anyhow!("Invalid subject type: {}", subject_type)),
             };
-            
+
             let permission_scope = match scope.as_deref() {
                 Some("resource") => PermissionScope::Resource,
                 Some("resource_and_children") => PermissionScope::ResourceAndChildren,
@@ -763,26 +879,35 @@ async fn handle_permission_commands(command: PermissionCommands, security_system
                 _ => PermissionScope::Resource,
             };
 
-            let permission_id = security_system.permissions().grant_permission(
-                &permission,
-                &resource_type,
-                &resource_id,
-                subject,
-                permission_scope,
-                "admin",
-                vec![],
-                None,
-            ).await?;
-            
+            let permission_id = security_system
+                .permissions()
+                .grant_permission(
+                    &permission,
+                    &resource_type,
+                    &resource_id,
+                    subject,
+                    permission_scope,
+                    "admin",
+                    vec![],
+                    None,
+                )
+                .await?;
+
             println!("✅ Permission granted (ID: {})", permission_id);
-        },
-        
+        }
+
         PermissionCommands::Revoke { permission_id } => {
-            security_system.permissions().revoke_permission(&permission_id).await?;
+            security_system
+                .permissions()
+                .revoke_permission(&permission_id)
+                .await?;
             println!("✅ Permission '{}' revoked", permission_id);
-        },
-        
-        PermissionCommands::List { subject_type, subject_id } => {
+        }
+
+        PermissionCommands::List {
+            subject_type,
+            subject_id,
+        } => {
             let subject = match subject_type.as_str() {
                 "user" => PermissionSubject::User(subject_id),
                 "role" => PermissionSubject::Role(subject_id),
@@ -790,34 +915,50 @@ async fn handle_permission_commands(command: PermissionCommands, security_system
                 "api_key" => PermissionSubject::ApiKey(subject_id),
                 _ => return Err(anyhow!("Invalid subject type: {}", subject_type)),
             };
-            
-            let permissions = security_system.permissions().list_permissions(&subject).await?;
-            
+
+            let permissions = security_system
+                .permissions()
+                .list_permissions(&subject)
+                .await?;
+
             println!("🔑 Permissions for {} ({})", subject_type, subject.get_id());
-            println!("{:<30} {:<20} {:<20} {:<15}", "Permission", "Resource Type", "Resource ID", "Scope");
+            println!(
+                "{:<30} {:<20} {:<20} {:<15}",
+                "Permission", "Resource Type", "Resource ID", "Scope"
+            );
             println!("{}", "-".repeat(85));
-            
+
             for perm in permissions {
-                println!("{:<30} {:<20} {:<20} {:<15}",
+                println!(
+                    "{:<30} {:<20} {:<20} {:<15}",
                     perm.permission_name,
                     perm.resource_type,
                     perm.resource_id,
                     format!("{:?}", perm.scope)
                 );
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
-async fn handle_audit_commands(command: AuditCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_audit_commands(
+    command: AuditCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
-        AuditCommands::Logs { limit, user_id, event_type, start_time, end_time } => {
+        AuditCommands::Logs {
+            limit,
+            user_id,
+            event_type,
+            start_time,
+            end_time,
+        } => {
             let mut filter = AuditFilter::default();
             filter.limit = Some(limit as u32);
             filter.user_id = user_id;
-            
+
             if let Some(event_str) = event_type {
                 // Simple mapping of string to event type
                 let event_type_enum = match event_str.as_str() {
@@ -830,54 +971,66 @@ async fn handle_audit_commands(command: AuditCommands, security_system: &Securit
                 };
                 filter.event_types = Some(vec![event_type_enum]);
             }
-            
+
             if let Some(start_str) = start_time {
-                filter.start_time = Some(DateTime::parse_from_rfc3339(&start_str)?.with_timezone(&Utc));
+                filter.start_time =
+                    Some(DateTime::parse_from_rfc3339(&start_str)?.with_timezone(&Utc));
             }
-            
+
             if let Some(end_str) = end_time {
                 filter.end_time = Some(DateTime::parse_from_rfc3339(&end_str)?.with_timezone(&Utc));
             }
 
             let events = security_system.get_audit_logs(filter).await?;
-            
+
             println!("📋 Audit Logs ({} entries)", events.len());
-            println!("{:<20} {:<15} {:<20} {:<30}", "Timestamp", "Event Type", "User", "Details");
+            println!(
+                "{:<20} {:<15} {:<20} {:<30}",
+                "Timestamp", "Event Type", "User", "Details"
+            );
             println!("{}", "-".repeat(85));
-            
+
             for event in events {
-                println!("{:<20} {:<15} {:<20} {:<30}",
+                println!(
+                    "{:<20} {:<15} {:<20} {:<30}",
                     event.timestamp.format("%Y-%m-%d %H:%M:%S"),
                     format!("{:?}", event.event_type),
                     event.user_id.unwrap_or_else(|| "system".to_string()),
                     event.details
                 );
             }
-        },
-        
-        AuditCommands::Export { output, format, start_time, end_time } => {
+        }
+
+        AuditCommands::Export {
+            output,
+            format,
+            start_time,
+            end_time,
+        } => {
             let mut filter = AuditFilter::default();
-            
+
             if let Some(start_str) = start_time {
-                filter.start_time = Some(DateTime::parse_from_rfc3339(&start_str)?.with_timezone(&Utc));
+                filter.start_time =
+                    Some(DateTime::parse_from_rfc3339(&start_str)?.with_timezone(&Utc));
             }
-            
+
             if let Some(end_str) = end_time {
                 filter.end_time = Some(DateTime::parse_from_rfc3339(&end_str)?.with_timezone(&Utc));
             }
 
             let events = security_system.get_audit_logs(filter).await?;
-            
+
             match format.as_str() {
                 "json" => {
                     let json = serde_json::to_string_pretty(&events)?;
                     std::fs::write(&output, json)?;
-                },
+                }
                 "csv" => {
                     // Simple CSV export
                     let mut csv_content = String::from("timestamp,event_type,user_id,details\n");
                     for event in events {
-                        csv_content.push_str(&format!("{},{:?},{},{}\n",
+                        csv_content.push_str(&format!(
+                            "{},{:?},{},{}\n",
                             event.timestamp.to_rfc3339(),
                             event.event_type,
                             event.user_id.unwrap_or_else(|| "system".to_string()),
@@ -885,16 +1038,16 @@ async fn handle_audit_commands(command: AuditCommands, security_system: &Securit
                         ));
                     }
                     std::fs::write(&output, csv_content)?;
-                },
+                }
                 _ => return Err(anyhow!("Unsupported format: {}", format)),
             }
-            
+
             println!("✅ Audit logs exported to: {:?}", output);
-        },
-        
+        }
+
         AuditCommands::Stats => {
             let stats = security_system.audit().get_statistics().await?;
-            
+
             println!("📊 Audit Statistics");
             println!("Total Events: {}", stats.total_events);
             println!("Events (24h): {}", stats.events_last_24h);
@@ -902,40 +1055,47 @@ async fn handle_audit_commands(command: AuditCommands, security_system: &Securit
             println!("Events (30d): {}", stats.events_last_30d);
             println!("Failed Events (24h): {}", stats.failed_events_24h);
             println!("Security Events (24h): {}", stats.security_events_24h);
-            println!("Compliance Violations (24h): {}", stats.compliance_violations_24h);
+            println!(
+                "Compliance Violations (24h): {}",
+                stats.compliance_violations_24h
+            );
             println!("Storage Size: {} bytes", stats.storage_size_bytes);
-            
+
             if let Some(oldest) = stats.oldest_event {
                 println!("Oldest Event: {}", oldest.format("%Y-%m-%d %H:%M:%S UTC"));
             }
-            
+
             if let Some(newest) = stats.newest_event {
                 println!("Newest Event: {}", newest.format("%Y-%m-%d %H:%M:%S UTC"));
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
-async fn handle_group_commands(command: GroupCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_group_commands(
+    command: GroupCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
         GroupCommands::List => {
             println!("🔐 Security Groups");
             println!("{:<20} {:<30} {:<10}", "ID", "Name", "Members");
             println!("{}", "-".repeat(60));
-            
+
             // Note: list_groups method not implemented yet
             let groups: Vec<crate::security::rbac::SecurityGroup> = vec![];
             for group in groups {
-                println!("{:<20} {:<30} {:<10}",
+                println!(
+                    "{:<20} {:<30} {:<10}",
                     group.id,
                     group.name,
                     group.members.len()
                 );
             }
-        },
-        
+        }
+
         GroupCommands::Create { name, description } => {
             let group = SecurityGroup {
                 id: format!("grp_{}", uuid::Uuid::new_v4()),
@@ -949,75 +1109,89 @@ async fn handle_group_commands(command: GroupCommands, security_system: &Securit
                 created_at: Utc::now(),
                 metadata: std::collections::HashMap::new(),
             };
-            
+
             // Note: create_group method not implemented yet
             println!("✅ Created security group: {}", name);
             println!("   ID: {}", group.id);
-        },
-        
+        }
+
         GroupCommands::Get { group_id } => {
             // Note: get_group method not implemented yet
             println!("📋 Security Group Details");
             println!("ID: {}", group_id);
             println!("(Group details not available - method not implemented)");
-        },
-        
+        }
+
         GroupCommands::AddUser { group_id, user_id } => {
             // Note: add_user_to_group method not implemented yet
             println!("✅ Added user {} to group {}", user_id, group_id);
-        },
-        
+        }
+
         GroupCommands::RemoveUser { group_id, user_id } => {
             // Note: remove_user_from_group method not implemented yet
             println!("✅ Removed user {} from group {}", user_id, group_id);
-        },
-        
+        }
+
         GroupCommands::Delete { group_id } => {
             // Note: delete_group method not implemented yet
             println!("✅ Deleted security group: {}", group_id);
-        },
+        }
     }
-    
+
     Ok(())
 }
 
-async fn handle_compliance_commands(command: ComplianceCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_compliance_commands(
+    command: ComplianceCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
         ComplianceCommands::Scan => {
             println!("🔍 Scanning for compliance violations...");
             let violations = security_system.scan_compliance_violations().await?;
-            
+
             if violations.is_empty() {
                 println!("✅ No compliance violations found");
             } else {
                 println!("⚠️  Found {} compliance violations:", violations.len());
-                
+
                 for violation in violations {
-                    println!("  {} - {} ({:?})", violation.id, violation.title, violation.severity);
+                    println!(
+                        "  {} - {} ({:?})",
+                        violation.id, violation.title, violation.severity
+                    );
                 }
             }
-        },
-        
+        }
+
         ComplianceCommands::Report { standard, output } => {
             println!("📋 Generating compliance report for {}...", standard);
-            let report = security_system.generate_compliance_report(&standard).await?;
-            
+            let report = security_system
+                .generate_compliance_report(&standard)
+                .await?;
+
             let json_report = serde_json::to_string_pretty(&report)?;
-            
+
             if let Some(output_path) = output {
                 std::fs::write(&output_path, &json_report)?;
                 println!("✅ Compliance report saved to: {:?}", output_path);
             } else {
                 println!("{}", json_report);
             }
-        },
-        
+        }
+
         ComplianceCommands::Status { standard } => {
-            let status = security_system.compliance().get_compliance_status(&standard).await?;
-            
+            let status = security_system
+                .compliance()
+                .get_compliance_status(&standard)
+                .await?;
+
             println!("📊 Compliance Status: {}", status.standard);
             println!("Overall Score: {:.1}%", status.overall_score);
-            println!("Requirements Met: {}/{}", status.met_requirements, status.total_requirements);
+            println!(
+                "Requirements Met: {}/{}",
+                status.met_requirements, status.total_requirements
+            );
             println!("Total Violations: {}", status.violations.total);
             println!("  Critical: {}", status.violations.critical);
             println!("  High: {}", status.violations.high);
@@ -1026,57 +1200,66 @@ async fn handle_compliance_commands(command: ComplianceCommands, security_system
             println!("Open Violations: {}", status.violations.open);
             println!("Overdue Violations: {}", status.violations.overdue);
             println!("Trend: {:?}", status.trend);
-        },
-        
+        }
+
         ComplianceCommands::Standards => {
             println!("📋 Supported Compliance Standards:");
             println!("  • SOX (Sarbanes-Oxley Act)");
             println!("  • GDPR (General Data Protection Regulation)");
             println!("  • ISO27001 (Information Security Management)");
-        },
+        }
     }
-    
+
     Ok(())
 }
 
-async fn handle_config_commands(command: ConfigCommands, security_system: &SecuritySystem) -> Result<()> {
+async fn handle_config_commands(
+    command: ConfigCommands,
+    security_system: &SecuritySystem,
+) -> Result<()> {
     match command {
         ConfigCommands::Show => {
             let config = security_system.get_config();
             let json_config = serde_json::to_string_pretty(config)?;
             println!("⚙️  Current Security Configuration:");
             println!("{}", json_config);
-        },
-        
+        }
+
         ConfigCommands::Update { config_file } => {
             let config_content = std::fs::read_to_string(&config_file)?;
             let new_config: SecurityConfig = serde_json::from_str(&config_content)?;
-            
+
             // In a real implementation, this would update the security system configuration
             println!("✅ Security configuration updated from: {:?}", config_file);
-            println!("New configuration applied with {} compliance standards", new_config.compliance_standards.len());
-        },
-        
+            println!(
+                "New configuration applied with {} compliance standards",
+                new_config.compliance_standards.len()
+            );
+        }
+
         ConfigCommands::Init { output } => {
             let default_config = SecurityConfig::default();
             let json_config = serde_json::to_string_pretty(&default_config)?;
-            
+
             if let Some(output_path) = output {
                 std::fs::write(&output_path, &json_config)?;
-                println!("✅ Default security configuration saved to: {:?}", output_path);
+                println!(
+                    "✅ Default security configuration saved to: {:?}",
+                    output_path
+                );
             } else {
                 println!("📄 Default Security Configuration:");
                 println!("{}", json_config);
             }
-        },
+        }
     }
-    
+
     Ok(())
 }
 
 async fn handle_status_command(security_system: &SecuritySystem) -> Result<()> {
     let metrics = security_system.get_security_metrics().await?;
-    
+
     println!("🔐 Security System Status");
     println!("========================");
     println!("Active Sessions: {}", metrics.active_sessions);
@@ -1086,29 +1269,41 @@ async fn handle_status_command(security_system: &SecuritySystem) -> Result<()> {
     println!("Total Teams: {}", metrics.total_teams);
     println!("Audit Events (24h): {}", metrics.audit_events_24h);
     println!("Compliance Violations: {}", metrics.compliance_violations);
-    println!("Last Updated: {}", metrics.last_updated.format("%Y-%m-%d %H:%M:%S UTC"));
-    
+    println!(
+        "Last Updated: {}",
+        metrics.last_updated.format("%Y-%m-%d %H:%M:%S UTC")
+    );
+
     // Get individual component statistics
     let rbac_stats = security_system.rbac().get_statistics().await?;
     let team_stats = security_system.teams().get_statistics().await?;
     let perm_stats = security_system.permissions().get_statistics().await?;
-    
+
     println!("\n📊 Component Statistics");
-    println!("RBAC: {} users, {} roles, {} security groups", 
-        rbac_stats.total_users, rbac_stats.total_roles, rbac_stats.total_security_groups);
-    println!("Teams: {} teams, {} members, {} pending invitations", 
-        team_stats.total_teams, team_stats.total_members, team_stats.pending_invitations);
-    println!("Permissions: {} total, {} active, {} expired", 
-        perm_stats.total_permissions, perm_stats.active_permissions, perm_stats.expired_permissions);
-    
+    println!(
+        "RBAC: {} users, {} roles, {} security groups",
+        rbac_stats.total_users, rbac_stats.total_roles, rbac_stats.total_security_groups
+    );
+    println!(
+        "Teams: {} teams, {} members, {} pending invitations",
+        team_stats.total_teams, team_stats.total_members, team_stats.pending_invitations
+    );
+    println!(
+        "Permissions: {} total, {} active, {} expired",
+        perm_stats.total_permissions, perm_stats.active_permissions, perm_stats.expired_permissions
+    );
+
     if rbac_stats.pending_approvals > 0 {
-        println!("\n⚠️  {} role assignments pending approval", rbac_stats.pending_approvals);
+        println!(
+            "\n⚠️  {} role assignments pending approval",
+            rbac_stats.pending_approvals
+        );
     }
-    
+
     if rbac_stats.locked_users > 0 {
         println!("🔒 {} user accounts are locked", rbac_stats.locked_users);
     }
-    
+
     Ok(())
 }
 

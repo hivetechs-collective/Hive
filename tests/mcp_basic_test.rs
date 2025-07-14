@@ -14,16 +14,16 @@ fn test_mcp_error_codes() {
     let parse_error = McpError::parse_error();
     assert_eq!(parse_error.code, -32700);
     assert_eq!(parse_error.message, "Parse error");
-    
+
     let invalid_request = McpError::invalid_request();
     assert_eq!(invalid_request.code, -32600);
-    
+
     let method_not_found = McpError::method_not_found();
     assert_eq!(method_not_found.code, -32601);
-    
+
     let invalid_params = McpError::invalid_params();
     assert_eq!(invalid_params.code, -32602);
-    
+
     let internal_error = McpError::internal_error();
     assert_eq!(internal_error.code, -32603);
 }
@@ -43,11 +43,11 @@ fn test_tool_serialization() {
             "required": ["input"]
         }),
     };
-    
+
     // Serialize and deserialize
     let json = serde_json::to_string(&tool).unwrap();
     let deserialized: Tool = serde_json::from_str(&json).unwrap();
-    
+
     assert_eq!(deserialized.name, tool.name);
     assert_eq!(deserialized.description, tool.description);
 }
@@ -60,11 +60,11 @@ fn test_resource_serialization() {
         description: Some("A Rust file".to_string()),
         mime_type: Some("text/x-rust".to_string()),
     };
-    
+
     // Serialize and deserialize
     let json = serde_json::to_string(&resource).unwrap();
     let deserialized: Resource = serde_json::from_str(&json).unwrap();
-    
+
     assert_eq!(deserialized.uri, resource.uri);
     assert_eq!(deserialized.name, resource.name);
     assert_eq!(deserialized.description, resource.description);
@@ -77,16 +77,16 @@ fn test_mcp_message_structure() {
         method: "tools/list".to_string(),
         params: serde_json::json!({}),
     };
-    
+
     let message = McpMessage {
         jsonrpc: "2.0".to_string(),
         id: Some(serde_json::json!(1)),
         content: McpMessageContent::Request(request),
     };
-    
+
     // Serialize to JSON
     let json = serde_json::to_string(&message).unwrap();
-    
+
     // Check that JSON contains expected fields
     assert!(json.contains("jsonrpc"));
     assert!(json.contains("\"2.0\""));
@@ -106,7 +106,7 @@ fn test_initialize_params() {
             version: "1.0.0".to_string(),
         },
     };
-    
+
     // Should serialize correctly
     let json = serde_json::to_value(&params).unwrap();
     assert_eq!(json["protocolVersion"], MCP_VERSION);
@@ -121,7 +121,7 @@ fn test_server_capabilities() {
         resources: Some(McpCapability { experimental: None }),
         tools: Some(McpCapability { experimental: None }),
     };
-    
+
     // Serialize and check structure
     let json = serde_json::to_value(&capabilities).unwrap();
     assert!(json["logging"].is_object());

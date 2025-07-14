@@ -131,7 +131,7 @@ impl NavigationProvider {
 
             // Search symbol index
             let definitions = self.find_symbol_definitions(&symbol.name, &symbol.kind).await?;
-            
+
             if definitions.is_empty() {
                 // Use AI to help find definition
                 return self.ai_assisted_definition_search(&symbol, document_content, language).await;
@@ -197,10 +197,10 @@ impl NavigationProvider {
 
             // Search all references
             let mut all_references = Vec::new();
-            
+
             // Find in symbol index
             let references = self.find_symbol_references(&symbol.name, &symbol.kind).await?;
-            
+
             for reference in references {
                 if params.context.include_declaration || !reference.is_declaration {
                     all_references.push(reference.location);
@@ -240,7 +240,7 @@ impl NavigationProvider {
         if let Some(symbol) = symbol_info {
             // Find implementations for interfaces/abstracts
             let implementations = self.find_implementations(&symbol.name, &symbol.kind).await?;
-            
+
             if !implementations.is_empty() {
                 let location_links: Vec<LocationLink> = implementations
                     .into_iter()
@@ -276,7 +276,7 @@ impl NavigationProvider {
             // Find type definition
             if let Some(type_name) = self.extract_type_name(&symbol, document_content).await? {
                 let type_definitions = self.find_symbol_definitions(&type_name, &SymbolKind::Type).await?;
-                
+
                 if !type_definitions.is_empty() {
                     let location_links: Vec<LocationLink> = type_definitions
                         .into_iter()
@@ -310,7 +310,7 @@ impl NavigationProvider {
         if let Some(symbol) = symbol_info {
             // Find declarations (different from definitions)
             let declarations = self.find_symbol_declarations(&symbol.name, &symbol.kind).await?;
-            
+
             if !declarations.is_empty() {
                 let location_links: Vec<LocationLink> = declarations
                     .into_iter()
@@ -337,7 +337,7 @@ impl NavigationProvider {
 
         // Parse document for symbols
         let parse_result = self.analysis_engine.parse_code(content, Some(language)).await?;
-        
+
         let mut definitions = Vec::new();
         let mut references = Vec::new();
 
@@ -415,7 +415,7 @@ impl NavigationProvider {
     ) -> Result<Option<SymbolInfo>> {
         // Parse content and find symbol at position
         let lines: Vec<&str> = content.lines().collect();
-        
+
         if params.position.line as usize >= lines.len() {
             return Ok(None);
         }
@@ -465,7 +465,7 @@ impl NavigationProvider {
     /// Extract word at character position
     fn extract_word_at_position(&self, line: &str, char_pos: usize) -> String {
         let chars: Vec<char> = line.chars().collect();
-        
+
         if char_pos >= chars.len() {
             return String::new();
         }
@@ -530,13 +530,13 @@ impl NavigationProvider {
     async fn find_symbol_declarations(&self, name: &str, kind: &SymbolKind) -> Result<Vec<SymbolDefinition>> {
         // Find declarations (vs definitions)
         let definitions = self.find_symbol_definitions(name, kind).await?;
-        
+
         // Filter for declarations only
         let declarations: Vec<SymbolDefinition> = definitions
             .into_iter()
             .filter(|def| {
                 // Simple heuristic: check if it's in a header file or has specific modifiers
-                def.location.uri.ends_with(".h") || 
+                def.location.uri.ends_with(".h") ||
                 def.location.uri.ends_with(".hpp") ||
                 def.modifiers.contains(&"extern".to_string())
             })

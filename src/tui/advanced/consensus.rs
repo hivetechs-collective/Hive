@@ -6,17 +6,15 @@
 //! - Live metrics display
 //! - Token streaming visualization
 
+use crate::tui::themes::Theme;
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyCode};
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Modifier},
-    text::{Span, Line},
-    widgets::{
-        Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Tabs, 
-        Clear, Wrap
-    },
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
 use std::{
@@ -24,7 +22,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc;
-use crate::tui::themes::Theme;
 
 /// Consensus panel state with real-time progress tracking
 pub struct ConsensusPanel {
@@ -364,7 +361,7 @@ impl ConsensusPanel {
         self.state = ConsensusState::Processing;
         self.pipeline_progress.reset();
         self.token_stream.start_streaming(PipelineStage::Generator);
-        
+
         // Add user message
         self.add_chat_message(ChatMessage {
             content: query,
@@ -379,10 +376,10 @@ impl ConsensusPanel {
 
     /// Update pipeline progress
     pub fn update_pipeline_progress(
-        &mut self, 
-        stage: PipelineStage, 
+        &mut self,
+        stage: PipelineStage,
         progress: u8,
-        tokens_processed: usize
+        tokens_processed: usize,
     ) {
         match stage {
             PipelineStage::Generator => self.pipeline_progress.generator = progress,
@@ -394,7 +391,7 @@ impl ConsensusPanel {
                 self.token_stream.stop_streaming();
             }
         }
-        
+
         self.pipeline_progress.active_stage = stage;
         self.pipeline_progress.tokens_processed = tokens_processed;
         self.update_metrics();
@@ -417,8 +414,7 @@ impl ConsensusPanel {
                 PipelineStage::Complete => MessageType::System,
             };
 
-            let processing_time = self.token_stream.start_time
-                .map(|start| start.elapsed());
+            let processing_time = self.token_stream.start_time.map(|start| start.elapsed());
 
             self.add_chat_message(ChatMessage {
                 content: self.token_stream.buffer.clone(),
@@ -438,7 +434,7 @@ impl ConsensusPanel {
         if self.chat_messages.len() > 1000 {
             self.chat_messages.pop_front();
         }
-        
+
         // Auto-scroll to latest message
         if !self.chat_messages.is_empty() {
             self.list_state.select(Some(self.chat_messages.len() - 1));
@@ -465,10 +461,10 @@ impl ConsensusPanel {
         // Update metrics based on current pipeline state
         if let Some(start_time) = self.pipeline_progress.stage_timings[0] {
             let elapsed = start_time.elapsed();
-            self.metrics.tokens_per_second = 
+            self.metrics.tokens_per_second =
                 self.pipeline_progress.tokens_processed as f64 / elapsed.as_secs_f64();
         }
-        
+
         // Update resource usage with real system metrics
         self.metrics.resource_usage = ResourceUsage {
             memory_mb: get_memory_usage(),
@@ -479,13 +475,7 @@ impl ConsensusPanel {
     }
 
     /// Render the consensus panel
-    pub fn render(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         // Split area for tabs and content
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -498,10 +488,10 @@ impl ConsensusPanel {
 
         // Render tab bar
         self.render_tab_bar(frame, chunks[0], theme);
-        
+
         // Render pipeline progress
         self.render_pipeline_progress(frame, chunks[1], theme, is_active);
-        
+
         // Render active tab content
         self.render_tab_content(frame, chunks[2], theme, is_active);
     }
@@ -510,7 +500,7 @@ impl ConsensusPanel {
     fn render_tab_bar(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
         let titles = vec![
             Line::from("Chat"),
-            Line::from("Analysis"), 
+            Line::from("Analysis"),
             Line::from("Planning"),
             Line::from("Memory"),
             Line::from("Metrics"),
@@ -552,36 +542,49 @@ impl ConsensusPanel {
             .split(area);
 
         // Update animation
-        if self.animation_state.enabled && 
-           self.animation_state.last_update.elapsed() > Duration::from_millis(100) {
-            self.animation_state.frame = 
+        if self.animation_state.enabled
+            && self.animation_state.last_update.elapsed() > Duration::from_millis(100)
+        {
+            self.animation_state.frame =
                 (self.animation_state.frame + 1) % self.animation_state.spinner_chars.len();
             self.animation_state.last_update = Instant::now();
         }
 
         // Render each stage
         self.render_stage_progress(
-            frame, chunks[0], "Generator", self.pipeline_progress.generator,
+            frame,
+            chunks[0],
+            "Generator",
+            self.pipeline_progress.generator,
             self.pipeline_progress.active_stage == PipelineStage::Generator,
-            theme
+            theme,
         );
-        
+
         self.render_stage_progress(
-            frame, chunks[1], "Refiner", self.pipeline_progress.refiner,
+            frame,
+            chunks[1],
+            "Refiner",
+            self.pipeline_progress.refiner,
             self.pipeline_progress.active_stage == PipelineStage::Refiner,
-            theme
+            theme,
         );
-        
+
         self.render_stage_progress(
-            frame, chunks[2], "Validator", self.pipeline_progress.validator,
+            frame,
+            chunks[2],
+            "Validator",
+            self.pipeline_progress.validator,
             self.pipeline_progress.active_stage == PipelineStage::Validator,
-            theme
+            theme,
         );
-        
+
         self.render_stage_progress(
-            frame, chunks[3], "Curator", self.pipeline_progress.curator,
+            frame,
+            chunks[3],
+            "Curator",
+            self.pipeline_progress.curator,
             self.pipeline_progress.active_stage == PipelineStage::Curator,
-            theme
+            theme,
         );
     }
 
@@ -639,13 +642,7 @@ impl ConsensusPanel {
     }
 
     /// Render chat tab with conversation history
-    fn render_chat_tab(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    fn render_chat_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         let messages = self.chat_messages.clone();
         let items: Vec<ListItem> = messages
             .iter()
@@ -655,18 +652,18 @@ impl ConsensusPanel {
         // Add streaming content if active
         let mut display_items = items;
         if self.token_stream.streaming && !self.token_stream.buffer.is_empty() {
-            let streaming_item = ListItem::new(vec![
-                Line::from(vec![
-                    Span::styled(
-                        format!("[{}] ", self.get_stage_name(&self.token_stream.source)),
-                        Style::default().fg(theme.accent_color()).add_modifier(Modifier::BOLD)
-                    ),
-                    Span::styled(
-                        format!("{}_", self.token_stream.buffer),
-                        Style::default().fg(theme.colors.foreground.clone().into())
-                    ),
-                ])
-            ]);
+            let streaming_item = ListItem::new(vec![Line::from(vec![
+                Span::styled(
+                    format!("[{}] ", self.get_stage_name(&self.token_stream.source)),
+                    Style::default()
+                        .fg(theme.accent_color())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    format!("{}_", self.token_stream.buffer),
+                    Style::default().fg(theme.colors.foreground.clone().into()),
+                ),
+            ])]);
             display_items.push(streaming_item);
         }
 
@@ -689,7 +686,12 @@ impl ConsensusPanel {
     /// Create chat list item
     fn create_chat_item<'a>(&self, message: &'a ChatMessage, theme: &Theme) -> ListItem<'a> {
         let (prefix, style) = match message.message_type {
-            MessageType::User => ("You", Style::default().fg(theme.accent_color()).add_modifier(Modifier::BOLD)),
+            MessageType::User => (
+                "You",
+                Style::default()
+                    .fg(theme.accent_color())
+                    .add_modifier(Modifier::BOLD),
+            ),
             MessageType::Generator => ("Gen", Style::default().fg(Color::Cyan)),
             MessageType::Refiner => ("Ref", Style::default().fg(Color::Yellow)),
             MessageType::Validator => ("Val", Style::default().fg(Color::Green)),
@@ -699,20 +701,22 @@ impl ConsensusPanel {
         };
 
         let time_str = message.timestamp.format("%H:%M:%S").to_string();
-        let tokens_info = message.tokens
+        let tokens_info = message
+            .tokens
             .map(|t| format!(" ({}t)", t))
             .unwrap_or_default();
 
-        ListItem::new(vec![
-            Line::from(vec![
-                Span::styled(format!("[{}]", time_str), Style::default().fg(theme.muted_color())),
-                Span::raw(" "),
-                Span::styled(format!("[{}]", prefix), style),
-                Span::styled(tokens_info, Style::default().fg(theme.muted_color())),
-                Span::raw(" "),
-                Span::styled(&message.content, theme.text_style()),
-            ])
-        ])
+        ListItem::new(vec![Line::from(vec![
+            Span::styled(
+                format!("[{}]", time_str),
+                Style::default().fg(theme.muted_color()),
+            ),
+            Span::raw(" "),
+            Span::styled(format!("[{}]", prefix), style),
+            Span::styled(tokens_info, Style::default().fg(theme.muted_color())),
+            Span::raw(" "),
+            Span::styled(&message.content, theme.text_style()),
+        ])])
     }
 
     /// Render analysis tab
@@ -743,7 +747,8 @@ impl ConsensusPanel {
             // Create items first without borrowing self.list_state
             let items: Vec<ListItem> = {
                 let results = &self.analysis_results;
-                results.iter()
+                results
+                    .iter()
                     .map(|result| {
                         // Inline the create_analysis_item logic to avoid self borrow
                         let confidence_style = if result.confidence >= 80 {
@@ -765,7 +770,10 @@ impl ConsensusPanel {
                             ]),
                             Line::from(vec![
                                 Span::raw("  "),
-                                Span::styled(&result.summary, Style::default().fg(theme.muted_color())),
+                                Span::styled(
+                                    &result.summary,
+                                    Style::default().fg(theme.muted_color()),
+                                ),
                             ]),
                         ];
 
@@ -805,12 +813,14 @@ impl ConsensusPanel {
             Line::from(vec![
                 Span::styled(
                     format!("[{}%]", result.confidence),
-                    confidence_style.add_modifier(Modifier::BOLD)
+                    confidence_style.add_modifier(Modifier::BOLD),
                 ),
                 Span::raw(" "),
                 Span::styled(
                     &result.analysis_type,
-                    Style::default().fg(theme.accent_color()).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(theme.accent_color())
+                        .add_modifier(Modifier::BOLD),
                 ),
             ]),
             Line::from(vec![
@@ -848,23 +858,32 @@ impl ConsensusPanel {
             // Create items first without borrowing self.list_state
             let items: Vec<ListItem> = {
                 let steps = &self.planning_data.steps;
-                steps.iter()
+                steps
+                    .iter()
                     .enumerate()
                     .map(|(i, step)| {
                         // Inline the create_planning_item logic to avoid self borrow
                         let (status_icon, status_style) = match step.status {
                             StepStatus::Pending => ("⏳", Style::default().fg(theme.muted_color())),
-                            StepStatus::InProgress => ("🔄", Style::default().fg(theme.accent_color())),
-                            StepStatus::Completed => ("✅", Style::default().fg(theme.success_color())),
+                            StepStatus::InProgress => {
+                                ("🔄", Style::default().fg(theme.accent_color()))
+                            }
+                            StepStatus::Completed => {
+                                ("✅", Style::default().fg(theme.success_color()))
+                            }
                             StepStatus::Failed => ("❌", Style::default().fg(theme.error_color())),
-                            StepStatus::Blocked => ("🚫", Style::default().fg(theme.warning_color())),
+                            StepStatus::Blocked => {
+                                ("🚫", Style::default().fg(theme.warning_color()))
+                            }
                         };
 
                         let risk_style = match step.risk_level {
                             RiskLevel::Low => Style::default().fg(theme.success_color()),
                             RiskLevel::Medium => Style::default().fg(theme.warning_color()),
                             RiskLevel::High => Style::default().fg(theme.error_color()),
-                            RiskLevel::Critical => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                            RiskLevel::Critical => {
+                                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+                            }
                         };
 
                         ListItem::new(vec![
@@ -875,10 +894,7 @@ impl ConsensusPanel {
                             ]),
                             Line::from(vec![
                                 Span::raw("    "),
-                                Span::styled(
-                                    format!("Risk: {:?}", step.risk_level),
-                                    risk_style
-                                ),
+                                Span::styled(format!("Risk: {:?}", step.risk_level), risk_style),
                             ]),
                         ])
                     })
@@ -889,7 +905,10 @@ impl ConsensusPanel {
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title(format!("Execution Plan ({}% complete)", self.planning_data.execution_progress))
+                        .title(format!(
+                            "Execution Plan ({}% complete)",
+                            self.planning_data.execution_progress
+                        ))
                         .border_style(if is_active {
                             theme.active_border_style()
                         } else {
@@ -903,7 +922,12 @@ impl ConsensusPanel {
     }
 
     /// Create planning list item
-    fn create_planning_item<'a>(&self, index: usize, step: &'a PlanStep, theme: &Theme) -> ListItem<'a> {
+    fn create_planning_item<'a>(
+        &self,
+        index: usize,
+        step: &'a PlanStep,
+        theme: &Theme,
+    ) -> ListItem<'a> {
         let (status_icon, status_style) = match step.status {
             StepStatus::Pending => ("⏳", Style::default().fg(theme.muted_color())),
             StepStatus::InProgress => ("🔄", Style::default().fg(theme.accent_color())),
@@ -927,22 +951,13 @@ impl ConsensusPanel {
             ]),
             Line::from(vec![
                 Span::raw("    "),
-                Span::styled(
-                    format!("Risk: {:?}", step.risk_level),
-                    risk_style
-                ),
+                Span::styled(format!("Risk: {:?}", step.risk_level), risk_style),
             ]),
         ])
     }
 
     /// Render memory tab
-    fn render_memory_tab(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    fn render_memory_tab(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         let content = if self.memory_insights.connections.is_empty() {
             "No memory insights available yet...".to_string()
         } else {
@@ -1047,7 +1062,7 @@ impl ConsensusPanel {
             }
             _ => {}
         }
-        
+
         Ok(false)
     }
 

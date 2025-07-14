@@ -1,26 +1,18 @@
 //! Main transformation engine that orchestrates AI-powered code improvements
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
-use chrono::Utc;
 
-use crate::analysis::{TreeSitterParser, SymbolIndexer};
-use crate::consensus::ConsensusEngine;
-use crate::core::{
-    context::ContextBuilder, 
-    security::check_read_access,
-    Language,
-};
 use super::{
-    types::*,
-    syntax::SyntaxAwareModifier,
-    conflict::ConflictResolver,
-    preview::PreviewSystem,
-    history::TransformationHistory,
-    applier::CodeApplier,
+    applier::CodeApplier, conflict::ConflictResolver, history::TransformationHistory,
+    preview::PreviewSystem, syntax::SyntaxAwareModifier, types::*,
 };
+use crate::analysis::{SymbolIndexer, TreeSitterParser};
+use crate::consensus::ConsensusEngine;
+use crate::core::{context::ContextBuilder, security::check_read_access, Language};
 
 /// Main transformation engine that coordinates all code transformation operations
 pub struct TransformationEngine {
@@ -41,18 +33,18 @@ impl TransformationEngine {
     pub async fn new(context: Arc<ContextBuilder>) -> Result<Self> {
         let consensus_engine = Arc::new(ConsensusEngine::new(None).await?);
         let parser = Arc::new(Mutex::new(TreeSitterParser::new(Language::Rust)?));
-        
+
         // Get database manager from context
         let db_manager = Arc::new(crate::core::database::DatabaseManager::default().await?);
         let symbol_index = Arc::new(Mutex::new(SymbolIndexer::new(db_manager).await?));
-        
+
         // Get configuration directory from context
         let config_dir = dirs::config_dir()
             .map(|d| d.join("hive"))
             .unwrap_or_else(|| std::path::PathBuf::from(".hive"));
-        
+
         let history = Arc::new(Mutex::new(TransformationHistory::new(&config_dir)?));
-        
+
         Ok(Self {
             context: context.clone(),
             consensus_engine,
@@ -74,22 +66,24 @@ impl TransformationEngine {
 
         // Read the current file content
         let content = tokio::fs::read_to_string(&request.file_path).await?;
-        
+
         // Parse the file to understand its structure
         let mut parser = self.parser.lock().await;
         let ast = parser.parse(&content)?;
-        
+
         // Update symbol index
         let mut symbol_index = self.symbol_index.lock().await;
-        symbol_index.index_file(&request.file_path, &content).await?;
+        symbol_index
+            .index_file(&request.file_path, &content)
+            .await?;
         drop(symbol_index);
 
         // Generate improvement suggestions using consensus engine
         let suggestions = self.generate_suggestions(&request, &content).await?;
-        
+
         // Convert suggestions to concrete changes
         let changes = self.create_changes(&request, &content, suggestions).await?;
-        
+
         // Check for conflicts
         let conflicts = self.conflict_resolver.check_conflicts(&changes)?;
         if !conflicts.is_empty() {
@@ -102,8 +96,9 @@ impl TransformationEngine {
             timestamp: Utc::now(),
             request: request.clone(),
             changes,
-            description: format!("Improve {} aspect of {}", 
-                request.aspect, 
+            description: format!(
+                "Improve {} aspect of {}",
+                request.aspect,
                 request.file_path.display()
             ),
             applied: false,
@@ -114,15 +109,20 @@ impl TransformationEngine {
         };
 
         // Generate preview
-        let preview = self.preview_system.generate_preview(&transformation).await?;
-        
+        let preview = self
+            .preview_system
+            .generate_preview(&transformation)
+            .await?;
+
         Ok(preview)
     }
 
     /// Apply a transformation that was previously previewed
     pub async fn apply_transformation(&self, transformation_id: &str) -> Result<()> {
         let mut history = self.history.lock().await;
-        let transformation = history.get_transformation(transformation_id).await
+        let transformation = history
+            .get_transformation(transformation_id)
+            .await
             .ok_or_else(|| anyhow!("Transformation not found"))?;
 
         if transformation.applied {
@@ -131,10 +131,12 @@ impl TransformationEngine {
 
         // Apply the transformation
         let transaction_id = self.applier.apply(transformation.clone()).await?;
-        
+
         // Update transformation status
-        history.mark_applied(transformation_id, &transaction_id).await?;
-        
+        history
+            .mark_applied(transformation_id, &transaction_id)
+            .await?;
+
         Ok(())
     }
 
@@ -142,10 +144,10 @@ impl TransformationEngine {
     pub async fn undo(&self) -> Result<()> {
         let mut history = self.history.lock().await;
         let last_transaction = history.get_last_transaction().await?;
-        
+
         self.applier.undo(&last_transaction.id).await?;
         history.mark_undone(&last_transaction.id).await?;
-        
+
         Ok(())
     }
 
@@ -153,31 +155,35 @@ impl TransformationEngine {
     pub async fn redo(&self) -> Result<()> {
         let mut history = self.history.lock().await;
         let last_undone = history.get_last_undone().await?;
-        
+
         self.applier.redo(&last_undone.id).await?;
         history.mark_redone(&last_undone.id).await?;
-        
+
         Ok(())
     }
 
     /// Generate AI suggestions for code improvement
     async fn generate_suggestions(
-        &self, 
-        request: &TransformationRequest, 
-        content: &str
+        &self,
+        request: &TransformationRequest,
+        content: &str,
     ) -> Result<Vec<String>> {
         let prompt = self.build_improvement_prompt(request, content)?;
-        
+
         let response = self.consensus_engine.process(&prompt, None).await?;
-        
+
         // Parse suggestions from the response
         self.parse_suggestions(&response.result.unwrap_or_default())
     }
 
     /// Build the prompt for the consensus engine
-    fn build_improvement_prompt(&self, request: &TransformationRequest, content: &str) -> Result<String> {
+    fn build_improvement_prompt(
+        &self,
+        request: &TransformationRequest,
+        content: &str,
+    ) -> Result<String> {
         let prompt = format!(
-            r#"You are an expert code reviewer. Analyze the following code and suggest improvements 
+            r#"You are an expert code reviewer. Analyze the following code and suggest improvements
 focused on the "{}" aspect.
 
 File: {}
@@ -228,13 +234,19 @@ Format your response as a numbered list of improvements."#,
         &self,
         request: &TransformationRequest,
         original_content: &str,
-        suggestions: Vec<String>
+        suggestions: Vec<String>,
     ) -> Result<Vec<CodeChange>> {
         let mut changes = Vec::new();
 
-        for suggestion in suggestions.iter().take(self.config.max_changes_per_transform) {
+        for suggestion in suggestions
+            .iter()
+            .take(self.config.max_changes_per_transform)
+        {
             // This is simplified - in production we'd parse the suggestion format more carefully
-            if let Some(change) = self.parse_single_change(request, original_content, suggestion).await? {
+            if let Some(change) = self
+                .parse_single_change(request, original_content, suggestion)
+                .await?
+            {
                 if change.confidence >= self.config.min_confidence {
                     changes.push(change);
                 }
@@ -249,17 +261,17 @@ Format your response as a numbered list of improvements."#,
         &self,
         request: &TransformationRequest,
         original_content: &str,
-        suggestion: &str
+        suggestion: &str,
     ) -> Result<Option<CodeChange>> {
         // This is a simplified implementation
         // In production, we'd use more sophisticated parsing
-        
+
         // For now, create a mock change
         Ok(Some(CodeChange {
             file_path: request.file_path.clone(),
             original_content: original_content.to_string(),
             new_content: original_content.to_string(), // Would be modified based on suggestion
-            line_range: (1, 10), // Would be parsed from suggestion
+            line_range: (1, 10),                       // Would be parsed from suggestion
             description: suggestion.to_string(),
             confidence: 0.85, // Would be parsed from suggestion
         }))
@@ -269,7 +281,7 @@ Format your response as a numbered list of improvements."#,
 /// Public convenience function for transforming code
 pub async fn transform_code(
     context: Arc<ContextBuilder>,
-    request: TransformationRequest
+    request: TransformationRequest,
 ) -> Result<TransformationPreview> {
     let engine = TransformationEngine::new(context).await?;
     engine.transform(request).await

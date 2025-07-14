@@ -1,19 +1,19 @@
 //! Migration Tools Foundation
-//! 
+//!
 //! Provides TypeScript to Rust migration capabilities with zero data loss.
 //! Handles configuration migration, database transfer, and validation.
 
 pub mod analyzer;
 pub mod config;
 pub mod database;
-pub mod validator;
-pub mod rollback;
-pub mod guide;
 pub mod database_impl;
+pub mod guide;
 pub mod live_test;
 pub mod performance;
+pub mod rollback;
 pub mod ui;
 pub mod validation_suite;
+pub mod validator;
 
 use crate::core::error::HiveError;
 use serde::{Deserialize, Serialize};
@@ -64,10 +64,10 @@ pub enum ValidationLevel {
 /// Migration scenario types
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MigrationType {
-    Fresh,          // No existing TypeScript installation
-    Upgrade,        // Convert existing TypeScript to Rust
-    Parallel,       // Run both versions temporarily
-    Staged,         // Gradual feature-by-feature migration
+    Fresh,    // No existing TypeScript installation
+    Upgrade,  // Convert existing TypeScript to Rust
+    Parallel, // Run both versions temporarily
+    Staged,   // Gradual feature-by-feature migration
 }
 
 /// Main migration coordinator
@@ -93,19 +93,27 @@ impl MigrationManager {
 
     /// Start migration process
     pub async fn migrate(&mut self) -> Result<(), HiveError> {
-        self.update_status(MigrationPhase::Analyzing, 0.1, "Analyzing TypeScript installation")?;
-        
+        self.update_status(
+            MigrationPhase::Analyzing,
+            0.1,
+            "Analyzing TypeScript installation",
+        )?;
+
         // Phase 1: Analyze existing installation
         let analysis = analyzer::analyze_typescript_installation(&self.config.source_path).await?;
-        
+
         if analysis.has_critical_issues() {
             return Err(HiveError::Migration {
-                message: "Critical issues found in TypeScript installation".to_string()
+                message: "Critical issues found in TypeScript installation".to_string(),
             });
         }
 
         // Phase 2: Migrate configuration
-        self.update_status(MigrationPhase::ConfigMigration, 0.3, "Migrating configuration")?;
+        self.update_status(
+            MigrationPhase::ConfigMigration,
+            0.3,
+            "Migrating configuration",
+        )?;
         config::migrate_configuration(&analysis).await?;
 
         // Phase 3: Migrate database
@@ -114,16 +122,24 @@ impl MigrationManager {
 
         // Phase 4: Validate migration
         self.update_status(MigrationPhase::Validation, 0.8, "Validating migration")?;
-        let validation_result = validator::validate_migration(&self.config.validation_level).await?;
-        
+        let validation_result =
+            validator::validate_migration(&self.config.validation_level).await?;
+
         if !validation_result.is_valid() {
             self.update_status(MigrationPhase::Failed, 0.8, "Migration validation failed")?;
             return Err(HiveError::Migration {
-                message: format!("Migration validation failed: {}", validation_result.summary())
+                message: format!(
+                    "Migration validation failed: {}",
+                    validation_result.summary()
+                ),
             });
         }
 
-        self.update_status(MigrationPhase::Completed, 1.0, "Migration completed successfully")?;
+        self.update_status(
+            MigrationPhase::Completed,
+            1.0,
+            "Migration completed successfully",
+        )?;
         Ok(())
     }
 
@@ -140,14 +156,19 @@ impl MigrationManager {
     }
 
     /// Update migration status
-    fn update_status(&mut self, phase: MigrationPhase, progress: f32, message: &str) -> Result<(), HiveError> {
+    fn update_status(
+        &mut self,
+        phase: MigrationPhase,
+        progress: f32,
+        message: &str,
+    ) -> Result<(), HiveError> {
         self.status.phase = phase;
         self.status.progress = progress;
         self.status.message = message.to_string();
-        
+
         // Log progress
         log::info!("Migration progress: {:.1}% - {}", progress * 100.0, message);
-        
+
         Ok(())
     }
 }
@@ -162,7 +183,7 @@ pub async fn preview_migration(config: &MigrationConfig) -> Result<MigrationPrev
     let analysis = analyzer::analyze_typescript_installation(&config.source_path).await?;
     let config_changes = config::preview_config_changes(&analysis).await?;
     let database_changes = database::preview_database_changes(&analysis).await?;
-    
+
     Ok(MigrationPreview {
         analysis,
         config_changes,
@@ -186,7 +207,7 @@ pub struct MigrationPreview {
 fn estimate_migration_time(config: &MigrationConfig) -> std::time::Duration {
     // Base time for analysis and setup
     let mut duration = std::time::Duration::from_secs(30);
-    
+
     // Add time based on migration type
     match config.migration_type {
         MigrationType::Fresh => duration += std::time::Duration::from_secs(60),
@@ -194,7 +215,7 @@ fn estimate_migration_time(config: &MigrationConfig) -> std::time::Duration {
         MigrationType::Parallel => duration += std::time::Duration::from_secs(120),
         MigrationType::Staged => duration += std::time::Duration::from_secs(300),
     }
-    
+
     // Add time based on validation level
     match config.validation_level {
         ValidationLevel::Basic => duration += std::time::Duration::from_secs(30),
@@ -202,32 +223,34 @@ fn estimate_migration_time(config: &MigrationConfig) -> std::time::Duration {
         ValidationLevel::Strict => duration += std::time::Duration::from_secs(120),
         ValidationLevel::Paranoid => duration += std::time::Duration::from_secs(300),
     }
-    
+
     duration
 }
 
 /// Assess migration risks
 fn assess_migration_risks(config: &MigrationConfig) -> Vec<String> {
     let mut risks = Vec::new();
-    
+
     if !config.preserve_original {
         risks.push("Original TypeScript installation will be removed".to_string());
     }
-    
+
     if config.backup_path.is_none() {
         risks.push("No backup path specified - data loss possible".to_string());
     }
-    
+
     match config.migration_type {
         MigrationType::Upgrade => {
             risks.push("In-place upgrade may cause temporary service interruption".to_string());
-        },
+        }
         MigrationType::Staged => {
-            risks.push("Staged migration requires multiple phases and careful coordination".to_string());
-        },
+            risks.push(
+                "Staged migration requires multiple phases and careful coordination".to_string(),
+            );
+        }
         _ => {}
     }
-    
+
     risks
 }
 
@@ -245,7 +268,7 @@ mod tests {
             validation_level: ValidationLevel::Standard,
             migration_type: MigrationType::Upgrade,
         };
-        
+
         let manager = MigrationManager::new(config);
         assert_eq!(manager.status.phase, MigrationPhase::NotStarted);
         assert_eq!(manager.status.progress, 0.0);
@@ -260,7 +283,7 @@ mod tests {
             validation_level: ValidationLevel::Paranoid,
             migration_type: MigrationType::Staged,
         };
-        
+
         let duration = estimate_migration_time(&config);
         // Should be at least 630 seconds (30 base + 300 staged + 300 paranoid)
         assert!(duration.as_secs() >= 630);
@@ -275,10 +298,12 @@ mod tests {
             validation_level: ValidationLevel::Basic,
             migration_type: MigrationType::Upgrade,
         };
-        
+
         let risks = assess_migration_risks(&config);
         assert!(risks.len() >= 2); // Should identify multiple risks
-        assert!(risks.iter().any(|r| r.contains("Original TypeScript installation")));
+        assert!(risks
+            .iter()
+            .any(|r| r.contains("Original TypeScript installation")));
         assert!(risks.iter().any(|r| r.contains("No backup path")));
     }
 }

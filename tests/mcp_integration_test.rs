@@ -3,56 +3,49 @@
 //! Tests for the complete MCP implementation with advanced features
 
 use hive_ai::integration::mcp::{
-    start_mcp_server, McpServer, 
-    AdvancedToolRegistry, PromptManager, SamplingManager, SubscriptionManager, PerformanceManager
+    start_mcp_server, AdvancedToolRegistry, McpServer, PerformanceManager, PromptManager,
+    SamplingManager, SubscriptionManager,
 };
-use tokio::time::{timeout, Duration};
 use serde_json::json;
+use tokio::time::{timeout, Duration};
 
 #[tokio::test]
 async fn test_mcp_server_startup() {
     // Test that the MCP server can start successfully
     let port = 8001;
-    
-    let server_task = tokio::spawn(async move {
-        start_mcp_server(port).await
-    });
+
+    let server_task = tokio::spawn(async move { start_mcp_server(port).await });
 
     // Give the server time to start
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Cancel the server task
     server_task.abort();
-    
+
     // If we reach here, the server started successfully
     assert!(true);
 }
 
 #[tokio::test]
 async fn test_advanced_tool_registry() {
-    let config = std::sync::Arc::new(
-        hive_ai::core::config::Config::default()
-    );
-    let consensus_engine = std::sync::Arc::new(
-        tokio::sync::RwLock::new(
-            hive_ai::consensus::engine::ConsensusEngine::new(config.clone()).await.unwrap()
-        )
-    );
-    
-    let advanced_tools = AdvancedToolRegistry::new(
-        consensus_engine,
-        config,
-    );
+    let config = std::sync::Arc::new(hive_ai::core::config::Config::default());
+    let consensus_engine = std::sync::Arc::new(tokio::sync::RwLock::new(
+        hive_ai::consensus::engine::ConsensusEngine::new(config.clone())
+            .await
+            .unwrap(),
+    ));
+
+    let advanced_tools = AdvancedToolRegistry::new(consensus_engine, config);
 
     let tools = advanced_tools.get_advanced_tools();
-    
+
     // Should have 15+ advanced tools
     assert!(tools.len() >= 15);
-    
+
     // Check that debug_code tool exists
     let debug_tool = tools.iter().find(|(name, _)| name == "debug_code");
     assert!(debug_tool.is_some());
-    
+
     // Check that refactor_code tool exists
     let refactor_tool = tools.iter().find(|(name, _)| name == "refactor_code");
     assert!(refactor_tool.is_some());
@@ -61,16 +54,19 @@ async fn test_advanced_tool_registry() {
 #[tokio::test]
 async fn test_prompt_manager() {
     let prompt_manager = PromptManager::new();
-    
+
     // Test template retrieval
     let template = prompt_manager.get_template("analyze_code");
     assert!(template.is_some());
-    
+
     // Test prompt generation
     let mut params = std::collections::HashMap::new();
-    params.insert("code".to_string(), json!("fn hello() { println!(\"Hello\"); }"));
+    params.insert(
+        "code".to_string(),
+        json!("fn hello() { println!(\"Hello\"); }"),
+    );
     params.insert("language".to_string(), json!("rust"));
-    
+
     let context = hive_ai::integration::mcp::PromptContext {
         language: Some("rust".to_string()),
         project_path: None,
@@ -80,10 +76,10 @@ async fn test_prompt_manager() {
         tool_name: "analyze_code".to_string(),
         additional_context: std::collections::HashMap::new(),
     };
-    
+
     let result = prompt_manager.generate_prompt("analyze_code", params, context);
     assert!(result.is_ok());
-    
+
     let prompt = result.unwrap();
     assert!(prompt.contains("rust"));
     assert!(prompt.contains("fn hello()"));
@@ -93,7 +89,7 @@ async fn test_prompt_manager() {
 async fn test_sampling_manager() {
     let config = hive_ai::integration::mcp::sampling::SamplingConfig::default();
     let sampling_manager = SamplingManager::new(config);
-    
+
     // Test sample creation
     let request = hive_ai::integration::mcp::SampleRequest {
         method: "consensus".to_string(),
@@ -106,13 +102,13 @@ async fn test_sampling_manager() {
         stop_sequences: None,
         stream: Some(true),
     };
-    
+
     let result = sampling_manager.start_sample(request).await;
     assert!(result.is_ok());
-    
+
     let (session_id, _progress_rx) = result.unwrap();
     assert!(!session_id.is_empty());
-    
+
     // Test sample retrieval
     let sample = sampling_manager.get_sample(&session_id).await;
     assert!(sample.is_some());
@@ -121,12 +117,14 @@ async fn test_sampling_manager() {
 #[tokio::test]
 async fn test_subscription_manager() {
     let mut subscription_manager = SubscriptionManager::new().unwrap();
-    
+
     // Test client registration
     let client_id = "test-client".to_string();
-    let result = subscription_manager.register_client(client_id.clone()).await;
+    let result = subscription_manager
+        .register_client(client_id.clone())
+        .await;
     assert!(result.is_ok());
-    
+
     // Test subscription creation
     let request = hive_ai::integration::mcp::SubscriptionRequest {
         resource_type: hive_ai::integration::mcp::subscriptions::ResourceType::File,
@@ -134,12 +132,14 @@ async fn test_subscription_manager() {
         filters: None,
         client_id: client_id.clone(),
     };
-    
+
     let result = subscription_manager.create_subscription(request).await;
     assert!(result.is_ok());
-    
+
     // Test subscription listing
-    let subscriptions = subscription_manager.list_client_subscriptions(&client_id).await;
+    let subscriptions = subscription_manager
+        .list_client_subscriptions(&client_id)
+        .await;
     assert_eq!(subscriptions.len(), 1);
 }
 
@@ -147,23 +147,20 @@ async fn test_subscription_manager() {
 async fn test_performance_manager() {
     let config = hive_ai::integration::mcp::PerformanceConfig::default();
     let performance_manager = PerformanceManager::new(config);
-    
+
     // Start monitoring
     let result = performance_manager.start_monitoring().await;
     assert!(result.is_ok());
-    
+
     // Test cache key generation
-    let key = performance_manager.generate_cache_key(
-        "test_tool",
-        &json!({"param": "value"})
-    );
+    let key = performance_manager.generate_cache_key("test_tool", &json!({"param": "value"}));
     assert!(!key.is_empty());
     assert!(key.starts_with("tool_test_tool_"));
-    
+
     // Test metrics retrieval
     let metrics = performance_manager.get_metrics().await;
     assert_eq!(metrics.total_requests, 0); // Should start at 0
-    
+
     // Test cache statistics
     let cache_stats = performance_manager.get_cache_statistics().await;
     assert_eq!(cache_stats.current_size, 0); // Should start empty
@@ -173,34 +170,30 @@ async fn test_performance_manager() {
 async fn test_tool_execution_flow() {
     // This test simulates the complete flow of tool execution
     // with performance monitoring, caching, and prompt management
-    
-    let config = std::sync::Arc::new(
-        hive_ai::core::config::Config::default()
-    );
-    let consensus_engine = std::sync::Arc::new(
-        tokio::sync::RwLock::new(
-            hive_ai::consensus::engine::ConsensusEngine::new(config.clone()).await.unwrap()
-        )
-    );
-    
+
+    let config = std::sync::Arc::new(hive_ai::core::config::Config::default());
+    let consensus_engine = std::sync::Arc::new(tokio::sync::RwLock::new(
+        hive_ai::consensus::engine::ConsensusEngine::new(config.clone())
+            .await
+            .unwrap(),
+    ));
+
     // Create tool registry with all advanced features
-    let tool_registry = hive_ai::integration::mcp::tools::ToolRegistry::new(
-        consensus_engine,
-        config,
-    ).await;
-    
+    let tool_registry =
+        hive_ai::integration::mcp::tools::ToolRegistry::new(consensus_engine, config).await;
+
     assert!(tool_registry.is_ok());
-    
+
     let registry = tool_registry.unwrap();
-    
+
     // Test listing tools
     let tools = registry.list_tools().await;
     assert!(tools.is_ok());
-    
+
     let tool_list = tools.unwrap();
     // Should have basic tools + advanced tools (26+ total)
     assert!(tool_list.len() >= 26);
-    
+
     // Verify some key tools exist
     let tool_names: Vec<_> = tool_list.iter().map(|t| &t.name).collect();
     assert!(tool_names.contains(&&"ask_hive".to_string()));
@@ -213,10 +206,10 @@ async fn test_tool_execution_flow() {
 #[tokio::test]
 async fn test_mcp_protocol_compliance() {
     // Test that our MCP implementation follows the protocol correctly
-    
+
     let server = McpServer::new().await;
     assert!(server.is_ok());
-    
+
     // The server should initialize with proper capabilities
     // and handle basic MCP protocol methods
     // This would be expanded with actual protocol testing
@@ -227,7 +220,7 @@ fn test_advanced_tool_definitions() {
     // Test that all advanced tools have proper schemas
     let tools_to_test = vec![
         "debug_code",
-        "refactor_code", 
+        "refactor_code",
         "review_code",
         "optimize_code",
         "security_scan",
@@ -242,7 +235,7 @@ fn test_advanced_tool_definitions() {
         "generate_changelog",
         "create_api_docs",
     ];
-    
+
     for tool_name in tools_to_test {
         // Each tool should have proper input schema definition
         // This would be expanded with actual schema validation
@@ -250,14 +243,14 @@ fn test_advanced_tool_definitions() {
     }
 }
 
-#[tokio::test]  
+#[tokio::test]
 async fn test_real_time_subscriptions() {
     let mut subscription_manager = SubscriptionManager::new().unwrap();
-    
+
     // Start the subscription manager
     let result = subscription_manager.start().await;
     assert!(result.is_ok());
-    
+
     // Test that the manager can handle real-time events
     let stats = subscription_manager.get_statistics().await;
     assert_eq!(stats.total_subscriptions, 0);
@@ -278,21 +271,23 @@ async fn test_performance_optimizations() {
         enable_result_streaming: true,
         metrics_collection_interval_seconds: 10,
     };
-    
+
     let performance_manager = PerformanceManager::new(config);
-    
+
     // Test caching functionality
     let cache_key = "test_key".to_string();
     let test_data = json!({"result": "cached_value"});
-    
+
     // Should be a cache miss initially
     let cached = performance_manager.get_cached_result(&cache_key).await;
     assert!(cached.is_none());
-    
+
     // Cache the result
-    let result = performance_manager.cache_result(cache_key.clone(), test_data.clone()).await;
+    let result = performance_manager
+        .cache_result(cache_key.clone(), test_data.clone())
+        .await;
     assert!(result.is_ok());
-    
+
     // Should now be a cache hit
     let cached = performance_manager.get_cached_result(&cache_key).await;
     assert!(cached.is_some());

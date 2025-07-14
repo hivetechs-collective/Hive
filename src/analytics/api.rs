@@ -1,5 +1,5 @@
 //! Analytics REST API
-//! 
+//!
 //! Provides RESTful API endpoints for external integrations:
 //! - Query analytics data programmatically
 //! - Real-time metrics streaming
@@ -7,14 +7,14 @@
 //! - OAuth2 authentication
 //! - Rate limiting and quotas
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use warp::{Filter, Reply, Rejection};
 use warp::http::StatusCode;
+use warp::{Filter, Rejection, Reply};
 
 /// API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,13 +198,13 @@ impl AnalyticsApi {
 
         // Analytics endpoints
         let analytics = self.analytics_routes();
-        
+
         // Dashboard endpoints
         let dashboards = self.dashboard_routes();
-        
+
         // Alert endpoints
         let alerts = self.alert_routes();
-        
+
         // Metrics streaming
         let stream = self.stream_routes();
 
@@ -339,7 +339,11 @@ impl AnalyticsApi {
             .and(warp::body::json())
             .and_then(create_alert_rule);
 
-        list.or(get).or(acknowledge).or(resolve).or(rules).or(create_rule)
+        list.or(get)
+            .or(acknowledge)
+            .or(resolve)
+            .or(rules)
+            .or(create_rule)
     }
 
     /// Streaming routes
@@ -374,16 +378,18 @@ impl AnalyticsApi {
 
         warp::header::optional::<String>("x-api-key")
             .and(warp::header::optional::<String>("authorization"))
-            .and_then(move |api_key: Option<String>, auth_header: Option<String>| {
-                let api_keys = Arc::clone(&api_keys);
-                let config = Arc::clone(&config);
-                
-                async move {
-                    authenticate(api_key, auth_header, api_keys, config)
-                        .await
-                        .map_err(|_| warp::reject::custom(ApiAuthError))
-                }
-            })
+            .and_then(
+                move |api_key: Option<String>, auth_header: Option<String>| {
+                    let api_keys = Arc::clone(&api_keys);
+                    let config = Arc::clone(&config);
+
+                    async move {
+                        authenticate(api_key, auth_header, api_keys, config)
+                            .await
+                            .map_err(|_| warp::reject::custom(ApiAuthError))
+                    }
+                },
+            )
     }
 
     /// Generate API key
@@ -483,7 +489,7 @@ impl TokenBucket {
 
     fn try_consume(&mut self) -> bool {
         self.refill();
-        
+
         if self.tokens >= 1.0 {
             self.tokens -= 1.0;
             true
@@ -495,7 +501,7 @@ impl TokenBucket {
     fn refill(&mut self) {
         let now = Utc::now();
         let elapsed = (now - self.last_refill).num_seconds() as f64;
-        
+
         self.tokens = (self.tokens + elapsed * self.refill_rate).min(self.capacity as f64);
         self.last_refill = now;
 
@@ -560,7 +566,10 @@ struct DashboardRequest {
 
 fn with_engine(
     engine: Arc<crate::analytics::AdvancedAnalyticsEngine>,
-) -> impl Filter<Extract = (Arc<crate::analytics::AdvancedAnalyticsEngine>,), Error = std::convert::Infallible> + Clone {
+) -> impl Filter<
+    Extract = (Arc<crate::analytics::AdvancedAnalyticsEngine>,),
+    Error = std::convert::Infallible,
+> + Clone {
     warp::any().map(move || Arc::clone(&engine))
 }
 
@@ -622,7 +631,9 @@ async fn get_analytics_overview(
     engine: Arc<crate::analytics::AdvancedAnalyticsEngine>,
 ) -> Result<impl Reply, Rejection> {
     let format = query.format.as_deref().unwrap_or("json");
-    let overview = engine.overview(&query.period, format).await
+    let overview = engine
+        .overview(&query.period, format)
+        .await
         .map_err(|_| warp::reject::custom(InternalApiError))?;
 
     Ok(warp::reply::json(&ApiResponse {
@@ -942,15 +953,15 @@ mod tests {
         let config = ApiConfig::default();
         let engine = Arc::new(
             crate::analytics::AdvancedAnalyticsEngine::new(
-                crate::analytics::AdvancedAnalyticsConfig::default()
-            ).await?
+                crate::analytics::AdvancedAnalyticsConfig::default(),
+            )
+            .await?,
         );
         let api = AnalyticsApi::new(config, engine);
 
-        let key = api.generate_api_key(
-            "Test Key".to_string(),
-            vec![Permission::ReadAnalytics],
-        ).await?;
+        let key = api
+            .generate_api_key("Test Key".to_string(), vec![Permission::ReadAnalytics])
+            .await?;
 
         assert_eq!(key.name, "Test Key");
         assert!(!key.key.is_empty());
@@ -962,11 +973,11 @@ mod tests {
     #[test]
     fn test_token_bucket() {
         let mut bucket = TokenBucket::new(60, 10);
-        
+
         // Should allow initial requests
         assert!(bucket.try_consume());
         assert!(bucket.try_consume());
-        
+
         // Check remaining tokens
         assert_eq!(bucket.tokens as u32, 8);
     }

@@ -5,12 +5,12 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 pub mod bash;
-pub mod zsh;
 pub mod fish;
 pub mod powershell;
+pub mod zsh;
 
+use super::{utils, ShellType};
 use crate::core::config::Config;
-use super::{ShellType, utils};
 
 /// Shell completions manager
 pub struct ShellCompletions {
@@ -27,15 +27,19 @@ impl ShellCompletions {
     pub fn install(&self, shell: ShellType) -> Result<()> {
         let completion_dir = self.get_completion_directory(shell)?;
         let completion_file = completion_dir.join(shell.completion_filename());
-        
+
         // Create completion directory if it doesn't exist
         utils::create_directory_safe(&completion_dir)?;
-        
+
         // Generate and write completion content
         let content = self.generate_completion_content(shell)?;
-        std::fs::write(&completion_file, content)
-            .with_context(|| format!("Failed to write completion file: {}", completion_file.display()))?;
-        
+        std::fs::write(&completion_file, content).with_context(|| {
+            format!(
+                "Failed to write completion file: {}",
+                completion_file.display()
+            )
+        })?;
+
         // Set appropriate permissions
         #[cfg(unix)]
         {
@@ -44,8 +48,12 @@ impl ShellCompletions {
             perms.set_mode(0o644);
             std::fs::set_permissions(&completion_file, perms)?;
         }
-        
-        tracing::info!("Installed {} completions to {}", shell.as_str(), completion_file.display());
+
+        tracing::info!(
+            "Installed {} completions to {}",
+            shell.as_str(),
+            completion_file.display()
+        );
         Ok(())
     }
 
@@ -86,7 +94,7 @@ impl ShellCompletions {
             if user_dir.exists() || utils::create_directory_safe(&user_dir).is_ok() {
                 return Ok(user_dir);
             }
-            
+
             // Try .local/share/bash-completion/completions
             let local_dir = PathBuf::from(&home)
                 .join(".local")
@@ -97,16 +105,26 @@ impl ShellCompletions {
                 return Ok(local_dir);
             }
         }
-        
+
         // Try system directories
-        for dir in &["/etc/bash_completion.d", "/usr/local/etc/bash_completion.d", "/usr/share/bash-completion/completions"] {
+        for dir in &[
+            "/etc/bash_completion.d",
+            "/usr/local/etc/bash_completion.d",
+            "/usr/share/bash-completion/completions",
+        ] {
             let path = PathBuf::from(dir);
-            if path.exists() && path.metadata().map_or(false, |m| !m.permissions().readonly()) {
+            if path.exists()
+                && path
+                    .metadata()
+                    .map_or(false, |m| !m.permissions().readonly())
+            {
                 return Ok(path);
             }
         }
-        
-        Err(anyhow::anyhow!("No suitable bash completion directory found"))
+
+        Err(anyhow::anyhow!(
+            "No suitable bash completion directory found"
+        ))
     }
 
     /// Get zsh completion directory
@@ -119,7 +137,7 @@ impl ShellCompletions {
                 format!("{}/.config/zsh/completions", home),
                 format!("{}/.local/share/zsh/site-functions", home),
             ];
-            
+
             for dir_str in &candidate_dirs {
                 let dir = PathBuf::from(dir_str);
                 if dir.exists() || utils::create_directory_safe(&dir).is_ok() {
@@ -127,40 +145,53 @@ impl ShellCompletions {
                 }
             }
         }
-        
+
         // Try system directories
-        for dir in &["/usr/local/share/zsh/site-functions", "/usr/share/zsh/site-functions"] {
+        for dir in &[
+            "/usr/local/share/zsh/site-functions",
+            "/usr/share/zsh/site-functions",
+        ] {
             let path = PathBuf::from(dir);
-            if path.exists() && path.metadata().map_or(false, |m| !m.permissions().readonly()) {
+            if path.exists()
+                && path
+                    .metadata()
+                    .map_or(false, |m| !m.permissions().readonly())
+            {
                 return Ok(path);
             }
         }
-        
-        Err(anyhow::anyhow!("No suitable zsh completion directory found"))
+
+        Err(anyhow::anyhow!(
+            "No suitable zsh completion directory found"
+        ))
     }
 
     /// Get fish completion directory
     fn get_fish_completion_dir(&self) -> Result<PathBuf> {
         if let Ok(home) = std::env::var("HOME") {
-            let config_home = std::env::var("XDG_CONFIG_HOME")
-                .unwrap_or_else(|_| format!("{}/.config", home));
-            
-            let fish_dir = PathBuf::from(config_home)
-                .join("fish")
-                .join("completions");
-            
+            let config_home =
+                std::env::var("XDG_CONFIG_HOME").unwrap_or_else(|_| format!("{}/.config", home));
+
+            let fish_dir = PathBuf::from(config_home).join("fish").join("completions");
+
             if fish_dir.exists() || utils::create_directory_safe(&fish_dir).is_ok() {
                 return Ok(fish_dir);
             }
         }
-        
+
         // Try system directory
         let system_dir = PathBuf::from("/usr/share/fish/completions");
-        if system_dir.exists() && system_dir.metadata().map_or(false, |m| !m.permissions().readonly()) {
+        if system_dir.exists()
+            && system_dir
+                .metadata()
+                .map_or(false, |m| !m.permissions().readonly())
+        {
             return Ok(system_dir);
         }
-        
-        Err(anyhow::anyhow!("No suitable fish completion directory found"))
+
+        Err(anyhow::anyhow!(
+            "No suitable fish completion directory found"
+        ))
     }
 
     /// Get PowerShell completion directory
@@ -171,13 +202,15 @@ impl ShellCompletions {
             } else {
                 PathBuf::from(home).join(".config").join("powershell")
             };
-            
+
             if profile_dir.exists() || utils::create_directory_safe(&profile_dir).is_ok() {
                 return Ok(profile_dir);
             }
         }
-        
-        Err(anyhow::anyhow!("No suitable PowerShell completion directory found"))
+
+        Err(anyhow::anyhow!(
+            "No suitable PowerShell completion directory found"
+        ))
     }
 
     /// Get Elvish completion directory
@@ -188,8 +221,10 @@ impl ShellCompletions {
                 return Ok(elvish_dir);
             }
         }
-        
-        Err(anyhow::anyhow!("No suitable Elvish completion directory found"))
+
+        Err(anyhow::anyhow!(
+            "No suitable Elvish completion directory found"
+        ))
     }
 
     /// Generate Elvish completions (basic implementation)
@@ -268,13 +303,14 @@ edit:completion:arg-completer[hive] = [@words]{
     ]
     $completions[$command]
 }
-"#.to_string()
+"#
+        .to_string()
     }
 
     /// Generate all completion files for distribution
     pub fn generate_all_files(&self, output_dir: &PathBuf) -> Result<()> {
         utils::create_directory_safe(output_dir)?;
-        
+
         let shells = [
             ShellType::Bash,
             ShellType::Zsh,
@@ -282,18 +318,23 @@ edit:completion:arg-completer[hive] = [@words]{
             ShellType::PowerShell,
             ShellType::Elvish,
         ];
-        
+
         for shell in &shells {
             let content = self.generate_completion_content(*shell)?;
             let filename = shell.completion_filename();
             let file_path = output_dir.join(filename);
-            
-            std::fs::write(&file_path, content)
-                .with_context(|| format!("Failed to write completion file: {}", file_path.display()))?;
-            
-            println!("Generated {} completion: {}", shell.as_str(), file_path.display());
+
+            std::fs::write(&file_path, content).with_context(|| {
+                format!("Failed to write completion file: {}", file_path.display())
+            })?;
+
+            println!(
+                "Generated {} completion: {}",
+                shell.as_str(),
+                file_path.display()
+            );
         }
-        
+
         Ok(())
     }
 
@@ -302,9 +343,17 @@ edit:completion:arg-completer[hive] = [@words]{
         if let Ok(completion_dir) = self.get_completion_directory(shell) {
             let completion_file = completion_dir.join(shell.completion_filename());
             if completion_file.exists() {
-                std::fs::remove_file(&completion_file)
-                    .with_context(|| format!("Failed to remove completion file: {}", completion_file.display()))?;
-                tracing::info!("Removed {} completions from {}", shell.as_str(), completion_file.display());
+                std::fs::remove_file(&completion_file).with_context(|| {
+                    format!(
+                        "Failed to remove completion file: {}",
+                        completion_file.display()
+                    )
+                })?;
+                tracing::info!(
+                    "Removed {} completions from {}",
+                    shell.as_str(),
+                    completion_file.display()
+                );
             }
         }
         Ok(())
@@ -320,11 +369,19 @@ mod tests {
     fn test_generate_completion_content() {
         let config = Config::default();
         let completions = ShellCompletions::new(config);
-        
-        assert!(completions.generate_completion_content(ShellType::Bash).is_ok());
-        assert!(completions.generate_completion_content(ShellType::Zsh).is_ok());
-        assert!(completions.generate_completion_content(ShellType::Fish).is_ok());
-        assert!(completions.generate_completion_content(ShellType::PowerShell).is_ok());
+
+        assert!(completions
+            .generate_completion_content(ShellType::Bash)
+            .is_ok());
+        assert!(completions
+            .generate_completion_content(ShellType::Zsh)
+            .is_ok());
+        assert!(completions
+            .generate_completion_content(ShellType::Fish)
+            .is_ok());
+        assert!(completions
+            .generate_completion_content(ShellType::PowerShell)
+            .is_ok());
     }
 
     #[test]
@@ -332,14 +389,16 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let config = Config::default();
         let completions = ShellCompletions::new(config);
-        
-        assert!(completions.generate_all_files(&temp_dir.path().to_path_buf()).is_ok());
-        
+
+        assert!(completions
+            .generate_all_files(&temp_dir.path().to_path_buf())
+            .is_ok());
+
         // Check that files were created
-        assert!(temp_dir.path().join("hive").exists());          // bash
-        assert!(temp_dir.path().join("_hive").exists());         // zsh
-        assert!(temp_dir.path().join("hive.fish").exists());     // fish
-        assert!(temp_dir.path().join("hive.ps1").exists());      // powershell
-        assert!(temp_dir.path().join("hive.elv").exists());      // elvish
+        assert!(temp_dir.path().join("hive").exists()); // bash
+        assert!(temp_dir.path().join("_hive").exists()); // zsh
+        assert!(temp_dir.path().join("hive.fish").exists()); // fish
+        assert!(temp_dir.path().join("hive.ps1").exists()); // powershell
+        assert!(temp_dir.path().join("hive.elv").exists()); // elvish
     }
 }

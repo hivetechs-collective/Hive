@@ -16,16 +16,16 @@ fn app(cx: Scope) -> Element {
         style { include_str!("../desktop/styles/mod.rs") }
         div {
             style: "display: flex; flex-direction: column; height: 100vh; background: #1e1e1e; color: #d4d4d4; font-family: -apple-system, system-ui, sans-serif;",
-            
+
             // Header
             div {
                 style: "background: #2d2d30; padding: 10px; border-bottom: 1px solid #3e3e42;",
-                h1 { 
+                h1 {
                     style: "margin: 0; font-size: 16px; font-weight: 500;",
-                    "🐝 Hive AI Desktop" 
+                    "🐝 Hive AI Desktop"
                 }
             }
-            
+
             // Messages area
             div {
                 style: "flex: 1; overflow-y: auto; padding: 20px;",
@@ -36,7 +36,7 @@ fn app(cx: Scope) -> Element {
                     }
                 })
             }
-            
+
             // Input area
             div {
                 style: "padding: 20px; border-top: 1px solid #3e3e42;",

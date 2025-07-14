@@ -3,14 +3,14 @@
 //! This module provides intelligent context extraction for AI queries,
 //! including relevant code snippets, documentation, and metadata.
 
-use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
 use anyhow::anyhow;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 use crate::core::{
     ast::SymbolKind,
-    semantic::{SemanticIndex, SearchQuery},
     error::Result,
+    semantic::{SearchQuery, SemanticIndex},
     Language,
 };
 
@@ -118,7 +118,7 @@ pub struct Documentation {
 trait ContextStrategy: Send + Sync {
     /// Extract context based on the query
     fn extract(&self, query: &str, index: &SemanticIndex) -> Result<PartialContext>;
-    
+
     /// Strategy name
     fn name(&self) -> &str;
 }
@@ -140,7 +140,7 @@ impl ContextStrategy for KeywordStrategy {
         // Extract keywords from query
         let keywords = self.extract_keywords(query);
         let context = PartialContext::default();
-        
+
         // Search for symbols matching keywords
         for keyword in keywords {
             let _search_query = SearchQuery {
@@ -151,14 +151,14 @@ impl ContextStrategy for KeywordStrategy {
                 limit: 5,
                 fuzzy: true,
             };
-            
+
             // This would use the actual search in a real implementation
             // For now, return empty context
         }
-        
+
         Ok(context)
     }
-    
+
     fn name(&self) -> &str {
         "keyword"
     }
@@ -166,7 +166,8 @@ impl ContextStrategy for KeywordStrategy {
 
 impl KeywordStrategy {
     fn extract_keywords(&self, query: &str) -> Vec<String> {
-        query.split_whitespace()
+        query
+            .split_whitespace()
             .filter(|w| w.len() > 3 && !COMMON_WORDS.contains(w))
             .map(|w| w.to_string())
             .collect()
@@ -182,7 +183,7 @@ impl ContextStrategy for SemanticStrategy {
         // to find semantically similar code
         Ok(PartialContext::default())
     }
-    
+
     fn name(&self) -> &str {
         "semantic"
     }
@@ -196,7 +197,7 @@ impl ContextStrategy for TypeStrategy {
         // Extract type names from query and find related code
         Ok(PartialContext::default())
     }
-    
+
     fn name(&self) -> &str {
         "type"
     }
@@ -204,10 +205,9 @@ impl ContextStrategy for TypeStrategy {
 
 /// Common words to exclude from keyword search
 const COMMON_WORDS: &[&str] = &[
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "can", "this", "that", "these",
+    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "as", "is", "was", "are", "were", "been", "have", "has", "had", "do", "does", "did",
+    "will", "would", "could", "should", "may", "might", "must", "can", "this", "that", "these",
     "those", "what", "which", "who", "when", "where", "why", "how",
 ];
 
@@ -219,37 +219,39 @@ impl ContextBuilder {
             Box::new(SemanticStrategy),
             Box::new(TypeStrategy),
         ];
-        
+
         Self {
             semantic_index: None,
             max_tokens: 8000, // Default max tokens
             strategies,
         }
     }
-    
+
     /// Set the semantic index
     pub fn with_index(mut self, index: SemanticIndex) -> Self {
         self.semantic_index = Some(index);
         self
     }
-    
+
     /// Set maximum context size in tokens
     pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
         self.max_tokens = max_tokens;
         self
     }
-    
+
     /// Build context for a query
     pub async fn build_context(&self, query: &str) -> Result<QueryContext> {
-        let index = self.semantic_index.as_ref()
+        let index = self
+            .semantic_index
+            .as_ref()
             .ok_or_else(|| anyhow!("Semantic index not available"))?;
-        
+
         // Extract context using all strategies
         let mut all_snippets = Vec::new();
         let mut all_symbols = Vec::new();
         let mut all_summaries = Vec::new();
         let mut all_docs = Vec::new();
-        
+
         for strategy in &self.strategies {
             match strategy.extract(query, index) {
                 Ok(partial) => {
@@ -263,19 +265,19 @@ impl ContextBuilder {
                 }
             }
         }
-        
+
         // Deduplicate and rank
         all_snippets.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap());
         all_snippets.dedup_by(|a, b| a.file == b.file && a.start_line == b.start_line);
-        
+
         all_symbols.dedup_by(|a, b| a.name == b.name);
         all_summaries.dedup_by(|a, b| a.path == b.path);
         all_docs.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap());
-        
+
         // Trim to fit token budget
         let mut total_tokens = 0;
         let mut final_snippets = Vec::new();
-        
+
         for snippet in all_snippets {
             let snippet_tokens = self.estimate_tokens(&snippet.content);
             if total_tokens + snippet_tokens <= self.max_tokens {
@@ -285,10 +287,10 @@ impl ContextBuilder {
                 break;
             }
         }
-        
+
         // Build project info
         let project_info = self.build_project_info().await?;
-        
+
         Ok(QueryContext {
             code_snippets: final_snippets,
             symbols: all_symbols.into_iter().take(20).collect(),
@@ -298,12 +300,12 @@ impl ContextBuilder {
             total_tokens,
         })
     }
-    
+
     /// Build context for a specific file
     pub async fn build_file_context(&self, file: &Path) -> Result<QueryContext> {
         let content = tokio::fs::read_to_string(file).await?;
         let language = crate::core::detect_language(file);
-        
+
         let snippet = CodeSnippet {
             file: file.to_path_buf(),
             start_line: 1,
@@ -313,9 +315,9 @@ impl ContextBuilder {
             relevance: 100.0,
             reason: "Full file context".to_string(),
         };
-        
+
         let project_info = self.build_project_info().await?;
-        
+
         Ok(QueryContext {
             code_snippets: vec![snippet],
             symbols: vec![],
@@ -325,26 +327,28 @@ impl ContextBuilder {
             total_tokens: self.estimate_tokens(&content),
         })
     }
-    
+
     /// Build context for a symbol
     pub async fn build_symbol_context(&self, symbol_name: &str) -> Result<QueryContext> {
-        let index = self.semantic_index.as_ref()
+        let index = self
+            .semantic_index
+            .as_ref()
             .ok_or_else(|| anyhow!("Semantic index not available"))?;
-        
+
         // Find symbol definition
         let definition = index.find_definition(symbol_name).await?;
         let mut snippets = Vec::new();
         let mut symbols = Vec::new();
-        
+
         if let Some(def) = definition {
             // Add definition snippet
             if let Ok(content) = tokio::fs::read_to_string(&def.file).await {
                 let lines: Vec<&str> = content.lines().collect();
                 let start = def.symbol.location.line.saturating_sub(5);
                 let end = (def.symbol.location.line + 10).min(lines.len());
-                
+
                 let snippet_content = lines[start..end].join("\n");
-                
+
                 snippets.push(CodeSnippet {
                     file: def.file.clone(),
                     start_line: start + 1,
@@ -354,7 +358,7 @@ impl ContextBuilder {
                     relevance: 100.0,
                     reason: "Symbol definition".to_string(),
                 });
-                
+
                 symbols.push(ContextSymbol {
                     name: def.symbol.name.clone(),
                     kind: def.symbol.kind,
@@ -365,7 +369,7 @@ impl ContextBuilder {
                 });
             }
         }
-        
+
         // Find references
         let references = index.find_references(symbol_name).await?;
         for (i, reference) in references.iter().take(5).enumerate() {
@@ -373,9 +377,9 @@ impl ContextBuilder {
                 let lines: Vec<&str> = content.lines().collect();
                 let start = reference.line.saturating_sub(2);
                 let end = (reference.line + 3).min(lines.len());
-                
+
                 let snippet_content = lines[start..end].join("\n");
-                
+
                 snippets.push(CodeSnippet {
                     file: reference.file.clone(),
                     start_line: start + 1,
@@ -387,10 +391,13 @@ impl ContextBuilder {
                 });
             }
         }
-        
+
         let project_info = self.build_project_info().await?;
-        let total_tokens = snippets.iter().map(|s| self.estimate_tokens(&s.content)).sum();
-        
+        let total_tokens = snippets
+            .iter()
+            .map(|s| self.estimate_tokens(&s.content))
+            .sum();
+
         Ok(QueryContext {
             code_snippets: snippets,
             symbols,
@@ -400,13 +407,13 @@ impl ContextBuilder {
             total_tokens,
         })
     }
-    
+
     /// Estimate token count for text
     fn estimate_tokens(&self, text: &str) -> usize {
         // Rough estimate: 1 token per 4 characters
         text.len() / 4
     }
-    
+
     /// Build project information
     async fn build_project_info(&self) -> Result<ProjectInfo> {
         // In a real implementation, this would analyze the project
@@ -428,12 +435,12 @@ impl Default for ContextBuilder {
 /// Format context for AI consumption
 pub fn format_context(context: &QueryContext) -> String {
     let mut output = String::new();
-    
+
     // Add project info
     output.push_str(&format!("# Project: {}\n", context.project_info.name));
     output.push_str(&format!("Type: {}\n", context.project_info.project_type));
     output.push_str("\n");
-    
+
     // Add code snippets
     for snippet in &context.code_snippets {
         output.push_str(&format!(
@@ -446,7 +453,7 @@ pub fn format_context(context: &QueryContext) -> String {
         output.push_str(&snippet.content);
         output.push_str("\n```\n\n");
     }
-    
+
     // Add symbols
     if !context.symbols.is_empty() {
         output.push_str("## Related Symbols\n");
@@ -458,7 +465,7 @@ pub fn format_context(context: &QueryContext) -> String {
         }
         output.push_str("\n");
     }
-    
+
     output
 }
 
@@ -483,25 +490,29 @@ fn language_to_string(lang: Language) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_context_builder() {
         let builder = ContextBuilder::new();
         assert_eq!(builder.max_tokens, 8000);
         assert_eq!(builder.strategies.len(), 3);
     }
-    
+
     #[test]
     fn test_token_estimation() {
         let builder = ContextBuilder::new();
         assert_eq!(builder.estimate_tokens("Hello, world!"), 3);
-        assert_eq!(builder.estimate_tokens("fn main() { println!(\"test\"); }"), 8);
+        assert_eq!(
+            builder.estimate_tokens("fn main() { println!(\"test\"); }"),
+            8
+        );
     }
-    
+
     #[test]
     fn test_keyword_extraction() {
         let strategy = KeywordStrategy;
-        let keywords = strategy.extract_keywords("How do I implement a binary search tree in Rust?");
+        let keywords =
+            strategy.extract_keywords("How do I implement a binary search tree in Rust?");
         assert!(keywords.contains(&"implement".to_string()));
         assert!(keywords.contains(&"binary".to_string()));
         assert!(keywords.contains(&"search".to_string()));

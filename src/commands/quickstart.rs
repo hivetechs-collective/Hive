@@ -40,17 +40,17 @@ pub async fn handle_quickstart(options: QuickstartOptions) -> Result<()> {
 
     // Check if this is a first-time user
     let is_first_time = is_first_time_user().await?;
-    
+
     if is_first_time {
         show_first_time_welcome();
     } else if !options.force {
         // Check if already configured
         let config_status = check_configuration_status().await?;
-        
+
         if config_status.fully_configured {
             println!("{} Already configured! All components are set up.", "✅".green());
             println!("{} Use --force to reconfigure or individual commands for specific setup.", "💡".yellow());
-            
+
             // Ask if user wants to switch accounts
             if config_status.has_license {
                 let switch = Confirm::with_theme(&ColorfulTheme::default())
@@ -58,14 +58,14 @@ pub async fn handle_quickstart(options: QuickstartOptions) -> Result<()> {
                     .default(false)
                     .interact()
                     .context("Failed to get user input")?;
-                
+
                 if !switch {
                     return Ok(());
                 }
             }
         }
     }
-    
+
     // Run the complete setup system
     let setup_system = CompleteSetupSystem::new(options);
     setup_system.run().await
@@ -74,23 +74,23 @@ pub async fn handle_quickstart(options: QuickstartOptions) -> Result<()> {
 /// Check if this is a first-time user
 async fn is_first_time_user() -> Result<bool> {
     let config_path = get_hive_config_dir().join("config.toml");
-    
+
     // Check if config file exists
     if !config_path.exists() {
         return Ok(true);
     }
-    
+
     // Try to load config and check if it has required fields
     match tokio::fs::read_to_string(&config_path).await {
         Ok(contents) => {
             match toml::from_str::<HiveConfig>(&contents) {
                 Ok(config) => {
                     // Check if essential fields are configured
-                    let has_license = config.license.is_some() && 
+                    let has_license = config.license.is_some() &&
                                     config.license.as_ref().unwrap().key.is_some();
-                    let has_openrouter = config.openrouter.is_some() && 
+                    let has_openrouter = config.openrouter.is_some() &&
                                        config.openrouter.as_ref().unwrap().api_key.is_some();
-                    
+
                     Ok(!(has_license && has_openrouter))
                 }
                 Err(_) => Ok(true), // Config exists but is invalid
@@ -127,7 +127,7 @@ struct ConfigStatus {
 /// Check current configuration status
 async fn check_configuration_status() -> Result<ConfigStatus> {
     let config_path = get_hive_config_dir().join("config.toml");
-    
+
     let config = if config_path.exists() {
         match tokio::fs::read_to_string(&config_path).await {
             Ok(contents) => toml::from_str::<HiveConfig>(&contents).unwrap_or_default(),
@@ -136,13 +136,13 @@ async fn check_configuration_status() -> Result<ConfigStatus> {
     } else {
         HiveConfig::default()
     };
-    
-    let has_license = config.license.is_some() && 
+
+    let has_license = config.license.is_some() &&
                      config.license.as_ref().unwrap().key.is_some();
-    let has_openrouter = config.openrouter.is_some() && 
+    let has_openrouter = config.openrouter.is_some() &&
                         config.openrouter.as_ref().unwrap().api_key.is_some();
     let has_ide_config = false; // TODO: Check IDE config when implemented
-    
+
     Ok(ConfigStatus {
         fully_configured: has_license && has_openrouter && has_ide_config,
         has_license,
@@ -161,50 +161,50 @@ struct CompleteSetupSystem {
 impl CompleteSetupSystem {
     fn new(options: QuickstartOptions) -> Self {
         let config_dir = get_hive_config_dir();
-        
+
         Self {
             options,
             theme: ColorfulTheme::default(),
             config_dir,
         }
     }
-    
+
     /// Run the complete setup system
     async fn run(self) -> Result<()> {
         println!("{}", "🚀 Hive AI Complete Setup System".cyan().bold());
         println!("{}", "━".repeat(50).cyan());
         println!();
-        
+
         // Phase 1: License validation system
         let license_status = self.setup_license_system().await?;
-        
+
         // Phase 2: Database initialization with complete schema
         self.initialize_complete_database().await?;
-        
+
         // Phase 3: OpenRouter model synchronization
         let openrouter_configured = self.setup_openrouter_sync().await?;
-        
+
         // Phase 4: Expert profile templates
         if openrouter_configured {
             self.setup_expert_profiles().await?;
         }
-        
+
         // Phase 5: IDE configuration (if not skipped)
         if !self.options.skip_ide {
             self.configure_ide_integration().await?;
         }
-        
+
         // Phase 6: MCP server configuration (if not skipped)
         if !self.options.skip_server {
             self.configure_mcp_server().await?;
         }
-        
+
         // Success and next steps
         self.show_completion_summary(&license_status).await?;
-        
+
         Ok(())
     }
-    
+
     /// Phase 1: Setup license validation system
     async fn setup_license_system(&self) -> Result<LicenseStatus> {
         println!("{} {}", "🔑".cyan(), "Phase 1: License Validation System".white().bold());
@@ -223,7 +223,7 @@ impl CompleteSetupSystem {
         } else {
             println!("⚠️ Operating in free tier mode");
         }
-        
+
         println!();
         Ok(license_status)
     }
@@ -271,9 +271,9 @@ impl CompleteSetupSystem {
         // Run health check
         pb.set_message("Running health check...");
         let health_issues = health_check(&conn)?;
-        
+
         pb.finish_and_clear();
-        
+
         if health_issues.is_empty() {
             println!("✅ Database initialized successfully!");
             println!("📊 Complete schema with 17 tables created");
@@ -285,7 +285,7 @@ impl CompleteSetupSystem {
                 println!("   • {}", issue);
             }
         }
-        
+
         println!();
         Ok(())
     }
@@ -299,7 +299,7 @@ impl CompleteSetupSystem {
         // Check if API key is already configured
         let config_path = self.config_dir.join("config.toml");
         let mut api_key = String::new();
-        
+
         if config_path.exists() {
             if let Ok(contents) = tokio::fs::read_to_string(&config_path).await {
                 if let Ok(config) = toml::from_str::<HiveConfig>(&contents) {
@@ -354,7 +354,7 @@ impl CompleteSetupSystem {
 
         // Sync models
         pb.set_message("Syncing models from OpenRouter...");
-        
+
         let db_path = self.config_dir.join("hive-ai.db");
         let db_config = crate::core::database::DatabaseConfig {
             path: db_path,
@@ -369,7 +369,7 @@ impl CompleteSetupSystem {
         };
         let db = DatabaseManager::new(db_config).await?;
         let sync_manager = ModelSyncManager::new(db, api_key);
-        
+
         match sync_manager.sync_models().await {
             Ok(sync_result) => {
                 pb.finish_and_clear();
@@ -449,7 +449,7 @@ impl CompleteSetupSystem {
                 let mut created_count = 0;
                 for template in templates {
                     pb.set_message(format!("Creating {}", template.name));
-                    
+
                     let profile_name = format!("{} Profile", template.name);
                     match template_manager.create_profile_from_template(&template.id, &profile_name, None).await {
                         Ok(_) => {
@@ -461,7 +461,7 @@ impl CompleteSetupSystem {
                             }
                         }
                     }
-                    
+
                     pb.inc(1);
                 }
 
@@ -496,7 +496,7 @@ impl CompleteSetupSystem {
         println!("  • JetBrains plugin");
         println!("  • Vim/Neovim plugin");
         println!("  • Language Server Protocol (LSP)");
-        
+
         println!();
         Ok(())
     }
@@ -514,7 +514,7 @@ impl CompleteSetupSystem {
         println!("  • IDE integration protocol");
         println!("  • Multi-language support");
         println!("  • Live collaboration");
-        
+
         println!();
         Ok(())
     }
@@ -536,7 +536,7 @@ impl CompleteSetupSystem {
         } else {
             println!("  {} License: Free tier", "🆓".yellow());
         }
-        
+
         // Check database status
         let db_path = self.config_dir.join("hive-ai.db");
         if db_path.exists() {
@@ -577,18 +577,18 @@ impl CompleteSetupSystem {
 
         println!();
         println!("{}", "Welcome to the future of AI-powered development! 🐝".cyan().italic());
-        
+
         Ok(())
     }
 
     /// Save OpenRouter API key to configuration
     async fn save_openrouter_api_key(&self, api_key: &str) -> Result<()> {
         let config_path = self.config_dir.join("config.toml");
-        
+
         // Ensure config directory exists
         tokio::fs::create_dir_all(&self.config_dir).await
             .context("Failed to create config directory")?;
-        
+
         // Load existing config or create new one
         let mut config = if config_path.exists() {
             match tokio::fs::read_to_string(&config_path).await {
@@ -598,23 +598,23 @@ impl CompleteSetupSystem {
         } else {
             HiveConfig::default()
         };
-        
+
         // Initialize openrouter section if it doesn't exist
         if config.openrouter.is_none() {
             config.openrouter = Some(OpenRouterConfig::default());
         }
-        
+
         // Set the API key
         if let Some(ref mut openrouter) = config.openrouter {
             openrouter.api_key = Some(api_key.to_string());
         }
-        
+
         // Save config
         let toml_string = toml::to_string_pretty(&config)
             .context("Failed to serialize config")?;
         tokio::fs::write(&config_path, toml_string).await
             .context("Failed to write config file")?;
-        
+
         Ok(())
     }
 }

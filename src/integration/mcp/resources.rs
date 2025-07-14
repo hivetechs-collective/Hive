@@ -6,10 +6,10 @@ use super::protocol::{Resource, ResourceContent, ResourceData};
 use crate::core::config::Config;
 use crate::core::security::SecurityManager;
 
-use anyhow::{Result, anyhow};
-use std::sync::Arc;
-use std::path::Path;
+use anyhow::{anyhow, Result};
 use std::fs;
+use std::path::Path;
+use std::sync::Arc;
 use tracing::{info, warn};
 use url::Url;
 use walkdir::WalkDir;
@@ -24,11 +24,8 @@ impl ResourceManager {
     /// Create new resource manager
     pub async fn new(config: Arc<Config>) -> Result<Self> {
         let security = SecurityManager::new(None, true)?;
-        
-        Ok(Self {
-            config,
-            security,
-        })
+
+        Ok(Self { config, security })
     }
 
     /// List available resources
@@ -54,8 +51,7 @@ impl ResourceManager {
         info!("Reading resource: {}", uri);
 
         // Parse URI
-        let url = Url::parse(uri)
-            .map_err(|e| anyhow!("Invalid resource URI: {}", e))?;
+        let url = Url::parse(uri).map_err(|e| anyhow!("Invalid resource URI: {}", e))?;
 
         match url.scheme() {
             "file" => self.read_file_resource(&url).await,
@@ -75,9 +71,7 @@ impl ResourceManager {
         }
 
         // Walk directory tree
-        let walker = WalkDir::new(path)
-            .follow_links(false)
-            .max_depth(10);
+        let walker = WalkDir::new(path).follow_links(false).max_depth(10);
 
         for entry in walker {
             let entry = match entry {
@@ -86,22 +80,25 @@ impl ResourceManager {
             };
 
             let file_path = entry.path();
-            
+
             // Skip hidden files and directories
-            if file_path.file_name()
+            if file_path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .map(|n| n.starts_with('.'))
-                .unwrap_or(false) {
+                .unwrap_or(false)
+            {
                 continue;
             }
 
             // Skip common build/output directories
             if let Some(parent) = file_path.parent() {
-                let parent_name = parent.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
-                
-                if matches!(parent_name, "target" | "node_modules" | ".git" | "dist" | "build") {
+                let parent_name = parent.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+                if matches!(
+                    parent_name,
+                    "target" | "node_modules" | ".git" | "dist" | "build"
+                ) {
                     continue;
                 }
             }
@@ -118,14 +115,12 @@ impl ResourceManager {
 
     /// Create file resource
     fn create_file_resource(&self, path: &Path) -> Result<Option<Resource>> {
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         // Only include text files
         let mime_type = match extension {
             "rs" => "text/x-rust",
-            "js" | "mjs" => "text/javascript", 
+            "js" | "mjs" => "text/javascript",
             "ts" => "text/typescript",
             "py" => "text/x-python",
             "java" => "text/x-java",
@@ -155,7 +150,8 @@ impl ResourceManager {
         };
 
         let uri = format!("file://{}", path.display());
-        let name = path.file_name()
+        let name = path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown")
             .to_string();
@@ -203,7 +199,10 @@ impl ResourceManager {
 
         // Security check
         if !self.security.is_path_trusted(path)? {
-            return Err(anyhow!("Access denied to untrusted file: {}", path.display()));
+            return Err(anyhow!(
+                "Access denied to untrusted file: {}",
+                path.display()
+            ));
         }
 
         // Read file content
@@ -231,7 +230,9 @@ impl ResourceManager {
                 Ok(vec![ResourceContent {
                     uri: url.to_string(),
                     mime_type: "application/toml".to_string(),
-                    content: ResourceData::Text { text: config_content },
+                    content: ResourceData::Text {
+                        text: config_content,
+                    },
                 }])
             }
             "memory/conversations" => {
@@ -244,8 +245,8 @@ impl ResourceManager {
                 Ok(vec![ResourceContent {
                     uri: url.to_string(),
                     mime_type: "application/json".to_string(),
-                    content: ResourceData::Text { 
-                        text: serde_json::to_string_pretty(&placeholder)? 
+                    content: ResourceData::Text {
+                        text: serde_json::to_string_pretty(&placeholder)?,
                     },
                 }])
             }
@@ -259,8 +260,8 @@ impl ResourceManager {
                 Ok(vec![ResourceContent {
                     uri: url.to_string(),
                     mime_type: "application/json".to_string(),
-                    content: ResourceData::Text { 
-                        text: serde_json::to_string_pretty(&placeholder)? 
+                    content: ResourceData::Text {
+                        text: serde_json::to_string_pretty(&placeholder)?,
                     },
                 }])
             }
@@ -270,14 +271,12 @@ impl ResourceManager {
 
     /// Detect MIME type for file
     fn detect_mime_type(&self, path: &Path) -> String {
-        let extension = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
+        let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
         match extension {
             "rs" => "text/x-rust",
             "js" | "mjs" => "text/javascript",
-            "ts" => "text/typescript", 
+            "ts" => "text/typescript",
             "py" => "text/x-python",
             "java" => "text/x-java",
             "cpp" | "cc" | "cxx" => "text/x-c++",
@@ -303,6 +302,7 @@ impl ResourceManager {
             "sh" | "bash" => "text/x-shellscript",
             "dockerfile" => "text/x-dockerfile",
             _ => "text/plain",
-        }.to_string()
+        }
+        .to_string()
     }
 }

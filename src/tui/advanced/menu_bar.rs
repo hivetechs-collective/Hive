@@ -53,19 +53,19 @@ pub enum MenuAction {
     SaveAs,
     CloseFolder,
     Exit,
-    
+
     // View menu actions
     CommandPalette,
     ThemeSelector,
     ToggleTerminal,
     ToggleExplorer,
     ToggleConsensus,
-    
+
     // Help menu actions
     ShowWelcome,
     ShowDocumentation,
     ShowAbout,
-    
+
     // Separator
     Separator,
 }
@@ -92,176 +92,185 @@ impl MenuBar {
             is_focused: false,
             menus: HashMap::new(),
         };
-        
+
         menu_bar.setup_menus();
         menu_bar
     }
-    
+
     /// Setup menu definitions
     fn setup_menus(&mut self) {
         // File menu
-        self.menus.insert(MenuType::File, vec![
-            MenuItem {
-                label: "Open File...".to_string(),
-                action: MenuAction::OpenFile,
-                shortcut: Some("Ctrl+O".to_string()),
-                enabled: true,
-            },
-            MenuItem {
-                label: "Open Folder...".to_string(),
-                action: MenuAction::OpenFolder,
-                shortcut: Some("Ctrl+K Ctrl+O".to_string()),
-                enabled: true,
-            },
-            MenuItem {
-                label: "Open Recent".to_string(),
-                action: MenuAction::OpenRecent,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "".to_string(),
-                action: MenuAction::Separator,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "Save".to_string(),
-                action: MenuAction::Save,
-                shortcut: Some("Ctrl+S".to_string()),
-                enabled: true,
-            },
-            MenuItem {
-                label: "Save As...".to_string(),
-                action: MenuAction::SaveAs,
-                shortcut: Some("Ctrl+Shift+S".to_string()),
-                enabled: true,
-            },
-            MenuItem {
-                label: "".to_string(),
-                action: MenuAction::Separator,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "Close Folder".to_string(),
-                action: MenuAction::CloseFolder,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "".to_string(),
-                action: MenuAction::Separator,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "Exit".to_string(),
-                action: MenuAction::Exit,
-                shortcut: Some("Ctrl+Q".to_string()),
-                enabled: true,
-            },
-        ]);
-        
+        self.menus.insert(
+            MenuType::File,
+            vec![
+                MenuItem {
+                    label: "Open File...".to_string(),
+                    action: MenuAction::OpenFile,
+                    shortcut: Some("Ctrl+O".to_string()),
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Open Folder...".to_string(),
+                    action: MenuAction::OpenFolder,
+                    shortcut: Some("Ctrl+K Ctrl+O".to_string()),
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Open Recent".to_string(),
+                    action: MenuAction::OpenRecent,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "".to_string(),
+                    action: MenuAction::Separator,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Save".to_string(),
+                    action: MenuAction::Save,
+                    shortcut: Some("Ctrl+S".to_string()),
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Save As...".to_string(),
+                    action: MenuAction::SaveAs,
+                    shortcut: Some("Ctrl+Shift+S".to_string()),
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "".to_string(),
+                    action: MenuAction::Separator,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Close Folder".to_string(),
+                    action: MenuAction::CloseFolder,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "".to_string(),
+                    action: MenuAction::Separator,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Exit".to_string(),
+                    action: MenuAction::Exit,
+                    shortcut: Some("Ctrl+Q".to_string()),
+                    enabled: true,
+                },
+            ],
+        );
+
         // View menu
-        self.menus.insert(MenuType::View, vec![
-            MenuItem {
-                label: "Command Palette...".to_string(),
-                action: MenuAction::CommandPalette,
-                shortcut: Some("Ctrl+Shift+P".to_string()),
-                enabled: true,
-            },
-            MenuItem {
-                label: "".to_string(),
-                action: MenuAction::Separator,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "Terminal".to_string(),
-                action: MenuAction::ToggleTerminal,
-                shortcut: Some("Ctrl+`".to_string()),
-                enabled: true,
-            },
-            MenuItem {
-                label: "Explorer".to_string(),
-                action: MenuAction::ToggleExplorer,
-                shortcut: Some("Ctrl+Shift+E".to_string()),
-                enabled: true,
-            },
-            MenuItem {
-                label: "Consensus Panel".to_string(),
-                action: MenuAction::ToggleConsensus,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "".to_string(),
-                action: MenuAction::Separator,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "Theme".to_string(),
-                action: MenuAction::ThemeSelector,
-                shortcut: None,
-                enabled: true,
-            },
-        ]);
-        
+        self.menus.insert(
+            MenuType::View,
+            vec![
+                MenuItem {
+                    label: "Command Palette...".to_string(),
+                    action: MenuAction::CommandPalette,
+                    shortcut: Some("Ctrl+Shift+P".to_string()),
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "".to_string(),
+                    action: MenuAction::Separator,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Terminal".to_string(),
+                    action: MenuAction::ToggleTerminal,
+                    shortcut: Some("Ctrl+`".to_string()),
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Explorer".to_string(),
+                    action: MenuAction::ToggleExplorer,
+                    shortcut: Some("Ctrl+Shift+E".to_string()),
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Consensus Panel".to_string(),
+                    action: MenuAction::ToggleConsensus,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "".to_string(),
+                    action: MenuAction::Separator,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Theme".to_string(),
+                    action: MenuAction::ThemeSelector,
+                    shortcut: None,
+                    enabled: true,
+                },
+            ],
+        );
+
         // Help menu
-        self.menus.insert(MenuType::Help, vec![
-            MenuItem {
-                label: "Welcome".to_string(),
-                action: MenuAction::ShowWelcome,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "Documentation".to_string(),
-                action: MenuAction::ShowDocumentation,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "".to_string(),
-                action: MenuAction::Separator,
-                shortcut: None,
-                enabled: true,
-            },
-            MenuItem {
-                label: "About HiveTechs Consensus".to_string(),
-                action: MenuAction::ShowAbout,
-                shortcut: None,
-                enabled: true,
-            },
-        ]);
+        self.menus.insert(
+            MenuType::Help,
+            vec![
+                MenuItem {
+                    label: "Welcome".to_string(),
+                    action: MenuAction::ShowWelcome,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "Documentation".to_string(),
+                    action: MenuAction::ShowDocumentation,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "".to_string(),
+                    action: MenuAction::Separator,
+                    shortcut: None,
+                    enabled: true,
+                },
+                MenuItem {
+                    label: "About HiveTechs Consensus".to_string(),
+                    action: MenuAction::ShowAbout,
+                    shortcut: None,
+                    enabled: true,
+                },
+            ],
+        );
     }
-    
+
     /// Render menu bar
     pub fn render(&self, frame: &mut Frame, area: Rect, theme: &crate::tui::themes::Theme) {
         // Create horizontal layout for menu items
         let menu_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Length(6),  // File
-                Constraint::Length(6),  // View
-                Constraint::Length(6),  // Help
-                Constraint::Min(0),     // Rest of space
+                Constraint::Length(6), // File
+                Constraint::Length(6), // View
+                Constraint::Length(6), // Help
+                Constraint::Min(0),    // Rest of space
             ])
             .split(area);
-        
+
         // Render each menu title
         self.render_menu_title(frame, menu_chunks[0], MenuType::File, "File", theme);
         self.render_menu_title(frame, menu_chunks[1], MenuType::View, "View", theme);
         self.render_menu_title(frame, menu_chunks[2], MenuType::Help, "Help", theme);
-        
+
         // Render dropdown if a menu is active
         if let Some(active_menu) = self.active_menu {
             self.render_dropdown(frame, area, active_menu, theme);
         }
     }
-    
+
     /// Render individual menu title
     fn render_menu_title(
         &self,
@@ -282,14 +291,14 @@ impl MenuBar {
         } else {
             Style::default().fg(theme.muted_color())
         };
-        
+
         let paragraph = Paragraph::new(label)
             .style(style)
             .alignment(Alignment::Center);
-        
+
         frame.render_widget(paragraph, area);
     }
-    
+
     /// Render dropdown menu
     fn render_dropdown(
         &self,
@@ -299,28 +308,28 @@ impl MenuBar {
         theme: &crate::tui::themes::Theme,
     ) {
         let items = self.menus.get(&menu_type).unwrap();
-        
+
         // Calculate dropdown position
         let x_offset = match menu_type {
             MenuType::File => 0,
             MenuType::View => 6,
             MenuType::Help => 12,
         };
-        
+
         // Calculate dropdown size
         let width = 40;
         let height = (items.len() + 2).min(20) as u16;
-        
+
         let dropdown_area = Rect {
             x: menu_bar_area.x + x_offset,
             y: menu_bar_area.y + 1,
             width,
             height,
         };
-        
+
         // Clear background
         frame.render_widget(Clear, dropdown_area);
-        
+
         // Create menu items
         let menu_items: Vec<ListItem> = items
             .iter()
@@ -340,36 +349,35 @@ impl MenuBar {
                     } else {
                         Style::default().fg(theme.muted_color())
                     };
-                    
+
                     // Format item with shortcut
                     let content = if let Some(shortcut) = &item.shortcut {
                         format!("{:<25} {}", item.label, shortcut)
                     } else {
                         item.label.clone()
                     };
-                    
+
                     ListItem::new(content).style(style)
                 }
             })
             .collect();
-        
-        let menu_list = List::new(menu_items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(theme.border_color()))
-                    .style(Style::default().bg(theme.background_color()))
-            );
-        
+
+        let menu_list = List::new(menu_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(theme.border_color()))
+                .style(Style::default().bg(theme.background_color())),
+        );
+
         frame.render_widget(menu_list, dropdown_area);
     }
-    
+
     /// Handle key events
     pub fn handle_key_event(&mut self, key: KeyEvent) -> MenuResult {
         if !self.is_focused && self.active_menu.is_none() {
             return MenuResult::None;
         }
-        
+
         match key.code {
             KeyCode::Esc => {
                 self.active_menu = None;
@@ -464,7 +472,7 @@ impl MenuBar {
             _ => MenuResult::None,
         }
     }
-    
+
     /// Move selection up in menu
     fn move_selection_up(&mut self) {
         if let Some(menu_type) = self.active_menu {
@@ -476,13 +484,13 @@ impl MenuBar {
                     } else {
                         new_idx -= 1;
                     }
-                    
+
                     // Skip separators
                     if !matches!(items[new_idx].action, MenuAction::Separator) {
                         self.selected_item = new_idx;
                         break;
                     }
-                    
+
                     // Prevent infinite loop
                     if new_idx == self.selected_item {
                         break;
@@ -491,7 +499,7 @@ impl MenuBar {
             }
         }
     }
-    
+
     /// Move selection down in menu
     fn move_selection_down(&mut self) {
         if let Some(menu_type) = self.active_menu {
@@ -499,13 +507,13 @@ impl MenuBar {
                 let mut new_idx = self.selected_item;
                 loop {
                     new_idx = (new_idx + 1) % items.len();
-                    
+
                     // Skip separators
                     if !matches!(items[new_idx].action, MenuAction::Separator) {
                         self.selected_item = new_idx;
                         break;
                     }
-                    
+
                     // Prevent infinite loop
                     if new_idx == self.selected_item {
                         break;
@@ -514,19 +522,19 @@ impl MenuBar {
             }
         }
     }
-    
+
     /// Focus the menu bar
     pub fn focus(&mut self) {
         self.is_focused = true;
     }
-    
+
     /// Unfocus the menu bar
     pub fn unfocus(&mut self) {
         self.is_focused = false;
         self.active_menu = None;
         self.selected_item = 0;
     }
-    
+
     /// Check if menu is active
     pub fn is_active(&self) -> bool {
         self.active_menu.is_some()

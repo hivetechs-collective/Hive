@@ -1,18 +1,18 @@
 //! Code applier that handles the actual file modifications
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use sha2::{Sha256, Digest};
 
-use crate::transformation::{
-    types::*,
-    history::{TransformationHistory, FileBackup},
-    syntax::SyntaxAwareModifier,
-};
-use crate::core::Language;
 use crate::analysis::LanguageDetector;
+use crate::core::Language;
+use crate::transformation::{
+    history::{FileBackup, TransformationHistory},
+    syntax::SyntaxAwareModifier,
+    types::*,
+};
 
 /// Applies code transformations to files
 pub struct CodeApplier {
@@ -21,7 +21,10 @@ pub struct CodeApplier {
 }
 
 impl CodeApplier {
-    pub fn new(history: Arc<Mutex<TransformationHistory>>, parser: Arc<Mutex<crate::analysis::TreeSitterParser>>) -> Self {
+    pub fn new(
+        history: Arc<Mutex<TransformationHistory>>,
+        parser: Arc<Mutex<crate::analysis::TreeSitterParser>>,
+    ) -> Self {
         Self {
             history,
             syntax_modifier: SyntaxAwareModifier::new(parser),
@@ -55,7 +58,9 @@ impl CodeApplier {
             let checksum = self.calculate_checksum(&original_content);
 
             // Apply all changes to this file
-            let new_content = self.apply_changes_to_file(&file_path, &original_content, changes).await?;
+            let new_content = self
+                .apply_changes_to_file(&file_path, &original_content, changes)
+                .await?;
 
             // Write the new content
             tokio::fs::write(&file_path, &new_content).await?;
@@ -71,12 +76,16 @@ impl CodeApplier {
 
         // Record the transaction
         let history = self.history.lock().await;
-        let transaction_id = history.record_transaction(&transformation.id, backups).await?;
-        
+        let transaction_id = history
+            .record_transaction(&transformation.id, backups)
+            .await?;
+
         // Mark transformation as applied
         transformation.applied = true;
         transformation.transaction_id = Some(transaction_id.clone());
-        history.mark_applied(&transformation.id, &transaction_id).await?;
+        history
+            .mark_applied(&transformation.id, &transaction_id)
+            .await?;
 
         Ok(transaction_id)
     }
@@ -94,11 +103,15 @@ impl CodeApplier {
 
         // Apply changes in reverse order (bottom to top) to preserve line numbers
         for change in changes {
-            content = self.apply_single_change(&content, change, language.clone()).await?;
+            content = self
+                .apply_single_change(&content, change, language.clone())
+                .await?;
         }
 
         // Verify the final syntax is valid
-        self.syntax_modifier.verify_syntax(&content, language).await?;
+        self.syntax_modifier
+            .verify_syntax(&content, language)
+            .await?;
 
         Ok(content)
     }
@@ -113,17 +126,14 @@ impl CodeApplier {
         // Extract the modification content from the change
         let lines: Vec<&str> = change.new_content.lines().collect();
         let (start, end) = change.line_range;
-        
+
         // Extract the relevant portion from new_content
         if start > 0 && end <= lines.len() {
             let modification = lines[(start - 1)..end].join("\n");
-            
-            self.syntax_modifier.apply_modification(
-                content,
-                &modification,
-                change.line_range,
-                language,
-            ).await
+
+            self.syntax_modifier
+                .apply_modification(content, &modification, change.line_range, language)
+                .await
         } else {
             // If we can't extract specific lines, try a different approach
             // This might happen if new_content is the entire file content
@@ -134,9 +144,12 @@ impl CodeApplier {
     /// Undo a transaction
     pub async fn undo(&self, transaction_id: &str) -> Result<()> {
         let history = self.history.lock().await;
-        let transactions = history.get_transaction_history(self.history.lock().await.max_history).await;
-        
-        let transaction = transactions.iter()
+        let transactions = history
+            .get_transaction_history(self.history.lock().await.max_history)
+            .await;
+
+        let transaction = transactions
+            .iter()
             .find(|t| t.id == transaction_id)
             .ok_or_else(|| anyhow!("Transaction not found"))?;
 
@@ -149,7 +162,7 @@ impl CodeApplier {
             // Verify current checksum matches what we expect
             let current_content = tokio::fs::read_to_string(&backup.file_path).await?;
             let current_checksum = self.calculate_checksum(&current_content);
-            
+
             if current_checksum != self.calculate_checksum(&backup.new_content) {
                 return Err(anyhow!(
                     "File {} has been modified since transformation was applied",
@@ -169,9 +182,12 @@ impl CodeApplier {
     /// Redo a transaction
     pub async fn redo(&self, transaction_id: &str) -> Result<()> {
         let history = self.history.lock().await;
-        let transactions = history.get_transaction_history(self.history.lock().await.max_history).await;
-        
-        let transaction = transactions.iter()
+        let transactions = history
+            .get_transaction_history(self.history.lock().await.max_history)
+            .await;
+
+        let transaction = transactions
+            .iter()
             .find(|t| t.id == transaction_id)
             .ok_or_else(|| anyhow!("Transaction not found"))?;
 
@@ -184,7 +200,7 @@ impl CodeApplier {
             // Verify current content matches original
             let current_content = tokio::fs::read_to_string(&backup.file_path).await?;
             let current_checksum = self.calculate_checksum(&current_content);
-            
+
             if current_checksum != backup.checksum {
                 return Err(anyhow!(
                     "File {} has been modified since transformation was undone",
@@ -213,7 +229,10 @@ impl CodeApplier {
         for change in &transformation.changes {
             // Check file exists
             if !change.file_path.exists() {
-                return Err(anyhow!("File {} does not exist", change.file_path.display()));
+                return Err(anyhow!(
+                    "File {} does not exist",
+                    change.file_path.display()
+                ));
             }
 
             // Check file is readable and writable
@@ -225,7 +244,9 @@ impl CodeApplier {
             // Verify syntax would be valid after change
             let detector = LanguageDetector::new();
             let language = detector.detect_from_path(&change.file_path)?;
-            self.syntax_modifier.verify_syntax(&change.new_content, language).await?;
+            self.syntax_modifier
+                .verify_syntax(&change.new_content, language)
+                .await?;
         }
 
         Ok(())
@@ -234,12 +255,14 @@ impl CodeApplier {
     /// Rollback all changes since a specific point
     pub async fn rollback_to(&self, transaction_id: &str) -> Result<()> {
         let history = self.history.lock().await;
-        let transactions = history.get_transaction_history(self.history.lock().await.max_history).await;
+        let transactions = history
+            .get_transaction_history(self.history.lock().await.max_history)
+            .await;
 
         // Find all transactions after the target
         let mut to_undo = Vec::new();
         let mut found = false;
-        
+
         for transaction in transactions.iter() {
             if found && transaction.applied {
                 to_undo.push(transaction.id.clone());

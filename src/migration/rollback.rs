@@ -1,15 +1,15 @@
 //! Migration Rollback Module
-//! 
+//!
 //! Provides comprehensive rollback capabilities to restore the system
 //! to its pre-migration state with complete data recovery.
 
 use crate::core::error::HiveError;
 use crate::migration::{MigrationConfig, MigrationPhase};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
-use chrono::{DateTime, Utc};
 
 /// Rollback operation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,26 +135,23 @@ pub struct RollbackManager {
 impl RollbackManager {
     /// Create new rollback manager
     pub fn new(config: MigrationConfig) -> Self {
-        Self {
-            config,
-            plan: None,
-        }
+        Self { config, plan: None }
     }
 
     /// Create rollback plan before migration starts
     pub async fn create_rollback_plan(&mut self) -> Result<(), HiveError> {
         log::info!("Creating rollback plan");
-        
+
         let migration_id = generate_migration_id();
         let backup_base = self.get_backup_directory()?;
-        
+
         // Ensure backup directory exists
         fs::create_dir_all(&backup_base).await?;
-        
+
         let mut backup_locations = HashMap::new();
         let mut original_permissions = HashMap::new();
         let mut operations = Vec::new();
-        
+
         // Plan database rollback
         if let Some(db_backup) = self.plan_database_backup(&backup_base).await? {
             backup_locations.insert("database".to_string(), db_backup.clone());
@@ -168,7 +165,7 @@ impl RollbackManager {
                 postconditions: vec!["database_accessible".to_string()],
             });
         }
-        
+
         // Plan configuration rollback
         if let Some(config_backup) = self.plan_configuration_backup(&backup_base).await? {
             backup_locations.insert("configuration".to_string(), config_backup.clone());
@@ -182,10 +179,10 @@ impl RollbackManager {
                 postconditions: vec!["configuration_valid".to_string()],
             });
         }
-        
+
         // Store original permissions
         original_permissions.extend(self.collect_original_permissions().await?);
-        
+
         self.plan = Some(RollbackPlan {
             migration_id,
             created_at: Utc::now(),
@@ -195,10 +192,10 @@ impl RollbackManager {
             dependencies: self.create_rollback_dependencies(),
             verification_steps: self.create_verification_steps(),
         });
-        
+
         // Save rollback plan to disk
         self.save_rollback_plan().await?;
-        
+
         log::info!("Rollback plan created successfully");
         Ok(())
     }
@@ -206,7 +203,7 @@ impl RollbackManager {
     /// Execute rollback using the saved plan
     pub async fn execute_rollback(&self) -> Result<RollbackResult, HiveError> {
         log::info!("Starting rollback execution");
-        
+
         let start_time = std::time::Instant::now();
         let mut result = RollbackResult {
             success: false,
@@ -217,17 +214,19 @@ impl RollbackManager {
             warnings: Vec::new(),
             duration: std::time::Duration::default(),
         };
-        
+
         // Load rollback plan
         let plan = match self.load_rollback_plan().await {
             Ok(plan) => plan,
             Err(e) => {
-                result.errors.push(format!("Failed to load rollback plan: {}", e));
+                result
+                    .errors
+                    .push(format!("Failed to load rollback plan: {}", e));
                 result.phase = RollbackPhase::Failed;
                 return Ok(result);
             }
         };
-        
+
         // Execute rollback phases
         for phase in [
             RollbackPhase::RestoringDatabase,
@@ -236,32 +235,39 @@ impl RollbackManager {
             RollbackPhase::CleaningUp,
         ] {
             result.phase = phase.clone();
-            
-            match self.execute_rollback_phase(&phase, &plan, &mut result).await {
+
+            match self
+                .execute_rollback_phase(&phase, &plan, &mut result)
+                .await
+            {
                 Ok(_) => {
                     log::info!("Rollback phase {:?} completed successfully", phase);
-                },
+                }
                 Err(e) => {
-                    result.errors.push(format!("Rollback phase {:?} failed: {}", phase, e));
+                    result
+                        .errors
+                        .push(format!("Rollback phase {:?} failed: {}", phase, e));
                     result.phase = RollbackPhase::Failed;
                     result.duration = start_time.elapsed();
                     return Ok(result);
                 }
             }
         }
-        
+
         // Verify rollback success
         if let Err(e) = self.verify_rollback(&plan).await {
-            result.errors.push(format!("Rollback verification failed: {}", e));
+            result
+                .errors
+                .push(format!("Rollback verification failed: {}", e));
             result.phase = RollbackPhase::Failed;
         } else {
             result.success = true;
             result.phase = RollbackPhase::Completed;
         }
-        
+
         result.duration = start_time.elapsed();
         log::info!("Rollback execution completed in {:?}", result.duration);
-        
+
         Ok(result)
     }
 
@@ -270,18 +276,20 @@ impl RollbackManager {
         if let Some(backup_path) = &self.config.backup_path {
             Ok(backup_path.clone())
         } else {
-            let home_dir = dirs::home_dir()
-                .ok_or_else(|| HiveError::Migration { 
-                    message: "Cannot determine home directory".to_string()
-                })?;
+            let home_dir = dirs::home_dir().ok_or_else(|| HiveError::Migration {
+                message: "Cannot determine home directory".to_string(),
+            })?;
             Ok(home_dir.join(".hive").join("backups"))
         }
     }
 
     /// Plan database backup
-    async fn plan_database_backup(&self, backup_base: &PathBuf) -> Result<Option<PathBuf>, HiveError> {
+    async fn plan_database_backup(
+        &self,
+        backup_base: &PathBuf,
+    ) -> Result<Option<PathBuf>, HiveError> {
         let source_db = &self.config.source_path.join("hive-ai.db");
-        
+
         if source_db.exists() {
             let backup_path = backup_base.join("database_backup.db");
             fs::copy(source_db, &backup_path).await?;
@@ -294,9 +302,12 @@ impl RollbackManager {
     }
 
     /// Plan configuration backup
-    async fn plan_configuration_backup(&self, backup_base: &PathBuf) -> Result<Option<PathBuf>, HiveError> {
+    async fn plan_configuration_backup(
+        &self,
+        backup_base: &PathBuf,
+    ) -> Result<Option<PathBuf>, HiveError> {
         let source_config = self.config.source_path.join("config.json");
-        
+
         if source_config.exists() {
             let backup_path = backup_base.join("config_backup.json");
             fs::copy(&source_config, &backup_path).await?;
@@ -311,13 +322,10 @@ impl RollbackManager {
     /// Collect original file permissions
     async fn collect_original_permissions(&self) -> Result<HashMap<PathBuf, u32>, HiveError> {
         let mut permissions = HashMap::new();
-        
+
         // Collect permissions for key files and directories
-        let paths_to_check = vec![
-            get_target_database_path()?,
-            get_target_config_path()?,
-        ];
-        
+        let paths_to_check = vec![get_target_database_path()?, get_target_config_path()?];
+
         for path in paths_to_check {
             if path.exists() {
                 if let Ok(metadata) = fs::metadata(&path).await {
@@ -333,19 +341,17 @@ impl RollbackManager {
                 }
             }
         }
-        
+
         Ok(permissions)
     }
 
     /// Create rollback dependencies
     fn create_rollback_dependencies(&self) -> Vec<RollbackDependency> {
-        vec![
-            RollbackDependency {
-                operation_id: "restore_configuration".to_string(),
-                depends_on: "restore_database".to_string(),
-                dependency_type: DependencyType::MustCompleteAfter,
-            }
-        ]
+        vec![RollbackDependency {
+            operation_id: "restore_configuration".to_string(),
+            depends_on: "restore_database".to_string(),
+            dependency_type: DependencyType::MustCompleteAfter,
+        }]
     }
 
     /// Create verification steps
@@ -371,10 +377,10 @@ impl RollbackManager {
         if let Some(plan) = &self.plan {
             let backup_dir = self.get_backup_directory()?;
             let plan_path = backup_dir.join("rollback_plan.json");
-            
+
             let plan_json = serde_json::to_string_pretty(plan)?;
             fs::write(&plan_path, plan_json).await?;
-            
+
             log::info!("Rollback plan saved: {}", plan_path.display());
         }
         Ok(())
@@ -384,16 +390,16 @@ impl RollbackManager {
     async fn load_rollback_plan(&self) -> Result<RollbackPlan, HiveError> {
         let backup_dir = self.get_backup_directory()?;
         let plan_path = backup_dir.join("rollback_plan.json");
-        
+
         if !plan_path.exists() {
-            return Err(HiveError::Migration { 
-                message: "Rollback plan not found".to_string()
+            return Err(HiveError::Migration {
+                message: "Rollback plan not found".to_string(),
             });
         }
-        
+
         let plan_content = fs::read_to_string(&plan_path).await?;
         let plan: RollbackPlan = serde_json::from_str(&plan_content)?;
-        
+
         Ok(plan)
     }
 
@@ -407,19 +413,19 @@ impl RollbackManager {
         match phase {
             RollbackPhase::RestoringDatabase => {
                 self.restore_database(plan, result).await?;
-            },
+            }
             RollbackPhase::RestoringConfiguration => {
                 self.restore_configuration(plan, result).await?;
-            },
+            }
             RollbackPhase::RestoringFiles => {
                 self.restore_files(plan, result).await?;
-            },
+            }
             RollbackPhase::CleaningUp => {
                 self.cleanup_migration_artifacts(result).await?;
-            },
+            }
             _ => {
-                return Err(HiveError::Migration { 
-                    message: format!("Invalid rollback phase: {:?}", phase)
+                return Err(HiveError::Migration {
+                    message: format!("Invalid rollback phase: {:?}", phase),
                 });
             }
         }
@@ -427,10 +433,14 @@ impl RollbackManager {
     }
 
     /// Restore database from backup
-    async fn restore_database(&self, plan: &RollbackPlan, result: &mut RollbackResult) -> Result<(), HiveError> {
+    async fn restore_database(
+        &self,
+        plan: &RollbackPlan,
+        result: &mut RollbackResult,
+    ) -> Result<(), HiveError> {
         if let Some(backup_path) = plan.backup_locations.get("database") {
             let target_path = get_target_database_path()?;
-            
+
             let operation = RollbackOperation {
                 operation_type: RollbackOperationType::DatabaseRestore,
                 source_path: backup_path.clone(),
@@ -439,34 +449,38 @@ impl RollbackManager {
                 details: "Restoring database from backup".to_string(),
                 timestamp: Utc::now(),
             };
-            
+
             result.operations.push(operation.clone());
-            
+
             // Remove current database if it exists
             if target_path.exists() {
                 fs::remove_file(&target_path).await?;
             }
-            
+
             // Restore from backup
             fs::copy(backup_path, &target_path).await?;
             result.restored_files.push(target_path);
-            
+
             // Update operation status
             if let Some(last_op) = result.operations.last_mut() {
                 last_op.status = OperationStatus::Completed;
                 last_op.details = "Database restored successfully".to_string();
             }
-            
+
             log::info!("Database restored from backup");
         }
         Ok(())
     }
 
     /// Restore configuration from backup
-    async fn restore_configuration(&self, plan: &RollbackPlan, result: &mut RollbackResult) -> Result<(), HiveError> {
+    async fn restore_configuration(
+        &self,
+        plan: &RollbackPlan,
+        result: &mut RollbackResult,
+    ) -> Result<(), HiveError> {
         if let Some(backup_path) = plan.backup_locations.get("configuration") {
             let target_path = get_target_config_path()?;
-            
+
             let operation = RollbackOperation {
                 operation_type: RollbackOperationType::ConfigurationRestore,
                 source_path: backup_path.clone(),
@@ -475,31 +489,35 @@ impl RollbackManager {
                 details: "Restoring configuration from backup".to_string(),
                 timestamp: Utc::now(),
             };
-            
+
             result.operations.push(operation.clone());
-            
+
             // Remove current config if it exists
             if target_path.exists() {
                 fs::remove_file(&target_path).await?;
             }
-            
+
             // Restore from backup
             fs::copy(backup_path, &target_path).await?;
             result.restored_files.push(target_path);
-            
+
             // Update operation status
             if let Some(last_op) = result.operations.last_mut() {
                 last_op.status = OperationStatus::Completed;
                 last_op.details = "Configuration restored successfully".to_string();
             }
-            
+
             log::info!("Configuration restored from backup");
         }
         Ok(())
     }
 
     /// Restore additional files
-    async fn restore_files(&self, plan: &RollbackPlan, result: &mut RollbackResult) -> Result<(), HiveError> {
+    async fn restore_files(
+        &self,
+        plan: &RollbackPlan,
+        result: &mut RollbackResult,
+    ) -> Result<(), HiveError> {
         // Restore file permissions
         for (path, mode) in &plan.original_permissions {
             if path.exists() {
@@ -512,28 +530,38 @@ impl RollbackManager {
                 log::debug!("Restored permissions for: {}", path.display());
             }
         }
-        
+
         log::info!("File permissions restored");
         Ok(())
     }
 
     /// Clean up migration artifacts
-    async fn cleanup_migration_artifacts(&self, result: &mut RollbackResult) -> Result<(), HiveError> {
+    async fn cleanup_migration_artifacts(
+        &self,
+        result: &mut RollbackResult,
+    ) -> Result<(), HiveError> {
         // Remove any temporary files created during migration
         let temp_dirs = vec![
             std::env::temp_dir().join("hive_migration"),
-            get_target_config_path()?.parent().unwrap().join("migration_temp"),
+            get_target_config_path()?
+                .parent()
+                .unwrap()
+                .join("migration_temp"),
         ];
-        
+
         for temp_dir in temp_dirs {
             if temp_dir.exists() {
                 match fs::remove_dir_all(&temp_dir).await {
                     Ok(_) => log::info!("Cleaned up temporary directory: {}", temp_dir.display()),
-                    Err(e) => result.warnings.push(format!("Failed to clean up {}: {}", temp_dir.display(), e)),
+                    Err(e) => result.warnings.push(format!(
+                        "Failed to clean up {}: {}",
+                        temp_dir.display(),
+                        e
+                    )),
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -544,13 +572,13 @@ impl RollbackManager {
                 VerificationType::DatabaseAccessible => {
                     let db_path = get_target_database_path()?;
                     if !db_path.exists() {
-                        return Err(HiveError::Migration { 
-                            message: "Database file not found after rollback".to_string()
+                        return Err(HiveError::Migration {
+                            message: "Database file not found after rollback".to_string(),
                         });
                     }
                     // Try to open database
                     // This would use the actual Database API in a real implementation
-                },
+                }
                 VerificationType::ConfigurationValid => {
                     let config_path = get_target_config_path()?;
                     if config_path.exists() {
@@ -562,13 +590,13 @@ impl RollbackManager {
                             toml::from_str::<toml::Value>(&content)?;
                         }
                     }
-                },
+                }
                 _ => {
                     // Handle other verification types
                 }
             }
         }
-        
+
         log::info!("Rollback verification completed successfully");
         Ok(())
     }
@@ -587,19 +615,17 @@ fn generate_migration_id() -> String {
 
 /// Get target database path
 fn get_target_database_path() -> Result<PathBuf, HiveError> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| HiveError::Migration { 
-            message: "Cannot determine home directory".to_string()
-        })?;
+    let home_dir = dirs::home_dir().ok_or_else(|| HiveError::Migration {
+        message: "Cannot determine home directory".to_string(),
+    })?;
     Ok(home_dir.join(".hive").join("hive-ai.db"))
 }
 
 /// Get target configuration path
 fn get_target_config_path() -> Result<PathBuf, HiveError> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| HiveError::Migration { 
-            message: "Cannot determine home directory".to_string()
-        })?;
+    let home_dir = dirs::home_dir().ok_or_else(|| HiveError::Migration {
+        message: "Cannot determine home directory".to_string(),
+    })?;
     Ok(home_dir.join(".hive").join("config.toml"))
 }
 
@@ -612,7 +638,7 @@ mod tests {
     fn test_generate_migration_id() {
         let id1 = generate_migration_id();
         let id2 = generate_migration_id();
-        
+
         assert!(id1.starts_with("migration_"));
         assert!(id2.starts_with("migration_"));
         // IDs should be different (unless generated in the same second)
@@ -628,7 +654,7 @@ mod tests {
             validation_level: crate::migration::ValidationLevel::Standard,
             migration_type: crate::migration::MigrationType::Upgrade,
         };
-        
+
         let manager = RollbackManager::new(config);
         assert!(manager.plan.is_none());
     }
@@ -644,7 +670,7 @@ mod tests {
             warnings: Vec::new(),
             duration: std::time::Duration::from_secs(30),
         };
-        
+
         assert!(result.success);
         assert_eq!(result.phase, RollbackPhase::Completed);
         assert!(result.errors.is_empty());

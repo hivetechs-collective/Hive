@@ -1,5 +1,5 @@
 //! Theme management for VS Code-style theming
-//! 
+//!
 //! Supports dark, light, and high contrast themes with dynamic switching
 
 use dioxus::prelude::*;
@@ -27,7 +27,7 @@ impl Theme {
             Self::HighContrast => super::themes::HIGH_CONTRAST_THEME_OVERRIDES,
         }
     }
-    
+
     /// Get the theme name for display
     pub fn display_name(&self) -> &'static str {
         match self {
@@ -36,7 +36,7 @@ impl Theme {
             Self::HighContrast => "High Contrast",
         }
     }
-    
+
     /// Get the theme icon
     pub fn icon(&self) -> &'static str {
         match self {
@@ -51,12 +51,12 @@ impl Theme {
 #[component]
 pub fn ThemeProvider(children: Element) -> Element {
     let theme = use_signal(|| Theme::default());
-    
+
     use_context_provider(|| theme);
-    
+
     // Inject theme-specific styles
     let theme_styles = theme.read().css_overrides();
-    
+
     rsx! {
         style {
             dangerous_inner_html: "{theme_styles}"
@@ -75,7 +75,7 @@ pub fn use_theme() -> Signal<Theme> {
 pub fn ThemeSwitcher() -> Element {
     let mut theme = use_theme();
     let theme_icon = theme.read().icon();
-    
+
     rsx! {
         div {
             class: "theme-switcher",
@@ -116,7 +116,7 @@ pub fn platform_adjustments() -> &'static str {
         .titlebar button { -webkit-app-region: no-drag; }
         "#
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         r#"
@@ -124,7 +124,7 @@ pub fn platform_adjustments() -> &'static str {
         ::-webkit-scrollbar { width: 17px; height: 17px; }
         "#
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         r#"

@@ -5,7 +5,7 @@ use rusqlite::params;
 
 use crate::core::database::{
     DatabaseConfig, DatabaseManager, initialize_database, get_database,
-    User, Conversation, Message, KnowledgeConversation, ConsensusProfile, 
+    User, Conversation, Message, KnowledgeConversation, ConsensusProfile,
     ActivityLog, execute_transaction
 };
 
@@ -34,7 +34,7 @@ async fn test_complete_database_setup() -> Result<()> {
     // Verify database is working
     let db = get_database().await?;
     let health = db.health_check().await?;
-    
+
     assert!(health.healthy);
     assert!(health.wal_mode_active);
     assert!(health.foreign_keys_enabled);
@@ -42,10 +42,10 @@ async fn test_complete_database_setup() -> Result<()> {
     // Test basic operations
     let stats = db.get_statistics().await?;
     assert_eq!(stats.conversation_count, 0); // Fresh database
-    
+
     // Test vacuum operation
     db.vacuum().await?;
-    
+
     // Test optimization
     db.optimize().await?;
 
@@ -83,25 +83,25 @@ async fn test_connection_pooling_stress() -> Result<()> {
 
     // Simulate concurrent operations
     let mut handles = vec![];
-    
+
     for i in 0..20 {
         let db_clone = db.clone();
         let handle = tokio::spawn(async move {
             // Each task inserts a value and then reads it
             let conn = db_clone.get_connection()?;
             let value = format!("test_value_{}", i);
-            
+
             conn.execute(
                 "INSERT INTO test_table (id, value) VALUES (?1, ?2)",
                 params![i, &value],
             )?;
-            
+
             let result: String = conn.query_row(
                 "SELECT value FROM test_table WHERE id = ?1",
                 params![i],
                 |row| row.get(0),
             )?;
-            
+
             Ok::<_, anyhow::Error>(result == value)
         });
         handles.push(handle);
@@ -109,7 +109,7 @@ async fn test_connection_pooling_stress() -> Result<()> {
 
     // Wait for all operations to complete
     let results = futures::future::join_all(handles).await;
-    
+
     for result in results {
         assert!(result??); // Unwrap JoinResult and then our Result<bool>
     }
@@ -121,7 +121,7 @@ async fn test_connection_pooling_stress() -> Result<()> {
         [],
         |row| row.get(0),
     )?;
-    
+
     assert_eq!(count, 20);
 
     Ok(())
@@ -426,15 +426,15 @@ async fn test_performance_metrics() -> Result<()> {
 
     // Create test data
     let user = User::create(None, None).await?;
-    
+
     // Measure conversation creation performance
     let start = std::time::Instant::now();
     let mut conversation_ids = Vec::new();
-    
+
     for i in 0..100 {
         let conv = Conversation::create(Some(user.id.clone()), None).await?;
         conversation_ids.push(conv.id);
-        
+
         // Add some messages
         for j in 0..5 {
             Message::create(
@@ -446,10 +446,10 @@ async fn test_performance_metrics() -> Result<()> {
             ).await?;
         }
     }
-    
+
     let creation_time = start.elapsed();
     println!("Created 100 conversations with 500 messages in {:?}", creation_time);
-    
+
     // Measure query performance
     let start = std::time::Instant::now();
     for id in &conversation_ids[..10] {
@@ -457,7 +457,7 @@ async fn test_performance_metrics() -> Result<()> {
     }
     let query_time = start.elapsed();
     println!("Queried 10 conversations in {:?}", query_time);
-    
+
     // Ensure performance meets targets
     assert!(creation_time.as_millis() < 5000, "Creation should be fast");
     assert!(query_time.as_millis() < 100, "Queries should be fast");
@@ -481,7 +481,7 @@ async fn test_concurrent_writes() -> Result<()> {
 
     // Create multiple users concurrently
     let mut handles = vec![];
-    
+
     for i in 0..50 {
         let handle = tokio::spawn(async move {
             User::create(
@@ -493,7 +493,7 @@ async fn test_concurrent_writes() -> Result<()> {
     }
 
     let results = futures::future::join_all(handles).await;
-    
+
     // All operations should succeed
     for result in results {
         assert!(result?.is_ok());
@@ -539,7 +539,7 @@ async fn test_backup_restore() -> Result<()> {
     // Perform backup
     let db = get_database().await?;
     let conn = db.get_connection()?;
-    
+
     // Use SQLite backup API
     let backup_conn = rusqlite::Connection::open(&backup_path)?;
     let backup = rusqlite::backup::Backup::new(&conn, &backup_conn)?;
@@ -554,7 +554,7 @@ async fn test_backup_restore() -> Result<()> {
         |row| row.get(0),
     )?;
     assert_eq!(user_count, 1);
-    
+
     let profile_count: i32 = verify_conn.query_row(
         "SELECT COUNT(*) FROM consensus_profiles",
         [],

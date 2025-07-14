@@ -1,9 +1,9 @@
 //! Preview generation for code transformations
 
-use anyhow::Result;
 use crate::transformation::types::*;
-use similar::{ChangeTag, TextDiff};
+use anyhow::Result;
 use colored::*;
+use similar::{ChangeTag, TextDiff};
 
 /// Generates previews for code transformations
 pub struct PreviewSystem {
@@ -18,7 +18,10 @@ impl PreviewSystem {
     }
 
     /// Generate a preview for a transformation
-    pub async fn generate_preview(&self, transformation: &Transformation) -> Result<TransformationPreview> {
+    pub async fn generate_preview(
+        &self,
+        transformation: &Transformation,
+    ) -> Result<TransformationPreview> {
         let mut diffs = Vec::new();
         let mut total_additions = 0;
         let mut total_deletions = 0;
@@ -42,7 +45,11 @@ impl PreviewSystem {
             files_modified: diffs.len(),
             files_affected: self.estimate_affected_files(&transformation.changes),
             functions_modified: modified_functions.into_iter().collect(),
-            risk_level: self.assess_risk_level(total_additions, total_deletions, &transformation.changes),
+            risk_level: self.assess_risk_level(
+                total_additions,
+                total_deletions,
+                &transformation.changes,
+            ),
             tests_affected: self.check_tests_affected(&transformation.changes),
         };
 
@@ -60,7 +67,7 @@ impl PreviewSystem {
     /// Generate diff for a single file change
     async fn generate_file_diff(&self, change: &CodeChange) -> Result<FileDiff> {
         let diff = TextDiff::from_lines(&change.original_content, &change.new_content);
-        
+
         let mut unified_diff = String::new();
         let mut additions = 0;
         let mut deletions = 0;
@@ -75,8 +82,13 @@ impl PreviewSystem {
             }
 
             let (tag, old_range, new_range) = group[0].as_tag_tuple();
-            unified_diff.push_str(&format!("@@ -{},{} +{},{} @@\n", 
-                old_range.start + 1, old_range.len(), new_range.start + 1, new_range.len()));
+            unified_diff.push_str(&format!(
+                "@@ -{},{} +{},{} @@\n",
+                old_range.start + 1,
+                old_range.len(),
+                new_range.start + 1,
+                new_range.len()
+            ));
 
             for op in group {
                 for change in diff.iter_changes(op) {
@@ -84,11 +96,11 @@ impl PreviewSystem {
                         ChangeTag::Delete => {
                             deletions += 1;
                             "-"
-                        },
+                        }
                         ChangeTag::Insert => {
                             additions += 1;
                             "+"
-                        },
+                        }
                         ChangeTag::Equal => " ",
                     };
 
@@ -111,9 +123,21 @@ impl PreviewSystem {
 
         // Header
         output.push_str(&format!("\n{}\n", "=== Transformation Preview ===".bold()));
-        output.push_str(&format!("{}: {}\n", "Description".bold(), preview.transformation.description));
-        output.push_str(&format!("{}: {}\n", "Aspect".bold(), preview.transformation.request.aspect));
-        output.push_str(&format!("{}: {} files modified\n\n", "Impact".bold(), preview.impact.files_modified));
+        output.push_str(&format!(
+            "{}: {}\n",
+            "Description".bold(),
+            preview.transformation.description
+        ));
+        output.push_str(&format!(
+            "{}: {}\n",
+            "Aspect".bold(),
+            preview.transformation.request.aspect
+        ));
+        output.push_str(&format!(
+            "{}: {} files modified\n\n",
+            "Impact".bold(),
+            preview.impact.files_modified
+        ));
 
         // Risk assessment
         let risk_color = match preview.impact.risk_level {
@@ -121,15 +145,21 @@ impl PreviewSystem {
             RiskLevel::Medium => "yellow",
             RiskLevel::High => "red",
         };
-        output.push_str(&format!("{}: {}\n\n", 
-            "Risk Level".bold(), 
+        output.push_str(&format!(
+            "{}: {}\n\n",
+            "Risk Level".bold(),
             format!("{:?}", preview.impact.risk_level).color(risk_color)
         ));
 
         // File diffs
         for diff in &preview.diffs {
-            output.push_str(&format!("{} {}\n", "File:".bold(), diff.file_path.display()));
-            output.push_str(&format!("  {} additions, {} deletions\n\n", 
+            output.push_str(&format!(
+                "{} {}\n",
+                "File:".bold(),
+                diff.file_path.display()
+            ));
+            output.push_str(&format!(
+                "  {} additions, {} deletions\n\n",
                 format!("+{}", diff.additions).green(),
                 format!("-{}", diff.deletions).red()
             ));
@@ -173,19 +203,22 @@ impl PreviewSystem {
         // This is a simplified implementation
         // In production, we'd use the AST to accurately identify functions
         let mut functions = Vec::new();
-        
+
         // Simple regex-based extraction for common languages
         let content = &change.original_content;
         let lines: Vec<&str> = content.lines().collect();
-        
+
         let (start, end) = change.line_range;
         for i in start.saturating_sub(5)..end.min(lines.len() + 5) {
             if i < lines.len() {
                 let line = lines[i];
-                
+
                 // Simple patterns for function detection
-                if line.contains("fn ") || line.contains("function ") || 
-                   line.contains("def ") || line.contains("func ") {
+                if line.contains("fn ")
+                    || line.contains("function ")
+                    || line.contains("def ")
+                    || line.contains("func ")
+                {
                     if let Some(name) = self.extract_function_name(line) {
                         functions.push(name);
                     }
@@ -231,9 +264,14 @@ impl PreviewSystem {
     }
 
     /// Assess risk level of the transformation
-    fn assess_risk_level(&self, additions: usize, deletions: usize, changes: &[CodeChange]) -> RiskLevel {
+    fn assess_risk_level(
+        &self,
+        additions: usize,
+        deletions: usize,
+        changes: &[CodeChange],
+    ) -> RiskLevel {
         let total_changes = additions + deletions;
-        
+
         // Simple heuristic
         if total_changes < 10 {
             RiskLevel::Low
@@ -260,28 +298,38 @@ impl PreviewSystem {
 
         // High risk warning
         if impact.risk_level == RiskLevel::High {
-            warnings.push("High risk transformation - review carefully before applying".to_string());
+            warnings
+                .push("High risk transformation - review carefully before applying".to_string());
         }
 
         // Multiple file warning
         if changes.len() > 5 {
-            warnings.push(format!("This transformation affects {} files", changes.len()));
+            warnings.push(format!(
+                "This transformation affects {} files",
+                changes.len()
+            ));
         }
 
         // Low confidence warning
         for change in changes {
             if change.confidence < 0.7 {
                 warnings.push(format!(
-                    "Low confidence ({:.0}%) for change in {}", 
+                    "Low confidence ({:.0}%) for change in {}",
                     change.confidence * 100.0,
-                    change.file_path.file_name().unwrap_or_default().to_string_lossy()
+                    change
+                        .file_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
                 ));
             }
         }
 
         // Test warning
         if impact.tests_affected {
-            warnings.push("Tests may be affected - consider running test suite after applying".to_string());
+            warnings.push(
+                "Tests may be affected - consider running test suite after applying".to_string(),
+            );
         }
 
         warnings

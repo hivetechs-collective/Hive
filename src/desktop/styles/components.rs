@@ -1,5 +1,5 @@
 //! Component-specific styling helpers for Dioxus
-//! 
+//!
 //! Provides utility functions and constants for consistent styling
 
 use dioxus::prelude::*;
@@ -60,7 +60,7 @@ pub fn icon_class(size: IconSize) -> &'static str {
 
 pub enum IconSize {
     Small,  // 12px
-    Medium, // 16px  
+    Medium, // 16px
     Large,  // 20px
 }
 
@@ -75,7 +75,7 @@ pub fn VsCodeButton(
 ) -> Element {
     let variant = variant.unwrap_or(ButtonVariant::Primary);
     let class = variant.vscode_class();
-    
+
     rsx! {
         button {
             class: "{class}",
@@ -98,7 +98,7 @@ pub fn VsCodePanel(
 ) -> Element {
     let style = style.unwrap_or(PanelStyle::Sidebar);
     let class = style.vscode_class();
-    
+
     rsx! {
         div {
             class: "{class}",
@@ -127,8 +127,12 @@ pub fn FileTreeItem(
 ) -> Element {
     let indent = format!("{}px", indent_level * 20);
     let icon = if is_folder { "folder" } else { "file" };
-    let class = if is_selected { "tree-item selected" } else { "tree-item" };
-    
+    let class = if is_selected {
+        "tree-item selected"
+    } else {
+        "tree-item"
+    };
+
     rsx! {
         div {
             class: "{class}",
@@ -153,7 +157,7 @@ pub fn VsCodeTab(
     #[props(default)] icon: Option<String>,
 ) -> Element {
     let class = if is_active { "tab active" } else { "tab" };
-    
+
     rsx! {
         div {
             class: "{class}",
@@ -194,9 +198,11 @@ pub fn cx(classes: &[&str]) -> String {
 pub fn syntax_highlight(code: &str, language: &str) -> String {
     // This would integrate with a syntax highlighting library
     // For now, return the code wrapped in appropriate classes
-    format!(r#"<pre class="code-block"><code class="language-{}">{}</code></pre>"#, 
-            language, 
-            html_escape(code))
+    format!(
+        r#"<pre class="code-block"><code class="language-{}">{}</code></pre>"#,
+        language,
+        html_escape(code)
+    )
 }
 
 fn html_escape(s: &str) -> String {

@@ -3,13 +3,13 @@
 //! This module provides syntax highlighting using tree-sitter queries
 //! optimized for terminal display with color schemes.
 
-use std::sync::Arc;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio::sync::Mutex;
-use serde::{Serialize, Deserialize};
 
+use super::parser::{HighlightSpan, HighlightType, TreeSitterParser};
 use crate::core::Position;
-use super::parser::{TreeSitterParser, HighlightSpan, HighlightType};
 
 /// Syntax highlighter for terminal display
 pub struct SyntaxHighlighter {
@@ -93,13 +93,13 @@ impl SyntaxHighlighter {
     pub fn new() -> Self {
         let mut registry = ColorSchemeRegistry::new();
         registry.register_default_schemes();
-        
+
         Self {
             color_schemes: registry,
             current_scheme: "monokai".to_string(),
         }
     }
-    
+
     /// Highlight source code
     pub async fn highlight(
         &self,
@@ -107,37 +107,48 @@ impl SyntaxHighlighter {
         content: &str,
     ) -> Result<Vec<HighlightSpan>> {
         let mut parser = parser.lock().await;
-        
+
         // Parse the content
-        let tree = parser.parser.parse(content, None)
+        let tree = parser
+            .parser
+            .parse(content, None)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse content for highlighting"))?;
-        
+
         // Get highlight spans
         parser.get_highlights(&tree, content)
     }
-    
+
     /// Apply color scheme to highlight spans
     pub fn apply_colors(&self, spans: &[HighlightSpan]) -> Vec<ColoredSpan> {
-        let scheme = self.color_schemes.schemes.get(&self.current_scheme)
+        let scheme = self
+            .color_schemes
+            .schemes
+            .get(&self.current_scheme)
             .unwrap_or_else(|| self.color_schemes.schemes.get("monokai").unwrap());
-        
-        spans.iter().map(|span| {
-            let color = scheme.colors.get(&span.highlight_type)
-                .cloned()
-                .unwrap_or(TerminalColor {
-                    fg: Color::White,
-                    bg: None,
-                    style: TextStyle::default(),
-                });
-            
-            ColoredSpan {
-                start: span.start,
-                end: span.end,
-                color,
-            }
-        }).collect()
+
+        spans
+            .iter()
+            .map(|span| {
+                let color =
+                    scheme
+                        .colors
+                        .get(&span.highlight_type)
+                        .cloned()
+                        .unwrap_or(TerminalColor {
+                            fg: Color::White,
+                            bg: None,
+                            style: TextStyle::default(),
+                        });
+
+                ColoredSpan {
+                    start: span.start,
+                    end: span.end,
+                    color,
+                }
+            })
+            .collect()
     }
-    
+
     /// Set the current color scheme
     pub fn set_scheme(&mut self, name: &str) -> Result<()> {
         if self.color_schemes.schemes.contains_key(name) {
@@ -147,12 +158,16 @@ impl SyntaxHighlighter {
             Err(anyhow::anyhow!("Color scheme '{}' not found", name))
         }
     }
-    
+
     /// Get available color schemes
     pub fn list_schemes(&self) -> Vec<&str> {
-        self.color_schemes.schemes.keys().map(|s| s.as_str()).collect()
+        self.color_schemes
+            .schemes
+            .keys()
+            .map(|s| s.as_str())
+            .collect()
     }
-    
+
     /// Get color scheme for theme type
     pub fn get_scheme_for_theme(&self, theme_type: ThemeType) -> &str {
         match theme_type {
@@ -176,159 +191,267 @@ impl ColorSchemeRegistry {
             schemes: std::collections::HashMap::new(),
         }
     }
-    
+
     fn register_default_schemes(&mut self) {
         // Monokai (dark theme)
         let mut monokai_colors = std::collections::HashMap::new();
-        monokai_colors.insert(HighlightType::Keyword, TerminalColor {
-            fg: Color::Rgb(249, 38, 114),  // Pink
-            bg: None,
-            style: TextStyle { bold: true, ..Default::default() },
-        });
-        monokai_colors.insert(HighlightType::Function, TerminalColor {
-            fg: Color::Rgb(166, 226, 46),  // Green
-            bg: None,
-            style: TextStyle::default(),
-        });
-        monokai_colors.insert(HighlightType::Type, TerminalColor {
-            fg: Color::Rgb(102, 217, 239), // Cyan
-            bg: None,
-            style: TextStyle { italic: true, ..Default::default() },
-        });
-        monokai_colors.insert(HighlightType::Variable, TerminalColor {
-            fg: Color::White,
-            bg: None,
-            style: TextStyle::default(),
-        });
-        monokai_colors.insert(HighlightType::String, TerminalColor {
-            fg: Color::Rgb(230, 219, 116), // Yellow
-            bg: None,
-            style: TextStyle::default(),
-        });
-        monokai_colors.insert(HighlightType::Number, TerminalColor {
-            fg: Color::Rgb(174, 129, 255), // Purple
-            bg: None,
-            style: TextStyle::default(),
-        });
-        monokai_colors.insert(HighlightType::Comment, TerminalColor {
-            fg: Color::Rgb(117, 113, 94),  // Gray
-            bg: None,
-            style: TextStyle { italic: true, ..Default::default() },
-        });
-        monokai_colors.insert(HighlightType::Operator, TerminalColor {
-            fg: Color::Rgb(249, 38, 114),  // Pink
-            bg: None,
-            style: TextStyle::default(),
-        });
-        monokai_colors.insert(HighlightType::Constant, TerminalColor {
-            fg: Color::Rgb(174, 129, 255), // Purple
-            bg: None,
-            style: TextStyle::default(),
-        });
-        
-        self.schemes.insert("monokai".to_string(), ColorScheme {
-            name: "monokai".to_string(),
-            theme_type: ThemeType::Dark,
-            colors: monokai_colors,
-        });
-        
+        monokai_colors.insert(
+            HighlightType::Keyword,
+            TerminalColor {
+                fg: Color::Rgb(249, 38, 114), // Pink
+                bg: None,
+                style: TextStyle {
+                    bold: true,
+                    ..Default::default()
+                },
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::Function,
+            TerminalColor {
+                fg: Color::Rgb(166, 226, 46), // Green
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::Type,
+            TerminalColor {
+                fg: Color::Rgb(102, 217, 239), // Cyan
+                bg: None,
+                style: TextStyle {
+                    italic: true,
+                    ..Default::default()
+                },
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::Variable,
+            TerminalColor {
+                fg: Color::White,
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::String,
+            TerminalColor {
+                fg: Color::Rgb(230, 219, 116), // Yellow
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::Number,
+            TerminalColor {
+                fg: Color::Rgb(174, 129, 255), // Purple
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::Comment,
+            TerminalColor {
+                fg: Color::Rgb(117, 113, 94), // Gray
+                bg: None,
+                style: TextStyle {
+                    italic: true,
+                    ..Default::default()
+                },
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::Operator,
+            TerminalColor {
+                fg: Color::Rgb(249, 38, 114), // Pink
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        monokai_colors.insert(
+            HighlightType::Constant,
+            TerminalColor {
+                fg: Color::Rgb(174, 129, 255), // Purple
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+
+        self.schemes.insert(
+            "monokai".to_string(),
+            ColorScheme {
+                name: "monokai".to_string(),
+                theme_type: ThemeType::Dark,
+                colors: monokai_colors,
+            },
+        );
+
         // GitHub (light theme)
         let mut github_colors = std::collections::HashMap::new();
-        github_colors.insert(HighlightType::Keyword, TerminalColor {
-            fg: Color::Rgb(215, 58, 73),   // Red
-            bg: None,
-            style: TextStyle { bold: true, ..Default::default() },
-        });
-        github_colors.insert(HighlightType::Function, TerminalColor {
-            fg: Color::Rgb(111, 66, 193),  // Purple
-            bg: None,
-            style: TextStyle::default(),
-        });
-        github_colors.insert(HighlightType::Type, TerminalColor {
-            fg: Color::Rgb(0, 92, 197),    // Blue
-            bg: None,
-            style: TextStyle::default(),
-        });
-        github_colors.insert(HighlightType::Variable, TerminalColor {
-            fg: Color::Black,
-            bg: None,
-            style: TextStyle::default(),
-        });
-        github_colors.insert(HighlightType::String, TerminalColor {
-            fg: Color::Rgb(3, 47, 98),     // Dark blue
-            bg: None,
-            style: TextStyle::default(),
-        });
-        github_colors.insert(HighlightType::Number, TerminalColor {
-            fg: Color::Rgb(0, 92, 197),    // Blue
-            bg: None,
-            style: TextStyle::default(),
-        });
-        github_colors.insert(HighlightType::Comment, TerminalColor {
-            fg: Color::Rgb(106, 115, 125), // Gray
-            bg: None,
-            style: TextStyle { italic: true, ..Default::default() },
-        });
-        github_colors.insert(HighlightType::Operator, TerminalColor {
-            fg: Color::Black,
-            bg: None,
-            style: TextStyle::default(),
-        });
-        github_colors.insert(HighlightType::Constant, TerminalColor {
-            fg: Color::Rgb(0, 92, 197),    // Blue
-            bg: None,
-            style: TextStyle::default(),
-        });
-        
-        self.schemes.insert("github".to_string(), ColorScheme {
-            name: "github".to_string(),
-            theme_type: ThemeType::Light,
-            colors: github_colors,
-        });
-        
+        github_colors.insert(
+            HighlightType::Keyword,
+            TerminalColor {
+                fg: Color::Rgb(215, 58, 73), // Red
+                bg: None,
+                style: TextStyle {
+                    bold: true,
+                    ..Default::default()
+                },
+            },
+        );
+        github_colors.insert(
+            HighlightType::Function,
+            TerminalColor {
+                fg: Color::Rgb(111, 66, 193), // Purple
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        github_colors.insert(
+            HighlightType::Type,
+            TerminalColor {
+                fg: Color::Rgb(0, 92, 197), // Blue
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        github_colors.insert(
+            HighlightType::Variable,
+            TerminalColor {
+                fg: Color::Black,
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        github_colors.insert(
+            HighlightType::String,
+            TerminalColor {
+                fg: Color::Rgb(3, 47, 98), // Dark blue
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        github_colors.insert(
+            HighlightType::Number,
+            TerminalColor {
+                fg: Color::Rgb(0, 92, 197), // Blue
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        github_colors.insert(
+            HighlightType::Comment,
+            TerminalColor {
+                fg: Color::Rgb(106, 115, 125), // Gray
+                bg: None,
+                style: TextStyle {
+                    italic: true,
+                    ..Default::default()
+                },
+            },
+        );
+        github_colors.insert(
+            HighlightType::Operator,
+            TerminalColor {
+                fg: Color::Black,
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        github_colors.insert(
+            HighlightType::Constant,
+            TerminalColor {
+                fg: Color::Rgb(0, 92, 197), // Blue
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+
+        self.schemes.insert(
+            "github".to_string(),
+            ColorScheme {
+                name: "github".to_string(),
+                theme_type: ThemeType::Light,
+                colors: github_colors,
+            },
+        );
+
         // Dracula (dark theme)
         let mut dracula_colors = std::collections::HashMap::new();
-        dracula_colors.insert(HighlightType::Keyword, TerminalColor {
-            fg: Color::Rgb(255, 121, 198), // Pink
-            bg: None,
-            style: TextStyle { bold: true, ..Default::default() },
-        });
-        dracula_colors.insert(HighlightType::Function, TerminalColor {
-            fg: Color::Rgb(80, 250, 123),  // Green
-            bg: None,
-            style: TextStyle::default(),
-        });
-        dracula_colors.insert(HighlightType::Type, TerminalColor {
-            fg: Color::Rgb(139, 233, 253), // Cyan
-            bg: None,
-            style: TextStyle { italic: true, ..Default::default() },
-        });
-        dracula_colors.insert(HighlightType::Variable, TerminalColor {
-            fg: Color::Rgb(248, 248, 242), // Foreground
-            bg: None,
-            style: TextStyle::default(),
-        });
-        dracula_colors.insert(HighlightType::String, TerminalColor {
-            fg: Color::Rgb(241, 250, 140), // Yellow
-            bg: None,
-            style: TextStyle::default(),
-        });
-        dracula_colors.insert(HighlightType::Number, TerminalColor {
-            fg: Color::Rgb(189, 147, 249), // Purple
-            bg: None,
-            style: TextStyle::default(),
-        });
-        dracula_colors.insert(HighlightType::Comment, TerminalColor {
-            fg: Color::Rgb(98, 114, 164),  // Comment
-            bg: None,
-            style: TextStyle { italic: true, ..Default::default() },
-        });
-        
-        self.schemes.insert("dracula".to_string(), ColorScheme {
-            name: "dracula".to_string(),
-            theme_type: ThemeType::Dark,
-            colors: dracula_colors,
-        });
+        dracula_colors.insert(
+            HighlightType::Keyword,
+            TerminalColor {
+                fg: Color::Rgb(255, 121, 198), // Pink
+                bg: None,
+                style: TextStyle {
+                    bold: true,
+                    ..Default::default()
+                },
+            },
+        );
+        dracula_colors.insert(
+            HighlightType::Function,
+            TerminalColor {
+                fg: Color::Rgb(80, 250, 123), // Green
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        dracula_colors.insert(
+            HighlightType::Type,
+            TerminalColor {
+                fg: Color::Rgb(139, 233, 253), // Cyan
+                bg: None,
+                style: TextStyle {
+                    italic: true,
+                    ..Default::default()
+                },
+            },
+        );
+        dracula_colors.insert(
+            HighlightType::Variable,
+            TerminalColor {
+                fg: Color::Rgb(248, 248, 242), // Foreground
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        dracula_colors.insert(
+            HighlightType::String,
+            TerminalColor {
+                fg: Color::Rgb(241, 250, 140), // Yellow
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        dracula_colors.insert(
+            HighlightType::Number,
+            TerminalColor {
+                fg: Color::Rgb(189, 147, 249), // Purple
+                bg: None,
+                style: TextStyle::default(),
+            },
+        );
+        dracula_colors.insert(
+            HighlightType::Comment,
+            TerminalColor {
+                fg: Color::Rgb(98, 114, 164), // Comment
+                bg: None,
+                style: TextStyle {
+                    italic: true,
+                    ..Default::default()
+                },
+            },
+        );
+
+        self.schemes.insert(
+            "dracula".to_string(),
+            ColorScheme {
+                name: "dracula".to_string(),
+                theme_type: ThemeType::Dark,
+                colors: dracula_colors,
+            },
+        );
     }
 }
 
@@ -373,7 +496,7 @@ impl Color {
             Color::Indexed(n) => format!("\x1b[38;5;{}m", n),
         }
     }
-    
+
     pub fn to_ansi_bg(&self) -> String {
         match self {
             Color::Black => "\x1b[40m".to_string(),
@@ -401,7 +524,7 @@ impl Color {
 impl TextStyle {
     pub fn to_ansi(&self) -> String {
         let mut codes = Vec::new();
-        
+
         if self.bold {
             codes.push("1");
         }
@@ -414,7 +537,7 @@ impl TextStyle {
         if self.strikethrough {
             codes.push("9");
         }
-        
+
         if codes.is_empty() {
             String::new()
         } else {
@@ -426,18 +549,18 @@ impl TextStyle {
 impl TerminalColor {
     pub fn to_ansi(&self) -> String {
         let mut result = String::new();
-        
+
         // Add style codes
         result.push_str(&self.style.to_ansi());
-        
+
         // Add foreground color
         result.push_str(&self.fg.to_ansi_fg());
-        
+
         // Add background color if present
         if let Some(bg) = &self.bg {
             result.push_str(&bg.to_ansi_bg());
         }
-        
+
         result
     }
 }
@@ -446,48 +569,51 @@ impl TerminalColor {
 mod tests {
     use super::*;
     use crate::core::Language;
-    
+
     #[tokio::test]
     async fn test_syntax_highlighting() {
         let highlighter = SyntaxHighlighter::new();
         let parser = Arc::new(Mutex::new(TreeSitterParser::new(Language::Rust).unwrap()));
-        
+
         let content = r#"fn main() {
     let x = 42;
     println!("Hello");
 }"#;
-        
-        let spans = highlighter.highlight(Arc::clone(&parser), content).await.unwrap();
+
+        let spans = highlighter
+            .highlight(Arc::clone(&parser), content)
+            .await
+            .unwrap();
         assert!(!spans.is_empty());
-        
+
         // Apply colors
         let colored_spans = highlighter.apply_colors(&spans);
         assert_eq!(spans.len(), colored_spans.len());
     }
-    
+
     #[test]
     fn test_color_schemes() {
         let mut highlighter = SyntaxHighlighter::new();
-        
+
         // List schemes
         let schemes = highlighter.list_schemes();
         assert!(schemes.contains(&"monokai"));
         assert!(schemes.contains(&"github"));
         assert!(schemes.contains(&"dracula"));
-        
+
         // Change scheme
         highlighter.set_scheme("github").unwrap();
         assert_eq!(highlighter.current_scheme, "github");
-        
+
         // Invalid scheme
         assert!(highlighter.set_scheme("invalid").is_err());
     }
-    
+
     #[test]
     fn test_ansi_conversion() {
         let color = Color::Rgb(255, 0, 0);
         assert_eq!(color.to_ansi_fg(), "\x1b[38;2;255;0;0m");
-        
+
         let style = TextStyle {
             bold: true,
             italic: true,

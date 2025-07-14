@@ -1,15 +1,15 @@
 //! Enhanced Mode Detection with Consensus Intelligence
-//! 
+//!
 //! Uses AI consensus to intelligently detect the most appropriate mode
 //! based on query analysis and context understanding.
 
-use crate::core::error::{HiveResult, HiveError};
-use crate::planning::{ModeType, PlanningContext};
 use crate::consensus::ConsensusEngine;
+use crate::core::error::{HiveError, HiveResult};
+use crate::planning::{ModeType, PlanningContext};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use regex::Regex;
 
 /// Enhanced mode detector using consensus engine
 pub struct EnhancedModeDetector {
@@ -100,16 +100,16 @@ impl EnhancedModeDetector {
             confidence_calculator: ConfidenceCalculator::new(),
         })
     }
-    
+
     /// Detect mode using consensus intelligence
     pub async fn detect_with_consensus(
         &self,
         query: &str,
-        context: &PlanningContext
+        context: &PlanningContext,
     ) -> HiveResult<DetectionResult> {
         let mut scores = HashMap::new();
         let mut reasoning = Vec::new();
-        
+
         // Initialize scores for all modes
         for mode in &[
             ModeType::Planning,
@@ -120,40 +120,62 @@ impl EnhancedModeDetector {
         ] {
             scores.insert(mode.clone(), 0.0);
         }
-        
+
         // Pattern-based detection
         let pattern_scores = self.pattern_matcher.analyze(query)?;
-        self.merge_scores(&mut scores, &pattern_scores, self.confidence_calculator.pattern_weight);
-        reasoning.push(format!("Pattern analysis: {:?}", self.get_top_pattern(query)));
-        
+        self.merge_scores(
+            &mut scores,
+            &pattern_scores,
+            self.confidence_calculator.pattern_weight,
+        );
+        reasoning.push(format!(
+            "Pattern analysis: {:?}",
+            self.get_top_pattern(query)
+        ));
+
         // Complexity analysis
         let complexity = self.complexity_analyzer.analyze(query);
         let complexity_scores = self.complexity_to_mode_scores(&complexity);
         self.merge_scores(&mut scores, &complexity_scores, 0.3);
-        reasoning.push(format!("Complexity level: {}", self.complexity_level(&complexity)));
-        
+        reasoning.push(format!(
+            "Complexity level: {}",
+            self.complexity_level(&complexity)
+        ));
+
         // Context analysis
         let context_scores = self.context_analyzer.analyze(context);
-        self.merge_scores(&mut scores, &context_scores, self.confidence_calculator.context_weight);
-        reasoning.push(format!("Context favors: {:?}", self.get_context_preference(context)));
-        
+        self.merge_scores(
+            &mut scores,
+            &context_scores,
+            self.confidence_calculator.context_weight,
+        );
+        reasoning.push(format!(
+            "Context favors: {:?}",
+            self.get_context_preference(context)
+        ));
+
         // AI consensus analysis
         let consensus_insights = self.get_consensus_insights(query, context).await?;
         let consensus_scores = self.insights_to_mode_scores(&consensus_insights);
-        self.merge_scores(&mut scores, &consensus_scores, self.confidence_calculator.consensus_weight);
-        reasoning.push(format!("AI consensus: {}", consensus_insights.recommended_approach));
-        
+        self.merge_scores(
+            &mut scores,
+            &consensus_scores,
+            self.confidence_calculator.consensus_weight,
+        );
+        reasoning.push(format!(
+            "AI consensus: {}",
+            consensus_insights.recommended_approach
+        ));
+
         // Calculate final mode and confidence
         let (primary_mode, base_confidence) = self.get_primary_mode(&scores);
-        let final_confidence = self.confidence_calculator.calculate(
-            base_confidence,
-            &scores,
-            &consensus_insights
-        );
-        
+        let final_confidence =
+            self.confidence_calculator
+                .calculate(base_confidence, &scores, &consensus_insights);
+
         // Get alternatives
         let alternatives = self.get_alternatives(&scores, &primary_mode);
-        
+
         Ok(DetectionResult {
             primary_mode,
             confidence: final_confidence,
@@ -164,12 +186,12 @@ impl EnhancedModeDetector {
             preference_influence: context.user_preferences.preference_strength,
         })
     }
-    
+
     /// Get consensus insights for the query
     async fn get_consensus_insights(
         &self,
         query: &str,
-        context: &PlanningContext
+        context: &PlanningContext,
     ) -> HiveResult<ConsensusInsights> {
         let prompt = format!(
             r#"Analyze this development query and provide insights:
@@ -195,9 +217,9 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
             context.experience_level,
             context.existing_codebase
         );
-        
+
         let result = self.consensus_engine.process(&prompt, None).await?;
-        
+
         // Parse the response
         match serde_json::from_str::<ConsensusInsights>(&result.result.unwrap_or_default()) {
             Ok(insights) => Ok(insights),
@@ -212,11 +234,11 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
             }
         }
     }
-    
+
     /// Convert insights to mode scores
     fn insights_to_mode_scores(&self, insights: &ConsensusInsights) -> HashMap<ModeType, f32> {
         let mut scores = HashMap::new();
-        
+
         // Task complexity influences mode
         match insights.task_complexity.as_str() {
             "high" => {
@@ -238,7 +260,7 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
                 scores.insert(ModeType::Hybrid, 0.6);
             }
         }
-        
+
         // Recommended approach keywords
         let approach_lower = insights.recommended_approach.to_lowercase();
         if approach_lower.contains("plan") || approach_lower.contains("design") {
@@ -253,54 +275,57 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
         if approach_lower.contains("balance") || approach_lower.contains("hybrid") {
             *scores.entry(ModeType::Hybrid).or_insert(0.0) += 0.3;
         }
-        
+
         scores
     }
-    
+
     /// Merge scores with weights
     fn merge_scores(
         &self,
         target: &mut HashMap<ModeType, f32>,
         source: &HashMap<ModeType, f32>,
-        weight: f32
+        weight: f32,
     ) {
         for (mode, score) in source {
             let current = target.entry(mode.clone()).or_insert(0.0);
             *current += score * weight;
         }
     }
-    
+
     /// Get primary mode from scores
     fn get_primary_mode(&self, scores: &HashMap<ModeType, f32>) -> (ModeType, f32) {
-        scores.iter()
+        scores
+            .iter()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(mode, score)| (mode.clone(), *score))
             .unwrap_or((ModeType::Hybrid, 0.5))
     }
-    
+
     /// Get alternative modes
     fn get_alternatives(
         &self,
         scores: &HashMap<ModeType, f32>,
-        primary: &ModeType
+        primary: &ModeType,
     ) -> Vec<(ModeType, f32)> {
-        let mut alternatives: Vec<(ModeType, f32)> = scores.iter()
+        let mut alternatives: Vec<(ModeType, f32)> = scores
+            .iter()
             .filter(|(mode, _)| *mode != primary)
             .map(|(mode, score)| (mode.clone(), *score))
             .collect();
-        
+
         alternatives.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         alternatives.truncate(3);
-        
+
         alternatives
     }
-    
+
     /// Get top matching pattern
     fn get_top_pattern(&self, query: &str) -> String {
-        self.pattern_matcher.get_top_pattern(query)
+        self.pattern_matcher
+            .get_top_pattern(query)
             .unwrap_or_else(|| "No specific pattern".to_string())
     }
-    
+
     /// Get complexity level as string
     fn complexity_level(&self, metrics: &ComplexityMetrics) -> String {
         let score = self.complexity_analyzer.calculate_score(metrics);
@@ -312,12 +337,12 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
             "High".to_string()
         }
     }
-    
+
     /// Convert complexity to mode scores
     fn complexity_to_mode_scores(&self, metrics: &ComplexityMetrics) -> HashMap<ModeType, f32> {
         let mut scores = HashMap::new();
         let complexity_score = self.complexity_analyzer.calculate_score(metrics);
-        
+
         if complexity_score < self.complexity_analyzer.thresholds.low {
             scores.insert(ModeType::Execution, 0.8);
             scores.insert(ModeType::Hybrid, 0.3);
@@ -329,15 +354,15 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
             scores.insert(ModeType::Planning, 0.8);
             scores.insert(ModeType::Hybrid, 0.5);
         }
-        
+
         scores
     }
-    
+
     /// Get context preference
     fn get_context_preference(&self, context: &PlanningContext) -> ModeType {
         context.user_preferences.preferred_mode.clone()
     }
-    
+
     /// Estimate complexity for fallback
     fn estimate_complexity(&self, query: &str) -> String {
         let words = query.split_whitespace().count();
@@ -354,66 +379,76 @@ Focus on whether this needs careful planning, immediate execution, or a hybrid a
 impl PatternMatcher {
     fn new() -> Self {
         let mut patterns = HashMap::new();
-        
+
         // Planning patterns
-        patterns.insert(ModeType::Planning, vec![
-            Regex::new(r"\b(plan|design|architect|strategy|roadmap)\b").unwrap(),
-            Regex::new(r"\b(how should I|best approach|structure)\b").unwrap(),
-            Regex::new(r"\b(break down|decompose|organize|outline)\b").unwrap(),
-            Regex::new(r"\b(timeline|milestone|phase|stage)\b").unwrap(),
-        ]);
-        
+        patterns.insert(
+            ModeType::Planning,
+            vec![
+                Regex::new(r"\b(plan|design|architect|strategy|roadmap)\b").unwrap(),
+                Regex::new(r"\b(how should I|best approach|structure)\b").unwrap(),
+                Regex::new(r"\b(break down|decompose|organize|outline)\b").unwrap(),
+                Regex::new(r"\b(timeline|milestone|phase|stage)\b").unwrap(),
+            ],
+        );
+
         // Execution patterns
-        patterns.insert(ModeType::Execution, vec![
-            Regex::new(r"\b(implement|code|build|create|write)\b").unwrap(),
-            Regex::new(r"\b(fix|debug|solve|patch|update)\b").unwrap(),
-            Regex::new(r"\b(add|remove|modify|change|refactor)\b").unwrap(),
-            Regex::new(r"\b(quickly|immediately|now|asap)\b").unwrap(),
-        ]);
-        
+        patterns.insert(
+            ModeType::Execution,
+            vec![
+                Regex::new(r"\b(implement|code|build|create|write)\b").unwrap(),
+                Regex::new(r"\b(fix|debug|solve|patch|update)\b").unwrap(),
+                Regex::new(r"\b(add|remove|modify|change|refactor)\b").unwrap(),
+                Regex::new(r"\b(quickly|immediately|now|asap)\b").unwrap(),
+            ],
+        );
+
         // Hybrid patterns
-        patterns.insert(ModeType::Hybrid, vec![
-            Regex::new(r"\b(plan and implement|design and build)\b").unwrap(),
-            Regex::new(r"\b(comprehensive|complete|full|entire)\b").unwrap(),
-            Regex::new(r"\b(step by step|iterative|incremental)\b").unwrap(),
-            Regex::new(r"\b(both|and also|as well as)\b").unwrap(),
-        ]);
-        
+        patterns.insert(
+            ModeType::Hybrid,
+            vec![
+                Regex::new(r"\b(plan and implement|design and build)\b").unwrap(),
+                Regex::new(r"\b(comprehensive|complete|full|entire)\b").unwrap(),
+                Regex::new(r"\b(step by step|iterative|incremental)\b").unwrap(),
+                Regex::new(r"\b(both|and also|as well as)\b").unwrap(),
+            ],
+        );
+
         // Analysis patterns
-        patterns.insert(ModeType::Analysis, vec![
-            Regex::new(r"\b(analyze|examine|investigate|understand)\b").unwrap(),
-            Regex::new(r"\b(what|why|how does|explain)\b").unwrap(),
-            Regex::new(r"\b(review|audit|assess|evaluate)\b").unwrap(),
-            Regex::new(r"\b(performance|bottleneck|issue|problem)\b").unwrap(),
-        ]);
-        
+        patterns.insert(
+            ModeType::Analysis,
+            vec![
+                Regex::new(r"\b(analyze|examine|investigate|understand)\b").unwrap(),
+                Regex::new(r"\b(what|why|how does|explain)\b").unwrap(),
+                Regex::new(r"\b(review|audit|assess|evaluate)\b").unwrap(),
+                Regex::new(r"\b(performance|bottleneck|issue|problem)\b").unwrap(),
+            ],
+        );
+
         Self {
             patterns,
             weights: HashMap::new(),
         }
     }
-    
+
     fn analyze(&self, query: &str) -> HiveResult<HashMap<ModeType, f32>> {
         let mut scores = HashMap::new();
         let query_lower = query.to_lowercase();
-        
+
         for (mode, patterns) in &self.patterns {
-            let matches = patterns.iter()
-                .filter(|p| p.is_match(&query_lower))
-                .count();
-            
+            let matches = patterns.iter().filter(|p| p.is_match(&query_lower)).count();
+
             if matches > 0 {
                 let score = (matches as f32 * 0.25).min(1.0);
                 scores.insert(mode.clone(), score);
             }
         }
-        
+
         Ok(scores)
     }
-    
+
     fn get_top_pattern(&self, query: &str) -> Option<String> {
         let query_lower = query.to_lowercase();
-        
+
         for (mode, patterns) in &self.patterns {
             for pattern in patterns {
                 if pattern.is_match(&query_lower) {
@@ -421,7 +456,7 @@ impl PatternMatcher {
                 }
             }
         }
-        
+
         None
     }
 }
@@ -443,31 +478,47 @@ impl ComplexityAnalyzer {
             },
         }
     }
-    
+
     fn analyze(&self, query: &str) -> ComplexityMetrics {
         let words: Vec<&str> = query.split_whitespace().collect();
         let word_count = words.len();
         let sentence_count = query.matches('.').count() + 1;
-        
+
         let technical_terms = [
-            "api", "database", "algorithm", "architecture", "framework",
-            "microservice", "deployment", "integration", "authentication",
-            "optimization", "refactor", "scalability", "performance",
+            "api",
+            "database",
+            "algorithm",
+            "architecture",
+            "framework",
+            "microservice",
+            "deployment",
+            "integration",
+            "authentication",
+            "optimization",
+            "refactor",
+            "scalability",
+            "performance",
         ];
-        
-        let technical_term_count = words.iter()
+
+        let technical_term_count = words
+            .iter()
             .filter(|w| technical_terms.contains(&w.to_lowercase().as_str()))
             .count();
-        
+
         let dependency_words = ["before", "after", "depends", "requires", "then"];
-        let dependency_count = words.iter()
+        let dependency_count = words
+            .iter()
             .filter(|w| dependency_words.contains(&w.to_lowercase().as_str()))
             .count();
-        
+
         let ambiguity_score = if query.contains('?') { 0.2 } else { 0.0 }
-            + if query.contains("maybe") || query.contains("possibly") { 0.3 } else { 0.0 }
+            + if query.contains("maybe") || query.contains("possibly") {
+                0.3
+            } else {
+                0.0
+            }
             + if query.contains("or") { 0.1 } else { 0.0 };
-        
+
         ComplexityMetrics {
             word_count,
             sentence_count,
@@ -476,65 +527,74 @@ impl ComplexityAnalyzer {
             ambiguity_score,
         }
     }
-    
+
     fn calculate_score(&self, metrics: &ComplexityMetrics) -> f32 {
         let word_score = (metrics.word_count as f32 / 50.0).min(1.0);
         let sentence_score = (metrics.sentence_count as f32 / 5.0).min(1.0);
         let technical_score = (metrics.technical_term_count as f32 / 5.0).min(1.0);
         let dependency_score = (metrics.dependency_count as f32 / 3.0).min(1.0);
-        
-        (word_score * 0.2 + 
-         sentence_score * 0.2 + 
-         technical_score * 0.3 + 
-         dependency_score * 0.2 + 
-         metrics.ambiguity_score * 0.1).min(1.0)
+
+        (word_score * 0.2
+            + sentence_score * 0.2
+            + technical_score * 0.3
+            + dependency_score * 0.2
+            + metrics.ambiguity_score * 0.1)
+            .min(1.0)
     }
 }
 
 impl ContextAnalyzer {
     fn new() -> Self {
         let mut mode_affinities = HashMap::new();
-        
+
         // Project type affinities
         mode_affinities.insert(("Infrastructure".to_string(), ModeType::Planning), 0.8);
         mode_affinities.insert(("Library".to_string(), ModeType::Execution), 0.7);
         mode_affinities.insert(("WebApplication".to_string(), ModeType::Hybrid), 0.8);
-        
+
         // Experience level affinities
         mode_affinities.insert(("Beginner".to_string(), ModeType::Planning), 0.7);
         mode_affinities.insert(("Expert".to_string(), ModeType::Execution), 0.6);
-        
+
         Self {
             context_weights: HashMap::new(),
             mode_affinities,
         }
     }
-    
+
     fn analyze(&self, context: &PlanningContext) -> HashMap<ModeType, f32> {
         let mut scores = HashMap::new();
-        
+
         // User preference has highest weight
         scores.insert(
             context.user_preferences.preferred_mode.clone(),
-            context.user_preferences.preference_strength
+            context.user_preferences.preference_strength,
         );
-        
+
         // Add project type affinity
         let project_key = format!("{:?}", context.project_type);
-        for mode in &[ModeType::Planning, ModeType::Execution, ModeType::Hybrid, ModeType::Analysis] {
-            if let Some(affinity) = self.mode_affinities.get(&(project_key.clone(), mode.clone())) {
+        for mode in &[
+            ModeType::Planning,
+            ModeType::Execution,
+            ModeType::Hybrid,
+            ModeType::Analysis,
+        ] {
+            if let Some(affinity) = self
+                .mode_affinities
+                .get(&(project_key.clone(), mode.clone()))
+            {
                 let current = scores.entry(mode.clone()).or_insert(0.0);
                 *current += affinity * 0.3;
             }
         }
-        
+
         // Team size influences mode
         if context.team_size > 3 {
             *scores.entry(ModeType::Planning).or_insert(0.0) += 0.2;
         } else if context.team_size == 1 {
             *scores.entry(ModeType::Execution).or_insert(0.0) += 0.2;
         }
-        
+
         scores
     }
 }
@@ -548,36 +608,36 @@ impl ConfidenceCalculator {
             context_weight: 0.3,
         }
     }
-    
+
     fn calculate(
         &self,
         base_score: f32,
         scores: &HashMap<ModeType, f32>,
-        insights: &ConsensusInsights
+        insights: &ConsensusInsights,
     ) -> f32 {
         let mut confidence = base_score;
-        
+
         // Adjust based on score distribution
         let sorted_scores: Vec<f32> = {
             let mut vals: Vec<f32> = scores.values().copied().collect();
             vals.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
             vals
         };
-        
+
         if sorted_scores.len() >= 2 {
             let gap = sorted_scores[0] - sorted_scores[1];
             confidence += gap * 0.3; // Clear winner increases confidence
         }
-        
+
         // Consensus quality affects confidence
         if !insights.potential_challenges.is_empty() {
             confidence *= 0.9; // Challenges reduce confidence slightly
         }
-        
+
         if insights.success_factors.len() >= 2 {
             confidence *= 1.1; // Clear success factors increase confidence
         }
-        
+
         confidence.clamp(0.1, 0.95)
     }
 }
@@ -585,22 +645,22 @@ impl ConfidenceCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_enhanced_detector_creation() {
         // Test detector initialization
     }
-    
+
     #[tokio::test]
     async fn test_consensus_detection() {
         // Test detection with consensus
     }
-    
+
     #[tokio::test]
     async fn test_pattern_matching() {
         // Test pattern-based detection
     }
-    
+
     #[tokio::test]
     async fn test_complexity_analysis() {
         // Test complexity calculation

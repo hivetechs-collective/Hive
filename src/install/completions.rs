@@ -1,12 +1,12 @@
 //! Shell completion installation and management
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
-use std::fs;
-use tokio::fs as afs;
 use clap::CommandFactory;
+use clap_complete::shells::{Bash, Fish, PowerShell, Zsh};
 use clap_complete::{Generator, Shell};
-use clap_complete::shells::{Bash, Zsh, Fish, PowerShell};
+use std::fs;
+use std::path::PathBuf;
+use tokio::fs as afs;
 
 /// Shell completion manager
 #[derive(Debug, Clone)]
@@ -24,15 +24,18 @@ impl CompletionManager {
     /// Install completions for specified shells
     pub async fn install(&self, shells: &[String]) -> Result<()> {
         println!("🔧 Installing shell completions...");
-        
+
         for shell_name in shells {
             if let Err(e) = self.install_for_shell(shell_name).await {
-                eprintln!("⚠️  Warning: Failed to install completion for {}: {}", shell_name, e);
+                eprintln!(
+                    "⚠️  Warning: Failed to install completion for {}: {}",
+                    shell_name, e
+                );
             } else {
                 println!("✅ Installed completion for {}", shell_name);
             }
         }
-        
+
         Ok(())
     }
 
@@ -40,29 +43,33 @@ impl CompletionManager {
     async fn install_for_shell(&self, shell_name: &str) -> Result<()> {
         let shell = parse_shell(shell_name)?;
         let completion_content = self.generate_completion(shell)?;
-        
+
         match shell {
             Shell::Bash => {
                 let completion_file = self.get_bash_completion_path()?;
-                self.write_completion_file(&completion_file, &completion_content).await?;
+                self.write_completion_file(&completion_file, &completion_content)
+                    .await?;
             }
             Shell::Zsh => {
                 let completion_file = self.get_zsh_completion_path()?;
-                self.write_completion_file(&completion_file, &completion_content).await?;
+                self.write_completion_file(&completion_file, &completion_content)
+                    .await?;
             }
             Shell::Fish => {
                 let completion_file = self.get_fish_completion_path()?;
-                self.write_completion_file(&completion_file, &completion_content).await?;
+                self.write_completion_file(&completion_file, &completion_content)
+                    .await?;
             }
             Shell::PowerShell => {
                 let completion_file = self.get_powershell_completion_path()?;
-                self.write_completion_file(&completion_file, &completion_content).await?;
+                self.write_completion_file(&completion_file, &completion_content)
+                    .await?;
             }
             _ => {
                 return Err(anyhow::anyhow!("Unsupported shell: {}", shell_name));
             }
         }
-        
+
         Ok(())
     }
 
@@ -70,7 +77,7 @@ impl CompletionManager {
     fn generate_completion(&self, shell: Shell) -> Result<String> {
         let mut cmd = crate::cli::Cli::command();
         let mut buf = Vec::new();
-        
+
         match shell {
             Shell::Bash => {
                 clap_complete::generate(Bash, &mut cmd, "hive", &mut buf);
@@ -88,7 +95,7 @@ impl CompletionManager {
                 return Err(anyhow::anyhow!("Unsupported shell"));
             }
         }
-        
+
         Ok(String::from_utf8(buf)?)
     }
 
@@ -98,10 +105,10 @@ impl CompletionManager {
         if let Some(parent) = path.parent() {
             afs::create_dir_all(parent).await?;
         }
-        
+
         // Write completion file
         afs::write(path, content).await?;
-        
+
         // Set readable permissions
         #[cfg(unix)]
         {
@@ -110,7 +117,7 @@ impl CompletionManager {
             perms.set_mode(0o644); // rw-r--r--
             fs::set_permissions(path, perms)?;
         }
-        
+
         Ok(())
     }
 
@@ -124,7 +131,7 @@ impl CompletionManager {
                 "/usr/share/bash-completion/completions/hive",
                 "/etc/bash_completion.d/hive",
             ];
-            
+
             for path in system_paths {
                 let path = PathBuf::from(path);
                 if let Some(parent) = path.parent() {
@@ -133,12 +140,12 @@ impl CompletionManager {
                     }
                 }
             }
-            
+
             // Fallback to user directory
             let home = std::env::var("HOME")?;
             Ok(PathBuf::from(home).join(".bash_completion.d/hive"))
         }
-        
+
         #[cfg(windows)]
         {
             // Windows doesn't have standard bash completion
@@ -156,7 +163,7 @@ impl CompletionManager {
                 "/usr/share/zsh/site-functions/_hive",
                 "/usr/share/zsh/vendor-completions/_hive",
             ];
-            
+
             for path in system_paths {
                 let path = PathBuf::from(path);
                 if let Some(parent) = path.parent() {
@@ -165,12 +172,12 @@ impl CompletionManager {
                     }
                 }
             }
-            
+
             // Fallback to user directory
             let home = std::env::var("HOME")?;
             Ok(PathBuf::from(home).join(".zsh/completions/_hive"))
         }
-        
+
         #[cfg(windows)]
         {
             Ok(self.completion_dir.join("_hive"))
@@ -186,7 +193,7 @@ impl CompletionManager {
                 "/usr/local/share/fish/completions/hive.fish",
                 "/usr/share/fish/completions/hive.fish",
             ];
-            
+
             for path in system_paths {
                 let path = PathBuf::from(path);
                 if let Some(parent) = path.parent() {
@@ -195,12 +202,12 @@ impl CompletionManager {
                     }
                 }
             }
-            
+
             // Fallback to user directory
             let home = std::env::var("HOME")?;
             Ok(PathBuf::from(home).join(".config/fish/completions/hive.fish"))
         }
-        
+
         #[cfg(windows)]
         {
             Ok(self.completion_dir.join("hive.fish"))
@@ -215,7 +222,7 @@ impl CompletionManager {
             let documents = std::env::var("USERPROFILE")?;
             Ok(PathBuf::from(documents).join("Documents/PowerShell/Scripts/hive-completion.ps1"))
         }
-        
+
         #[cfg(unix)]
         {
             Ok(self.completion_dir.join("hive.ps1"))
@@ -225,17 +232,20 @@ impl CompletionManager {
     /// Remove all completions
     pub async fn remove(&self) -> Result<()> {
         println!("🗑️  Removing shell completions...");
-        
+
         let shells = vec!["bash", "zsh", "fish", "powershell"];
-        
+
         for shell in shells {
             if let Err(e) = self.remove_for_shell(shell).await {
-                eprintln!("⚠️  Warning: Failed to remove completion for {}: {}", shell, e);
+                eprintln!(
+                    "⚠️  Warning: Failed to remove completion for {}: {}",
+                    shell, e
+                );
             } else {
                 println!("✅ Removed completion for {}", shell);
             }
         }
-        
+
         Ok(())
     }
 
@@ -248,11 +258,11 @@ impl CompletionManager {
             "powershell" => self.get_powershell_completion_path()?,
             _ => return Err(anyhow::anyhow!("Unknown shell: {}", shell_name)),
         };
-        
+
         if completion_file.exists() {
             afs::remove_file(&completion_file).await?;
         }
-        
+
         Ok(())
     }
 
@@ -260,7 +270,7 @@ impl CompletionManager {
     pub async fn check_installed(&self) -> Result<Vec<String>> {
         let mut installed = Vec::new();
         let shells = vec!["bash", "zsh", "fish", "powershell"];
-        
+
         for shell in shells {
             let completion_file = match shell {
                 "bash" => self.get_bash_completion_path()?,
@@ -269,12 +279,12 @@ impl CompletionManager {
                 "powershell" => self.get_powershell_completion_path()?,
                 _ => continue,
             };
-            
+
             if completion_file.exists() {
                 installed.push(shell.to_string());
             }
         }
-        
+
         Ok(installed)
     }
 
@@ -383,7 +393,7 @@ fn parse_shell(shell_name: &str) -> Result<Shell> {
 /// Detect available shells on the system
 pub fn detect_available_shells() -> Vec<String> {
     let mut shells = Vec::new();
-    
+
     // Check for common shells
     let shell_paths = vec![
         ("/bin/bash", "bash"),
@@ -394,7 +404,7 @@ pub fn detect_available_shells() -> Vec<String> {
         ("/usr/bin/fish", "fish"),
         ("/usr/local/bin/fish", "fish"),
     ];
-    
+
     for (path, name) in shell_paths {
         if PathBuf::from(path).exists() {
             if !shells.contains(&name.to_string()) {
@@ -402,7 +412,7 @@ pub fn detect_available_shells() -> Vec<String> {
             }
         }
     }
-    
+
     // Check for PowerShell on Windows
     #[cfg(windows)]
     {
@@ -410,7 +420,7 @@ pub fn detect_available_shells() -> Vec<String> {
             shells.push("powershell".to_string());
         }
     }
-    
+
     // Check SHELL environment variable
     if let Ok(shell_path) = std::env::var("SHELL") {
         if let Some(shell_name) = PathBuf::from(shell_path).file_name() {
@@ -422,7 +432,7 @@ pub fn detect_available_shells() -> Vec<String> {
             }
         }
     }
-    
+
     shells
 }
 

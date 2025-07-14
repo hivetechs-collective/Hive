@@ -1,14 +1,14 @@
 //! Configuration Migration Module
-//! 
+//!
 //! Handles conversion of TypeScript JSON configurations to Rust TOML format
 //! while preserving all user settings and custom configurations.
 
-use crate::core::error::HiveError;
 use crate::core::config::{HiveConfig, OpenRouterConfig};
 use crate::core::database_working::DatabaseConfig;
-use serde_json::Value as JsonValue;
-use crate::migration::analyzer::{TypeScriptAnalysis, ConfigFile, ConfigFileType};
+use crate::core::error::HiveError;
+use crate::migration::analyzer::{ConfigFile, ConfigFileType, TypeScriptAnalysis};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
@@ -55,11 +55,11 @@ pub struct ConfigChange {
 /// Configuration change actions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ChangeAction {
-    Preserve,   // Keep value as-is
-    Transform,  // Convert to new format
-    Rename,     // Change key name
-    Default,    // Use default value
-    Deprecate,  // Remove deprecated setting
+    Preserve,  // Keep value as-is
+    Transform, // Convert to new format
+    Rename,    // Change key name
+    Default,   // Use default value
+    Deprecate, // Remove deprecated setting
 }
 
 /// TypeScript configuration structure (for parsing)
@@ -109,7 +109,9 @@ struct TypeScriptProfile {
 }
 
 /// Preview configuration migration changes
-pub async fn preview_config_changes(analysis: &TypeScriptAnalysis) -> Result<ConfigChanges, HiveError> {
+pub async fn preview_config_changes(
+    analysis: &TypeScriptAnalysis,
+) -> Result<ConfigChanges, HiveError> {
     let mut changes = ConfigChanges {
         source_configs: Vec::new(),
         target_config: get_target_config_path()?,
@@ -143,10 +145,10 @@ pub async fn migrate_configuration(analysis: &TypeScriptAnalysis) -> Result<(), 
 
     // Load existing TypeScript configurations
     let ts_configs = load_typescript_configs(analysis).await?;
-    
+
     // Create new Rust configuration
     let rust_config = convert_to_rust_config(&ts_configs).await?;
-    
+
     // Backup existing Rust config if it exists
     let target_path = get_target_config_path()?;
     if target_path.exists() {
@@ -165,18 +167,19 @@ pub async fn migrate_configuration(analysis: &TypeScriptAnalysis) -> Result<(), 
 
 /// Get target configuration path for Rust version
 fn get_target_config_path() -> Result<PathBuf, HiveError> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| HiveError::Migration { 
-            message: "Cannot determine home directory".to_string()
-        })?;
-    
+    let home_dir = dirs::home_dir().ok_or_else(|| HiveError::Migration {
+        message: "Cannot determine home directory".to_string(),
+    })?;
+
     Ok(home_dir.join(".hive").join("config.toml"))
 }
 
 /// Analyze what transformations are needed for a config file
-async fn analyze_config_transformation(config_file: &ConfigFile) -> Result<ConfigTransformation, HiveError> {
+async fn analyze_config_transformation(
+    config_file: &ConfigFile,
+) -> Result<ConfigTransformation, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Determine source format
     let source_format = match config_file.path.extension().and_then(|s| s.to_str()) {
         Some("json") => ConfigFormat::Json,
@@ -209,63 +212,62 @@ async fn analyze_config_transformation(config_file: &ConfigFile) -> Result<Confi
 }
 
 /// Analyze how a specific setting should be transformed
-fn analyze_setting_change(key: &str, value: &serde_json::Value, section: &str) -> Result<ConfigChange, HiveError> {
+fn analyze_setting_change(
+    key: &str,
+    value: &serde_json::Value,
+    section: &str,
+) -> Result<ConfigChange, HiveError> {
     let (action, new_key, new_value, notes) = match (key, section) {
         // API keys - preserve as-is
         ("openrouter_api_key", _) => (
             ChangeAction::Preserve,
             key.to_string(),
             value.clone(),
-            Some("API key preserved in secure storage".to_string())
+            Some("API key preserved in secure storage".to_string()),
         ),
-        
+
         // License key - preserve as-is
         ("license_key", _) => (
             ChangeAction::Preserve,
             key.to_string(),
             value.clone(),
-            Some("License key preserved".to_string())
+            Some("License key preserved".to_string()),
         ),
-        
+
         // Model configurations - may need transformation
         ("generator_model" | "refiner_model" | "validator_model" | "curator_model", _) => (
             ChangeAction::Transform,
             format!("consensus.{}", key),
             value.clone(),
-            Some("Moved to consensus section".to_string())
+            Some("Moved to consensus section".to_string()),
         ),
-        
+
         // Database settings
         ("database_path", _) => (
             ChangeAction::Rename,
             "database.path".to_string(),
             value.clone(),
-            Some("Renamed for clarity".to_string())
+            Some("Renamed for clarity".to_string()),
         ),
-        
+
         // Security settings
         ("trust_mode" | "allowed_directories" | "blocked_directories", _) => (
             ChangeAction::Transform,
             format!("security.{}", key),
             value.clone(),
-            Some("Moved to security section".to_string())
+            Some("Moved to security section".to_string()),
         ),
-        
+
         // Deprecated settings
         ("legacy_mode" | "experimental_features", _) => (
             ChangeAction::Deprecate,
             key.to_string(),
             serde_json::Value::Null,
-            Some("Setting deprecated in Rust version".to_string())
+            Some("Setting deprecated in Rust version".to_string()),
         ),
-        
+
         // Default case - preserve with transformation
-        _ => (
-            ChangeAction::Preserve,
-            key.to_string(),
-            value.clone(),
-            None
-        ),
+        _ => (ChangeAction::Preserve, key.to_string(), value.clone(), None),
     };
 
     Ok(ConfigChange {
@@ -278,7 +280,9 @@ fn analyze_setting_change(key: &str, value: &serde_json::Value, section: &str) -
 }
 
 /// Load all TypeScript configuration files
-async fn load_typescript_configs(analysis: &TypeScriptAnalysis) -> Result<TypeScriptConfig, HiveError> {
+async fn load_typescript_configs(
+    analysis: &TypeScriptAnalysis,
+) -> Result<TypeScriptConfig, HiveError> {
     let mut merged_config = TypeScriptConfig {
         openrouter_api_key: None,
         license_key: None,
@@ -291,23 +295,25 @@ async fn load_typescript_configs(analysis: &TypeScriptAnalysis) -> Result<TypeSc
 
     for config_file in &analysis.config_files {
         let content = fs::read_to_string(&config_file.path).await?;
-        
+
         match config_file.file_type {
             ConfigFileType::MainConfig => {
                 if let Ok(config) = serde_json::from_str::<TypeScriptConfig>(&content) {
                     merge_typescript_config(&mut merged_config, config);
                 }
-            },
+            }
             ConfigFileType::UserSettings => {
-                if let Ok(settings) = serde_json::from_str::<HashMap<String, serde_json::Value>>(&content) {
+                if let Ok(settings) =
+                    serde_json::from_str::<HashMap<String, serde_json::Value>>(&content)
+                {
                     merged_config.user_preferences = Some(settings);
                 }
-            },
+            }
             ConfigFileType::ModelProfiles => {
                 if let Ok(profiles) = serde_json::from_str::<Vec<TypeScriptProfile>>(&content) {
                     merged_config.custom_profiles = Some(profiles);
                 }
-            },
+            }
             _ => {
                 // Handle other config types as needed
             }
@@ -355,7 +361,7 @@ async fn convert_to_rust_config(ts_config: &TypeScriptConfig) -> Result<HiveConf
             max_retries: 3,
         });
     }
-    
+
     // Note: license_key is handled separately in the security config
     // if let Some(license_key) = &ts_config.license_key {
     //     rust_config.security.license_key = Some(license_key.clone());
@@ -367,8 +373,8 @@ async fn convert_to_rust_config(ts_config: &TypeScriptConfig) -> Result<HiveConf
 
     // Convert database configuration
     // Note: Database configuration structure may vary, so we'll handle this in implementation
-    
-    // Convert security configuration  
+
+    // Convert security configuration
     // Note: Security configuration structure may vary, so we'll handle this in implementation
 
     Ok(rust_config)
@@ -382,14 +388,13 @@ async fn write_rust_config(config: &HiveConfig, path: &PathBuf) -> Result<(), Hi
     }
 
     // Serialize to TOML
-    let toml_content = toml::to_string_pretty(config)
-        .map_err(|e| HiveError::Migration { 
-            message: format!("Failed to serialize config: {}", e)
-        })?;
+    let toml_content = toml::to_string_pretty(config).map_err(|e| HiveError::Migration {
+        message: format!("Failed to serialize config: {}", e),
+    })?;
 
     // Write to file
     fs::write(path, toml_content).await?;
-    
+
     log::info!("Configuration written to: {}", path.display());
     Ok(())
 }
@@ -403,7 +408,10 @@ async fn backup_existing_config(path: &PathBuf) -> Result<(), HiveError> {
 }
 
 /// Migrate custom consensus profiles
-async fn migrate_custom_profiles(analysis: &TypeScriptAnalysis, _config: &HiveConfig) -> Result<(), HiveError> {
+async fn migrate_custom_profiles(
+    analysis: &TypeScriptAnalysis,
+    _config: &HiveConfig,
+) -> Result<(), HiveError> {
     // Find custom profiles in the analysis
     for profile in &analysis.custom_profiles {
         log::info!("Migrating custom profile: {}", profile.name);
@@ -416,59 +424,61 @@ async fn migrate_custom_profiles(analysis: &TypeScriptAnalysis, _config: &HiveCo
 /// Identify settings that are deprecated in the Rust version
 fn identify_deprecated_settings(analysis: &TypeScriptAnalysis) -> Vec<String> {
     let mut deprecated = Vec::new();
-    
+
     for config_file in &analysis.config_files {
         for key in config_file.settings.keys() {
             match key.as_str() {
                 "legacy_mode" | "experimental_features" | "debug_verbose" | "old_api_version" => {
                     deprecated.push(key.clone());
-                },
+                }
                 _ => {}
             }
         }
     }
-    
+
     deprecated
 }
 
 /// Get new default settings for Rust version
 fn get_new_default_settings() -> HashMap<String, serde_json::Value> {
     let mut defaults = HashMap::new();
-    
+
     defaults.insert(
         "performance.cache_enabled".to_string(),
-        serde_json::Value::Bool(true)
+        serde_json::Value::Bool(true),
     );
-    
+
     defaults.insert(
         "performance.max_memory_mb".to_string(),
-        serde_json::Value::Number(serde_json::Number::from(512))
+        serde_json::Value::Number(serde_json::Number::from(512)),
     );
-    
+
     defaults.insert(
         "ui.theme".to_string(),
-        serde_json::Value::String("dark".to_string())
+        serde_json::Value::String("dark".to_string()),
     );
-    
+
     defaults.insert(
         "analytics.enabled".to_string(),
-        serde_json::Value::Bool(false)
+        serde_json::Value::Bool(false),
     );
-    
+
     defaults
 }
 
 /// Generate migration warnings
 fn generate_migration_warnings(analysis: &TypeScriptAnalysis) -> Vec<String> {
     let mut warnings = Vec::new();
-    
+
     // Check for version-specific warnings
     if let Some(version) = &analysis.version {
         if version.starts_with("0.") {
-            warnings.push("Very old version detected - some settings may not migrate correctly".to_string());
+            warnings.push(
+                "Very old version detected - some settings may not migrate correctly".to_string(),
+            );
         }
     }
-    
+
     // Check for custom configurations that might need manual review
     if !analysis.custom_profiles.is_empty() {
         warnings.push(format!(
@@ -476,19 +486,17 @@ fn generate_migration_warnings(analysis: &TypeScriptAnalysis) -> Vec<String> {
             analysis.custom_profiles.len()
         ));
     }
-    
+
     // Check for configuration file issues
-    let invalid_configs = analysis.config_files.iter()
-        .filter(|c| !c.valid)
-        .count();
-    
+    let invalid_configs = analysis.config_files.iter().filter(|c| !c.valid).count();
+
     if invalid_configs > 0 {
         warnings.push(format!(
             "{} invalid configuration files will be skipped",
             invalid_configs
         ));
     }
-    
+
     warnings
 }
 
@@ -502,21 +510,20 @@ mod tests {
         let change = analyze_setting_change(
             "generator_model",
             &serde_json::Value::String("gpt-4".to_string()),
-            "general"
-        ).unwrap();
-        
+            "general",
+        )
+        .unwrap();
+
         assert_eq!(change.key, "consensus.generator_model");
         assert!(matches!(change.action, ChangeAction::Transform));
     }
 
     #[test]
     fn test_deprecated_setting_detection() {
-        let change = analyze_setting_change(
-            "legacy_mode",
-            &serde_json::Value::Bool(true),
-            "general"
-        ).unwrap();
-        
+        let change =
+            analyze_setting_change("legacy_mode", &serde_json::Value::Bool(true), "general")
+                .unwrap();
+
         assert!(matches!(change.action, ChangeAction::Deprecate));
     }
 
@@ -543,7 +550,7 @@ mod tests {
         };
 
         merge_typescript_config(&mut target, source);
-        
+
         assert_eq!(target.openrouter_api_key, Some("new_key".to_string()));
         assert_eq!(target.license_key, Some("license".to_string()));
     }

@@ -1,8 +1,7 @@
 /// Model Selection and Management
-/// 
+///
 /// Intelligent model selection supporting 323+ models from OpenRouter
 /// with task complexity analysis, cost optimization, and performance balancing.
-
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -97,7 +96,7 @@ impl ModelSelector {
             models: HashMap::new(),
             strategy,
         };
-        
+
         // Initialize with known models
         selector.initialize_default_models();
         selector
@@ -146,10 +145,7 @@ impl ModelSelector {
             provider: "anthropic".to_string(),
             name: "Claude 3 Haiku".to_string(),
             tier: ModelTier::Standard,
-            capabilities: vec![
-                ModelCapability::Programming,
-                ModelCapability::FastResponse,
-            ],
+            capabilities: vec![ModelCapability::Programming, ModelCapability::FastResponse],
             context_window: 200000,
             cost_per_1k_input: 0.00025,
             cost_per_1k_output: 0.00125,
@@ -198,10 +194,7 @@ impl ModelSelector {
             provider: "openai".to_string(),
             name: "GPT-4 Omni Mini".to_string(),
             tier: ModelTier::Standard,
-            capabilities: vec![
-                ModelCapability::Programming,
-                ModelCapability::FastResponse,
-            ],
+            capabilities: vec![ModelCapability::Programming, ModelCapability::FastResponse],
             context_window: 128000,
             cost_per_1k_input: 0.00015,
             cost_per_1k_output: 0.0006,
@@ -233,10 +226,7 @@ impl ModelSelector {
             provider: "meta-llama".to_string(),
             name: "Llama 3 70B".to_string(),
             tier: ModelTier::Standard,
-            capabilities: vec![
-                ModelCapability::Programming,
-                ModelCapability::Reasoning,
-            ],
+            capabilities: vec![ModelCapability::Programming, ModelCapability::Reasoning],
             context_window: 8192,
             cost_per_1k_input: 0.0008,
             cost_per_1k_output: 0.0008,
@@ -250,10 +240,7 @@ impl ModelSelector {
             provider: "mistralai".to_string(),
             name: "Mixtral 8x7B".to_string(),
             tier: ModelTier::Economy,
-            capabilities: vec![
-                ModelCapability::Programming,
-                ModelCapability::FastResponse,
-            ],
+            capabilities: vec![ModelCapability::Programming, ModelCapability::FastResponse],
             context_window: 32768,
             cost_per_1k_input: 0.0006,
             cost_per_1k_output: 0.0006,
@@ -317,18 +304,20 @@ impl ModelSelector {
         max_cost_per_1k_tokens: Option<f32>,
     ) -> Result<ModelSelection> {
         // Filter models by required capabilities
-        let mut eligible_models: Vec<&ModelMetadata> = self.models
+        let mut eligible_models: Vec<&ModelMetadata> = self
+            .models
             .values()
             .filter(|model| {
-                required_capabilities.iter().all(|cap| model.capabilities.contains(cap))
+                required_capabilities
+                    .iter()
+                    .all(|cap| model.capabilities.contains(cap))
             })
             .collect();
 
         // Filter by cost constraint if provided
         if let Some(max_cost) = max_cost_per_1k_tokens {
-            eligible_models.retain(|model| {
-                model.cost_per_1k_input + model.cost_per_1k_output <= max_cost
-            });
+            eligible_models
+                .retain(|model| model.cost_per_1k_input + model.cost_per_1k_output <= max_cost);
         }
 
         // Filter by minimum tier based on complexity
@@ -418,7 +407,8 @@ impl ModelSelector {
     pub fn list_models(&self) -> Vec<&ModelMetadata> {
         let mut models: Vec<&ModelMetadata> = self.models.values().collect();
         models.sort_by(|a, b| {
-            a.tier.cmp(&b.tier)
+            a.tier
+                .cmp(&b.tier)
                 .then(b.quality_score.partial_cmp(&a.quality_score).unwrap())
         });
         models
@@ -448,7 +438,7 @@ fn parse_cost(cost_str: &str) -> Result<f32> {
 /// Determine model tier based on pricing
 fn determine_tier(input_cost: f32, output_cost: f32) -> ModelTier {
     let total_cost = input_cost + output_cost;
-    
+
     if total_cost > 0.02 {
         ModelTier::Flagship
     } else if total_cost > 0.005 {
@@ -476,7 +466,8 @@ fn determine_capabilities(model_name: &str, modality: &str) -> Vec<ModelCapabili
         capabilities.push(ModelCapability::FastResponse);
     }
 
-    if model_name.contains("opus") || model_name.contains("gpt-4") || model_name.contains("claude") {
+    if model_name.contains("opus") || model_name.contains("gpt-4") || model_name.contains("claude")
+    {
         capabilities.push(ModelCapability::Reasoning);
         capabilities.push(ModelCapability::Creative);
     }
@@ -522,13 +513,15 @@ mod tests {
     #[test]
     fn test_model_selection() {
         let selector = ModelSelector::new(ModelSelectionStrategy::Balanced);
-        
-        let result = selector.select_model(
-            "Write a function to parse JSON",
-            TaskComplexity::Simple,
-            vec![ModelCapability::Programming],
-            None,
-        ).unwrap();
+
+        let result = selector
+            .select_model(
+                "Write a function to parse JSON",
+                TaskComplexity::Simple,
+                vec![ModelCapability::Programming],
+                None,
+            )
+            .unwrap();
 
         assert!(!result.primary.is_empty());
         assert!(!result.fallbacks.is_empty());
@@ -538,10 +531,10 @@ mod tests {
     #[test]
     fn test_capability_filtering() {
         let selector = ModelSelector::new(ModelSelectionStrategy::Balanced);
-        
+
         let multimodal_models = selector.get_models_by_capability(ModelCapability::Multimodal);
         assert!(!multimodal_models.is_empty());
-        
+
         for model in multimodal_models {
             assert!(model.capabilities.contains(&ModelCapability::Multimodal));
         }

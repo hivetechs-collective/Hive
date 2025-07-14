@@ -1,5 +1,5 @@
 //! Enterprise Reporting Templates
-//! 
+//!
 //! Professional report templates for various business needs:
 //! - Executive summaries with strategic insights
 //! - Financial reports with cost breakdowns
@@ -7,10 +7,10 @@
 //! - Compliance reports for auditing
 //! - Custom templates with branding
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Datelike};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
 
@@ -280,7 +280,7 @@ impl TemplateManager {
 
         // Load built-in templates
         manager.load_builtin_templates();
-        
+
         manager
     }
 
@@ -357,9 +357,7 @@ impl TemplateManager {
                     TemplateSection {
                         id: "recommendations".to_string(),
                         title: "Strategic Recommendations".to_string(),
-                        content_type: SectionContentType::Summary {
-                            max_length: 500,
-                        },
+                        content_type: SectionContentType::Summary { max_length: 500 },
                         data_sources: vec!["analytics.insights".to_string()],
                         visualizations: vec![],
                         conditional: None,
@@ -399,7 +397,11 @@ impl TemplateManager {
                     tags: vec!["executive".to_string(), "summary".to_string()],
                     department: None,
                 },
-                tags: vec!["executive".to_string(), "summary".to_string(), "overview".to_string()],
+                tags: vec![
+                    "executive".to_string(),
+                    "summary".to_string(),
+                    "overview".to_string(),
+                ],
             },
         );
 
@@ -487,7 +489,11 @@ impl TemplateManager {
                     tags: vec!["financial".to_string(), "budget".to_string()],
                     department: Some("Finance".to_string()),
                 },
-                tags: vec!["financial".to_string(), "budget".to_string(), "analysis".to_string()],
+                tags: vec![
+                    "financial".to_string(),
+                    "budget".to_string(),
+                    "analysis".to_string(),
+                ],
             },
         );
 
@@ -594,7 +600,11 @@ impl TemplateManager {
                     tags: vec!["compliance".to_string(), "audit".to_string()],
                     department: Some("Legal".to_string()),
                 },
-                tags: vec!["compliance".to_string(), "audit".to_string(), "legal".to_string()],
+                tags: vec![
+                    "compliance".to_string(),
+                    "audit".to_string(),
+                    "legal".to_string(),
+                ],
             },
         );
     }
@@ -606,14 +616,14 @@ impl TemplateManager {
         }
 
         let mut entries = fs::read_dir(&self.custom_templates_path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 let content = fs::read_to_string(&path).await?;
-                let template: ReportTemplate = serde_json::from_str(&content)
-                    .context("Failed to parse template")?;
-                
+                let template: ReportTemplate =
+                    serde_json::from_str(&content).context("Failed to parse template")?;
+
                 self.templates.insert(template.id.clone(), template);
             }
         }
@@ -637,7 +647,9 @@ impl TemplateManager {
         self.validate_template(&template)?;
 
         // Save to disk
-        let file_path = self.custom_templates_path.join(format!("{}.json", template.id));
+        let file_path = self
+            .custom_templates_path
+            .join(format!("{}.json", template.id));
         let content = serde_json::to_string_pretty(&template)?;
         fs::write(&file_path, content).await?;
 
@@ -728,20 +740,23 @@ impl TemplateManager {
     /// Search templates
     pub fn search_templates(&self, query: &str) -> Vec<&ReportTemplate> {
         let query_lower = query.to_lowercase();
-        
+
         self.templates
             .values()
             .filter(|t| {
                 t.name.to_lowercase().contains(&query_lower)
                     || t.description.to_lowercase().contains(&query_lower)
-                    || t.tags.iter().any(|tag| tag.to_lowercase().contains(&query_lower))
+                    || t.tags
+                        .iter()
+                        .any(|tag| tag.to_lowercase().contains(&query_lower))
             })
             .collect()
     }
 
     /// Export template marketplace format
     pub fn export_marketplace_format(&self, template_id: &str) -> Result<String> {
-        let template = self.templates
+        let template = self
+            .templates
             .get(template_id)
             .ok_or_else(|| anyhow::anyhow!("Template not found"))?;
 
@@ -772,7 +787,8 @@ impl TemplateManager {
             "# {}\n\n{}\n\n## Sections:\n{}",
             template.name,
             template.description,
-            template.sections
+            template
+                .sections
                 .iter()
                 .map(|s| format!("- {}", s.title))
                 .collect::<Vec<_>>()
@@ -794,7 +810,8 @@ impl ReportBuilder {
 
     /// Build report from request
     pub async fn build_report(&self, request: &ReportRequest) -> Result<Report> {
-        let template = self.template_manager
+        let template = self
+            .template_manager
             .get_template(&request.template_id)
             .ok_or_else(|| anyhow::anyhow!("Template not found"))?;
 
@@ -816,7 +833,9 @@ impl ReportBuilder {
         // Build each section
         for section_template in &template.sections {
             if self.should_include_section(section_template, &request.filters) {
-                let section = self.build_section(section_template, &request.period).await?;
+                let section = self
+                    .build_section(section_template, &request.period)
+                    .await?;
                 report.sections.push(section);
             }
         }
@@ -825,7 +844,11 @@ impl ReportBuilder {
     }
 
     /// Check if section should be included
-    fn should_include_section(&self, section: &TemplateSection, filters: &HashMap<String, String>) -> bool {
+    fn should_include_section(
+        &self,
+        section: &TemplateSection,
+        filters: &HashMap<String, String>,
+    ) -> bool {
         if let Some(conditional) = &section.conditional {
             // Evaluate conditional rule
             // Simplified - in production would use proper expression evaluation
@@ -836,7 +859,11 @@ impl ReportBuilder {
     }
 
     /// Build individual section
-    async fn build_section(&self, template: &TemplateSection, period: &ReportPeriod) -> Result<ReportSection> {
+    async fn build_section(
+        &self,
+        template: &TemplateSection,
+        period: &ReportPeriod,
+    ) -> Result<ReportSection> {
         Ok(ReportSection {
             id: template.id.clone(),
             title: template.title.clone(),
@@ -846,53 +873,61 @@ impl ReportBuilder {
     }
 
     /// Generate section content
-    async fn generate_section_content(&self, template: &TemplateSection, period: &ReportPeriod) -> Result<SectionContent> {
+    async fn generate_section_content(
+        &self,
+        template: &TemplateSection,
+        period: &ReportPeriod,
+    ) -> Result<SectionContent> {
         match &template.content_type {
-            SectionContentType::Summary { max_length } => {
-                Ok(SectionContent::Text {
-                    content: "Executive summary content would be generated here based on data analysis.".to_string(),
-                })
-            }
-            SectionContentType::Table { columns } => {
-                Ok(SectionContent::Table {
-                    headers: columns.iter().map(|c| c.header.clone()).collect(),
-                    rows: vec![
-                        vec!["Model Usage".to_string(), "$1,234.56".to_string(), "$987.65".to_string(), "+25.0%".to_string()],
-                        vec!["API Calls".to_string(), "$543.21".to_string(), "$456.78".to_string(), "+18.9%".to_string()],
+            SectionContentType::Summary { max_length } => Ok(SectionContent::Text {
+                content:
+                    "Executive summary content would be generated here based on data analysis."
+                        .to_string(),
+            }),
+            SectionContentType::Table { columns } => Ok(SectionContent::Table {
+                headers: columns.iter().map(|c| c.header.clone()).collect(),
+                rows: vec![
+                    vec![
+                        "Model Usage".to_string(),
+                        "$1,234.56".to_string(),
+                        "$987.65".to_string(),
+                        "+25.0%".to_string(),
                     ],
-                })
-            }
-            SectionContentType::Chart { chart_type } => {
-                Ok(SectionContent::Chart {
-                    chart_type: *chart_type,
-                    data: serde_json::json!({
-                        "labels": ["Jan", "Feb", "Mar", "Apr", "May"],
-                        "datasets": [{
-                            "label": "Cost",
-                            "data": [1200, 1400, 1100, 1600, 1800],
-                        }],
-                    }),
-                })
-            }
-            SectionContentType::Metrics { layout } => {
-                Ok(SectionContent::Metrics {
-                    metrics: vec![
-                        Metric {
-                            label: "Total Cost".to_string(),
-                            value: "$5,432.10".to_string(),
-                            change: Some("+15.2%".to_string()),
-                            trend: Some("up".to_string()),
-                        },
-                        Metric {
-                            label: "API Calls".to_string(),
-                            value: "1.2M".to_string(),
-                            change: Some("+8.5%".to_string()),
-                            trend: Some("up".to_string()),
-                        },
+                    vec![
+                        "API Calls".to_string(),
+                        "$543.21".to_string(),
+                        "$456.78".to_string(),
+                        "+18.9%".to_string(),
                     ],
-                    layout: *layout,
-                })
-            }
+                ],
+            }),
+            SectionContentType::Chart { chart_type } => Ok(SectionContent::Chart {
+                chart_type: *chart_type,
+                data: serde_json::json!({
+                    "labels": ["Jan", "Feb", "Mar", "Apr", "May"],
+                    "datasets": [{
+                        "label": "Cost",
+                        "data": [1200, 1400, 1100, 1600, 1800],
+                    }],
+                }),
+            }),
+            SectionContentType::Metrics { layout } => Ok(SectionContent::Metrics {
+                metrics: vec![
+                    Metric {
+                        label: "Total Cost".to_string(),
+                        value: "$5,432.10".to_string(),
+                        change: Some("+15.2%".to_string()),
+                        trend: Some("up".to_string()),
+                    },
+                    Metric {
+                        label: "API Calls".to_string(),
+                        value: "1.2M".to_string(),
+                        change: Some("+8.5%".to_string()),
+                        trend: Some("up".to_string()),
+                    },
+                ],
+                layout: *layout,
+            }),
             _ => Ok(SectionContent::Text {
                 content: "Content generation not implemented for this type".to_string(),
             }),
@@ -901,7 +936,8 @@ impl ReportBuilder {
 
     /// Collect all data sources from template
     fn collect_data_sources(&self, template: &ReportTemplate) -> Vec<String> {
-        template.sections
+        template
+            .sections
             .iter()
             .flat_map(|s| s.data_sources.clone())
             .collect::<std::collections::HashSet<_>>()
@@ -935,10 +971,21 @@ pub struct ReportSection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SectionContent {
-    Text { content: String },
-    Table { headers: Vec<String>, rows: Vec<Vec<String>> },
-    Chart { chart_type: ChartType, data: serde_json::Value },
-    Metrics { metrics: Vec<Metric>, layout: MetricsLayout },
+    Text {
+        content: String,
+    },
+    Table {
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
+    Chart {
+        chart_type: ChartType,
+        data: serde_json::Value,
+    },
+    Metrics {
+        metrics: Vec<Metric>,
+        layout: MetricsLayout,
+    },
 }
 
 /// Metric data
@@ -966,7 +1013,7 @@ mod tests {
     #[test]
     fn test_template_manager_creation() {
         let manager = TemplateManager::new(None);
-        
+
         // Check built-in templates are loaded
         assert!(manager.get_template("executive_summary").is_some());
         assert!(manager.get_template("financial_report").is_some());
@@ -976,22 +1023,20 @@ mod tests {
     #[tokio::test]
     async fn test_custom_template_creation() -> Result<()> {
         let mut manager = TemplateManager::new(Some(PathBuf::from("/tmp/hive_templates")));
-        
+
         let template = ReportTemplate {
             id: "test_template".to_string(),
             name: "Test Template".to_string(),
             template_type: TemplateType::CustomTemplate,
             description: "Test template".to_string(),
-            sections: vec![
-                TemplateSection {
-                    id: "test_section".to_string(),
-                    title: "Test Section".to_string(),
-                    content_type: SectionContentType::Summary { max_length: 100 },
-                    data_sources: vec![],
-                    visualizations: vec![],
-                    conditional: None,
-                },
-            ],
+            sections: vec![TemplateSection {
+                id: "test_section".to_string(),
+                title: "Test Section".to_string(),
+                content_type: SectionContentType::Summary { max_length: 100 },
+                data_sources: vec![],
+                visualizations: vec![],
+                conditional: None,
+            }],
             styling: ReportStyling {
                 theme: "default".to_string(),
                 logo_url: None,
@@ -1028,20 +1073,20 @@ mod tests {
             },
             tags: vec!["test".to_string()],
         };
-        
+
         manager.create_custom_template(template).await?;
         assert!(manager.get_template("test_template").is_some());
-        
+
         Ok(())
     }
 
     #[test]
     fn test_template_search() {
         let manager = TemplateManager::new(None);
-        
+
         let results = manager.search_templates("executive");
         assert!(!results.is_empty());
-        
+
         let results = manager.search_templates("financial");
         assert!(!results.is_empty());
     }
@@ -1050,7 +1095,7 @@ mod tests {
     async fn test_report_building() -> Result<()> {
         let manager = TemplateManager::new(None);
         let builder = ReportBuilder::new(manager);
-        
+
         let request = ReportRequest {
             template_id: "executive_summary".to_string(),
             title: "Q1 2024 Executive Summary".to_string(),
@@ -1064,12 +1109,12 @@ mod tests {
             recipients: vec![],
             schedule: None,
         };
-        
+
         let report = builder.build_report(&request).await?;
-        
+
         assert_eq!(report.title, "Q1 2024 Executive Summary");
         assert!(!report.sections.is_empty());
-        
+
         Ok(())
     }
 }

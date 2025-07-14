@@ -1,5 +1,5 @@
 //! Memory analytics and insights dashboard
-//! 
+//!
 //! This module provides:
 //! - Memory usage analytics
 //! - Insight generation from patterns
@@ -9,11 +9,11 @@
 use anyhow::{Context as _, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use tracing::{debug, info};
 
-use crate::core::memory::{MemoryInsight, InsightType, SemanticSearchResult};
+use crate::core::memory::{InsightType, MemoryInsight, SemanticSearchResult};
 use crate::memory::knowledge_graph::KnowledgeGraph;
 use crate::memory::pattern_learning::{Pattern, PatternLearner};
 
@@ -206,7 +206,7 @@ impl MemoryAnalyzer {
     pub fn new() -> Self {
         Self::with_config(AnalyticsConfig::default())
     }
-    
+
     /// Create with custom configuration
     pub fn with_config(config: AnalyticsConfig) -> Self {
         Self {
@@ -215,7 +215,7 @@ impl MemoryAnalyzer {
             time_series: TimeSeriesData::default(),
         }
     }
-    
+
     /// Record a search operation
     pub async fn record_search(
         &mut self,
@@ -223,113 +223,125 @@ impl MemoryAnalyzer {
         results: &[SemanticSearchResult],
     ) -> Result<()> {
         debug!("Recording search analytics for query: {}", query);
-        
+
         // Update query statistics
         self.data.query_stats.total_queries += 1;
         if !results.is_empty() {
             self.data.query_stats.successful_queries += 1;
             let n = self.data.query_stats.successful_queries as f32;
             let prev_avg = self.data.query_stats.avg_results_per_query;
-            self.data.query_stats.avg_results_per_query = 
+            self.data.query_stats.avg_results_per_query =
                 (prev_avg * (n - 1.0) + results.len() as f32) / n;
         } else {
             self.data.query_stats.failed_queries += 1;
         }
-        
+
         // Update access patterns
         for result in results {
-            let pattern = self.data.access_patterns
+            let pattern = self
+                .data
+                .access_patterns
                 .entry(result.id.clone())
                 .or_default();
-            
+
             pattern.access_count += 1;
             pattern.last_accessed = Some(Utc::now());
-            
+
             // Update average relevance score
             let n = pattern.access_count as f32;
-            pattern.avg_relevance_score = 
+            pattern.avg_relevance_score =
                 (pattern.avg_relevance_score * (n - 1.0) + result.similarity_score) / n;
         }
-        
+
         // Extract and record query patterns
         self.extract_query_patterns(query);
-        
+
         // Update time series
         let today = Utc::now().format("%Y-%m-%d").to_string();
         *self.time_series.daily_queries.entry(today).or_insert(0) += 1;
-        
+
         Ok(())
     }
-    
+
     /// Record memory addition
     pub async fn record_memory_added(&mut self, topic: Option<&str>) -> Result<()> {
         self.data.total_memories += 1;
-        
+
         // Update topic distribution
         if let Some(topic) = topic {
-            let topic_stats = self.data.topic_distribution
+            let topic_stats = self
+                .data
+                .topic_distribution
                 .entry(topic.to_string())
                 .or_default();
-            
+
             topic_stats.memory_count += 1;
             topic_stats.last_updated = Some(Utc::now());
         }
-        
+
         // Update time series
         let today = Utc::now().format("%Y-%m-%d").to_string();
         *self.time_series.daily_memories.entry(today).or_insert(0) += 1;
-        
+
         Ok(())
     }
-    
+
     /// Update quality metrics
     pub async fn update_quality_metrics(&mut self, metrics: QualityMetrics) -> Result<()> {
         let overall_quality = metrics.overall_quality; // Extract value before move
         self.data.quality_metrics = metrics;
-        
+
         // Update time series
         let today = Utc::now().format("%Y-%m-%d").to_string();
-        self.time_series.daily_quality.insert(today, overall_quality);
-        
+        self.time_series
+            .daily_quality
+            .insert(today, overall_quality);
+
         Ok(())
     }
-    
+
     /// Update performance metrics
     pub async fn update_performance_metrics(&mut self, metrics: PerformanceMetrics) -> Result<()> {
         let metrics_clone = metrics.clone(); // Clone for time series
         self.data.performance_metrics = metrics;
-        
+
         // Update time series
         let today = Utc::now().format("%Y-%m-%d").to_string();
-        self.time_series.daily_performance.insert(today, metrics_clone);
-        
+        self.time_series
+            .daily_performance
+            .insert(today, metrics_clone);
+
         Ok(())
     }
-    
+
     /// Get memory metrics
     pub fn get_metrics(&self) -> MemoryMetrics {
         let thirty_days_ago = Utc::now() - Duration::days(30);
-        
+
         // Count active memories
-        let active_memories = self.data.access_patterns
+        let active_memories = self
+            .data
+            .access_patterns
             .values()
             .filter(|p| p.last_accessed.map_or(false, |t| t > thirty_days_ago))
             .count();
-        
+
         // Calculate growth rate
         let growth_rate = self.calculate_growth_rate();
-        
+
         // Get top memories
-        let mut top_memories: Vec<_> = self.data.access_patterns
+        let mut top_memories: Vec<_> = self
+            .data
+            .access_patterns
             .iter()
             .map(|(id, pattern)| (id.clone(), pattern.access_count))
             .collect();
         top_memories.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         top_memories.truncate(10);
-        
+
         // Calculate health score
         let health_score = self.calculate_health_score();
-        
+
         MemoryMetrics {
             total_memories: self.data.total_memories,
             active_memories,
@@ -338,15 +350,15 @@ impl MemoryAnalyzer {
             health_score,
         }
     }
-    
+
     /// Analyze trends
     pub fn analyze_trends(&self) -> TrendAnalysis {
         debug!("Analyzing memory trends");
-        
+
         let memory_trend = self.calculate_trend(&self.time_series.daily_memories);
         let query_trend = self.calculate_trend(&self.time_series.daily_queries);
         let quality_trend = self.calculate_quality_trend();
-        
+
         TrendAnalysis {
             memory_growth_trend: memory_trend,
             query_volume_trend: query_trend,
@@ -358,29 +370,29 @@ impl MemoryAnalyzer {
             },
         }
     }
-    
+
     /// Detect anomalies
     pub fn detect_anomalies(&self) -> Vec<Anomaly> {
         let mut anomalies = Vec::new();
-        
+
         // Check for sudden drops in quality
         if let Some(anomaly) = self.detect_quality_anomaly() {
             anomalies.push(anomaly);
         }
-        
+
         // Check for unusual access patterns
         anomalies.extend(self.detect_access_anomalies());
-        
+
         // Check for performance issues
         if let Some(anomaly) = self.detect_performance_anomaly() {
             anomalies.push(anomaly);
         }
-        
+
         anomalies
     }
-    
+
     // Private helper methods
-    
+
     fn extract_query_patterns(&mut self, query: &str) {
         let patterns = vec![
             ("how to", "How-to questions"),
@@ -389,73 +401,84 @@ impl MemoryAnalyzer {
             ("error", "Error-related queries"),
             ("best practice", "Best practice queries"),
         ];
-        
+
         let query_lower = query.to_lowercase();
         for (pattern, _) in patterns {
             if query_lower.contains(pattern) {
                 // Update common patterns
-                let found = self.data.query_stats.common_patterns
+                let found = self
+                    .data
+                    .query_stats
+                    .common_patterns
                     .iter_mut()
                     .find(|(p, _)| p == pattern);
-                
+
                 if let Some((_, count)) = found {
                     *count += 1;
                 } else {
-                    self.data.query_stats.common_patterns.push((pattern.to_string(), 1));
+                    self.data
+                        .query_stats
+                        .common_patterns
+                        .push((pattern.to_string(), 1));
                 }
-                
+
                 // Keep only top 10
-                self.data.query_stats.common_patterns.sort_by_key(|(_, c)| std::cmp::Reverse(*c));
+                self.data
+                    .query_stats
+                    .common_patterns
+                    .sort_by_key(|(_, c)| std::cmp::Reverse(*c));
                 self.data.query_stats.common_patterns.truncate(10);
-                
+
                 break;
             }
         }
     }
-    
+
     fn calculate_growth_rate(&self) -> f32 {
         if self.time_series.daily_memories.len() < 2 {
             return 0.0;
         }
-        
-        let values: Vec<f32> = self.time_series.daily_memories
+
+        let values: Vec<f32> = self
+            .time_series
+            .daily_memories
             .values()
             .rev()
             .take(7)
             .map(|&v| v as f32)
             .collect();
-        
+
         if values.len() < 2 {
             return 0.0;
         }
-        
+
         // Simple linear regression
         let n = values.len() as f32;
         let x_mean = (n - 1.0) / 2.0;
         let y_mean = values.iter().sum::<f32>() / n;
-        
+
         let mut numerator = 0.0;
         let mut denominator = 0.0;
-        
+
         for (i, &y) in values.iter().enumerate() {
             let x = i as f32;
             numerator += (x - x_mean) * (y - y_mean);
             denominator += (x - x_mean).powi(2);
         }
-        
+
         if denominator > 0.0 {
             numerator / denominator
         } else {
             0.0
         }
     }
-    
+
     fn calculate_health_score(&self) -> f32 {
         let mut score = 50.0; // Base score
-        
+
         // Quality component (0-25 points)
         score += self.data.quality_metrics.overall_quality * 25.0;
-        
+
         // Performance component (0-15 points)
         if self.data.performance_metrics.avg_search_latency < 100.0 {
             score += 15.0;
@@ -464,25 +487,26 @@ impl MemoryAnalyzer {
         } else if self.data.performance_metrics.avg_search_latency < 1000.0 {
             score += 5.0;
         }
-        
+
         // Activity component (0-10 points)
         let success_rate = if self.data.query_stats.total_queries > 0 {
-            self.data.query_stats.successful_queries as f32 / self.data.query_stats.total_queries as f32
+            self.data.query_stats.successful_queries as f32
+                / self.data.query_stats.total_queries as f32
         } else {
             0.0
         };
         score += success_rate * 10.0;
-        
+
         score.min(100.0)
     }
-    
+
     fn calculate_trend(&self, data: &BTreeMap<String, usize>) -> Trend {
         if data.len() < self.config.min_trend_points {
             return Trend::Stable;
         }
-        
+
         let growth_rate = self.calculate_growth_rate();
-        
+
         if growth_rate > 0.1 {
             Trend::Increasing
         } else if growth_rate < -0.1 {
@@ -491,22 +515,25 @@ impl MemoryAnalyzer {
             Trend::Stable
         }
     }
-    
+
     fn calculate_quality_trend(&self) -> Trend {
-        let values: Vec<f32> = self.time_series.daily_quality
+        let values: Vec<f32> = self
+            .time_series
+            .daily_quality
             .values()
             .rev()
             .take(7)
             .copied()
             .collect();
-        
+
         if values.len() < 2 {
             return Trend::Stable;
         }
-        
-        let first_avg = values[..values.len()/2].iter().sum::<f32>() / (values.len()/2) as f32;
-        let second_avg = values[values.len()/2..].iter().sum::<f32>() / (values.len() - values.len()/2) as f32;
-        
+
+        let first_avg = values[..values.len() / 2].iter().sum::<f32>() / (values.len() / 2) as f32;
+        let second_avg = values[values.len() / 2..].iter().sum::<f32>()
+            / (values.len() - values.len() / 2) as f32;
+
         if second_avg > first_avg * 1.05 {
             Trend::Increasing
         } else if second_avg < first_avg * 0.95 {
@@ -515,89 +542,98 @@ impl MemoryAnalyzer {
             Trend::Stable
         }
     }
-    
+
     fn generate_predictions(&self) -> Predictions {
         // Simple predictions based on trends
         let memory_growth = self.calculate_growth_rate();
         let next_week_memories = (self.data.total_memories as f32 + memory_growth * 7.0) as usize;
-        
+
         let query_trend = self.calculate_trend(&self.time_series.daily_queries);
         let avg_daily_queries = if !self.time_series.daily_queries.is_empty() {
-            self.time_series.daily_queries.values().sum::<usize>() / self.time_series.daily_queries.len()
+            self.time_series.daily_queries.values().sum::<usize>()
+                / self.time_series.daily_queries.len()
         } else {
             0
         };
-        
+
         let next_week_queries = match query_trend {
             Trend::Increasing => (avg_daily_queries as f32 * 1.1 * 7.0) as usize,
             Trend::Decreasing => (avg_daily_queries as f32 * 0.9 * 7.0) as usize,
             Trend::Stable => avg_daily_queries * 7,
         };
-        
+
         Predictions {
             next_week_memories,
             next_week_queries,
             recommended_actions: self.generate_recommendations(),
         }
     }
-    
+
     fn generate_recommendations(&self) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         // Check quality
         if self.data.quality_metrics.overall_quality < 0.7 {
-            recommendations.push("Consider improving memory quality through better embeddings".to_string());
+            recommendations
+                .push("Consider improving memory quality through better embeddings".to_string());
         }
-        
+
         // Check performance
         if self.data.performance_metrics.avg_search_latency > 500.0 {
-            recommendations.push("Search latency is high - consider optimizing indexes".to_string());
+            recommendations
+                .push("Search latency is high - consider optimizing indexes".to_string());
         }
-        
+
         // Check cache
         if self.data.performance_metrics.cache_hit_rate < 0.5 {
             recommendations.push("Low cache hit rate - consider increasing cache size".to_string());
         }
-        
+
         recommendations
     }
-    
+
     fn detect_quality_anomaly(&self) -> Option<Anomaly> {
-        let recent_quality: Vec<f32> = self.time_series.daily_quality
+        let recent_quality: Vec<f32> = self
+            .time_series
+            .daily_quality
             .values()
             .rev()
             .take(7)
             .copied()
             .collect();
-        
+
         if recent_quality.len() < 3 {
             return None;
         }
-        
+
         let mean = recent_quality.iter().sum::<f32>() / recent_quality.len() as f32;
-        let variance = recent_quality.iter()
+        let variance = recent_quality
+            .iter()
             .map(|&x| (x - mean).powi(2))
-            .sum::<f32>() / recent_quality.len() as f32;
+            .sum::<f32>()
+            / recent_quality.len() as f32;
         let std_dev = variance.sqrt();
-        
+
         if let Some(&latest) = recent_quality.first() {
             if (latest - mean).abs() > self.config.anomaly_threshold * std_dev {
                 return Some(Anomaly {
                     anomaly_type: AnomalyType::QualityDrop,
-                    description: format!("Quality score dropped to {:.2} (normal range: {:.2} ± {:.2})", 
-                        latest, mean, std_dev),
+                    description: format!(
+                        "Quality score dropped to {:.2} (normal range: {:.2} ± {:.2})",
+                        latest, mean, std_dev
+                    ),
                     severity: Severity::High,
                     timestamp: Utc::now(),
                 });
             }
         }
-        
+
         None
     }
-    
+
     fn detect_access_anomalies(&self) -> Vec<Anomaly> {
         let mut anomalies = Vec::new();
-        
+
         // Look for memories with sudden access spikes
         for (id, pattern) in &self.data.access_patterns {
             if pattern.trend > 2.0 {
@@ -609,16 +645,18 @@ impl MemoryAnalyzer {
                 });
             }
         }
-        
+
         anomalies
     }
-    
+
     fn detect_performance_anomaly(&self) -> Option<Anomaly> {
         if self.data.performance_metrics.avg_search_latency > 1000.0 {
             Some(Anomaly {
                 anomaly_type: AnomalyType::PerformanceIssue,
-                description: format!("Search latency is {:.0}ms (threshold: 1000ms)", 
-                    self.data.performance_metrics.avg_search_latency),
+                description: format!(
+                    "Search latency is {:.0}ms (threshold: 1000ms)",
+                    self.data.performance_metrics.avg_search_latency
+                ),
                 severity: Severity::Medium,
                 timestamp: Utc::now(),
             })
@@ -706,28 +744,32 @@ impl InsightGenerator {
     pub fn new() -> Self {
         Self::with_config(InsightConfig::default())
     }
-    
+
     /// Create with custom configuration
     pub fn with_config(config: InsightConfig) -> Self {
         Self { config }
     }
-    
+
     /// Generate insights from patterns
     pub async fn from_patterns(&self, patterns: Vec<Pattern>) -> Result<Vec<MemoryInsight>> {
         let mut insights = Vec::new();
-        
+
         // Find high-frequency patterns
-        let high_freq_patterns: Vec<_> = patterns.iter()
+        let high_freq_patterns: Vec<_> = patterns
+            .iter()
             .filter(|p| p.frequency > 10 && p.confidence >= self.config.min_confidence)
             .collect();
-        
+
         if !high_freq_patterns.is_empty() {
             insights.push(MemoryInsight {
                 insight_type: InsightType::PatternDiscovered,
-                description: format!("Discovered {} high-frequency patterns that could be automated", 
-                    high_freq_patterns.len()),
+                description: format!(
+                    "Discovered {} high-frequency patterns that could be automated",
+                    high_freq_patterns.len()
+                ),
                 confidence: 0.9,
-                supporting_evidence: high_freq_patterns.iter()
+                supporting_evidence: high_freq_patterns
+                    .iter()
                     .map(|p| p.template.clone())
                     .take(3)
                     .collect(),
@@ -737,58 +779,62 @@ impl InsightGenerator {
                 ],
             });
         }
-        
+
         // Find patterns with low confidence
-        let low_conf_patterns: Vec<_> = patterns.iter()
-            .filter(|p| p.confidence < 0.6)
-            .collect();
-        
+        let low_conf_patterns: Vec<_> = patterns.iter().filter(|p| p.confidence < 0.6).collect();
+
         if low_conf_patterns.len() > 5 {
             insights.push(MemoryInsight {
                 insight_type: InsightType::OptimizationOpportunity,
                 description: "Several patterns have low confidence scores".to_string(),
                 confidence: 0.8,
-                supporting_evidence: vec![format!("{} patterns below 60% confidence", low_conf_patterns.len())],
+                supporting_evidence: vec![format!(
+                    "{} patterns below 60% confidence",
+                    low_conf_patterns.len()
+                )],
                 recommendations: vec![
                     "Review and refine low-confidence patterns".to_string(),
                     "Collect more training examples".to_string(),
                 ],
             });
         }
-        
+
         insights.truncate(self.config.max_insights);
         Ok(insights)
     }
-    
+
     /// Generate insights from knowledge graph
     pub async fn from_graph(&self, graph: &KnowledgeGraph) -> Result<Vec<MemoryInsight>> {
         let mut insights = Vec::new();
-        
+
         // Analyze graph connectivity
         let stats = graph.stats().clone();
-        
+
         if stats.avg_connections < 1.5 {
             insights.push(MemoryInsight {
                 insight_type: InsightType::KnowledgeGap,
                 description: "Knowledge graph has low connectivity".to_string(),
                 confidence: 0.85,
-                supporting_evidence: vec![
-                    format!("Average connections per entity: {:.1}", stats.avg_connections),
-                ],
+                supporting_evidence: vec![format!(
+                    "Average connections per entity: {:.1}",
+                    stats.avg_connections
+                )],
                 recommendations: vec![
                     "Extract more relationships between entities".to_string(),
                     "Improve entity linking in new conversations".to_string(),
                 ],
             });
         }
-        
+
         // Find knowledge hubs
         if !stats.hubs.is_empty() {
-            let hub_names: Vec<String> = stats.hubs.iter()
+            let hub_names: Vec<String> = stats
+                .hubs
+                .iter()
                 .take(3)
                 .map(|(name, count)| format!("{} ({} connections)", name, count))
                 .collect();
-            
+
             insights.push(MemoryInsight {
                 insight_type: InsightType::TrendIdentified,
                 description: "Identified key knowledge hubs in the system".to_string(),
@@ -800,17 +846,20 @@ impl InsightGenerator {
                 ],
             });
         }
-        
+
         Ok(insights)
     }
-    
+
     /// Generate insights from analytics
     pub async fn from_analytics(&self, analyzer: &MemoryAnalyzer) -> Result<Vec<MemoryInsight>> {
         let mut insights = Vec::new();
-        
+
         // Check for anomalies
         let anomalies = analyzer.detect_anomalies();
-        for anomaly in anomalies.iter().filter(|a| a.severity as u8 >= Severity::Medium as u8) {
+        for anomaly in anomalies
+            .iter()
+            .filter(|a| a.severity as u8 >= Severity::Medium as u8)
+        {
             insights.push(MemoryInsight {
                 insight_type: InsightType::AnomalyDetected,
                 description: anomaly.description.clone(),
@@ -822,7 +871,7 @@ impl InsightGenerator {
                 ],
             });
         }
-        
+
         // Analyze trends
         let trends = analyzer.analyze_trends();
         if trends.memory_growth_trend == Trend::Decreasing {
@@ -837,7 +886,7 @@ impl InsightGenerator {
                 ],
             });
         }
-        
+
         Ok(insights)
     }
 }
@@ -845,21 +894,21 @@ impl InsightGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_memory_analyzer() -> Result<()> {
         let mut analyzer = MemoryAnalyzer::new();
-        
+
         // Record some test data
         analyzer.record_memory_added(Some("rust")).await?;
         analyzer.record_memory_added(Some("python")).await?;
-        
+
         let metrics = analyzer.get_metrics();
         assert_eq!(metrics.total_memories, 2);
-        
+
         Ok(())
     }
-    
+
     #[test]
     fn test_trend_calculation() {
         let analyzer = MemoryAnalyzer::new();

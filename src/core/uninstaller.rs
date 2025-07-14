@@ -94,7 +94,7 @@ impl HiveUninstaller {
     /// Create uninstall plan by scanning for Hive AI components
     pub async fn create_uninstall_plan(&self) -> Result<UninstallPlan> {
         info!("Scanning system for Hive AI components...");
-        
+
         let mut components = Vec::new();
         let mut total_size = 0u64;
         let mut requires_admin = false;
@@ -154,8 +154,14 @@ impl HiveUninstaller {
             components.push(temp_component);
         }
 
-        let backup_recommended = !self.preserve_config && !self.preserve_data && 
-                                components.iter().any(|c| matches!(c.component_type, ComponentType::Database | ComponentType::Configuration));
+        let backup_recommended = !self.preserve_config
+            && !self.preserve_data
+            && components.iter().any(|c| {
+                matches!(
+                    c.component_type,
+                    ComponentType::Database | ComponentType::Configuration
+                )
+            });
 
         Ok(UninstallPlan {
             components,
@@ -167,11 +173,7 @@ impl HiveUninstaller {
 
     /// Find main Hive AI binary
     async fn find_binary_component(&self) -> Result<Option<UninstallComponent>> {
-        let possible_locations = [
-            "/usr/local/bin/hive",
-            "/usr/bin/hive", 
-            "/opt/hive/bin/hive",
-        ];
+        let possible_locations = ["/usr/local/bin/hive", "/usr/bin/hive", "/opt/hive/bin/hive"];
 
         // Also check Windows locations
         let windows_locations = [
@@ -208,10 +210,12 @@ impl HiveUninstaller {
 
         // Also check current executable location
         if let Ok(current_exe) = env::current_exe() {
-            if current_exe.file_name()
+            if current_exe
+                .file_name()
                 .and_then(|name| name.to_str())
                 .map(|name| name.starts_with("hive"))
-                .unwrap_or(false) {
+                .unwrap_or(false)
+            {
                 if let Ok(metadata) = fs::metadata(&current_exe).await {
                     total_size += metadata.len();
                     paths.push(current_exe);
@@ -455,8 +459,10 @@ impl HiveUninstaller {
             while let Some(entry) = entries.next_entry().await? {
                 let file_name = entry.file_name();
                 let name_str = file_name.to_string_lossy();
-                
-                if name_str.contains("hive") && (name_str.contains("update") || name_str.contains("temp")) {
+
+                if name_str.contains("hive")
+                    && (name_str.contains("update") || name_str.contains("temp"))
+                {
                     if let Ok(metadata) = entry.metadata().await {
                         total_size += metadata.len();
                         paths.push(entry.path());
@@ -503,7 +509,11 @@ impl HiveUninstaller {
                     dirs.push(PathBuf::from(appdata).join("HiveTechs").join("HiveAI"));
                 }
                 if let Ok(local_appdata) = env::var("LOCALAPPDATA") {
-                    dirs.push(PathBuf::from(local_appdata).join("HiveTechs").join("HiveAI"));
+                    dirs.push(
+                        PathBuf::from(local_appdata)
+                            .join("HiveTechs")
+                            .join("HiveAI"),
+                    );
                 }
             }
             _ => {}
@@ -519,7 +529,12 @@ impl HiveUninstaller {
         match env::consts::OS {
             "macos" => {
                 if let Ok(home) = env::var("HOME") {
-                    dirs.push(PathBuf::from(home).join("Library").join("Caches").join("HiveAI"));
+                    dirs.push(
+                        PathBuf::from(home)
+                            .join("Library")
+                            .join("Caches")
+                            .join("HiveAI"),
+                    );
                 }
             }
             "linux" => {
@@ -531,7 +546,12 @@ impl HiveUninstaller {
             }
             "windows" => {
                 if let Ok(local_appdata) = env::var("LOCALAPPDATA") {
-                    dirs.push(PathBuf::from(local_appdata).join("HiveTechs").join("HiveAI").join("Cache"));
+                    dirs.push(
+                        PathBuf::from(local_appdata)
+                            .join("HiveTechs")
+                            .join("HiveAI")
+                            .join("Cache"),
+                    );
                 }
             }
             _ => {}
@@ -547,17 +567,33 @@ impl HiveUninstaller {
         match env::consts::OS {
             "macos" => {
                 if let Ok(home) = env::var("HOME") {
-                    dirs.push(PathBuf::from(home).join("Library").join("Logs").join("HiveAI"));
+                    dirs.push(
+                        PathBuf::from(home)
+                            .join("Library")
+                            .join("Logs")
+                            .join("HiveAI"),
+                    );
                 }
             }
             "linux" => {
                 if let Ok(home) = env::var("HOME") {
-                    dirs.push(PathBuf::from(home).join(".local").join("share").join("hive").join("logs"));
+                    dirs.push(
+                        PathBuf::from(home)
+                            .join(".local")
+                            .join("share")
+                            .join("hive")
+                            .join("logs"),
+                    );
                 }
             }
             "windows" => {
                 if let Ok(local_appdata) = env::var("LOCALAPPDATA") {
-                    dirs.push(PathBuf::from(local_appdata).join("HiveTechs").join("HiveAI").join("Logs"));
+                    dirs.push(
+                        PathBuf::from(local_appdata)
+                            .join("HiveTechs")
+                            .join("HiveAI")
+                            .join("Logs"),
+                    );
                 }
             }
             _ => {}
@@ -587,10 +623,10 @@ impl HiveUninstaller {
     /// Check if admin access is required for paths
     fn requires_admin_access(&self, paths: &[PathBuf]) -> bool {
         paths.iter().any(|path| {
-            path.starts_with("/usr") || 
-            path.starts_with("/opt") ||
-            path.starts_with("/etc") ||
-            (env::consts::OS == "windows" && path.starts_with("C:\\Program Files"))
+            path.starts_with("/usr")
+                || path.starts_with("/opt")
+                || path.starts_with("/etc")
+                || (env::consts::OS == "windows" && path.starts_with("C:\\Program Files"))
         })
     }
 
@@ -607,7 +643,10 @@ impl HiveUninstaller {
             info!("Removing component: {}", component.name);
 
             if self.dry_run {
-                info!("DRY RUN: Would remove {} ({} bytes)", component.name, component.size_bytes);
+                info!(
+                    "DRY RUN: Would remove {} ({} bytes)",
+                    component.name, component.size_bytes
+                );
                 components_removed += 1;
                 space_freed += component.size_bytes;
                 continue;
@@ -650,7 +689,10 @@ impl HiveUninstaller {
 
         if success {
             info!("🎉 Hive AI uninstallation completed successfully!");
-            info!("Freed {} bytes across {} components", space_freed, components_removed);
+            info!(
+                "Freed {} bytes across {} components",
+                space_freed, components_removed
+            );
         } else {
             warn!("⚠️ Uninstallation completed with {} errors", errors.len());
         }
@@ -672,12 +714,14 @@ impl HiveUninstaller {
         }
 
         let metadata = fs::metadata(path).await?;
-        
+
         if metadata.is_file() {
-            fs::remove_file(path).await
+            fs::remove_file(path)
+                .await
                 .with_context(|| format!("Failed to remove file: {}", path.display()))?;
         } else if metadata.is_dir() {
-            fs::remove_dir_all(path).await
+            fs::remove_dir_all(path)
+                .await
                 .with_context(|| format!("Failed to remove directory: {}", path.display()))?;
         }
 
@@ -711,39 +755,43 @@ impl HiveUninstaller {
     async fn remove_hive_references_from_file(&self, file_path: &Path) -> Result<()> {
         let content = fs::read_to_string(file_path).await?;
         let mut lines: Vec<&str> = content.lines().collect();
-        
+
         // Remove lines that reference Hive AI
         let mut in_hive_section = false;
         let mut modified = false;
-        
+
         lines.retain(|line| {
             let line_lower = line.to_lowercase();
-            
+
             // Start of Hive AI section
             if line_lower.contains("added by hive") || line_lower.contains("hive ai installer") {
                 in_hive_section = true;
                 modified = true;
                 return false;
             }
-            
+
             // In Hive AI section
             if in_hive_section {
                 if line.trim().is_empty() && !line_lower.contains("hive") {
                     in_hive_section = false;
                     return true;
                 }
-                if line_lower.contains("hive") || line_lower.contains("export path") && line_lower.contains("/usr/local/bin") {
+                if line_lower.contains("hive")
+                    || line_lower.contains("export path") && line_lower.contains("/usr/local/bin")
+                {
                     modified = true;
                     return false;
                 }
             }
-            
+
             // Standalone Hive references
-            if line_lower.contains("hive") && (line_lower.contains("export") || line_lower.contains("alias")) {
+            if line_lower.contains("hive")
+                && (line_lower.contains("export") || line_lower.contains("alias"))
+            {
                 modified = true;
                 return false;
             }
-            
+
             true
         });
 
@@ -758,18 +806,24 @@ impl HiveUninstaller {
 
     /// Create backup before uninstallation
     pub async fn create_uninstall_backup(&self, plan: &UninstallPlan) -> Result<PathBuf> {
-        let backup_dir = env::temp_dir().join(format!("hive_uninstall_backup_{}", chrono::Utc::now().format("%Y%m%d_%H%M%S")));
+        let backup_dir = env::temp_dir().join(format!(
+            "hive_uninstall_backup_{}",
+            chrono::Utc::now().format("%Y%m%d_%H%M%S")
+        ));
         fs::create_dir_all(&backup_dir).await?;
 
         for component in &plan.components {
-            if matches!(component.component_type, ComponentType::Configuration | ComponentType::Database) {
+            if matches!(
+                component.component_type,
+                ComponentType::Configuration | ComponentType::Database
+            ) {
                 let component_backup_dir = backup_dir.join(&component.name);
                 fs::create_dir_all(&component_backup_dir).await?;
 
                 for path in &component.paths {
                     if path.exists() {
                         let dest = component_backup_dir.join(path.file_name().unwrap_or_default());
-                        
+
                         if path.is_file() {
                             fs::copy(path, &dest).await?;
                         } else if path.is_dir() {
@@ -820,7 +874,7 @@ mod tests {
     #[tokio::test]
     async fn test_uninstall_plan_creation() {
         let uninstaller = HiveUninstaller::new().with_dry_run(true);
-        
+
         if let Ok(plan) = uninstaller.create_uninstall_plan().await {
             // Should have at least some components detected
             assert!(!plan.components.is_empty() || plan.estimated_space_freed == 0);
@@ -832,11 +886,18 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let test_dir = temp_dir.path().join("test");
         tokio::fs::create_dir_all(&test_dir).await.unwrap();
-        tokio::fs::write(test_dir.join("file1.txt"), "test content").await.unwrap();
-        tokio::fs::write(test_dir.join("file2.txt"), "more test content").await.unwrap();
+        tokio::fs::write(test_dir.join("file1.txt"), "test content")
+            .await
+            .unwrap();
+        tokio::fs::write(test_dir.join("file2.txt"), "more test content")
+            .await
+            .unwrap();
 
         let uninstaller = HiveUninstaller::new();
-        let size = uninstaller.calculate_directory_size(&test_dir).await.unwrap();
+        let size = uninstaller
+            .calculate_directory_size(&test_dir)
+            .await
+            .unwrap();
         assert!(size > 0);
     }
 }

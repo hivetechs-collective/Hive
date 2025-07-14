@@ -2,10 +2,8 @@
 //!
 //! Provides VS Code-like panel layout with responsive design
 
-use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
-};
 use crate::tui::themes::Theme;
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
 
 /// Layout manager for advanced TUI panels
 pub struct LayoutManager {
@@ -50,9 +48,9 @@ impl LayoutManager {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(2),     // Title bar (menu + title)
-                Constraint::Min(0),        // Main content
-                Constraint::Length(1),     // Status bar
+                Constraint::Length(2), // Title bar (menu + title)
+                Constraint::Min(0),    // Main content
+                Constraint::Length(1), // Status bar
             ])
             .split(area);
 
@@ -180,7 +178,7 @@ pub fn responsive_layout(area: Rect) -> (bool, bool) {
 
     // Determine what to show based on terminal size
     let show_consensus = width >= 120; // Need at least 120 columns for consensus panel
-    let show_terminal = height >= 30;  // Need at least 30 rows for terminal panel
+    let show_terminal = height >= 30; // Need at least 30 rows for terminal panel
 
     (show_consensus, show_terminal)
 }

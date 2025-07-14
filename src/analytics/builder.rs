@@ -1,5 +1,5 @@
 //! Custom Dashboard Builder
-//! 
+//!
 //! Enables users to create personalized analytics dashboards:
 //! - Drag-and-drop widget placement
 //! - Customizable visualizations
@@ -7,13 +7,13 @@
 //! - Template marketplace integration
 //! - Export and sharing capabilities
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use tokio::fs;
 use std::sync::Arc;
+use tokio::fs;
 use tokio::sync::RwLock;
 
 /// Dashboard definition
@@ -484,7 +484,8 @@ impl DashboardBuilder {
         widget_config: WidgetConfig,
     ) -> Result<Widget> {
         let mut dashboards = self.dashboards.write().await;
-        let dashboard = dashboards.get_mut(dashboard_id)
+        let dashboard = dashboards
+            .get_mut(dashboard_id)
             .ok_or_else(|| anyhow::anyhow!("Dashboard not found"))?;
 
         let widget = Widget {
@@ -494,7 +495,9 @@ impl DashboardBuilder {
             position: widget_config.position,
             size: widget_config.size,
             data_binding: widget_config.data_binding,
-            visualization: widget_config.visualization.unwrap_or_else(|| self.default_visualization()),
+            visualization: widget_config
+                .visualization
+                .unwrap_or_else(|| self.default_visualization()),
             interactions: widget_config.interactions,
             refresh_override: widget_config.refresh_override,
         };
@@ -516,10 +519,13 @@ impl DashboardBuilder {
         updates: WidgetUpdate,
     ) -> Result<()> {
         let mut dashboards = self.dashboards.write().await;
-        let dashboard = dashboards.get_mut(dashboard_id)
+        let dashboard = dashboards
+            .get_mut(dashboard_id)
             .ok_or_else(|| anyhow::anyhow!("Dashboard not found"))?;
 
-        let widget = dashboard.widgets.iter_mut()
+        let widget = dashboard
+            .widgets
+            .iter_mut()
             .find(|w| w.id == widget_id)
             .ok_or_else(|| anyhow::anyhow!("Widget not found"))?;
 
@@ -548,7 +554,8 @@ impl DashboardBuilder {
     /// Remove widget
     pub async fn remove_widget(&self, dashboard_id: &str, widget_id: &str) -> Result<()> {
         let mut dashboards = self.dashboards.write().await;
-        let dashboard = dashboards.get_mut(dashboard_id)
+        let dashboard = dashboards
+            .get_mut(dashboard_id)
             .ok_or_else(|| anyhow::anyhow!("Dashboard not found"))?;
 
         dashboard.widgets.retain(|w| w.id != widget_id);
@@ -571,11 +578,12 @@ impl DashboardBuilder {
 
         // Load from disk
         let file_path = self.templates_path.join(format!("{}.json", dashboard_id));
-        let content = fs::read_to_string(&file_path).await
+        let content = fs::read_to_string(&file_path)
+            .await
             .context("Failed to read dashboard file")?;
-        
-        let dashboard: Dashboard = serde_json::from_str(&content)
-            .context("Failed to parse dashboard")?;
+
+        let dashboard: Dashboard =
+            serde_json::from_str(&content).context("Failed to parse dashboard")?;
 
         // Cache in memory
         let mut dashboards = self.dashboards.write().await;
@@ -609,13 +617,13 @@ impl DashboardBuilder {
 
         // List from disk
         let mut entries = fs::read_dir(&self.templates_path).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 let content = fs::read_to_string(&path).await?;
                 let dashboard: Dashboard = serde_json::from_str(&content)?;
-                
+
                 summaries.push(DashboardSummary {
                     id: dashboard.id,
                     name: dashboard.name,
@@ -668,14 +676,16 @@ impl DashboardBuilder {
                 // Would render dashboard to PDF
                 Ok(Vec::new())
             }
-            _ => Err(anyhow::anyhow!("Export format not supported for dashboards")),
+            _ => Err(anyhow::anyhow!(
+                "Export format not supported for dashboards"
+            )),
         }
     }
 
     /// Import dashboard
     pub async fn import_dashboard(&self, data: &[u8]) -> Result<Dashboard> {
-        let mut dashboard: Dashboard = serde_json::from_slice(data)
-            .context("Failed to parse dashboard")?;
+        let mut dashboard: Dashboard =
+            serde_json::from_slice(data).context("Failed to parse dashboard")?;
 
         // Generate new ID
         dashboard.id = uuid::Uuid::new_v4().to_string();
@@ -691,11 +701,12 @@ impl DashboardBuilder {
     /// Share dashboard
     pub async fn share_dashboard(&self, dashboard_id: &str, public: bool) -> Result<String> {
         let mut dashboards = self.dashboards.write().await;
-        let dashboard = dashboards.get_mut(dashboard_id)
+        let dashboard = dashboards
+            .get_mut(dashboard_id)
             .ok_or_else(|| anyhow::anyhow!("Dashboard not found"))?;
 
         dashboard.permissions.public = public;
-        
+
         if public && dashboard.permissions.share_link.is_none() {
             dashboard.permissions.share_link = Some(format!(
                 "https://hive.ai/dashboards/shared/{}",
@@ -705,8 +716,7 @@ impl DashboardBuilder {
             dashboard.permissions.share_link = None;
         }
 
-        let share_link = dashboard.permissions.share_link.clone()
-            .unwrap_or_default();
+        let share_link = dashboard.permissions.share_link.clone().unwrap_or_default();
 
         // Save updated dashboard
         self.save_dashboard(dashboard).await?;
@@ -720,7 +730,10 @@ impl DashboardBuilder {
     }
 
     /// List marketplace templates
-    pub async fn list_marketplace_templates(&self, category: Option<&str>) -> Result<Vec<MarketplaceTemplate>> {
+    pub async fn list_marketplace_templates(
+        &self,
+        category: Option<&str>,
+    ) -> Result<Vec<MarketplaceTemplate>> {
         self.marketplace_client.list_templates(category).await
     }
 
@@ -841,7 +854,7 @@ mod tests {
     #[tokio::test]
     async fn test_dashboard_creation() -> Result<()> {
         let builder = DashboardBuilder::new(Some(PathBuf::from("/tmp/hive_dashboards")));
-        
+
         let config = DashboardConfig {
             name: "Test Dashboard".to_string(),
             description: "Test dashboard description".to_string(),
@@ -852,31 +865,33 @@ mod tests {
             tags: vec!["test".to_string()],
             category: None,
         };
-        
+
         let dashboard = builder.create_dashboard(config).await?;
-        
+
         assert_eq!(dashboard.name, "Test Dashboard");
         assert_eq!(dashboard.layout, DashboardLayout::Grid);
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_widget_management() -> Result<()> {
         let builder = DashboardBuilder::new(Some(PathBuf::from("/tmp/hive_dashboards")));
-        
+
         // Create dashboard
-        let dashboard = builder.create_dashboard(DashboardConfig {
-            name: "Widget Test".to_string(),
-            description: "Testing widgets".to_string(),
-            layout: DashboardLayout::Grid,
-            theme: None,
-            refresh_interval: None,
-            owner: "test_user".to_string(),
-            tags: vec![],
-            category: None,
-        }).await?;
-        
+        let dashboard = builder
+            .create_dashboard(DashboardConfig {
+                name: "Widget Test".to_string(),
+                description: "Testing widgets".to_string(),
+                layout: DashboardLayout::Grid,
+                theme: None,
+                refresh_interval: None,
+                owner: "test_user".to_string(),
+                tags: vec![],
+                category: None,
+            })
+            .await?;
+
         // Add widget
         let widget_config = WidgetConfig {
             type_: WidgetType::Chart {
@@ -912,11 +927,11 @@ mod tests {
             interactions: vec![],
             refresh_override: None,
         };
-        
+
         let widget = builder.add_widget(&dashboard.id, widget_config).await?;
-        
+
         assert_eq!(widget.title, "Test Chart");
-        
+
         // Update widget
         let updates = WidgetUpdate {
             title: Some("Updated Chart".to_string()),
@@ -924,17 +939,21 @@ mod tests {
             size: None,
             data_binding: None,
         };
-        
-        builder.update_widget(&dashboard.id, &widget.id, updates).await?;
-        
+
+        builder
+            .update_widget(&dashboard.id, &widget.id, updates)
+            .await?;
+
         // Load and verify
         let updated_dashboard = builder.load_dashboard(&dashboard.id).await?;
-        let updated_widget = updated_dashboard.widgets.iter()
+        let updated_widget = updated_dashboard
+            .widgets
+            .iter()
             .find(|w| w.id == widget.id)
             .unwrap();
-        
+
         assert_eq!(updated_widget.title, "Updated Chart");
-        
+
         Ok(())
     }
 }

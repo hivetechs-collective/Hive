@@ -1,22 +1,22 @@
 //! Enterprise Authentication System
-//! 
+//!
 //! Provides comprehensive authentication including:
 //! - Multi-factor authentication
 //! - Session management
 //! - API key management
 //! - Password policies
 
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Duration, Utc};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
-use sha2::{Sha256, Digest};
 use uuid::Uuid;
-use rand::Rng;
 
-use super::{SecurityConfig, PasswordPolicy};
+use super::{PasswordPolicy, SecurityConfig};
 
 /// Authentication manager
 pub struct AuthenticationManager {
@@ -109,7 +109,12 @@ impl SessionManager {
         }
     }
 
-    pub async fn create_session(&self, user_id: &str, ip_address: Option<String>, user_agent: Option<String>) -> Result<Session> {
+    pub async fn create_session(
+        &self,
+        user_id: &str,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<Session> {
         let token = self.generate_session_token();
         let now = Utc::now();
         let expires_at = now + Duration::seconds(self.config.session_timeout as i64);
@@ -133,7 +138,7 @@ impl SessionManager {
 
     pub async fn validate_session(&self, token: &str) -> Result<Session> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(token) {
             if session.expires_at < Utc::now() {
                 sessions.remove(token);
@@ -164,9 +169,9 @@ impl SessionManager {
         let mut sessions = self.sessions.write().await;
         let now = Utc::now();
         let initial_count = sessions.len();
-        
+
         sessions.retain(|_, session| session.expires_at > now);
-        
+
         Ok((initial_count - sessions.len()) as u64)
     }
 
@@ -194,7 +199,12 @@ impl ApiKeyManager {
         }
     }
 
-    pub async fn create_api_key(&self, user_id: &str, name: &str, permissions: Vec<String>) -> Result<ApiKey> {
+    pub async fn create_api_key(
+        &self,
+        user_id: &str,
+        name: &str,
+        permissions: Vec<String>,
+    ) -> Result<ApiKey> {
         let key = self.generate_api_key();
         let now = Utc::now();
         let expires_at = if self.config.api_key_expiry_days > 0 {
@@ -223,7 +233,7 @@ impl ApiKeyManager {
 
     pub async fn validate_api_key(&self, key: &str) -> Result<ApiKey> {
         let mut api_keys = self.api_keys.write().await;
-        
+
         if let Some(api_key) = api_keys.get_mut(key) {
             if !api_key.active {
                 return Err(anyhow!("API key is disabled"));
@@ -254,7 +264,8 @@ impl ApiKeyManager {
 
     pub async fn list_user_api_keys(&self, user_id: &str) -> Result<Vec<ApiKey>> {
         let api_keys = self.api_keys.read().await;
-        Ok(api_keys.values()
+        Ok(api_keys
+            .values()
             .filter(|key| key.user_id == user_id)
             .cloned()
             .collect())
@@ -330,10 +341,10 @@ impl PasswordAuthProvider {
         let salt = Uuid::new_v4().to_string();
         let hash = self.hash_password(password, &salt);
         let stored_hash = format!("{}:{}", salt, hash);
-        
+
         let mut hashes = self.password_hashes.write().await;
         hashes.insert(user_id.to_string(), stored_hash);
-        
+
         Ok(())
     }
 }
@@ -345,7 +356,12 @@ impl AuthProvider for PasswordAuthProvider {
         Ok(username == "admin" && password == "admin")
     }
 
-    fn change_password(&self, _user_id: &str, _old_password: &str, _new_password: &str) -> Result<()> {
+    fn change_password(
+        &self,
+        _user_id: &str,
+        _old_password: &str,
+        _new_password: &str,
+    ) -> Result<()> {
         // Implement password change logic
         Ok(())
     }
@@ -397,12 +413,15 @@ impl AuthenticationManager {
         // Start session cleanup task
         let sessions = self.sessions.clone();
         let config = self.config.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(300)); // 5 minutes
             loop {
                 interval.tick().await;
-                let session_manager = SessionManager { sessions: sessions.clone(), config: config.clone() };
+                let session_manager = SessionManager {
+                    sessions: sessions.clone(),
+                    config: config.clone(),
+                };
                 if let Err(e) = session_manager.cleanup_expired_sessions().await {
                     tracing::error!("Failed to cleanup expired sessions: {}", e);
                 }
@@ -412,15 +431,22 @@ impl AuthenticationManager {
         Ok(())
     }
 
-    pub async fn authenticate(&self, username: &str, password: &str, mfa_token: Option<&str>) -> Result<Session> {
+    pub async fn authenticate(
+        &self,
+        username: &str,
+        password: &str,
+        mfa_token: Option<&str>,
+    ) -> Result<Session> {
         // Check login attempts
         if self.is_user_locked(username).await? {
-            return Err(anyhow!("User account is temporarily locked due to too many failed attempts"));
+            return Err(anyhow!(
+                "User account is temporarily locked due to too many failed attempts"
+            ));
         }
 
         // Authenticate with password (simplified - use proper auth provider in production)
         let auth_success = username == "admin" && password == "admin";
-        
+
         if !auth_success {
             self.record_failed_attempt(username).await?;
             return Err(anyhow!("Invalid credentials"));
@@ -446,18 +472,28 @@ impl AuthenticationManager {
     }
 
     pub async fn validate_session(&self, token: &str) -> Result<Session> {
-        let session_manager = SessionManager { sessions: self.sessions.clone(), config: self.config.clone() };
+        let session_manager = SessionManager {
+            sessions: self.sessions.clone(),
+            config: self.config.clone(),
+        };
         session_manager.validate_session(token).await
     }
 
-    pub async fn create_api_key(&self, user_id: &str, name: &str, permissions: Vec<String>) -> Result<ApiKey> {
+    pub async fn create_api_key(
+        &self,
+        user_id: &str,
+        name: &str,
+        permissions: Vec<String>,
+    ) -> Result<ApiKey> {
         let api_key_manager = ApiKeyManager::new(self.config.clone());
-        let api_key = api_key_manager.create_api_key(user_id, name, permissions).await?;
-        
+        let api_key = api_key_manager
+            .create_api_key(user_id, name, permissions)
+            .await?;
+
         // Store in our collection
         let mut api_keys = self.api_keys.write().await;
         api_keys.insert(api_key.key.clone(), api_key.clone());
-        
+
         Ok(api_key)
     }
 
@@ -465,7 +501,7 @@ impl AuthenticationManager {
         // Validate new password against policy
         let auth_provider = PasswordAuthProvider::new();
         auth_provider.validate_password_policy(new_password, &self.config.password_policy)?;
-        
+
         // In production, update password in database
         Ok(())
     }
@@ -488,17 +524,20 @@ impl AuthenticationManager {
 
     async fn record_failed_attempt(&self, username: &str) -> Result<()> {
         let mut attempts = self.login_attempts.write().await;
-        let user_attempts = attempts.entry(username.to_string()).or_insert(LoginAttempts {
-            count: 0,
-            last_attempt: Utc::now(),
-            locked_until: None,
-        });
+        let user_attempts = attempts
+            .entry(username.to_string())
+            .or_insert(LoginAttempts {
+                count: 0,
+                last_attempt: Utc::now(),
+                locked_until: None,
+            });
 
         user_attempts.count += 1;
         user_attempts.last_attempt = Utc::now();
 
         if user_attempts.count >= self.config.max_login_attempts {
-            user_attempts.locked_until = Some(Utc::now() + Duration::minutes(15)); // Lock for 15 minutes
+            user_attempts.locked_until = Some(Utc::now() + Duration::minutes(15));
+            // Lock for 15 minutes
         }
 
         Ok(())
@@ -516,7 +555,8 @@ impl AuthenticationManager {
         let attempts = self.login_attempts.read().await;
 
         let now = Utc::now();
-        let failed_logins_24h = attempts.values()
+        let failed_logins_24h = attempts
+            .values()
             .filter(|a| a.last_attempt > now - Duration::hours(24))
             .map(|a| a.count as u64)
             .sum();
@@ -525,7 +565,8 @@ impl AuthenticationManager {
             active_sessions: sessions.len() as u64,
             active_api_keys: api_keys.values().filter(|k| k.active).count() as u64,
             failed_logins_last_24h: failed_logins_24h,
-            locked_accounts: attempts.values()
+            locked_accounts: attempts
+                .values()
                 .filter(|a| a.locked_until.map_or(false, |l| l > now))
                 .count() as u64,
         })
@@ -556,14 +597,23 @@ mod tests {
         let config = SecurityConfig::default();
         let session_manager = SessionManager::new(config);
 
-        let session = session_manager.create_session("test_user", None, None).await.unwrap();
+        let session = session_manager
+            .create_session("test_user", None, None)
+            .await
+            .unwrap();
         assert_eq!(session.user_id, "test_user");
 
-        let validated = session_manager.validate_session(&session.token).await.unwrap();
+        let validated = session_manager
+            .validate_session(&session.token)
+            .await
+            .unwrap();
         assert_eq!(validated.user_id, "test_user");
 
-        session_manager.revoke_session(&session.token).await.unwrap();
-        
+        session_manager
+            .revoke_session(&session.token)
+            .await
+            .unwrap();
+
         let result = session_manager.validate_session(&session.token).await;
         assert!(result.is_err());
     }
@@ -573,21 +623,27 @@ mod tests {
         let config = SecurityConfig::default();
         let api_key_manager = ApiKeyManager::new(config);
 
-        let api_key = api_key_manager.create_api_key(
-            "test_user",
-            "test_key",
-            vec!["read".to_string(), "write".to_string()]
-        ).await.unwrap();
+        let api_key = api_key_manager
+            .create_api_key(
+                "test_user",
+                "test_key",
+                vec!["read".to_string(), "write".to_string()],
+            )
+            .await
+            .unwrap();
 
         assert_eq!(api_key.user_id, "test_user");
         assert_eq!(api_key.name, "test_key");
         assert!(api_key.active);
 
-        let validated = api_key_manager.validate_api_key(&api_key.key).await.unwrap();
+        let validated = api_key_manager
+            .validate_api_key(&api_key.key)
+            .await
+            .unwrap();
         assert_eq!(validated.user_id, "test_user");
 
         api_key_manager.revoke_api_key(&api_key.key).await.unwrap();
-        
+
         let result = api_key_manager.validate_api_key(&api_key.key).await;
         assert!(result.is_err());
     }
@@ -606,15 +662,23 @@ mod tests {
         };
 
         // Valid password
-        assert!(auth_provider.validate_password_policy("MyPass123!", &policy).is_ok());
+        assert!(auth_provider
+            .validate_password_policy("MyPass123!", &policy)
+            .is_ok());
 
         // Too short
-        assert!(auth_provider.validate_password_policy("Pass1!", &policy).is_err());
+        assert!(auth_provider
+            .validate_password_policy("Pass1!", &policy)
+            .is_err());
 
         // Missing uppercase
-        assert!(auth_provider.validate_password_policy("mypass123!", &policy).is_err());
+        assert!(auth_provider
+            .validate_password_policy("mypass123!", &policy)
+            .is_err());
 
         // Missing numbers
-        assert!(auth_provider.validate_password_policy("MyPassword!", &policy).is_err());
+        assert!(auth_provider
+            .validate_password_policy("MyPassword!", &policy)
+            .is_err());
     }
 }

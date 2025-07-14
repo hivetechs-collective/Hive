@@ -15,12 +15,18 @@ pub mod types;
 
 pub use engine::ConsensusEngine;
 pub use pipeline::ConsensusPipeline;
-pub use streaming::{ConsensusEvent, StreamingCallbacks, StreamingResponse, ConsensusStage, ConsensusResponseResult, ChannelStreamingCallbacks};
+pub use streaming::{
+    ChannelStreamingCallbacks, ConsensusEvent, ConsensusResponseResult, ConsensusStage,
+    StreamingCallbacks, StreamingResponse,
+};
 pub use temporal::TemporalContextProvider;
-pub use types::{ConsensusConfig, ConsensusProfile, ConsensusResult, ConsensusRequest, ConsensusResponse, Stage, ResponseMetadata};
+pub use types::{
+    ConsensusConfig, ConsensusProfile, ConsensusRequest, ConsensusResponse, ConsensusResult,
+    ResponseMetadata, Stage,
+};
 
 // Re-export commonly used items
-pub use stages::{CuratorStage, GeneratorStage, RefinerStage, ValidatorStage};
-pub use models::{ModelInfo, ModelManager, DynamicModelSelector};
+pub use models::{DynamicModelSelector, ModelInfo, ModelManager};
 pub use openrouter::OpenRouterClient;
 pub use profiles::ExpertProfileManager;
+pub use stages::{CuratorStage, GeneratorStage, RefinerStage, ValidatorStage};

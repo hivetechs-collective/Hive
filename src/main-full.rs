@@ -12,11 +12,11 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-    
+
     /// Configuration file path
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
-    
+
     /// Verbosity level
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
@@ -30,160 +30,160 @@ enum Commands {
         #[arg(short, long)]
         path: Option<PathBuf>,
     },
-    
+
     /// Analyze and understand any repository
     Analyze {
         /// Repository path or URL
         repo: String,
-        
+
         /// Analysis depth (quick, standard, comprehensive)
         #[arg(short, long, default_value = "standard")]
         depth: String,
-        
+
         /// Output format (text, json, html)
         #[arg(short, long, default_value = "text")]
         format: String,
-        
+
         /// Save analysis to file
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    
+
     /// Ask a question about the codebase
     Ask {
         /// The question to ask
         question: String,
-        
+
         /// Consensus profile to use
         #[arg(short, long, default_value = "balanced")]
         profile: String,
-        
+
         /// Output format
         #[arg(short, long, default_value = "text")]
         format: String,
-        
+
         /// Enable planning mode
         #[arg(long)]
         plan: bool,
     },
-    
+
     /// Enter planning mode for complex tasks
     Plan {
         /// Description of what you want to accomplish
         goal: String,
-        
+
         /// Planning depth (quick, standard, comprehensive)
         #[arg(short, long, default_value = "standard")]
         depth: String,
-        
+
         /// Enable collaborative planning
         #[arg(short, long)]
         collaborative: bool,
-        
+
         /// Save plan to file
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    
+
     /// Execute a previously created plan
     Execute {
         /// Plan file or plan ID
         plan: String,
-        
+
         /// Auto-execute without confirmation
         #[arg(short, long)]
         auto: bool,
-        
+
         /// Validation level (basic, standard, strict)
         #[arg(short, long, default_value = "standard")]
         validation: String,
     },
-    
+
     /// Apply AI-suggested improvements to a file
     Improve {
         /// File to improve
         file: PathBuf,
-        
+
         /// Specific aspect to improve
         #[arg(short, long)]
         aspect: Option<String>,
-        
+
         /// Auto-apply changes without confirmation
         #[arg(long)]
         auto_apply: bool,
-        
+
         /// Use consensus validation
         #[arg(long)]
         consensus: bool,
     },
-    
+
     /// Generate comprehensive analytics reports
     Analytics {
         #[command(subcommand)]
         command: AnalyticsCommands,
     },
-    
+
     /// Manage long-term memory
     Memory {
         #[command(subcommand)]
         command: MemoryCommands,
     },
-    
+
     /// Execute tools and tool chains
     Tool {
         /// Tool name
         name: String,
-        
+
         /// Tool parameters (JSON format)
         #[arg(short, long)]
         params: Option<String>,
-        
+
         /// Execute as part of a tool chain
         #[arg(short, long)]
         chain: Option<String>,
     },
-    
+
     /// Start the IDE integration server
     Serve {
         /// Server mode
         #[arg(short, long, default_value = "mcp")]
         mode: String,
-        
+
         /// Port to listen on
         #[arg(short, long, default_value = "7777")]
         port: u16,
     },
-    
+
     /// Analyze codebase and build indices
     Index {
         /// Path to index
         #[arg(short, long)]
         path: Option<PathBuf>,
-        
+
         /// Force rebuild
         #[arg(short, long)]
         force: bool,
     },
-    
+
     /// Manage configuration
     Config {
         #[command(subcommand)]
         command: ConfigCommands,
     },
-    
+
     /// Manage enterprise hooks and automation
     Hooks {
         #[command(subcommand)]
         command: HookCommands,
     },
-    
+
     /// Interactive mode
     Interactive {
         /// Starting mode (planning, execution, hybrid)
         #[arg(short, long, default_value = "hybrid")]
         mode: String,
     },
-    
+
     /// Launch full TUI interface (VS Code-like)
     Tui {
         /// Force TUI even if not detected as standalone
@@ -200,48 +200,48 @@ enum AnalyticsCommands {
         #[arg(short, long, default_value = "week")]
         period: String,
     },
-    
+
     /// Performance analysis
     Performance {
         /// Time period
         #[arg(short, long, default_value = "week")]
         period: String,
     },
-    
+
     /// Cost analysis
     Cost {
         /// Time period
         #[arg(short, long, default_value = "month")]
         period: String,
     },
-    
+
     /// Quality metrics
     Quality {
         /// Time period
         #[arg(short, long, default_value = "week")]
         period: String,
     },
-    
+
     /// Comprehensive report
     Report {
         /// Report type (executive, operational, performance, cost)
         #[arg(short, long, default_value = "executive")]
         report_type: String,
-        
+
         /// Time period
         #[arg(short, long, default_value = "month")]
         period: String,
-        
+
         /// Output format
         #[arg(short, long, default_value = "html")]
         format: String,
     },
-    
+
     /// Trend analysis
     Trends {
         /// Metric to analyze
         metric: String,
-        
+
         /// Time period
         #[arg(short, long, default_value = "quarter")]
         period: String,
@@ -254,43 +254,43 @@ enum MemoryCommands {
     Search {
         /// Search query
         query: String,
-        
+
         /// Maximum results
         #[arg(short, long, default_value = "10")]
         limit: usize,
     },
-    
+
     /// Show memory statistics
     Stats,
-    
+
     /// Export conversation history
     Export {
         /// Output file
         #[arg(short, long)]
         output: PathBuf,
-        
+
         /// Export format (json, csv, markdown)
         #[arg(short, long, default_value = "json")]
         format: String,
     },
-    
+
     /// Import conversation history
     Import {
         /// Input file
         file: PathBuf,
     },
-    
+
     /// Clear memory (with confirmation)
     Clear {
         /// Clear all data
         #[arg(long)]
         all: bool,
-        
+
         /// Clear conversations older than days
         #[arg(long)]
         older_than: Option<u32>,
     },
-    
+
     /// Manage knowledge graph
     Knowledge {
         #[command(subcommand)]
@@ -302,18 +302,18 @@ enum MemoryCommands {
 enum KnowledgeCommands {
     /// View knowledge graph statistics
     Stats,
-    
+
     /// Query the knowledge graph
     Query {
         /// Query string
         query: String,
     },
-    
+
     /// Export knowledge graph
     Export {
         /// Output file
         output: PathBuf,
-        
+
         /// Format (graphml, json, dot)
         #[arg(short, long, default_value = "json")]
         format: String,
@@ -324,25 +324,25 @@ enum KnowledgeCommands {
 enum ConfigCommands {
     /// Show current configuration
     Show,
-    
+
     /// Set a configuration value
     Set {
         /// Configuration key
         key: String,
-        
+
         /// Configuration value
         value: String,
     },
-    
+
     /// Get a configuration value
     Get {
         /// Configuration key
         key: String,
     },
-    
+
     /// Validate configuration
     Validate,
-    
+
     /// Reset to defaults
     Reset {
         /// Confirm reset
@@ -358,42 +358,42 @@ enum HookCommands {
         /// Filter by event type
         #[arg(short, long)]
         event: Option<String>,
-        
+
         /// Show only enabled hooks
         #[arg(long)]
         enabled_only: bool,
     },
-    
+
     /// Add a new hook
     Add {
         /// Hook configuration file (JSON)
         config: PathBuf,
     },
-    
+
     /// Remove a hook
     Remove {
         /// Hook ID to remove
         hook_id: String,
     },
-    
+
     /// Enable/disable a hook
     Toggle {
         /// Hook ID to toggle
         hook_id: String,
     },
-    
+
     /// Test a hook configuration
     Test {
         /// Hook configuration file
         config: PathBuf,
-        
+
         /// Mock event to trigger
         event: String,
     },
-    
+
     /// Validate all hook configurations
     Validate,
-    
+
     /// Show hook execution history
     History {
         /// Number of recent executions to show
@@ -405,21 +405,21 @@ enum HookCommands {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    
+
     // Check for TUI mode first
     if should_launch_tui().await {
         return launch_tui().await;
     }
-    
+
     // Show banner if no command provided (like Claude Code)
     if std::env::args().len() == 1 {
         show_startup_banner().await?;
         return Ok(());
     }
-    
+
     // Initialize Hive
     initialize().await?;
-    
+
     // Set verbosity
     if cli.verbose > 0 {
         std::env::set_var("RUST_LOG", match cli.verbose {
@@ -428,106 +428,106 @@ async fn main() -> Result<()> {
             _ => "trace",
         });
     }
-    
+
     match cli.command {
         Commands::Init { path } => {
             let path = path.unwrap_or_else(|| PathBuf::from("."));
             println!("🐝 Initializing Hive in {}...", path.display());
-            
+
             // Create .hive directory
             tokio::fs::create_dir_all(path.join(".hive")).await?;
-            
+
             // Create default config
             let config = include_str!("../templates/default_config.toml");
             tokio::fs::write(path.join(".hive/config.toml"), config).await?;
-            
+
             println!("✅ Hive initialized successfully!");
             println!("📝 Edit .hive/config.toml to customize settings");
         }
-        
+
         Commands::Analyze { repo, depth, format, output } => {
             println!("🔍 Analyzing repository: {}", repo);
             println!("📊 Analysis depth: {}", depth);
-            
+
             // TODO: Implement repository analysis
             println!("🏗️  Architecture detected: Microservices");
             println!("🛠️  Technologies: Rust, TypeScript, Docker");
             println!("📈 Quality score: 8.5/10");
             println!("🔒 Security: 3 potential issues found");
-            
+
             if let Some(output_path) = output {
                 println!("💾 Saving analysis to: {}", output_path.display());
             }
         }
-        
+
         Commands::Ask { question, profile, format, plan } => {
             if plan {
                 println!("📋 Planning mode enabled...");
             }
-            
+
             println!("🤔 Processing your question...\n");
-            
+
             let engine = ConsensusEngine::new(profile).await?;
             let response = engine.process(&question).await?;
-            
+
             match format.as_str() {
                 "json" => println!("{}", serde_json::to_string_pretty(&response)?),
                 _ => println!("{}", response.curator_output),
             }
         }
-        
+
         Commands::Plan { goal, depth, collaborative, output } => {
             println!("📋 Creating execution plan...");
             println!("🎯 Goal: {}", goal);
             println!("📊 Planning depth: {}", depth);
-            
+
             if collaborative {
                 println!("🤝 Collaborative planning enabled");
             }
-            
+
             // TODO: Implement planning engine
             println!("✅ Plan created with 5 tasks");
             println!("⏱️  Estimated completion: 2-3 days");
             println!("⚠️  2 risks identified");
-            
+
             if let Some(output_path) = output {
                 println!("💾 Plan saved to: {}", output_path.display());
             }
         }
-        
+
         Commands::Execute { plan, auto, validation } => {
             println!("⚡ Executing plan: {}", plan);
             println!("🔍 Validation level: {}", validation);
-            
+
             if auto {
                 println!("🤖 Auto-execution enabled");
             }
-            
+
             // TODO: Implement plan execution
             println!("✅ Plan executed successfully");
         }
-        
+
         Commands::Improve { file, aspect, auto_apply, consensus } => {
             println!("🔍 Analyzing {}...", file.display());
-            
+
             if let Some(aspect) = aspect {
                 println!("🎯 Focusing on: {}", aspect);
             }
-            
+
             if consensus {
                 println!("🧠 Using consensus validation...");
             }
-            
+
             // TODO: Implement improvement logic
             println!("📝 Improvement suggestions generated");
-            
+
             if auto_apply {
                 println!("✅ Changes applied automatically");
             } else {
                 println!("❓ Review changes? (y/n)");
             }
         }
-        
+
         Commands::Analytics { command } => {
             match command {
                 AnalyticsCommands::Usage { period } => {
@@ -556,7 +556,7 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        
+
         Commands::Memory { command } => {
             match command {
                 MemoryCommands::Search { query, limit } => {
@@ -607,25 +607,25 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        
+
         Commands::Tool { name, params, chain } => {
             if let Some(chain_name) = chain {
                 println!("🔧 Executing tool chain: {}", chain_name);
             } else {
                 println!("🔧 Executing tool: {}", name);
             }
-            
+
             if let Some(params_json) = params {
                 println!("⚙️  Parameters: {}", params_json);
             }
-            
+
             // TODO: Implement tool execution
             println!("✅ Tool executed successfully");
         }
-        
+
         Commands::Serve { mode, port } => {
             println!("🚀 Starting {} server on port {}...", mode, port);
-            
+
             match mode.as_str() {
                 "mcp" => {
                     hive_ai::integration::start_mcp_server(port).await?;
@@ -636,22 +636,22 @@ async fn main() -> Result<()> {
                 _ => anyhow::bail!("Unknown server mode: {}", mode),
             }
         }
-        
+
         Commands::Index { path, force } => {
             let path = path.unwrap_or_else(|| PathBuf::from("."));
-            
+
             if force {
                 println!("🔄 Force rebuilding indices...");
             } else {
                 println!("📚 Building indices...");
             }
-            
+
             let index = SemanticIndex::new().await?;
             index.build_project(&path, force).await?;
-            
+
             println!("✅ Indexing complete!");
         }
-        
+
         Commands::Config { command } => {
             match command {
                 ConfigCommands::Show => {
@@ -680,7 +680,7 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        
+
         Commands::Hooks { command } => {
             match command {
                 HookCommands::List { event, enabled_only } => {
@@ -730,10 +730,10 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        
+
         Commands::Interactive { mode } => {
             println!("🎮 Starting interactive mode: {}", mode);
-            
+
             // Check if we should use the advanced TUI or simple CLI
             if check_tui_capabilities() && std::env::var("HIVE_SIMPLE_CLI").is_err() {
                 // Launch advanced TUI (like Claude Code)
@@ -749,7 +749,7 @@ async fn main() -> Result<()> {
                 start_interactive_mode().await?;
             }
         }
-        
+
         Commands::Tui { force } => {
             if force || check_tui_capabilities() {
                 println!("🖥️ Launching TUI interface...");
@@ -760,13 +760,13 @@ async fn main() -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
 async fn show_startup_banner() -> Result<()> {
     use console::style;
-    
+
     // Claude Code style welcome banner
     println!("╭───────────────────────────────────────────────────╮");
     println!("│ ✻ Welcome to HiveTechs Consensus!                 │");
@@ -776,17 +776,17 @@ async fn show_startup_banner() -> Result<()> {
     println!("│   cwd: {}                  │", get_current_dir_display());
     println!("╰───────────────────────────────────────────────────╯");
     println!();
-    
+
     // What's new section (like Claude Code)
     println!(" What's new:");
     println!("  • Released [Enterprise Hooks](https://docs.hivetechs.com/");
     println!("  hooks). Deterministic control over AI behavior");
     println!("  • Temporal context for web search - always knows today's date");
-    println!("  • Repository intelligence with ML-powered analysis"); 
+    println!("  • Repository intelligence with ML-powered analysis");
     println!("  • 10-40x performance improvements over TypeScript version");
     println!("  • Planning mode for strategic development workflows");
     println!();
-    
+
     Ok(())
 }
 
@@ -807,10 +807,10 @@ fn get_current_dir_display() -> String {
 async fn start_advanced_tui() -> Result<()> {
     mod interactive_tui;
     use interactive_tui::InteractiveTui;
-    
+
     let mut tui = InteractiveTui::new().await?;
     tui.run().await?;
-    
+
     Ok(())
 }
 
@@ -818,26 +818,26 @@ async fn start_advanced_tui() -> Result<()> {
 async fn start_interactive_mode() -> Result<()> {
     use std::io::{self, Write};
     use console::{style, Term};
-    
+
     let term = Term::stdout();
     term.clear_screen()?;
-    
+
     // Show the welcome banner first
     show_startup_banner().await?;
-    
+
     // Initialize the persistent interactive interface
     loop {
         // Print the interactive input box (like Claude Code)
         print_interactive_prompt()?;
-        
+
         // Read user input
         let mut input = String::new();
         if io::stdin().read_line(&mut input).is_err() {
             break;
         }
-        
+
         let input = input.trim();
-        
+
         // Handle special commands
         match input {
             "/help" | "help" => {
@@ -860,7 +860,7 @@ async fn start_interactive_mode() -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -899,34 +899,34 @@ async fn print_status_info() -> Result<()> {
     println!();
     println!(" 📊 HiveTechs Consensus Status");
     println!();
-    
+
     let config_dir = get_hive_config_dir();
     let config_exists = tokio::fs::metadata(config_dir.join("config.toml")).await.is_ok();
     let db_exists = tokio::fs::metadata(config_dir.join("hive-ai.db")).await.is_ok();
-    
+
     println!(" System:");
     println!("   Version: {}", env!("CARGO_PKG_VERSION"));
     println!("   Config: {}", if config_exists { "✓ Configured" } else { "⚠ Not configured" });
     println!("   Memory: {}", if db_exists { "✓ Ready" } else { "⚠ Not initialized" });
     println!("   Working Directory: {}", get_current_dir_display());
     println!();
-    
+
     // Check connectivity
     let internet_status = check_internet_connection().await;
     let api_status = check_api_status().await;
-    
+
     println!(" Connectivity:");
     println!("   Internet: {}", if internet_status { "✓ Connected" } else { "✗ Offline" });
     println!("   AI Models: {}", if api_status { "✓ Available (323+ models)" } else { "✗ Unavailable" });
     println!();
-    
+
     // Memory usage
     let memory_usage = get_memory_usage();
     println!(" Performance:");
     println!("   Memory Usage: {:.1} MB", memory_usage as f64 / 1024.0 / 1024.0);
     println!("   Consensus Engine: ✓ Ready");
     println!();
-    
+
     Ok(())
 }
 
@@ -935,9 +935,9 @@ async fn process_interactive_command(input: &str) -> Result<()> {
     let parts: Vec<&str> = input.splitn(2, ' ').collect();
     let command = parts[0];
     let args = if parts.len() > 1 { parts[1] } else { "" };
-    
+
     println!(); // Add spacing before output
-    
+
     match command {
         "ask" => {
             if args.is_empty() {
@@ -946,15 +946,15 @@ async fn process_interactive_command(input: &str) -> Result<()> {
             }
             println!("🤔 Processing your question...");
             println!("🧠 Running 4-stage consensus pipeline...");
-            
+
             // Simulate consensus processing
             println!();
             println!("Generator → ████████ 100% (claude-3-5-sonnet)");
-            println!("Refiner   → ████████ 100% (gpt-4-turbo)");  
+            println!("Refiner   → ████████ 100% (gpt-4-turbo)");
             println!("Validator → ████████ 100% (claude-3-opus)");
             println!("Curator   → ████████ 100% (gpt-4o)");
             println!();
-            
+
             // Mock response
             println!("✨ Consensus Response:");
             println!("{}", args);
@@ -1025,7 +1025,7 @@ async fn process_interactive_command(input: &str) -> Result<()> {
             println!("💡 Type 'help' for available commands");
         }
     }
-    
+
     println!(); // Add spacing after output
     Ok(())
 }
@@ -1035,7 +1035,7 @@ async fn get_conversation_count(config_dir: &std::path::Path) -> Result<usize> {
     if !db_path.exists() {
         return Ok(0);
     }
-    
+
     // This would connect to the actual database in the real implementation
     // For now, return a placeholder
     Ok(42) // Placeholder - would query actual database
@@ -1044,7 +1044,7 @@ async fn get_conversation_count(config_dir: &std::path::Path) -> Result<usize> {
 async fn load_hive_config(config_dir: &std::path::Path) -> Result<BannerConfig> {
     let config_path = config_dir.join("config.toml");
     let _content = tokio::fs::read_to_string(config_path).await?;
-    
+
     // This would parse the actual TOML config
     // For now, return a placeholder
     Ok(BannerConfig {
@@ -1060,12 +1060,12 @@ struct BannerConfig {
 
 async fn print_system_status() -> Result<()> {
     use console::style;
-    
+
     println!("  {}", style("System Status:").bold());
-    
+
     // Check internet connectivity
     let internet_status = check_internet_connection().await;
-    println!("    {} {}", 
+    println!("    {} {}",
         style("Internet:").dim(),
         if internet_status {
             style("✓ Connected").green()
@@ -1073,10 +1073,10 @@ async fn print_system_status() -> Result<()> {
             style("✗ Offline").red()
         }
     );
-    
+
     // Check OpenRouter API
     let api_status = check_api_status().await;
-    println!("    {} {}", 
+    println!("    {} {}",
         style("AI Models:").dim(),
         if api_status {
             style("✓ Available").green()
@@ -1084,14 +1084,14 @@ async fn print_system_status() -> Result<()> {
             style("✗ Unavailable").red()
         }
     );
-    
+
     // Memory usage
     let memory_usage = get_memory_usage();
-    println!("    {} {}", 
+    println!("    {} {}",
         style("Memory:").dim(),
         style(format!("{:.1} MB", memory_usage as f64 / 1024.0 / 1024.0)).blue()
     );
-    
+
     println!();
     Ok(())
 }
@@ -1137,12 +1137,12 @@ async fn should_launch_tui() -> bool {
     if std::env::var("HIVE_TUI").is_ok() {
         return true;
     }
-    
+
     // Check if running standalone (no command args) and terminal is capable
     let is_standalone = std::env::args().len() == 1;
     let terminal_capable = check_tui_capabilities();
     let tui_enabled = check_tui_preference().await;
-    
+
     is_standalone && terminal_capable && tui_enabled
 }
 
@@ -1151,7 +1151,7 @@ fn check_tui_capabilities() -> bool {
     if !atty::is(atty::Stream::Stdout) || !atty::is(atty::Stream::Stdin) {
         return false;
     }
-    
+
     // Check terminal size requirements
     if let Ok((width, height)) = crossterm::terminal::size() {
         width >= 120 && height >= 30
@@ -1163,7 +1163,7 @@ fn check_tui_capabilities() -> bool {
 async fn check_tui_preference() -> bool {
     let config_dir = get_hive_config_dir();
     let config_path = config_dir.join("config.toml");
-    
+
     if config_path.exists() {
         if let Ok(content) = tokio::fs::read_to_string(config_path).await {
             // Simple TOML parsing for TUI preference
@@ -1179,14 +1179,14 @@ async fn check_tui_preference() -> bool {
 
 async fn launch_tui() -> Result<()> {
     println!("🚀 Launching Hive AI TUI...");
-    
+
     // Check for required dependencies
     if !check_tui_dependencies() {
         println!("❌ TUI dependencies not available in this build");
         println!("💡 Install with: cargo install hive-ai --features tui");
         return Ok(());
     }
-    
+
     // Initialize TUI
     match HiveTui::run().await {
         Ok(()) => {
@@ -1198,7 +1198,7 @@ async fn launch_tui() -> Result<()> {
             show_startup_banner().await?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -1215,7 +1215,7 @@ impl HiveTui {
     async fn run() -> Result<()> {
         use std::io;
         use std::time::Duration;
-        
+
         println!("┌─────────────────────────────────────────────────────────────┐");
         println!("│  🐝 HiveTechs Consensus - TUI Mode                        │");
         println!("├─────────────────────────────────────────────────────────────┤");
@@ -1247,11 +1247,11 @@ impl HiveTui {
         println!("   • Memory and analytics panels");
         println!();
         println!("⌨️  Press any key to return to CLI mode...");
-        
+
         // Simple key wait
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-        
+
         Ok(())
     }
 }

@@ -1,19 +1,19 @@
 //! Database Performance Optimization
-//! 
+//!
 //! Implements aggressive database optimizations to achieve <1ms latency target.
 //! This module provides revolutionary database performance through connection pooling,
 //! prepared statement caching, and optimized query execution.
 
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
 use anyhow::Result;
-use rusqlite::{Connection};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
 
 use crate::core::performance::{HotPathCache, PerfTimer};
 
@@ -41,7 +41,7 @@ impl Default for DatabaseOptimizationConfig {
             pool_size: 10,
             cache_size: 10000,
             checkpoint_interval: Duration::from_secs(300), // 5 minutes
-            vacuum_interval: Duration::from_secs(3600),   // 1 hour
+            vacuum_interval: Duration::from_secs(3600),    // 1 hour
             pragma_optimizations: true,
         }
     }
@@ -70,19 +70,18 @@ pub struct OptimizedDatabase {
 impl OptimizedDatabase {
     pub async fn new(database_path: &str, config: DatabaseOptimizationConfig) -> Result<Self> {
         let _timer = PerfTimer::new("database_initialization");
-        
+
         // Create connection manager with optimizations
         let config_clone = config.clone();
-        let manager = SqliteConnectionManager::file(database_path)
-            .with_init(move |conn| {
-                if let Err(e) = Self::apply_optimizations(conn, &config_clone) {
-                    return Err(rusqlite::Error::SqliteFailure(
-                        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
-                        Some(format!("Failed to apply optimizations: {}", e))
-                    ));
-                }
-                Ok(())
-            });
+        let manager = SqliteConnectionManager::file(database_path).with_init(move |conn| {
+            if let Err(e) = Self::apply_optimizations(conn, &config_clone) {
+                return Err(rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR),
+                    Some(format!("Failed to apply optimizations: {}", e)),
+                ));
+            }
+            Ok(())
+        });
 
         // Create connection pool
         let pool = Pool::builder()
@@ -120,7 +119,11 @@ impl OptimizedDatabase {
     }
 
     /// Execute query with all optimizations
-    pub async fn execute_optimized<T>(&self, query: &str, params: &[&dyn rusqlite::ToSql]) -> Result<T>
+    pub async fn execute_optimized<T>(
+        &self,
+        query: &str,
+        params: &[&dyn rusqlite::ToSql],
+    ) -> Result<T>
     where
         T: for<'de> Deserialize<'de> + Serialize + Clone + Send + Sync + 'static,
     {
@@ -166,8 +169,7 @@ impl OptimizedDatabase {
         if elapsed > Duration::from_millis(1) {
             warn!(
                 "Database query exceeded target: {:?} > 1ms for query: {}",
-                elapsed,
-                query
+                elapsed, query
             );
         }
 
@@ -184,7 +186,7 @@ impl OptimizedDatabase {
         T: for<'de> Deserialize<'de> + Serialize + Clone,
     {
         let _timer = PerfTimer::new("prepared_statement_execution");
-        
+
         let conn_start = Instant::now();
         let mut conn = self.pool.get()?;
         let connection_time = conn_start.elapsed();
@@ -192,11 +194,12 @@ impl OptimizedDatabase {
         // Get or create prepared statement
         let statement_key = self.normalize_query(query);
         let mut statement_cache = self.statement_cache.write().await;
-        
+
         let result = if let Some(cached_statement) = statement_cache.get(&statement_key) {
             debug!("Using cached prepared statement");
             // Execute with cached statement template
-            self.execute_statement(&mut conn, &cached_statement.sql, params).await?
+            self.execute_statement(&mut conn, &cached_statement.sql, params)
+                .await?
         } else {
             debug!("Creating new prepared statement");
             {
@@ -217,22 +220,18 @@ impl OptimizedDatabase {
     }
 
     /// Execute query directly without prepared statements
-    async fn execute_direct<T>(
-        &self,
-        query: &str,
-        params: &[&dyn rusqlite::ToSql],
-    ) -> Result<T>
+    async fn execute_direct<T>(&self, query: &str, params: &[&dyn rusqlite::ToSql]) -> Result<T>
     where
         T: for<'de> Deserialize<'de> + Serialize + Clone,
     {
         let _timer = PerfTimer::new("direct_execution");
-        
+
         let conn_start = Instant::now();
         let mut conn = self.pool.get()?;
         let connection_time = conn_start.elapsed();
 
         let result = self.execute_statement(&mut conn, query, params).await?;
-        
+
         self.update_connection_metrics(connection_time).await;
         Ok(result)
     }
@@ -250,14 +249,14 @@ impl OptimizedDatabase {
         // This is a simplified implementation
         // In a real implementation, you would handle different query types
         // and properly parse results based on T
-        
+
         if query.trim().to_lowercase().starts_with("select") {
             let mut stmt = conn.prepare(query)?;
             let rows = stmt.query_map(params, |_row| {
                 // Simplified row parsing - would need proper implementation
                 Ok(serde_json::json!({}))
             })?;
-            
+
             let results: Vec<_> = rows.collect::<Result<Vec<_>, _>>()?;
             let serialized = serde_json::to_string(&results)?;
             let result: T = serde_json::from_str(&serialized)?;
@@ -272,49 +271,56 @@ impl OptimizedDatabase {
     }
 
     /// Batch execute multiple queries efficiently
-    pub async fn batch_execute(&self, queries: &[(&str, &[&dyn rusqlite::ToSql])]) -> Result<Vec<QueryResult>> {
+    pub async fn batch_execute(
+        &self,
+        queries: &[(&str, &[&dyn rusqlite::ToSql])],
+    ) -> Result<Vec<QueryResult>> {
         let _timer = PerfTimer::new("batch_execute");
-        
+
         let mut conn = self.pool.get()?;
         let tx = conn.transaction()?;
-        
+
         let mut results = Vec::new();
         for (query, params) in queries {
             let start_time = Instant::now();
-            
+
             // Execute in transaction for efficiency
             let mut stmt = tx.prepare(query)?;
             stmt.execute(*params)?;
-            
+
             results.push(QueryResult {
                 data: "success".to_string(),
                 timestamp: std::time::SystemTime::now(),
             });
-            
+
             self.update_query_metrics(start_time.elapsed(), true).await;
         }
-        
+
         tx.commit()?;
         info!("Batch executed {} queries", queries.len());
         Ok(results)
     }
 
     /// Read operations with optimized connection usage
-    pub async fn read_optimized<T>(&self, query: &str, params: &[&dyn rusqlite::ToSql]) -> Result<Vec<T>>
+    pub async fn read_optimized<T>(
+        &self,
+        query: &str,
+        params: &[&dyn rusqlite::ToSql],
+    ) -> Result<Vec<T>>
     where
         T: for<'de> Deserialize<'de> + Clone,
     {
         let _timer = PerfTimer::new("read_optimized");
-        
+
         // Use read-only connection for better performance
         let conn = self.pool.get()?;
         let mut stmt = conn.prepare(query)?;
-        
+
         let rows = stmt.query_map(params, |_row| {
             // Simplified implementation
             Ok(serde_json::json!({}))
         })?;
-        
+
         let mut results = Vec::new();
         for row in rows {
             let value = row?;
@@ -324,17 +330,21 @@ impl OptimizedDatabase {
                 results.push(typed_value);
             }
         }
-        
+
         Ok(results)
     }
 
     /// Write operations with transaction optimization
-    pub async fn write_optimized(&self, query: &str, params: &[&dyn rusqlite::ToSql]) -> Result<usize> {
+    pub async fn write_optimized(
+        &self,
+        query: &str,
+        params: &[&dyn rusqlite::ToSql],
+    ) -> Result<usize> {
         let _timer = PerfTimer::new("write_optimized");
-        
+
         let conn = self.pool.get()?;
         let rows_affected = conn.execute(query, params)?;
-        
+
         Ok(rows_affected)
     }
 
@@ -355,38 +365,39 @@ impl OptimizedDatabase {
         conn.execute("PRAGMA temp_store = memory", [])?;
         conn.execute("PRAGMA mmap_size = 268435456", [])?; // 256MB
         conn.execute("PRAGMA page_size = 4096", [])?;
-        
+
         // Query optimizations
         conn.execute("PRAGMA optimize", [])?;
         conn.execute("PRAGMA automatic_index = ON", [])?;
-        
+
         // Memory optimizations
         conn.execute("PRAGMA memory_mapped_io = ON", [])?;
-        
+
         debug!("Applied database optimizations");
         Ok(())
     }
 
     /// Generate cache key for query and parameters
     fn generate_cache_key(&self, query: &str, params: &[&dyn rusqlite::ToSql]) -> String {
-        use sha2::{Sha256, Digest};
-        
+        use sha2::{Digest, Sha256};
+
         let mut hasher = Sha256::new();
         hasher.update(query.as_bytes());
-        
+
         // Hash parameters (simplified)
         for (i, _param) in params.iter().enumerate() {
             // In a real implementation, you'd need proper parameter serialization
             hasher.update(format!("param_{}", i).as_bytes());
         }
-        
+
         format!("{:x}", hasher.finalize())
     }
 
     /// Normalize query for statement caching
     fn normalize_query(&self, query: &str) -> String {
         // Remove extra whitespace and normalize for caching
-        query.split_whitespace()
+        query
+            .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ")
             .to_lowercase()
@@ -415,7 +426,11 @@ impl OptimizedDatabase {
         let total_requests = metrics.total_queries as f64;
         if total_requests > 0.0 {
             let current_hits = metrics.cache_hit_rate * total_requests;
-            let new_hits = if cache_hit { current_hits + 1.0 } else { current_hits };
+            let new_hits = if cache_hit {
+                current_hits + 1.0
+            } else {
+                current_hits
+            };
             metrics.cache_hit_rate = new_hits / (total_requests + 1.0);
         } else {
             metrics.cache_hit_rate = if cache_hit { 1.0 } else { 0.0 };
@@ -432,7 +447,7 @@ impl OptimizedDatabase {
     async fn start_maintenance_tasks(&self) {
         let pool = self.pool.clone();
         let config = self.config.clone();
-        
+
         // Checkpoint task
         if config.enable_wal_mode {
             let pool_checkpoint = pool.clone();
@@ -529,7 +544,7 @@ impl PoolHealthMonitor {
     /// Check pool health and performance
     pub async fn check_health(&self) -> Result<PoolHealth> {
         let state = self.pool.state();
-        
+
         // Test connection latency
         let start = Instant::now();
         let _conn = self.pool.get()?;
@@ -556,14 +571,14 @@ pub struct PoolHealth {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::test;
     use tempfile::NamedTempFile;
+    use tokio::test;
 
     #[test]
     async fn test_database_optimization_performance() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_str().unwrap();
-        
+
         let config = DatabaseOptimizationConfig::default();
         let db = OptimizedDatabase::new(db_path, config).await.unwrap();
 
@@ -593,12 +608,12 @@ mod tests {
     async fn test_query_caching() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_str().unwrap();
-        
+
         let config = DatabaseOptimizationConfig::default();
         let db = OptimizedDatabase::new(db_path, config).await.unwrap();
 
         let query = "SELECT 1 as test";
-        
+
         // First execution
         let start = Instant::now();
         let _: serde_json::Value = db.execute_optimized(query, &[]).await.unwrap();
@@ -611,7 +626,7 @@ mod tests {
 
         // Cached execution should be faster
         println!("First: {:?}, Cached: {:?}", first_time, cached_time);
-        
+
         let metrics = db.get_metrics().await;
         assert!(metrics.cache_hit_rate > 0.0);
     }
@@ -620,12 +635,15 @@ mod tests {
     async fn test_batch_execution() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_str().unwrap();
-        
+
         let config = DatabaseOptimizationConfig::default();
         let db = OptimizedDatabase::new(db_path, config).await.unwrap();
 
         let queries = vec![
-            ("CREATE TABLE IF NOT EXISTS batch_test (id INTEGER)", vec![].as_slice()),
+            (
+                "CREATE TABLE IF NOT EXISTS batch_test (id INTEGER)",
+                vec![].as_slice(),
+            ),
             ("INSERT INTO batch_test (id) VALUES (1)", vec![].as_slice()),
             ("INSERT INTO batch_test (id) VALUES (2)", vec![].as_slice()),
         ];
@@ -635,7 +653,7 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert_eq!(results.len(), 3);
-        
+
         // Batch execution should be efficient
         let avg_time_per_query = elapsed / results.len() as u32;
         assert!(avg_time_per_query < Duration::from_millis(1));
@@ -645,13 +663,13 @@ mod tests {
     async fn test_pool_health_monitoring() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_str().unwrap();
-        
+
         let config = DatabaseOptimizationConfig::default();
         let db = OptimizedDatabase::new(db_path, config).await.unwrap();
-        
+
         let monitor = PoolHealthMonitor::new(db.pool.clone());
         let health = monitor.check_health().await.unwrap();
-        
+
         assert!(health.healthy);
         assert!(health.total_connections > 0);
         assert!(health.connection_latency < Duration::from_millis(100));

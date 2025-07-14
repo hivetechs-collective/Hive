@@ -1,17 +1,17 @@
 //! Migration Performance Optimization
-//! 
+//!
 //! Advanced optimization techniques for achieving 10-40x performance improvements
 //! over TypeScript implementation with efficient memory usage and parallel processing.
 
 use crate::core::error::HiveError;
-use crate::migration::database_impl::{ProductionDatabase, MigrationStats, BatchConfig};
-use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
-use tokio::sync::{Semaphore, RwLock};
+use crate::migration::database_impl::{BatchConfig, MigrationStats, ProductionDatabase};
 use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::{RwLock, Semaphore};
 
 /// Performance optimization strategies
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,21 +32,21 @@ pub struct PerformanceConfig {
 /// Disk I/O optimization strategies
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DiskIOStrategy {
-    Sequential,     // Process data sequentially
-    Parallel,       // Parallel read/write operations
-    MemoryMapped,   // Use memory-mapped files
-    Streaming,      // Stream processing
-    Adaptive,       // Adapt strategy based on data size
+    Sequential,   // Process data sequentially
+    Parallel,     // Parallel read/write operations
+    MemoryMapped, // Use memory-mapped files
+    Streaming,    // Stream processing
+    Adaptive,     // Adapt strategy based on data size
 }
 
 /// Batch processing strategies
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BatchStrategy {
-    FixedSize(u32),           // Fixed batch size
-    MemoryBased(u32),         // Based on memory usage
-    AdaptiveSize,             // Adapt based on performance
-    CPUBased,                 // Based on CPU utilization
-    HybridOptimal,            // Optimal hybrid approach
+    FixedSize(u32),   // Fixed batch size
+    MemoryBased(u32), // Based on memory usage
+    AdaptiveSize,     // Adapt based on performance
+    CPUBased,         // Based on CPU utilization
+    HybridOptimal,    // Optimal hybrid approach
 }
 
 /// Performance monitoring and metrics
@@ -143,11 +143,11 @@ pub enum RecommendationPriority {
 /// Implementation effort estimates
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ImplementationEffort {
-    Minimal,    // Configuration change
-    Low,        // Small code changes
-    Medium,     // Moderate refactoring
-    High,       // Significant changes
-    Major,      // Architecture changes
+    Minimal, // Configuration change
+    Low,     // Small code changes
+    Medium,  // Moderate refactoring
+    High,    // Significant changes
+    Major,   // Architecture changes
 }
 
 /// Benchmark comparison against TypeScript
@@ -226,28 +226,31 @@ impl PerformanceOptimizer {
         database: &mut ProductionDatabase,
     ) -> Result<OptimizationResult, HiveError> {
         log::info!("Starting performance optimization analysis");
-        
+
         // Start performance monitoring
         self.start_performance_monitoring().await?;
 
         // Run baseline benchmark
         let baseline_performance = self.measure_baseline_performance(database).await?;
-        
+
         // Apply optimizations
         let optimized_config = self.calculate_optimal_configuration().await?;
-        let optimized_performance = self.measure_optimized_performance(database, &optimized_config).await?;
+        let optimized_performance = self
+            .measure_optimized_performance(database, &optimized_config)
+            .await?;
 
         // Analyze results
-        let optimization_result = self.analyze_optimization_results(
-            baseline_performance,
-            optimized_performance,
-        ).await?;
+        let optimization_result = self
+            .analyze_optimization_results(baseline_performance, optimized_performance)
+            .await?;
 
         // Stop monitoring
         self.stop_performance_monitoring().await?;
 
-        log::info!("Performance optimization completed. Improvement factor: {:.2}x", 
-            optimization_result.performance_improvement_factor);
+        log::info!(
+            "Performance optimization completed. Improvement factor: {:.2}x",
+            optimization_result.performance_improvement_factor
+        );
 
         Ok(optimization_result)
     }
@@ -265,17 +268,23 @@ impl PerformanceOptimizer {
             while monitor_clone.is_monitoring.load(Ordering::Relaxed) {
                 // Update memory usage
                 if let Ok(memory_info) = Self::get_current_memory_usage() {
-                    monitor_clone.current_memory_usage_mb.store(memory_info, Ordering::Relaxed);
-                    
+                    monitor_clone
+                        .current_memory_usage_mb
+                        .store(memory_info, Ordering::Relaxed);
+
                     let current_peak = monitor_clone.peak_memory_usage_mb.load(Ordering::Relaxed);
                     if memory_info > current_peak {
-                        monitor_clone.peak_memory_usage_mb.store(memory_info, Ordering::Relaxed);
+                        monitor_clone
+                            .peak_memory_usage_mb
+                            .store(memory_info, Ordering::Relaxed);
                     }
                 }
 
                 // Update CPU usage
                 if let Ok(cpu_usage) = Self::get_current_cpu_usage().await {
-                    monitor_clone.cpu_usage_percent.store((cpu_usage * 100.0) as u64, Ordering::Relaxed);
+                    monitor_clone
+                        .cpu_usage_percent
+                        .store((cpu_usage * 100.0) as u64, Ordering::Relaxed);
                 }
 
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -299,10 +308,10 @@ impl PerformanceOptimizer {
         log::info!("Measuring baseline performance");
 
         let start_time = Instant::now();
-        
+
         // Simulate basic migration operations
         let test_batch_config = BatchConfig {
-            batch_size: 100, // Small batch size for baseline
+            batch_size: 100,     // Small batch size for baseline
             parallel_batches: 1, // No parallelism for baseline
             memory_limit_mb: 256,
             progress_callback: None,
@@ -310,7 +319,7 @@ impl PerformanceOptimizer {
 
         // Measure performance with basic configuration
         let _result = self.simulate_migration_workload(&test_batch_config).await?;
-        
+
         let duration = start_time.elapsed();
         let memory_usage = self.monitor.peak_memory_usage_mb.load(Ordering::Relaxed);
         let cpu_usage = self.monitor.cpu_usage_percent.load(Ordering::Relaxed) as f64 / 100.0;
@@ -332,21 +341,21 @@ impl PerformanceOptimizer {
             BatchStrategy::MemoryBased(limit_mb) => {
                 // Calculate batch size based on available memory
                 (limit_mb / 4).max(100) // Conservative estimate
-            },
+            }
             BatchStrategy::AdaptiveSize => {
                 // Start with medium size and adapt
                 1000
-            },
+            }
             BatchStrategy::CPUBased => {
                 // Scale with CPU cores
                 self.config.cpu_cores_to_use * 250
-            },
+            }
             BatchStrategy::HybridOptimal => {
                 // Optimal hybrid approach
                 let memory_based = (self.config.memory_limit_mb / 4).max(100);
                 let cpu_based = self.config.cpu_cores_to_use * 250;
                 memory_based.min(cpu_based).max(500)
-            },
+            }
         };
 
         let parallel_batches = if self.config.enable_parallel_processing {
@@ -369,23 +378,30 @@ impl PerformanceOptimizer {
         _database: &ProductionDatabase,
         config: &BatchConfig,
     ) -> Result<PerformanceMeasurement, HiveError> {
-        log::info!("Measuring optimized performance with batch size: {}, parallel batches: {}", 
-            config.batch_size, config.parallel_batches);
+        log::info!(
+            "Measuring optimized performance with batch size: {}, parallel batches: {}",
+            config.batch_size,
+            config.parallel_batches
+        );
 
         let start_time = Instant::now();
-        
+
         // Reset monitoring counters
-        self.monitor.peak_memory_usage_mb.store(0, Ordering::Relaxed);
-        self.monitor.operations_completed.store(0, Ordering::Relaxed);
+        self.monitor
+            .peak_memory_usage_mb
+            .store(0, Ordering::Relaxed);
+        self.monitor
+            .operations_completed
+            .store(0, Ordering::Relaxed);
 
         // Measure performance with optimized configuration
         let _result = self.simulate_migration_workload(config).await?;
-        
+
         let duration = start_time.elapsed();
         let memory_usage = self.monitor.peak_memory_usage_mb.load(Ordering::Relaxed);
         let cpu_usage = self.monitor.cpu_usage_percent.load(Ordering::Relaxed) as f64 / 100.0;
         let operations = self.monitor.operations_completed.load(Ordering::Relaxed);
-        
+
         let throughput = if duration.as_secs() > 0 {
             operations as f64 / duration.as_secs() as f64
         } else {
@@ -418,7 +434,7 @@ impl PerformanceOptimizer {
 
                 let handle = tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
-                    
+
                     // Simulate batch processing
                     Self::simulate_batch_processing(batch_id, batch_size, monitor).await
                 });
@@ -433,7 +449,12 @@ impl PerformanceOptimizer {
         } else {
             // Sequential processing simulation
             for batch_id in 0..total_batches {
-                Self::simulate_batch_processing(batch_id, operations_per_batch, self.monitor.clone()).await?;
+                Self::simulate_batch_processing(
+                    batch_id,
+                    operations_per_batch,
+                    self.monitor.clone(),
+                )
+                .await?;
             }
         }
 
@@ -448,14 +469,14 @@ impl PerformanceOptimizer {
     ) -> Result<(), HiveError> {
         // Simulate database operations with realistic timing
         let operation_time = Duration::from_micros(100); // 100 microseconds per operation
-        
+
         for _ in 0..batch_size {
             // Simulate memory allocation
             let _data = vec![0u8; 1024]; // 1KB per operation
-            
+
             // Simulate processing time
             tokio::time::sleep(operation_time).await;
-            
+
             // Update counters
             monitor.operations_completed.fetch_add(1, Ordering::Relaxed);
             monitor.bytes_processed.fetch_add(1024, Ordering::Relaxed);
@@ -492,18 +513,20 @@ impl PerformanceOptimizer {
 
         let disk_io_efficiency_score = 1.5; // Placeholder
 
-        let overall_optimization_score = (
-            performance_improvement_factor * 0.4 +
-            memory_efficiency_score * 0.2 +
-            cpu_utilization_score * 0.2 +
-            disk_io_efficiency_score * 0.2
-        );
+        let overall_optimization_score = (performance_improvement_factor * 0.4
+            + memory_efficiency_score * 0.2
+            + cpu_utilization_score * 0.2
+            + disk_io_efficiency_score * 0.2);
 
         // Identify bottlenecks
-        let bottlenecks = self.identify_performance_bottlenecks(&baseline, &optimized).await?;
+        let bottlenecks = self
+            .identify_performance_bottlenecks(&baseline, &optimized)
+            .await?;
 
         // Generate recommendations
-        let recommendations = self.generate_optimization_recommendations(&bottlenecks).await?;
+        let recommendations = self
+            .generate_optimization_recommendations(&bottlenecks)
+            .await?;
 
         // Create benchmark comparison
         let benchmark_comparison = BenchmarkComparison {
@@ -520,7 +543,8 @@ impl PerformanceOptimizer {
                 rust_avg_cpu_percent: optimized.cpu_usage_percent,
                 cpu_efficiency_improvement: cpu_utilization_score,
             },
-            meets_target_performance: performance_improvement_factor >= self.config.target_performance_factor,
+            meets_target_performance: performance_improvement_factor
+                >= self.config.target_performance_factor,
         };
 
         Ok(OptimizationResult {
@@ -571,10 +595,13 @@ impl PerformanceOptimizer {
             bottlenecks.push(PerformanceBottleneck {
                 bottleneck_type: BottleneckType::Algorithm,
                 severity: BottleneckSeverity::Medium,
-                description: format!("Performance target not met: {:.1}x vs {:.1}x target", 
-                    improvement_factor, self.config.target_performance_factor),
+                description: format!(
+                    "Performance target not met: {:.1}x vs {:.1}x target",
+                    improvement_factor, self.config.target_performance_factor
+                ),
                 impact_on_performance: 0.4,
-                suggested_solution: "Enable additional optimizations or increase parallelism".to_string(),
+                suggested_solution: "Enable additional optimizations or increase parallelism"
+                    .to_string(),
             });
         }
 
@@ -598,7 +625,7 @@ impl PerformanceOptimizer {
                         expected_improvement: 0.3,
                         implementation_effort: ImplementationEffort::Minimal,
                     });
-                    
+
                     recommendations.push(OptimizationRecommendation {
                         category: OptimizationCategory::MemoryUsage,
                         priority: RecommendationPriority::Medium,
@@ -606,7 +633,7 @@ impl PerformanceOptimizer {
                         expected_improvement: 0.4,
                         implementation_effort: ImplementationEffort::Low,
                     });
-                },
+                }
                 BottleneckType::CPU => {
                     recommendations.push(OptimizationRecommendation {
                         category: OptimizationCategory::ParallelProcessing,
@@ -615,7 +642,7 @@ impl PerformanceOptimizer {
                         expected_improvement: 0.2,
                         implementation_effort: ImplementationEffort::Medium,
                     });
-                },
+                }
                 BottleneckType::Algorithm => {
                     recommendations.push(OptimizationRecommendation {
                         category: OptimizationCategory::AlgorithmOptimization,
@@ -624,7 +651,7 @@ impl PerformanceOptimizer {
                         expected_improvement: 0.5,
                         implementation_effort: ImplementationEffort::Low,
                     });
-                },
+                }
                 _ => {
                     // Add generic recommendations for other bottleneck types
                 }
@@ -646,7 +673,8 @@ impl PerformanceOptimizer {
             recommendations.push(OptimizationRecommendation {
                 category: OptimizationCategory::DatabaseConnections,
                 priority: RecommendationPriority::High,
-                description: "Enable connection pooling for better database performance".to_string(),
+                description: "Enable connection pooling for better database performance"
+                    .to_string(),
                 expected_improvement: 0.3,
                 implementation_effort: ImplementationEffort::Low,
             });
@@ -718,8 +746,14 @@ mod tests {
     async fn test_performance_optimizer_creation() {
         let config = PerformanceConfig::default();
         let optimizer = PerformanceOptimizer::new(config);
-        
-        assert!(optimizer.monitor.operations_completed.load(Ordering::Relaxed) == 0);
+
+        assert!(
+            optimizer
+                .monitor
+                .operations_completed
+                .load(Ordering::Relaxed)
+                == 0
+        );
     }
 
     #[test]
@@ -744,6 +778,9 @@ mod tests {
             implementation_effort: ImplementationEffort::Minimal,
         };
 
-        assert!(matches!(recommendation.priority, RecommendationPriority::High));
+        assert!(matches!(
+            recommendation.priority,
+            RecommendationPriority::High
+        ));
     }
 }

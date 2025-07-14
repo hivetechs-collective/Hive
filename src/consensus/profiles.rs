@@ -1,5 +1,5 @@
 //! Expert profile system for consensus engine
-//! 
+//!
 //! Provides TypeScript-compatible expert templates with enhanced capabilities.
 
 use serde::{Deserialize, Serialize};
@@ -188,7 +188,8 @@ impl ExpertProfileManager {
             ExpertTemplate {
                 id: "lightning-fast".to_string(),
                 name: "Lightning Fast".to_string(),
-                description: "Ultra-high-speed consensus optimized for rapid prototyping".to_string(),
+                description: "Ultra-high-speed consensus optimized for rapid prototyping"
+                    .to_string(),
                 category: ProfileCategory::Speed,
                 scope: ProfileScope::Minimal,
                 expert_level: ExpertLevel::Beginner,
@@ -244,12 +245,12 @@ impl ExpertProfileManager {
                 ],
                 tags: vec!["speed".to_string(), "budget-friendly".to_string()],
             },
-
             // Precision Architect - Maximum quality
             ExpertTemplate {
                 id: "precision-architect".to_string(),
                 name: "Precision Architect".to_string(),
-                description: "Maximum quality consensus for complex architectural decisions".to_string(),
+                description: "Maximum quality consensus for complex architectural decisions"
+                    .to_string(),
                 category: ProfileCategory::Quality,
                 scope: ProfileScope::Production,
                 expert_level: ExpertLevel::Expert,
@@ -304,14 +305,19 @@ impl ExpertProfileManager {
                     "Complex algorithms".to_string(),
                     "Production code review".to_string(),
                 ],
-                tags: vec!["quality".to_string(), "expert".to_string(), "architecture".to_string()],
+                tags: vec![
+                    "quality".to_string(),
+                    "expert".to_string(),
+                    "architecture".to_string(),
+                ],
             },
-
             // Budget Optimizer - Cost-efficient
             ExpertTemplate {
                 id: "budget-optimizer".to_string(),
                 name: "Budget Optimizer".to_string(),
-                description: "Cost-efficient consensus that maximizes value while minimizing expenses".to_string(),
+                description:
+                    "Cost-efficient consensus that maximizes value while minimizing expenses"
+                        .to_string(),
                 category: ProfileCategory::Cost,
                 scope: ProfileScope::Basic,
                 expert_level: ExpertLevel::Intermediate,
@@ -366,14 +372,18 @@ impl ExpertProfileManager {
                     "High-volume processing".to_string(),
                     "Experimentation".to_string(),
                 ],
-                tags: vec!["cost".to_string(), "budget".to_string(), "efficient".to_string()],
+                tags: vec![
+                    "cost".to_string(),
+                    "budget".to_string(),
+                    "efficient".to_string(),
+                ],
             },
-
             // Research Specialist - Deep exploration
             ExpertTemplate {
                 id: "research-specialist".to_string(),
                 name: "Research Specialist".to_string(),
-                description: "Deep exploration consensus for research and complex problem-solving".to_string(),
+                description: "Deep exploration consensus for research and complex problem-solving"
+                    .to_string(),
                 category: ProfileCategory::Research,
                 scope: ProfileScope::Research,
                 expert_level: ExpertLevel::Research,
@@ -394,7 +404,10 @@ impl ExpertProfileManager {
                     },
                     validator: ModelCriteria {
                         ranking_position: Some("top-5".to_string()),
-                        capabilities: Some(vec!["reasoning".to_string(), "verification".to_string()]),
+                        capabilities: Some(vec![
+                            "reasoning".to_string(),
+                            "verification".to_string(),
+                        ]),
                         ..Default::default()
                     },
                     curator: ModelCriteria {
@@ -432,14 +445,19 @@ impl ExpertProfileManager {
                     "Deep problem-solving".to_string(),
                     "Scientific exploration".to_string(),
                 ],
-                tags: vec!["research".to_string(), "deep".to_string(), "exploration".to_string()],
+                tags: vec![
+                    "research".to_string(),
+                    "deep".to_string(),
+                    "exploration".to_string(),
+                ],
             },
-
             // Debug Specialist - Troubleshooting focus
             ExpertTemplate {
                 id: "debug-specialist".to_string(),
                 name: "Debug Specialist".to_string(),
-                description: "Specialized consensus for debugging and troubleshooting complex issues".to_string(),
+                description:
+                    "Specialized consensus for debugging and troubleshooting complex issues"
+                        .to_string(),
                 category: ProfileCategory::Troubleshooting,
                 scope: ProfileScope::Standard,
                 expert_level: ExpertLevel::Expert,
@@ -495,14 +513,18 @@ impl ExpertProfileManager {
                     "Performance debugging".to_string(),
                     "Code review".to_string(),
                 ],
-                tags: vec!["debug".to_string(), "troubleshooting".to_string(), "code".to_string()],
+                tags: vec![
+                    "debug".to_string(),
+                    "troubleshooting".to_string(),
+                    "code".to_string(),
+                ],
             },
-
             // Balanced Generalist - All-purpose
             ExpertTemplate {
                 id: "balanced-generalist".to_string(),
                 name: "Balanced Generalist".to_string(),
-                description: "Well-rounded consensus for general-purpose development tasks".to_string(),
+                description: "Well-rounded consensus for general-purpose development tasks"
+                    .to_string(),
                 category: ProfileCategory::Quality,
                 scope: ProfileScope::Standard,
                 expert_level: ExpertLevel::Intermediate,
@@ -558,14 +580,18 @@ impl ExpertProfileManager {
                     "Code generation".to_string(),
                     "Explanations".to_string(),
                 ],
-                tags: vec!["balanced".to_string(), "general".to_string(), "versatile".to_string()],
+                tags: vec![
+                    "balanced".to_string(),
+                    "general".to_string(),
+                    "versatile".to_string(),
+                ],
             },
-
             // Enterprise Architect - Production systems
             ExpertTemplate {
                 id: "enterprise-architect".to_string(),
                 name: "Enterprise Architect".to_string(),
-                description: "Enterprise-grade consensus for production systems and architecture".to_string(),
+                description: "Enterprise-grade consensus for production systems and architecture"
+                    .to_string(),
                 category: ProfileCategory::Quality,
                 scope: ProfileScope::Production,
                 expert_level: ExpertLevel::Expert,
@@ -622,14 +648,19 @@ impl ExpertProfileManager {
                     "Security design".to_string(),
                     "Compliance review".to_string(),
                 ],
-                tags: vec!["enterprise".to_string(), "architecture".to_string(), "production".to_string()],
+                tags: vec![
+                    "enterprise".to_string(),
+                    "architecture".to_string(),
+                    "production".to_string(),
+                ],
             },
-
             // Creative Innovator - Innovative solutions
             ExpertTemplate {
                 id: "creative-innovator".to_string(),
                 name: "Creative Innovator".to_string(),
-                description: "Creative consensus for innovative solutions and out-of-the-box thinking".to_string(),
+                description:
+                    "Creative consensus for innovative solutions and out-of-the-box thinking"
+                        .to_string(),
                 category: ProfileCategory::Research,
                 scope: ProfileScope::Standard,
                 expert_level: ExpertLevel::Advanced,
@@ -679,14 +710,18 @@ impl ExpertProfileManager {
                     "Creative solutions".to_string(),
                     "Prototyping".to_string(),
                 ],
-                tags: vec!["creative".to_string(), "innovative".to_string(), "exploration".to_string()],
+                tags: vec![
+                    "creative".to_string(),
+                    "innovative".to_string(),
+                    "exploration".to_string(),
+                ],
             },
-
             // Teaching Assistant - Educational focus
             ExpertTemplate {
                 id: "teaching-assistant".to_string(),
                 name: "Teaching Assistant".to_string(),
-                description: "Educational consensus optimized for clear explanations and learning".to_string(),
+                description: "Educational consensus optimized for clear explanations and learning"
+                    .to_string(),
                 category: ProfileCategory::Quality,
                 scope: ProfileScope::Basic,
                 expert_level: ExpertLevel::Intermediate,
@@ -736,7 +771,11 @@ impl ExpertProfileManager {
                     "Documentation".to_string(),
                     "Learning resources".to_string(),
                 ],
-                tags: vec!["education".to_string(), "teaching".to_string(), "clear".to_string()],
+                tags: vec![
+                    "education".to_string(),
+                    "teaching".to_string(),
+                    "clear".to_string(),
+                ],
             },
         ]
     }
@@ -771,7 +810,11 @@ impl ExpertProfileManager {
     pub fn get_recommended_for_use_case(&self, use_case: &str) -> Vec<&ExpertTemplate> {
         self.templates
             .iter()
-            .filter(|t| t.use_cases.iter().any(|uc| uc.to_lowercase().contains(&use_case.to_lowercase())))
+            .filter(|t| {
+                t.use_cases
+                    .iter()
+                    .any(|uc| uc.to_lowercase().contains(&use_case.to_lowercase()))
+            })
             .collect()
     }
 }

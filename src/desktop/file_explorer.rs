@@ -1,19 +1,19 @@
 //! File Explorer Component
 
+use crate::desktop::{components::*, events::MouseEventUtils, state::*};
+use dioxus::events::{KeyboardEvent, MouseData};
 use dioxus::prelude::*;
-use dioxus::events::{MouseData, KeyboardEvent};
-use crate::desktop::{state::*, components::*, events::MouseEventUtils};
 
 /// File Explorer Component - VS Code-like file tree
 #[component]
 pub fn FileExplorer() -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let state = app_state.read();
-    
+
     rsx! {
         div {
             class: "file-explorer",
-            
+
             // Header
             div {
                 class: "explorer-header",
@@ -27,7 +27,7 @@ pub fn FileExplorer() -> Element {
                     i { class: "fa-solid fa-chevron-left" }
                 }
             }
-            
+
             // File Tree
             div {
                 class: "file-tree",
@@ -80,12 +80,12 @@ fn FileTreeItem(file: FileItem) -> Element {
         let state = app_state.read();
         state.file_explorer.selected_file.as_ref() == Some(&file.path)
     };
-    
+
     let mut class_name = String::from("file-item");
     if is_selected {
         class_name.push_str(" selected");
     }
-    
+
     // Add git status to class for styling
     let git_status_class = file.git_status.as_ref().map(|status| match status {
         GitFileStatus::Modified => "modified",
@@ -96,14 +96,14 @@ fn FileTreeItem(file: FileItem) -> Element {
         GitFileStatus::Copied => "copied",
         GitFileStatus::Ignored => "ignored",
     });
-    
+
     // Clone paths and directory flag for closures to avoid move issues
     let file_path_click = file.path.clone();
     let file_path_context = file.path.clone();
     let file_path_drag = file.path.clone();
     let file_path_drop = file.path.clone();
     let is_directory = file.is_directory;
-    
+
     rsx! {
         div {
             class: "{class_name}",
@@ -126,7 +126,7 @@ fn FileTreeItem(file: FileItem) -> Element {
                 tracing::debug!("Right click on file: {}", file_path_context.display());
             },
             ondragstart: move |evt| {
-                // Set drag data  
+                // Set drag data
                 // TODO: Fix drag and drop API for Dioxus 0.5
                 tracing::debug!("Drag started for: {}", file_path_drag.display());
             },
@@ -142,7 +142,7 @@ fn FileTreeItem(file: FileItem) -> Element {
                     tracing::debug!("Drop on directory: {}", file_path_drop.display());
                 }
             },
-            
+
             span {
                 class: "file-icon",
                 i {
@@ -154,12 +154,12 @@ fn FileTreeItem(file: FileItem) -> Element {
                     "data-file-type": file.file_type.extension()
                 }
             }
-            
+
             span {
                 class: "file-name",
                 "{file.name}"
             }
-            
+
             if let Some(git_status) = &file.git_status {
                 span {
                     class: "git-status",
@@ -184,7 +184,7 @@ fn FileTreeItem(file: FileItem) -> Element {
                 }
             }
         }
-        
+
         // Render children if directory is expanded
         if file.is_directory && file.is_expanded {
             div {

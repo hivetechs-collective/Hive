@@ -1,5 +1,5 @@
 //! Enhanced File Explorer Component
-//! 
+//!
 //! VS Code-style file tree with proper width and functionality
 
 use dioxus::prelude::*;
@@ -12,26 +12,26 @@ pub fn FileExplorer() -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let mut search_query = use_signal(String::new);
     let mut show_hidden = use_signal(|| false);
-    
+
     rsx! {
         div {
             class: "file-explorer-container",
             style: "width: 240px; background: var(--vscode-sideBar-background); height: 100%; display: flex; flex-direction: column;",
-            
+
             // Explorer Header
             div {
                 class: "explorer-header",
                 style: "padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--vscode-sideBar-border);",
-                
+
                 h3 {
                     style: "font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; color: var(--vscode-sideBar-foreground);",
                     "EXPLORER"
                 }
-                
+
                 div {
                     class: "explorer-actions",
                     style: "display: flex; gap: 4px;",
-                    
+
                     button {
                         class: "btn-icon",
                         title: "New File",
@@ -41,7 +41,7 @@ pub fn FileExplorer() -> Element {
                         },
                         i { class: "fa-solid fa-file-plus" }
                     }
-                    
+
                     button {
                         class: "btn-icon",
                         title: "New Folder",
@@ -51,7 +51,7 @@ pub fn FileExplorer() -> Element {
                         },
                         i { class: "fa-solid fa-folder-plus" }
                     }
-                    
+
                     button {
                         class: "btn-icon",
                         title: "Refresh Explorer",
@@ -60,7 +60,7 @@ pub fn FileExplorer() -> Element {
                         },
                         i { class: "fa-solid fa-arrow-rotate-right" }
                     }
-                    
+
                     button {
                         class: "btn-icon",
                         title: "Collapse All",
@@ -71,21 +71,21 @@ pub fn FileExplorer() -> Element {
                     }
                 }
             }
-            
+
             // Search Box
             div {
                 class: "explorer-search",
                 style: "padding: 8px 12px; border-bottom: 1px solid var(--vscode-sideBar-border);",
-                
+
                 div {
                     class: "search-input",
                     style: "display: flex; align-items: center; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); border-radius: 4px; padding: 4px 8px;",
-                    
+
                     i {
                         class: "fa-solid fa-magnifying-glass",
                         style: "font-size: 12px; margin-right: 6px; opacity: 0.6;"
                     }
-                    
+
                     input {
                         style: "background: transparent; border: none; outline: none; flex: 1; font-size: 13px; color: var(--vscode-input-foreground);",
                         placeholder: "Search files...",
@@ -95,7 +95,7 @@ pub fn FileExplorer() -> Element {
                             app_state.write().file_explorer.filter_files(&evt.value());
                         }
                     }
-                    
+
                     if !search_query.read().is_empty() {
                         button {
                             class: "btn-icon",
@@ -109,20 +109,20 @@ pub fn FileExplorer() -> Element {
                     }
                 }
             }
-            
+
             // Workspace Info
             div {
                 class: "workspace-info",
                 style: "padding: 8px 12px; border-bottom: 1px solid var(--vscode-sideBar-border);",
-                
+
                 div {
                     style: "display: flex; align-items: center; justify-content: space-between;",
-                    
+
                     span {
                         style: "font-size: 12px; font-weight: 600; color: var(--vscode-sideBar-foreground);",
                         "HIVE AI"
                     }
-                    
+
                     button {
                         class: "btn-icon",
                         style: "width: 20px; height: 20px;",
@@ -131,19 +131,19 @@ pub fn FileExplorer() -> Element {
                             show_hidden.set(!*show_hidden.read());
                             app_state.write().file_explorer.set_show_hidden(*show_hidden.read());
                         },
-                        i { 
+                        i {
                             class: if *show_hidden.read() { "fa-solid fa-eye" } else { "fa-solid fa-eye-slash" },
                             style: "font-size: 12px;"
                         }
                     }
                 }
             }
-            
+
             // File Tree
             div {
                 class: "file-tree-container",
                 style: "flex: 1; overflow-y: auto; overflow-x: hidden; padding: 4px 0;",
-                
+
                 if app_state.read().file_explorer.files.is_empty() {
                     div {
                         style: "padding: 20px; text-align: center; color: var(--vscode-tab-inactiveForeground); font-size: 13px;",
@@ -161,19 +161,19 @@ pub fn FileExplorer() -> Element {
                     }
                 } else {
                     for file in &app_state.read().file_explorer.files {
-                        FileTreeItem { 
+                        FileTreeItem {
                             file: file.clone(),
                             depth: 0
                         }
                     }
                 }
             }
-            
+
             // Status Line
             div {
                 class: "explorer-status",
                 style: "padding: 6px 12px; border-top: 1px solid var(--vscode-sideBar-border); font-size: 11px; color: var(--vscode-tab-inactiveForeground);",
-                
+
                 if let Some(selected) = &app_state.read().file_explorer.selected_file {
                     "{selected.file_name().unwrap_or_default().to_string_lossy()}"
                 } else {
@@ -190,16 +190,16 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let mut is_renaming = use_signal(|| false);
     let mut rename_value = use_signal(|| file.name.clone());
-    
+
     let is_selected = {
         let state = app_state.read();
         state.file_explorer.selected_file.as_ref() == Some(&file.path)
     };
-    
+
     let indent = depth * 20;
     let file_path = file.path.clone();
     let is_directory = file.is_directory;
-    
+
     // Git status styling
     let git_class = file.git_status.as_ref().map(|status| match status {
         GitFileStatus::Modified => "git-modified",
@@ -210,13 +210,13 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
         GitFileStatus::Copied => "git-copied",
         GitFileStatus::Ignored => "git-ignored",
     }).unwrap_or("");
-    
+
     rsx! {
         div {
             class: "file-tree-item {git_class}",
             "data-selected": is_selected,
             style: "display: flex; flex-direction: column;",
-            
+
             div {
                 class: "file-item-row",
                 style: "display: flex; align-items: center; padding: 2px 8px; cursor: pointer; user-select: none;",
@@ -239,10 +239,10 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
                     // TODO: Show context menu
                     tracing::debug!("Context menu for: {}", file_path.display());
                 },
-                
+
                 // Indentation
                 span { style: "width: {indent}px; flex-shrink: 0;" }
-                
+
                 // Expand/Collapse arrow for directories
                 if is_directory {
                     span {
@@ -261,7 +261,7 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
                 } else {
                     span { style: "width: 16px; flex-shrink: 0;" }
                 }
-                
+
                 // File/Folder icon
                 span {
                     class: "file-icon",
@@ -280,7 +280,7 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
                         }
                     }
                 }
-                
+
                 // File name
                 if *is_renaming.read() {
                     input {
@@ -321,7 +321,7 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
                         "{file.name}"
                     }
                 }
-                
+
                 // Git status indicator
                 if let Some(git_status) = &file.git_status {
                     span {
@@ -338,7 +338,7 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
                         },
                         title: match git_status {
                             GitFileStatus::Modified => "Modified",
-                            GitFileStatus::Added => "Added", 
+                            GitFileStatus::Added => "Added",
                             GitFileStatus::Deleted => "Deleted",
                             GitFileStatus::Untracked => "Untracked",
                             GitFileStatus::Renamed => "Renamed",
@@ -357,13 +357,13 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
                     }
                 }
             }
-            
+
             // Render children if expanded
             if file.is_directory && file.is_expanded && !file.children.is_empty() {
                 div {
                     class: "file-children",
                     for child in &file.children {
-                        FileTreeItem { 
+                        FileTreeItem {
                             file: child.clone(),
                             depth: depth + 1
                         }

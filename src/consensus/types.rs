@@ -1,11 +1,11 @@
 // Type definitions for consensus engine
 // Matches TypeScript interface definitions for compatibility
 
+use crate::consensus::temporal::TemporalContext;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use crate::consensus::temporal::TemporalContext;
 
 /// Consensus pipeline stages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

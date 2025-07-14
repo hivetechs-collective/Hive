@@ -1,9 +1,8 @@
 /// OpenRouter API Client
-/// 
+///
 /// Core implementation of the OpenRouter API client with authentication,
 /// request handling, and error management. Maintains 100% compatibility
 /// with the TypeScript implementation while providing 10-40x performance improvement.
-
 use anyhow::{Context, Result};
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
@@ -202,10 +201,7 @@ impl OpenRouterClient {
     }
 
     /// Execute a single request to OpenRouter
-    async fn execute_request(
-        &self,
-        request: &ChatCompletionRequest,
-    ) -> Result<OpenRouterResponse> {
+    async fn execute_request(&self, request: &ChatCompletionRequest) -> Result<OpenRouterResponse> {
         let url = format!("{}/chat/completions", OPENROUTER_API_BASE);
 
         let response = self

@@ -1,12 +1,12 @@
 //! Risk Analysis and Mitigation
-//! 
+//!
 //! Identifies potential risks and provides mitigation strategies
 
-use crate::core::error::{HiveResult, HiveError};
+use crate::core::error::{HiveError, HiveResult};
 use crate::planning::types::*;
+use chrono::Duration;
 use std::collections::HashMap;
 use uuid::Uuid;
-use chrono::Duration;
 
 /// Risk analysis engine
 pub struct RiskAnalyzer {
@@ -56,114 +56,122 @@ impl RiskAnalyzer {
     /// Analyze tasks and context to identify risks
     pub fn analyze(&self, tasks: &[Task], context: &PlanningContext) -> HiveResult<Vec<Risk>> {
         let mut risks = Vec::new();
-        
+
         // Analyze task-specific risks
         for task in tasks {
             risks.extend(self.analyze_task_risks(task, context)?);
         }
-        
+
         // Analyze overall project risks
         risks.extend(self.analyze_project_risks(tasks, context)?);
-        
+
         // Analyze dependency risks
         risks.extend(self.analyze_dependency_risks(tasks)?);
-        
+
         // Analyze resource risks
         risks.extend(self.analyze_resource_risks(tasks, context)?);
-        
+
         // Score and prioritize risks
         self.score_risks(&mut risks);
-        
+
         // Generate mitigation strategies
         for risk in &mut risks {
             risk.mitigation_strategies = self.generate_mitigations(risk)?;
         }
-        
+
         // Sort by severity and probability
         risks.sort_by(|a, b| {
             let a_score = self.calculate_risk_score(a);
             let b_score = self.calculate_risk_score(b);
-            b_score.partial_cmp(&a_score).unwrap_or(std::cmp::Ordering::Equal)
+            b_score
+                .partial_cmp(&a_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
-        
+
         Ok(risks)
     }
 
     /// Analyze risks specific to individual tasks
     fn analyze_task_risks(&self, task: &Task, context: &PlanningContext) -> HiveResult<Vec<Risk>> {
         let mut risks = Vec::new();
-        
+
         // Check for complexity risks
         if task.estimated_duration > Duration::hours(8) {
             risks.push(self.create_complexity_risk(task)?);
         }
-        
+
         // Check for skill gaps
         if !task.required_skills.is_empty() {
             if let Some(risk) = self.check_skill_gap_risk(task, context)? {
                 risks.push(risk);
             }
         }
-        
+
         // Check for resource availability
         for resource in &task.resources {
             if resource.availability != ResourceAvailability::Available {
                 risks.push(self.create_resource_risk(task, resource)?);
             }
         }
-        
+
         // Check for testing risks
         if task.task_type == TaskType::Implementation && task.acceptance_criteria.is_empty() {
             risks.push(self.create_testing_risk(task)?);
         }
-        
+
         Ok(risks)
     }
 
     /// Analyze overall project risks
-    fn analyze_project_risks(&self, tasks: &[Task], context: &PlanningContext) -> HiveResult<Vec<Risk>> {
+    fn analyze_project_risks(
+        &self,
+        tasks: &[Task],
+        context: &PlanningContext,
+    ) -> HiveResult<Vec<Risk>> {
         let mut risks = Vec::new();
-        
+
         // Timeline risk
-        let total_duration: Duration = tasks.iter()
-            .map(|t| t.estimated_duration)
-            .sum();
-        
+        let total_duration: Duration = tasks.iter().map(|t| t.estimated_duration).sum();
+
         if let Some(constraint) = context.time_constraints {
             if total_duration > constraint {
                 risks.push(self.create_timeline_risk(total_duration, constraint)?);
             }
         }
-        
+
         // Team size risk
         if context.team_size == 1 && tasks.len() > 10 {
             risks.push(self.create_workload_risk(tasks.len())?);
         }
-        
+
         // Technology risk
         if context.technology_stack.len() > 5 {
             risks.push(self.create_technology_complexity_risk(&context.technology_stack)?);
         }
-        
+
         // Experience level risk
-        if context.experience_level == ExperienceLevel::Beginner && 
-           tasks.iter().any(|t| t.task_type == TaskType::Design || t.task_type == TaskType::Refactoring) {
+        if context.experience_level == ExperienceLevel::Beginner
+            && tasks
+                .iter()
+                .any(|t| t.task_type == TaskType::Design || t.task_type == TaskType::Refactoring)
+        {
             risks.push(self.create_experience_risk()?);
         }
-        
+
         Ok(risks)
     }
 
     /// Analyze dependency-related risks
     fn analyze_dependency_risks(&self, tasks: &[Task]) -> HiveResult<Vec<Risk>> {
         let mut risks = Vec::new();
-        
+
         // Check for circular dependencies
         if self.has_circular_dependencies(tasks) {
             risks.push(Risk {
                 id: Uuid::new_v4().to_string(),
                 title: "Circular Dependencies Detected".to_string(),
-                description: "Tasks have circular dependencies that will prevent execution".to_string(),
+                description: "Tasks have circular dependencies that will prevent execution"
+                    .to_string(),
                 severity: RiskSeverity::Critical,
                 probability: 1.0,
                 impact: RiskImpact {
@@ -176,20 +184,24 @@ impl RiskAnalyzer {
                 affected_tasks: tasks.iter().map(|t| t.id.clone()).collect(),
             });
         }
-        
+
         // Check for long dependency chains
         let max_chain_length = self.find_longest_dependency_chain(tasks);
         if max_chain_length > 5 {
             risks.push(self.create_dependency_chain_risk(max_chain_length)?);
         }
-        
+
         Ok(risks)
     }
 
     /// Analyze resource-related risks
-    fn analyze_resource_risks(&self, tasks: &[Task], context: &PlanningContext) -> HiveResult<Vec<Risk>> {
+    fn analyze_resource_risks(
+        &self,
+        tasks: &[Task],
+        context: &PlanningContext,
+    ) -> HiveResult<Vec<Risk>> {
         let mut risks = Vec::new();
-        
+
         // Count required resources
         let mut resource_counts: HashMap<String, f64> = HashMap::new();
         for task in tasks {
@@ -197,23 +209,23 @@ impl RiskAnalyzer {
                 *resource_counts.entry(resource.name.clone()).or_insert(0.0) += resource.quantity;
             }
         }
-        
+
         // Check for resource conflicts
         for (resource_name, total_quantity) in resource_counts {
             if total_quantity > 1.0 && resource_name.contains("Developer") {
                 risks.push(self.create_resource_conflict_risk(&resource_name, total_quantity)?);
             }
         }
-        
+
         Ok(risks)
     }
 
     /// Generate mitigation strategies for a risk
     fn generate_mitigations(&self, risk: &Risk) -> HiveResult<Vec<MitigationStrategy>> {
         let category = self.determine_risk_category(risk);
-        
+
         let mut strategies = Vec::new();
-        
+
         if let Some(templates) = self.mitigation_database.get(&category) {
             for template in templates {
                 strategies.push(MitigationStrategy {
@@ -225,13 +237,17 @@ impl RiskAnalyzer {
                 });
             }
         }
-        
+
         // Add risk-specific mitigations
         strategies.extend(self.generate_specific_mitigations(risk)?);
-        
+
         // Sort by effectiveness
-        strategies.sort_by(|a, b| b.effectiveness.partial_cmp(&a.effectiveness).unwrap_or(std::cmp::Ordering::Equal));
-        
+        strategies.sort_by(|a, b| {
+            b.effectiveness
+                .partial_cmp(&a.effectiveness)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
         Ok(strategies)
     }
 
@@ -241,25 +257,41 @@ impl RiskAnalyzer {
         vec![
             RiskPattern {
                 category: RiskCategory::Technical,
-                indicators: vec!["complex".to_string(), "new technology".to_string(), "integration".to_string()],
+                indicators: vec![
+                    "complex".to_string(),
+                    "new technology".to_string(),
+                    "integration".to_string(),
+                ],
                 base_severity: RiskSeverity::High,
                 base_probability: 0.6,
             },
             RiskPattern {
                 category: RiskCategory::Timeline,
-                indicators: vec!["deadline".to_string(), "tight schedule".to_string(), "dependencies".to_string()],
+                indicators: vec![
+                    "deadline".to_string(),
+                    "tight schedule".to_string(),
+                    "dependencies".to_string(),
+                ],
                 base_severity: RiskSeverity::High,
                 base_probability: 0.7,
             },
             RiskPattern {
                 category: RiskCategory::Resource,
-                indicators: vec!["limited resources".to_string(), "skill gap".to_string(), "availability".to_string()],
+                indicators: vec![
+                    "limited resources".to_string(),
+                    "skill gap".to_string(),
+                    "availability".to_string(),
+                ],
                 base_severity: RiskSeverity::Medium,
                 base_probability: 0.5,
             },
             RiskPattern {
                 category: RiskCategory::Quality,
-                indicators: vec!["no tests".to_string(), "unclear requirements".to_string(), "rushed".to_string()],
+                indicators: vec![
+                    "no tests".to_string(),
+                    "unclear requirements".to_string(),
+                    "rushed".to_string(),
+                ],
                 base_severity: RiskSeverity::High,
                 base_probability: 0.8,
             },
@@ -268,91 +300,103 @@ impl RiskAnalyzer {
 
     fn init_mitigation_database() -> HashMap<RiskCategory, Vec<MitigationTemplate>> {
         let mut database = HashMap::new();
-        
-        database.insert(RiskCategory::Technical, vec![
-            MitigationTemplate {
-                description: "Conduct proof of concept for new technologies".to_string(),
-                effectiveness: 0.8,
-                cost_factor: 0.2,
-                time_factor: 0.3,
-            },
-            MitigationTemplate {
-                description: "Allocate time for learning and experimentation".to_string(),
-                effectiveness: 0.7,
-                cost_factor: 0.1,
-                time_factor: 0.4,
-            },
-            MitigationTemplate {
-                description: "Seek expert consultation or mentoring".to_string(),
-                effectiveness: 0.9,
-                cost_factor: 0.5,
-                time_factor: 0.2,
-            },
-        ]);
-        
-        database.insert(RiskCategory::Timeline, vec![
-            MitigationTemplate {
-                description: "Prioritize critical path tasks".to_string(),
-                effectiveness: 0.7,
-                cost_factor: 0.0,
-                time_factor: 0.0,
-            },
-            MitigationTemplate {
-                description: "Add buffer time to estimates".to_string(),
-                effectiveness: 0.6,
-                cost_factor: 0.0,
-                time_factor: 0.2,
-            },
-            MitigationTemplate {
-                description: "Consider parallel execution where possible".to_string(),
-                effectiveness: 0.8,
-                cost_factor: 0.3,
-                time_factor: -0.3,
-            },
-        ]);
-        
-        database.insert(RiskCategory::Resource, vec![
-            MitigationTemplate {
-                description: "Cross-train team members".to_string(),
-                effectiveness: 0.7,
-                cost_factor: 0.2,
-                time_factor: 0.3,
-            },
-            MitigationTemplate {
-                description: "Hire contractors or consultants".to_string(),
-                effectiveness: 0.9,
-                cost_factor: 0.8,
-                time_factor: 0.1,
-            },
-            MitigationTemplate {
-                description: "Simplify requirements to match available resources".to_string(),
-                effectiveness: 0.6,
-                cost_factor: -0.2,
-                time_factor: -0.2,
-            },
-        ]);
-        
-        database.insert(RiskCategory::Quality, vec![
-            MitigationTemplate {
-                description: "Implement comprehensive testing strategy".to_string(),
-                effectiveness: 0.9,
-                cost_factor: 0.3,
-                time_factor: 0.4,
-            },
-            MitigationTemplate {
-                description: "Add code review checkpoints".to_string(),
-                effectiveness: 0.8,
-                cost_factor: 0.1,
-                time_factor: 0.2,
-            },
-            MitigationTemplate {
-                description: "Define clear acceptance criteria upfront".to_string(),
-                effectiveness: 0.7,
-                cost_factor: 0.0,
-                time_factor: 0.1,
-            },
-        ]);
-        
+
+        database.insert(
+            RiskCategory::Technical,
+            vec![
+                MitigationTemplate {
+                    description: "Conduct proof of concept for new technologies".to_string(),
+                    effectiveness: 0.8,
+                    cost_factor: 0.2,
+                    time_factor: 0.3,
+                },
+                MitigationTemplate {
+                    description: "Allocate time for learning and experimentation".to_string(),
+                    effectiveness: 0.7,
+                    cost_factor: 0.1,
+                    time_factor: 0.4,
+                },
+                MitigationTemplate {
+                    description: "Seek expert consultation or mentoring".to_string(),
+                    effectiveness: 0.9,
+                    cost_factor: 0.5,
+                    time_factor: 0.2,
+                },
+            ],
+        );
+
+        database.insert(
+            RiskCategory::Timeline,
+            vec![
+                MitigationTemplate {
+                    description: "Prioritize critical path tasks".to_string(),
+                    effectiveness: 0.7,
+                    cost_factor: 0.0,
+                    time_factor: 0.0,
+                },
+                MitigationTemplate {
+                    description: "Add buffer time to estimates".to_string(),
+                    effectiveness: 0.6,
+                    cost_factor: 0.0,
+                    time_factor: 0.2,
+                },
+                MitigationTemplate {
+                    description: "Consider parallel execution where possible".to_string(),
+                    effectiveness: 0.8,
+                    cost_factor: 0.3,
+                    time_factor: -0.3,
+                },
+            ],
+        );
+
+        database.insert(
+            RiskCategory::Resource,
+            vec![
+                MitigationTemplate {
+                    description: "Cross-train team members".to_string(),
+                    effectiveness: 0.7,
+                    cost_factor: 0.2,
+                    time_factor: 0.3,
+                },
+                MitigationTemplate {
+                    description: "Hire contractors or consultants".to_string(),
+                    effectiveness: 0.9,
+                    cost_factor: 0.8,
+                    time_factor: 0.1,
+                },
+                MitigationTemplate {
+                    description: "Simplify requirements to match available resources".to_string(),
+                    effectiveness: 0.6,
+                    cost_factor: -0.2,
+                    time_factor: -0.2,
+                },
+            ],
+        );
+
+        database.insert(
+            RiskCategory::Quality,
+            vec![
+                MitigationTemplate {
+                    description: "Implement comprehensive testing strategy".to_string(),
+                    effectiveness: 0.9,
+                    cost_factor: 0.3,
+                    time_factor: 0.4,
+                },
+                MitigationTemplate {
+                    description: "Add code review checkpoints".to_string(),
+                    effectiveness: 0.8,
+                    cost_factor: 0.1,
+                    time_factor: 0.2,
+                },
+                MitigationTemplate {
+                    description: "Define clear acceptance criteria upfront".to_string(),
+                    effectiveness: 0.7,
+                    cost_factor: 0.0,
+                    time_factor: 0.1,
+                },
+            ],
+        );
+
         database
     }
 
@@ -360,7 +404,11 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: format!("High Complexity: {}", task.title),
-            description: format!("Task '{}' has high complexity with {} hour estimate", task.title, task.estimated_duration.num_hours()),
+            description: format!(
+                "Task '{}' has high complexity with {} hour estimate",
+                task.title,
+                task.estimated_duration.num_hours()
+            ),
             severity: RiskSeverity::Medium,
             probability: 0.6,
             impact: RiskImpact {
@@ -374,14 +422,25 @@ impl RiskAnalyzer {
         })
     }
 
-    fn check_skill_gap_risk(&self, task: &Task, context: &PlanningContext) -> HiveResult<Option<Risk>> {
+    fn check_skill_gap_risk(
+        &self,
+        task: &Task,
+        context: &PlanningContext,
+    ) -> HiveResult<Option<Risk>> {
         // Simple skill gap detection based on experience level
-        if context.experience_level == ExperienceLevel::Beginner && 
-           task.required_skills.iter().any(|s| s.contains("advanced") || s.contains("expert")) {
+        if context.experience_level == ExperienceLevel::Beginner
+            && task
+                .required_skills
+                .iter()
+                .any(|s| s.contains("advanced") || s.contains("expert"))
+        {
             return Ok(Some(Risk {
                 id: Uuid::new_v4().to_string(),
                 title: format!("Skill Gap: {}", task.title),
-                description: format!("Task requires skills that may exceed team's experience level: {}", task.required_skills.join(", ")),
+                description: format!(
+                    "Task requires skills that may exceed team's experience level: {}",
+                    task.required_skills.join(", ")
+                ),
                 severity: RiskSeverity::High,
                 probability: 0.7,
                 impact: RiskImpact {
@@ -401,7 +460,10 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: format!("Resource Availability: {}", resource.name),
-            description: format!("Resource '{}' has limited availability for task '{}'", resource.name, task.title),
+            description: format!(
+                "Resource '{}' has limited availability for task '{}'",
+                resource.name, task.title
+            ),
             severity: RiskSeverity::Medium,
             probability: 0.5,
             impact: RiskImpact {
@@ -419,7 +481,8 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: format!("Missing Test Criteria: {}", task.title),
-            description: "Implementation task lacks clear acceptance criteria for testing".to_string(),
+            description: "Implementation task lacks clear acceptance criteria for testing"
+                .to_string(),
             severity: RiskSeverity::High,
             probability: 0.8,
             impact: RiskImpact {
@@ -438,8 +501,12 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: "Timeline Overrun Risk".to_string(),
-            description: format!("Estimated duration ({} days) exceeds time constraint ({} days) by {} days", 
-                total.num_days(), constraint.num_days(), overrun.num_days()),
+            description: format!(
+                "Estimated duration ({} days) exceeds time constraint ({} days) by {} days",
+                total.num_days(),
+                constraint.num_days(),
+                overrun.num_days()
+            ),
             severity: RiskSeverity::Critical,
             probability: 0.9,
             impact: RiskImpact {
@@ -457,7 +524,10 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: "Single Developer Workload".to_string(),
-            description: format!("Single developer responsible for {} tasks may lead to burnout or delays", task_count),
+            description: format!(
+                "Single developer responsible for {} tasks may lead to burnout or delays",
+                task_count
+            ),
             severity: RiskSeverity::High,
             probability: 0.7,
             impact: RiskImpact {
@@ -475,8 +545,11 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: "Technology Stack Complexity".to_string(),
-            description: format!("Project uses {} different technologies which may increase complexity: {}", 
-                stack.len(), stack.join(", ")),
+            description: format!(
+                "Project uses {} different technologies which may increase complexity: {}",
+                stack.len(),
+                stack.join(", ")
+            ),
             severity: RiskSeverity::Medium,
             probability: 0.6,
             impact: RiskImpact {
@@ -494,7 +567,8 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: "Experience Level Mismatch".to_string(),
-            description: "Complex design/refactoring tasks assigned to beginner-level team".to_string(),
+            description: "Complex design/refactoring tasks assigned to beginner-level team"
+                .to_string(),
             severity: RiskSeverity::High,
             probability: 0.8,
             impact: RiskImpact {
@@ -512,7 +586,10 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: "Long Dependency Chain".to_string(),
-            description: format!("Dependency chain of {} tasks may cause delays to cascade", chain_length),
+            description: format!(
+                "Dependency chain of {} tasks may cause delays to cascade",
+                chain_length
+            ),
             severity: RiskSeverity::Medium,
             probability: 0.6,
             impact: RiskImpact {
@@ -530,7 +607,10 @@ impl RiskAnalyzer {
         Ok(Risk {
             id: Uuid::new_v4().to_string(),
             title: format!("Resource Conflict: {}", resource),
-            description: format!("Multiple tasks require {} (total: {:.1}) which may cause scheduling conflicts", resource, quantity),
+            description: format!(
+                "Multiple tasks require {} (total: {:.1}) which may cause scheduling conflicts",
+                resource, quantity
+            ),
             severity: RiskSeverity::Medium,
             probability: 0.7,
             impact: RiskImpact {
@@ -553,7 +633,11 @@ impl RiskAnalyzer {
     fn find_longest_dependency_chain(&self, tasks: &[Task]) -> usize {
         // Find the longest chain of dependencies
         // In a real implementation, would use proper graph algorithms
-        tasks.iter().map(|t| t.dependencies.len()).max().unwrap_or(0)
+        tasks
+            .iter()
+            .map(|t| t.dependencies.len())
+            .max()
+            .unwrap_or(0)
     }
 
     fn score_risks(&self, risks: &mut [Risk]) {
@@ -563,7 +647,7 @@ impl RiskAnalyzer {
             if risk.affected_tasks.len() > 3 {
                 risk.probability = (risk.probability * 1.2).min(1.0);
             }
-            
+
             // Adjust severity based on impact
             if risk.impact.timeline_impact > Duration::days(7) {
                 risk.severity = match risk.severity {
@@ -623,7 +707,7 @@ impl RiskAnalyzer {
 
     fn generate_specific_mitigations(&self, risk: &Risk) -> HiveResult<Vec<MitigationStrategy>> {
         let mut strategies = Vec::new();
-        
+
         // Add risk-specific mitigations based on the risk type
         if risk.title.contains("Circular Dependencies") {
             strategies.push(MitigationStrategy {
@@ -634,7 +718,7 @@ impl RiskAnalyzer {
                 implementation_time: Duration::hours(2),
             });
         }
-        
+
         if risk.title.contains("Timeline Overrun") {
             strategies.push(MitigationStrategy {
                 id: Uuid::new_v4().to_string(),
@@ -644,7 +728,7 @@ impl RiskAnalyzer {
                 implementation_time: Duration::hours(1),
             });
         }
-        
+
         Ok(strategies)
     }
 }
@@ -678,7 +762,7 @@ mod tests {
             mitigation_strategies: Vec::new(),
             affected_tasks: Vec::new(),
         };
-        
+
         let score = analyzer.calculate_risk_score(&risk);
         assert_eq!(score, 2.4); // High (3.0) * 0.8 = 2.4
     }

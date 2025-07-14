@@ -72,7 +72,7 @@ pub const MENU_STYLES: &str = r#"
         position: relative;
         z-index: 1000;
     }
-    
+
     .menu-item {
         padding: 0 12px;
         height: 100%;
@@ -84,12 +84,12 @@ pub const MENU_STYLES: &str = r#"
         position: relative;
         transition: background-color 0.1s;
     }
-    
+
     .menu-item:hover,
     .menu-item.active {
         background: #3e3e42;
     }
-    
+
     /* Dropdown menu styles */
     .menu-dropdown {
         position: absolute;
@@ -102,7 +102,7 @@ pub const MENU_STYLES: &str = r#"
         padding: 4px 0;
         z-index: 1001;
     }
-    
+
     .menu-dropdown-item {
         padding: 6px 20px;
         font-size: 13px;
@@ -113,45 +113,45 @@ pub const MENU_STYLES: &str = r#"
         align-items: center;
         transition: background-color 0.1s;
     }
-    
+
     .menu-dropdown-item:hover {
         background: #094771;
         color: #ffffff;
     }
-    
+
     .menu-dropdown-item.disabled {
         color: #5a5a5a;
         cursor: default;
     }
-    
+
     .menu-dropdown-item.disabled:hover {
         background: transparent;
         color: #5a5a5a;
     }
-    
+
     .menu-separator {
         height: 1px;
         background: #3e3e42;
         margin: 4px 0;
     }
-    
+
     .menu-shortcut {
         font-size: 11px;
         color: #858585;
         margin-left: 20px;
     }
-    
+
     .menu-dropdown-item:hover .menu-shortcut {
         color: #cccccc;
     }
-    
+
     /* Submenu styles */
     .menu-submenu-arrow {
         margin-left: auto;
         font-size: 10px;
         color: #858585;
     }
-    
+
     .menu-submenu {
         position: absolute;
         left: 100%;
@@ -163,11 +163,11 @@ pub const MENU_STYLES: &str = r#"
         padding: 4px 0;
         display: none;
     }
-    
+
     .menu-dropdown-item:hover .menu-submenu {
         display: block;
     }
-    
+
     /* Click outside overlay */
     .menu-overlay {
         position: fixed;
@@ -187,39 +187,52 @@ pub fn MenuBar(on_action: EventHandler<MenuAction>) -> Element {
 
     // Define menu structure
     let menus = vec![
-        ("File", vec![
-            MenuItem::new("Open File", MenuAction::OpenFile, Some("Cmd+O")),
-            MenuItem::new("Open Folder", MenuAction::OpenFolder, Some("Cmd+Shift+O")),
-            MenuItem::new("Open Recent", MenuAction::OpenRecent, None),
-            MenuItem::separator(),
-            MenuItem::new("Save", MenuAction::Save, Some("Cmd+S")),
-            MenuItem::new("Save As...", MenuAction::SaveAs, Some("Cmd+Shift+S")),
-            MenuItem::separator(),
-            MenuItem::new("Close Folder", MenuAction::CloseFolder, None),
-        ]),
-        ("View", vec![
-            MenuItem::new("Command Palette", MenuAction::CommandPalette, Some("Cmd+Shift+P")),
-            MenuItem::separator(),
-            MenuItem::submenu("Appearance", vec![
-                MenuItem::new("Theme", MenuAction::ChangeTheme, None),
-            ]),
-            MenuItem::separator(),
-            MenuItem::new("Settings", MenuAction::Settings, Some("Cmd+,")),
-        ]),
-        ("Help", vec![
-            MenuItem::new("Welcome", MenuAction::Welcome, None),
-            MenuItem::new("Documentation", MenuAction::Documentation, None),
-            MenuItem::separator(),
-            MenuItem::new("Check for Updates...", MenuAction::CheckForUpdates, None),
-            MenuItem::separator(),
-            MenuItem::new("About", MenuAction::About, None),
-        ]),
+        (
+            "File",
+            vec![
+                MenuItem::new("Open File", MenuAction::OpenFile, Some("Cmd+O")),
+                MenuItem::new("Open Folder", MenuAction::OpenFolder, Some("Cmd+Shift+O")),
+                MenuItem::new("Open Recent", MenuAction::OpenRecent, None),
+                MenuItem::separator(),
+                MenuItem::new("Save", MenuAction::Save, Some("Cmd+S")),
+                MenuItem::new("Save As...", MenuAction::SaveAs, Some("Cmd+Shift+S")),
+                MenuItem::separator(),
+                MenuItem::new("Close Folder", MenuAction::CloseFolder, None),
+            ],
+        ),
+        (
+            "View",
+            vec![
+                MenuItem::new(
+                    "Command Palette",
+                    MenuAction::CommandPalette,
+                    Some("Cmd+Shift+P"),
+                ),
+                MenuItem::separator(),
+                MenuItem::submenu(
+                    "Appearance",
+                    vec![MenuItem::new("Theme", MenuAction::ChangeTheme, None)],
+                ),
+                MenuItem::separator(),
+                MenuItem::new("Settings", MenuAction::Settings, Some("Cmd+,")),
+            ],
+        ),
+        (
+            "Help",
+            vec![
+                MenuItem::new("Welcome", MenuAction::Welcome, None),
+                MenuItem::new("Documentation", MenuAction::Documentation, None),
+                MenuItem::separator(),
+                MenuItem::new("Check for Updates...", MenuAction::CheckForUpdates, None),
+                MenuItem::separator(),
+                MenuItem::new("About", MenuAction::About, None),
+            ],
+        ),
     ];
-
 
     rsx! {
         style { "{MENU_STYLES}" }
-        
+
         // Click outside overlay
         if active_menu.read().is_some() {
             div {
@@ -230,16 +243,16 @@ pub fn MenuBar(on_action: EventHandler<MenuAction>) -> Element {
                 },
             }
         }
-        
+
         div {
             class: "menu-bar",
-            
+
             for (menu_name, items) in menus {
                 div {
-                    class: if active_menu.read().as_ref() == Some(&menu_name.to_string()) { 
-                        "menu-item active" 
-                    } else { 
-                        "menu-item" 
+                    class: if active_menu.read().as_ref() == Some(&menu_name.to_string()) {
+                        "menu-item active"
+                    } else {
+                        "menu-item"
                     },
                     onclick: {
                         let menu_name = menu_name.to_string();
@@ -267,13 +280,13 @@ pub fn MenuBar(on_action: EventHandler<MenuAction>) -> Element {
                         }
                     },
                     "{menu_name}"
-                    
+
                     // Dropdown menu
                     if active_menu.read().as_ref() == Some(&menu_name.to_string()) {
                         div {
                             class: "menu-dropdown",
                             onclick: move |e| e.stop_propagation(),
-                            
+
                             for item in items {
                                 if item.separator {
                                     div { class: "menu-separator" }
@@ -282,7 +295,7 @@ pub fn MenuBar(on_action: EventHandler<MenuAction>) -> Element {
                                         class: "menu-dropdown-item",
                                         "{item.label}"
                                         span { class: "menu-submenu-arrow", "▶" }
-                                        
+
                                         div {
                                             class: "menu-submenu",
                                             for sub_item in submenu_items {
@@ -307,10 +320,10 @@ pub fn MenuBar(on_action: EventHandler<MenuAction>) -> Element {
                                     }
                                 } else {
                                     div {
-                                        class: if item.action.is_some() { 
-                                            "menu-dropdown-item" 
-                                        } else { 
-                                            "menu-dropdown-item disabled" 
+                                        class: if item.action.is_some() {
+                                            "menu-dropdown-item"
+                                        } else {
+                                            "menu-dropdown-item disabled"
                                         },
                                         onclick: {
                                             let action = item.action.clone();

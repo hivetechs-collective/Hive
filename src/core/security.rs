@@ -1,5 +1,5 @@
 //! Security and trust management system for HiveTechs Consensus
-//! 
+//!
 //! This module implements a Claude Code-style trust system that requires explicit
 //! user permission before accessing files in new directories. All file operations
 //! must go through this security layer.
@@ -125,13 +125,15 @@ impl SecurityContext {
                 .context("Failed to create security database directory")?;
         }
 
-        let conn = Connection::open(&db_path)
-            .context("Failed to open security database")?;
+        let conn = Connection::open(&db_path).context("Failed to open security database")?;
 
         // Initialize database schema
         Self::initialize_database(&conn)?;
 
-        let session_id = format!("session_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+        let session_id = format!(
+            "session_{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        );
 
         Ok(Self {
             db: Arc::new(Mutex::new(conn)),
@@ -177,20 +179,21 @@ impl SecurityContext {
 
     /// Check if a path is trusted
     pub fn is_trusted(&self, path: &Path) -> Result<bool> {
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
-        
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
         // Check cache first
         {
             let cache = self.trust_cache.lock().unwrap();
             if let Some(&trust_level) = cache.get(&canonical) {
-                return Ok(trust_level == TrustLevel::Trusted || trust_level == TrustLevel::Temporary);
+                return Ok(
+                    trust_level == TrustLevel::Trusted || trust_level == TrustLevel::Temporary
+                );
             }
         }
 
         // Check database
         let trust_level = self.get_trust_level(&canonical)?;
-        
+
         // Update cache
         {
             let mut cache = self.trust_cache.lock().unwrap();
@@ -202,17 +205,18 @@ impl SecurityContext {
 
     /// Get the trust level for a path
     pub fn get_trust_level(&self, path: &Path) -> Result<TrustLevel> {
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
-        
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
         let db = self.db.lock().unwrap();
-        
+
         // Check exact path match
-        let trust_level: Option<String> = db.query_row(
-            "SELECT trust_level FROM trust_decisions WHERE path = ?1",
-            params![canonical.to_string_lossy()],
-            |row| row.get(0),
-        ).optional()?;
+        let trust_level: Option<String> = db
+            .query_row(
+                "SELECT trust_level FROM trust_decisions WHERE path = ?1",
+                params![canonical.to_string_lossy()],
+                |row| row.get(0),
+            )
+            .optional()?;
 
         if let Some(level) = trust_level {
             return Ok(match level.as_str() {
@@ -226,11 +230,13 @@ impl SecurityContext {
         // Check parent directories
         let mut current = canonical.as_path();
         while let Some(parent) = current.parent() {
-            let parent_trust: Option<String> = db.query_row(
-                "SELECT trust_level FROM trust_decisions WHERE path = ?1",
-                params![parent.to_string_lossy()],
-                |row| row.get(0),
-            ).optional()?;
+            let parent_trust: Option<String> = db
+                .query_row(
+                    "SELECT trust_level FROM trust_decisions WHERE path = ?1",
+                    params![parent.to_string_lossy()],
+                    |row| row.get(0),
+                )
+                .optional()?;
 
             if let Some(level) = parent_trust {
                 return Ok(match level.as_str() {
@@ -240,7 +246,7 @@ impl SecurityContext {
                     _ => TrustLevel::Untrusted,
                 });
             }
-            
+
             current = parent;
         }
 
@@ -249,10 +255,14 @@ impl SecurityContext {
     }
 
     /// Set trust level for a path
-    pub fn set_trust_level(&self, path: &Path, level: TrustLevel, reason: Option<String>) -> Result<()> {
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
-        
+    pub fn set_trust_level(
+        &self,
+        path: &Path,
+        level: TrustLevel,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
         let decision = TrustDecision {
             path: canonical.clone(),
             trust_level: level,
@@ -303,8 +313,7 @@ impl SecurityContext {
             return Ok(TrustLevel::Untrusted);
         }
 
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Log the prompt event
         self.log_event(SecurityEvent {
@@ -319,7 +328,10 @@ impl SecurityContext {
         println!("\n┌─────────────────────────────────────────────────────────┐");
         println!("│ 🔒 Security Warning - Directory Access Request          │");
         println!("├─────────────────────────────────────────────────────────┤");
-        println!("│ HiveTechs Consensus wants to {} in:              │", operation);
+        println!(
+            "│ HiveTechs Consensus wants to {} in:              │",
+            operation
+        );
         println!("│                                                         │");
         println!("│ 📁 {:<51} │", canonical.display());
         println!("│                                                         │");
@@ -364,12 +376,11 @@ impl SecurityContext {
 
     /// Check file access permission
     pub fn check_file_access(&self, path: &Path, operation: &str) -> Result<()> {
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Check if trusted
         let trust_level = self.get_trust_level(&canonical)?;
-        
+
         if trust_level == TrustLevel::Trusted || trust_level == TrustLevel::Temporary {
             // Log successful access
             self.log_event(SecurityEvent {
@@ -384,7 +395,7 @@ impl SecurityContext {
 
         // Not trusted, prompt user
         let new_level = self.prompt_trust(&canonical, operation)?;
-        
+
         if new_level == TrustLevel::Trusted || new_level == TrustLevel::Temporary {
             Ok(())
         } else {
@@ -396,8 +407,11 @@ impl SecurityContext {
                 details: format!("Denied {}", operation),
                 allowed: false,
             })?;
-            
-            Err(anyhow!("Access denied to untrusted path: {}", canonical.display()))
+
+            Err(anyhow!(
+                "Access denied to untrusted path: {}",
+                canonical.display()
+            ))
         }
     }
 
@@ -413,12 +427,11 @@ impl SecurityContext {
 
     /// Check file write permission
     pub fn check_write_access(&self, path: &Path) -> Result<()> {
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Write operations require explicit trust
         let trust_level = self.get_trust_level(&canonical)?;
-        
+
         if trust_level == TrustLevel::Trusted || trust_level == TrustLevel::Temporary {
             // Log write access
             self.log_event(SecurityEvent {
@@ -433,26 +446,31 @@ impl SecurityContext {
 
         // Prompt for write access
         let new_level = self.prompt_trust(&canonical, "write to file")?;
-        
+
         if new_level == TrustLevel::Trusted || new_level == TrustLevel::Temporary {
             Ok(())
         } else {
-            Err(anyhow!("Write access denied to untrusted path: {}", canonical.display()))
+            Err(anyhow!(
+                "Write access denied to untrusted path: {}",
+                canonical.display()
+            ))
         }
     }
 
     /// Check file deletion permission
     pub fn check_delete_access(&self, path: &Path) -> Result<()> {
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
         // Deletion requires additional confirmation
         let trust_level = self.get_trust_level(&canonical)?;
-        
+
         if trust_level != TrustLevel::Trusted && trust_level != TrustLevel::Temporary {
             let new_level = self.prompt_trust(&canonical, "delete file")?;
             if new_level != TrustLevel::Trusted && new_level != TrustLevel::Temporary {
-                return Err(anyhow!("Delete access denied to untrusted path: {}", canonical.display()));
+                return Err(anyhow!(
+                    "Delete access denied to untrusted path: {}",
+                    canonical.display()
+                ));
             }
         }
 
@@ -460,7 +478,10 @@ impl SecurityContext {
         if self.interactive {
             let theme = ColorfulTheme::default();
             let confirm = Confirm::with_theme(&theme)
-                .with_prompt(format!("Are you sure you want to delete '{}'?", canonical.display()))
+                .with_prompt(format!(
+                    "Are you sure you want to delete '{}'?",
+                    canonical.display()
+                ))
                 .default(false)
                 .interact()?;
 
@@ -484,7 +505,7 @@ impl SecurityContext {
     /// Log a security event
     pub fn log_event(&self, event: SecurityEvent) -> Result<()> {
         let db = self.db.lock().unwrap();
-        
+
         db.execute(
             r#"
             INSERT INTO security_events (event_type, path, timestamp, details, allowed, session_id)
@@ -533,9 +554,8 @@ impl SecurityContext {
 
     /// Get security events for a path
     pub fn get_events_for_path(&self, path: &Path) -> Result<Vec<SecurityEvent>> {
-        let canonical = path.canonicalize()
-            .unwrap_or_else(|_| path.to_path_buf());
-        
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare(
             r#"
@@ -547,27 +567,28 @@ impl SecurityContext {
             "#,
         )?;
 
-        let events = stmt.query_map(params![canonical.to_string_lossy()], |row| {
-            Ok(SecurityEvent {
-                event_type: match row.get::<_, String>(0)?.as_str() {
-                    "Trust Prompt" => SecurityEventType::TrustPrompt,
-                    "File Access" => SecurityEventType::FileAccess,
-                    "Directory List" => SecurityEventType::DirectoryList,
-                    "File Write" => SecurityEventType::FileWrite,
-                    "File Deletion" => SecurityEventType::FileDeletion,
-                    "Trust Decision" => SecurityEventType::TrustDecision,
-                    "Security Violation" => SecurityEventType::SecurityViolation,
-                    _ => SecurityEventType::FileAccess,
-                },
-                path: row.get::<_, Option<String>>(1)?.map(PathBuf::from),
-                timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .unwrap_or_else(|_| Utc::now().into())
-                    .with_timezone(&Utc),
-                details: row.get(3)?,
-                allowed: row.get(4)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+        let events = stmt
+            .query_map(params![canonical.to_string_lossy()], |row| {
+                Ok(SecurityEvent {
+                    event_type: match row.get::<_, String>(0)?.as_str() {
+                        "Trust Prompt" => SecurityEventType::TrustPrompt,
+                        "File Access" => SecurityEventType::FileAccess,
+                        "Directory List" => SecurityEventType::DirectoryList,
+                        "File Write" => SecurityEventType::FileWrite,
+                        "File Deletion" => SecurityEventType::FileDeletion,
+                        "Trust Decision" => SecurityEventType::TrustDecision,
+                        "Security Violation" => SecurityEventType::SecurityViolation,
+                        _ => SecurityEventType::FileAccess,
+                    },
+                    path: row.get::<_, Option<String>>(1)?.map(PathBuf::from),
+                    timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
+                        .unwrap_or_else(|_| Utc::now().into())
+                        .with_timezone(&Utc),
+                    details: row.get(3)?,
+                    allowed: row.get(4)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(events)
     }
@@ -584,16 +605,17 @@ impl SecurityContext {
             "#,
         )?;
 
-        let paths = stmt.query_map(params![], |row| {
-            let path = PathBuf::from(row.get::<_, String>(0)?);
-            let level = match row.get::<_, String>(1)?.as_str() {
-                "Trusted" => TrustLevel::Trusted,
-                "Temporary" => TrustLevel::Temporary,
-                _ => TrustLevel::Untrusted,
-            };
-            Ok((path, level))
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
+        let paths = stmt
+            .query_map(params![], |row| {
+                let path = PathBuf::from(row.get::<_, String>(0)?);
+                let level = match row.get::<_, String>(1)?.as_str() {
+                    "Trusted" => TrustLevel::Trusted,
+                    "Temporary" => TrustLevel::Temporary,
+                    _ => TrustLevel::Untrusted,
+                };
+                Ok((path, level))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
 
         Ok(paths)
     }
@@ -646,7 +668,7 @@ impl SecurityContext {
             TrustLevel::Untrusted => Ok(false),
         }
     }
-    
+
     /// Check trust status for a path
     fn check_trust_status(&self, path: &Path) -> Result<TrustLevel> {
         // Check cache first
@@ -660,19 +682,21 @@ impl SecurityContext {
         // Check database
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare(
-            "SELECT trust_level FROM trust_decisions 
+            "SELECT trust_level FROM trust_decisions
              WHERE path = ?1 AND (expires_at IS NULL OR expires_at > datetime('now'))
-             ORDER BY created_at DESC LIMIT 1"
+             ORDER BY created_at DESC LIMIT 1",
         )?;
 
-        let level = stmt.query_row(params![path.to_str().unwrap_or("")], |row| {
-            let level_str: String = row.get(0)?;
-            Ok(match level_str.as_str() {
-                "trusted" => TrustLevel::Trusted,
-                "temporary" => TrustLevel::Temporary,
-                _ => TrustLevel::Untrusted,
+        let level = stmt
+            .query_row(params![path.to_str().unwrap_or("")], |row| {
+                let level_str: String = row.get(0)?;
+                Ok(match level_str.as_str() {
+                    "trusted" => TrustLevel::Trusted,
+                    "temporary" => TrustLevel::Temporary,
+                    _ => TrustLevel::Untrusted,
+                })
             })
-        }).unwrap_or(TrustLevel::Untrusted);
+            .unwrap_or(TrustLevel::Untrusted);
 
         // Update cache
         let mut cache = self.trust_cache.lock().unwrap();
@@ -683,19 +707,22 @@ impl SecurityContext {
 }
 
 /// Global security context instance
-static SECURITY_CONTEXT: once_cell::sync::OnceCell<Arc<SecurityContext>> = once_cell::sync::OnceCell::new();
+static SECURITY_CONTEXT: once_cell::sync::OnceCell<Arc<SecurityContext>> =
+    once_cell::sync::OnceCell::new();
 
 /// Initialize the global security context
 pub fn initialize_security(db_path: Option<PathBuf>, interactive: bool) -> Result<()> {
     let context = SecurityContext::new(db_path, interactive)?;
-    SECURITY_CONTEXT.set(Arc::new(context))
+    SECURITY_CONTEXT
+        .set(Arc::new(context))
         .map_err(|_| anyhow!("Security context already initialized"))?;
     Ok(())
 }
 
 /// Get the global security context
 pub fn get_security_context() -> Result<Arc<SecurityContext>> {
-    SECURITY_CONTEXT.get()
+    SECURITY_CONTEXT
+        .get()
         .cloned()
         .ok_or_else(|| anyhow!("Security context not initialized"))
 }
@@ -746,7 +773,7 @@ mod tests {
     fn test_security_context_creation() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        
+
         let context = SecurityContext::new(Some(db_path), false).unwrap();
         assert!(!context.interactive);
     }
@@ -756,12 +783,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let test_path = temp_dir.path().join("test.txt");
-        
+
         let context = SecurityContext::new(Some(db_path), false).unwrap();
-        
+
         // Set trust level
-        context.set_trust_level(&test_path, TrustLevel::Trusted, Some("Test".to_string())).unwrap();
-        
+        context
+            .set_trust_level(&test_path, TrustLevel::Trusted, Some("Test".to_string()))
+            .unwrap();
+
         // Verify it was stored
         let level = context.get_trust_level(&test_path).unwrap();
         assert_eq!(level, TrustLevel::Trusted);
@@ -771,12 +800,14 @@ mod tests {
     fn test_parent_directory_trust() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        
+
         let context = SecurityContext::new(Some(db_path), false).unwrap();
-        
+
         // Trust parent directory
-        context.set_trust_level(temp_dir.path(), TrustLevel::Trusted, None).unwrap();
-        
+        context
+            .set_trust_level(temp_dir.path(), TrustLevel::Trusted, None)
+            .unwrap();
+
         // Child should inherit trust
         let child_path = temp_dir.path().join("subdir/file.txt");
         let level = context.get_trust_level(&child_path).unwrap();
@@ -788,9 +819,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let test_path = temp_dir.path().join("test.txt");
-        
+
         let context = SecurityContext::new(Some(db_path), false).unwrap();
-        
+
         // Log an event
         let event = SecurityEvent {
             event_type: SecurityEventType::FileAccess,
@@ -799,9 +830,9 @@ mod tests {
             details: "Test access".to_string(),
             allowed: true,
         };
-        
+
         context.log_event(event).unwrap();
-        
+
         // Retrieve events
         let events = context.get_events_for_path(&test_path).unwrap();
         assert_eq!(events.len(), 1);
@@ -812,16 +843,20 @@ mod tests {
     fn test_trusted_paths_list() {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        
+
         let context = SecurityContext::new(Some(db_path), false).unwrap();
-        
+
         // Add some trusted paths
         let path1 = temp_dir.path().join("dir1");
         let path2 = temp_dir.path().join("dir2");
-        
-        context.set_trust_level(&path1, TrustLevel::Trusted, None).unwrap();
-        context.set_trust_level(&path2, TrustLevel::Temporary, None).unwrap();
-        
+
+        context
+            .set_trust_level(&path1, TrustLevel::Trusted, None)
+            .unwrap();
+        context
+            .set_trust_level(&path2, TrustLevel::Temporary, None)
+            .unwrap();
+
         // Get trusted paths
         let trusted = context.get_trusted_paths().unwrap();
         assert_eq!(trusted.len(), 2);
@@ -832,12 +867,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let db_path = temp_dir.path().join("test.db");
         let test_path = temp_dir.path().join("cached.txt");
-        
+
         let context = SecurityContext::new(Some(db_path), false).unwrap();
-        
+
         // Set trust level (should cache)
-        context.set_trust_level(&test_path, TrustLevel::Trusted, None).unwrap();
-        
+        context
+            .set_trust_level(&test_path, TrustLevel::Trusted, None)
+            .unwrap();
+
         // Check cache
         let cache = context.trust_cache.lock().unwrap();
         assert!(cache.contains_key(&test_path));

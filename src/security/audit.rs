@@ -1,20 +1,20 @@
 //! Enterprise Audit Logging System
-//! 
+//!
 //! Provides comprehensive audit logging for compliance including:
 //! - Tamper-proof audit trails
 //! - Compliance reporting (SOX, GDPR, ISO27001)
 //! - Real-time monitoring
 //! - Event correlation and analysis
 
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
-use sha2::{Sha256, Digest};
 
 /// Enterprise audit logger with compliance features
 pub struct EnterpriseAuditLogger {
@@ -260,7 +260,7 @@ impl EnterpriseAuditLogger {
         // Flush buffer periodically
         let buffer = self.event_buffer.clone();
         let log_file = self.log_file.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
             loop {
@@ -304,7 +304,8 @@ impl EnterpriseAuditLogger {
 
             for event in events.iter() {
                 let json_line = serde_json::to_string(event)?;
-                file.write_all(format!("{}\n", json_line).as_bytes()).await?;
+                file.write_all(format!("{}\n", json_line).as_bytes())
+                    .await?;
             }
 
             file.flush().await?;
@@ -328,32 +329,66 @@ impl EnterpriseAuditLogger {
     }
 
     /// Log system-level events
-    pub async fn log_system_event(&self, event_type: AuditEventType, details: String, user_id: Option<String>) -> Result<()> {
-        let event = self.create_event(event_type, user_id, None, details, AuditOutcome::Success).await;
+    pub async fn log_system_event(
+        &self,
+        event_type: AuditEventType,
+        details: String,
+        user_id: Option<String>,
+    ) -> Result<()> {
+        let event = self
+            .create_event(event_type, user_id, None, details, AuditOutcome::Success)
+            .await;
         self.log_event(event).await
     }
 
     /// Log user-related events
-    pub async fn log_user_event(&self, event_type: AuditEventType, user_id: &str, details: String) -> Result<()> {
-        let event = self.create_event(event_type, Some(user_id.to_string()), None, details, AuditOutcome::Success).await;
+    pub async fn log_user_event(
+        &self,
+        event_type: AuditEventType,
+        user_id: &str,
+        details: String,
+    ) -> Result<()> {
+        let event = self
+            .create_event(
+                event_type,
+                Some(user_id.to_string()),
+                None,
+                details,
+                AuditOutcome::Success,
+            )
+            .await;
         self.log_event(event).await
     }
 
     /// Log team-related events
-    pub async fn log_team_event(&self, event_type: AuditEventType, team_name: &str, details: String) -> Result<()> {
-        let event = self.create_event(
-            event_type,
-            None,
-            Some(format!("team:{}", team_name)),
-            details,
-            AuditOutcome::Success,
-        ).await;
+    pub async fn log_team_event(
+        &self,
+        event_type: AuditEventType,
+        team_name: &str,
+        details: String,
+    ) -> Result<()> {
+        let event = self
+            .create_event(
+                event_type,
+                None,
+                Some(format!("team:{}", team_name)),
+                details,
+                AuditOutcome::Success,
+            )
+            .await;
         self.log_event(event).await
     }
 
     /// Log security events with high priority
-    pub async fn log_security_event(&self, event_type: AuditEventType, details: String, user_id: Option<String>) -> Result<()> {
-        let mut event = self.create_event(event_type, user_id, None, details, AuditOutcome::Success).await;
+    pub async fn log_security_event(
+        &self,
+        event_type: AuditEventType,
+        details: String,
+        user_id: Option<String>,
+    ) -> Result<()> {
+        let mut event = self
+            .create_event(event_type, user_id, None, details, AuditOutcome::Success)
+            .await;
         event.risk_score = Some(80); // High risk score for security events
         event.compliance_tags = vec!["SECURITY".to_string(), "SOX".to_string()];
         self.log_event(event).await
@@ -361,57 +396,67 @@ impl EnterpriseAuditLogger {
 
     /// Log hook-related events
     pub async fn log_hook_registered(&self, hook_id: &str) -> Result<()> {
-        let event = self.create_event(
-            AuditEventType::HookCreated,
-            None,
-            Some(format!("hook:{}", hook_id)),
-            format!("Hook {} registered", hook_id),
-            AuditOutcome::Success,
-        ).await;
+        let event = self
+            .create_event(
+                AuditEventType::HookCreated,
+                None,
+                Some(format!("hook:{}", hook_id)),
+                format!("Hook {} registered", hook_id),
+                AuditOutcome::Success,
+            )
+            .await;
         self.log_event(event).await
     }
 
     pub async fn log_hook_removed(&self, hook_id: &str) -> Result<()> {
-        let event = self.create_event(
-            AuditEventType::HookDeleted,
-            None,
-            Some(format!("hook:{}", hook_id)),
-            format!("Hook {} removed", hook_id),
-            AuditOutcome::Success,
-        ).await;
+        let event = self
+            .create_event(
+                AuditEventType::HookDeleted,
+                None,
+                Some(format!("hook:{}", hook_id)),
+                format!("Hook {} removed", hook_id),
+                AuditOutcome::Success,
+            )
+            .await;
         self.log_event(event).await
     }
 
     pub async fn log_hook_enabled(&self, hook_id: &str) -> Result<()> {
-        let event = self.create_event(
-            AuditEventType::HookEnabled,
-            None,
-            Some(format!("hook:{}", hook_id)),
-            format!("Hook {} enabled", hook_id),
-            AuditOutcome::Success,
-        ).await;
+        let event = self
+            .create_event(
+                AuditEventType::HookEnabled,
+                None,
+                Some(format!("hook:{}", hook_id)),
+                format!("Hook {} enabled", hook_id),
+                AuditOutcome::Success,
+            )
+            .await;
         self.log_event(event).await
     }
 
     pub async fn log_hook_disabled(&self, hook_id: &str) -> Result<()> {
-        let event = self.create_event(
-            AuditEventType::HookDisabled,
-            None,
-            Some(format!("hook:{}", hook_id)),
-            format!("Hook {} disabled", hook_id),
-            AuditOutcome::Success,
-        ).await;
+        let event = self
+            .create_event(
+                AuditEventType::HookDisabled,
+                None,
+                Some(format!("hook:{}", hook_id)),
+                format!("Hook {} disabled", hook_id),
+                AuditOutcome::Success,
+            )
+            .await;
         self.log_event(event).await
     }
 
     pub async fn log_all_hooks_cleared(&self) -> Result<()> {
-        let event = self.create_event(
-            AuditEventType::AdminAction,
-            None,
-            Some("hooks:all".to_string()),
-            "All hooks cleared".to_string(),
-            AuditOutcome::Success,
-        ).await;
+        let event = self
+            .create_event(
+                AuditEventType::AdminAction,
+                None,
+                Some("hooks:all".to_string()),
+                "All hooks cleared".to_string(),
+                AuditOutcome::Success,
+            )
+            .await;
         self.log_event(event).await
     }
 
@@ -430,7 +475,12 @@ impl EnterpriseAuditLogger {
     }
 
     /// Generate compliance report
-    pub async fn generate_compliance_report(&self, standard: &str, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<ComplianceReport> {
+    pub async fn generate_compliance_report(
+        &self,
+        standard: &str,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<ComplianceReport> {
         let filter = AuditFilter {
             start_time: Some(start),
             end_time: Some(end),
@@ -461,7 +511,11 @@ impl EnterpriseAuditLogger {
         })
     }
 
-    async fn detect_compliance_violations(&self, _events: &[AuditEvent], _standard: &str) -> Result<Vec<ComplianceViolation>> {
+    async fn detect_compliance_violations(
+        &self,
+        _events: &[AuditEvent],
+        _standard: &str,
+    ) -> Result<Vec<ComplianceViolation>> {
         // In a real implementation, this would analyze events for compliance violations
         Ok(vec![])
     }
@@ -492,24 +546,34 @@ impl EnterpriseAuditLogger {
         let buffer = self.event_buffer.read().await;
         let now = Utc::now();
 
-        let events_24h = buffer.iter()
+        let events_24h = buffer
+            .iter()
             .filter(|e| e.timestamp > now - Duration::hours(24))
             .count() as u64;
 
-        let events_7d = buffer.iter()
+        let events_7d = buffer
+            .iter()
             .filter(|e| e.timestamp > now - Duration::days(7))
             .count() as u64;
 
-        let events_30d = buffer.iter()
+        let events_30d = buffer
+            .iter()
             .filter(|e| e.timestamp > now - Duration::days(30))
             .count() as u64;
 
-        let failed_events_24h = buffer.iter()
+        let failed_events_24h = buffer
+            .iter()
             .filter(|e| e.timestamp > now - Duration::hours(24))
-            .filter(|e| matches!(e.outcome, AuditOutcome::Failure | AuditOutcome::Denied | AuditOutcome::Error))
+            .filter(|e| {
+                matches!(
+                    e.outcome,
+                    AuditOutcome::Failure | AuditOutcome::Denied | AuditOutcome::Error
+                )
+            })
             .count() as u64;
 
-        let security_events_24h = buffer.iter()
+        let security_events_24h = buffer
+            .iter()
             .filter(|e| e.timestamp > now - Duration::hours(24))
             .filter(|e| e.compliance_tags.contains(&"SECURITY".to_string()))
             .count() as u64;
@@ -522,8 +586,8 @@ impl EnterpriseAuditLogger {
             failed_events_24h,
             security_events_24h,
             compliance_violations_24h: 0, // Would be calculated from database
-            unique_users_24h: 0, // Would be calculated from database
-            storage_size_bytes: 0, // Would be calculated from file/database size
+            unique_users_24h: 0,          // Would be calculated from database
+            storage_size_bytes: 0,        // Would be calculated from file/database size
             oldest_event: buffer.first().map(|e| e.timestamp),
             newest_event: buffer.last().map(|e| e.timestamp),
         })
@@ -547,7 +611,7 @@ impl EnterpriseAuditLogger {
     ) -> AuditEvent {
         let id = uuid::Uuid::new_v4().to_string();
         let timestamp = Utc::now();
-        
+
         // Create hash for tamper detection
         let hash_input = format!("{}{:?}{}{}", id, event_type, timestamp, details);
         let mut hasher = Sha256::new();
@@ -574,33 +638,52 @@ impl EnterpriseAuditLogger {
     }
 
     /// Log a trust decision
-    pub async fn log_trust_decision(&self, path: &Path, trusted: bool, reason: Option<String>) -> Result<()> {
-        let mut event = self.create_event(
-            AuditEventType::TrustDecision,
-            None,
-            Some(path.display().to_string()),
-            format!("Trust decision for {}: {}", path.display(), if trusted { "trusted" } else { "denied" }),
-            if trusted { AuditOutcome::Success } else { AuditOutcome::Denied },
-        ).await;
-        
+    pub async fn log_trust_decision(
+        &self,
+        path: &Path,
+        trusted: bool,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let mut event = self
+            .create_event(
+                AuditEventType::TrustDecision,
+                None,
+                Some(path.display().to_string()),
+                format!(
+                    "Trust decision for {}: {}",
+                    path.display(),
+                    if trusted { "trusted" } else { "denied" }
+                ),
+                if trusted {
+                    AuditOutcome::Success
+                } else {
+                    AuditOutcome::Denied
+                },
+            )
+            .await;
+
         if let Some(reason) = reason {
             event.metadata.insert("reason".to_string(), reason);
         }
-        event.metadata.insert("trusted".to_string(), trusted.to_string());
-        
+        event
+            .metadata
+            .insert("trusted".to_string(), trusted.to_string());
+
         self.log_event(event).await
     }
 
     /// Log trust revoked
     pub async fn log_trust_revoked(&self, path: &Path) -> Result<()> {
-        let event = self.create_event(
-            AuditEventType::TrustRevoked,
-            None,
-            Some(path.display().to_string()),
-            format!("Trust revoked for {}", path.display()),
-            AuditOutcome::Success,
-        ).await;
-        
+        let event = self
+            .create_event(
+                AuditEventType::TrustRevoked,
+                None,
+                Some(path.display().to_string()),
+                format!("Trust revoked for {}", path.display()),
+                AuditOutcome::Success,
+            )
+            .await;
+
         self.log_event(event).await
     }
 }
@@ -632,46 +715,61 @@ mod tests {
     async fn test_audit_logging() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("audit_test.db");
-        
-        let logger = EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap();
+
+        let logger = EnterpriseAuditLogger::new(Some(db_path), 365)
+            .await
+            .unwrap();
         logger.initialize().await.unwrap();
 
         // Log a test event
-        logger.log_system_event(
-            AuditEventType::SystemInit,
-            "Test system initialization".to_string(),
-            Some("admin".to_string()),
-        ).await.unwrap();
+        logger
+            .log_system_event(
+                AuditEventType::SystemInit,
+                "Test system initialization".to_string(),
+                Some("admin".to_string()),
+            )
+            .await
+            .unwrap();
 
         // Verify event was logged
         let recent_logs = logger.get_recent_logs(10).await.unwrap();
         assert_eq!(recent_logs.len(), 1);
-        assert!(matches!(recent_logs[0].event_type, AuditEventType::SystemInit));
+        assert!(matches!(
+            recent_logs[0].event_type,
+            AuditEventType::SystemInit
+        ));
     }
 
     #[tokio::test]
     async fn test_compliance_report() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("compliance_test.db");
-        
-        let logger = EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap();
+
+        let logger = EnterpriseAuditLogger::new(Some(db_path), 365)
+            .await
+            .unwrap();
         logger.initialize().await.unwrap();
 
         // Log some compliance-related events
-        let mut event = logger.create_event(
-            AuditEventType::UserLogin,
-            Some("test_user".to_string()),
-            None,
-            "User login".to_string(),
-            AuditOutcome::Success,
-        ).await;
+        let mut event = logger
+            .create_event(
+                AuditEventType::UserLogin,
+                Some("test_user".to_string()),
+                None,
+                "User login".to_string(),
+                AuditOutcome::Success,
+            )
+            .await;
         event.compliance_tags = vec!["SOX".to_string()];
         logger.log_event(event).await.unwrap();
 
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now();
-        
-        let report = logger.generate_compliance_report("SOX", start, end).await.unwrap();
+
+        let report = logger
+            .generate_compliance_report("SOX", start, end)
+            .await
+            .unwrap();
         assert_eq!(report.standard, "SOX");
         assert!(report.total_events > 0);
     }
@@ -680,17 +778,22 @@ mod tests {
     async fn test_audit_statistics() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("stats_test.db");
-        
-        let logger = EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap();
+
+        let logger = EnterpriseAuditLogger::new(Some(db_path), 365)
+            .await
+            .unwrap();
         logger.initialize().await.unwrap();
 
         // Log some events
         for i in 0..5 {
-            logger.log_user_event(
-                AuditEventType::UserLogin,
-                &format!("user_{}", i),
-                "Login event".to_string(),
-            ).await.unwrap();
+            logger
+                .log_user_event(
+                    AuditEventType::UserLogin,
+                    &format!("user_{}", i),
+                    "Login event".to_string(),
+                )
+                .await
+                .unwrap();
         }
 
         let stats = logger.get_statistics().await.unwrap();

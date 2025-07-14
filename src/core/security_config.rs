@@ -235,7 +235,7 @@ impl Default for NetworkSecurityConfig {
         allowed_domains.insert("openrouter.ai".to_string());
         allowed_domains.insert("workers.dev".to_string());
         allowed_domains.insert("cloudflare.com".to_string());
-        
+
         Self {
             filter_requests: true,
             allowed_domains,
@@ -266,14 +266,14 @@ impl Default for ExecutionSecurityConfig {
         allowed_commands.insert("git".to_string());
         allowed_commands.insert("npm".to_string());
         allowed_commands.insert("hive".to_string());
-        
+
         let mut allowed_env_vars = HashSet::new();
         allowed_env_vars.insert("PATH".to_string());
         allowed_env_vars.insert("HOME".to_string());
         allowed_env_vars.insert("USER".to_string());
         allowed_env_vars.insert("CARGO_HOME".to_string());
         allowed_env_vars.insert("RUSTUP_HOME".to_string());
-        
+
         Self {
             enable_sandbox: false,
             allowed_commands,
@@ -308,13 +308,13 @@ impl SecurityConfigManager {
     /// Create a new security configuration manager
     pub async fn new(config_dir: &Path) -> Result<Self> {
         let config_path = config_dir.join("security.toml");
-        
+
         // Ensure config directory exists
         if !config_dir.exists() {
             fs::create_dir_all(config_dir).await
                 .context("Failed to create config directory")?;
         }
-        
+
         let config = if config_path.exists() {
             Self::load_config(&config_path).await?
         } else {
@@ -322,42 +322,42 @@ impl SecurityConfigManager {
             Self::save_config(&config_path, &default_config).await?;
             default_config
         };
-        
+
         Ok(Self {
             config,
             config_path,
         })
     }
-    
+
     /// Load security configuration from file
     async fn load_config(path: &Path) -> Result<SecurityConfig> {
         let content = fs::read_to_string(path).await
             .with_context(|| format!("Failed to read security config: {}", path.display()))?;
-        
+
         let config: SecurityConfig = toml::from_str(&content)
             .context("Failed to parse security configuration")?;
-        
+
         info!("Loaded security configuration from: {}", path.display());
         Ok(config)
     }
-    
+
     /// Save security configuration to file
     async fn save_config(path: &Path, config: &SecurityConfig) -> Result<()> {
         let content = toml::to_string_pretty(config)
             .context("Failed to serialize security configuration")?;
-        
+
         fs::write(path, content).await
             .with_context(|| format!("Failed to write security config: {}", path.display()))?;
-        
+
         debug!("Saved security configuration to: {}", path.display());
         Ok(())
     }
-    
+
     /// Get the current security configuration
     pub fn get_config(&self) -> &SecurityConfig {
         &self.config
     }
-    
+
     /// Update the security configuration
     pub async fn update_config(&mut self, config: SecurityConfig) -> Result<()> {
         self.config = config;
@@ -365,7 +365,7 @@ impl SecurityConfigManager {
         info!("Updated security configuration");
         Ok(())
     }
-    
+
     /// Update a specific security policy setting
     pub async fn update_policy(&mut self, policy: SecurityPolicy) -> Result<()> {
         self.config.policy = policy;
@@ -373,7 +373,7 @@ impl SecurityConfigManager {
         info!("Updated security policy");
         Ok(())
     }
-    
+
     /// Update trust settings
     pub async fn update_trust_settings(&mut self, trust_settings: TrustSettings) -> Result<()> {
         self.config.trust_settings = trust_settings;
@@ -381,7 +381,7 @@ impl SecurityConfigManager {
         info!("Updated trust settings");
         Ok(())
     }
-    
+
     /// Enable or disable enterprise mode
     pub async fn set_enterprise_mode(&mut self, enabled: bool) -> Result<()> {
         self.config.enterprise.enabled = enabled;
@@ -389,36 +389,36 @@ impl SecurityConfigManager {
         info!("Enterprise mode {}", if enabled { "enabled" } else { "disabled" });
         Ok(())
     }
-    
+
     /// Validate the current configuration
     pub fn validate_config(&self) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
-        
+
         // Check if trust prompts are disabled (dangerous)
         if !self.config.policy.trust_prompts_enabled {
             warnings.push("Trust prompts are disabled - this is dangerous in production".to_string());
         }
-        
+
         // Check if audit logging is disabled
         if !self.config.audit_config.enabled {
             warnings.push("Audit logging is disabled - security events will not be recorded".to_string());
         }
-        
+
         // Check for overly permissive network settings
         if self.config.network.allowed_domains.is_empty() && self.config.network.filter_requests {
             warnings.push("Network filtering is enabled but no domains are allowed".to_string());
         }
-        
+
         // Check resource limits
         if self.config.execution.resource_limits.max_memory_mb > 8192 {
             warnings.push("Memory limit is very high (>8GB) - consider reducing for security".to_string());
         }
-        
+
         // Check for empty allowed commands
         if self.config.execution.allowed_commands.is_empty() {
             warnings.push("No commands are allowed for execution - functionality may be limited".to_string());
         }
-        
+
         if warnings.is_empty() {
             info!("Security configuration validation passed");
         } else {
@@ -426,10 +426,10 @@ impl SecurityConfigManager {
                 warn!("Security config warning: {}", warning);
             }
         }
-        
+
         Ok(warnings)
     }
-    
+
     /// Reset configuration to defaults
     pub async fn reset_to_defaults(&mut self) -> Result<()> {
         self.config = SecurityConfig::default();
@@ -437,29 +437,29 @@ impl SecurityConfigManager {
         info!("Reset security configuration to defaults");
         Ok(())
     }
-    
+
     /// Export configuration as JSON for backup/sharing
     pub fn export_as_json(&self) -> Result<String> {
         serde_json::to_string_pretty(&self.config)
             .context("Failed to serialize config as JSON")
     }
-    
+
     /// Import configuration from JSON
     pub async fn import_from_json(&mut self, json: &str) -> Result<()> {
         let config: SecurityConfig = serde_json::from_str(json)
             .context("Failed to parse JSON configuration")?;
-        
+
         // Validate the imported configuration
         let temp_manager = SecurityConfigManager {
             config: config.clone(),
             config_path: self.config_path.clone(),
         };
-        
+
         let warnings = temp_manager.validate_config()?;
         if !warnings.is_empty() {
             warn!("Imported configuration has warnings: {:?}", warnings);
         }
-        
+
         self.config = config;
         Self::save_config(&self.config_path, &self.config).await?;
         info!("Imported security configuration from JSON");
@@ -474,59 +474,59 @@ impl SecurityConfigUtils {
     /// Generate a secure default configuration for production use
     pub fn production_config() -> SecurityConfig {
         let mut config = SecurityConfig::default();
-        
+
         // More restrictive settings for production
         config.policy.trust_prompts_enabled = true;
         config.policy.sandbox_mode = true;
         config.policy.max_file_size = 5 * 1024 * 1024; // 5MB
-        
+
         config.trust_settings.require_confirmation = true;
         config.trust_settings.trust_expiry_hours = 24; // Expire after 24 hours
-        
+
         config.network.require_https = true;
         config.network.validate_certificates = true;
-        
+
         config.execution.enable_sandbox = true;
         config.execution.max_execution_time = 60; // 1 minute
         config.execution.resource_limits.max_memory_mb = 512; // 512MB
-        
+
         config
     }
-    
+
     /// Generate a development-friendly configuration
     pub fn development_config() -> SecurityConfig {
         let mut config = SecurityConfig::default();
-        
+
         // More permissive settings for development
         config.policy.trust_prompts_enabled = true;
         config.policy.sandbox_mode = false;
         config.policy.max_file_size = 50 * 1024 * 1024; // 50MB
-        
+
         config.trust_settings.require_confirmation = false;
         config.trust_settings.trust_expiry_hours = 0; // Never expire
-        
+
         config.execution.enable_sandbox = false;
         config.execution.max_execution_time = 300; // 5 minutes
         config.execution.resource_limits.max_memory_mb = 2048; // 2GB
-        
+
         config
     }
-    
+
     /// Generate an enterprise configuration template
     pub fn enterprise_config() -> SecurityConfig {
         let mut config = Self::production_config();
-        
+
         // Enterprise-specific settings
         config.enterprise.enabled = true;
         config.enterprise.require_mfa = true;
         config.enterprise.policy_refresh_minutes = 15;
-        
+
         config.audit_config.include_content_hashes = true;
         config.audit_config.log_level = "debug".to_string();
-        
+
         config.network.rate_limiting.max_requests_per_minute = 30;
         config.network.rate_limiting.max_requests_per_hour = 500;
-        
+
         config
     }
 }
@@ -535,44 +535,44 @@ impl SecurityConfigUtils {
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    
+
     #[tokio::test]
     async fn test_security_config_manager_creation() {
         let temp_dir = TempDir::new().unwrap();
         let manager = SecurityConfigManager::new(temp_dir.path()).await;
         assert!(manager.is_ok());
     }
-    
+
     #[tokio::test]
     async fn test_config_persistence() {
         let temp_dir = TempDir::new().unwrap();
         let mut manager = SecurityConfigManager::new(temp_dir.path()).await.unwrap();
-        
+
         // Modify config
         let mut config = manager.get_config().clone();
         config.policy.max_file_size = 12345;
         manager.update_config(config).await.unwrap();
-        
+
         // Create new manager to test persistence
         let manager2 = SecurityConfigManager::new(temp_dir.path()).await.unwrap();
         assert_eq!(manager2.get_config().policy.max_file_size, 12345);
     }
-    
+
     #[test]
     fn test_config_validation() {
         let mut config = SecurityConfig::default();
         config.policy.trust_prompts_enabled = false;
-        
+
         let manager = SecurityConfigManager {
             config,
             config_path: PathBuf::from("/tmp/test"),
         };
-        
+
         let warnings = manager.validate_config().unwrap();
         assert!(!warnings.is_empty());
         assert!(warnings[0].contains("Trust prompts are disabled"));
     }
-    
+
     #[test]
     fn test_production_config() {
         let config = SecurityConfigUtils::production_config();
@@ -581,7 +581,7 @@ mod tests {
         assert!(config.execution.enable_sandbox);
         assert_eq!(config.trust_settings.trust_expiry_hours, 24);
     }
-    
+
     #[test]
     fn test_development_config() {
         let config = SecurityConfigUtils::development_config();

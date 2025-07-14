@@ -1,5 +1,5 @@
 //! Performance Benchmark Tests
-//! 
+//!
 //! Comprehensive performance testing to verify 10-40x improvement targets
 //! and validate optimization strategies.
 
@@ -26,7 +26,7 @@ impl PerformanceBenchmarkSuite {
     pub fn new() -> Result<Self, HiveError> {
         let temp_dir = tempdir()
             .map_err(|e| HiveError::Migration(format!("Failed to create temp dir: {}", e)))?;
-        
+
         let source_db_path = temp_dir.path().join("benchmark_source.db");
         let target_db_path = temp_dir.path().join("benchmark_target.db");
 
@@ -98,8 +98,8 @@ impl PerformanceBenchmarkSuite {
 
         // Insert benchmark data
         let mut stmt = conn.prepare(
-            "INSERT INTO conversations 
-             (id, question, final_answer, source_of_truth, created_at) 
+            "INSERT INTO conversations
+             (id, question, final_answer, source_of_truth, created_at)
              VALUES (?, ?, ?, ?, ?)"
         ).map_err(|e| HiveError::Migration(format!("Failed to prepare statement: {}", e)))?;
 
@@ -108,9 +108,9 @@ impl PerformanceBenchmarkSuite {
             let question = format!("Performance benchmark question number {} with additional content to simulate realistic data sizes", i);
             let final_answer = format!("Performance benchmark answer number {} with comprehensive content that represents typical response sizes in production environments", i);
             let source_of_truth = format!("Performance benchmark source of truth content for conversation {} with detailed information", i);
-            let timestamp = format!("2024-01-{:02}T{:02}:{:02}:00Z", 
-                (i % 28) + 1, 
-                (i % 24), 
+            let timestamp = format!("2024-01-{:02}T{:02}:{:02}:00Z",
+                (i % 28) + 1,
+                (i % 24),
                 (i % 60)
             );
 
@@ -126,7 +126,7 @@ impl PerformanceBenchmarkSuite {
             for stage_num in 1..=4 {
                 let stage_name = match stage_num {
                     1 => "generator",
-                    2 => "refiner", 
+                    2 => "refiner",
                     3 => "validator",
                     4 => "curator",
                     _ => "unknown",
@@ -138,10 +138,10 @@ impl PerformanceBenchmarkSuite {
                 let output_content = format!("Detailed output content from {} stage for conversation {} with substantial text content to simulate realistic AI response sizes", stage_name, i);
 
                 conn.execute(
-                    "INSERT INTO stage_outputs 
-                     (id, conversation_id, stage_name, stage_number, provider, model, 
-                      full_output, character_count, word_count, temperature, 
-                      processing_time_ms, tokens_used, created_at) 
+                    "INSERT INTO stage_outputs
+                     (id, conversation_id, stage_name, stage_number, provider, model,
+                      full_output, character_count, word_count, temperature,
+                      processing_time_ms, tokens_used, created_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         &stage_id,
@@ -168,8 +168,8 @@ impl PerformanceBenchmarkSuite {
             let keywords = format!("[\"keyword_{}\", \"test\", \"benchmark\"]", i % 10);
 
             conn.execute(
-                "INSERT INTO knowledge_base 
-                 (id, conversation_id, curator_content, topics, keywords, created_at) 
+                "INSERT INTO knowledge_base
+                 (id, conversation_id, curator_content, topics, keywords, created_at)
                  VALUES (?, ?, ?, ?, ?, ?)",
                 [
                     &kb_id,
@@ -194,9 +194,9 @@ impl PerformanceBenchmarkSuite {
     /// Benchmark basic migration performance
     pub async fn benchmark_basic_migration(&self) -> Result<BenchmarkResult, HiveError> {
         let start_time = Instant::now();
-        
+
         let mut db = ProductionDatabase::new(&self.source_db_path, &self.target_db_path).await?;
-        
+
         let config = BatchConfig {
             batch_size: 1000,
             parallel_batches: 1,
@@ -220,9 +220,9 @@ impl PerformanceBenchmarkSuite {
     /// Benchmark optimized migration performance
     pub async fn benchmark_optimized_migration(&self) -> Result<BenchmarkResult, HiveError> {
         let start_time = Instant::now();
-        
+
         let mut db = ProductionDatabase::new(&self.source_db_path, &self.target_db_path).await?;
-        
+
         let config = BatchConfig {
             batch_size: 2000, // Larger batch size
             parallel_batches: 4, // Parallel processing
@@ -254,9 +254,9 @@ impl PerformanceBenchmarkSuite {
             }
 
             let start_time = Instant::now();
-            
+
             let mut db = ProductionDatabase::new(&self.source_db_path, &self.target_db_path).await?;
-            
+
             let config = BatchConfig {
                 batch_size,
                 parallel_batches: 2,
@@ -291,9 +291,9 @@ impl PerformanceBenchmarkSuite {
             }
 
             let start_time = Instant::now();
-            
+
             let mut db = ProductionDatabase::new(&self.source_db_path, &self.target_db_path).await?;
-            
+
             let config = BatchConfig {
                 batch_size: 1000,
                 parallel_batches,
@@ -365,10 +365,10 @@ impl PerformanceBenchmarkSuite {
             }
 
             let start_time = Instant::now();
-            
+
             let mut db = ProductionDatabase::new(&self.source_db_path, &self.target_db_path).await?;
             let mut optimizer = PerformanceOptimizer::new(config);
-            
+
             let optimization_result = optimizer.optimize_migration_performance(&mut db).await?;
             let duration = start_time.elapsed();
 
@@ -388,9 +388,9 @@ impl PerformanceBenchmarkSuite {
     /// Memory usage benchmark
     pub async fn benchmark_memory_usage(&self) -> Result<BenchmarkResult, HiveError> {
         let start_memory = Self::get_memory_usage();
-        
+
         let mut db = ProductionDatabase::new(&self.source_db_path, &self.target_db_path).await?;
-        
+
         let config = BatchConfig {
             batch_size: 500, // Smaller batch for memory testing
             parallel_batches: 1,
@@ -401,7 +401,7 @@ impl PerformanceBenchmarkSuite {
         let start_time = Instant::now();
         let stats = db.migrate_complete_database(config).await?;
         let duration = start_time.elapsed();
-        
+
         let end_memory = Self::get_memory_usage();
         let memory_used = end_memory.saturating_sub(start_memory);
 
@@ -425,7 +425,7 @@ impl PerformanceBenchmarkSuite {
     /// Run comprehensive performance test suite
     pub async fn run_comprehensive_benchmark(&self, conversation_count: u32) -> Result<BenchmarkSuite, HiveError> {
         log::info!("Running comprehensive performance benchmark with {} conversations", conversation_count);
-        
+
         // Create benchmark database
         self.create_benchmark_database(conversation_count).await?;
 
@@ -469,7 +469,7 @@ impl PerformanceBenchmarkSuite {
         suite.meets_performance_targets = suite.overall_performance_factor >= 10.0; // 10x minimum target
 
         log::info!("Benchmark completed. Performance factor: {:.2}x", suite.overall_performance_factor);
-        
+
         Ok(suite)
     }
 }
@@ -512,7 +512,7 @@ impl BenchmarkSuite {
     /// Generate performance report
     pub fn generate_report(&self) -> String {
         let mut report = String::new();
-        
+
         report.push_str(&format!("Performance Benchmark Report\n"));
         report.push_str(&format!("==========================\n\n"));
         report.push_str(&format!("Dataset Size: {} conversations\n", self.conversation_count));
@@ -548,7 +548,7 @@ impl BenchmarkSuite {
 // Criterion benchmarks for automated performance testing
 fn criterion_benchmark(c: &mut Criterion) {
     let rt = tokio::runtime::Runtime::new().unwrap();
-    
+
     c.bench_function("small_migration_100", |b| {
         b.to_async(&rt).iter(|| async {
             let suite = PerformanceBenchmarkSuite::new().unwrap();
@@ -604,7 +604,7 @@ mod tests {
     async fn test_small_database_benchmark() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         suite.create_benchmark_database(10).await.unwrap();
-        
+
         let result = suite.benchmark_basic_migration().await.unwrap();
         assert!(result.success);
         assert!(result.rows_processed > 0);
@@ -616,10 +616,10 @@ mod tests {
     async fn test_batch_size_comparison() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         suite.create_benchmark_database(50).await.unwrap();
-        
+
         let results = suite.benchmark_batch_sizes(vec![10, 25, 50]).await.unwrap();
         assert_eq!(results.len(), 3);
-        
+
         for result in results {
             assert!(result.success);
             assert!(result.throughput_rows_per_sec > 0.0);
@@ -631,14 +631,14 @@ mod tests {
     async fn test_parallel_processing_benchmark() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         suite.create_benchmark_database(40).await.unwrap();
-        
+
         let results = suite.benchmark_parallel_processing(vec![1, 2, 4]).await.unwrap();
         assert_eq!(results.len(), 3);
-        
+
         // Parallel processing should generally be faster (higher throughput)
         let sequential = &results[0];
         let parallel = &results[1];
-        
+
         assert!(sequential.success);
         assert!(parallel.success);
         // Note: In very small datasets, parallel might not always be faster due to overhead
@@ -649,7 +649,7 @@ mod tests {
     async fn test_memory_usage_benchmark() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         suite.create_benchmark_database(25).await.unwrap();
-        
+
         let result = suite.benchmark_memory_usage().await.unwrap();
         assert!(result.success);
         assert!(result.memory_usage_mb > 0);
@@ -661,11 +661,11 @@ mod tests {
     async fn test_comprehensive_benchmark_small() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         let results = suite.run_comprehensive_benchmark(20).await.unwrap();
-        
+
         assert_eq!(results.conversation_count, 20);
         assert!(!results.results.is_empty());
         assert!(results.overall_performance_factor > 0.0);
-        
+
         // Verify we have results from different benchmark types
         let result_names: Vec<&String> = results.results.iter().map(|r| &r.name).collect();
         assert!(result_names.iter().any(|name| name.contains("Basic Migration")));
@@ -677,7 +677,7 @@ mod tests {
     async fn test_benchmark_report_generation() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         let results = suite.run_comprehensive_benchmark(15).await.unwrap();
-        
+
         let report = results.generate_report();
         assert!(report.contains("Performance Benchmark Report"));
         assert!(report.contains("Dataset Size: 15 conversations"));
@@ -689,14 +689,14 @@ mod tests {
     async fn test_performance_target_validation() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         let results = suite.run_comprehensive_benchmark(30).await.unwrap();
-        
+
         // Check if performance improvement is measurable
         assert!(results.overall_performance_factor > 0.5); // At least some improvement
-        
+
         // Verify best performance result exists
         let best = results.get_best_performance();
         assert!(best.is_some());
-        
+
         let best_result = best.unwrap();
         assert!(best_result.throughput_rows_per_sec > 0.0);
         assert!(best_result.success);
@@ -707,43 +707,43 @@ mod tests {
     async fn test_optimization_strategy_comparison() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
         suite.create_benchmark_database(35).await.unwrap();
-        
+
         let strategy_results = suite.benchmark_optimization_strategies().await.unwrap();
         assert!(strategy_results.len() >= 3); // At least 3 different strategies
-        
+
         // Find sequential and optimized strategies
         let sequential = strategy_results.iter()
             .find(|r| r.name.contains("Sequential"))
             .expect("Sequential strategy should be tested");
-        
+
         let optimized = strategy_results.iter()
             .find(|r| r.name.contains("Advanced") || r.name.contains("Maximum"))
             .expect("Optimized strategy should be tested");
-        
+
         assert!(sequential.success);
         assert!(optimized.success);
-        
+
         // In most cases, optimized should be better, but for very small datasets
         // the overhead might make sequential faster
-        log::info!("Sequential: {:.2} rows/sec, Optimized: {:.2} rows/sec", 
+        log::info!("Sequential: {:.2} rows/sec, Optimized: {:.2} rows/sec",
             sequential.throughput_rows_per_sec, optimized.throughput_rows_per_sec);
     }
 
     #[tokio::test]
-    #[serial] 
+    #[serial]
     async fn test_large_dataset_performance() {
         let suite = PerformanceBenchmarkSuite::new().unwrap();
-        
+
         // Test with larger dataset to see real performance differences
         let results = suite.run_comprehensive_benchmark(100).await.unwrap();
-        
+
         assert_eq!(results.conversation_count, 100);
         assert!(results.overall_performance_factor > 0.8); // Should show some improvement
-        
+
         // With larger datasets, we should see clearer performance differences
         let best_performance = results.get_best_performance().unwrap();
         assert!(best_performance.throughput_rows_per_sec > 10.0); // At least 10 rows/sec
-        
+
         // Memory usage should be reasonable even for larger datasets
         let memory_efficient = results.get_most_memory_efficient().unwrap();
         assert!(memory_efficient.memory_usage_mb < 512); // Should stay under 512MB

@@ -2,26 +2,26 @@
 //!
 //! This module provides a complete MCP server for IDE integration
 
+pub mod auth;
+pub mod performance;
+pub mod prompts;
 pub mod protocol;
+pub mod resources;
+pub mod sampling;
 pub mod server;
+pub mod streaming;
+pub mod subscriptions;
 pub mod tools;
 pub mod tools_advanced;
-pub mod prompts;
-pub mod sampling;
-pub mod subscriptions;
-pub mod performance;
-pub mod resources;
-pub mod auth;
-pub mod streaming;
 
+pub use performance::{PerformanceConfig, PerformanceManager};
+pub use prompts::{PromptContext, PromptManager};
+pub use protocol::{McpError, McpRequest, McpResponse};
+pub use sampling::{SampleProgress, SampleRequest, SamplingManager};
 pub use server::McpServer;
-pub use protocol::{McpRequest, McpResponse, McpError};
 pub use streaming::{StreamingHandler, StreamingToolResponse};
-pub use tools_advanced::AdvancedToolRegistry;
-pub use prompts::{PromptManager, PromptContext};
-pub use sampling::{SamplingManager, SampleRequest, SampleProgress};
 pub use subscriptions::{SubscriptionManager, SubscriptionRequest};
-pub use performance::{PerformanceManager, PerformanceConfig};
+pub use tools_advanced::AdvancedToolRegistry;
 
 use anyhow::Result;
 

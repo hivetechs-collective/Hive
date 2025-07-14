@@ -10,7 +10,7 @@ use ratatui::{
 };
 use tokio::sync::mpsc;
 
-use crate::tui::app::{TuiEvent, TuiMessage, MessageType};
+use crate::tui::app::{MessageType, TuiEvent, TuiMessage};
 
 /// Professional input box component
 pub struct InputBox {
@@ -43,29 +43,25 @@ impl InputBox {
             theme: InputTheme::default(),
         }
     }
-    
+
     /// Draw the professional input box (Claude Code style)
-    pub fn draw(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        input_buffer: &str,
-        cursor_position: usize,
-    ) {
+    pub fn draw(&self, frame: &mut Frame, area: Rect, input_buffer: &str, cursor_position: usize) {
         // Input text with placeholder
         let display_text = if input_buffer.is_empty() {
             "Try \"ask <question>\" or \"analyze .\" or \"plan <goal>\""
         } else {
             input_buffer
         };
-        
+
         // Style based on whether input is empty
         let text_style = if input_buffer.is_empty() {
-            Style::default().fg(self.theme.placeholder_color).add_modifier(Modifier::ITALIC)
+            Style::default()
+                .fg(self.theme.placeholder_color)
+                .add_modifier(Modifier::ITALIC)
         } else {
             Style::default().fg(self.theme.input_color)
         };
-        
+
         // Create input paragraph with professional styling
         let input_paragraph = Paragraph::new(format!("> {}", display_text))
             .style(text_style)
@@ -77,13 +73,13 @@ impl InputBox {
                     .title_style(
                         Style::default()
                             .fg(self.theme.title_color)
-                            .add_modifier(Modifier::BOLD)
-                    )
+                            .add_modifier(Modifier::BOLD),
+                    ),
             )
             .wrap(Wrap { trim: true });
-        
+
         frame.render_widget(input_paragraph, area);
-        
+
         // Show cursor if there's input
         if !input_buffer.is_empty() {
             let cursor_x = area.x + cursor_position as u16 + 3; // Account for "> " prefix
@@ -103,7 +99,7 @@ impl InputHandler {
     pub fn new() -> Self {
         Self {}
     }
-    
+
     /// Process user command input
     pub async fn process_command(
         &self,
@@ -111,7 +107,7 @@ impl InputHandler {
         event_sender: mpsc::UnboundedSender<TuiEvent>,
     ) -> Result<()> {
         let input = input.trim();
-        
+
         // Handle built-in commands
         match input {
             "help" | "/help" => {
@@ -151,12 +147,15 @@ impl InputHandler {
                 }));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Send help message
-    async fn send_help_message(&self, event_sender: &mpsc::UnboundedSender<TuiEvent>) -> Result<()> {
+    async fn send_help_message(
+        &self,
+        event_sender: &mpsc::UnboundedSender<TuiEvent>,
+    ) -> Result<()> {
         let help_content = "📚 HiveTechs Consensus Commands\n\
                            \n\
                            Core Commands:\n\
@@ -175,18 +174,21 @@ impl InputHandler {
                            plan \"Add user authentication with JWT tokens\"\n\
                            \n\
                            Press ? for keyboard shortcuts";
-        
+
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
             content: help_content.to_string(),
             message_type: MessageType::Help,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         Ok(())
     }
-    
+
     /// Send status message
-    async fn send_status_message(&self, event_sender: &mpsc::UnboundedSender<TuiEvent>) -> Result<()> {
+    async fn send_status_message(
+        &self,
+        event_sender: &mpsc::UnboundedSender<TuiEvent>,
+    ) -> Result<()> {
         let status_content = "📊 HiveTechs Consensus System Status\n\
                              \n\
                              Core System:\n\
@@ -207,16 +209,16 @@ impl InputHandler {
                              \n\
                              Memory Usage: ~25MB (vs 180MB TypeScript)\n\
                              Startup Time: <50ms (vs 2.1s TypeScript)";
-        
+
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
             content: status_content.to_string(),
             message_type: MessageType::Status,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         Ok(())
     }
-    
+
     /// Process ask command with 4-stage consensus
     async fn process_ask_command(
         &self,
@@ -231,21 +233,22 @@ impl InputHandler {
             }));
             return Ok(());
         }
-        
+
         // Send processing message
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
             content: "🤔 Processing your question with 4-stage consensus...".to_string(),
             message_type: MessageType::SystemResponse,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         // TODO: Integrate with actual consensus engine
         // For now, simulate the process
-        self.simulate_consensus_process(question, event_sender).await?;
-        
+        self.simulate_consensus_process(question, event_sender)
+            .await?;
+
         Ok(())
     }
-    
+
     /// Process analyze command with repository intelligence
     async fn process_analyze_command(
         &self,
@@ -260,16 +263,19 @@ impl InputHandler {
             }));
             return Ok(());
         }
-        
+
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
-            content: format!("🔍 Analyzing: {} with ML-powered repository intelligence...", path),
+            content: format!(
+                "🔍 Analyzing: {} with ML-powered repository intelligence...",
+                path
+            ),
             message_type: MessageType::SystemResponse,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         // Simulate analysis
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-        
+
         let analysis_result = format!(
             "📊 Repository Analysis Complete\n\
              \n\
@@ -293,16 +299,16 @@ impl InputHandler {
              • Consider adding integration tests",
             path
         );
-        
+
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
             content: analysis_result,
             message_type: MessageType::SystemResponse,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         Ok(())
     }
-    
+
     /// Process plan command with strategic planning
     async fn process_plan_command(
         &self,
@@ -317,16 +323,16 @@ impl InputHandler {
             }));
             return Ok(());
         }
-        
+
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
             content: format!("📋 Creating strategic development plan for: {}", goal),
             message_type: MessageType::SystemResponse,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         // Simulate planning
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-        
+
         let plan_result = format!(
             "✅ Development Plan Created\n\
              \n\
@@ -359,16 +365,16 @@ impl InputHandler {
              Ready to begin? Use 'execute plan' to start implementation.",
             goal
         );
-        
+
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
             content: plan_result,
             message_type: MessageType::SystemResponse,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         Ok(())
     }
-    
+
     /// Simulate consensus process (placeholder for real implementation)
     async fn simulate_consensus_process(
         &self,
@@ -376,7 +382,7 @@ impl InputHandler {
         event_sender: &mpsc::UnboundedSender<TuiEvent>,
     ) -> Result<()> {
         use crate::tui::consensus_view::{ConsensusProgress, StageProgress, StageStatus};
-        
+
         // Initialize consensus progress
         let mut progress = ConsensusProgress {
             generator: StageProgress {
@@ -405,7 +411,7 @@ impl InputHandler {
             },
             is_active: true,
         };
-        
+
         // Simulate each stage
         for stage_idx in 0..4 {
             for progress_val in 0..=100 {
@@ -416,11 +422,11 @@ impl InputHandler {
                     3 => progress.curator.progress = progress_val,
                     _ => {}
                 }
-                
+
                 let _ = event_sender.send(TuiEvent::ConsensusUpdate(progress.clone()));
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             }
-            
+
             // Mark current stage as complete and start next
             match stage_idx {
                 0 => {
@@ -441,10 +447,10 @@ impl InputHandler {
                 _ => {}
             }
         }
-        
+
         // Complete consensus
         let _ = event_sender.send(TuiEvent::ConsensusComplete);
-        
+
         // Send result
         let result = format!(
             "✨ Consensus Response\n\
@@ -462,13 +468,13 @@ impl InputHandler {
              In production, this would be the actual consensus result.)",
             question
         );
-        
+
         let _ = event_sender.send(TuiEvent::Message(TuiMessage {
             content: result,
             message_type: MessageType::SystemResponse,
             timestamp: chrono::Utc::now(),
         }));
-        
+
         Ok(())
     }
 }

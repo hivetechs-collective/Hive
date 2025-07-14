@@ -2,14 +2,14 @@
 //!
 //! Additional AI-powered tools for comprehensive IDE integration
 
-use super::protocol::{Tool, ToolResult, ToolContent};
+use super::protocol::{Tool, ToolContent, ToolResult};
+use crate::consensus::engine::ConsensusEngine;
 use crate::core::config::Config;
-use crate::consensus::engine::ConsensusEngine; 
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use serde_json::Value;
 use tracing::info;
 
 /// Advanced tool registry extension
@@ -20,10 +20,7 @@ pub struct AdvancedToolRegistry {
 
 impl AdvancedToolRegistry {
     /// Create new advanced tool registry
-    pub fn new(
-        consensus_engine: Arc<RwLock<ConsensusEngine>>,
-        config: Arc<Config>,
-    ) -> Self {
+    pub fn new(consensus_engine: Arc<RwLock<ConsensusEngine>>, config: Arc<Config>) -> Self {
         Self {
             consensus_engine,
             config,
@@ -405,7 +402,7 @@ impl AdvancedToolRegistry {
         let name = "analyze_dependencies".to_string();
         let tool = Tool {
             name: name.clone(),
-            description: "Dependency analysis with security and update recommendations".to_string(), 
+            description: "Dependency analysis with security and update recommendations".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -453,7 +450,7 @@ impl AdvancedToolRegistry {
                         "description": "Code to analyze for pattern opportunities"
                     },
                     "problem_description": {
-                        "type": "string",  
+                        "type": "string",
                         "description": "Description of the problem to solve"
                     },
                     "language": {
@@ -518,7 +515,8 @@ impl AdvancedToolRegistry {
         let name = "generate_changelog".to_string();
         let tool = Tool {
             name: name.clone(),
-            description: "Automated changelog generation from git history and code changes".to_string(),
+            description: "Automated changelog generation from git history and code changes"
+                .to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -594,21 +592,22 @@ impl AdvancedToolRegistry {
 
     /// Handle debug code tool
     pub async fn handle_debug_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let error_message = args.get("error_message")
+        let error_message = args
+            .get("error_message")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: error_message"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let context = args.get("context")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let context = args.get("context").and_then(|v| v.as_str()).unwrap_or("");
 
         let prompt = format!(
             "Debug this {} code with systematic analysis:\n\n\
@@ -621,17 +620,26 @@ impl AdvancedToolRegistry {
             3. Potential fix with explanation\n\
             4. Prevention strategies\n\
             5. Testing recommendations",
-            language, language, code, error_message,
-            if context.is_empty() { String::new() } else { format!("Context: {}", context) }
+            language,
+            language,
+            code,
+            error_message,
+            if context.is_empty() {
+                String::new()
+            } else {
+                format!("Context: {}", context)
+            }
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Debug analysis failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -639,21 +647,22 @@ impl AdvancedToolRegistry {
 
     /// Handle refactor code tool
     pub async fn handle_refactor_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let refactor_type = args.get("refactor_type")
+        let refactor_type = args
+            .get("refactor_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: refactor_type"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let target = args.get("target")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let target = args.get("target").and_then(|v| v.as_str()).unwrap_or("");
 
         let prompt = format!(
             "Perform {} refactoring on this {} code:\n\n\
@@ -665,17 +674,26 @@ impl AdvancedToolRegistry {
             3. Benefits of the refactoring\n\
             4. Potential risks or considerations\n\
             5. Testing strategy for the refactored code",
-            refactor_type, language, language, code,
-            if target.is_empty() { String::new() } else { format!("Target element: {}", target) }
+            refactor_type,
+            language,
+            language,
+            code,
+            if target.is_empty() {
+                String::new()
+            } else {
+                format!("Target element: {}", target)
+            }
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Refactoring failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -683,23 +701,29 @@ impl AdvancedToolRegistry {
 
     /// Handle review code tool
     pub async fn handle_review_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let focus_areas = args.get("focus_areas")
+        let focus_areas = args
+            .get("focus_areas")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter()
-                .filter_map(|v| v.as_str())
-                .collect::<Vec<_>>()
-                .join(", "))
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
             .unwrap_or_else(|| "general code quality".to_string());
 
-        let style_guide = args.get("style_guide")
+        let style_guide = args
+            .get("style_guide")
             .and_then(|v| v.as_str())
             .unwrap_or("language best practices");
 
@@ -719,12 +743,14 @@ impl AdvancedToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Code review failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -732,7 +758,7 @@ impl AdvancedToolRegistry {
 
     /// Handle additional tool methods...
     /// (Implementation for remaining tools would follow similar patterns)
-    
+
     /// Handle a generic advanced tool call
     pub async fn handle_advanced_tool(&self, name: &str, args: Value) -> Result<ToolResult> {
         match name {
@@ -754,9 +780,7 @@ impl AdvancedToolRegistry {
                 );
 
                 Ok(ToolResult {
-                    content: vec![ToolContent::Text { 
-                        text: placeholder 
-                    }],
+                    content: vec![ToolContent::Text { text: placeholder }],
                     is_error: None,
                 })
             }

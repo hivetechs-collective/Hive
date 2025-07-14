@@ -1,27 +1,31 @@
 // Consensus Pipeline - Orchestrates the 4-stage consensus process
 // Manages flow from Generator → Refiner → Validator → Curator
 
-use crate::consensus::stages::{ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage};
-use crate::consensus::streaming::{ConsoleCallbacks, ProgressTracker, StreamingCallbacks, ProgressInfo};
+use crate::consensus::stages::{
+    ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage,
+};
+use crate::consensus::streaming::{
+    ConsoleCallbacks, ProgressInfo, ProgressTracker, StreamingCallbacks,
+};
 use crate::consensus::temporal::TemporalContextProvider;
+#[cfg(test)]
+use crate::consensus::types::ConsensusProfile;
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
     TokenUsage,
 };
-#[cfg(test)]
-use crate::consensus::types::ConsensusProfile;
 // use crate::hooks::{HooksSystem, EventType, EventSource, HookEvent, ConsensusIntegration};
+use crate::consensus::models::ModelManager;
 use crate::consensus::openrouter::{
     OpenRouterClient, OpenRouterMessage, OpenRouterRequest, OpenRouterResponse,
-    StreamingCallbacks as OpenRouterStreamingCallbacks, SimpleStreamingCallbacks
+    SimpleStreamingCallbacks, StreamingCallbacks as OpenRouterStreamingCallbacks,
 };
-use rusqlite::{params, OptionalExtension};
-use crate::consensus::models::ModelManager;
 use crate::core::database::DatabaseManager;
 use crate::core::usage_tracker::UsageTracker;
 use crate::subscription::conversation_gateway::ConversationGateway;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use rusqlite::{params, OptionalExtension};
 use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
@@ -44,7 +48,11 @@ pub struct ConsensusPipeline {
 
 impl ConsensusPipeline {
     /// Create a new consensus pipeline
-    pub fn new(config: ConsensusConfig, profile: ConsensusProfile, api_key: Option<String>) -> Self {
+    pub fn new(
+        config: ConsensusConfig,
+        profile: ConsensusProfile,
+        api_key: Option<String>,
+    ) -> Self {
         let callbacks: Arc<dyn StreamingCallbacks> = if config.show_progress {
             Arc::new(ConsoleCallbacks {
                 show_progress: true,
@@ -98,13 +106,13 @@ impl ConsensusPipeline {
         self.usage_tracker = Some(Arc::new(UsageTracker::new(database)));
         self
     }
-    
+
     /// Set the hooks system for this pipeline
     // pub fn with_hooks(mut self, hooks_system: Arc<HooksSystem>) -> Self {
     //     self.hooks_system = Some(hooks_system);
     //     self
     // }
-    
+
     /// Set the consensus integration for enterprise features
     // pub fn with_consensus_integration(mut self, integration: Arc<ConsensusIntegration>) -> Self {
     //     self.consensus_integration = Some(integration);
@@ -122,7 +130,7 @@ impl ConsensusPipeline {
         // Check usage limits before running consensus
         // if let (Some(user_id), Some(usage_tracker)) = (user_id.as_ref(), &self.usage_tracker) {
         //     let usage_check = usage_tracker.check_usage_before_conversation(user_id).await?;
-        //     
+        //
         //     if !usage_check.allowed {
         //         return Err(anyhow::anyhow!(
         //             "Usage limit reached: {}. {} conversations remaining today.",
@@ -130,7 +138,7 @@ impl ConsensusPipeline {
         //             usage_check.remaining_conversations
         //         ));
         //     }
-        //     
+        //
         //     tracing::info!(
         //         "Usage check passed for user {}: {} - {} remaining",
         //         user_id,
@@ -138,22 +146,22 @@ impl ConsensusPipeline {
         //         usage_check.remaining_conversations
         //     );
         // }
-        
+
         // Check if maintenance has run recently
         if let Some(db) = &self.database {
             use crate::consensus::maintenance::TemplateMaintenanceManager;
-            
-            let mut maintenance = TemplateMaintenanceManager::new(
-                db.clone(), 
-                self.api_key.clone()
-            );
-            
+
+            let mut maintenance = TemplateMaintenanceManager::new(db.clone(), self.api_key.clone());
+
             if maintenance.needs_maintenance() {
                 tracing::info!("Running model maintenance before consensus...");
                 match maintenance.run_maintenance().await {
                     Ok(report) => {
-                        tracing::info!("Model maintenance complete: {} models synced, {} profiles migrated", 
-                                     report.models_synced, report.migrated_profiles.len());
+                        tracing::info!(
+                            "Model maintenance complete: {} models synced, {} profiles migrated",
+                            report.models_synced,
+                            report.migrated_profiles.len()
+                        );
                     }
                     Err(e) => {
                         tracing::warn!("Model maintenance failed: {}. Continuing anyway.", e);
@@ -161,7 +169,7 @@ impl ConsensusPipeline {
                 }
             }
         }
-        
+
         let conversation_id = Uuid::new_v4().to_string();
         let pipeline_start = Instant::now();
         let mut total_cost = 0.0;
@@ -173,33 +181,44 @@ impl ConsensusPipeline {
             let conn = db.get_connection()?;
             let license_key = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
                 // Get current license key only - D1 will validate and return user info
-                let license_key: Option<String> = conn.query_row(
-                    "SELECT value FROM configurations WHERE key = 'hive_license_key'",
-                    [],
-                    |row| row.get(0)
-                ).optional()?;
+                let license_key: Option<String> = conn
+                    .query_row(
+                        "SELECT value FROM configurations WHERE key = 'hive_license_key'",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
                 Ok(license_key)
-            }).await??;
-            
+            })
+            .await??;
+
             if let Some(license_key) = license_key {
-                tracing::info!("Starting consensus with license key: {}", 
-                             &license_key[..8]); // Log only first 8 chars for security
-                
+                tracing::info!("Starting consensus with license key: {}", &license_key[..8]); // Log only first 8 chars for security
+
                 // Call D1 to validate license and increment conversation count IMMEDIATELY
                 // D1 is the source of truth for user information
                 let gateway = ConversationGateway::new()?;
-                match gateway.request_conversation_authorization(question, &license_key).await {
+                match gateway
+                    .request_conversation_authorization(question, &license_key)
+                    .await
+                {
                     Ok(auth) => {
                         let remaining = auth.remaining.unwrap_or(u32::MAX);
-                        tracing::info!("D1 authorization successful! {} conversations remaining today", 
-                                     if remaining == u32::MAX { "Unlimited".to_string() } else { remaining.to_string() });
-                        
+                        tracing::info!(
+                            "D1 authorization successful! {} conversations remaining today",
+                            if remaining == u32::MAX {
+                                "Unlimited".to_string()
+                            } else {
+                                remaining.to_string()
+                            }
+                        );
+
                         // Notify callbacks immediately about D1 authorization
                         // This updates the UI count right away, not after consensus completes
                         if let Err(e) = self.callbacks.on_d1_authorization(remaining) {
                             tracing::warn!("Failed to notify D1 authorization: {}", e);
                         }
-                        
+
                         // Store the authorization for later verification
                         // The remaining count is already updated in D1 and should refresh UI
                         Some((license_key, auth))
@@ -217,23 +236,23 @@ impl ConsensusPipeline {
         } else {
             None
         };
-        
+
         // Store the D1 authorization for later verification
         let d1_auth = license_key_for_d1.map(|(_, auth)| auth);
 
         // Emit BeforeConsensus hook event
-//         // if let Some(hooks) = &self.hooks_system {
-//         //     let event = HookEvent::new(
-//         //         EventType::BeforeConsensus,
-//                 EventSource::Consensus { stage: "pipeline".to_string() }
-//             )
-//             .with_context("question", question)
-//             .with_context("conversation_id", &conversation_id);
-//             
-//             if let Err(e) = hooks.dispatch_event(event).await {
-//                 tracing::warn!("Failed to dispatch BeforeConsensus hook event: {}", e);
-//             }
-//         }
+        //         // if let Some(hooks) = &self.hooks_system {
+        //         //     let event = HookEvent::new(
+        //         //         EventType::BeforeConsensus,
+        //                 EventSource::Consensus { stage: "pipeline".to_string() }
+        //             )
+        //             .with_context("question", question)
+        //             .with_context("conversation_id", &conversation_id);
+        //
+        //             if let Err(e) = hooks.dispatch_event(event).await {
+        //                 tracing::warn!("Failed to dispatch BeforeConsensus hook event: {}", e);
+        //             }
+        //         }
 
         // Check if temporal context is needed
         let temporal_context = if self.temporal_provider.requires_temporal_context(question) {
@@ -247,13 +266,18 @@ impl ConsensusPipeline {
         let memory_context = self.get_memory_context(question).await?;
         if let Some(ref mem_ctx) = memory_context {
             tracing::info!("Retrieved memory context with {} characters", mem_ctx.len());
-            tracing::debug!("Memory context preview: {}", &mem_ctx.chars().take(200).collect::<String>());
+            tracing::debug!(
+                "Memory context preview: {}",
+                &mem_ctx.chars().take(200).collect::<String>()
+            );
         } else {
             tracing::info!("No memory context found (this is normal for first conversation)");
         }
 
         // Build full context including semantic, temporal, and memory
-        let full_context = self.build_full_context(context, temporal_context, memory_context).await?;
+        let full_context = self
+            .build_full_context(context, temporal_context, memory_context)
+            .await?;
 
         let mut previous_answer: Option<String> = None;
         let mut stage_results = Vec::new();
@@ -261,7 +285,7 @@ impl ConsensusPipeline {
         // Run through all 4 stages
         for (i, stage_handler) in self.stages.iter().enumerate() {
             let stage = stage_handler.stage();
-            
+
             // Use model directly from profile - the maintenance system ensures these are always valid
             let model = self.profile.get_model_for_stage(stage).to_string();
 
@@ -269,7 +293,7 @@ impl ConsensusPipeline {
             // if let Some(integration) = &self.consensus_integration {
             //     // Estimate stage cost
             //     let estimated_cost = self.estimate_stage_cost(stage, model, question).await?;
-            //     
+            //
             //     // Execute pre-stage hooks with cost and quality checks
             //     let pre_stage_result = integration.execute_pre_stage_hooks(
             //         stage,
@@ -278,13 +302,13 @@ impl ConsensusPipeline {
             //         model,
             //         estimated_cost,
             //     ).await?;
-            //     
+            //
             //     // Check if we should proceed
             //     if !pre_stage_result.proceed {
             //         if let Some(approval_required) = pre_stage_result.approval_required {
             //             // Handle approval requirement
             //             tracing::info!("Approval required for {} stage: {}", stage.as_str(), approval_required.description);
-            //             
+            //
             //             // For now, we'll continue with a warning
             //             // In a real implementation, this would wait for approval
             //             for warning in &pre_stage_result.warnings {
@@ -298,28 +322,28 @@ impl ConsensusPipeline {
             // }
 
             // Emit BeforeStage hook event
-//             if let Some(hooks) = &self.hooks_system {
-//                 let stage_event_type = match stage {
-//                     Stage::Generator => EventType::BeforeGeneratorStage,
-//                     Stage::Refiner => EventType::BeforeRefinerStage,
-//                     Stage::Validator => EventType::BeforeValidatorStage,
-//                     Stage::Curator => EventType::BeforeCuratorStage,
-//                 };
-//                 
-//                 let event = HookEvent::new(
-//                     stage_event_type,
-//                     EventSource::Consensus { stage: stage.as_str().to_string() }
-//                 )
-//                 .with_context("question", question)
-//                 .with_context("conversation_id", &conversation_id)
-//                 .with_context("model", model)
-//                 .with_context("stage_index", i)
-//                 .with_context("previous_answer", previous_answer.as_deref().unwrap_or(""));
-//                 
-//                 if let Err(e) = hooks.dispatch_event(event).await {
-//                     tracing::warn!("Failed to dispatch Before{:?}Stage hook event: {}", stage, e);
-//                 }
-//             }
+            //             if let Some(hooks) = &self.hooks_system {
+            //                 let stage_event_type = match stage {
+            //                     Stage::Generator => EventType::BeforeGeneratorStage,
+            //                     Stage::Refiner => EventType::BeforeRefinerStage,
+            //                     Stage::Validator => EventType::BeforeValidatorStage,
+            //                     Stage::Curator => EventType::BeforeCuratorStage,
+            //                 };
+            //
+            //                 let event = HookEvent::new(
+            //                     stage_event_type,
+            //                     EventSource::Consensus { stage: stage.as_str().to_string() }
+            //                 )
+            //                 .with_context("question", question)
+            //                 .with_context("conversation_id", &conversation_id)
+            //                 .with_context("model", model)
+            //                 .with_context("stage_index", i)
+            //                 .with_context("previous_answer", previous_answer.as_deref().unwrap_or(""));
+            //
+            //                 if let Err(e) = hooks.dispatch_event(event).await {
+            //                     tracing::warn!("Failed to dispatch Before{:?}Stage hook event: {}", stage, e);
+            //                 }
+            //             }
 
             // Notify stage start
             self.callbacks.on_stage_start(stage, &model)?;
@@ -330,7 +354,7 @@ impl ConsensusPipeline {
                 Stage::Generator => full_context.as_deref(),
                 _ => None, // Other stages don't get memory context directly
             };
-            
+
             let stage_result = self
                 .run_single_stage(
                     stage,
@@ -347,24 +371,24 @@ impl ConsensusPipeline {
             // Update cost
             if let Some(analytics) = &stage_result.analytics {
                 total_cost += analytics.cost;
-                
+
                 // Emit cost control hook events if needed
-//                 if let Some(hooks) = &self.hooks_system {
-//                     if analytics.cost > 0.05 { // Threshold for cost notifications
-//                         let cost_event = HookEvent::new(
-//                             EventType::CostThresholdReached,
-//                             EventSource::Consensus { stage: stage.as_str().to_string() }
-//                         )
-//                         .with_context("estimated_cost", analytics.cost)
-//                         .with_context("stage_cost", analytics.cost)
-//                         .with_context("total_cost", total_cost)
-//                         .with_context("model", model);
-//                         
-//                         if let Err(e) = hooks.dispatch_event(cost_event).await {
-//                             tracing::warn!("Failed to dispatch CostThresholdReached hook event: {}", e);
-//                         }
-//                     }
-//                 }
+                //                 if let Some(hooks) = &self.hooks_system {
+                //                     if analytics.cost > 0.05 { // Threshold for cost notifications
+                //                         let cost_event = HookEvent::new(
+                //                             EventType::CostThresholdReached,
+                //                             EventSource::Consensus { stage: stage.as_str().to_string() }
+                //                         )
+                //                         .with_context("estimated_cost", analytics.cost)
+                //                         .with_context("stage_cost", analytics.cost)
+                //                         .with_context("total_cost", total_cost)
+                //                         .with_context("model", model);
+                //
+                //                         if let Err(e) = hooks.dispatch_event(cost_event).await {
+                //                             tracing::warn!("Failed to dispatch CostThresholdReached hook event: {}", e);
+                //                         }
+                //                     }
+                //                 }
             }
 
             // Store the answer for next stage
@@ -379,13 +403,13 @@ impl ConsensusPipeline {
             //         stage,
             //         &stage_result,
             //     ).await?;
-            //     
+            //
             //     // Check if we should continue
             //     if !post_stage_result.proceed {
             //         if let Some(approval_required) = post_stage_result.approval_required {
             //             // Handle approval requirement
             //             tracing::warn!("Quality issue in {} stage requires approval: {}", stage.as_str(), approval_required.description);
-            //             
+            //
             //             // For now, we'll continue with warnings
             //             for warning in &post_stage_result.warnings {
             //                 tracing::warn!("Post-stage warning: {}", warning);
@@ -395,7 +419,7 @@ impl ConsensusPipeline {
             //             return Err(anyhow::anyhow!("Stage {} result was rejected by quality gates", stage.as_str()));
             //         }
             //     }
-            //     
+            //
             //     // Log any warnings
             //     for warning in &post_stage_result.warnings {
             //         tracing::warn!("Quality warning for {} stage: {}", stage.as_str(), warning);
@@ -403,37 +427,36 @@ impl ConsensusPipeline {
             // }
 
             // Emit AfterStage hook event
-//             if let Some(hooks) = &self.hooks_system {
-//                 let stage_event_type = match stage {
-//                     Stage::Generator => EventType::AfterGeneratorStage,
-//                     Stage::Refiner => EventType::AfterRefinerStage,
-//                     Stage::Validator => EventType::AfterValidatorStage,
-//                     Stage::Curator => EventType::AfterCuratorStage,
-//                 };
-//                 
-//                 let event = HookEvent::new(
-//                     stage_event_type,
-//                     EventSource::Consensus { stage: stage.as_str().to_string() }
-//                 )
-//                 .with_context("question", question)
-//                 .with_context("conversation_id", &conversation_id)
-//                 .with_context("model", model)
-//                 .with_context("answer", &stage_result.answer)
-//                 .with_context("duration", stage_result.analytics.as_ref().map(|a| a.duration).unwrap_or(0.0))
-//                 .with_context("cost", stage_result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0));
-//                 
-//                 if let Err(e) = hooks.dispatch_event(event).await {
-//                     tracing::warn!("Failed to dispatch After{:?}Stage hook event: {}", stage, e);
-//                 }
-//             }
+            //             if let Some(hooks) = &self.hooks_system {
+            //                 let stage_event_type = match stage {
+            //                     Stage::Generator => EventType::AfterGeneratorStage,
+            //                     Stage::Refiner => EventType::AfterRefinerStage,
+            //                     Stage::Validator => EventType::AfterValidatorStage,
+            //                     Stage::Curator => EventType::AfterCuratorStage,
+            //                 };
+            //
+            //                 let event = HookEvent::new(
+            //                     stage_event_type,
+            //                     EventSource::Consensus { stage: stage.as_str().to_string() }
+            //                 )
+            //                 .with_context("question", question)
+            //                 .with_context("conversation_id", &conversation_id)
+            //                 .with_context("model", model)
+            //                 .with_context("answer", &stage_result.answer)
+            //                 .with_context("duration", stage_result.analytics.as_ref().map(|a| a.duration).unwrap_or(0.0))
+            //                 .with_context("cost", stage_result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0));
+            //
+            //                 if let Err(e) = hooks.dispatch_event(event).await {
+            //                     tracing::warn!("Failed to dispatch After{:?}Stage hook event: {}", stage, e);
+            //                 }
+            //             }
 
             stage_results.push(stage_result);
         }
 
         // The final answer is from the Curator stage
-        let final_answer = previous_answer.unwrap_or_else(|| {
-            "Error: No response generated from consensus pipeline".to_string()
-        });
+        let final_answer = previous_answer
+            .unwrap_or_else(|| "Error: No response generated from consensus pipeline".to_string());
 
         let result = ConsensusResult {
             success: true,
@@ -447,22 +470,28 @@ impl ConsensusPipeline {
 
         // CRITICAL: Store conversation and curator result in database (like TypeScript implementation)
         if let Some(db) = &self.database {
-            tracing::info!("Database available, attempting to store consensus result for conversation {}", conversation_id);
-            if let Err(e) = self.store_consensus_result(
-                &conversation_id,
-                question,
-                &final_answer,
-                &stage_results,
-                total_cost,
-                db.clone()
-            ).await {
+            tracing::info!(
+                "Database available, attempting to store consensus result for conversation {}",
+                conversation_id
+            );
+            if let Err(e) = self
+                .store_consensus_result(
+                    &conversation_id,
+                    question,
+                    &final_answer,
+                    &stage_results,
+                    total_cost,
+                    db.clone(),
+                )
+                .await
+            {
                 tracing::error!("Failed to store consensus result in database: {}", e);
                 // Don't fail the entire consensus for storage errors, but log them
             }
         } else {
             tracing::warn!("No database available - consensus results will not be persisted!");
         }
-        
+
         // TODO: Re-enable usage tracking when database is unified
         // Record usage after successful consensus completion
         // if let (Some(user_id), Some(usage_tracker)) = (user_id.as_ref(), &self.usage_tracker) {
@@ -475,34 +504,40 @@ impl ConsensusPipeline {
         // }
 
         // Emit AfterConsensus hook event
-//         if let Some(hooks) = &self.hooks_system {
-//             let event = HookEvent::new(
-//                 EventType::AfterConsensus,
-//                 EventSource::Consensus { stage: "pipeline".to_string() }
-//             )
-//             .with_context("question", question)
-//             .with_context("conversation_id", &conversation_id)
-//             .with_context("final_answer", &final_answer)
-//             .with_context("total_duration", result.total_duration)
-//             .with_context("total_cost", result.total_cost)
-//             .with_context("stages_count", result.stages.len());
-//             
-//             if let Err(e) = hooks.dispatch_event(event).await {
-//                 tracing::warn!("Failed to dispatch AfterConsensus hook event: {}", e);
-//             }
-//         }
+        //         if let Some(hooks) = &self.hooks_system {
+        //             let event = HookEvent::new(
+        //                 EventType::AfterConsensus,
+        //                 EventSource::Consensus { stage: "pipeline".to_string() }
+        //             )
+        //             .with_context("question", question)
+        //             .with_context("conversation_id", &conversation_id)
+        //             .with_context("final_answer", &final_answer)
+        //             .with_context("total_duration", result.total_duration)
+        //             .with_context("total_cost", result.total_cost)
+        //             .with_context("stages_count", result.stages.len());
+        //
+        //             if let Err(e) = hooks.dispatch_event(event).await {
+        //                 tracing::warn!("Failed to dispatch AfterConsensus hook event: {}", e);
+        //             }
+        //         }
 
         // Report conversation completion to D1 if we have authorization
         if let Some(auth) = d1_auth {
             let gateway = ConversationGateway::new()?;
-            match gateway.report_conversation_completion(
-                &auth.conversation_token,
-                &conversation_id,
-                &auth.question_hash
-            ).await {
+            match gateway
+                .report_conversation_completion(
+                    &auth.conversation_token,
+                    &conversation_id,
+                    &auth.question_hash,
+                )
+                .await
+            {
                 Ok(verification) => {
                     if verification.verified {
-                        tracing::info!("Conversation verified with D1 ({} remaining)", verification.remaining_conversations);
+                        tracing::info!(
+                            "Conversation verified with D1 ({} remaining)",
+                            verification.remaining_conversations
+                        );
                     } else {
                         tracing::warn!("D1 verification failed but continuing");
                     }
@@ -541,18 +576,30 @@ impl ConsensusPipeline {
         let mut response = self
             .call_model(model, &messages, &mut tracker)
             .await
-            .with_context(|| format!("Failed to call model {} for {}", model, stage.display_name()))?;
-        
+            .with_context(|| {
+                format!(
+                    "Failed to call model {} for {}",
+                    model,
+                    stage.display_name()
+                )
+            })?;
+
         // Check if we need to retry with a different model
         if response.content.starts_with("RETRY_WITH_MODEL:") {
             let replacement_model = response.content.trim_start_matches("RETRY_WITH_MODEL:");
             tracing::info!("Retrying with replacement model: {}", replacement_model);
-            
+
             // Call with replacement model
             response = self
                 .call_model(replacement_model, &messages, &mut tracker)
                 .await
-                .with_context(|| format!("Failed to call replacement model {} for {}", replacement_model, stage.display_name()))?;
+                .with_context(|| {
+                    format!(
+                        "Failed to call replacement model {} for {}",
+                        replacement_model,
+                        stage.display_name()
+                    )
+                })?;
         }
 
         // Mark complete
@@ -578,7 +625,8 @@ impl ConsensusPipeline {
                 fallback_used: false,
                 rate_limit_hit: false,
                 retry_count: 0,
-                start_time: Utc::now() - chrono::Duration::seconds(stage_start.elapsed().as_secs() as i64),
+                start_time: Utc::now()
+                    - chrono::Duration::seconds(stage_start.elapsed().as_secs() as i64),
                 end_time: Utc::now(),
                 memory_usage: None,
                 features: crate::consensus::types::AnalyticsFeatures {
@@ -665,13 +713,16 @@ impl ConsensusPipeline {
             // Create a custom callback that forwards to our tracker
             let stage = tracker.stage.clone();
             let tracker_callbacks = tracker.callbacks.clone();
-            
+
             let callbacks = Box::new(TrackerForwardingCallbacks {
                 tracker_callbacks,
                 stage,
             }) as Box<dyn OpenRouterStreamingCallbacks>;
 
-            match openrouter_client.chat_completion_stream(request, Some(callbacks)).await {
+            match openrouter_client
+                .chat_completion_stream(request, Some(callbacks))
+                .await
+            {
                 Ok(response_content) => {
                     // The streaming callbacks have already been called during streaming
                     // Just update the final content
@@ -706,15 +757,15 @@ impl ConsensusPipeline {
                         },
                     })
                 }
-                Err(e) => {
-                    self.handle_api_error(e, tracker, model).await
-                }
+                Err(e) => self.handle_api_error(e, tracker, model).await,
             }
         } else {
             // Use non-streaming
             match openrouter_client.chat_completion(request).await {
                 Ok(response) => {
-                    let content = response.choices.first()
+                    let content = response
+                        .choices
+                        .first()
                         .and_then(|choice| choice.message.as_ref())
                         .map(|message| message.content.clone())
                         .unwrap_or_else(|| "No response content".to_string());
@@ -770,9 +821,7 @@ impl ConsensusPipeline {
                         },
                     })
                 }
-                Err(e) => {
-                    self.handle_api_error(e, tracker, model).await
-                }
+                Err(e) => self.handle_api_error(e, tracker, model).await,
             }
         }
     }
@@ -786,25 +835,25 @@ impl ConsensusPipeline {
     ) -> Result<ModelResponse> {
         // Check if this is a model unavailable error
         let error_str = error.to_string();
-        let is_model_unavailable = error_str.contains("404") || 
-                                   error_str.contains("model not found") ||
-                                   error_str.contains("model unavailable");
-        
+        let is_model_unavailable = error_str.contains("404")
+            || error_str.contains("model not found")
+            || error_str.contains("model unavailable");
+
         if is_model_unavailable {
-            tracing::warn!("Model {} is unavailable, attempting to find replacement", model);
-            
+            tracing::warn!(
+                "Model {} is unavailable, attempting to find replacement",
+                model
+            );
+
             // Try to find a replacement model
             if let Some(db) = &self.database {
                 use crate::consensus::maintenance::TemplateMaintenanceManager;
-                
-                let maintenance = TemplateMaintenanceManager::new(
-                    db.clone(),
-                    self.api_key.clone()
-                );
-                
+
+                let maintenance = TemplateMaintenanceManager::new(db.clone(), self.api_key.clone());
+
                 if let Ok(Some(replacement)) = maintenance.find_model_replacement(model).await {
                     tracing::info!("Found replacement model: {} -> {}", model, replacement);
-                    
+
                     // Return a special response indicating we need to retry with a different model
                     return Ok(ModelResponse {
                         model: replacement.clone(),
@@ -837,15 +886,15 @@ impl ConsensusPipeline {
                 }
             }
         }
-        
+
         // For other errors or if no replacement found, return the error
         Err(anyhow::anyhow!(
             "OpenRouter API call failed for model {}: {}",
-            model, 
+            model,
             error
         ))
     }
-    
+
     /// Estimate cost for a stage operation
     async fn estimate_stage_cost(&self, stage: Stage, model: &str, question: &str) -> Result<f64> {
         // Simple cost estimation based on question length and model
@@ -856,7 +905,7 @@ impl ConsensusPipeline {
             Stage::Validator => question_tokens + 100, // Validator checks quality
             Stage::Curator => question_tokens + 150,   // Curator polishes result
         };
-        
+
         // Model-based cost calculation (simplified)
         let cost_per_token = match model {
             m if m.contains("gpt-4") => 0.00003,
@@ -866,7 +915,7 @@ impl ConsensusPipeline {
             m if m.contains("claude-3-haiku") => 0.000001,
             _ => 0.00001, // Default fallback
         };
-        
+
         Ok(estimated_tokens as f64 * cost_per_token)
     }
 
@@ -880,51 +929,63 @@ impl ConsensusPipeline {
         total_cost: f64,
         database: Arc<DatabaseManager>,
     ) -> Result<()> {
-        tracing::info!("Starting to store consensus result for conversation {}", conversation_id);
+        tracing::info!(
+            "Starting to store consensus result for conversation {}",
+            conversation_id
+        );
         tracing::debug!("Question: {}", question);
         tracing::debug!("Number of stage results: {}", stage_results.len());
         tracing::debug!("Profile ID: {}", self.profile.id);
-        
+
         let now = Utc::now().to_rfc3339();
         let mut conn = database.get_connection()?;
         tracing::debug!("Got database connection");
-        
+
         // Use spawn_blocking for the entire database transaction
         let conversation_id = conversation_id.to_string();
         let question = question.to_string();
         let final_answer = final_answer.to_string();
         let stage_results = stage_results.to_vec();
         let profile_id = self.profile.id.clone(); // Capture profile ID before closure
-        
+
         tokio::task::spawn_blocking(move || -> Result<()> {
             tracing::debug!("Inside spawn_blocking, starting transaction");
             let tx = conn.transaction()?;
-            
+
             // 1. Store conversation record
             tracing::debug!("Storing conversation record with ID: {}", conversation_id);
             let rows_affected = tx.execute(
                 "INSERT OR REPLACE INTO conversations (
-                    id, user_id, consensus_profile_id, total_cost, 
-                    input_tokens, output_tokens, start_time, end_time, 
+                    id, user_id, consensus_profile_id, total_cost,
+                    input_tokens, output_tokens, start_time, end_time,
                     success, quality_score, created_at, updated_at
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     conversation_id,
                     None::<String>, // user_id is optional, like TypeScript version
-                    profile_id, // Use the actual profile ID from the pipeline
+                    profile_id,     // Use the actual profile ID from the pipeline
                     total_cost,
-                    stage_results.iter().map(|s| s.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0)).sum::<u32>(),
-                    stage_results.iter().map(|s| s.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0)).sum::<u32>(),
-                    &now, // start_time
-                    &now, // end_time
-                    1i32, // success (true)
+                    stage_results
+                        .iter()
+                        .map(|s| s.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0))
+                        .sum::<u32>(),
+                    stage_results
+                        .iter()
+                        .map(|s| s.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0))
+                        .sum::<u32>(),
+                    &now,    // start_time
+                    &now,    // end_time
+                    1i32,    // success (true)
                     0.95f64, // quality_score (default high quality)
-                    &now, // created_at
-                    &now  // updated_at
-                ]
+                    &now,    // created_at
+                    &now     // updated_at
+                ],
             )?;
-            tracing::debug!("Conversation record stored, {} rows affected", rows_affected);
-            
+            tracing::debug!(
+                "Conversation record stored, {} rows affected",
+                rows_affected
+            );
+
             // 2. Store all stage outputs as messages for audit trail
             for stage_result in &stage_results {
                 // Store user message (question) - only for first stage
@@ -941,10 +1002,10 @@ impl ConsensusPipeline {
                             None::<String>, // User message has no stage
                             None::<String>, // User message has no model
                             &now
-                        ]
+                        ],
                     )?;
                 }
-                
+
                 // Store assistant message for each stage
                 tx.execute(
                     "INSERT INTO messages (
@@ -958,14 +1019,14 @@ impl ConsensusPipeline {
                         stage_result.stage_name,
                         stage_result.model,
                         stage_result.timestamp.to_rfc3339()
-                    ]
+                    ],
                 )?;
             }
-            
+
             // 3. Store in knowledge_conversations (extended format matching TypeScript)
             tx.execute(
                 "INSERT OR REPLACE INTO knowledge_conversations (
-                    id, conversation_id, question, final_answer, source_of_truth, 
+                    id, conversation_id, question, final_answer, source_of_truth,
                     conversation_context, profile_id, created_at, last_updated
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
@@ -973,33 +1034,36 @@ impl ConsensusPipeline {
                     conversation_id,
                     question,
                     final_answer,
-                    final_answer, // Final answer is the "source of truth" from Curator
+                    final_answer,   // Final answer is the "source of truth" from Curator
                     None::<String>, // TODO: Add conversation context if available
-                    profile_id, // Use the actual profile ID
+                    profile_id,     // Use the actual profile ID
                     &now,
                     &now
-                ]
+                ],
             )?;
-            
+
             // 4. Store conversation usage for tracking - using current license key
             // Get the currently configured license key first
-            let current_license_key: Option<String> = tx.query_row(
-                "SELECT value FROM configurations WHERE key = 'hive_license_key'",
-                [],
-                |row| row.get(0)
-            ).optional()?;
-            
+            let current_license_key: Option<String> = tx
+                .query_row(
+                    "SELECT value FROM configurations WHERE key = 'hive_license_key'",
+                    [],
+                    |row| row.get(0),
+                )
+                .optional()?;
+
             // Then get the user_id that matches the current license key
             let user_id_result: Option<String> = if let Some(license_key) = current_license_key {
                 tx.query_row(
                     "SELECT id FROM users WHERE license_key = ?1",
                     params![&license_key],
-                    |row| row.get(0)
-                ).optional()?
+                    |row| row.get(0),
+                )
+                .optional()?
             } else {
                 None
             };
-            
+
             if let Some(user_id) = user_id_result {
                 // Check if we already recorded this at the start (to avoid duplicates)
                 let already_recorded: bool = tx.query_row(
@@ -1007,18 +1071,14 @@ impl ConsensusPipeline {
                     params![conversation_id, &user_id],
                     |_| Ok(true)
                 ).unwrap_or(false);
-                
+
                 if !already_recorded {
                     // Insert into conversation_usage table for tracking
                     tx.execute(
                         "INSERT INTO conversation_usage (
                             conversation_id, user_id, timestamp
                         ) VALUES (?1, ?2, ?3)",
-                        params![
-                            conversation_id,
-                            user_id,
-                            &now
-                        ]
+                        params![conversation_id, user_id, &now],
                     )?;
                     tracing::info!("Recorded conversation usage for user {}", user_id);
                 } else {
@@ -1027,25 +1087,32 @@ impl ConsensusPipeline {
             } else {
                 tracing::warn!("No user found with license key, skipping usage tracking");
             }
-            
+
             // 5. Store curator truth (flagged as source of truth - critical for memory system)
             tracing::debug!("Looking for curator stage result");
-            let curator_result = stage_results.iter()
+            let curator_result = stage_results
+                .iter()
                 .find(|s| s.stage_name == "curator")
                 .ok_or_else(|| {
-                    tracing::error!("No curator stage result found! Stage names: {:?}", 
-                        stage_results.iter().map(|s| &s.stage_name).collect::<Vec<_>>());
+                    tracing::error!(
+                        "No curator stage result found! Stage names: {:?}",
+                        stage_results
+                            .iter()
+                            .map(|s| &s.stage_name)
+                            .collect::<Vec<_>>()
+                    );
                     anyhow::anyhow!("No curator stage result found")
                 })?;
             tracing::debug!("Found curator result");
-            
-            let confidence_score = curator_result.analytics
+
+            let confidence_score = curator_result
+                .analytics
                 .as_ref()
                 .map(|a| a.quality_score)
                 .unwrap_or(0.8); // Default confidence
-            
+
             let topic_summary = Self::extract_topic_summary(&question, &final_answer);
-            
+
             tx.execute(
                 "INSERT OR REPLACE INTO curator_truths (
                     conversation_id, curator_output, confidence_score, topic_summary, created_at
@@ -1056,18 +1123,22 @@ impl ConsensusPipeline {
                     confidence_score,
                     topic_summary,
                     &now
-                ]
+                ],
             )?;
-            
+
             tracing::debug!("Committing transaction");
             tx.commit()?;
-            tracing::info!("Successfully stored consensus result for conversation {} in database", conversation_id);
+            tracing::info!(
+                "Successfully stored consensus result for conversation {} in database",
+                conversation_id
+            );
             Ok(())
-        }).await??;
-        
+        })
+        .await??;
+
         Ok(())
     }
-    
+
     /// Extract topic summary from question and answer (simple implementation)
     fn extract_topic_summary(question: &str, answer: &str) -> String {
         // Simple topic extraction - in production this would use AI or NLP
@@ -1077,7 +1148,7 @@ impl ConsensusPipeline {
             .filter(|w| w.len() > 4) // Filter short words
             .take(5) // Take first 5 meaningful words
             .collect();
-        
+
         if words.is_empty() {
             "general_topic".to_string()
         } else {
@@ -1100,7 +1171,11 @@ impl ConsensusPipeline {
     }
 
     /// Build memory context combining recent and thematic memories (matching TypeScript)
-    async fn build_memory_context(&self, query: &str, database: Arc<DatabaseManager>) -> Result<String> {
+    async fn build_memory_context(
+        &self,
+        query: &str,
+        database: Arc<DatabaseManager>,
+    ) -> Result<String> {
         tracing::debug!("Building memory context for query: {}", query);
         let mut conn = database.get_connection()?;
         let query = query.to_string();
@@ -1121,14 +1196,14 @@ impl ConsensusPipeline {
                 "examples", "code example", "how does", " it ", " that ", " this ",
                 " those ", " these ", " them ", " they "
             ].iter().any(|pattern| query_lower.contains(pattern));
-            
+
             tracing::debug!("Is follow-up query: {}", is_follow_up);
 
             // TEMPORAL SEARCH: One conversation at a time, most recent first
             // Step 1: Search backwards through time, one conversation at a time
             let mut found_context = false;
             let mut selected_memory: Option<(String, String, f64, String)> = None;
-            
+
             // Get ALL conversations from the last 24 hours, ordered by recency
             let mut stmt = conn.prepare(
                 "SELECT source_of_truth, question, 1.0 as confidence_score, created_at
@@ -1149,7 +1224,7 @@ impl ConsensusPipeline {
             // Search one by one until we find relevant context
             for result in all_recent_results {
                 let (curator_output, question, confidence, created_at) = result?;
-                
+
                 // For follow-up queries, the most recent is ALWAYS relevant
                 if is_follow_up && selected_memory.is_none() {
                     tracing::debug!("Follow-up detected - using most recent conversation: {}", question);
@@ -1157,19 +1232,19 @@ impl ConsensusPipeline {
                     found_context = true;
                     break;
                 }
-                
+
                 // For non-follow-up, check if this conversation might be relevant
                 let query_words: Vec<String> = query.to_lowercase()
                     .split_whitespace()
                     .filter(|w| w.len() > 2)
                     .map(|w| w.to_string())
                     .collect();
-                
+
                 let conversation_relevant = query_words.iter().any(|word| {
-                    question.to_lowercase().contains(word) || 
+                    question.to_lowercase().contains(word) ||
                     curator_output.to_lowercase().contains(word)
                 });
-                
+
                 if conversation_relevant {
                     tracing::debug!("Found relevant conversation: {}", question);
                     selected_memory = Some((curator_output, question, confidence, created_at));
@@ -1177,14 +1252,14 @@ impl ConsensusPipeline {
                     break;
                 }
             }
-            
+
             // If we found context in recent conversations, use it
             if found_context && selected_memory.is_some() {
                 let (curator_output, question, _, created_at) = selected_memory.unwrap();
                 let date = chrono::DateTime::parse_from_rfc3339(&created_at)
                     .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
                     .unwrap_or_else(|_| "recent".to_string());
-                
+
                 context_parts.push("🧠 AUTHORITATIVE MEMORY CONTEXT:".to_string());
                 context_parts.push("Here is the most relevant recent conversation:".to_string());
                 context_parts.push("".to_string());
@@ -1193,7 +1268,7 @@ impl ConsensusPipeline {
                     date, question, curator_output
                 ));
                 context_parts.push("".to_string());
-                
+
                 if is_follow_up {
                     context_parts.push("🚨 FOLLOW-UP DETECTED: This is a follow-up question.".to_string());
                     context_parts.push("You MUST provide examples/clarification about the topic above.".to_string());
@@ -1201,17 +1276,17 @@ impl ConsensusPipeline {
                 } else {
                     context_parts.push("⚡ Use this context to inform your response.".to_string());
                 }
-                
+
                 return Ok(context_parts.join("\n"));
             }
-            
+
             tracing::debug!("No relevant context found in recent 24h conversations, falling back to thematic search");
-            
+
             // If follow-up but no 24h context, try broader window (72 hours)
             if is_follow_up {
                 let seventy_two_hours_ago = (Utc::now() - chrono::Duration::hours(72)).to_rfc3339();
                 tracing::debug!("Follow-up detected, checking broader window (72h)");
-                
+
                 let mut stmt = conn.prepare(
                     "SELECT source_of_truth, question, 1.0 as confidence_score, created_at
                      FROM knowledge_conversations
@@ -1219,37 +1294,37 @@ impl ConsensusPipeline {
                      ORDER BY created_at DESC
                      LIMIT 3"
                 )?;
-                
+
                 let broader_results = stmt.query_map(
-                    rusqlite::params![&seventy_two_hours_ago, &twenty_four_hours_ago], 
+                    rusqlite::params![&seventy_two_hours_ago, &twenty_four_hours_ago],
                     |row| {
                         Ok((
-                            row.get::<_, String>(0)?, // source_of_truth (curator output)  
+                            row.get::<_, String>(0)?, // source_of_truth (curator output)
                             row.get::<_, String>(1)?, // question
                             row.get::<_, f64>(2)?,    // confidence_score
                             row.get::<_, String>(3)?, // created_at
                         ))
                     }
                 )?;
-                
+
                 let mut broader_memories = Vec::new();
                 for result in broader_results {
                     broader_memories.push(result?);
                 }
-                
+
                 if !broader_memories.is_empty() {
                     context_parts.push("🔄 RECENT FOLLOW-UP CONTEXT (72h):".to_string());
                     for (i, (curator_output, question, _confidence, created_at)) in broader_memories.iter().enumerate() {
                         let date = chrono::DateTime::parse_from_rfc3339(created_at)
                             .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
                             .unwrap_or_else(|_| "recent".to_string());
-                        
+
                         context_parts.push(format!(
                             "RECENT CONVERSATION {} (from {}):\nQuestion: {}\n\nAnswer:\n{}\n\n---",
                             i + 1, date, question, curator_output
                         ));
                     }
-                    
+
                     return Ok(context_parts.join("\n"));
                 }
             }
@@ -1279,7 +1354,7 @@ impl ConsensusPipeline {
                 );
 
                 let mut stmt = conn.prepare(&full_query)?;
-                
+
                 // Double the keywords for both source_of_truth and question matching
                 let mut params: Vec<&dyn rusqlite::ToSql> = Vec::new();
                 for keyword in &keywords {
@@ -1300,7 +1375,7 @@ impl ConsensusPipeline {
                 let mut found_thematic = false;
                 for result in thematic_results {
                     let (curator_output, question, _, created_at) = result?;
-                    
+
                     // Skip if this was already checked in temporal search
                     let created_dt = chrono::DateTime::parse_from_rfc3339(&created_at)
                         .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -1308,7 +1383,7 @@ impl ConsensusPipeline {
                     if created_dt > chrono::Utc::now() - chrono::Duration::hours(24) {
                         continue; // Already checked in temporal search
                     }
-                    
+
                     // For thematic search, be more selective - require stronger match
                     let strong_match = keywords.iter()
                         .filter(|k| k.len() > 5) // Only check meaningful keywords
@@ -1317,11 +1392,11 @@ impl ConsensusPipeline {
                             question.to_lowercase().contains(&clean_keyword) ||
                             curator_output.to_lowercase().contains(&clean_keyword)
                         });
-                    
+
                     if strong_match {
                         tracing::debug!("Found thematic match: {}", question);
                         let date = created_dt.format("%Y-%m-%d").to_string();
-                        
+
                         context_parts.push("📚 THEMATIC CONTEXT:".to_string());
                         context_parts.push(format!(
                             "Related conversation from {}: Question: {}\n\nAnswer:\n{}\n\n---",
@@ -1329,12 +1404,12 @@ impl ConsensusPipeline {
                         ));
                         context_parts.push("".to_string());
                         context_parts.push("⚡ This is older context that may be relevant to your query.".to_string());
-                        
+
                         found_thematic = true;
                         break; // Use only the most recent thematic match
                     }
                 }
-                
+
                 if !found_thematic && is_follow_up {
                     // For follow-ups with no context found, provide a clear message
                     context_parts.push("⚠️ NO RECENT CONTEXT FOUND".to_string());
@@ -1368,16 +1443,22 @@ impl OpenRouterStreamingCallbacks for TrackerForwardingCallbacks {
     fn on_start(&self) {
         // Already handled by on_stage_start
     }
-    
+
     fn on_chunk(&self, chunk: String, total_content: String) {
         // Forward to our consensus callbacks
-        tracing::debug!("TrackerForwardingCallbacks: Received chunk for stage {:?}: '{}'", self.stage, chunk);
-        let result = self.tracker_callbacks.on_stage_chunk(self.stage, &chunk, &total_content);
+        tracing::debug!(
+            "TrackerForwardingCallbacks: Received chunk for stage {:?}: '{}'",
+            self.stage,
+            chunk
+        );
+        let result = self
+            .tracker_callbacks
+            .on_stage_chunk(self.stage, &chunk, &total_content);
         if let Err(e) = result {
             tracing::error!("Failed to forward chunk: {}", e);
         }
     }
-    
+
     fn on_progress(&self, progress: crate::consensus::openrouter::StreamingProgress) {
         // Convert and forward
         if let Some(tokens) = progress.tokens {
@@ -1390,11 +1471,15 @@ impl OpenRouterStreamingCallbacks for TrackerForwardingCallbacks {
             let _ = self.tracker_callbacks.on_stage_progress(self.stage, info);
         }
     }
-    
-    fn on_complete(&self, _final_content: String, _usage: Option<crate::consensus::openrouter::Usage>) {
+
+    fn on_complete(
+        &self,
+        _final_content: String,
+        _usage: Option<crate::consensus::openrouter::Usage>,
+    ) {
         // Will be handled by on_stage_complete
     }
-    
+
     fn on_error(&self, error: &anyhow::Error) {
         let _ = self.tracker_callbacks.on_error(self.stage, error);
     }

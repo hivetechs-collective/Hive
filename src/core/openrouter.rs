@@ -115,7 +115,7 @@ impl OpenRouterClient {
     /// Test API key connectivity
     pub async fn test_connection(&self) -> Result<bool> {
         let url = format!("{}/auth/key", self.base_url);
-        
+
         let response = self.client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
@@ -131,7 +131,7 @@ impl OpenRouterClient {
     /// Fetch all available models from OpenRouter
     pub async fn fetch_models(&self) -> Result<Vec<OpenRouterModel>> {
         let url = format!("{}/models", self.base_url);
-        
+
         let response = self.client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
@@ -174,7 +174,7 @@ impl ModelSyncManager {
     /// Create new model sync manager
     pub fn new(db: DatabaseManager, api_key: String) -> Self {
         let client = OpenRouterClient::new(api_key);
-        
+
         Self {
             db,
             client,
@@ -184,7 +184,7 @@ impl ModelSyncManager {
     /// Sync all models from OpenRouter
     pub async fn sync_models(&self) -> Result<ModelSyncResult> {
         println!("🔄 Syncing models from OpenRouter...");
-        
+
         // Test connection first
         if !self.client.test_connection().await? {
             return Err(HiveError::AuthenticationFailed { service: "OpenRouter".to_string(), message: "Invalid OpenRouter API key".to_string() });
@@ -215,7 +215,7 @@ impl ModelSyncManager {
         // Process each model
         for model in openrouter_models {
             current_model_ids.insert(model.id.clone());
-            
+
             let provider_name = self.extract_provider_name(&model.id);
             sync_result.providers.insert(provider_name.clone());
 
@@ -225,7 +225,7 @@ impl ModelSyncManager {
             match existing_models.get(&model.id) {
                 Some(existing) => {
                     // Update existing model
-                    let needs_update = 
+                    let needs_update =
                         existing.name != model.name ||
                         existing.description != model.description ||
                         existing.context_window != model.context_window ||
@@ -274,7 +274,7 @@ impl ModelSyncManager {
     /// Get existing models from database
     fn get_existing_models(&self, conn: &rusqlite::Connection) -> Result<HashMap<String, StoredModel>> {
         let mut stmt = conn.prepare(
-            "SELECT internal_id, openrouter_id, name, provider_name, description, 
+            "SELECT internal_id, openrouter_id, name, provider_name, description,
                     context_window, pricing_input, pricing_output, is_active, last_updated
              FROM openrouter_models"
         )?;
@@ -318,10 +318,10 @@ impl ModelSyncManager {
         pricing_output: f64,
     ) -> Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        
+
         conn.execute(
-            "INSERT INTO openrouter_models 
-             (openrouter_id, name, provider_name, description, context_window, 
+            "INSERT INTO openrouter_models
+             (openrouter_id, name, provider_name, description, context_window,
               pricing_input, pricing_output, is_active, last_updated)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8)",
             rusqlite::params![
@@ -350,9 +350,9 @@ impl ModelSyncManager {
         pricing_output: f64,
     ) -> Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        
+
         conn.execute(
-            "UPDATE openrouter_models 
+            "UPDATE openrouter_models
              SET name = ?1, provider_name = ?2, description = ?3, context_window = ?4,
                  pricing_input = ?5, pricing_output = ?6, is_active = 1, last_updated = ?7
              WHERE internal_id = ?8",
@@ -374,7 +374,7 @@ impl ModelSyncManager {
     /// Deactivate model in database
     fn deactivate_model(&self, conn: &rusqlite::Connection, internal_id: i64) -> Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
-        
+
         conn.execute(
             "UPDATE openrouter_models SET is_active = 0, last_updated = ?1 WHERE internal_id = ?2",
             rusqlite::params![now, internal_id],
@@ -411,7 +411,7 @@ impl ModelSyncManager {
             if let Some(internal_id) = internal_id {
                 let now = chrono::Utc::now().to_rfc3339();
                 tx.execute(
-                    "INSERT INTO model_rankings 
+                    "INSERT INTO model_rankings
                      (model_internal_id, ranking_source, rank_position, last_updated)
                      VALUES (?1, 'openrouter_general', ?2, ?3)",
                     rusqlite::params![internal_id, rank, now],
@@ -436,9 +436,9 @@ impl ModelSyncManager {
     fn parse_pricing(&self, pricing_str: &str) -> Result<f64> {
         // OpenRouter pricing is typically in format like "0.000001" (per token)
         pricing_str.parse::<f64>()
-            .map_err(|_| HiveError::Internal { 
-                context: "pricing".to_string(), 
-                message: format!("Invalid pricing format: {}", pricing_str) 
+            .map_err(|_| HiveError::Internal {
+                context: "pricing".to_string(),
+                message: format!("Invalid pricing format: {}", pricing_str)
             })
     }
 }
@@ -469,8 +469,8 @@ impl ModelQuery {
         let mut stmt = conn.prepare(
             "SELECT internal_id, openrouter_id, name, provider_name, description,
                     context_window, pricing_input, pricing_output, is_active, last_updated
-             FROM openrouter_models 
-             WHERE is_active = 1 
+             FROM openrouter_models
+             WHERE is_active = 1
              ORDER BY provider_name, name"
         )?;
 
@@ -508,7 +508,7 @@ impl ModelQuery {
         let mut stmt = conn.prepare(
             "SELECT internal_id, openrouter_id, name, provider_name, description,
                     context_window, pricing_input, pricing_output, is_active, last_updated
-             FROM openrouter_models 
+             FROM openrouter_models
              WHERE is_active = 1 AND provider_name = ?1
              ORDER BY name"
         )?;
@@ -545,14 +545,14 @@ impl ModelQuery {
     pub async fn get_providers(&self) -> Result<Vec<ProviderInfo>> {
         let conn = self.db.get_connection()?;
         let mut stmt = conn.prepare(
-            "SELECT provider_name, 
+            "SELECT provider_name,
                     COUNT(*) as model_count,
                     COUNT(CASE WHEN pricing_input = 0 THEN 1 END) as free_models,
                     MIN(pricing_input + pricing_output) as min_cost,
                     AVG(pricing_input + pricing_output) as avg_cost
-             FROM openrouter_models 
-             WHERE is_active = 1 
-             GROUP BY provider_name 
+             FROM openrouter_models
+             WHERE is_active = 1
+             GROUP BY provider_name
              ORDER BY provider_name"
         )?;
 
@@ -580,7 +580,7 @@ impl ModelQuery {
         let result = match conn.query_row(
             "SELECT internal_id, openrouter_id, name, provider_name, description,
                     context_window, pricing_input, pricing_output, is_active, last_updated
-             FROM openrouter_models 
+             FROM openrouter_models
              WHERE internal_id = ?1",
             [internal_id],
             |row| {

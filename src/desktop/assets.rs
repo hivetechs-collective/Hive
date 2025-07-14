@@ -1,6 +1,6 @@
 //! Embedded assets for the desktop application
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 /// Embedded HiveTechs logo (small version)
 pub const HIVE_LOGO_SMALL: &[u8] = include_bytes!("../../assets/Hive-Logo-small.jpg");

@@ -1,14 +1,14 @@
 //! Hook Registry - Central storage and management of hooks
 
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::fmt;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use super::{HookPriority, EventType};
 use super::conditions::HookCondition;
 use super::security::SecurityPolicy;
+use super::{EventType, HookPriority};
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::fmt;
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Unique identifier for a hook
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -18,9 +18,13 @@ impl HookId {
     pub fn new() -> Self {
         Self(Uuid::new_v4().to_string())
     }
-    
+
     pub fn from_name(name: &str) -> Self {
-        Self(format!("{}-{}", name.to_lowercase().replace(' ', "-"), Uuid::new_v4().simple()))
+        Self(format!(
+            "{}-{}",
+            name.to_lowercase().replace(' ', "-"),
+            Uuid::new_v4().simple()
+        ))
     }
 }
 
@@ -145,13 +149,13 @@ impl HookRegistry {
             tag_index: HashMap::new(),
         }
     }
-    
+
     /// Register a new hook
     pub fn register(&mut self, hook: Hook) -> Result<()> {
         if self.hooks.contains_key(&hook.id) {
             return Err(anyhow!("Hook with ID {} already exists", hook.id.0));
         }
-        
+
         // Update event index
         for event in &hook.events {
             self.event_index
@@ -159,7 +163,7 @@ impl HookRegistry {
                 .or_insert_with(HashSet::new)
                 .insert(hook.id.clone());
         }
-        
+
         // Update tag index
         for tag in &hook.metadata.tags {
             self.tag_index
@@ -167,18 +171,20 @@ impl HookRegistry {
                 .or_insert_with(HashSet::new)
                 .insert(hook.id.clone());
         }
-        
+
         let hook_id = hook.id.clone();
         self.hooks.insert(hook_id, Arc::new(hook));
-        
+
         Ok(())
     }
-    
+
     /// Unregister a hook
     pub fn unregister(&mut self, hook_id: &HookId) -> Result<()> {
-        let hook = self.hooks.remove(hook_id)
+        let hook = self
+            .hooks
+            .remove(hook_id)
             .ok_or_else(|| anyhow!("Hook with ID {} not found", hook_id.0))?;
-        
+
         // Remove from event index
         for event in &hook.events {
             if let Some(hooks) = self.event_index.get_mut(event) {
@@ -188,7 +194,7 @@ impl HookRegistry {
                 }
             }
         }
-        
+
         // Remove from tag index
         for tag in &hook.metadata.tags {
             if let Some(hooks) = self.tag_index.get_mut(tag) {
@@ -198,21 +204,22 @@ impl HookRegistry {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get a hook by ID
     pub fn get(&self, hook_id: &HookId) -> Option<Arc<Hook>> {
         self.hooks.get(hook_id).cloned()
     }
-    
+
     /// Find hooks that listen to a specific event
     pub fn find_by_event(&self, event: &EventType) -> Vec<Arc<Hook>> {
         self.event_index
             .get(event)
             .map(|hook_ids| {
-                hook_ids.iter()
+                hook_ids
+                    .iter()
                     .filter_map(|id| self.hooks.get(id))
                     .filter(|hook| hook.enabled)
                     .cloned()
@@ -220,42 +227,43 @@ impl HookRegistry {
             })
             .unwrap_or_default()
     }
-    
+
     /// Find hooks by tag
     pub fn find_by_tag(&self, tag: &str) -> Vec<Arc<Hook>> {
         self.tag_index
             .get(tag)
             .map(|hook_ids| {
-                hook_ids.iter()
+                hook_ids
+                    .iter()
                     .filter_map(|id| self.hooks.get(id))
                     .cloned()
                     .collect()
             })
             .unwrap_or_default()
     }
-    
+
     /// List all hooks
     pub fn list_all(&self) -> Vec<Hook> {
-        self.hooks.values()
-            .map(|hook| (**hook).clone())
-            .collect()
+        self.hooks.values().map(|hook| (**hook).clone()).collect()
     }
-    
+
     /// Enable or disable a hook
     pub fn set_enabled(&mut self, hook_id: &HookId, enabled: bool) -> Result<()> {
-        let hook = self.hooks.get_mut(hook_id)
+        let hook = self
+            .hooks
+            .get_mut(hook_id)
             .ok_or_else(|| anyhow!("Hook with ID {} not found", hook_id.0))?;
-        
+
         // Clone the hook and update enabled status
         let mut updated_hook = (**hook).clone();
         updated_hook.enabled = enabled;
         updated_hook.metadata.updated_at = chrono::Utc::now();
-        
+
         *hook = Arc::new(updated_hook);
-        
+
         Ok(())
     }
-    
+
     /// Clear all hooks
     pub fn clear_all(&mut self) -> Result<()> {
         self.hooks.clear();
@@ -263,7 +271,7 @@ impl HookRegistry {
         self.tag_index.clear();
         Ok(())
     }
-    
+
     /// Get hook statistics
     pub fn get_stats(&self) -> HookRegistryStats {
         HookRegistryStats {
@@ -287,11 +295,11 @@ pub struct HookRegistryStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_hook_registration() {
         let mut registry = HookRegistry::new();
-        
+
         let hook = Hook {
             id: HookId::new(),
             name: "Test Hook".to_string(),
@@ -304,22 +312,22 @@ mod tests {
             security: SecurityPolicy::default(),
             metadata: HookMetadata::default(),
         };
-        
+
         let hook_id = hook.id.clone();
-        
+
         // Register hook
         assert!(registry.register(hook).is_ok());
-        
+
         // Verify hook exists
         assert!(registry.get(&hook_id).is_some());
-        
+
         // Verify event index
         let hooks = registry.find_by_event(&EventType::BeforeCodeModification);
         assert_eq!(hooks.len(), 1);
-        
+
         // Unregister hook
         assert!(registry.unregister(&hook_id).is_ok());
-        
+
         // Verify hook removed
         assert!(registry.get(&hook_id).is_none());
     }

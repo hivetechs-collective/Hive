@@ -2,24 +2,24 @@
 //!
 //! Provides AI-powered tools for IDE integration
 
-use super::protocol::{Tool, ToolResult, ToolContent};
+use super::performance::{PerformanceConfig, PerformanceManager};
+use super::prompts::{PromptContext, PromptManager};
+use super::protocol::{Tool, ToolContent, ToolResult};
 use super::tools_advanced::AdvancedToolRegistry;
-use super::prompts::{PromptManager, PromptContext};
-use super::performance::{PerformanceManager, PerformanceConfig};
-use crate::core::config::Config;
-use crate::consensus::engine::ConsensusEngine;
+use crate::analysis::dependency::DependencyAnalyzer;
 use crate::analysis::repository_intelligence::RepositoryAnalyzer;
 use crate::analysis::symbol_index::SymbolIndexer;
-use crate::analysis::dependency::DependencyAnalyzer;
-use crate::core::database::DatabaseManager;
 use crate::commands::analyze::analyze_codebase;
+use crate::consensus::engine::ConsensusEngine;
+use crate::core::config::Config;
+use crate::core::database::DatabaseManager;
 
-use anyhow::{Result, anyhow};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::info;
 
 /// Tool registry for MCP server
@@ -39,7 +39,8 @@ struct ToolDefinition {
 }
 
 /// Tool handler type
-type ToolHandler = Box<dyn Fn(&ToolRegistry, Value) -> tokio::task::JoinHandle<Result<ToolResult>> + Send + Sync>;
+type ToolHandler =
+    Box<dyn Fn(&ToolRegistry, Value) -> tokio::task::JoinHandle<Result<ToolResult>> + Send + Sync>;
 
 impl ToolRegistry {
     /// Create new tool registry
@@ -47,13 +48,10 @@ impl ToolRegistry {
         consensus_engine: Arc<RwLock<ConsensusEngine>>,
         config: Arc<Config>,
     ) -> Result<Self> {
-        let advanced_tools = AdvancedToolRegistry::new(
-            consensus_engine.clone(),
-            config.clone(),
-        );
+        let advanced_tools = AdvancedToolRegistry::new(consensus_engine.clone(), config.clone());
 
         let prompt_manager = PromptManager::new();
-        
+
         let performance_manager = PerformanceManager::new(PerformanceConfig::default());
         performance_manager.start_monitoring().await?;
 
@@ -97,9 +95,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_ask_hive(args).await
-                })
+                tokio::spawn(async move { registry.handle_ask_hive(args).await })
             }),
         );
 
@@ -107,7 +103,7 @@ impl ToolRegistry {
             "analyze_code",
             "Analyze code files or directories using AI consensus",
             serde_json::json!({
-                "type": "object", 
+                "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
@@ -126,14 +122,14 @@ impl ToolRegistry {
                     let path = args.get("path")
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
-                    
+
                     let focus = args.get("focus")
                         .and_then(|v| v.as_str())
                         .unwrap_or("general");
-                    
+
                     let path_string = path.to_string();
                     let focus_string = focus.to_string();
-                    
+
                     let analysis = tokio::task::spawn_blocking(move || {
                         let runtime = tokio::runtime::Handle::current();
                         runtime.block_on(async {
@@ -143,9 +139,9 @@ impl ToolRegistry {
                     }).await
                         .map_err(|e| anyhow!("Task join error: {}", e))?
                         .map_err(|e| anyhow!("Analysis failed: {}", e))?;
-                    
+
                     Ok(ToolResult {
-                        content: vec![ToolContent::Text { 
+                        content: vec![ToolContent::Text {
                             text: serde_json::to_string_pretty(&analysis)
                                 .unwrap_or_else(|_| analysis.to_string())
                         }],
@@ -166,7 +162,7 @@ impl ToolRegistry {
                         "description": "Code to explain"
                     },
                     "language": {
-                        "type": "string", 
+                        "type": "string",
                         "description": "Programming language"
                     }
                 },
@@ -174,9 +170,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_explain_code(args).await
-                })
+                tokio::spawn(async move { registry.handle_explain_code(args).await })
             }),
         );
 
@@ -211,7 +205,7 @@ impl ToolRegistry {
 
         self.register_tool(
             "generate_tests",
-            "Generate unit tests for code using AI consensus", 
+            "Generate unit tests for code using AI consensus",
             serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -232,9 +226,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_generate_tests(args).await
-                })
+                tokio::spawn(async move { registry.handle_generate_tests(args).await })
             }),
         );
 
@@ -254,13 +246,14 @@ impl ToolRegistry {
             Box::new(|_registry, args| {
                 tokio::spawn(async move {
                     // For now, return a placeholder until we fix the Send issue
-                    let path = args.get("path")
+                    let path = args
+                        .get("path")
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
-                    
+
                     Ok(ToolResult {
-                        content: vec![ToolContent::Text { 
-                            text: format!("Repository summary for '{}' - analysis pending", path)
+                        content: vec![ToolContent::Text {
+                            text: format!("Repository summary for '{}' - analysis pending", path),
                         }],
                         is_error: None,
                     })
@@ -293,9 +286,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_plan_project(args).await
-                })
+                tokio::spawn(async move { registry.handle_plan_project(args).await })
             }),
         );
 
@@ -323,9 +314,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_transform_code(args).await
-                })
+                tokio::spawn(async move { registry.handle_transform_code(args).await })
             }),
         );
 
@@ -355,9 +344,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_search_memory(args).await
-                })
+                tokio::spawn(async move { registry.handle_search_memory(args).await })
             }),
         );
 
@@ -386,9 +373,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_generate_analytics(args).await
-                })
+                tokio::spawn(async move { registry.handle_generate_analytics(args).await })
             }),
         );
 
@@ -417,9 +402,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
-                    registry.handle_generate_docs(args).await
-                })
+                tokio::spawn(async move { registry.handle_generate_docs(args).await })
             }),
         );
 
@@ -431,7 +414,7 @@ impl ToolRegistry {
     async fn register_advanced_tools(&mut self) -> Result<()> {
         let advanced_tool_definitions = self.advanced_tools.get_advanced_tools();
         let tool_count = advanced_tool_definitions.len(); // Get the count before moving the vec
-        
+
         for (name, tool) in advanced_tool_definitions {
             let name_for_closure = name.clone();
             self.register_tool(
@@ -467,10 +450,8 @@ impl ToolRegistry {
             input_schema,
         };
 
-        self.tools.insert(name.to_string(), ToolDefinition {
-            tool,
-            handler,
-        });
+        self.tools
+            .insert(name.to_string(), ToolDefinition { tool, handler });
     }
 
     /// List all available tools
@@ -480,25 +461,27 @@ impl ToolRegistry {
 
     /// Call a tool
     pub async fn call_tool(&self, name: &str, arguments: Value) -> Result<ToolResult> {
-        let tool_def = self.tools.get(name)
+        let tool_def = self
+            .tools
+            .get(name)
             .ok_or_else(|| anyhow!("Tool not found: {}", name))?;
 
         info!("Executing tool: {}", name);
-        
+
         // Use performance optimizations
-        let result = self.performance_manager.execute_tool_optimized(
-            name,
-            &arguments,
-            || async {
+        let result = self
+            .performance_manager
+            .execute_tool_optimized(name, &arguments, || async {
                 let handle = (tool_def.handler)(self, arguments.clone());
-                let tool_result = handle.await
+                let tool_result = handle
+                    .await
                     .map_err(|e| anyhow!("Tool execution failed: {}", e))??;
-                
+
                 // Convert ToolResult to JSON for caching
                 Ok(serde_json::to_value(tool_result)?)
-            }
-        ).await?;
-        
+            })
+            .await?;
+
         // Convert back to ToolResult
         Ok(serde_json::from_value(result)?)
     }
@@ -513,13 +496,12 @@ impl ToolRegistry {
 
     /// Handle ask_hive tool
     async fn handle_ask_hive(&self, args: Value) -> Result<ToolResult> {
-        let question = args.get("question")
+        let question = args
+            .get("question")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: question"))?;
 
-        let context = args.get("context")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let context = args.get("context").and_then(|v| v.as_str()).unwrap_or("");
 
         let mut prompt = question.to_string();
         if !context.is_empty() {
@@ -527,12 +509,14 @@ impl ToolRegistry {
         }
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -540,23 +524,26 @@ impl ToolRegistry {
 
     /// Handle analyze_code tool
     async fn handle_analyze_code(&self, args: Value) -> Result<ToolResult> {
-        let path = args.get("path")
+        let path = args
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
 
-        let focus = args.get("focus")
+        let focus = args
+            .get("focus")
             .and_then(|v| v.as_str())
             .unwrap_or("general");
 
         // Use existing analyze command
         let path_buf = PathBuf::from(path);
-        let analysis = analyze_codebase(&path_buf).await
+        let analysis = analyze_codebase(&path_buf)
+            .await
             .map_err(|e| anyhow!("Analysis failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
+            content: vec![ToolContent::Text {
                 text: serde_json::to_string_pretty(&analysis)
-                    .unwrap_or_else(|_| analysis.to_string()) 
+                    .unwrap_or_else(|_| analysis.to_string()),
             }],
             is_error: None,
         })
@@ -564,11 +551,13 @@ impl ToolRegistry {
 
     /// Handle explain_code tool
     async fn handle_explain_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
@@ -578,12 +567,14 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -591,15 +582,18 @@ impl ToolRegistry {
 
     /// Handle improve_code tool
     async fn handle_improve_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let focus = args.get("focus")
+        let focus = args
+            .get("focus")
             .and_then(|v| v.as_str())
             .unwrap_or("general");
 
@@ -609,12 +603,14 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -622,15 +618,18 @@ impl ToolRegistry {
 
     /// Handle generate_tests tool
     async fn handle_generate_tests(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let test_framework = args.get("test_framework")
+        let test_framework = args
+            .get("test_framework")
             .and_then(|v| v.as_str())
             .unwrap_or("default");
 
@@ -640,12 +639,14 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -653,27 +654,40 @@ impl ToolRegistry {
 
     /// Handle repository_summary tool
     async fn handle_repository_summary(&self, args: Value) -> Result<ToolResult> {
-        let path = args.get("path")
+        let path = args
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
 
         // Create dependencies for repository analyzer
-        let db = Arc::new(DatabaseManager::default().await
-            .map_err(|e| anyhow!("Failed to create database manager: {}", e))?);
-        let symbol_indexer = Arc::new(SymbolIndexer::new(db.clone()).await
-            .map_err(|e| anyhow!("Failed to create symbol indexer: {}", e))?);
-        let dependency_analyzer = Arc::new(DependencyAnalyzer::new().await
-            .map_err(|e| anyhow!("Failed to create dependency analyzer: {}", e))?);
-        
+        let db = Arc::new(
+            DatabaseManager::default()
+                .await
+                .map_err(|e| anyhow!("Failed to create database manager: {}", e))?,
+        );
+        let symbol_indexer = Arc::new(
+            SymbolIndexer::new(db.clone())
+                .await
+                .map_err(|e| anyhow!("Failed to create symbol indexer: {}", e))?,
+        );
+        let dependency_analyzer = Arc::new(
+            DependencyAnalyzer::new()
+                .await
+                .map_err(|e| anyhow!("Failed to create dependency analyzer: {}", e))?,
+        );
+
         // Use repository analyzer
-        let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer).await
+        let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer)
+            .await
             .map_err(|e| anyhow!("Failed to create repository analyzer: {}", e))?;
-        let summary = analyzer.analyze_repository(Path::new(path)).await
+        let summary = analyzer
+            .analyze_repository(Path::new(path))
+            .await
             .map_err(|e| anyhow!("Repository analysis failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: summary.to_string() 
+            content: vec![ToolContent::Text {
+                text: summary.to_string(),
             }],
             is_error: None,
         })
@@ -681,20 +695,25 @@ impl ToolRegistry {
 
     /// Handle plan_project tool
     async fn handle_plan_project(&self, args: Value) -> Result<ToolResult> {
-        let description = args.get("description")
+        let description = args
+            .get("description")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: description"))?;
 
-        let scope = args.get("scope")
+        let scope = args
+            .get("scope")
             .and_then(|v| v.as_str())
             .unwrap_or("feature");
 
-        let constraints = args.get("constraints")
+        let constraints = args
+            .get("constraints")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter()
-                .filter_map(|v| v.as_str())
-                .collect::<Vec<_>>()
-                .join("\n- "))
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n- ")
+            })
             .unwrap_or_default();
 
         let prompt = format!(
@@ -709,17 +728,24 @@ impl ToolRegistry {
             4. Risk analysis and mitigation strategies\n\
             5. Resource requirements\n\
             6. Success criteria",
-            description, scope,
-            if constraints.is_empty() { String::new() } else { format!("Constraints:\n- {}", constraints) }
+            description,
+            scope,
+            if constraints.is_empty() {
+                String::new()
+            } else {
+                format!("Constraints:\n- {}", constraints)
+            }
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Planning failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -727,15 +753,18 @@ impl ToolRegistry {
 
     /// Handle transform_code tool
     async fn handle_transform_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let transformation = args.get("transformation")
+        let transformation = args
+            .get("transformation")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: transformation"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
@@ -748,12 +777,14 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Transformation failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -761,17 +792,14 @@ impl ToolRegistry {
 
     /// Handle search_memory tool
     async fn handle_search_memory(&self, args: Value) -> Result<ToolResult> {
-        let query = args.get("query")
+        let query = args
+            .get("query")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: query"))?;
 
-        let limit = args.get("limit")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(10) as usize;
+        let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(10) as usize;
 
-        let search_type = args.get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("all");
+        let search_type = args.get("type").and_then(|v| v.as_str()).unwrap_or("all");
 
         // TODO: Implement actual memory search
         // For now, return a placeholder response
@@ -786,24 +814,25 @@ impl ToolRegistry {
         );
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: placeholder 
-            }],
+            content: vec![ToolContent::Text { text: placeholder }],
             is_error: None,
         })
     }
 
     /// Handle generate_analytics tool
     async fn handle_generate_analytics(&self, args: Value) -> Result<ToolResult> {
-        let report_type = args.get("report_type")
+        let report_type = args
+            .get("report_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: report_type"))?;
 
-        let timeframe = args.get("timeframe")
+        let timeframe = args
+            .get("timeframe")
             .and_then(|v| v.as_str())
             .unwrap_or("week");
 
-        let format = args.get("format")
+        let format = args
+            .get("format")
             .and_then(|v| v.as_str())
             .unwrap_or("summary");
 
@@ -822,24 +851,25 @@ impl ToolRegistry {
         );
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: placeholder 
-            }],
+            content: vec![ToolContent::Text { text: placeholder }],
             is_error: None,
         })
     }
 
     /// Handle generate_docs tool
     async fn handle_generate_docs(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let style = args.get("style")
+        let style = args
+            .get("style")
             .and_then(|v| v.as_str())
             .unwrap_or("markdown");
 
@@ -856,12 +886,14 @@ impl ToolRegistry {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Documentation generation failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -878,13 +910,12 @@ struct ToolRegistryHandler {
 impl ToolRegistryHandler {
     /// Handle ask_hive tool
     async fn handle_ask_hive(&self, args: Value) -> Result<ToolResult> {
-        let question = args.get("question")
+        let question = args
+            .get("question")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: question"))?;
 
-        let context = args.get("context")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let context = args.get("context").and_then(|v| v.as_str()).unwrap_or("");
 
         let mut prompt = question.to_string();
         if !context.is_empty() {
@@ -892,12 +923,14 @@ impl ToolRegistryHandler {
         }
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -905,23 +938,26 @@ impl ToolRegistryHandler {
 
     /// Handle analyze_code tool
     async fn handle_analyze_code(&self, args: Value) -> Result<ToolResult> {
-        let path = args.get("path")
+        let path = args
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
 
-        let focus = args.get("focus")
+        let focus = args
+            .get("focus")
             .and_then(|v| v.as_str())
             .unwrap_or("general");
 
         // Use existing analyze command
         let path_buf = PathBuf::from(path);
-        let analysis = analyze_codebase(&path_buf).await
+        let analysis = analyze_codebase(&path_buf)
+            .await
             .map_err(|e| anyhow!("Analysis failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
+            content: vec![ToolContent::Text {
                 text: serde_json::to_string_pretty(&analysis)
-                    .unwrap_or_else(|_| analysis.to_string()) 
+                    .unwrap_or_else(|_| analysis.to_string()),
             }],
             is_error: None,
         })
@@ -929,11 +965,13 @@ impl ToolRegistryHandler {
 
     /// Handle explain_code tool
     async fn handle_explain_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
@@ -943,12 +981,14 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -956,15 +996,18 @@ impl ToolRegistryHandler {
 
     /// Handle improve_code tool
     async fn handle_improve_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let focus = args.get("focus")
+        let focus = args
+            .get("focus")
             .and_then(|v| v.as_str())
             .unwrap_or("general");
 
@@ -974,12 +1017,14 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -987,15 +1032,18 @@ impl ToolRegistryHandler {
 
     /// Handle generate_tests tool
     async fn handle_generate_tests(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let test_framework = args.get("test_framework")
+        let test_framework = args
+            .get("test_framework")
             .and_then(|v| v.as_str())
             .unwrap_or("default");
 
@@ -1005,12 +1053,14 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Consensus failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -1018,27 +1068,40 @@ impl ToolRegistryHandler {
 
     /// Handle repository_summary tool
     async fn handle_repository_summary(&self, args: Value) -> Result<ToolResult> {
-        let path = args.get("path")
+        let path = args
+            .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: path"))?;
 
         // Create dependencies for repository analyzer
-        let db = Arc::new(DatabaseManager::default().await
-            .map_err(|e| anyhow!("Failed to create database manager: {}", e))?);
-        let symbol_indexer = Arc::new(SymbolIndexer::new(db.clone()).await
-            .map_err(|e| anyhow!("Failed to create symbol indexer: {}", e))?);
-        let dependency_analyzer = Arc::new(DependencyAnalyzer::new().await
-            .map_err(|e| anyhow!("Failed to create dependency analyzer: {}", e))?);
-        
+        let db = Arc::new(
+            DatabaseManager::default()
+                .await
+                .map_err(|e| anyhow!("Failed to create database manager: {}", e))?,
+        );
+        let symbol_indexer = Arc::new(
+            SymbolIndexer::new(db.clone())
+                .await
+                .map_err(|e| anyhow!("Failed to create symbol indexer: {}", e))?,
+        );
+        let dependency_analyzer = Arc::new(
+            DependencyAnalyzer::new()
+                .await
+                .map_err(|e| anyhow!("Failed to create dependency analyzer: {}", e))?,
+        );
+
         // Use repository analyzer
-        let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer).await
+        let analyzer = RepositoryAnalyzer::new(symbol_indexer, dependency_analyzer)
+            .await
             .map_err(|e| anyhow!("Failed to create repository analyzer: {}", e))?;
-        let summary = analyzer.analyze_repository(Path::new(path)).await
+        let summary = analyzer
+            .analyze_repository(Path::new(path))
+            .await
             .map_err(|e| anyhow!("Repository analysis failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: summary.to_string() 
+            content: vec![ToolContent::Text {
+                text: summary.to_string(),
             }],
             is_error: None,
         })
@@ -1046,20 +1109,25 @@ impl ToolRegistryHandler {
 
     /// Handle plan_project tool
     async fn handle_plan_project(&self, args: Value) -> Result<ToolResult> {
-        let description = args.get("description")
+        let description = args
+            .get("description")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: description"))?;
 
-        let scope = args.get("scope")
+        let scope = args
+            .get("scope")
             .and_then(|v| v.as_str())
             .unwrap_or("feature");
 
-        let constraints = args.get("constraints")
+        let constraints = args
+            .get("constraints")
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter()
-                .filter_map(|v| v.as_str())
-                .collect::<Vec<_>>()
-                .join("\n- "))
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n- ")
+            })
             .unwrap_or_default();
 
         let prompt = format!(
@@ -1074,17 +1142,24 @@ impl ToolRegistryHandler {
             4. Risk analysis and mitigation strategies\n\
             5. Resource requirements\n\
             6. Success criteria",
-            description, scope,
-            if constraints.is_empty() { String::new() } else { format!("Constraints:\n- {}", constraints) }
+            description,
+            scope,
+            if constraints.is_empty() {
+                String::new()
+            } else {
+                format!("Constraints:\n- {}", constraints)
+            }
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Planning failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -1092,15 +1167,18 @@ impl ToolRegistryHandler {
 
     /// Handle transform_code tool
     async fn handle_transform_code(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let transformation = args.get("transformation")
+        let transformation = args
+            .get("transformation")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: transformation"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
@@ -1113,12 +1191,14 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Transformation failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -1126,17 +1206,14 @@ impl ToolRegistryHandler {
 
     /// Handle search_memory tool
     async fn handle_search_memory(&self, args: Value) -> Result<ToolResult> {
-        let query = args.get("query")
+        let query = args
+            .get("query")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: query"))?;
 
-        let limit = args.get("limit")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(10) as usize;
+        let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(10) as usize;
 
-        let search_type = args.get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("all");
+        let search_type = args.get("type").and_then(|v| v.as_str()).unwrap_or("all");
 
         // TODO: Implement actual memory search
         // For now, return a placeholder response
@@ -1151,24 +1228,25 @@ impl ToolRegistryHandler {
         );
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: placeholder 
-            }],
+            content: vec![ToolContent::Text { text: placeholder }],
             is_error: None,
         })
     }
 
     /// Handle generate_analytics tool
     async fn handle_generate_analytics(&self, args: Value) -> Result<ToolResult> {
-        let report_type = args.get("report_type")
+        let report_type = args
+            .get("report_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: report_type"))?;
 
-        let timeframe = args.get("timeframe")
+        let timeframe = args
+            .get("timeframe")
             .and_then(|v| v.as_str())
             .unwrap_or("week");
 
-        let format = args.get("format")
+        let format = args
+            .get("format")
             .and_then(|v| v.as_str())
             .unwrap_or("summary");
 
@@ -1187,24 +1265,25 @@ impl ToolRegistryHandler {
         );
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: placeholder 
-            }],
+            content: vec![ToolContent::Text { text: placeholder }],
             is_error: None,
         })
     }
 
     /// Handle generate_docs tool
     async fn handle_generate_docs(&self, args: Value) -> Result<ToolResult> {
-        let code = args.get("code")
+        let code = args
+            .get("code")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing required parameter: code"))?;
 
-        let language = args.get("language")
+        let language = args
+            .get("language")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
 
-        let style = args.get("style")
+        let style = args
+            .get("style")
             .and_then(|v| v.as_str())
             .unwrap_or("markdown");
 
@@ -1221,12 +1300,14 @@ impl ToolRegistryHandler {
         );
 
         let engine = self.consensus_engine.read().await;
-        let response = engine.process(&prompt, None).await
+        let response = engine
+            .process(&prompt, None)
+            .await
             .map_err(|e| anyhow!("Documentation generation failed: {}", e))?;
 
         Ok(ToolResult {
-            content: vec![ToolContent::Text { 
-                text: response.result.unwrap_or_default() 
+            content: vec![ToolContent::Text {
+                text: response.result.unwrap_or_default(),
             }],
             is_error: None,
         })
@@ -1235,10 +1316,8 @@ impl ToolRegistryHandler {
     /// Handle advanced tool call
     async fn handle_advanced_tool(&self, tool_name: &str, args: Value) -> Result<ToolResult> {
         // Create advanced tools registry for this call
-        let advanced_tools = AdvancedToolRegistry::new(
-            self.consensus_engine.clone(),
-            self.config.clone(),
-        );
+        let advanced_tools =
+            AdvancedToolRegistry::new(self.consensus_engine.clone(), self.config.clone());
 
         // Delegate to advanced tools handler
         advanced_tools.handle_advanced_tool(tool_name, args).await

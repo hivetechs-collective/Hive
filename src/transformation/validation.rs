@@ -3,13 +3,13 @@
 //! This module ensures that all code transformations maintain syntactic correctness
 //! and don't break the codebase.
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::{
-    analysis::{TreeSitterParser, LanguageDetector},
-    core::{Language, security::check_write_access},
+    analysis::{LanguageDetector, TreeSitterParser},
+    core::{security::check_write_access, Language},
     transformation::types::*,
 };
 use tokio::sync::Mutex;
@@ -41,7 +41,10 @@ impl TransformationValidator {
     }
 
     /// Validate a complete transformation before applying
-    pub async fn validate_transformation(&mut self, transformation: &Transformation) -> Result<ValidationReport> {
+    pub async fn validate_transformation(
+        &mut self,
+        transformation: &Transformation,
+    ) -> Result<ValidationReport> {
         let mut report = ValidationReport {
             valid: true,
             errors: Vec::new(),
@@ -62,7 +65,12 @@ impl TransformationValidator {
     }
 
     /// Validate a single code change
-    async fn validate_change(&mut self, change: &CodeChange, index: usize, report: &mut ValidationReport) -> Result<()> {
+    async fn validate_change(
+        &mut self,
+        change: &CodeChange,
+        index: usize,
+        report: &mut ValidationReport,
+    ) -> Result<()> {
         // Security check
         match check_write_access(&change.file_path) {
             Ok(_) => {
@@ -74,7 +82,9 @@ impl TransformationValidator {
             }
             Err(e) => {
                 report.valid = false;
-                report.errors.push(format!("Change {}: Security check failed - {}", index, e));
+                report
+                    .errors
+                    .push(format!("Change {}: Security check failed - {}", index, e));
                 report.security_checks.push(SecurityCheck {
                     file_path: change.file_path.clone(),
                     passed: false,
@@ -112,7 +122,11 @@ impl TransformationValidator {
                     report.syntax_checks.push(SyntaxCheck {
                         file_path: change.file_path.clone(),
                         passed: false,
-                        errors: parse_result.errors.iter().map(|e| e.message.clone()).collect(),
+                        errors: parse_result
+                            .errors
+                            .iter()
+                            .map(|e| e.message.clone())
+                            .collect(),
                     });
                 } else {
                     report.syntax_checks.push(SyntaxCheck {
@@ -150,7 +164,7 @@ impl TransformationValidator {
     fn extract_syntax_errors(&self, tree: &tree_sitter::Tree) -> Vec<String> {
         let mut errors = Vec::new();
         let mut cursor = tree.walk();
-        
+
         fn visit_node(cursor: &mut tree_sitter::TreeCursor, errors: &mut Vec<String>) {
             let node = cursor.node();
             if node.is_error() || node.is_missing() {
@@ -162,7 +176,7 @@ impl TransformationValidator {
                     node.end_position().column + 1
                 ));
             }
-            
+
             if cursor.goto_first_child() {
                 loop {
                     visit_node(cursor, errors);
@@ -173,13 +187,18 @@ impl TransformationValidator {
                 cursor.goto_parent();
             }
         }
-        
+
         visit_node(&mut cursor, &mut errors);
         errors
     }
 
     /// Validate imports are properly handled
-    fn validate_imports(&self, change: &CodeChange, language: Language, report: &mut ValidationReport) -> Result<()> {
+    fn validate_imports(
+        &self,
+        change: &CodeChange,
+        language: Language,
+        report: &mut ValidationReport,
+    ) -> Result<()> {
         // Language-specific import validation
         match language {
             Language::Rust => self.validate_rust_imports(change, report),
@@ -189,17 +208,23 @@ impl TransformationValidator {
         }
     }
 
-    fn validate_rust_imports(&self, change: &CodeChange, report: &mut ValidationReport) -> Result<()> {
-        let new_uses: Vec<&str> = change.new_content
+    fn validate_rust_imports(
+        &self,
+        change: &CodeChange,
+        report: &mut ValidationReport,
+    ) -> Result<()> {
+        let new_uses: Vec<&str> = change
+            .new_content
             .lines()
             .filter(|line| line.trim_start().starts_with("use "))
             .collect();
-            
-        let old_uses: Vec<&str> = change.original_content
+
+        let old_uses: Vec<&str> = change
+            .original_content
             .lines()
             .filter(|line| line.trim_start().starts_with("use "))
             .collect();
-            
+
         if new_uses.len() < old_uses.len() {
             report.warnings.push(format!(
                 "Removed {} import(s) from {}",
@@ -207,26 +232,38 @@ impl TransformationValidator {
                 change.file_path.display()
             ));
         }
-        
+
         Ok(())
     }
 
-    fn validate_python_imports(&self, _change: &CodeChange, _report: &mut ValidationReport) -> Result<()> {
+    fn validate_python_imports(
+        &self,
+        _change: &CodeChange,
+        _report: &mut ValidationReport,
+    ) -> Result<()> {
         // TODO: Implement Python import validation
         Ok(())
     }
 
-    fn validate_js_imports(&self, _change: &CodeChange, _report: &mut ValidationReport) -> Result<()> {
+    fn validate_js_imports(
+        &self,
+        _change: &CodeChange,
+        _report: &mut ValidationReport,
+    ) -> Result<()> {
         // TODO: Implement JavaScript/TypeScript import validation
         Ok(())
     }
 
     /// Validate formatting is preserved
-    fn validate_formatting(&self, change: &CodeChange, report: &mut ValidationReport) -> Result<()> {
+    fn validate_formatting(
+        &self,
+        change: &CodeChange,
+        report: &mut ValidationReport,
+    ) -> Result<()> {
         // Check indentation consistency
         let original_indent = self.detect_indentation(&change.original_content);
         let new_indent = self.detect_indentation(&change.new_content);
-        
+
         if original_indent != new_indent {
             report.warnings.push(format!(
                 "Indentation style changed in {} (was: {:?}, now: {:?})",
@@ -235,14 +272,14 @@ impl TransformationValidator {
                 new_indent
             ));
         }
-        
+
         Ok(())
     }
 
     fn detect_indentation(&self, content: &str) -> IndentStyle {
         let mut spaces = 0;
         let mut tabs = 0;
-        
+
         for line in content.lines() {
             if line.starts_with('\t') {
                 tabs += 1;
@@ -250,16 +287,17 @@ impl TransformationValidator {
                 spaces += 1;
             }
         }
-        
+
         if tabs > spaces {
             IndentStyle::Tabs
         } else if spaces > 0 {
             // Detect space count
-            let space_counts: Vec<usize> = content.lines()
+            let space_counts: Vec<usize> = content
+                .lines()
                 .filter(|line| line.starts_with(' '))
                 .map(|line| line.chars().take_while(|&c| c == ' ').count())
                 .collect();
-                
+
             if space_counts.is_empty() {
                 IndentStyle::Spaces(2)
             } else {
@@ -272,10 +310,15 @@ impl TransformationValidator {
     }
 
     /// Validate size limits
-    fn validate_size_limits(&self, change: &CodeChange, index: usize, report: &mut ValidationReport) -> Result<()> {
+    fn validate_size_limits(
+        &self,
+        change: &CodeChange,
+        index: usize,
+        report: &mut ValidationReport,
+    ) -> Result<()> {
         const MAX_FILE_SIZE: usize = 1_000_000; // 1MB
         const MAX_LINE_LENGTH: usize = 500;
-        
+
         if change.new_content.len() > MAX_FILE_SIZE {
             report.valid = false;
             report.errors.push(format!(
@@ -285,7 +328,7 @@ impl TransformationValidator {
                 MAX_FILE_SIZE
             ));
         }
-        
+
         for (line_no, line) in change.new_content.lines().enumerate() {
             if line.len() > MAX_LINE_LENGTH {
                 report.warnings.push(format!(
@@ -297,22 +340,23 @@ impl TransformationValidator {
                 ));
             }
         }
-        
+
         Ok(())
     }
 
     /// Check for conflicts between changes
     fn check_conflicts(&self, changes: &[CodeChange], report: &mut ValidationReport) -> Result<()> {
         // Group changes by file
-        let mut changes_by_file: std::collections::HashMap<&Path, Vec<&CodeChange>> = std::collections::HashMap::new();
-        
+        let mut changes_by_file: std::collections::HashMap<&Path, Vec<&CodeChange>> =
+            std::collections::HashMap::new();
+
         for change in changes {
             changes_by_file
                 .entry(&change.file_path)
                 .or_insert_with(Vec::new)
                 .push(change);
         }
-        
+
         // Check for overlapping changes in the same file
         for (file_path, file_changes) in changes_by_file {
             if file_changes.len() > 1 {
@@ -320,20 +364,22 @@ impl TransformationValidator {
                     for j in (i + 1)..file_changes.len() {
                         let (start_a, end_a) = file_changes[i].line_range;
                         let (start_b, end_b) = file_changes[j].line_range;
-                        
+
                         if start_a <= end_b && start_b <= end_a {
                             report.warnings.push(format!(
                                 "Overlapping changes in {}: lines {}-{} and {}-{}",
                                 file_path.display(),
-                                start_a, end_a,
-                                start_b, end_b
+                                start_a,
+                                end_a,
+                                start_b,
+                                end_b
                             ));
                         }
                     }
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -384,10 +430,10 @@ mod tests {
     #[test]
     fn test_indentation_detection() {
         let validator = TransformationValidator::new();
-        
+
         let space2 = "fn main() {\n  println!(\"Hello\");\n}";
         assert_eq!(validator.detect_indentation(space2), IndentStyle::Spaces(2));
-        
+
         let tabs = "fn main() {\n\tprintln!(\"Hello\");\n}";
         assert_eq!(validator.detect_indentation(tabs), IndentStyle::Tabs);
     }

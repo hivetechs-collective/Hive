@@ -1,5 +1,5 @@
 //! Executive Reporting System with Professional Visualizations
-//! 
+//!
 //! This module provides:
 //! - Executive-level summaries and KPIs
 //! - Professional report generation
@@ -8,7 +8,7 @@
 //! - Export to multiple formats
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Duration, Utc, Datelike};
+use chrono::{DateTime, Datelike, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -164,7 +164,7 @@ impl ReportPeriod {
             Self::Custom { days } => Duration::days(*days as i64),
         }
     }
-    
+
     pub fn to_string(&self) -> String {
         match self {
             Self::Daily => "Daily".to_string(),
@@ -295,11 +295,11 @@ impl ExecutiveReporter {
     /// Create a new executive reporter
     pub async fn new(config: Arc<RwLock<AdvancedAnalyticsConfig>>) -> Result<Self> {
         info!("Initializing executive reporter");
-        
+
         let kpi_calculator = Arc::new(KpiCalculator::new());
         let insight_generator = Arc::new(InsightGenerator::new());
         let visualizer = Arc::new(Visualizer::new());
-        
+
         Ok(Self {
             config,
             kpi_calculator,
@@ -311,25 +311,25 @@ impl ExecutiveReporter {
     /// Generate executive summary
     pub async fn generate_summary(&self, period: &str) -> Result<ExecutiveSummary> {
         debug!("Generating executive summary for period: {}", period);
-        
+
         let report_period = self.parse_period(period)?;
         let executive_data = self.collect_executive_data(report_period).await?;
-        
+
         // Calculate KPIs
         let key_metrics = self.kpi_calculator.calculate_kpis(&executive_data)?;
-        
+
         // Generate insights
         let business_insights = self.insight_generator.generate_insights(&executive_data)?;
-        
+
         // Create recommendations
         let recommendations = self.generate_recommendations(&key_metrics, &business_insights)?;
-        
+
         // Generate visualizations
         let visualizations = self.create_visualizations(&executive_data).await?;
-        
+
         // Calculate health score
         let health_score = self.calculate_health_score(&key_metrics)?;
-        
+
         Ok(ExecutiveSummary {
             period: report_period,
             generated_at: Utc::now(),
@@ -342,13 +342,9 @@ impl ExecutiveReporter {
     }
 
     /// Generate report in specific format
-    pub async fn generate_report(
-        &self,
-        period: &str,
-        format: ReportFormat,
-    ) -> Result<String> {
+    pub async fn generate_report(&self, period: &str, format: ReportFormat) -> Result<String> {
         let summary = self.generate_summary(period).await?;
-        
+
         match format {
             ReportFormat::Markdown => self.format_markdown(summary),
             ReportFormat::Html => self.format_html(summary),
@@ -364,7 +360,7 @@ impl ExecutiveReporter {
     }
 
     // Private helper methods
-    
+
     fn parse_period(&self, period: &str) -> Result<ReportPeriod> {
         match period.to_lowercase().as_str() {
             "day" | "daily" => Ok(ReportPeriod::Daily),
@@ -386,28 +382,37 @@ impl ExecutiveReporter {
     async fn collect_executive_data(&self, period: ReportPeriod) -> Result<ExecutiveData> {
         let db = get_database().await?;
         let statistics = db.get_statistics().await?;
-        
+
         // Collect various metrics
         let mut metrics = HashMap::new();
-        
+
         // Basic metrics from statistics
-        metrics.insert("total_conversations".to_string(), statistics.conversation_count as f64);
-        metrics.insert("total_messages".to_string(), statistics.message_count as f64);
+        metrics.insert(
+            "total_conversations".to_string(),
+            statistics.conversation_count as f64,
+        );
+        metrics.insert(
+            "total_messages".to_string(),
+            statistics.message_count as f64,
+        );
         metrics.insert("active_users".to_string(), statistics.user_count as f64);
-        metrics.insert("models_available".to_string(), statistics.model_count as f64);
-        
+        metrics.insert(
+            "models_available".to_string(),
+            statistics.model_count as f64,
+        );
+
         // Calculate derived metrics
         if statistics.conversation_count > 0 {
             metrics.insert(
                 "avg_messages_per_conversation".to_string(),
-                statistics.message_count as f64 / statistics.conversation_count as f64
+                statistics.message_count as f64 / statistics.conversation_count as f64,
             );
         }
-        
+
         // Add time-based metrics (placeholder - would query from database)
         let now = Utc::now();
         let period_start = now - period.to_duration();
-        
+
         // Placeholder values - in production, these would be calculated from actual data
         metrics.insert("period_conversations".to_string(), 150.0);
         metrics.insert("period_cost".to_string(), 45.67);
@@ -415,7 +420,7 @@ impl ExecutiveReporter {
         metrics.insert("avg_response_time_ms".to_string(), 245.0);
         metrics.insert("success_rate".to_string(), 0.985);
         metrics.insert("user_satisfaction".to_string(), 4.7);
-        
+
         Ok(ExecutiveData {
             metrics,
             statistics,
@@ -429,7 +434,7 @@ impl ExecutiveReporter {
         insights: &[BusinessInsight],
     ) -> Result<Vec<ExecutiveRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         // Check for high cost metrics
         if let Some(cost_metric) = metrics.iter().find(|m| m.name == "Cost per Query") {
             if cost_metric.value > 0.10 {
@@ -443,9 +448,12 @@ impl ExecutiveReporter {
                 });
             }
         }
-        
+
         // Check for growth opportunities
-        if let Some(growth_insight) = insights.iter().find(|i| i.category == InsightCategory::Growth) {
+        if let Some(growth_insight) = insights
+            .iter()
+            .find(|i| i.category == InsightCategory::Growth)
+        {
             if growth_insight.impact == BusinessImpact::High {
                 recommendations.push(ExecutiveRecommendation {
                     priority: Priority::High,
@@ -457,7 +465,7 @@ impl ExecutiveReporter {
                 });
             }
         }
-        
+
         // Add general optimization recommendation
         recommendations.push(ExecutiveRecommendation {
             priority: Priority::Medium,
@@ -467,13 +475,13 @@ impl ExecutiveReporter {
             effort_estimate: EffortLevel::Low,
             roi_estimate: Some(4.0),
         });
-        
+
         Ok(recommendations)
     }
 
     async fn create_visualizations(&self, data: &ExecutiveData) -> Result<Vec<Visualization>> {
         let mut visualizations = Vec::new();
-        
+
         // Usage trend visualization
         let usage_data = self.create_usage_trend_data(data)?;
         visualizations.push(Visualization {
@@ -482,7 +490,7 @@ impl ExecutiveReporter {
             data: usage_data,
             options: VisualizationOptions::default(),
         });
-        
+
         // Cost breakdown visualization
         let cost_data = self.create_cost_breakdown_data(data)?;
         visualizations.push(Visualization {
@@ -491,7 +499,7 @@ impl ExecutiveReporter {
             data: cost_data,
             options: VisualizationOptions::default(),
         });
-        
+
         // Performance gauge
         let perf_data = self.create_performance_gauge_data(data)?;
         visualizations.push(Visualization {
@@ -504,7 +512,7 @@ impl ExecutiveReporter {
                 ..Default::default()
             },
         });
-        
+
         Ok(visualizations)
     }
 
@@ -512,29 +520,39 @@ impl ExecutiveReporter {
         let mut components = HashMap::new();
         let mut total_score = 0.0;
         let mut count = 0;
-        
+
         // Performance health
         if let Some(response_time) = metrics.iter().find(|m| m.name == "Avg Response Time") {
-            let perf_score = if response_time.value < 200.0 { 100.0 }
-                else if response_time.value < 500.0 { 80.0 }
-                else if response_time.value < 1000.0 { 60.0 }
-                else { 40.0 };
+            let perf_score = if response_time.value < 200.0 {
+                100.0
+            } else if response_time.value < 500.0 {
+                80.0
+            } else if response_time.value < 1000.0 {
+                60.0
+            } else {
+                40.0
+            };
             components.insert("performance".to_string(), perf_score);
             total_score += perf_score;
             count += 1;
         }
-        
+
         // Cost efficiency health
         if let Some(cost_metric) = metrics.iter().find(|m| m.name == "Cost per Query") {
-            let cost_score = if cost_metric.value < 0.05 { 100.0 }
-                else if cost_metric.value < 0.10 { 80.0 }
-                else if cost_metric.value < 0.20 { 60.0 }
-                else { 40.0 };
+            let cost_score = if cost_metric.value < 0.05 {
+                100.0
+            } else if cost_metric.value < 0.10 {
+                80.0
+            } else if cost_metric.value < 0.20 {
+                60.0
+            } else {
+                40.0
+            };
             components.insert("cost_efficiency".to_string(), cost_score);
             total_score += cost_score;
             count += 1;
         }
-        
+
         // Quality health
         if let Some(success_rate) = metrics.iter().find(|m| m.name == "Success Rate") {
             let quality_score = success_rate.value * 100.0;
@@ -542,7 +560,7 @@ impl ExecutiveReporter {
             total_score += quality_score;
             count += 1;
         }
-        
+
         // User satisfaction health
         if let Some(satisfaction) = metrics.iter().find(|m| m.name == "User Satisfaction") {
             let satisfaction_score = (satisfaction.value / 5.0) * 100.0;
@@ -550,13 +568,21 @@ impl ExecutiveReporter {
             total_score += satisfaction_score;
             count += 1;
         }
-        
-        let overall = if count > 0 { total_score / count as f64 } else { 0.0 };
-        
-        let trend = if overall > 80.0 { HealthTrend::Improving }
-            else if overall > 60.0 { HealthTrend::Stable }
-            else { HealthTrend::Degrading };
-        
+
+        let overall = if count > 0 {
+            total_score / count as f64
+        } else {
+            0.0
+        };
+
+        let trend = if overall > 80.0 {
+            HealthTrend::Improving
+        } else if overall > 60.0 {
+            HealthTrend::Stable
+        } else {
+            HealthTrend::Degrading
+        };
+
         Ok(HealthScore {
             overall,
             components,
@@ -568,17 +594,17 @@ impl ExecutiveReporter {
         // Create sample trend data
         let mut points = Vec::new();
         let now = Utc::now();
-        
+
         for i in (0..30).rev() {
             let date = now - Duration::days(i);
             let value = 100.0 + (i as f64 * 2.0) + ((i as f64 * 0.5).sin() * 20.0);
-            
+
             points.push(serde_json::json!({
                 "date": date.format("%Y-%m-%d").to_string(),
                 "value": value
             }));
         }
-        
+
         Ok(serde_json::json!({
             "series": [{
                 "name": "Daily Queries",
@@ -607,7 +633,7 @@ impl ExecutiveReporter {
 
     fn create_performance_gauge_data(&self, data: &ExecutiveData) -> Result<serde_json::Value> {
         let response_time = data.metrics.get("avg_response_time_ms").unwrap_or(&500.0);
-        
+
         Ok(serde_json::json!({
             "value": response_time,
             "min": 0,
@@ -624,33 +650,46 @@ impl ExecutiveReporter {
 
     fn format_markdown(&self, summary: ExecutiveSummary) -> Result<String> {
         let mut output = String::new();
-        
-        output.push_str(&format!("# Executive Report - {}\n\n", summary.period.to_string()));
-        output.push_str(&format!("*Generated: {}*\n\n", summary.generated_at.format("%Y-%m-%d %H:%M UTC")));
-        
+
+        output.push_str(&format!(
+            "# Executive Report - {}\n\n",
+            summary.period.to_string()
+        ));
+        output.push_str(&format!(
+            "*Generated: {}*\n\n",
+            summary.generated_at.format("%Y-%m-%d %H:%M UTC")
+        ));
+
         // Health Score
-        output.push_str(&format!("## Overall Health Score: {:.1}/100 ({:?})\n\n", 
-            summary.health_score.overall, summary.health_score.trend));
-        
+        output.push_str(&format!(
+            "## Overall Health Score: {:.1}/100 ({:?})\n\n",
+            summary.health_score.overall, summary.health_score.trend
+        ));
+
         // Key Metrics
         output.push_str("## Key Performance Indicators\n\n");
         output.push_str("| Metric | Value | Change | Status | Trend |\n");
         output.push_str("|--------|-------|---------|---------|-------|\n");
-        
+
         for metric in &summary.key_metrics {
             output.push_str(&format!(
                 "| {} | {:.2} {} | {:+.1}% | {:?} | {:?} |\n",
-                metric.name, metric.value, metric.unit, metric.change_percent,
-                metric.status, metric.trend
+                metric.name,
+                metric.value,
+                metric.unit,
+                metric.change_percent,
+                metric.status,
+                metric.trend
             ));
         }
         output.push_str("\n");
-        
+
         // Business Insights
         if !summary.business_insights.is_empty() {
             output.push_str("## Business Insights\n\n");
             for insight in &summary.business_insights {
-                output.push_str(&format!("### {} - {}\n", 
+                output.push_str(&format!(
+                    "### {} - {}\n",
                     match insight.category {
                         InsightCategory::Growth => "📈 Growth",
                         InsightCategory::Efficiency => "⚡ Efficiency",
@@ -661,17 +700,24 @@ impl ExecutiveReporter {
                     insight.title
                 ));
                 output.push_str(&format!("{}\n\n", insight.summary));
-                output.push_str(&format!("**Impact**: {:?} | **Confidence**: {:.0}%\n\n", 
-                    insight.impact, insight.confidence * 100.0));
+                output.push_str(&format!(
+                    "**Impact**: {:?} | **Confidence**: {:.0}%\n\n",
+                    insight.impact,
+                    insight.confidence * 100.0
+                ));
             }
         }
-        
+
         // Recommendations
         if !summary.recommendations.is_empty() {
             output.push_str("## Strategic Recommendations\n\n");
             for (i, rec) in summary.recommendations.iter().enumerate() {
-                output.push_str(&format!("### {}. {} (Priority: {:?})\n", 
-                    i + 1, rec.title, rec.priority));
+                output.push_str(&format!(
+                    "### {}. {} (Priority: {:?})\n",
+                    i + 1,
+                    rec.title,
+                    rec.priority
+                ));
                 output.push_str(&format!("{}\n\n", rec.description));
                 output.push_str(&format!("**Expected Outcome**: {}\n", rec.expected_outcome));
                 output.push_str(&format!("**Effort**: {:?}", rec.effort_estimate));
@@ -681,7 +727,7 @@ impl ExecutiveReporter {
                 output.push_str("\n\n");
             }
         }
-        
+
         // Visualizations (ASCII art)
         output.push_str("## Performance Visualizations\n\n");
         for viz in &summary.visualizations {
@@ -690,13 +736,14 @@ impl ExecutiveReporter {
                 output.push_str(&format!("```\n{}\n```\n\n", ascii_chart));
             }
         }
-        
+
         Ok(output)
     }
 
     fn format_html(&self, summary: ExecutiveSummary) -> Result<String> {
         // Simple HTML formatting
-        let mut html = String::from(r#"
+        let mut html = String::from(
+            r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -713,12 +760,18 @@ impl ExecutiveReporter {
     </style>
 </head>
 <body>
-"#);
-        
-        html.push_str(&format!("<h1>Executive Report - {}</h1>\n", summary.period.to_string()));
-        html.push_str(&format!("<p><em>Generated: {}</em></p>\n", 
-            summary.generated_at.format("%Y-%m-%d %H:%M UTC")));
-        
+"#,
+        );
+
+        html.push_str(&format!(
+            "<h1>Executive Report - {}</h1>\n",
+            summary.period.to_string()
+        ));
+        html.push_str(&format!(
+            "<p><em>Generated: {}</em></p>\n",
+            summary.generated_at.format("%Y-%m-%d %H:%M UTC")
+        ));
+
         // Convert markdown content to HTML (simplified)
         if let Ok(markdown_content) = self.format_markdown(summary) {
             let html_content = markdown_content
@@ -728,10 +781,10 @@ impl ExecutiveReporter {
                 .replace("\n\n", "</p><p>")
                 .replace("**", "<strong>")
                 .replace("*", "<em>");
-            
+
             html.push_str(&html_content);
         }
-        
+
         html.push_str("</body></html>");
         Ok(html)
     }
@@ -747,16 +800,18 @@ impl ExecutiveSummary {
     pub fn format_markdown(&self) -> Result<String> {
         // Delegate to a simple markdown formatter
         let mut output = String::new();
-        
+
         output.push_str(&format!("Period: {}\n", self.period.to_string()));
         output.push_str(&format!("Generated: {}\n\n", self.generated_at));
-        
+
         output.push_str("### Key Metrics\n");
         for metric in &self.key_metrics {
-            output.push_str(&format!("- {}: {} {} ({:+.1}%)\n", 
-                metric.name, metric.value, metric.unit, metric.change_percent));
+            output.push_str(&format!(
+                "- {}: {} {} ({:+.1}%)\n",
+                metric.name, metric.value, metric.unit, metric.change_percent
+            ));
         }
-        
+
         Ok(output)
     }
 }
@@ -764,17 +819,52 @@ impl ExecutiveSummary {
 impl KpiCalculator {
     fn new() -> Self {
         let mut kpi_definitions = HashMap::new();
-        
+
         // Define standard KPIs
-        Self::add_kpi(&mut kpi_definitions, "Total Queries", "period_queries", "queries", None, Direction::Higher);
-        Self::add_kpi(&mut kpi_definitions, "Avg Response Time", "avg_response_time_ms", "ms", Some(300.0), Direction::Lower);
-        Self::add_kpi(&mut kpi_definitions, "Success Rate", "success_rate", "%", Some(0.95), Direction::Higher);
-        Self::add_kpi(&mut kpi_definitions, "Cost per Query", "cost_per_query", "$", Some(0.10), Direction::Lower);
-        Self::add_kpi(&mut kpi_definitions, "User Satisfaction", "user_satisfaction", "/5", Some(4.5), Direction::Higher);
-        
+        Self::add_kpi(
+            &mut kpi_definitions,
+            "Total Queries",
+            "period_queries",
+            "queries",
+            None,
+            Direction::Higher,
+        );
+        Self::add_kpi(
+            &mut kpi_definitions,
+            "Avg Response Time",
+            "avg_response_time_ms",
+            "ms",
+            Some(300.0),
+            Direction::Lower,
+        );
+        Self::add_kpi(
+            &mut kpi_definitions,
+            "Success Rate",
+            "success_rate",
+            "%",
+            Some(0.95),
+            Direction::Higher,
+        );
+        Self::add_kpi(
+            &mut kpi_definitions,
+            "Cost per Query",
+            "cost_per_query",
+            "$",
+            Some(0.10),
+            Direction::Lower,
+        );
+        Self::add_kpi(
+            &mut kpi_definitions,
+            "User Satisfaction",
+            "user_satisfaction",
+            "/5",
+            Some(4.5),
+            Direction::Higher,
+        );
+
         Self { kpi_definitions }
     }
-    
+
     fn add_kpi(
         definitions: &mut HashMap<String, KpiDefinition>,
         name: &str,
@@ -784,51 +874,68 @@ impl KpiCalculator {
         direction: Direction,
     ) {
         let metric_key_owned = metric_key.to_string();
-        definitions.insert(name.to_string(), KpiDefinition {
-            name: name.to_string(),
-            calculation: Box::new(move |metrics| {
-                metrics.get(&metric_key_owned).copied().unwrap_or(0.0)
-            }),
-            unit: unit.to_string(),
-            target,
-            good_direction: direction,
-        });
+        definitions.insert(
+            name.to_string(),
+            KpiDefinition {
+                name: name.to_string(),
+                calculation: Box::new(move |metrics| {
+                    metrics.get(&metric_key_owned).copied().unwrap_or(0.0)
+                }),
+                unit: unit.to_string(),
+                target,
+                good_direction: direction,
+            },
+        );
     }
-    
+
     fn calculate_kpis(&self, data: &ExecutiveData) -> Result<Vec<KeyMetric>> {
         let mut kpis = Vec::new();
-        
+
         for (name, definition) in &self.kpi_definitions {
             let value = (definition.calculation)(&data.metrics);
-            
+
             // Calculate change percent (simplified - would use historical data)
             let change_percent = ((value * 0.1) - 5.0).max(-50.0).min(50.0);
-            
+
             // Determine status
             let status = if let Some(target) = definition.target {
                 match definition.good_direction {
                     Direction::Higher => {
-                        if value >= target * 1.1 { MetricStatus::Excellent }
-                        else if value >= target { MetricStatus::Good }
-                        else if value >= target * 0.8 { MetricStatus::Warning }
-                        else { MetricStatus::Critical }
+                        if value >= target * 1.1 {
+                            MetricStatus::Excellent
+                        } else if value >= target {
+                            MetricStatus::Good
+                        } else if value >= target * 0.8 {
+                            MetricStatus::Warning
+                        } else {
+                            MetricStatus::Critical
+                        }
                     }
                     Direction::Lower => {
-                        if value <= target * 0.9 { MetricStatus::Excellent }
-                        else if value <= target { MetricStatus::Good }
-                        else if value <= target * 1.2 { MetricStatus::Warning }
-                        else { MetricStatus::Critical }
+                        if value <= target * 0.9 {
+                            MetricStatus::Excellent
+                        } else if value <= target {
+                            MetricStatus::Good
+                        } else if value <= target * 1.2 {
+                            MetricStatus::Warning
+                        } else {
+                            MetricStatus::Critical
+                        }
                     }
                 }
             } else {
                 MetricStatus::Good
             };
-            
+
             // Determine trend
-            let trend = if change_percent > 5.0 { MetricTrend::Improving }
-                else if change_percent < -5.0 { MetricTrend::Declining }
-                else { MetricTrend::Stable };
-            
+            let trend = if change_percent > 5.0 {
+                MetricTrend::Improving
+            } else if change_percent < -5.0 {
+                MetricTrend::Declining
+            } else {
+                MetricTrend::Stable
+            };
+
             kpis.push(KeyMetric {
                 name: name.clone(),
                 value,
@@ -839,7 +946,7 @@ impl KpiCalculator {
                 trend,
             });
         }
-        
+
         Ok(kpis)
     }
 }
@@ -847,7 +954,7 @@ impl KpiCalculator {
 impl InsightGenerator {
     fn new() -> Self {
         let mut insight_rules = Vec::new();
-        
+
         // Growth insight rule
         insight_rules.push(InsightRule {
             name: "Rapid Growth Detection".to_string(),
@@ -871,25 +978,28 @@ impl InsightGenerator {
                 }
             }),
         });
-        
+
         // Efficiency insight rule
         insight_rules.push(InsightRule {
             name: "Cost Efficiency".to_string(),
             category: InsightCategory::Efficiency,
             condition: Box::new(|data| {
-                let cost_per_query = data.metrics.get("period_cost").unwrap_or(&0.0) / 
-                    data.metrics.get("period_queries").unwrap_or(&1.0);
+                let cost_per_query = data.metrics.get("period_cost").unwrap_or(&0.0)
+                    / data.metrics.get("period_queries").unwrap_or(&1.0);
                 cost_per_query < 0.05
             }),
             generator: Box::new(|data| {
                 let cost = data.metrics.get("period_cost").unwrap_or(&0.0);
                 let queries = data.metrics.get("period_queries").unwrap_or(&1.0);
                 let cost_per_query = cost / queries;
-                
+
                 BusinessInsight {
                     category: InsightCategory::Efficiency,
                     title: "Excellent Cost Efficiency".to_string(),
-                    summary: format!("Cost per query is ${:.3}, well below industry average", cost_per_query),
+                    summary: format!(
+                        "Cost per query is ${:.3}, well below industry average",
+                        cost_per_query
+                    ),
                     impact: BusinessImpact::Medium,
                     supporting_data: {
                         let mut data = HashMap::new();
@@ -901,19 +1011,19 @@ impl InsightGenerator {
                 }
             }),
         });
-        
+
         Self { insight_rules }
     }
-    
+
     fn generate_insights(&self, data: &ExecutiveData) -> Result<Vec<BusinessInsight>> {
         let mut insights = Vec::new();
-        
+
         for rule in &self.insight_rules {
             if (rule.condition)(data) {
                 insights.push((rule.generator)(data));
             }
         }
-        
+
         Ok(insights)
     }
 }
@@ -924,7 +1034,7 @@ impl Visualizer {
             ascii_renderer: AsciiRenderer,
         }
     }
-    
+
     fn render_ascii(&self, visualization: &Visualization) -> Result<String> {
         self.ascii_renderer.render(visualization)
     }
@@ -941,13 +1051,13 @@ impl AsciiRenderer {
             _ => Ok("Chart type not yet implemented".to_string()),
         }
     }
-    
+
     fn render_line_chart(&self, viz: &Visualization) -> Result<String> {
         // Simple ASCII line chart
         let mut output = String::new();
         let width = viz.options.width as usize;
         let height = viz.options.height as usize;
-        
+
         // Create a simple line chart representation
         output.push_str("     ^\n");
         output.push_str("100 |     .--.\n");
@@ -957,26 +1067,26 @@ impl AsciiRenderer {
         output.push_str(" 20 |                \\___\n");
         output.push_str("  0 +------------------------>\n");
         output.push_str("    0    7   14   21   28  Days\n");
-        
+
         Ok(output)
     }
-    
+
     fn render_bar_chart(&self, viz: &Visualization) -> Result<String> {
         let mut output = String::new();
-        
+
         output.push_str("Model Usage Distribution\n");
         output.push_str("GPT-4       |████████████████████| 45%\n");
         output.push_str("Claude-3-O  |████████████        | 30%\n");
         output.push_str("Claude-3-S  |███████             | 15%\n");
         output.push_str("Others      |████                | 10%\n");
-        
+
         Ok(output)
     }
-    
+
     fn render_pie_chart(&self, viz: &Visualization) -> Result<String> {
         // Simple ASCII pie chart representation
         let mut output = String::new();
-        
+
         output.push_str("     .-\"\"-.\n");
         output.push_str("   /   45% \\\n");
         output.push_str("  |  GPT-4  |\n");
@@ -986,35 +1096,40 @@ impl AsciiRenderer {
         output.push_str("  |  Other  |\n");
         output.push_str("   \\  25%  /\n");
         output.push_str("     '----'\n");
-        
+
         Ok(output)
     }
-    
+
     fn render_gauge_chart(&self, viz: &Visualization) -> Result<String> {
         let mut output = String::new();
-        
+
         // Extract gauge value
-        let value = viz.data.get("value")
+        let value = viz
+            .data
+            .get("value")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
-        
-        let max = viz.data.get("max")
+
+        let max = viz
+            .data
+            .get("max")
             .and_then(|v| v.as_f64())
             .unwrap_or(100.0);
-        
+
         let percentage = (value / max * 100.0).min(100.0);
         let filled = (percentage / 5.0) as usize;
-        
+
         output.push_str("Performance Gauge\n");
-        output.push_str(&format!("[{}{}] {:.0}ms\n", 
+        output.push_str(&format!(
+            "[{}{}] {:.0}ms\n",
             "█".repeat(filled),
             "░".repeat(20 - filled),
             value
         ));
-        
+
         Ok(output)
     }
-    
+
     fn render_sparkline(&self, viz: &Visualization) -> Result<String> {
         // Simple sparkline
         Ok("▁▂▃▅▇█▇▅▃▃▅▇█▇▅▃▁".to_string())
@@ -1029,9 +1144,9 @@ mod tests {
     async fn test_executive_reporter_creation() -> Result<()> {
         let config = Arc::new(RwLock::new(AdvancedAnalyticsConfig::default()));
         let reporter = ExecutiveReporter::new(config).await?;
-        
+
         assert!(Arc::strong_count(&reporter.kpi_calculator) > 0);
-        
+
         Ok(())
     }
 
@@ -1044,9 +1159,15 @@ mod tests {
             insight_generator: Arc::new(InsightGenerator::new()),
             visualizer: Arc::new(Visualizer::new()),
         };
-        
-        assert!(matches!(reporter.parse_period("weekly").unwrap(), ReportPeriod::Weekly));
-        assert!(matches!(reporter.parse_period("30").unwrap(), ReportPeriod::Custom { days: 30 }));
+
+        assert!(matches!(
+            reporter.parse_period("weekly").unwrap(),
+            ReportPeriod::Weekly
+        ));
+        assert!(matches!(
+            reporter.parse_period("30").unwrap(),
+            ReportPeriod::Custom { days: 30 }
+        ));
     }
 
     #[test]
@@ -1071,7 +1192,7 @@ mod tests {
                 trend: MetricTrend::Stable,
             },
         ];
-        
+
         let config = Arc::new(RwLock::new(AdvancedAnalyticsConfig::default()));
         let reporter = ExecutiveReporter {
             config,
@@ -1079,9 +1200,12 @@ mod tests {
             insight_generator: Arc::new(InsightGenerator::new()),
             visualizer: Arc::new(Visualizer::new()),
         };
-        
+
         let health_score = reporter.calculate_health_score(&metrics).unwrap();
         assert!(health_score.overall > 80.0);
-        assert!(matches!(health_score.trend, HealthTrend::Improving | HealthTrend::Stable));
+        assert!(matches!(
+            health_score.trend,
+            HealthTrend::Improving | HealthTrend::Stable
+        ));
     }
 }

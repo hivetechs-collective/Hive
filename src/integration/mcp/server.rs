@@ -2,31 +2,32 @@
 //!
 //! Core MCP server that handles JSON-RPC communication
 
-use super::protocol::{
-    McpMessage, McpMessageContent, McpRequest, McpResponse, McpError,
-    InitializeParams, InitializeResult, ServerCapabilities, ServerInfo,
-    ListToolsResult, CallToolRequest, ToolResult,
-    ListResourcesResult, ReadResourceResult, 
-    McpCapability, MCP_VERSION,
-};
-use super::tools::ToolRegistry;
-use super::resources::ResourceManager;
 use super::auth::AuthManager;
+use super::protocol::{
+    CallToolRequest, InitializeParams, InitializeResult, ListResourcesResult, ListToolsResult,
+    McpCapability, McpError, McpMessage, McpMessageContent, McpRequest, McpResponse,
+    ReadResourceResult, ServerCapabilities, ServerInfo, ToolResult, MCP_VERSION,
+};
+use super::resources::ResourceManager;
 use super::streaming::{StreamingHandler, WebSocketHandler};
-use crate::core::config::{Config, self};
+use super::tools::ToolRegistry;
 use crate::consensus::engine::ConsensusEngine;
+use crate::core::config::{self, Config};
 
-use anyhow::{Result, anyhow};
-use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
-use hyper::{Body, Request, Response, Server, service::{make_service_fn, service_fn}};
-use hyper::{Method, StatusCode, header};
-use std::convert::Infallible;
-use std::net::SocketAddr;
-use tower_http::cors::CorsLayer;
-use tracing::{info, warn, error, debug};
+use anyhow::{anyhow, Result};
 use futures::stream::StreamExt;
 use futures::SinkExt;
+use hyper::{header, Method, StatusCode};
+use hyper::{
+    service::{make_service_fn, service_fn},
+    Body, Request, Response, Server,
+};
+use std::convert::Infallible;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::{mpsc, RwLock};
+use tower_http::cors::CorsLayer;
+use tracing::{debug, error, info, warn};
 
 /// MCP server
 pub struct McpServer {
@@ -42,22 +43,14 @@ impl McpServer {
     /// Create new MCP server
     pub async fn new() -> Result<Self> {
         let config = Arc::new(config::load_config().await?);
-        let consensus_engine = Arc::new(RwLock::new(
-            ConsensusEngine::new(None).await?
-        ));
-        
-        let tool_registry = Arc::new(ToolRegistry::new(
-            consensus_engine.clone(),
-            config.clone(),
-        ).await?);
-        
-        let resource_manager = Arc::new(ResourceManager::new(
-            config.clone()
-        ).await?);
-        
-        let auth_manager = Arc::new(AuthManager::new(
-            config.clone()
-        ).await?);
+        let consensus_engine = Arc::new(RwLock::new(ConsensusEngine::new(None).await?));
+
+        let tool_registry =
+            Arc::new(ToolRegistry::new(consensus_engine.clone(), config.clone()).await?);
+
+        let resource_manager = Arc::new(ResourceManager::new(config.clone()).await?);
+
+        let auth_manager = Arc::new(AuthManager::new(config.clone()).await?);
 
         Ok(Self {
             tool_registry,
@@ -72,7 +65,7 @@ impl McpServer {
     /// Start MCP server
     pub async fn start(&self, port: u16) -> Result<()> {
         let addr = SocketAddr::from(([127, 0, 0, 1], port));
-        
+
         let server = self.clone();
         let make_svc = make_service_fn(move |_conn| {
             let server = server.clone();
@@ -84,11 +77,10 @@ impl McpServer {
             }
         });
 
-        let server_future = Server::bind(&addr)
-            .serve(make_svc);
+        let server_future = Server::bind(&addr).serve(make_svc);
 
         info!("🚀 MCP server listening on http://{}", addr);
-        
+
         if let Err(e) = server_future.await {
             error!("MCP server error: {}", e);
             return Err(anyhow!("Server failed: {}", e));
@@ -121,16 +113,23 @@ impl McpServer {
                 .status(StatusCode::OK)
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-                .header("Access-Control-Allow-Headers", "Content-Type, Authorization, Upgrade, Connection")
+                .header(
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, Authorization, Upgrade, Connection",
+                )
                 .body(Body::empty())?);
         }
 
         // Check for WebSocket upgrade
-        if req.headers().get(header::CONNECTION)
+        if req
+            .headers()
+            .get(header::CONNECTION)
             .and_then(|v| v.to_str().ok())
             .map(|v| v.contains("Upgrade"))
             .unwrap_or(false)
-            && req.headers().get(header::UPGRADE)
+            && req
+                .headers()
+                .get(header::UPGRADE)
                 .and_then(|v| v.to_str().ok())
                 .map(|v| v == "websocket")
                 .unwrap_or(false)
@@ -148,7 +147,7 @@ impl McpServer {
         // Parse request body
         let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
         let body_str = String::from_utf8(body_bytes.to_vec())?;
-        
+
         debug!("Received MCP request: {}", body_str);
 
         // Parse JSON-RPC message
@@ -175,7 +174,7 @@ impl McpServer {
         // Process message
         let response = self.handle_message(message).await;
         let response_body = serde_json::to_string(&response)?;
-        
+
         debug!("Sending MCP response: {}", response_body);
 
         Ok(Response::builder()
@@ -188,7 +187,7 @@ impl McpServer {
     /// Handle MCP message
     async fn handle_message(&self, message: McpMessage) -> McpMessage {
         let id = message.id.clone();
-        
+
         match message.content {
             McpMessageContent::Request(request) => {
                 let response = self.handle_mcp_request(request).await;
@@ -248,19 +247,24 @@ impl McpServer {
     async fn handle_initialize(&self, params: serde_json::Value) -> McpResponse {
         let init_params: InitializeParams = match serde_json::from_value(params) {
             Ok(params) => params,
-            Err(_) => return McpResponse::Error {
-                error: McpError::invalid_params(),
-            },
+            Err(_) => {
+                return McpResponse::Error {
+                    error: McpError::invalid_params(),
+                }
+            }
         };
 
-        info!("Initializing MCP server for client: {} v{}", 
-              init_params.client_info.name, 
-              init_params.client_info.version);
+        info!(
+            "Initializing MCP server for client: {} v{}",
+            init_params.client_info.name, init_params.client_info.version
+        );
 
         // Validate protocol version
         if init_params.protocol_version != MCP_VERSION {
-            warn!("Protocol version mismatch: client={}, server={}", 
-                  init_params.protocol_version, MCP_VERSION);
+            warn!(
+                "Protocol version mismatch: client={}, server={}",
+                init_params.protocol_version, MCP_VERSION
+            );
         }
 
         let result = InitializeResult {
@@ -287,7 +291,7 @@ impl McpServer {
         let mut initialized = self.initialized.write().await;
         *initialized = true;
         info!("MCP server initialization completed");
-        
+
         McpResponse::Success {
             result: serde_json::Value::Null,
         }
@@ -315,12 +319,18 @@ impl McpServer {
     async fn handle_call_tool(&self, params: serde_json::Value) -> McpResponse {
         let call_request: CallToolRequest = match serde_json::from_value(params) {
             Ok(req) => req,
-            Err(_) => return McpResponse::Error {
-                error: McpError::invalid_params(),
-            },
+            Err(_) => {
+                return McpResponse::Error {
+                    error: McpError::invalid_params(),
+                }
+            }
         };
 
-        match self.tool_registry.call_tool(&call_request.name, call_request.arguments).await {
+        match self
+            .tool_registry
+            .call_tool(&call_request.name, call_request.arguments)
+            .await
+        {
             Ok(result) => McpResponse::Success {
                 result: serde_json::to_value(result).unwrap(),
             },
@@ -355,9 +365,11 @@ impl McpServer {
     async fn handle_read_resource(&self, params: serde_json::Value) -> McpResponse {
         let uri: String = match params.get("uri").and_then(|v| v.as_str()) {
             Some(uri) => uri.to_string(),
-            None => return McpResponse::Error {
-                error: McpError::invalid_params(),
-            },
+            None => {
+                return McpResponse::Error {
+                    error: McpError::invalid_params(),
+                }
+            }
         };
 
         match self.resource_manager.read_resource(&uri).await {
@@ -391,15 +403,18 @@ impl McpServer {
     }
 
     /// Handle WebSocket connection
-    async fn handle_websocket_connection(&self, ws: tokio_tungstenite::WebSocketStream<hyper::upgrade::Upgraded>) -> Result<()> {
+    async fn handle_websocket_connection(
+        &self,
+        ws: tokio_tungstenite::WebSocketStream<hyper::upgrade::Upgraded>,
+    ) -> Result<()> {
         info!("WebSocket connection established");
-        
+
         let (mut ws_sender, mut ws_receiver) = ws.split();
         let (msg_sender, mut msg_receiver) = mpsc::channel::<McpMessage>(100);
-        
+
         // Create streaming handler
         let streaming_handler = StreamingHandler::new(msg_sender.clone());
-        
+
         // Spawn task to forward messages to WebSocket
         let send_task = tokio::spawn(async move {
             while let Some(message) = msg_receiver.recv().await {
@@ -410,20 +425,23 @@ impl McpServer {
                         continue;
                     }
                 };
-                
-                if let Err(e) = ws_sender.send(tokio_tungstenite::tungstenite::Message::Text(json)).await {
+
+                if let Err(e) = ws_sender
+                    .send(tokio_tungstenite::tungstenite::Message::Text(json))
+                    .await
+                {
                     error!("Failed to send WebSocket message: {}", e);
                     break;
                 }
             }
         });
-        
+
         // Process incoming WebSocket messages
         while let Some(msg) = ws_receiver.next().await {
             match msg {
                 Ok(tokio_tungstenite::tungstenite::Message::Text(text)) => {
                     debug!("Received WebSocket message: {}", text);
-                    
+
                     // Parse and handle message
                     match serde_json::from_str::<McpMessage>(&text) {
                         Ok(message) => {
@@ -454,11 +472,11 @@ impl McpServer {
                 _ => {} // Ignore other message types
             }
         }
-        
+
         // Clean up
         send_task.abort();
         info!("WebSocket connection closed");
-        
+
         Ok(())
     }
 }

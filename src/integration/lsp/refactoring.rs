@@ -213,7 +213,7 @@ impl SmartRefactoringProvider {
             for suggestion in &mut suggestions {
                 let safety = self.validate_refactoring_safety(&suggestion.action, content, language).await?;
                 suggestion.action.safety_score = safety.confidence;
-                
+
                 if !safety.is_safe {
                     suggestion.action.side_effects.extend(
                         safety.risks.iter().map(|r| r.description.clone())
@@ -301,7 +301,7 @@ impl SmartRefactoringProvider {
         debug!(\"Generating AI refactoring suggestions for {}\", language);
 
         let consensus = self.consensus_engine.read().await;
-        
+
         let context_str = context.unwrap_or(\"\");
         let refactoring_prompt = format!(
             \"Analyze this {} code and suggest specific refactoring improvements. Focus on code quality, performance, readability, and maintainability:\\n\\nCode to refactor:\\n```{}\\n{}\\n```\\n\\nContext:\\n{}\\n\\nProvide:\\n1. Specific refactoring suggestions with exact code changes\\n2. Justification for each suggestion\\n3. Confidence level (0-1)\\n4. Potential risks or side effects\\n5. Performance impact assessment\",
@@ -336,7 +336,7 @@ impl SmartRefactoringProvider {
         // 1. Syntax validation
         if let Some(transformed_code) = self.apply_refactoring_simulation(action, original_code).await? {
             let parse_result = self.analysis_engine.parse_code(&transformed_code, Some(language)).await?;
-            
+
             if !parse_result.errors.is_empty() {
                 is_safe = false;
                 confidence = 0.0;
@@ -684,28 +684,28 @@ impl SmartRefactoringProvider {
             let line = lines[start_line];
             let start_char = range.start.character as usize;
             let end_char = range.end.character as usize;
-            
+
             if start_char >= line.len() || end_char > line.len() || start_char > end_char {
                 return Err(HiveError::validation(\"refactoring\", \"Invalid character range\"));
             }
-            
+
             Ok(line[start_char..end_char].to_string())
         } else {
             // Multi-line selection
             let mut selected_lines = Vec::new();
-            
+
             // First line (partial)
             let first_line = lines[start_line];
             let start_char = range.start.character as usize;
             if start_char < first_line.len() {
                 selected_lines.push(&first_line[start_char..]);
             }
-            
+
             // Middle lines (complete)
             for i in (start_line + 1)..end_line {
                 selected_lines.push(lines[i]);
             }
-            
+
             // Last line (partial)
             if end_line < lines.len() {
                 let last_line = lines[end_line];
@@ -714,7 +714,7 @@ impl SmartRefactoringProvider {
                     selected_lines.push(&last_line[..end_char]);
                 }
             }
-            
+
             Ok(selected_lines.join(\"\\n\"))
         }
     }
@@ -845,7 +845,7 @@ impl SmartRefactoringProvider {
     /// Generate safety recommendations
     fn generate_safety_recommendations(&self, risks: &[SafetyRisk]) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         for risk in risks {
             match risk.severity {
                 RiskSeverity::Critical => {
@@ -861,12 +861,12 @@ impl SmartRefactoringProvider {
                     recommendations.push(\"Consider the impact on code readability\".to_string());
                 }
             }
-            
+
             if let Some(mitigation) = &risk.mitigation {
                 recommendations.push(mitigation.clone());
             }
         }
-        
+
         recommendations.dedup();
         recommendations
     }

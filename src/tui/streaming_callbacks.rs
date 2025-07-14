@@ -3,10 +3,11 @@
 //! Real-time streaming callbacks for TUI consensus integration.
 //! Bridges the consensus engine with the TUI interface.
 
-use crate::consensus::streaming::{StreamingCallbacks, ProgressInfo};
+use crate::consensus::streaming::{ProgressInfo, StreamingCallbacks};
 use crate::consensus::types::{Stage, StageResult};
 use crate::tui::advanced::consensus::{
-    ConsensusPanel, PipelineStage, ChatMessage, MessageType, LiveMetrics, ResourceUsage, ModelUtilization
+    ChatMessage, ConsensusPanel, LiveMetrics, MessageType, ModelUtilization, PipelineStage,
+    ResourceUsage,
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -27,15 +28,9 @@ pub struct TuiStreamingCallbacks {
 #[derive(Debug, Clone)]
 pub enum TuiConsensusEvent {
     /// Stage started
-    StageStarted {
-        stage: PipelineStage,
-        model: String,
-    },
+    StageStarted { stage: PipelineStage, model: String },
     /// Token received
-    TokenReceived {
-        stage: PipelineStage,
-        token: String,
-    },
+    TokenReceived { stage: PipelineStage, token: String },
     /// Progress updated
     ProgressUpdated {
         stage: PipelineStage,
@@ -50,10 +45,7 @@ pub enum TuiConsensusEvent {
         duration: Duration,
     },
     /// Error occurred
-    ErrorOccurred {
-        stage: PipelineStage,
-        error: String,
-    },
+    ErrorOccurred { stage: PipelineStage, error: String },
     /// Consensus completed
     ConsensusCompleted {
         final_content: String,
@@ -199,7 +191,7 @@ impl StreamingCallbacks for TuiStreamingCallbacks {
     fn on_stage_progress(&self, stage: Stage, progress: ProgressInfo) -> Result<()> {
         let pipeline_stage = self.convert_stage(stage);
         let progress_percent = progress.percentage.min(100.0) as u8;
-        
+
         let event = TuiConsensusEvent::ProgressUpdated {
             stage: pipeline_stage,
             progress: progress_percent,
@@ -214,7 +206,11 @@ impl StreamingCallbacks for TuiStreamingCallbacks {
             let panel = self.consensus_panel.clone();
             async move {
                 if let Ok(mut panel) = panel.try_write() {
-                    panel.update_pipeline_progress(pipeline_stage, progress_percent, progress.tokens as usize);
+                    panel.update_pipeline_progress(
+                        pipeline_stage,
+                        progress_percent,
+                        progress.tokens as usize,
+                    );
                 }
             }
         });
@@ -249,10 +245,10 @@ impl StreamingCallbacks for TuiStreamingCallbacks {
                 if let Ok(mut panel) = panel.try_write() {
                     // Complete the streaming for this stage
                     panel.complete_streaming(pipeline_stage);
-                    
+
                     // Mark stage as 100% complete
                     panel.update_pipeline_progress(pipeline_stage, 100, tokens);
-                    
+
                     // Update metrics
                     callbacks.update_metrics(tokens, stage_duration).await;
                 }

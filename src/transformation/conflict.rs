@@ -1,9 +1,9 @@
 //! Conflict detection and resolution for code transformations
 
+use crate::transformation::types::*;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::transformation::types::*;
 
 /// Handles conflict detection and resolution for transformations
 pub struct ConflictResolver {
@@ -90,7 +90,8 @@ impl ConflictResolver {
                     let (start1, end1) = change.line_range;
                     let (start2, end2) = pending_change.line_range;
 
-                    if (start1 <= start2 && end1 >= start2) || (start2 <= start1 && end2 >= start1) {
+                    if (start1 <= start2 && end1 >= start2) || (start2 <= start1 && end2 >= start1)
+                    {
                         conflicts.push(ConflictInfo {
                             file_path: change.file_path.clone(),
                             conflict_type: ConflictType::PendingConflict,
@@ -156,10 +157,8 @@ impl ConflictResolver {
 
     /// Add a transformation to pending list
     pub fn add_pending(&mut self, transformation: Transformation) {
-        self.pending_transformations.insert(
-            transformation.id.clone(),
-            transformation,
-        );
+        self.pending_transformations
+            .insert(transformation.id.clone(), transformation);
     }
 
     /// Remove a transformation from pending list
@@ -186,10 +185,10 @@ impl ConflictResolver {
     ) -> Result<bool> {
         let metadata = tokio::fs::metadata(file_path).await?;
         let modified = metadata.modified()?;
-        
+
         // Convert system time to chrono
         let modified_time: chrono::DateTime<chrono::Utc> = modified.into();
-        
+
         Ok(modified_time > since)
     }
 
@@ -204,10 +203,7 @@ impl ConflictResolver {
     }
 
     /// Merge multiple changes affecting the same region
-    pub fn merge_changes(
-        &self,
-        changes: Vec<CodeChange>,
-    ) -> Result<Vec<CodeChange>> {
+    pub fn merge_changes(&self, changes: Vec<CodeChange>) -> Result<Vec<CodeChange>> {
         // Group by file
         let mut by_file: HashMap<PathBuf, Vec<CodeChange>> = HashMap::new();
         for change in changes {
@@ -234,7 +230,8 @@ impl ConflictResolver {
                         if curr.line_range.1 >= change.line_range.0 - 1 {
                             // Merge
                             curr.line_range.1 = curr.line_range.1.max(change.line_range.1);
-                            curr.description = format!("{}\n{}", curr.description, change.description);
+                            curr.description =
+                                format!("{}\n{}", curr.description, change.description);
                             curr.confidence = curr.confidence.min(change.confidence);
                         } else {
                             // Not adjacent, save current and start new

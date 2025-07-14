@@ -1,5 +1,5 @@
 //! Dynamic knowledge graph construction and traversal
-//! 
+//!
 //! This module provides:
 //! - Entity extraction and relationship mapping
 //! - Graph construction with petgraph
@@ -7,8 +7,8 @@
 //! - Visualization and export capabilities
 
 use anyhow::{Context as _, Result};
+use petgraph::algo::{all_simple_paths, dijkstra};
 use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::algo::{dijkstra, all_simple_paths};
 use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -195,7 +195,7 @@ impl KnowledgeGraph {
             stats: GraphStatistics::default(),
         }
     }
-    
+
     /// Add an entity to the graph
     pub fn add_entity(&mut self, entity: Entity) -> Result<NodeIndex> {
         // Check if entity already exists
@@ -206,114 +206,130 @@ impl KnowledgeGraph {
             }
             return Ok(node_index);
         }
-        
+
         // Add new entity
         let node_index = self.graph.add_node(entity.clone());
         self.entity_map.insert(entity.id.clone(), node_index);
-        
+
         // Update type index
         self.type_index
             .entry(entity.entity_type.clone())
             .or_insert_with(HashSet::new)
             .insert(entity.id.clone());
-        
+
         // Update statistics
         self.stats.entity_count += 1;
-        *self.stats.entities_by_type
+        *self
+            .stats
+            .entities_by_type
             .entry(entity.entity_type)
             .or_insert(0) += 1;
-        
+
         Ok(node_index)
     }
-    
+
     /// Get graph statistics
     pub fn stats(&self) -> &GraphStatistics {
         &self.stats
     }
-    
+
     /// Add a relationship to the graph
     pub fn add_relationship(&mut self, relationship: Relationship) -> Result<()> {
         // Ensure both entities exist
-        let source_index = self.entity_map.get(&relationship.source)
+        let source_index = self
+            .entity_map
+            .get(&relationship.source)
             .ok_or_else(|| anyhow::anyhow!("Source entity not found: {}", relationship.source))?;
-        let target_index = self.entity_map.get(&relationship.target)
+        let target_index = self
+            .entity_map
+            .get(&relationship.target)
             .ok_or_else(|| anyhow::anyhow!("Target entity not found: {}", relationship.target))?;
-        
+
         // Add edge
-        self.graph.add_edge(*source_index, *target_index, relationship.clone());
-        
+        self.graph
+            .add_edge(*source_index, *target_index, relationship.clone());
+
         // Update statistics
         self.stats.relationship_count += 1;
-        *self.stats.relationships_by_type
+        *self
+            .stats
+            .relationships_by_type
             .entry(relationship.relation_type)
             .or_insert(0) += 1;
-        
+
         Ok(())
     }
-    
+
     /// Find entity by ID
     pub fn find_entity(&self, id: &str) -> Option<&Entity> {
-        self.entity_map.get(id)
+        self.entity_map
+            .get(id)
             .and_then(|&index| self.graph.node_weight(index))
     }
-    
+
     /// Find relationships for an entity
     pub async fn find_relationships(&self, entity_id: &str) -> Result<Vec<Relationship>> {
-        let node_index = self.entity_map.get(entity_id)
+        let node_index = self
+            .entity_map
+            .get(entity_id)
             .ok_or_else(|| anyhow::anyhow!("Entity not found: {}", entity_id))?;
-        
+
         let mut relationships = Vec::new();
-        
+
         // Outgoing relationships
         for edge in self.graph.edges(*node_index) {
             relationships.push(edge.weight().clone());
         }
-        
+
         // Incoming relationships
-        for edge in self.graph.edges_directed(*node_index, petgraph::Direction::Incoming) {
+        for edge in self
+            .graph
+            .edges_directed(*node_index, petgraph::Direction::Incoming)
+        {
             let mut rel = edge.weight().clone();
             // Swap source and target for incoming edges
             std::mem::swap(&mut rel.source, &mut rel.target);
             relationships.push(rel);
         }
-        
+
         Ok(relationships)
     }
-    
+
     /// Execute a graph query
     pub fn query(&self, query: &GraphQuery) -> Result<Vec<Entity>> {
         let mut results = Vec::new();
         let mut visited = HashSet::new();
-        
+
         // Determine starting points
         let start_nodes: Vec<NodeIndex> = if let Some(ref start_ids) = query.start_entities {
-            start_ids.iter()
+            start_ids
+                .iter()
                 .filter_map(|id| self.entity_map.get(id))
                 .copied()
                 .collect()
         } else {
             self.graph.node_indices().collect()
         };
-        
+
         // BFS traversal with filters
         let mut queue = VecDeque::new();
         for node in start_nodes {
             queue.push_back((node, 0));
         }
-        
+
         while let Some((node_index, depth)) = queue.pop_front() {
             if visited.contains(&node_index) {
                 continue;
             }
             visited.insert(node_index);
-            
+
             // Check depth limit
             if let Some(max_depth) = query.max_depth {
                 if depth > max_depth {
                     continue;
                 }
             }
-            
+
             // Get entity
             if let Some(entity) = self.graph.node_weight(node_index) {
                 // Apply filters
@@ -322,15 +338,15 @@ impl KnowledgeGraph {
                         continue;
                     }
                 }
-                
+
                 if let Some(min_conf) = query.min_confidence {
                     if entity.confidence < min_conf {
                         continue;
                     }
                 }
-                
+
                 results.push(entity.clone());
-                
+
                 // Add neighbors to queue
                 for edge in self.graph.edges(node_index) {
                     if let Some(ref rel_types) = query.relation_types {
@@ -342,53 +358,62 @@ impl KnowledgeGraph {
                 }
             }
         }
-        
+
         Ok(results)
     }
-    
+
     /// Find shortest path between two entities
     pub fn find_path(&self, from: &str, to: &str) -> Result<Vec<Entity>> {
-        let from_index = self.entity_map.get(from)
+        let from_index = self
+            .entity_map
+            .get(from)
             .ok_or_else(|| anyhow::anyhow!("Source entity not found: {}", from))?;
-        let to_index = self.entity_map.get(to)
+        let to_index = self
+            .entity_map
+            .get(to)
             .ok_or_else(|| anyhow::anyhow!("Target entity not found: {}", to))?;
-        
+
         // Use Dijkstra's algorithm
-        let node_map = dijkstra(&self.graph, *from_index, Some(*to_index), |e| e.weight().weight);
-        
+        let node_map = dijkstra(&self.graph, *from_index, Some(*to_index), |e| {
+            e.weight().weight
+        });
+
         // Reconstruct path
         let mut path = Vec::new();
         let mut current = *to_index;
-        
+
         while current != *from_index {
             if let Some(entity) = self.graph.node_weight(current) {
                 path.push(entity.clone());
             }
-            
+
             // Find predecessor
             let mut found = false;
-            for edge in self.graph.edges_directed(current, petgraph::Direction::Incoming) {
+            for edge in self
+                .graph
+                .edges_directed(current, petgraph::Direction::Incoming)
+            {
                 if node_map.contains_key(&edge.source()) {
                     current = edge.source();
                     found = true;
                     break;
                 }
             }
-            
+
             if !found {
                 return Err(anyhow::anyhow!("No path found between {} and {}", from, to));
             }
         }
-        
+
         // Add starting entity
         if let Some(entity) = self.graph.node_weight(*from_index) {
             path.push(entity.clone());
         }
-        
+
         path.reverse();
         Ok(path)
     }
-    
+
     /// Calculate graph statistics
     pub fn calculate_statistics(&mut self) {
         self.stats = GraphStatistics {
@@ -399,47 +424,54 @@ impl KnowledgeGraph {
             avg_connections: 0.0,
             hubs: Vec::new(),
         };
-        
+
         // Count entities by type
         for node in self.graph.node_weights() {
-            *self.stats.entities_by_type
+            *self
+                .stats
+                .entities_by_type
                 .entry(node.entity_type.clone())
                 .or_insert(0) += 1;
         }
-        
+
         // Count relationships by type
         for edge in self.graph.edge_weights() {
-            *self.stats.relationships_by_type
+            *self
+                .stats
+                .relationships_by_type
                 .entry(edge.relation_type.clone())
                 .or_insert(0) += 1;
         }
-        
+
         // Calculate average connections and find hubs
         let mut connection_counts: Vec<(String, usize)> = Vec::new();
         let mut total_connections = 0;
-        
+
         for (id, &node_index) in &self.entity_map {
-            let connections = self.graph.edges(node_index).count() +
-                             self.graph.edges_directed(node_index, petgraph::Direction::Incoming).count();
+            let connections = self.graph.edges(node_index).count()
+                + self
+                    .graph
+                    .edges_directed(node_index, petgraph::Direction::Incoming)
+                    .count();
             total_connections += connections;
             connection_counts.push((id.clone(), connections));
         }
-        
+
         if self.stats.entity_count > 0 {
             self.stats.avg_connections = total_connections as f32 / self.stats.entity_count as f32;
         }
-        
+
         // Find top 10 hubs
         connection_counts.sort_by_key(|&(_, count)| std::cmp::Reverse(count));
         self.stats.hubs = connection_counts.into_iter().take(10).collect();
     }
-    
+
     /// Export graph to DOT format
     pub fn export_dot(&self) -> String {
         let mut dot = String::from("digraph KnowledgeGraph {\n");
         dot.push_str("  rankdir=LR;\n");
         dot.push_str("  node [shape=box, style=rounded];\n\n");
-        
+
         // Add nodes
         for (id, &node_index) in &self.entity_map {
             if let Some(entity) = self.graph.node_weight(node_index) {
@@ -454,40 +486,34 @@ impl KnowledgeGraph {
                     EntityType::CodeElement => "lightyellow",
                     EntityType::Domain => "lightpink",
                 };
-                
+
                 dot.push_str(&format!(
                     "  \"{}\" [label=\"{}\\n[{}]\", fillcolor=\"{}\", style=filled];\n",
-                    id,
-                    entity.label,
-                    entity.entity_type,
-                    color
+                    id, entity.label, entity.entity_type, color
                 ));
             }
         }
-        
+
         dot.push_str("\n");
-        
+
         // Add edges
         for edge in self.graph.edge_references() {
             if let (Some(source), Some(target)) = (
                 self.graph.node_weight(edge.source()),
-                self.graph.node_weight(edge.target())
+                self.graph.node_weight(edge.target()),
             ) {
                 let edge_data = edge.weight();
                 dot.push_str(&format!(
                     "  \"{}\" -> \"{}\" [label=\"{}\", weight={:.2}];\n",
-                    source.id,
-                    target.id,
-                    edge_data.relation_type,
-                    edge_data.weight
+                    source.id, target.id, edge_data.relation_type, edge_data.weight
                 ));
             }
         }
-        
+
         dot.push_str("}\n");
         dot
     }
-    
+
     /// Export graph to JSON format
     pub fn export_json(&self) -> Result<String> {
         #[derive(Serialize)]
@@ -496,30 +522,29 @@ impl KnowledgeGraph {
             relationships: Vec<Relationship>,
             statistics: GraphStatistics,
         }
-        
+
         let entities: Vec<Entity> = self.graph.node_weights().cloned().collect();
         let relationships: Vec<Relationship> = self.graph.edge_weights().cloned().collect();
-        
+
         let export = GraphExport {
             entities,
             relationships,
             statistics: self.stats.clone(),
         };
-        
-        serde_json::to_string_pretty(&export)
-            .context("Failed to serialize graph to JSON")
+
+        serde_json::to_string_pretty(&export).context("Failed to serialize graph to JSON")
     }
-    
+
     /// Build graph from memory system
     pub async fn build_from_memories(&mut self, _memory_system: &MemorySystem) -> Result<()> {
         info!("Building knowledge graph from memory system");
-        
+
         // This is a placeholder implementation
         // In production, this would:
         // 1. Extract entities from conversations using NER
         // 2. Identify relationships using dependency parsing
         // 3. Build the graph incrementally
-        
+
         // For now, add some example entities
         self.add_entity(Entity {
             id: "rust".to_string(),
@@ -528,7 +553,7 @@ impl KnowledgeGraph {
             properties: HashMap::new(),
             confidence: 1.0,
         })?;
-        
+
         self.add_entity(Entity {
             id: "memory_system".to_string(),
             entity_type: EntityType::Concept,
@@ -536,7 +561,7 @@ impl KnowledgeGraph {
             properties: HashMap::new(),
             confidence: 0.95,
         })?;
-        
+
         self.add_relationship(Relationship {
             source: "memory_system".to_string(),
             target: "rust".to_string(),
@@ -544,14 +569,14 @@ impl KnowledgeGraph {
             weight: 0.9,
             properties: HashMap::new(),
         })?;
-        
+
         self.calculate_statistics();
-        
-        info!("Knowledge graph built with {} entities and {} relationships",
-            self.stats.entity_count,
-            self.stats.relationship_count
+
+        info!(
+            "Knowledge graph built with {} entities and {} relationships",
+            self.stats.entity_count, self.stats.relationship_count
         );
-        
+
         Ok(())
     }
 }
@@ -559,11 +584,11 @@ impl KnowledgeGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_graph_construction() -> Result<()> {
         let mut graph = KnowledgeGraph::new();
-        
+
         // Add entities
         let entity1 = Entity {
             id: "rust".to_string(),
@@ -572,7 +597,7 @@ mod tests {
             properties: HashMap::new(),
             confidence: 1.0,
         };
-        
+
         let entity2 = Entity {
             id: "memory".to_string(),
             entity_type: EntityType::Concept,
@@ -580,10 +605,10 @@ mod tests {
             properties: HashMap::new(),
             confidence: 0.9,
         };
-        
+
         graph.add_entity(entity1)?;
         graph.add_entity(entity2)?;
-        
+
         // Add relationship
         graph.add_relationship(Relationship {
             source: "rust".to_string(),
@@ -592,17 +617,17 @@ mod tests {
             weight: 0.8,
             properties: HashMap::new(),
         })?;
-        
+
         assert_eq!(graph.stats.entity_count, 2);
         assert_eq!(graph.stats.relationship_count, 1);
-        
+
         Ok(())
     }
-    
+
     #[test]
     fn test_graph_query() -> Result<()> {
         let mut graph = KnowledgeGraph::new();
-        
+
         // Build a small graph
         for i in 1..=5 {
             graph.add_entity(Entity {
@@ -613,18 +638,18 @@ mod tests {
                 confidence: 0.8 + (i as f32 * 0.02),
             })?;
         }
-        
+
         // Query for technologies with high confidence
         let query = GraphQuery {
             entity_types: Some(vec![EntityType::Technology]),
             min_confidence: Some(0.85),
             ..Default::default()
         };
-        
+
         let results = graph.query(&query)?;
         assert!(results.len() <= 5);
         assert!(results.iter().all(|e| e.confidence >= 0.85));
-        
+
         Ok(())
     }
 }

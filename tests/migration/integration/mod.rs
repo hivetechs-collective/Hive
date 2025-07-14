@@ -1,5 +1,5 @@
 //! Integration Tests for Migration System
-//! 
+//!
 //! Tests the complete migration system with real database operations
 //! and validates end-to-end functionality.
 
@@ -29,7 +29,7 @@ impl TestDatabaseSetup {
     pub fn new() -> Result<Self, HiveError> {
         let temp_dir = tempdir()
             .map_err(|e| HiveError::Migration(format!("Failed to create temp dir: {}", e)))?;
-        
+
         let source_db_path = temp_dir.path().join("source.db");
         let target_db_path = temp_dir.path().join("target.db");
 
@@ -124,10 +124,10 @@ impl TestDatabaseSetup {
         // Insert sample conversations
         for i in 1..=100 {
             let conversation_id = format!("conv_{:03}", i);
-            
+
             conn.execute(
-                "INSERT INTO conversations 
-                 (id, question, final_answer, source_of_truth, created_at) 
+                "INSERT INTO conversations
+                 (id, question, final_answer, source_of_truth, created_at)
                  VALUES (?, ?, ?, ?, ?)",
                 [
                     &conversation_id,
@@ -149,12 +149,12 @@ impl TestDatabaseSetup {
             for (stage_name, stage_number, provider, model) in stages {
                 let stage_id = format!("{}_{}", conversation_id, stage_name);
                 let output_content = format!("Generated content from {} for {}", stage_name, conversation_id);
-                
+
                 conn.execute(
-                    "INSERT INTO stage_outputs 
-                     (id, conversation_id, stage_name, stage_number, provider, model, 
-                      full_output, character_count, word_count, temperature, 
-                      processing_time_ms, tokens_used, created_at) 
+                    "INSERT INTO stage_outputs
+                     (id, conversation_id, stage_name, stage_number, provider, model,
+                      full_output, character_count, word_count, temperature,
+                      processing_time_ms, tokens_used, created_at)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         &stage_id,
@@ -177,8 +177,8 @@ impl TestDatabaseSetup {
             // Insert knowledge base entry
             let knowledge_id = format!("kb_{}", conversation_id);
             conn.execute(
-                "INSERT INTO knowledge_base 
-                 (id, conversation_id, curator_content, topics, keywords, created_at) 
+                "INSERT INTO knowledge_base
+                 (id, conversation_id, curator_content, topics, keywords, created_at)
                  VALUES (?, ?, ?, ?, ?, ?)",
                 [
                     &knowledge_id,
@@ -209,7 +209,7 @@ impl TestDatabaseSetup {
     pub fn get_conversation_count(&self, db_path: &PathBuf) -> Result<u32, HiveError> {
         let conn = Connection::open(db_path)
             .map_err(|e| HiveError::Migration(format!("Failed to open database: {}", e)))?;
-        
+
         let count: i32 = conn.query_row(
             "SELECT COUNT(*) FROM conversations",
             [],
@@ -230,7 +230,7 @@ mod tests {
     async fn test_database_setup() {
         let setup = TestDatabaseSetup::new().unwrap();
         setup.create_mock_typescript_database().await.unwrap();
-        
+
         let count = setup.get_conversation_count(&setup.source_db_path).unwrap();
         assert_eq!(count, 100);
     }
@@ -253,10 +253,10 @@ mod tests {
         };
 
         let stats = db.migrate_complete_database(config).await.unwrap();
-        
+
         assert!(stats.conversations_migrated > 0);
         assert!(stats.total_rows_migrated > 0);
-        
+
         // Verify target database has data
         let target_count = setup.get_conversation_count(&setup.target_db_path).unwrap();
         assert_eq!(target_count, 100);
@@ -278,7 +278,7 @@ mod tests {
 
         let mut manager = MigrationManager::new(config);
         let result = manager.migrate().await;
-        
+
         // Migration should complete successfully
         assert!(result.is_ok());
     }
@@ -302,7 +302,7 @@ mod tests {
 
         let mut optimizer = PerformanceOptimizer::new(performance_config);
         let result = optimizer.optimize_migration_performance(&mut db).await.unwrap();
-        
+
         assert!(result.performance_improvement_factor > 1.0);
         assert!(result.overall_optimization_score > 0.0);
     }
@@ -330,7 +330,7 @@ mod tests {
         ).unwrap();
 
         let results = suite.run_full_validation().await.unwrap();
-        
+
         assert_ne!(results.overall_status, hive_ai::migration::validation_suite::ValidationStatus::Failed);
         assert!(results.total_tests_run > 0);
     }
@@ -352,11 +352,11 @@ mod tests {
         };
 
         let mut tester = LiveMigrationTester::new(test_config);
-        
+
         // Note: This test may fail in CI environment without proper setup
         // It's designed to test with actual TypeScript installations
         let _result = tester.run_live_test_suite().await;
-        
+
         // We don't assert on result here as it depends on environment setup
         // but we verify the tester can be created and run without panicking
     }
@@ -373,7 +373,7 @@ mod tests {
         let is_valid = run_quick_validation(&setup.source_db_path, &setup.target_db_path)
             .await
             .unwrap();
-        
+
         assert!(is_valid);
     }
 
@@ -446,7 +446,7 @@ mod tests {
         // 4. Performance verification
         let performance_config = PerformanceConfig::default();
         let optimizer = PerformanceOptimizer::new(performance_config);
-        
+
         // Migration workflow completed successfully
         assert!(true); // Placeholder for workflow completion
     }
@@ -455,10 +455,10 @@ mod tests {
     #[serial]
     async fn test_large_database_migration() {
         let setup = TestDatabaseSetup::new().unwrap();
-        
+
         // Create larger test database
         let conn = Connection::open(&setup.source_db_path).unwrap();
-        
+
         // Create schema
         conn.execute_batch(r#"
             CREATE TABLE conversations (
@@ -502,7 +502,7 @@ mod tests {
         // Verify performance with larger dataset
         assert_eq!(stats.conversations_migrated, 1000);
         assert!(duration.as_secs() < 30); // Should complete within 30 seconds
-        
+
         let target_count = setup.get_conversation_count(&setup.target_db_path).unwrap();
         assert_eq!(target_count, 1000);
     }
@@ -511,11 +511,11 @@ mod tests {
     #[serial]
     async fn test_migration_error_handling() {
         let setup = TestDatabaseSetup::new().unwrap();
-        
+
         // Create malformed source database
         let conn = Connection::open(&setup.source_db_path).unwrap();
         conn.execute_batch("CREATE TABLE invalid_table (id TEXT)").unwrap();
-        
+
         // Migration should handle invalid schema gracefully
         let config = MigrationConfig {
             source_path: setup.source_db_path.clone(),
@@ -527,7 +527,7 @@ mod tests {
 
         let mut manager = MigrationManager::new(config);
         let result = manager.migrate().await;
-        
+
         // Should fail gracefully, not panic
         assert!(result.is_err());
     }

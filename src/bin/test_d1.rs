@@ -13,12 +13,12 @@ async fn main() -> Result<()> {
         ("verone.lazio@gmail.com", "HIVE-1SXK-DGW5-F15U-K9E1-L3IL"),
         ("sales@hivetechs.io", "HIVE-QACW-NFPX-5RKU-898D-S5RD"),
     ];
-    
+
     for (email, key) in licenses {
         println!("\n{}", "=".repeat(80));
         println!("Testing {}: {}", email, key);
         println!("{}", "=".repeat(80));
-        
+
         // Create gateway
         let gateway = match ConversationGateway::new() {
             Ok(g) => g,
@@ -27,10 +27,13 @@ async fn main() -> Result<()> {
                 continue;
             }
         };
-        
+
         // Test pre-conversation endpoint
         println!("\n1. Testing request_conversation_authorization:");
-        match gateway.request_conversation_authorization("test_query", key).await {
+        match gateway
+            .request_conversation_authorization("test_query", key)
+            .await
+        {
             Ok(auth) => {
                 println!("✅ SUCCESS! Got ConversationAuthorization:");
                 println!("  user_id: {}", auth.user_id);
@@ -45,7 +48,7 @@ async fn main() -> Result<()> {
                 println!("Full error chain: {:?}", e);
             }
         }
-        
+
         // Test validate endpoint
         println!("\n2. Testing validate_license_key:");
         match gateway.validate_license_key(key).await {
@@ -63,10 +66,10 @@ async fn main() -> Result<()> {
                 println!("Full error chain: {:?}", e);
             }
         }
-        
+
         // Small delay between tests
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
-    
+
     Ok(())
 }
