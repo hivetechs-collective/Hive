@@ -7,6 +7,8 @@
 //! - Performance monitoring and metrics
 //! - Error tracking and debugging
 
+use is_terminal::IsTerminal;
+use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Once;
@@ -18,8 +20,6 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
     EnvFilter, Layer,
 };
-use serde_json::Value;
-use is_terminal::IsTerminal;
 
 use crate::core::error::{HiveError, Result};
 
@@ -28,7 +28,7 @@ use crate::core::error::{HiveError, Result};
 pub struct LoggingConfig {
     /// Console logging level
     pub console_level: Level,
-    /// File logging level  
+    /// File logging level
     pub file_level: Level,
     /// JSON logging level
     pub json_level: Level,
@@ -65,7 +65,7 @@ impl Default for LoggingConfig {
     fn default() -> Self {
         let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         let log_dir = home_dir.join(".hive").join("logs");
-        
+
         Self {
             console_level: Level::INFO,
             file_level: Level::DEBUG,
@@ -103,8 +103,8 @@ pub fn initialize_default_logging() -> Result<()> {
 fn setup_logging_internal(config: LoggingConfig) -> Result<()> {
     // Create log directory if it doesn't exist
     if config.file_logging || config.json_logging {
-        fs::create_dir_all(&config.log_dir).map_err(|_e| {
-            HiveError::ConfigDirCreation { path: config.log_dir.clone() }
+        fs::create_dir_all(&config.log_dir).map_err(|_e| HiveError::ConfigDirCreation {
+            path: config.log_dir.clone(),
         })?;
     }
 
@@ -119,13 +119,15 @@ fn setup_logging_internal(config: LoggingConfig) -> Result<()> {
 
     let registry = tracing_subscriber::registry().with(env_filter);
 
-    // Console layer with colors and formatting  
+    // Console layer with colors and formatting
     let console_layer = fmt::layer()
-        .with_ansi(config.console_colors && {
-            use is_terminal::IsTerminal;
-            use std::io::stdout;
-            stdout().is_terminal()
-        })
+        .with_ansi(
+            config.console_colors && {
+                use is_terminal::IsTerminal;
+                use std::io::stdout;
+                stdout().is_terminal()
+            },
+        )
         .with_target(true)
         .with_thread_ids(false)
         .with_thread_names(false)
@@ -133,28 +135,24 @@ fn setup_logging_internal(config: LoggingConfig) -> Result<()> {
         .with_line_number(true)
         .with_span_events(FmtSpan::CLOSE)
         .with_writer(std::io::stdout)
-        .with_filter(tracing_subscriber::filter::LevelFilter::from_level(config.console_level));
+        .with_filter(tracing_subscriber::filter::LevelFilter::from_level(
+            config.console_level,
+        ));
 
     let mut layers = vec![Box::new(console_layer) as Box<dyn Layer<_> + Send + Sync>];
 
     // File logging layer
     if config.file_logging {
         let file_appender = match config.rotation {
-            LogRotation::Daily => RollingFileAppender::new(
-                Rotation::DAILY,
-                &config.log_dir,
-                "hive.log"
-            ),
-            LogRotation::Hourly => RollingFileAppender::new(
-                Rotation::HOURLY,
-                &config.log_dir,
-                "hive.log"
-            ),
-            LogRotation::Size | LogRotation::Never => RollingFileAppender::new(
-                Rotation::NEVER,
-                &config.log_dir,
-                "hive.log"
-            ),
+            LogRotation::Daily => {
+                RollingFileAppender::new(Rotation::DAILY, &config.log_dir, "hive.log")
+            }
+            LogRotation::Hourly => {
+                RollingFileAppender::new(Rotation::HOURLY, &config.log_dir, "hive.log")
+            }
+            LogRotation::Size | LogRotation::Never => {
+                RollingFileAppender::new(Rotation::NEVER, &config.log_dir, "hive.log")
+            }
         };
 
         let file_layer = fmt::layer()
@@ -166,7 +164,9 @@ fn setup_logging_internal(config: LoggingConfig) -> Result<()> {
             .with_line_number(true)
             .with_span_events(FmtSpan::FULL)
             .with_writer(file_appender)
-            .with_filter(tracing_subscriber::filter::LevelFilter::from_level(config.file_level));
+            .with_filter(tracing_subscriber::filter::LevelFilter::from_level(
+                config.file_level,
+            ));
 
         layers.push(Box::new(file_layer));
     }
@@ -180,7 +180,7 @@ fn setup_logging_internal(config: LoggingConfig) -> Result<()> {
                 _ => Rotation::NEVER,
             },
             &config.log_dir,
-            "hive-analytics.jsonl"
+            "hive-analytics.jsonl",
         );
 
         let json_layer = fmt::layer()
@@ -188,7 +188,9 @@ fn setup_logging_internal(config: LoggingConfig) -> Result<()> {
             .with_current_span(true)
             .with_span_list(true)
             .with_writer(json_appender)
-            .with_filter(tracing_subscriber::filter::LevelFilter::from_level(config.json_level));
+            .with_filter(tracing_subscriber::filter::LevelFilter::from_level(
+                config.json_level,
+            ));
 
         layers.push(Box::new(json_layer));
     }
@@ -223,14 +225,14 @@ impl PerfTimer {
     pub fn new(name: impl Into<String>) -> Self {
         let name = name.into();
         let span = tracing::info_span!("perf_timer", operation = %name);
-        
+
         Self {
             name,
             start: std::time::Instant::now(),
             span,
         }
     }
-    
+
     /// Record a checkpoint
     pub fn checkpoint(&self, label: &str) {
         let elapsed = self.start.elapsed();
@@ -242,7 +244,7 @@ impl PerfTimer {
             "Performance checkpoint"
         );
     }
-    
+
     /// Finish the timer and log results
     pub fn finish(self) {
         let elapsed = self.start.elapsed();
@@ -264,7 +266,7 @@ impl ErrorTracker {
     pub fn log_error(error: &HiveError, context: Option<&str>) {
         let category = error.category();
         let recoverable = error.is_recoverable();
-        
+
         tracing::error!(
             error = %error,
             error_category = %category,
@@ -273,7 +275,7 @@ impl ErrorTracker {
             "Hive error occurred"
         );
     }
-    
+
     /// Log a warning with context
     pub fn log_warning(message: &str, context: Option<&str>) {
         tracing::warn!(
@@ -282,7 +284,7 @@ impl ErrorTracker {
             "Hive warning"
         );
     }
-    
+
     /// Log recoverable error that was handled
     pub fn log_recovered_error(error: &HiveError, recovery_action: &str) {
         tracing::info!(
@@ -309,7 +311,7 @@ impl AnalyticsLogger {
             "User action logged"
         );
     }
-    
+
     /// Log consensus operation metrics
     pub fn log_consensus_metrics(
         stage: &str,
@@ -330,7 +332,7 @@ impl AnalyticsLogger {
             "Consensus metrics logged"
         );
     }
-    
+
     /// Log performance metrics
     pub fn log_performance_metrics(
         operation: &str,
@@ -349,13 +351,9 @@ impl AnalyticsLogger {
             "Performance metrics logged"
         );
     }
-    
+
     /// Log system health metrics
-    pub fn log_health_metrics(
-        component: &str,
-        status: &str,
-        details: Option<Value>,
-    ) {
+    pub fn log_health_metrics(component: &str, status: &str, details: Option<Value>) {
         tracing::info!(
             target: "analytics",
             event_type = "health_metrics",
@@ -378,14 +376,14 @@ impl LogManager {
     pub fn new(config: LoggingConfig) -> Self {
         Self { config }
     }
-    
+
     /// Clean up old log files
     pub fn cleanup_old_logs(&self) -> Result<()> {
         let log_dir = &self.config.log_dir;
         if !log_dir.exists() {
             return Ok(());
         }
-        
+
         let mut log_files: Vec<_> = fs::read_dir(log_dir)
             .map_err(|e| HiveError::internal("log_cleanup", e.to_string()))?
             .filter_map(|entry| {
@@ -400,10 +398,10 @@ impl LogManager {
                 }
             })
             .collect();
-        
+
         // Sort by modification time (newest first)
         log_files.sort_by(|a, b| b.1.cmp(&a.1));
-        
+
         // Remove excess files
         if log_files.len() > self.config.max_files {
             for (path, _) in log_files.iter().skip(self.config.max_files) {
@@ -416,10 +414,10 @@ impl LogManager {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get current log file size
     pub fn get_log_size(&self) -> Result<u64> {
         let log_file = self.config.log_dir.join("hive.log");
@@ -431,7 +429,7 @@ impl LogManager {
             Ok(0)
         }
     }
-    
+
     /// Check if log rotation is needed
     pub fn needs_rotation(&self) -> Result<bool> {
         match self.config.rotation {
@@ -517,7 +515,7 @@ mod tests {
             max_files: 3,
             ..LoggingConfig::default()
         };
-        
+
         let manager = LogManager::new(config);
         assert_eq!(manager.get_log_size().unwrap(), 0);
         assert!(!manager.needs_rotation().unwrap());

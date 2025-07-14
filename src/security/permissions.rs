@@ -1,17 +1,17 @@
 //! Enterprise Permission Management System
-//! 
+//!
 //! Provides fine-grained permission control including:
 //! - Resource-based permissions
 //! - Permission inheritance
 //! - Permission templates
 //! - Dynamic permission evaluation
 
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 /// Permission manager for enterprise-grade access control
 pub struct PermissionManager {
@@ -213,15 +213,13 @@ impl PermissionManager {
                 name: "Administrator Full Access".to_string(),
                 description: "Full administrative access to all resources".to_string(),
                 category: "Administrative".to_string(),
-                permissions: vec![
-                    TemplatePermission {
-                        permission_name: "admin".to_string(),
-                        resource_type: "*".to_string(),
-                        resource_pattern: "*".to_string(),
-                        scope: PermissionScope::Global,
-                        conditions: vec![],
-                    }
-                ],
+                permissions: vec![TemplatePermission {
+                    permission_name: "admin".to_string(),
+                    resource_type: "*".to_string(),
+                    resource_pattern: "*".to_string(),
+                    scope: PermissionScope::Global,
+                    conditions: vec![],
+                }],
                 variables: HashMap::new(),
                 created_at: Utc::now(),
                 version: "1.0".to_string(),
@@ -244,17 +242,17 @@ impl PermissionManager {
                         resource_type: "file".to_string(),
                         resource_pattern: "project:${project_id}:file:*".to_string(),
                         scope: PermissionScope::Resource,
-                        conditions: vec![
-                            PermissionCondition {
-                                condition_type: ConditionType::TimeRange,
-                                operator: ConditionOperator::In,
-                                value: "09:00-18:00".to_string(),
-                                context_key: None,
-                            }
-                        ],
-                    }
+                        conditions: vec![PermissionCondition {
+                            condition_type: ConditionType::TimeRange,
+                            operator: ConditionOperator::In,
+                            value: "09:00-18:00".to_string(),
+                            context_key: None,
+                        }],
+                    },
                 ],
-                variables: [("project_id".to_string(), "".to_string())].into_iter().collect(),
+                variables: [("project_id".to_string(), "".to_string())]
+                    .into_iter()
+                    .collect(),
                 created_at: Utc::now(),
                 version: "1.0".to_string(),
             },
@@ -263,19 +261,19 @@ impl PermissionManager {
                 name: "Read-Only Access".to_string(),
                 description: "Read-only access to specified resources".to_string(),
                 category: "Viewer".to_string(),
-                permissions: vec![
-                    TemplatePermission {
-                        permission_name: "read".to_string(),
-                        resource_type: "${resource_type}".to_string(),
-                        resource_pattern: "${resource_pattern}".to_string(),
-                        scope: PermissionScope::Resource,
-                        conditions: vec![],
-                    }
-                ],
+                permissions: vec![TemplatePermission {
+                    permission_name: "read".to_string(),
+                    resource_type: "${resource_type}".to_string(),
+                    resource_pattern: "${resource_pattern}".to_string(),
+                    scope: PermissionScope::Resource,
+                    conditions: vec![],
+                }],
                 variables: [
                     ("resource_type".to_string(), "".to_string()),
                     ("resource_pattern".to_string(), "".to_string()),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 created_at: Utc::now(),
                 version: "1.0".to_string(),
             },
@@ -328,7 +326,7 @@ impl PermissionManager {
         expires_at: Option<DateTime<Utc>>,
     ) -> Result<String> {
         let permission_id = uuid::Uuid::new_v4().to_string();
-        
+
         let permission = ResourcePermission {
             id: permission_id.clone(),
             resource_type: resource_type.to_string(),
@@ -371,7 +369,7 @@ impl PermissionManager {
         context: &PermissionContext,
     ) -> Result<PermissionEvaluationResult> {
         let start_time = std::time::Instant::now();
-        
+
         let permissions = self.permissions.read().await;
         let mut matched_permissions = Vec::new();
         let mut failed_conditions = Vec::new();
@@ -407,7 +405,9 @@ impl PermissionManager {
             }
 
             // Evaluate conditions
-            let (conditions_met, failed) = self.evaluate_conditions(&permission.conditions, context).await?;
+            let (conditions_met, failed) = self
+                .evaluate_conditions(&permission.conditions, context)
+                .await?;
             if !conditions_met {
                 failed_conditions.extend(failed);
                 continue;
@@ -418,23 +418,38 @@ impl PermissionManager {
             // Check if this permission requires approval
             if self.requires_approval(permission, context) {
                 requires_approval = true;
-                approval_reason = Some(format!("High-risk operation requiring approval: {}", permission.permission_name));
+                approval_reason = Some(format!(
+                    "High-risk operation requiring approval: {}",
+                    permission.permission_name
+                ));
             }
         }
 
         // Check inherited permissions
-        let inherited = self.check_inherited_permissions(
-            subject, permission_name, resource_type, resource_id, context
-        ).await?;
+        let inherited = self
+            .check_inherited_permissions(
+                subject,
+                permission_name,
+                resource_type,
+                resource_id,
+                context,
+            )
+            .await?;
 
         matched_permissions.extend(inherited.matched_permissions);
         failed_conditions.extend(inherited.failed_conditions);
 
         let granted = !matched_permissions.is_empty();
         let reason = if granted {
-            format!("Permission granted via {} direct permission(s)", matched_permissions.len())
+            format!(
+                "Permission granted via {} direct permission(s)",
+                matched_permissions.len()
+            )
         } else if !failed_conditions.is_empty() {
-            format!("Permission denied: conditions failed - {}", failed_conditions.join(", "))
+            format!(
+                "Permission denied: conditions failed - {}",
+                failed_conditions.join(", ")
+            )
         } else {
             "Permission denied: no matching permissions found".to_string()
         };
@@ -456,24 +471,30 @@ impl PermissionManager {
         match (granted_to, subject) {
             (PermissionSubject::User(granted_user), PermissionSubject::User(check_user)) => {
                 granted_user == check_user
-            },
+            }
             (PermissionSubject::Role(granted_role), PermissionSubject::Role(check_role)) => {
                 granted_role == check_role
-            },
+            }
             (PermissionSubject::Team(granted_team), PermissionSubject::Team(check_team)) => {
                 granted_team == check_team
-            },
+            }
             (PermissionSubject::ApiKey(granted_key), PermissionSubject::ApiKey(check_key)) => {
                 granted_key == check_key
-            },
-            (PermissionSubject::ServiceAccount(granted_sa), PermissionSubject::ServiceAccount(check_sa)) => {
-                granted_sa == check_sa
-            },
+            }
+            (
+                PermissionSubject::ServiceAccount(granted_sa),
+                PermissionSubject::ServiceAccount(check_sa),
+            ) => granted_sa == check_sa,
             _ => false,
         }
     }
 
-    fn resource_matches(&self, permission: &ResourcePermission, resource_type: &str, resource_id: &str) -> Result<bool> {
+    fn resource_matches(
+        &self,
+        permission: &ResourcePermission,
+        resource_type: &str,
+        resource_id: &str,
+    ) -> Result<bool> {
         // Check resource type
         if permission.resource_type != "*" && permission.resource_type != resource_type {
             return Ok(false);
@@ -483,37 +504,40 @@ impl PermissionManager {
         match permission.scope {
             PermissionScope::Global => Ok(true),
             PermissionScope::ResourceType => Ok(permission.resource_type == resource_type),
-            PermissionScope::Resource => Ok(
-                permission.resource_type == resource_type && 
-                (permission.resource_id == "*" || permission.resource_id == resource_id)
-            ),
+            PermissionScope::Resource => Ok(permission.resource_type == resource_type
+                && (permission.resource_id == "*" || permission.resource_id == resource_id)),
             PermissionScope::ResourceAndChildren => {
                 if permission.resource_type != resource_type {
                     return Ok(false);
                 }
-                
+
                 // Check if current resource is the target or a child
-                Ok(permission.resource_id == "*" || 
-                   permission.resource_id == resource_id ||
-                   resource_id.starts_with(&format!("{}:", permission.resource_id)))
-            },
+                Ok(permission.resource_id == "*"
+                    || permission.resource_id == resource_id
+                    || resource_id.starts_with(&format!("{}:", permission.resource_id)))
+            }
             PermissionScope::Namespace => {
                 // Extract namespace from resource ID (e.g., "namespace:resource")
                 let namespace = resource_id.split(':').next().unwrap_or("");
                 let permission_namespace = permission.resource_id.split(':').next().unwrap_or("");
                 Ok(namespace == permission_namespace)
-            },
+            }
         }
     }
 
-    async fn evaluate_conditions(&self, conditions: &[PermissionCondition], context: &PermissionContext) -> Result<(bool, Vec<String>)> {
+    async fn evaluate_conditions(
+        &self,
+        conditions: &[PermissionCondition],
+        context: &PermissionContext,
+    ) -> Result<(bool, Vec<String>)> {
         let mut failed_conditions = Vec::new();
 
         for condition in conditions {
             if !self.evaluate_single_condition(condition, context)? {
-                failed_conditions.push(format!("{:?} {} {}", 
-                    condition.condition_type, 
-                    condition.operator.to_string(), 
+                failed_conditions.push(format!(
+                    "{:?} {} {}",
+                    condition.condition_type,
+                    condition.operator.to_string(),
                     condition.value
                 ));
             }
@@ -522,48 +546,56 @@ impl PermissionManager {
         Ok((failed_conditions.is_empty(), failed_conditions))
     }
 
-    fn evaluate_single_condition(&self, condition: &PermissionCondition, context: &PermissionContext) -> Result<bool> {
+    fn evaluate_single_condition(
+        &self,
+        condition: &PermissionCondition,
+        context: &PermissionContext,
+    ) -> Result<bool> {
         let context_value = match condition.condition_type {
             ConditionType::TimeRange => {
                 let current_time = context.request_time.format("%H:%M").to_string();
                 current_time
-            },
-            ConditionType::IpAddress => {
-                context.ip_address.clone().unwrap_or_default()
-            },
-            ConditionType::UserAgent => {
-                context.user_agent.clone().unwrap_or_default()
-            },
+            }
+            ConditionType::IpAddress => context.ip_address.clone().unwrap_or_default(),
+            ConditionType::UserAgent => context.user_agent.clone().unwrap_or_default(),
             ConditionType::ResourceState => {
                 if let Some(key) = &condition.context_key {
                     context.resource_state.get(key).cloned().unwrap_or_default()
                 } else {
                     String::new()
                 }
-            },
+            }
             ConditionType::CustomAttribute => {
                 if let Some(key) = &condition.context_key {
-                    context.custom_attributes.get(key).cloned().unwrap_or_default()
+                    context
+                        .custom_attributes
+                        .get(key)
+                        .cloned()
+                        .unwrap_or_default()
                 } else {
                     String::new()
                 }
-            },
-            ConditionType::ApiKey => {
-                context.api_key.clone().unwrap_or_default()
-            },
+            }
+            ConditionType::ApiKey => context.api_key.clone().unwrap_or_default(),
             ConditionType::SessionAge => {
                 // Calculate session age in minutes (simplified)
                 "30".to_string() // Placeholder
-            },
-            ConditionType::RiskScore => {
-                context.risk_score.map(|s| s.to_string()).unwrap_or_default()
-            },
+            }
+            ConditionType::RiskScore => context
+                .risk_score
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
         };
 
         self.evaluate_operator(&condition.operator, &context_value, &condition.value)
     }
 
-    fn evaluate_operator(&self, operator: &ConditionOperator, context_value: &str, condition_value: &str) -> Result<bool> {
+    fn evaluate_operator(
+        &self,
+        operator: &ConditionOperator,
+        context_value: &str,
+        condition_value: &str,
+    ) -> Result<bool> {
         match operator {
             ConditionOperator::Equals => Ok(context_value == condition_value),
             ConditionOperator::NotEquals => Ok(context_value != condition_value),
@@ -573,30 +605,30 @@ impl PermissionManager {
                 let ctx_val: f64 = context_value.parse().unwrap_or(0.0);
                 let cond_val: f64 = condition_value.parse().unwrap_or(0.0);
                 Ok(ctx_val > cond_val)
-            },
+            }
             ConditionOperator::LessThan => {
                 let ctx_val: f64 = context_value.parse().unwrap_or(0.0);
                 let cond_val: f64 = condition_value.parse().unwrap_or(0.0);
                 Ok(ctx_val < cond_val)
-            },
+            }
             ConditionOperator::GreaterOrEqual => {
                 let ctx_val: f64 = context_value.parse().unwrap_or(0.0);
                 let cond_val: f64 = condition_value.parse().unwrap_or(0.0);
                 Ok(ctx_val >= cond_val)
-            },
+            }
             ConditionOperator::LessOrEqual => {
                 let ctx_val: f64 = context_value.parse().unwrap_or(0.0);
                 let cond_val: f64 = condition_value.parse().unwrap_or(0.0);
                 Ok(ctx_val <= cond_val)
-            },
+            }
             ConditionOperator::In => {
                 let values: Vec<&str> = condition_value.split(',').collect();
                 Ok(values.contains(&context_value))
-            },
+            }
             ConditionOperator::NotIn => {
                 let values: Vec<&str> = condition_value.split(',').collect();
                 Ok(!values.contains(&context_value))
-            },
+            }
             ConditionOperator::Matches => {
                 // Regex matching
                 if let Ok(regex) = regex::Regex::new(condition_value) {
@@ -604,7 +636,7 @@ impl PermissionManager {
                 } else {
                     Ok(false)
                 }
-            },
+            }
         }
     }
 
@@ -628,7 +660,11 @@ impl PermissionManager {
         })
     }
 
-    fn requires_approval(&self, permission: &ResourcePermission, context: &PermissionContext) -> bool {
+    fn requires_approval(
+        &self,
+        permission: &ResourcePermission,
+        context: &PermissionContext,
+    ) -> bool {
         // Check if this is a high-risk operation
         let high_risk_permissions = ["delete", "admin", "grant", "revoke"];
         if high_risk_permissions.contains(&permission.permission_name.as_str()) {
@@ -643,9 +679,10 @@ impl PermissionManager {
         }
 
         // Check for sensitive resources
-        if permission.resource_type == "financial" || 
-           permission.resource_type == "sensitive" ||
-           permission.resource_id.contains("prod") {
+        if permission.resource_type == "financial"
+            || permission.resource_type == "sensitive"
+            || permission.resource_id.contains("prod")
+        {
             return true;
         }
 
@@ -661,7 +698,8 @@ impl PermissionManager {
         granted_by: &str,
     ) -> Result<Vec<String>> {
         let templates = self.templates.read().await;
-        let template = templates.get(template_id)
+        let template = templates
+            .get(template_id)
             .ok_or_else(|| anyhow!("Template not found: {}", template_id))?;
 
         let mut permission_ids = Vec::new();
@@ -675,20 +713,30 @@ impl PermissionManager {
 
             // Extract resource type and ID from pattern
             let parts: Vec<&str> = resource_pattern.split(':').collect();
-            let resource_type = template_perm.resource_type.replace("${resource_type}", 
-                variables.get("resource_type").unwrap_or(&template_perm.resource_type));
-            let resource_id = if parts.len() > 1 { parts[1..].join(":") } else { "*".to_string() };
+            let resource_type = template_perm.resource_type.replace(
+                "${resource_type}",
+                variables
+                    .get("resource_type")
+                    .unwrap_or(&template_perm.resource_type),
+            );
+            let resource_id = if parts.len() > 1 {
+                parts[1..].join(":")
+            } else {
+                "*".to_string()
+            };
 
-            let permission_id = self.grant_permission(
-                &template_perm.permission_name,
-                &resource_type,
-                &resource_id,
-                subject.clone(),
-                template_perm.scope.clone(),
-                granted_by,
-                template_perm.conditions.clone(),
-                None,
-            ).await?;
+            let permission_id = self
+                .grant_permission(
+                    &template_perm.permission_name,
+                    &resource_type,
+                    &resource_id,
+                    subject.clone(),
+                    template_perm.scope.clone(),
+                    granted_by,
+                    template_perm.conditions.clone(),
+                    None,
+                )
+                .await?;
 
             permission_ids.push(permission_id);
         }
@@ -697,9 +745,13 @@ impl PermissionManager {
     }
 
     /// List permissions for a subject
-    pub async fn list_permissions(&self, subject: &PermissionSubject) -> Result<Vec<ResourcePermission>> {
+    pub async fn list_permissions(
+        &self,
+        subject: &PermissionSubject,
+    ) -> Result<Vec<ResourcePermission>> {
         let permissions = self.permissions.read().await;
-        Ok(permissions.values()
+        Ok(permissions
+            .values()
             .filter(|p| p.active && self.subject_matches(&p.granted_to, subject))
             .cloned()
             .collect())
@@ -712,7 +764,8 @@ impl PermissionManager {
         let inheritance_rules = self.inheritance_rules.read().await;
 
         let now = Utc::now();
-        let expired_permissions = permissions.values()
+        let expired_permissions = permissions
+            .values()
             .filter(|p| p.expires_at.map_or(false, |exp| exp < now))
             .count();
 
@@ -761,27 +814,27 @@ mod tests {
     #[tokio::test]
     async fn test_permission_grant_and_check() {
         let manager = PermissionManager::new().await.unwrap();
-        
+
         let subject = PermissionSubject::User("test_user".to_string());
-        let permission_id = manager.grant_permission(
-            "read",
-            "file",
-            "test_file.txt",
-            subject.clone(),
-            PermissionScope::Resource,
-            "admin",
-            vec![],
-            None,
-        ).await.unwrap();
+        let permission_id = manager
+            .grant_permission(
+                "read",
+                "file",
+                "test_file.txt",
+                subject.clone(),
+                PermissionScope::Resource,
+                "admin",
+                vec![],
+                None,
+            )
+            .await
+            .unwrap();
 
         let context = PermissionContext::default();
-        let result = manager.check_permission(
-            &subject,
-            "read",
-            "file",
-            "test_file.txt",
-            &context,
-        ).await.unwrap();
+        let result = manager
+            .check_permission(&subject, "read", "file", "test_file.txt", &context)
+            .await
+            .unwrap();
 
         assert!(result.granted);
         assert_eq!(result.matched_permissions.len(), 1);
@@ -791,52 +844,47 @@ mod tests {
     #[tokio::test]
     async fn test_permission_with_conditions() {
         let manager = PermissionManager::new().await.unwrap();
-        
-        let conditions = vec![
-            PermissionCondition {
-                condition_type: ConditionType::RiskScore,
-                operator: ConditionOperator::LessThan,
-                value: "50".to_string(),
-                context_key: None,
-            }
-        ];
+
+        let conditions = vec![PermissionCondition {
+            condition_type: ConditionType::RiskScore,
+            operator: ConditionOperator::LessThan,
+            value: "50".to_string(),
+            context_key: None,
+        }];
 
         let subject = PermissionSubject::User("test_user".to_string());
-        manager.grant_permission(
-            "write",
-            "file",
-            "sensitive_file.txt",
-            subject.clone(),
-            PermissionScope::Resource,
-            "admin",
-            conditions,
-            None,
-        ).await.unwrap();
+        manager
+            .grant_permission(
+                "write",
+                "file",
+                "sensitive_file.txt",
+                subject.clone(),
+                PermissionScope::Resource,
+                "admin",
+                conditions,
+                None,
+            )
+            .await
+            .unwrap();
 
         // Test with low risk score (should pass)
         let mut context = PermissionContext::default();
         context.risk_score = Some(30);
-        
-        let result = manager.check_permission(
-            &subject,
-            "write",
-            "file",
-            "sensitive_file.txt",
-            &context,
-        ).await.unwrap();
+
+        let result = manager
+            .check_permission(&subject, "write", "file", "sensitive_file.txt", &context)
+            .await
+            .unwrap();
 
         assert!(result.granted);
 
         // Test with high risk score (should fail)
         context.risk_score = Some(80);
-        
-        let result = manager.check_permission(
-            &subject,
-            "write",
-            "file",
-            "sensitive_file.txt",
-            &context,
-        ).await.unwrap();
+
+        let result = manager
+            .check_permission(&subject, "write", "file", "sensitive_file.txt", &context)
+            .await
+            .unwrap();
 
         assert!(!result.granted);
         assert!(!result.failed_conditions.is_empty());
@@ -848,14 +896,19 @@ mod tests {
         manager.initialize_defaults().await.unwrap();
 
         let subject = PermissionSubject::User("developer".to_string());
-        let variables = [("project_id".to_string(), "proj123".to_string())].into_iter().collect();
+        let variables = [("project_id".to_string(), "proj123".to_string())]
+            .into_iter()
+            .collect();
 
-        let permission_ids = manager.apply_template(
-            "developer_project_access",
-            subject.clone(),
-            variables,
-            "admin",
-        ).await.unwrap();
+        let permission_ids = manager
+            .apply_template(
+                "developer_project_access",
+                subject.clone(),
+                variables,
+                "admin",
+            )
+            .await
+            .unwrap();
 
         assert_eq!(permission_ids.len(), 2); // Should create 2 permissions
 
@@ -867,51 +920,45 @@ mod tests {
     #[tokio::test]
     async fn test_permission_scopes() {
         let manager = PermissionManager::new().await.unwrap();
-        
+
         let subject = PermissionSubject::User("test_user".to_string());
-        
+
         // Grant permission with ResourceAndChildren scope
-        manager.grant_permission(
-            "read",
-            "project",
-            "project1",
-            subject.clone(),
-            PermissionScope::ResourceAndChildren,
-            "admin",
-            vec![],
-            None,
-        ).await.unwrap();
+        manager
+            .grant_permission(
+                "read",
+                "project",
+                "project1",
+                subject.clone(),
+                PermissionScope::ResourceAndChildren,
+                "admin",
+                vec![],
+                None,
+            )
+            .await
+            .unwrap();
 
         let context = PermissionContext::default();
 
         // Should have access to the project itself
-        let result = manager.check_permission(
-            &subject,
-            "read",
-            "project",
-            "project1",
-            &context,
-        ).await.unwrap();
+        let result = manager
+            .check_permission(&subject, "read", "project", "project1", &context)
+            .await
+            .unwrap();
         assert!(result.granted);
 
         // Should have access to child resources
-        let result = manager.check_permission(
-            &subject,
-            "read",
-            "project",
-            "project1:file1",
-            &context,
-        ).await.unwrap();
+        let result = manager
+            .check_permission(&subject, "read", "project", "project1:file1", &context)
+            .await
+            .unwrap();
         assert!(result.granted);
 
         // Should NOT have access to different project
-        let result = manager.check_permission(
-            &subject,
-            "read",
-            "project",
-            "project2",
-            &context,
-        ).await.unwrap();
+        let result = manager
+            .check_permission(&subject, "read", "project", "project2", &context)
+            .await
+            .unwrap();
         assert!(!result.granted);
     }
 }

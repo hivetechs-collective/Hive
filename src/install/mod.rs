@@ -4,17 +4,17 @@
 //! including binary distribution, shell completions, and self-updating mechanisms.
 
 use anyhow::{Context, Result};
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tokio::fs as afs;
-use serde::{Deserialize, Serialize};
 
 pub mod binary;
+pub mod cache;
 pub mod completions;
 pub mod npm;
 pub mod updater;
-pub mod cache;
 pub mod validation;
 
 /// Installation manager for global Hive AI deployment
@@ -96,13 +96,13 @@ impl InstallationManager {
         let cache_dir = config_dir.join("cache");
         let completion_dir = get_completion_dir()?;
         let install_dir = default_install_dir();
-        
+
         // Ensure directories exist
         afs::create_dir_all(&config_dir).await?;
         afs::create_dir_all(&cache_dir).await?;
-        
+
         let status = Self::detect_installation_status(&install_dir).await?;
-        
+
         Ok(Self {
             install_dir,
             config_dir,
@@ -116,28 +116,23 @@ impl InstallationManager {
     async fn detect_installation_status(install_dir: &Path) -> Result<InstallationStatus> {
         let binary_path = install_dir.join("hive");
         let is_installed = binary_path.exists();
-        
+
         if is_installed {
             // Try to get version from installed binary
-            let version = match Command::new(&binary_path)
-                .arg("--version")
-                .output()
-            {
-                Ok(output) => {
-                    String::from_utf8_lossy(&output.stdout)
-                        .trim()
-                        .split_whitespace()
-                        .last()
-                        .unwrap_or(crate::VERSION)
-                        .to_string()
-                }
+            let version = match Command::new(&binary_path).arg("--version").output() {
+                Ok(output) => String::from_utf8_lossy(&output.stdout)
+                    .trim()
+                    .split_whitespace()
+                    .last()
+                    .unwrap_or(crate::VERSION)
+                    .to_string(),
                 Err(_) => crate::VERSION.to_string(),
             };
-            
+
             Ok(InstallationStatus {
                 is_installed: true,
                 version,
-                method: InstallMethod::Binary, // Default assumption
+                method: InstallMethod::Binary,    // Default assumption
                 installed_at: chrono::Utc::now(), // Placeholder
                 completions: vec![],
                 auto_update: true,
@@ -157,67 +152,73 @@ impl InstallationManager {
     /// Install Hive globally
     pub async fn install(&mut self, config: InstallConfig) -> Result<()> {
         println!("🚀 Installing Hive AI globally...");
-        
+
         // Check permissions
         self.check_permissions(&config.install_dir)?;
-        
+
         // Install binary
         self.install_binary(&config.install_dir).await?;
-        
+
         // Install shell completions
         if config.enable_completions {
             self.install_completions(&config.shells).await?;
         }
-        
+
         // Configure auto-updates
         if config.auto_update {
-            self.configure_auto_updates(config.update_check_interval).await?;
+            self.configure_auto_updates(config.update_check_interval)
+                .await?;
         }
-        
+
         // Update status
         self.status.is_installed = true;
         self.status.version = crate::VERSION.to_string();
         self.status.installed_at = chrono::Utc::now();
         self.status.auto_update = config.auto_update;
-        
+
         // Save installation status
         self.save_status().await?;
-        
+
         println!("✅ Hive AI installed successfully!");
         println!("   Binary: {}", config.install_dir.join("hive").display());
         println!("   Config: {}", self.config_dir.display());
-        
+
         if config.enable_completions {
-            println!("   Shell completions installed for: {}", config.shells.join(", "));
+            println!(
+                "   Shell completions installed for: {}",
+                config.shells.join(", ")
+            );
         }
-        
+
         Ok(())
     }
 
     /// Uninstall Hive globally
     pub async fn uninstall(&mut self) -> Result<()> {
         println!("🗑️  Uninstalling Hive AI...");
-        
+
         // Remove binary
         let binary_path = self.install_dir.join("hive");
         if binary_path.exists() {
-            fs::remove_file(&binary_path)
-                .context("Failed to remove binary")?;
+            fs::remove_file(&binary_path).context("Failed to remove binary")?;
         }
-        
+
         // Remove shell completions
         self.remove_completions().await?;
-        
+
         // Remove auto-update configuration
         self.remove_auto_updates().await?;
-        
+
         // Update status
         self.status.is_installed = false;
         self.save_status().await?;
-        
+
         println!("✅ Hive AI uninstalled successfully!");
-        println!("   Configuration preserved at: {}", self.config_dir.display());
-        
+        println!(
+            "   Configuration preserved at: {}",
+            self.config_dir.display()
+        );
+
         Ok(())
     }
 
@@ -230,20 +231,20 @@ impl InstallationManager {
     /// Update Hive to the latest version
     pub async fn update(&mut self) -> Result<bool> {
         println!("🔄 Checking for updates...");
-        
+
         let updater = updater::UpdateManager::new()?;
         let updated = updater.update().await?;
-        
+
         if updated {
             // Update our status
             self.status.version = crate::VERSION.to_string();
             self.save_status().await?;
-            
+
             println!("✅ Hive AI updated successfully!");
         } else {
             println!("✅ Hive AI is already up to date!");
         }
-        
+
         Ok(updated)
     }
 
@@ -280,17 +281,15 @@ impl InstallationManager {
     /// Check if we have permissions to install
     fn check_permissions(&self, install_dir: &Path) -> Result<()> {
         if !install_dir.exists() {
-            fs::create_dir_all(install_dir)
-                .context("Failed to create installation directory")?;
+            fs::create_dir_all(install_dir).context("Failed to create installation directory")?;
         }
-        
+
         // Try to write a test file
         let test_file = install_dir.join(".hive_test");
         fs::write(&test_file, "test")
             .context("No permission to write to installation directory")?;
-        fs::remove_file(&test_file)
-            .context("Failed to clean up test file")?;
-        
+        fs::remove_file(&test_file).context("Failed to clean up test file")?;
+
         Ok(())
     }
 
@@ -353,7 +352,7 @@ fn get_config_dir() -> Result<PathBuf> {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .context("Cannot determine home directory")?;
-    
+
     Ok(PathBuf::from(home).join(".hive"))
 }
 
@@ -361,7 +360,9 @@ fn get_config_dir() -> Result<PathBuf> {
 fn get_completion_dir() -> Result<PathBuf> {
     #[cfg(unix)]
     {
-        Ok(PathBuf::from("/usr/local/share/bash-completion/completions"))
+        Ok(PathBuf::from(
+            "/usr/local/share/bash-completion/completions",
+        ))
     }
     #[cfg(windows)]
     {

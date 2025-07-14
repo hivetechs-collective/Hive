@@ -272,7 +272,7 @@ impl LspRequestHandler {
         if let Some(doc_state) = documents.get(&uri) {
             let content = doc_state.content.clone();
             drop(documents);
-            
+
             // Run comprehensive analysis on save
             self.comprehensive_analysis(&uri, &content).await?;
         }
@@ -298,7 +298,7 @@ impl LspRequestHandler {
     /// Apply text change to document content
     fn apply_text_change(&self, content: &mut String, range: Range, text: &str) -> Result<()> {
         let lines: Vec<&str> = content.lines().collect();
-        
+
         if range.start.line as usize >= lines.len() || range.end.line as usize >= lines.len() {
             return Err(HiveError::validation("lsp", "Range out of bounds"));
         }
@@ -306,11 +306,11 @@ impl LspRequestHandler {
         // Calculate byte positions
         let start_line = &lines[range.start.line as usize];
         let end_line = &lines[range.end.line as usize];
-        
+
         let start_byte = lines[..range.start.line as usize].iter()
             .map(|line| line.len() + 1) // +1 for newline
             .sum::<usize>() + range.start.character as usize;
-            
+
         let end_byte = lines[..range.end.line as usize].iter()
             .map(|line| line.len() + 1)
             .sum::<usize>() + range.end.character as usize;
@@ -327,7 +327,7 @@ impl LspRequestHandler {
 
         // Use analysis engine for syntax analysis
         let parse_result = self.analysis_engine.parse_code(content, None).await?;
-        
+
         // Convert parse errors to diagnostics
         let mut diagnostics = Vec::new();
         for error in parse_result.errors {

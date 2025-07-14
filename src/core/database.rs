@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{params, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -89,7 +89,7 @@ impl DatabaseManager {
 
         // Get a connection to apply initial pragmas
         let conn = pool.get().context("Failed to get initial connection")?;
-        
+
         info!("Applying database pragmas...");
         // Apply performance optimizations
         if config.enable_wal {
@@ -97,24 +97,21 @@ impl DatabaseManager {
             let _mode: String = conn.query_row(
                 &format!("PRAGMA journal_mode = {}", config.journal_mode),
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )?;
             info!("WAL mode set successfully");
         }
-        
+
         info!("Setting cache size...");
         conn.execute(&format!("PRAGMA cache_size = {}", config.cache_size), [])?;
         info!("Setting temp store...");
         conn.execute("PRAGMA temp_store = MEMORY", [])?;
         info!("Setting mmap size...");
-        let _mmap_size: i64 = conn.query_row(
-            "PRAGMA mmap_size = 268435456",
-            [],
-            |row| row.get(0)
-        )?; // 256MB mmap
+        let _mmap_size: i64 =
+            conn.query_row("PRAGMA mmap_size = 268435456", [], |row| row.get(0))?; // 256MB mmap
         info!("Setting synchronous mode...");
         conn.execute(&format!("PRAGMA synchronous = {}", config.synchronous), [])?;
-        
+
         if config.enable_foreign_keys {
             info!("Enabling foreign keys...");
             conn.execute("PRAGMA foreign_keys = ON", [])?;
@@ -130,12 +127,12 @@ impl DatabaseManager {
         );
 
         let manager = Self { pool, config };
-        
+
         // Run migrations
         info!("Starting database migrations...");
         manager.run_migrations().await?;
         info!("Database migrations completed");
-        
+
         Ok(manager)
     }
 
@@ -149,7 +146,7 @@ impl DatabaseManager {
     /// Run database migrations
     pub async fn run_migrations(&self) -> Result<()> {
         let conn = self.get_connection()?;
-        
+
         // Create migrations table if it doesn't exist
         conn.execute(
             "CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -192,7 +189,7 @@ impl DatabaseManager {
                     .file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("");
-                
+
                 // Extract version from filename (e.g., "001_initial_schema.sql" -> 1)
                 let version: i32 = filename
                     .split('_')
@@ -228,7 +225,7 @@ impl DatabaseManager {
                     // Apply migration in a transaction
                     let mut conn = self.get_connection()?;
                     let tx = conn.transaction()?;
-                    
+
                     // Split SQL into individual statements and execute each
                     for statement in clean_sql.split(';') {
                         let trimmed = statement.trim();
@@ -253,15 +250,12 @@ impl DatabaseManager {
     /// Execute a health check to ensure database is responding
     pub async fn health_check(&self) -> Result<DatabaseHealthStatus> {
         let start = Instant::now();
-        
+
         let conn = self.get_connection()?;
-        
+
         // Test basic connectivity
-        let timestamp: String = conn.query_row(
-            "SELECT datetime('now') as timestamp",
-            [],
-            |row| row.get(0),
-        )?;
+        let timestamp: String =
+            conn.query_row("SELECT datetime('now') as timestamp", [], |row| row.get(0))?;
 
         let response_time = start.elapsed();
 
@@ -271,18 +265,10 @@ impl DatabaseManager {
         let idle_connections = pool_state.idle_connections;
 
         // Check if WAL mode is active
-        let wal_mode: String = conn.query_row(
-            "PRAGMA journal_mode",
-            [],
-            |row| row.get(0),
-        )?;
+        let wal_mode: String = conn.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
 
         // Check foreign key enforcement
-        let foreign_keys: i32 = conn.query_row(
-            "PRAGMA foreign_keys",
-            [],
-            |row| row.get(0),
-        )?;
+        let foreign_keys: i32 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
 
         Ok(DatabaseHealthStatus {
             healthy: true,
@@ -298,9 +284,9 @@ impl DatabaseManager {
     /// Get database statistics for monitoring
     pub async fn get_statistics(&self) -> Result<DatabaseStatistics> {
         let conn = self.get_connection()?;
-        
+
         let stats_query = r#"
-            SELECT 
+            SELECT
                 (SELECT COUNT(*) FROM conversations) as conversation_count,
                 (SELECT COUNT(*) FROM messages) as message_count,
                 (SELECT COUNT(*) FROM openrouter_models) as model_count,
@@ -309,17 +295,23 @@ impl DatabaseManager {
                 (SELECT COUNT(*) FROM knowledge_conversations) as knowledge_count
         "#;
 
-        let (conversation_count, message_count, model_count, user_count, profile_count, knowledge_count) = 
-            conn.query_row(stats_query, [], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?,
-                    row.get::<_, i64>(5)?,
-                ))
-            })?;
+        let (
+            conversation_count,
+            message_count,
+            model_count,
+            user_count,
+            profile_count,
+            knowledge_count,
+        ) = conn.query_row(stats_query, [], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?;
 
         // Get database file size
         let db_size = tokio::fs::metadata(&self.config.path)
@@ -348,7 +340,7 @@ impl DatabaseManager {
         let start = Instant::now();
 
         let conn = self.get_connection()?;
-        
+
         // Use incremental vacuum for WAL mode
         conn.execute("PRAGMA incremental_vacuum(1000)", [])?;
 
@@ -364,7 +356,7 @@ impl DatabaseManager {
         let start = Instant::now();
 
         let conn = self.get_connection()?;
-        
+
         // Analyze tables for query optimization
         conn.execute("ANALYZE", [])?;
 
@@ -413,7 +405,7 @@ pub struct DatabaseStatistics {
 pub async fn initialize_database(config: Option<DatabaseConfig>) -> Result<()> {
     let config = config.unwrap_or_default();
     let db_manager = Arc::new(DatabaseManager::new(config).await?);
-    
+
     DATABASE
         .set(db_manager)
         .map_err(|_| anyhow::anyhow!("Database already initialized"))?;
@@ -458,7 +450,7 @@ impl User {
     pub async fn create(email: Option<String>, license_key: Option<String>) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let user = User {
             id: generate_id(),
             email,
@@ -469,7 +461,7 @@ impl User {
         };
 
         conn.execute(
-            "INSERT INTO users (id, email, license_key, tier, created_at, updated_at) 
+            "INSERT INTO users (id, email, license_key, tier, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 &user.id,
@@ -488,10 +480,10 @@ impl User {
     pub async fn find_by_id(id: &str) -> Result<Option<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let user = conn
             .query_row(
-                "SELECT id, email, license_key, tier, created_at, updated_at 
+                "SELECT id, email, license_key, tier, created_at, updated_at
                  FROM users WHERE id = ?1",
                 params![id],
                 |row| {
@@ -514,10 +506,10 @@ impl User {
     pub async fn find_by_email(email: &str) -> Result<Option<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let user = conn
             .query_row(
-                "SELECT id, email, license_key, tier, created_at, updated_at 
+                "SELECT id, email, license_key, tier, created_at, updated_at
                  FROM users WHERE email = ?1",
                 params![email],
                 |row| {
@@ -565,7 +557,7 @@ impl Conversation {
     ) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let conversation = Conversation {
             id: generate_id(),
             user_id,
@@ -576,10 +568,10 @@ impl Conversation {
             start_time: Some(current_timestamp()),
             end_time: None,
             success_rate: "0".to_string(), // Will be calculated after completion
-            quality_score: 0.0, // Will be calculated based on actual consensus
-            consensus_improvement: 0, // Will be calculated from stage analysis
+            quality_score: 0.0,            // Will be calculated based on actual consensus
+            consensus_improvement: 0,      // Will be calculated from stage analysis
             confidence_level: "Unknown".to_string(), // Will be determined by validator
-            success: false, // Will be set to true when consensus completes
+            success: false,                // Will be set to true when consensus completes
             created_at: current_timestamp(),
             updated_at: current_timestamp(),
         };
@@ -616,7 +608,7 @@ impl Conversation {
     pub async fn find_by_id(id: &str) -> Result<Option<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let conversation = conn
             .query_row(
                 "SELECT id, user_id, consensus_profile_id, total_cost, input_tokens, output_tokens,
@@ -650,17 +642,22 @@ impl Conversation {
     }
 
     /// Update conversation metrics
-    pub async fn update_metrics(&mut self, cost: f64, input_tokens: i32, output_tokens: i32) -> Result<()> {
+    pub async fn update_metrics(
+        &mut self,
+        cost: f64,
+        input_tokens: i32,
+        output_tokens: i32,
+    ) -> Result<()> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         self.total_cost += cost;
         self.input_tokens += input_tokens;
         self.output_tokens += output_tokens;
         self.updated_at = current_timestamp();
 
         conn.execute(
-            "UPDATE conversations 
+            "UPDATE conversations
              SET total_cost = ?1, input_tokens = ?2, output_tokens = ?3, updated_at = ?4
              WHERE id = ?5",
             params![
@@ -679,12 +676,12 @@ impl Conversation {
     pub async fn complete(&mut self) -> Result<()> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         self.end_time = Some(current_timestamp());
         self.updated_at = current_timestamp();
 
         conn.execute(
-            "UPDATE conversations 
+            "UPDATE conversations
              SET end_time = ?1, updated_at = ?2
              WHERE id = ?3",
             params![&self.end_time, &self.updated_at, &self.id],
@@ -717,7 +714,7 @@ impl Message {
     ) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let message = Message {
             id: generate_id(),
             conversation_id,
@@ -749,10 +746,10 @@ impl Message {
     pub async fn find_by_conversation(conversation_id: &str) -> Result<Vec<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
             "SELECT id, conversation_id, role, content, stage, model_used, timestamp
-             FROM messages 
+             FROM messages
              WHERE conversation_id = ?1
              ORDER BY timestamp ASC",
         )?;
@@ -799,7 +796,7 @@ impl KnowledgeConversation {
     ) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let knowledge = KnowledgeConversation {
             id: generate_id(),
             conversation_id,
@@ -837,9 +834,9 @@ impl KnowledgeConversation {
     pub async fn search(query: &str, limit: usize) -> Result<Vec<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let search_pattern = format!("%{}%", query);
-        
+
         let mut stmt = conn.prepare(
             "SELECT id, conversation_id, question, final_answer, source_of_truth,
                     conversation_context, profile_id, created_at, last_updated
@@ -872,7 +869,7 @@ impl KnowledgeConversation {
     pub async fn get_recent(limit: usize) -> Result<Vec<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
             "SELECT id, conversation_id, question, final_answer, source_of_truth,
                     conversation_context, profile_id, created_at, last_updated
@@ -904,7 +901,7 @@ impl KnowledgeConversation {
     pub async fn find_by_id(id: &str) -> Result<Option<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let knowledge = conn
             .query_row(
                 "SELECT id, conversation_id, question, final_answer, source_of_truth,
@@ -924,7 +921,7 @@ impl KnowledgeConversation {
                         created_at: row.get(7)?,
                         last_updated: row.get(8)?,
                     })
-                }
+                },
             )
             .optional()?;
 
@@ -957,7 +954,7 @@ impl ConsensusProfile {
     ) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let profile = ConsensusProfile {
             id: generate_id(),
             profile_name,
@@ -995,7 +992,7 @@ impl ConsensusProfile {
     pub async fn find_by_name(name: &str) -> Result<Option<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let profile = conn
             .query_row(
                 "SELECT id, profile_name, pipeline_profile_id, generator_model, refiner_model,
@@ -1025,7 +1022,7 @@ impl ConsensusProfile {
     pub async fn list_all() -> Result<Vec<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
             "SELECT id, profile_name, pipeline_profile_id, generator_model, refiner_model,
                     validator_model, curator_model, created_at, updated_at
@@ -1082,9 +1079,9 @@ impl ActivityLog {
     ) -> Result<()> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let metadata_str = metadata.map(|v| v.to_string());
-        
+
         conn.execute(
             "INSERT INTO activity_log (
                 event_type, conversation_id, user_id, stage, metadata, created_at
@@ -1106,7 +1103,7 @@ impl ActivityLog {
     pub async fn get_recent(limit: usize) -> Result<Vec<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
             "SELECT id, event_type, conversation_id, user_id, stage, model_used,
                     provider_name, cost, duration_ms, tokens_used, error_message,
@@ -1147,7 +1144,7 @@ where
 {
     let db = get_database().await?;
     let mut conn = db.get_connection()?;
-    
+
     let tx = conn.transaction()?;
     match f(&tx) {
         Ok(result) => {
@@ -1164,13 +1161,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use anyhow::bail;
+    use tempfile::TempDir;
 
     async fn setup_test_db() -> Result<(Arc<DatabaseManager>, TempDir)> {
         let temp_dir = TempDir::new()?;
         let db_path = temp_dir.path().join("test.db");
-        
+
         let config = DatabaseConfig {
             path: db_path,
             max_connections: 5,
@@ -1184,89 +1181,90 @@ mod tests {
         };
 
         let db = Arc::new(DatabaseManager::new(config).await?);
-        
+
         // Set global instance for tests
         DATABASE.set(db.clone()).ok();
-        
+
         Ok((db, temp_dir))
     }
 
     #[tokio::test]
     async fn test_database_initialization() -> Result<()> {
         let (db, _temp_dir) = setup_test_db().await?;
-        
+
         // Test basic connectivity
         let health = db.health_check().await?;
         assert!(health.healthy);
         assert!(health.wal_mode_active);
         assert!(health.foreign_keys_enabled);
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_user_crud() -> Result<()> {
         let (_db, _temp_dir) = setup_test_db().await?;
-        
+
         // Create user
         let user = User::create(
             Some("test@example.com".to_string()),
             Some("test-license".to_string()),
-        ).await?;
-        
+        )
+        .await?;
+
         assert!(!user.id.is_empty());
         assert_eq!(user.email, Some("test@example.com".to_string()));
-        
+
         // Find by ID
         let found = User::find_by_id(&user.id).await?;
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, user.id);
-        
+
         // Find by email
         let found = User::find_by_email("test@example.com").await?;
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, user.id);
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_conversation_crud() -> Result<()> {
         let (_db, _temp_dir) = setup_test_db().await?;
-        
+
         // Create user first
         let user = User::create(None, None).await?;
-        
+
         // Create conversation
         let mut conv = Conversation::create(Some(user.id.clone()), None).await?;
         assert!(!conv.id.is_empty());
         assert_eq!(conv.user_id, Some(user.id));
-        
+
         // Update metrics
         conv.update_metrics(0.05, 100, 200).await?;
         assert_eq!(conv.total_cost, 0.05);
         assert_eq!(conv.input_tokens, 100);
         assert_eq!(conv.output_tokens, 200);
-        
+
         // Complete conversation
         conv.complete().await?;
         assert!(conv.end_time.is_some());
-        
+
         // Find by ID
         let found = Conversation::find_by_id(&conv.id).await?;
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, conv.id);
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_message_crud() -> Result<()> {
         let (_db, _temp_dir) = setup_test_db().await?;
-        
+
         // Create conversation first
         let conv = Conversation::create(None, None).await?;
-        
+
         // Create messages
         let msg1 = Message::create(
             conv.id.clone(),
@@ -1274,65 +1272,69 @@ mod tests {
             "Hello".to_string(),
             None,
             None,
-        ).await?;
-        
+        )
+        .await?;
+
         let msg2 = Message::create(
             conv.id.clone(),
             "assistant".to_string(),
             "Hi there!".to_string(),
             Some("generator".to_string()),
             Some("claude-3-opus".to_string()),
-        ).await?;
-        
+        )
+        .await?;
+
         // Find messages by conversation
         let messages = Message::find_by_conversation(&conv.id).await?;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].id, msg1.id);
         assert_eq!(messages[1].id, msg2.id);
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_knowledge_search() -> Result<()> {
         let (_db, _temp_dir) = setup_test_db().await?;
-        
+
         // Create knowledge entries
         let k1 = KnowledgeConversation::create(
             None,
             "How to implement a REST API?".to_string(),
             "Use a web framework like Express or FastAPI".to_string(),
             "Common web development knowledge".to_string(),
-        ).await?;
-        
+        )
+        .await?;
+
         let k2 = KnowledgeConversation::create(
             None,
             "What is Rust ownership?".to_string(),
             "Rust's memory management system".to_string(),
             "Rust documentation".to_string(),
-        ).await?;
-        
+        )
+        .await?;
+
         // Search for REST
         let results = KnowledgeConversation::search("REST", 10).await?;
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, k1.id);
-        
+
         // Search for Rust
         let results = KnowledgeConversation::search("Rust", 10).await?;
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, k2.id);
-        
+
         // Get recent
         let recent = KnowledgeConversation::get_recent(10).await?;
         assert_eq!(recent.len(), 2);
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_consensus_profiles() -> Result<()> {
         let (_db, _temp_dir) = setup_test_db().await?;
-        
+
         // Create profile
         let profile = ConsensusProfile::create(
             "Test Profile".to_string(),
@@ -1340,25 +1342,26 @@ mod tests {
             "gpt-4".to_string(),
             "claude-3-sonnet".to_string(),
             "gpt-4-turbo".to_string(),
-        ).await?;
-        
+        )
+        .await?;
+
         // Find by name
         let found = ConsensusProfile::find_by_name("Test Profile").await?;
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, profile.id);
-        
+
         // List all
         let all = ConsensusProfile::list_all().await?;
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].id, profile.id);
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_activity_logging() -> Result<()> {
         let (_db, _temp_dir) = setup_test_db().await?;
-        
+
         // Log activities
         ActivityLog::log(
             "query_start".to_string(),
@@ -1366,64 +1369,63 @@ mod tests {
             None,
             None,
             Some(serde_json::json!({"test": true})),
-        ).await?;
-        
+        )
+        .await?;
+
         ActivityLog::log(
             "query_complete".to_string(),
             None,
             None,
             Some("generator".to_string()),
             None,
-        ).await?;
-        
+        )
+        .await?;
+
         // Get recent
         let activities = ActivityLog::get_recent(10).await?;
         assert_eq!(activities.len(), 2);
         assert_eq!(activities[0].event_type, "query_complete");
         assert_eq!(activities[1].event_type, "query_start");
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_connection_pooling() -> Result<()> {
         let (db, _temp_dir) = setup_test_db().await?;
-        
+
         // Test multiple concurrent connections
         let mut handles = vec![];
-        
+
         for i in 0..10 {
             let db_clone = db.clone();
             let handle = tokio::spawn(async move {
                 let conn = db_clone.get_connection()?;
-                let result: i32 = conn.query_row(
-                    "SELECT ?1 as id",
-                    params![i],
-                    |row| row.get(0),
-                )?;
+                let result: i32 =
+                    conn.query_row("SELECT ?1 as id", params![i], |row| row.get(0))?;
                 Ok::<_, anyhow::Error>(result)
             });
             handles.push(handle);
         }
-        
+
         let results = futures::future::join_all(handles).await;
-        
+
         // All connections should succeed
         for (i, result) in results.into_iter().enumerate() {
             let value = result??;
             assert_eq!(value, i as i32);
         }
-        
+
         Ok(())
     }
 
     #[tokio::test]
     async fn test_transaction_rollback() -> Result<()> {
         let (_db, _temp_dir) = setup_test_db().await?;
-        
+
         // Create a user
         let user = User::create(Some("tx@test.com".to_string()), None).await?;
-        
+
         // Try a failing transaction
         let result = execute_transaction(|tx| {
             // Update user
@@ -1431,17 +1433,18 @@ mod tests {
                 "UPDATE users SET tier = ?1 WHERE id = ?2",
                 params!["PREMIUM", &user.id],
             )?;
-            
+
             // Force an error
             bail!("Simulated error");
-        }).await;
-        
+        })
+        .await;
+
         assert!(result.is_err());
-        
+
         // Check that the update was rolled back
         let found = User::find_by_id(&user.id).await?;
         assert_eq!(found.unwrap().tier, "FREE");
-        
+
         Ok(())
     }
 }
@@ -1457,20 +1460,29 @@ pub async fn execute_query(query: &str, params: &[&dyn rusqlite::ToSql]) -> Resu
 }
 
 /// Fetch all results from a query
-pub async fn fetch_all_query<T, F>(query: &str, params: &[&dyn rusqlite::ToSql], f: F) -> Result<Vec<T>>
+pub async fn fetch_all_query<T, F>(
+    query: &str,
+    params: &[&dyn rusqlite::ToSql],
+    f: F,
+) -> Result<Vec<T>>
 where
     F: FnMut(&rusqlite::Row) -> rusqlite::Result<T>,
 {
     let db = get_database().await?;
     let conn = db.get_connection()?;
     let mut stmt = conn.prepare(query)?;
-    let results = stmt.query_map(params, f)?
+    let results = stmt
+        .query_map(params, f)?
         .collect::<rusqlite::Result<Vec<T>>>()?;
     Ok(results)
 }
 
 /// Fetch optional result from a query
-pub async fn fetch_optional_query<T, F>(query: &str, params: &[&dyn rusqlite::ToSql], f: F) -> Result<Option<T>>
+pub async fn fetch_optional_query<T, F>(
+    query: &str,
+    params: &[&dyn rusqlite::ToSql],
+    f: F,
+) -> Result<Option<T>>
 where
     F: FnOnce(&rusqlite::Row) -> rusqlite::Result<T>,
 {
@@ -1479,4 +1491,3 @@ where
     let result = conn.query_row(query, params, f).optional()?;
     Ok(result)
 }
-

@@ -13,12 +13,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 pub mod conversation_gateway;
-pub mod usage_tracker;
 pub mod reminder;
+pub mod usage_tracker;
 
-pub use conversation_gateway::{ConversationGateway, ConversationAuthorization};
-pub use usage_tracker::{UsageTracker, UsageNotification};
+pub use conversation_gateway::{ConversationAuthorization, ConversationGateway};
 pub use reminder::SubscriptionReminder;
+pub use usage_tracker::{UsageNotification, UsageTracker};
 
 /// Subscription tiers matching TypeScript implementation
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -155,9 +155,9 @@ pub struct UsageStatistics {
 /// Credit pack options
 #[derive(Debug, Clone, Copy)]
 pub enum CreditPack {
-    Starter,  // 25 credits for $3
-    Value,    // 75 credits for $7
-    Power,    // 200 credits for $15
+    Starter, // 25 credits for $3
+    Value,   // 75 credits for $7
+    Power,   // 200 credits for $15
 }
 
 impl CreditPack {
@@ -191,8 +191,14 @@ impl CreditPack {
 pub enum LicenseChange {
     NoChange,
     Renewed,
-    Upgraded { from: SubscriptionTier, to: SubscriptionTier },
-    Downgraded { from: SubscriptionTier, to: SubscriptionTier },
+    Upgraded {
+        from: SubscriptionTier,
+        to: SubscriptionTier,
+    },
+    Downgraded {
+        from: SubscriptionTier,
+        to: SubscriptionTier,
+    },
     Cancelled,
 }
 
@@ -207,7 +213,7 @@ pub struct SubscriptionDisplay {
     pub total_remaining: Option<u32>, // From D1 (includes daily + credits)
     pub is_trial: bool,
     pub average_daily_usage: Option<f32>, // Average since account creation
-    pub days_active: u32, // Days since account creation
+    pub days_active: u32,                 // Days since account creation
 }
 
 impl SubscriptionDisplay {
@@ -238,62 +244,78 @@ impl SubscriptionDisplay {
                 format!("{} | {} | Unlimited", self.username, tier_display)
             } else if total == 0 {
                 // Out of conversations - show clear limit reached message
-                format!("{} | {} | Daily limit reached ({}/{})", 
-                    self.username, tier_display, self.daily_used, self.daily_limit)
+                format!(
+                    "{} | {} | Daily limit reached ({}/{})",
+                    self.username, tier_display, self.daily_used, self.daily_limit
+                )
             } else if self.daily_remaining == 0 && total > 0 {
                 // Using credit packs
-                format!("{} | {} | {} credits remaining", 
-                    self.username, tier_display, total)
+                format!(
+                    "{} | {} | {} credits remaining",
+                    self.username, tier_display, total
+                )
             } else if self.is_trial && total > 0 {
                 // During trial, show remaining from D1
-                format!("{} | {} | {} remaining (trial)", self.username, tier_display, total)
+                format!(
+                    "{} | {} | {} remaining (trial)",
+                    self.username, tier_display, total
+                )
             } else {
                 // Normal display with remaining
-                format!("{} | {} | {} remaining today", 
-                    self.username, tier_display, total)
+                format!(
+                    "{} | {} | {} remaining today",
+                    self.username, tier_display, total
+                )
             }
         } else {
             // Fallback when D1 info not available (local display only)
             if self.daily_remaining == 0 {
-                format!("{} | {} | Daily limit reached ({}/{})", 
-                    self.username, tier_display, self.daily_used, self.daily_limit)
+                format!(
+                    "{} | {} | Daily limit reached ({}/{})",
+                    self.username, tier_display, self.daily_used, self.daily_limit
+                )
             } else if self.is_trial {
-                format!("{} | {} | {} remaining (trial)", self.username, tier_display, self.daily_remaining)
+                format!(
+                    "{} | {} | {} remaining (trial)",
+                    self.username, tier_display, self.daily_remaining
+                )
             } else {
-                format!("{} | {} | {}/{} daily", 
-                    self.username, tier_display, self.daily_remaining, self.daily_limit)
+                format!(
+                    "{} | {} | {}/{} daily",
+                    self.username, tier_display, self.daily_remaining, self.daily_limit
+                )
             }
         };
-        
+
         // Append average usage
         format!("{}{}", base_display, avg_display)
     }
-    
+
     /// Load subscription display info from database
     pub async fn load_from_database() -> Result<Self> {
         use crate::core::database::get_database;
         use chrono::{Datelike, Timelike, Utc};
-        
+
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         // Query all subscription info from unified database
         let result = tokio::task::spawn_blocking(move || -> Result<(String, String, String, u32, bool, Option<f32>, u32)> {
             use rusqlite::OptionalExtension;
-            
+
             // First, get the currently configured license key
             let current_license_key = conn.query_row(
                 "SELECT value FROM configurations WHERE key = 'hive_license_key'",
                 [],
                 |row| row.get::<_, String>(0)
             ).optional()?;
-            
+
             if current_license_key.is_none() {
                 return Ok(("No license".to_string(), "free".to_string(), String::new(), 0, false, None, 0));
             }
-            
+
             let license_key = current_license_key.unwrap();
-            
+
             // Get user info that matches the current license key
             let user_result = conn.query_row(
                 "SELECT id, email, tier, license_key FROM users WHERE license_key = ?1",
@@ -307,12 +329,12 @@ impl SubscriptionDisplay {
                     ))
                 }
             ).optional()?;
-            
+
             let (user_id, email, tier_str, license_key) = match user_result {
                 Some(data) => data,
                 None => return Ok(("No user".to_string(), "free".to_string(), String::new(), 0, false, None, 0)),
             };
-            
+
             // Get conversation count for today from conversation_usage table
             // Using UTC midnight as the reset point for global consistency
             let now = Utc::now();
@@ -321,33 +343,33 @@ impl SubscriptionDisplay {
                 .with_minute(0).unwrap()
                 .with_second(0).unwrap()
                 .with_nanosecond(0).unwrap();
-            
+
             let daily_used: u32 = conn.query_row(
-                "SELECT COUNT(*) FROM conversation_usage 
-                 WHERE user_id = ?1 
+                "SELECT COUNT(*) FROM conversation_usage
+                 WHERE user_id = ?1
                  AND datetime(timestamp) >= datetime(?2)",
                 rusqlite::params![&user_id, start_of_day.to_rfc3339()],
                 |row| row.get(0)
             ).unwrap_or(0);
-            
-            tracing::debug!("Daily usage query: user_id={}, start_of_day={}, count={}", 
+
+            tracing::debug!("Daily usage query: user_id={}, start_of_day={}, count={}",
                          user_id, start_of_day.to_rfc3339(), daily_used);
-            
+
             // SECURITY: DO NOT query credits_remaining - only D1 knows the balance
-            
+
             // Check if in trial period (first 7 days after user creation)
             let is_trial = conn.query_row(
-                "SELECT 
+                "SELECT
                     CAST((julianday('now') - julianday(created_at)) AS INTEGER) < 7 as is_trial
-                FROM users 
+                FROM users
                 WHERE id = ?1",
                 rusqlite::params![&user_id],
                 |row| row.get::<_, bool>(0)
             ).unwrap_or(false);
-            
+
             // Calculate average daily usage since account creation
             let (total_conversations, days_active): (u32, u32) = conn.query_row(
-                "SELECT 
+                "SELECT
                     COUNT(*) as total_conversations,
                     MAX(1, CAST((julianday('now') - julianday(MIN(u.created_at))) AS INTEGER) + 1) as days_active
                 FROM conversation_usage cu
@@ -356,31 +378,39 @@ impl SubscriptionDisplay {
                 rusqlite::params![&user_id],
                 |row| Ok((row.get(0)?, row.get(1)?))
             ).unwrap_or((0, 1));
-            
+
             let average_daily_usage = if days_active > 0 {
                 Some(total_conversations as f32 / days_active as f32)
             } else {
                 None
             };
-            
-            tracing::debug!("Average usage calculation: total={}, days={}, avg={:?}", 
+
+            tracing::debug!("Average usage calculation: total={}, days={}, avg={:?}",
                          total_conversations, days_active, average_daily_usage);
-            
+
             Ok((email, tier_str, license_key, daily_used, is_trial, average_daily_usage, days_active))
         }).await??;
-        
-        let (username, subscription_tier, _license_key, daily_used, is_trial, average_daily_usage, days_active) = result;
-        
+
+        let (
+            username,
+            subscription_tier,
+            _license_key,
+            daily_used,
+            is_trial,
+            average_daily_usage,
+            days_active,
+        ) = result;
+
         // Parse tier
         let tier = SubscriptionTier::from_string(&subscription_tier);
-        
+
         // Calculate remaining daily conversations
         let daily_limit = if is_trial {
             u32::MAX // Unlimited during trial
         } else {
             tier.daily_limit()
         };
-        
+
         let daily_remaining = if daily_limit == u32::MAX {
             u32::MAX
         } else if daily_limit > daily_used {
@@ -388,7 +418,7 @@ impl SubscriptionDisplay {
         } else {
             0
         };
-        
+
         Ok(SubscriptionDisplay {
             username,
             tier,
@@ -401,29 +431,38 @@ impl SubscriptionDisplay {
             days_active,
         })
     }
-    
+
     /// Update display with fresh data from D1
     pub fn update_from_d1(&mut self, total_remaining: u32) {
         self.total_remaining = Some(total_remaining);
-        
-        // If D1 says we have 0 remaining and we're on a free plan, 
+
+        // If D1 says we have 0 remaining and we're on a free plan,
         // we're definitely not in trial (trial gives unlimited)
         if total_remaining == 0 && self.tier == SubscriptionTier::Free {
             self.is_trial = false;
             self.daily_remaining = 0;
         }
     }
-    
+
     /// Get recommended tier based on average daily usage
     pub fn recommended_tier(&self) -> Option<(SubscriptionTier, &'static str)> {
         let avg = self.average_daily_usage?;
-        
+
         Some(match avg {
             _ if avg <= 8.0 => (SubscriptionTier::Free, "Your FREE plan is perfect!"),
-            _ if avg <= 40.0 => (SubscriptionTier::Basic, "Upgrade to BASIC (50/day) - Save 70% vs credits"),
-            _ if avg <= 80.0 => (SubscriptionTier::Standard, "Upgrade to STANDARD (100/day) - Best value"),
+            _ if avg <= 40.0 => (
+                SubscriptionTier::Basic,
+                "Upgrade to BASIC (50/day) - Save 70% vs credits",
+            ),
+            _ if avg <= 80.0 => (
+                SubscriptionTier::Standard,
+                "Upgrade to STANDARD (100/day) - Best value",
+            ),
             _ if avg <= 150.0 => (SubscriptionTier::Premium, "Upgrade to PREMIUM (200/day)"),
-            _ if avg <= 500.0 => (SubscriptionTier::Unlimited, "Go UNLIMITED - No daily limits"),
+            _ if avg <= 500.0 => (
+                SubscriptionTier::Unlimited,
+                "Go UNLIMITED - No daily limits",
+            ),
             _ => (SubscriptionTier::Team, "Contact us for TEAM plan - 600/day"),
         })
     }
@@ -478,7 +517,10 @@ mod tests {
             days_active: 10,
         };
 
-        assert_eq!(display.format(), "user@example.com | PREMIUM | 180/200 daily | Avg: 15.5/day");
+        assert_eq!(
+            display.format(),
+            "user@example.com | PREMIUM | 180/200 daily | Avg: 15.5/day"
+        );
     }
 
     #[test]
@@ -495,9 +537,12 @@ mod tests {
             days_active: 3,
         };
 
-        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | Unlimited (5 used today) | Avg: 3.2/day");
+        assert_eq!(
+            display.format(),
+            "trial@example.com | FREE (Trial) | Unlimited (5 used today) | Avg: 3.2/day"
+        );
     }
-    
+
     #[test]
     fn test_trial_display_with_d1() {
         let display = SubscriptionDisplay {
@@ -512,9 +557,12 @@ mod tests {
             days_active: 2,
         };
 
-        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | 995 remaining today | Avg: 4.0/day");
+        assert_eq!(
+            display.format(),
+            "trial@example.com | FREE (Trial) | 995 remaining today | Avg: 4.0/day"
+        );
     }
-    
+
     #[test]
     fn test_trial_limit_reached() {
         let display = SubscriptionDisplay {
@@ -529,9 +577,12 @@ mod tests {
             days_active: 4,
         };
 
-        assert_eq!(display.format(), "trial@example.com | FREE (Trial) | Trial limit reached for today | Avg: 250.0/day");
+        assert_eq!(
+            display.format(),
+            "trial@example.com | FREE (Trial) | Trial limit reached for today | Avg: 250.0/day"
+        );
     }
-    
+
     #[test]
     fn test_daily_limit_reached() {
         let display = SubscriptionDisplay {
@@ -546,9 +597,12 @@ mod tests {
             days_active: 30,
         };
 
-        assert_eq!(display.format(), "user@example.com | BASIC | Daily limit reached (0/50 daily) | Avg: 45.5/day");
+        assert_eq!(
+            display.format(),
+            "user@example.com | BASIC | Daily limit reached (0/50 daily) | Avg: 45.5/day"
+        );
     }
-    
+
     #[test]
     fn test_credit_pack_usage() {
         let display = SubscriptionDisplay {
@@ -563,6 +617,9 @@ mod tests {
             days_active: 15,
         };
 
-        assert_eq!(display.format(), "user@example.com | BASIC | 25 credits remaining | Avg: 48.0/day");
+        assert_eq!(
+            display.format(),
+            "user@example.com | BASIC | 25 credits remaining | Avg: 48.0/day"
+        );
     }
 }

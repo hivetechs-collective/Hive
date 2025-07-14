@@ -2,11 +2,11 @@
 
 pub mod api_keys;
 pub mod ast;
-pub mod semantic;
-pub mod context;
 pub mod config;
+pub mod context;
 pub mod error;
 pub mod logging;
+pub mod semantic;
 pub mod temporal;
 
 // Database implementation
@@ -15,16 +15,16 @@ pub mod database_simple;
 pub mod database_working;
 
 // These modules require additional dependencies not in minimal build
-pub mod security;
 pub mod schema;
+pub mod security;
 // pub mod trust_dialog;
 // pub mod file_access;
 // pub mod security_config;
 pub mod migrations_simple;
 
 // Enhanced memory and analytics
-pub mod memory;
 pub mod analytics;
+pub mod memory;
 
 // Auto-update mechanism
 pub mod updater;
@@ -48,49 +48,48 @@ pub mod uninstaller;
 pub mod performance;
 
 pub use ast::{
-    AstEngine, Position, AstNode, NodeMetadata, Symbol, SymbolKind, 
-    ParseResult, ParseError, ErrorSeverity, ImportInfo, CodeMetrics
+    AstEngine, AstNode, CodeMetrics, ErrorSeverity, ImportInfo, NodeMetadata, ParseError,
+    ParseResult, Position, Symbol, SymbolKind,
+};
+pub use config::{
+    create_default_config, get_config, get_config_value, init_config, load_config, reset_config,
+    save_config, set_config_value, Config, HiveConfig,
+};
+pub use context::ContextBuilder;
+pub use error::{ErrorCategory, HiveError, HiveResult, Result};
+pub use logging::{
+    initialize_default_logging, initialize_logging, AnalyticsLogger, ErrorTracker, LoggingConfig,
+    PerfTimer,
 };
 pub use semantic::SemanticIndex;
-pub use context::ContextBuilder;
-pub use config::{
-    HiveConfig, Config, load_config, get_config, set_config_value, get_config_value,
-    reset_config, save_config, create_default_config, init_config,
-};
-pub use error::{HiveError, ErrorCategory, Result, HiveResult};
-pub use logging::{LoggingConfig, initialize_logging, initialize_default_logging, PerfTimer, ErrorTracker, AnalyticsLogger};
-pub use temporal::{TemporalContext, BusinessHours, TimeContext, TimeOfDay};
+pub use temporal::{BusinessHours, TemporalContext, TimeContext, TimeOfDay};
 // Re-export database functionality from unified database module
 pub use database::{
-    DatabaseConfig, DatabaseHealthStatus, DatabaseStatistics,
-    initialize_database, get_database, generate_id, current_timestamp
+    current_timestamp, generate_id, get_database, initialize_database, DatabaseConfig,
+    DatabaseHealthStatus, DatabaseStatistics,
 };
+pub use license::{LicenseInfo, LicenseManager, LicenseStatus};
+pub use memory::{MemoryManager, MemorySystem};
 pub use migrations_simple::{
-    MigrationManager, Migration, MigrationResult, MigrationStatus, IntegrityReport,
-    initialize_migrations, get_migration_status
-};
-pub use security::{
-    SecurityContext, TrustLevel, TrustDecision, SecurityEvent, SecurityEventType,
-    initialize_security, get_security_context, is_trusted,
-    check_read_access, check_write_access, check_delete_access, check_directory_access
-};
-pub use updater::{
-    AutoUpdater, UpdateInfo, UpdateConfig, UpdateChannel, ReleaseInfo
+    get_migration_status, initialize_migrations, IntegrityReport, Migration, MigrationManager,
+    MigrationResult, MigrationStatus,
 };
 pub use migrator::{
-    HiveMigrator, MigrationPlan, MigrationResult as HiveMigrationResult, MigrationStep, 
-    TypeScriptHiveData, LegacyConversation, LegacyConfig
+    HiveMigrator, LegacyConfig, LegacyConversation, MigrationPlan,
+    MigrationResult as HiveMigrationResult, MigrationStep, TypeScriptHiveData,
 };
-pub use uninstaller::{
-    HiveUninstaller, UninstallPlan, UninstallResult, UninstallComponent
+pub use security::{
+    check_delete_access, check_directory_access, check_read_access, check_write_access,
+    get_security_context, initialize_security, is_trusted, SecurityContext, SecurityEvent,
+    SecurityEventType, TrustDecision, TrustLevel,
 };
-pub use memory::{MemorySystem, MemoryManager};
-pub use license::{LicenseManager, LicenseInfo, LicenseStatus};
+pub use uninstaller::{HiveUninstaller, UninstallComponent, UninstallPlan, UninstallResult};
+pub use updater::{AutoUpdater, ReleaseInfo, UpdateChannel, UpdateConfig, UpdateInfo};
 
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 // Type aliases for compatibility with other modules
 pub type LanguageType = Language;
@@ -100,7 +99,7 @@ pub type LanguageType = Language;
 pub struct Workspace {
     /// Root directory of the workspace
     pub root: PathBuf,
-    /// Cached file information  
+    /// Cached file information
     pub files: Arc<Mutex<HashMap<PathBuf, FileInfo>>>,
     /// Git repository (if available)
     pub git: Option<GitRepo>,
@@ -172,19 +171,19 @@ impl Workspace {
         } else {
             None
         };
-        
+
         Ok(Self {
             root,
             files: Arc::new(Mutex::new(HashMap::new())),
             git,
         })
     }
-    
+
     /// Get or load file information
     pub async fn get_file(&self, path: &PathBuf) -> Result<Arc<FileInfo>> {
         // Check security permissions first
         check_read_access(path)?;
-        
+
         {
             let files = self.files.lock().unwrap();
             if let Some(info) = files.get(path) {
@@ -195,7 +194,7 @@ impl Workspace {
                 }
             }
         }
-        
+
         // Load file
         let content = tokio::fs::read_to_string(path).await?;
         let language = detect_language(path);
@@ -206,7 +205,7 @@ impl Workspace {
             path: path.clone(),
             metrics: None, // Metrics can be computed lazily if needed
         };
-        
+
         let mut files = self.files.lock().unwrap();
         files.insert(path.clone(), info.clone());
         Ok(Arc::new(info))

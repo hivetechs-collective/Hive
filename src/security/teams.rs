@@ -1,19 +1,19 @@
 //! Enterprise Team Management System
-//! 
+//!
 //! Provides comprehensive team management including:
 //! - Hierarchical team structures
 //! - Team-based permissions
 //! - Team access controls
 //! - Team invitations and workflows
 
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 
-use super::{EnterpriseRbacManager, audit::EnterpriseAuditLogger};
+use super::{audit::EnterpriseAuditLogger, EnterpriseRbacManager};
 
 /// Team manager for enterprise team operations
 pub struct TeamManager {
@@ -294,7 +294,7 @@ impl TeamManager {
     /// Create a new enterprise team
     pub async fn create_team(&self, team: EnterpriseTeam) -> Result<()> {
         let mut teams = self.teams.write().await;
-        
+
         if teams.contains_key(&team.id) {
             return Err(anyhow!("Team already exists: {}", team.id));
         }
@@ -313,42 +313,49 @@ impl TeamManager {
             self.update_hierarchy(&team.id, Some(parent_id)).await?;
         }
 
-        self.audit_logger.log_team_event(
-            super::audit::AuditEventType::TeamCreated,
-            &team.id,
-            format!("Team '{}' created by {}", team.name, team.created_by),
-        ).await?;
+        self.audit_logger
+            .log_team_event(
+                super::audit::AuditEventType::TeamCreated,
+                &team.id,
+                format!("Team '{}' created by {}", team.name, team.created_by),
+            )
+            .await?;
 
         Ok(())
     }
 
     async fn update_hierarchy(&self, team_id: &str, parent_id: Option<&str>) -> Result<()> {
         let mut hierarchies = self.hierarchies.write().await;
-        
+
         if let Some(parent) = parent_id {
             // Find or create hierarchy for this parent chain
             let root_team = self.find_root_team(parent).await?;
             let hierarchy_id = root_team.clone();
-            
-            let hierarchy = hierarchies.entry(hierarchy_id).or_insert_with(|| TeamHierarchy {
-                root_team,
-                levels: HashMap::new(),
-                parent_child_map: HashMap::new(),
-                inheritance_rules: vec![],
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
-            });
+
+            let hierarchy = hierarchies
+                .entry(hierarchy_id)
+                .or_insert_with(|| TeamHierarchy {
+                    root_team,
+                    levels: HashMap::new(),
+                    parent_child_map: HashMap::new(),
+                    inheritance_rules: vec![],
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                });
 
             // Calculate level for new team
             let parent_level = hierarchy.levels.get(parent).copied().unwrap_or(0);
-            hierarchy.levels.insert(team_id.to_string(), parent_level + 1);
-            
+            hierarchy
+                .levels
+                .insert(team_id.to_string(), parent_level + 1);
+
             // Update parent-child mapping
-            hierarchy.parent_child_map
+            hierarchy
+                .parent_child_map
                 .entry(parent.to_string())
                 .or_insert_with(Vec::new)
                 .push(team_id.to_string());
-            
+
             hierarchy.updated_at = Utc::now();
         }
 
@@ -358,7 +365,7 @@ impl TeamManager {
     async fn find_root_team(&self, team_id: &str) -> Result<String> {
         let teams = self.teams.read().await;
         let mut current_id = team_id.to_string();
-        
+
         // Traverse up the hierarchy to find root
         while let Some(team) = teams.get(&current_id) {
             if let Some(parent_id) = &team.parent_team {
@@ -367,14 +374,15 @@ impl TeamManager {
                 break;
             }
         }
-        
+
         Ok(current_id)
     }
 
     /// Add user to team
     pub async fn add_user_to_team(&self, user_id: &str, team_id: &str) -> Result<()> {
         let mut teams = self.teams.write().await;
-        let team = teams.get_mut(team_id)
+        let team = teams
+            .get_mut(team_id)
             .ok_or_else(|| anyhow!("Team not found: {}", team_id))?;
 
         // Check if user is already a member
@@ -390,7 +398,9 @@ impl TeamManager {
         }
 
         // Default role is "member"
-        let default_role = team.roles.iter()
+        let default_role = team
+            .roles
+            .iter()
             .find(|r| r.name == "member")
             .map(|r| r.id.clone())
             .unwrap_or_else(|| "member".to_string());
@@ -409,11 +419,13 @@ impl TeamManager {
 
         team.members.push(member);
 
-        self.audit_logger.log_team_event(
-            super::audit::AuditEventType::UserAddedToTeam,
-            team_id,
-            format!("User {} added to team", user_id),
-        ).await?;
+        self.audit_logger
+            .log_team_event(
+                super::audit::AuditEventType::UserAddedToTeam,
+                team_id,
+                format!("User {} added to team", user_id),
+            )
+            .await?;
 
         Ok(())
     }
@@ -421,7 +433,8 @@ impl TeamManager {
     /// Remove user from team
     pub async fn remove_user_from_team(&self, user_id: &str, team_id: &str) -> Result<()> {
         let mut teams = self.teams.write().await;
-        let team = teams.get_mut(team_id)
+        let team = teams
+            .get_mut(team_id)
             .ok_or_else(|| anyhow!("Team not found: {}", team_id))?;
 
         let initial_len = team.members.len();
@@ -431,11 +444,13 @@ impl TeamManager {
             return Err(anyhow!("User is not a member of team: {}", team_id));
         }
 
-        self.audit_logger.log_team_event(
-            super::audit::AuditEventType::UserRemovedFromTeam,
-            team_id,
-            format!("User {} removed from team", user_id),
-        ).await?;
+        self.audit_logger
+            .log_team_event(
+                super::audit::AuditEventType::UserRemovedFromTeam,
+                team_id,
+                format!("User {} removed from team", user_id),
+            )
+            .await?;
 
         Ok(())
     }
@@ -452,7 +467,8 @@ impl TeamManager {
         duration: Option<Duration>,
     ) -> Result<String> {
         let teams = self.teams.read().await;
-        let team = teams.get(team_id)
+        let team = teams
+            .get(team_id)
             .ok_or_else(|| anyhow!("Team not found: {}", team_id))?;
 
         // Validate role exists in team
@@ -482,11 +498,13 @@ impl TeamManager {
         let mut invitations = self.invitations.write().await;
         invitations.insert(invitation_id.clone(), invitation);
 
-        self.audit_logger.log_team_event(
-            super::audit::AuditEventType::TeamCreated, // Would have specific invitation event type
-            team_id,
-            format!("Invitation created for {} by {}", invitee_email, invited_by),
-        ).await?;
+        self.audit_logger
+            .log_team_event(
+                super::audit::AuditEventType::TeamCreated, // Would have specific invitation event type
+                team_id,
+                format!("Invitation created for {} by {}", invitee_email, invited_by),
+            )
+            .await?;
 
         Ok(invitation_id)
     }
@@ -494,7 +512,8 @@ impl TeamManager {
     /// Accept team invitation
     pub async fn accept_invitation(&self, invitation_id: &str, user_id: &str) -> Result<()> {
         let mut invitations = self.invitations.write().await;
-        let invitation = invitations.get_mut(invitation_id)
+        let invitation = invitations
+            .get_mut(invitation_id)
             .ok_or_else(|| anyhow!("Invitation not found: {}", invitation_id))?;
 
         if invitation.status != InvitationStatus::Pending {
@@ -509,7 +528,7 @@ impl TeamManager {
         invitation.status = InvitationStatus::Accepted;
         invitation.accepted_at = Some(Utc::now());
         invitation.invitee_user_id = Some(user_id.to_string());
-        
+
         // Clone needed values before dropping the lock
         let team_id = invitation.team_id.clone();
         let is_temporary = invitation.temporary;
@@ -521,11 +540,8 @@ impl TeamManager {
 
         // Set temporary membership if specified
         if is_temporary {
-            self.set_temporary_membership(
-                user_id,
-                &team_id,
-                temp_duration,
-            ).await?;
+            self.set_temporary_membership(user_id, &team_id, temp_duration)
+                .await?;
         }
 
         Ok(())
@@ -538,7 +554,8 @@ impl TeamManager {
         duration: Option<Duration>,
     ) -> Result<()> {
         let mut teams = self.teams.write().await;
-        let team = teams.get_mut(team_id)
+        let team = teams
+            .get_mut(team_id)
             .ok_or_else(|| anyhow!("Team not found: {}", team_id))?;
 
         if let Some(member) = team.members.iter_mut().find(|m| m.user_id == user_id) {
@@ -558,8 +575,13 @@ impl TeamManager {
     /// List teams for user
     pub async fn list_user_teams(&self, user_id: &str) -> Result<Vec<EnterpriseTeam>> {
         let teams = self.teams.read().await;
-        Ok(teams.values()
-            .filter(|team| team.members.iter().any(|m| m.user_id == user_id && m.status == MemberStatus::Active))
+        Ok(teams
+            .values()
+            .filter(|team| {
+                team.members
+                    .iter()
+                    .any(|m| m.user_id == user_id && m.status == MemberStatus::Active)
+            })
             .cloned()
             .collect())
     }
@@ -578,47 +600,52 @@ impl TeamManager {
         permission: &'a str,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool>> + 'a>> {
         Box::pin(async move {
-        let teams = self.teams.read().await;
-        let team = teams.get(team_id)
-            .ok_or_else(|| anyhow!("Team not found: {}", team_id))?;
+            let teams = self.teams.read().await;
+            let team = teams
+                .get(team_id)
+                .ok_or_else(|| anyhow!("Team not found: {}", team_id))?;
 
-        // Find user's membership
-        let member = team.members.iter()
-            .find(|m| m.user_id == user_id && m.status == MemberStatus::Active)
-            .ok_or_else(|| anyhow!("User is not an active member of team"))?;
+            // Find user's membership
+            let member = team
+                .members
+                .iter()
+                .find(|m| m.user_id == user_id && m.status == MemberStatus::Active)
+                .ok_or_else(|| anyhow!("User is not an active member of team"))?;
 
-        // Check if user has the permission directly
-        if member.permissions.contains(&permission.to_string()) {
-            return Ok(true);
-        }
-
-        // Check role-based permissions
-        if let Some(role) = team.roles.iter().find(|r| r.id == member.role) {
-            if role.permissions.contains(permission) {
+            // Check if user has the permission directly
+            if member.permissions.contains(&permission.to_string()) {
                 return Ok(true);
             }
-        }
 
-        // Check team-level permissions
-        for (resource_type, actions) in &team.permissions.resource_access {
-            if permission.starts_with(resource_type) {
-                let action = permission.split('.').nth(1).unwrap_or("");
-                if actions.contains(&action.to_string()) || actions.contains(&"*".to_string()) {
+            // Check role-based permissions
+            if let Some(role) = team.roles.iter().find(|r| r.id == member.role) {
+                if role.permissions.contains(permission) {
                     return Ok(true);
                 }
             }
-        }
 
-        // Check inherited permissions from parent teams
-        if team.permissions.permission_inheritance {
-            if let Some(parent_id) = &team.parent_team {
-                let parent_id = parent_id.clone();
-                drop(teams); // Release lock before recursive call
-                return self.check_team_permission(user_id, &parent_id, permission).await;
+            // Check team-level permissions
+            for (resource_type, actions) in &team.permissions.resource_access {
+                if permission.starts_with(resource_type) {
+                    let action = permission.split('.').nth(1).unwrap_or("");
+                    if actions.contains(&action.to_string()) || actions.contains(&"*".to_string()) {
+                        return Ok(true);
+                    }
+                }
             }
-        }
 
-        Ok(false)
+            // Check inherited permissions from parent teams
+            if team.permissions.permission_inheritance {
+                if let Some(parent_id) = &team.parent_team {
+                    let parent_id = parent_id.clone();
+                    drop(teams); // Release lock before recursive call
+                    return self
+                        .check_team_permission(user_id, &parent_id, permission)
+                        .await;
+                }
+            }
+
+            Ok(false)
         })
     }
 
@@ -628,16 +655,16 @@ impl TeamManager {
         let invitations = self.invitations.read().await;
         let hierarchies = self.hierarchies.read().await;
 
-        let total_members = teams.values()
-            .map(|team| team.members.len())
-            .sum::<usize>();
+        let total_members = teams.values().map(|team| team.members.len()).sum::<usize>();
 
-        let active_members = teams.values()
+        let active_members = teams
+            .values()
             .flat_map(|team| &team.members)
             .filter(|member| member.status == MemberStatus::Active)
             .count();
 
-        let pending_invitations = invitations.values()
+        let pending_invitations = invitations
+            .values()
             .filter(|inv| inv.status == InvitationStatus::Pending && inv.expires_at > Utc::now())
             .count();
 
@@ -665,7 +692,9 @@ impl TeamManager {
                     "members.remove".to_string(),
                     "roles.manage".to_string(),
                     "settings.manage".to_string(),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 can_invite: true,
                 can_remove: true,
                 can_manage_roles: true,
@@ -682,7 +711,9 @@ impl TeamManager {
                     "members.remove".to_string(),
                     "settings.view".to_string(),
                     "settings.modify".to_string(),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 can_invite: true,
                 can_remove: true,
                 can_manage_roles: false,
@@ -694,10 +725,9 @@ impl TeamManager {
                 id: "member".to_string(),
                 name: "Member".to_string(),
                 description: "Standard team member".to_string(),
-                permissions: [
-                    "team.view".to_string(),
-                    "members.view".to_string(),
-                ].into_iter().collect(),
+                permissions: ["team.view".to_string(), "members.view".to_string()]
+                    .into_iter()
+                    .collect(),
                 can_invite: false,
                 can_remove: false,
                 can_manage_roles: false,
@@ -789,17 +819,19 @@ mod tests {
     async fn test_team_creation() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("team_test.db");
-        
-        let permission_manager = Arc::new(
-            super::PermissionManager::new().await.unwrap()
-        );
+
+        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            super::EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            super::EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
         let rbac_manager = Arc::new(
-            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone()).await.unwrap()
+            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone())
+                .await
+                .unwrap(),
         );
-        
+
         let team_manager = TeamManager::new(rbac_manager, audit_logger).await.unwrap();
 
         let team = EnterpriseTeam {
@@ -831,17 +863,19 @@ mod tests {
     async fn test_team_membership() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("membership_test.db");
-        
-        let permission_manager = Arc::new(
-            super::PermissionManager::new().await.unwrap()
-        );
+
+        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            super::EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            super::EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
         let rbac_manager = Arc::new(
-            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone()).await.unwrap()
+            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone())
+                .await
+                .unwrap(),
         );
-        
+
         let team_manager = TeamManager::new(rbac_manager, audit_logger).await.unwrap();
 
         // Create team
@@ -866,10 +900,16 @@ mod tests {
         team_manager.create_team(team).await.unwrap();
 
         // Initialize default roles
-        team_manager.initialize_default_roles("team002").await.unwrap();
+        team_manager
+            .initialize_default_roles("team002")
+            .await
+            .unwrap();
 
         // Add user to team
-        team_manager.add_user_to_team("user001", "team002").await.unwrap();
+        team_manager
+            .add_user_to_team("user001", "team002")
+            .await
+            .unwrap();
 
         let team = team_manager.get_team("team002").await.unwrap().unwrap();
         assert_eq!(team.members.len(), 1);
@@ -877,7 +917,10 @@ mod tests {
         assert_eq!(team.members[0].status, MemberStatus::Active);
 
         // Remove user from team
-        team_manager.remove_user_from_team("user001", "team002").await.unwrap();
+        team_manager
+            .remove_user_from_team("user001", "team002")
+            .await
+            .unwrap();
 
         let team = team_manager.get_team("team002").await.unwrap().unwrap();
         assert_eq!(team.members.len(), 0);
@@ -887,17 +930,19 @@ mod tests {
     async fn test_team_invitations() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("invitation_test.db");
-        
-        let permission_manager = Arc::new(
-            super::PermissionManager::new().await.unwrap()
-        );
+
+        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            super::EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            super::EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
         let rbac_manager = Arc::new(
-            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone()).await.unwrap()
+            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone())
+                .await
+                .unwrap(),
         );
-        
+
         let team_manager = TeamManager::new(rbac_manager, audit_logger).await.unwrap();
 
         // Create team with roles
@@ -909,20 +954,18 @@ mod tests {
             parent_team: None,
             child_teams: vec![],
             members: vec![],
-            roles: vec![
-                TeamRole {
-                    id: "member".to_string(),
-                    name: "Member".to_string(),
-                    description: "Standard member".to_string(),
-                    permissions: HashSet::new(),
-                    can_invite: false,
-                    can_remove: false,
-                    can_manage_roles: false,
-                    can_manage_settings: false,
-                    inheritance_level: InheritanceLevel::Read,
-                    created_at: Utc::now(),
-                }
-            ],
+            roles: vec![TeamRole {
+                id: "member".to_string(),
+                name: "Member".to_string(),
+                description: "Standard member".to_string(),
+                permissions: HashSet::new(),
+                can_invite: false,
+                can_remove: false,
+                can_manage_roles: false,
+                can_manage_settings: false,
+                inheritance_level: InheritanceLevel::Read,
+                created_at: Utc::now(),
+            }],
             permissions: TeamPermissions::default(),
             access_controls: TeamAccess::default(),
             settings: TeamSettings::default(),
@@ -935,20 +978,26 @@ mod tests {
         team_manager.create_team(team).await.unwrap();
 
         // Create invitation
-        let invitation_id = team_manager.create_invitation(
-            "team003",
-            "newuser@company.com",
-            "member",
-            "admin",
-            Some("Welcome to the team!".to_string()),
-            false,
-            None,
-        ).await.unwrap();
+        let invitation_id = team_manager
+            .create_invitation(
+                "team003",
+                "newuser@company.com",
+                "member",
+                "admin",
+                Some("Welcome to the team!".to_string()),
+                false,
+                None,
+            )
+            .await
+            .unwrap();
 
         assert!(!invitation_id.is_empty());
 
         // Accept invitation
-        team_manager.accept_invitation(&invitation_id, "user002").await.unwrap();
+        team_manager
+            .accept_invitation(&invitation_id, "user002")
+            .await
+            .unwrap();
 
         let team = team_manager.get_team("team003").await.unwrap().unwrap();
         assert_eq!(team.members.len(), 1);
@@ -959,24 +1008,26 @@ mod tests {
     async fn test_team_permissions() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("permissions_test.db");
-        
-        let permission_manager = Arc::new(
-            super::PermissionManager::new().await.unwrap()
-        );
+
+        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            super::EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            super::EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
         let rbac_manager = Arc::new(
-            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone()).await.unwrap()
+            super::EnterpriseRbacManager::new(permission_manager, audit_logger.clone())
+                .await
+                .unwrap(),
         );
-        
+
         let team_manager = TeamManager::new(rbac_manager, audit_logger).await.unwrap();
 
         // Create team with specific permissions
         let mut team_permissions = TeamPermissions::default();
         team_permissions.resource_access.insert(
             "project".to_string(),
-            vec!["read".to_string(), "write".to_string()]
+            vec!["read".to_string(), "write".to_string()],
         );
 
         let team = EnterpriseTeam {
@@ -986,19 +1037,17 @@ mod tests {
             team_type: TeamType::Project,
             parent_team: None,
             child_teams: vec![],
-            members: vec![
-                TeamMember {
-                    user_id: "user003".to_string(),
-                    role: "member".to_string(),
-                    joined_at: Utc::now(),
-                    invited_by: "admin".to_string(),
-                    status: MemberStatus::Active,
-                    permissions: vec!["project.read".to_string()],
-                    last_activity: Some(Utc::now()),
-                    temporary: false,
-                    expires_at: None,
-                }
-            ],
+            members: vec![TeamMember {
+                user_id: "user003".to_string(),
+                role: "member".to_string(),
+                joined_at: Utc::now(),
+                invited_by: "admin".to_string(),
+                status: MemberStatus::Active,
+                permissions: vec!["project.read".to_string()],
+                last_activity: Some(Utc::now()),
+                temporary: false,
+                expires_at: None,
+            }],
             roles: vec![],
             permissions: team_permissions,
             access_controls: TeamAccess::default(),
@@ -1012,19 +1061,17 @@ mod tests {
         team_manager.create_team(team).await.unwrap();
 
         // Test permission check
-        let has_permission = team_manager.check_team_permission(
-            "user003",
-            "team004",
-            "project.read"
-        ).await.unwrap();
+        let has_permission = team_manager
+            .check_team_permission("user003", "team004", "project.read")
+            .await
+            .unwrap();
 
         assert!(has_permission);
 
-        let no_permission = team_manager.check_team_permission(
-            "user003",
-            "team004",
-            "project.delete"
-        ).await.unwrap();
+        let no_permission = team_manager
+            .check_team_permission("user003", "team004", "project.delete")
+            .await
+            .unwrap();
 
         assert!(!no_permission);
     }

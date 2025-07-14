@@ -6,13 +6,14 @@
 //! - Output scrolling
 //! - Hive command integration
 
+use crate::tui::themes::Theme;
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyCode};
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     backend::Backend,
     layout::Rect,
-    style::{Color, Style, Modifier},
-    text::{Span, Line},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState},
     Frame,
 };
@@ -24,7 +25,6 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command as AsyncCommand,
 };
-use crate::tui::themes::Theme;
 
 /// Terminal panel state
 pub struct TerminalPanel {
@@ -95,7 +95,7 @@ impl TerminalPanel {
         // Add welcome message
         panel.add_system_message("🐝 HiveTechs Terminal - Ready".to_string());
         panel.add_system_message(format!("Working directory: {}", panel.current_dir));
-        
+
         Ok(panel)
     }
 
@@ -106,7 +106,7 @@ impl TerminalPanel {
             content: message,
             timestamp: chrono::Local::now(),
         };
-        
+
         self.add_history_entry(entry);
     }
 
@@ -117,12 +117,16 @@ impl TerminalPanel {
             content: format!("{} $ {}", self.get_prompt(), command),
             timestamp: chrono::Local::now(),
         };
-        
+
         self.add_history_entry(entry);
-        
+
         // Add to command history for navigation
-        if !command.trim().is_empty() && 
-           self.command_history.front().map_or(true, |last| last != &command) {
+        if !command.trim().is_empty()
+            && self
+                .command_history
+                .front()
+                .map_or(true, |last| last != &command)
+        {
             self.command_history.push_front(command);
             if self.command_history.len() > 100 {
                 self.command_history.pop_back();
@@ -160,7 +164,7 @@ impl TerminalPanel {
         if self.history.len() > self.max_history {
             self.history.pop_front();
         }
-        
+
         // Auto-scroll to bottom
         if !self.history.is_empty() {
             self.list_state.select(Some(self.history.len() - 1));
@@ -210,18 +214,14 @@ impl TerminalPanel {
 
         match parts[0] {
             "cd" => {
-                let target = if parts.len() > 1 {
-                    parts[1]
-                } else {
-                    "~"
-                };
-                
+                let target = if parts.len() > 1 { parts[1] } else { "~" };
+
                 let new_dir = if target == "~" {
                     dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"))
                 } else {
                     std::path::PathBuf::from(target)
                 };
-                
+
                 match std::env::set_current_dir(&new_dir) {
                     Ok(()) => {
                         self.current_dir = new_dir.to_string_lossy().to_string();
@@ -254,7 +254,7 @@ impl TerminalPanel {
     /// Execute Hive command with integrated output
     async fn execute_hive_command(&mut self, args: &[&str]) -> Result<()> {
         self.add_system_message("🐝 Executing Hive command...".to_string());
-        
+
         // TODO: Integrate with actual Hive command system
         // For now, simulate some common commands
         match args.get(0) {
@@ -282,7 +282,7 @@ impl TerminalPanel {
                 self.add_output("Use 'hive help' for available commands".to_string());
             }
         }
-        
+
         Ok(())
     }
 
@@ -296,12 +296,12 @@ impl TerminalPanel {
             .stderr(Stdio::piped());
 
         let mut child = cmd.spawn()?;
-        
+
         let stdout = child
             .stdout
             .take()
             .ok_or_else(|| anyhow::anyhow!("Failed to capture stdout"))?;
-        
+
         let stderr = child
             .stderr
             .take()
@@ -309,16 +309,16 @@ impl TerminalPanel {
 
         let mut stdout_reader = BufReader::new(stdout);
         let mut stderr_reader = BufReader::new(stderr);
-        
+
         let mut stdout_lines = Vec::new();
         let mut stderr_lines = Vec::new();
-        
+
         let mut stdout_line = String::new();
         while stdout_reader.read_line(&mut stdout_line).await? > 0 {
             stdout_lines.push(stdout_line.trim_end().to_string());
             stdout_line.clear();
         }
-        
+
         let mut stderr_line = String::new();
         while stderr_reader.read_line(&mut stderr_line).await? > 0 {
             stderr_lines.push(stderr_line.trim_end().to_string());
@@ -326,7 +326,7 @@ impl TerminalPanel {
         }
 
         let _ = child.wait().await?;
-        
+
         Ok((stdout_lines.join("\n"), stderr_lines.join("\n")))
     }
 
@@ -340,37 +340,25 @@ impl TerminalPanel {
     }
 
     /// Render the terminal panel
-    pub fn render(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         // Split area for history and input
         let chunks = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
-                ratatui::layout::Constraint::Min(0),     // History
-                ratatui::layout::Constraint::Length(1),  // Input line
+                ratatui::layout::Constraint::Min(0),    // History
+                ratatui::layout::Constraint::Length(1), // Input line
             ])
             .split(area);
 
         // Render history
         self.render_history(frame, chunks[0], theme, is_active);
-        
+
         // Render input line
         self.render_input(frame, chunks[1], theme, is_active);
     }
 
     /// Render terminal history
-    fn render_history(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    fn render_history(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         let items: Vec<ListItem> = self
             .history
             .iter()
@@ -393,15 +381,8 @@ impl TerminalPanel {
         frame.render_stateful_widget(history_list, area, &mut self.list_state);
     }
 
-
     /// Render input line
-    fn render_input(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    fn render_input(&self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         let prompt = self.get_prompt();
         let input_text = if self.executing {
             format!("{} $ {}", prompt, "[Executing...]")
@@ -434,7 +415,7 @@ impl TerminalPanel {
                 self.current_input.clear();
                 self.cursor_pos = 0;
                 self.history_index = None;
-                
+
                 if !command.trim().is_empty() {
                     self.execute_command(command).await?;
                 }
@@ -514,7 +495,7 @@ impl TerminalPanel {
             }
             _ => {}
         }
-        
+
         Ok(false)
     }
 
@@ -543,19 +524,15 @@ impl TerminalPanel {
 /// Create history list item
 fn create_history_item<'a>(entry: &'a TerminalEntry, theme: &'a Theme) -> ListItem<'a> {
     let style = match entry.entry_type {
-        TerminalEntryType::Command => {
-            Style::default().fg(theme.command_color()).add_modifier(Modifier::BOLD)
-        }
+        TerminalEntryType::Command => Style::default()
+            .fg(theme.command_color())
+            .add_modifier(Modifier::BOLD),
         TerminalEntryType::Output => theme.terminal_output_style(),
-        TerminalEntryType::Error => {
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-        }
-        TerminalEntryType::System => {
-            Style::default().fg(theme.system_message_color()).add_modifier(Modifier::ITALIC)
-        }
+        TerminalEntryType::Error => Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        TerminalEntryType::System => Style::default()
+            .fg(theme.system_message_color())
+            .add_modifier(Modifier::ITALIC),
     };
 
-    ListItem::new(Line::from(vec![
-        Span::styled(entry.content.clone(), style)
-    ]))
+    ListItem::new(Line::from(vec![Span::styled(entry.content.clone(), style)]))
 }

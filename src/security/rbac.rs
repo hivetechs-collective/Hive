@@ -1,5 +1,5 @@
 //! Enterprise Role-Based Access Control (RBAC) Manager
-//! 
+//!
 //! Enhanced RBAC system with enterprise features including:
 //! - Hierarchical roles
 //! - Dynamic role assignment
@@ -7,14 +7,14 @@
 //! - Access policies
 //! - Role inheritance
 
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 
-use super::{PermissionManager, audit::EnterpriseAuditLogger};
+use super::{audit::EnterpriseAuditLogger, PermissionManager};
 
 /// Enterprise RBAC manager
 pub struct EnterpriseRbacManager {
@@ -232,8 +232,8 @@ pub struct InheritanceCondition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeRestriction {
-    pub start_time: String, // HH:MM format
-    pub end_time: String,   // HH:MM format
+    pub start_time: String,    // HH:MM format
+    pub end_time: String,      // HH:MM format
     pub days_of_week: Vec<u8>, // 0-6, Monday=0
     pub timezone: String,
 }
@@ -287,7 +287,9 @@ impl EnterpriseRbacManager {
                     "role.read".to_string(),
                     "role.update".to_string(),
                     "system.configure".to_string(),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 parent_roles: vec!["super_admin".to_string()],
                 child_roles: vec!["manager".to_string()],
                 auto_assign_conditions: vec![],
@@ -311,17 +313,17 @@ impl EnterpriseRbacManager {
                     "project.read".to_string(),
                     "project.update".to_string(),
                     "user.read".to_string(),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 parent_roles: vec!["admin".to_string()],
                 child_roles: vec!["developer".to_string(), "analyst".to_string()],
-                auto_assign_conditions: vec![
-                    AutoAssignCondition {
-                        condition_type: "department".to_string(),
-                        operator: "equals".to_string(),
-                        value: "management".to_string(),
-                        metadata: HashMap::new(),
-                    }
-                ],
+                auto_assign_conditions: vec![AutoAssignCondition {
+                    condition_type: "department".to_string(),
+                    operator: "equals".to_string(),
+                    value: "management".to_string(),
+                    metadata: HashMap::new(),
+                }],
                 max_assignment_duration: Some(Duration::days(180)),
                 requires_approval: false,
                 approval_roles: vec![],
@@ -341,17 +343,17 @@ impl EnterpriseRbacManager {
                     "code.write".to_string(),
                     "build.create".to_string(),
                     "test.run".to_string(),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 parent_roles: vec!["manager".to_string()],
                 child_roles: vec![],
-                auto_assign_conditions: vec![
-                    AutoAssignCondition {
-                        condition_type: "department".to_string(),
-                        operator: "equals".to_string(),
-                        value: "engineering".to_string(),
-                        metadata: HashMap::new(),
-                    }
-                ],
+                auto_assign_conditions: vec![AutoAssignCondition {
+                    condition_type: "department".to_string(),
+                    operator: "equals".to_string(),
+                    value: "engineering".to_string(),
+                    metadata: HashMap::new(),
+                }],
                 max_assignment_duration: Some(Duration::days(90)),
                 requires_approval: false,
                 approval_roles: vec![],
@@ -369,7 +371,9 @@ impl EnterpriseRbacManager {
                     "report.read".to_string(),
                     "data.read".to_string(),
                     "analytics.view".to_string(),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 parent_roles: vec!["manager".to_string()],
                 child_roles: vec![],
                 auto_assign_conditions: vec![],
@@ -390,7 +394,9 @@ impl EnterpriseRbacManager {
                     "audit.read".to_string(),
                     "security.read".to_string(),
                     "compliance.read".to_string(),
-                ].into_iter().collect(),
+                ]
+                .into_iter()
+                .collect(),
                 parent_roles: vec![],
                 child_roles: vec![],
                 auto_assign_conditions: vec![],
@@ -474,14 +480,12 @@ impl EnterpriseRbacManager {
                 name: "Business Hours Access Only".to_string(),
                 description: "Restrict access to business hours".to_string(),
                 policy_type: PolicyType::Conditional,
-                conditions: vec![
-                    PolicyCondition {
-                        attribute: "time".to_string(),
-                        operator: "between".to_string(),
-                        value: "09:00-18:00".to_string(),
-                        case_sensitive: false,
-                    }
-                ],
+                conditions: vec![PolicyCondition {
+                    attribute: "time".to_string(),
+                    operator: "between".to_string(),
+                    value: "09:00-18:00".to_string(),
+                    case_sensitive: false,
+                }],
                 effect: PolicyEffect::Allow,
                 resources: vec!["*".to_string()],
                 actions: vec!["*".to_string()],
@@ -502,14 +506,12 @@ impl EnterpriseRbacManager {
                 name: "MFA Required for Admin Actions".to_string(),
                 description: "Require MFA for all administrative actions".to_string(),
                 policy_type: PolicyType::Conditional,
-                conditions: vec![
-                    PolicyCondition {
-                        attribute: "action".to_string(),
-                        operator: "starts_with".to_string(),
-                        value: "admin".to_string(),
-                        case_sensitive: false,
-                    }
-                ],
+                conditions: vec![PolicyCondition {
+                    attribute: "action".to_string(),
+                    operator: "starts_with".to_string(),
+                    value: "admin".to_string(),
+                    case_sensitive: false,
+                }],
                 effect: PolicyEffect::RequireMfa,
                 resources: vec!["*".to_string()],
                 actions: vec!["admin.*".to_string()],
@@ -525,14 +527,12 @@ impl EnterpriseRbacManager {
                 name: "Deny Sensitive Data Access to Contractors".to_string(),
                 description: "Block contractor access to sensitive data".to_string(),
                 policy_type: PolicyType::Deny,
-                conditions: vec![
-                    PolicyCondition {
-                        attribute: "resource_type".to_string(),
-                        operator: "equals".to_string(),
-                        value: "sensitive_data".to_string(),
-                        case_sensitive: false,
-                    }
-                ],
+                conditions: vec![PolicyCondition {
+                    attribute: "resource_type".to_string(),
+                    operator: "equals".to_string(),
+                    value: "sensitive_data".to_string(),
+                    case_sensitive: false,
+                }],
                 effect: PolicyEffect::Deny,
                 resources: vec!["sensitive_data:*".to_string()],
                 actions: vec!["*".to_string()],
@@ -556,7 +556,7 @@ impl EnterpriseRbacManager {
     /// Create a new enterprise user
     pub async fn create_user(&self, user: EnterpriseUser) -> Result<()> {
         let mut users = self.users.write().await;
-        
+
         if users.contains_key(&user.id) {
             return Err(anyhow!("User already exists: {}", user.id));
         }
@@ -569,11 +569,13 @@ impl EnterpriseRbacManager {
         users.insert(user.id.clone(), user_with_roles);
 
         // Log user creation
-        self.audit_logger.log_user_event(
-            super::audit::AuditEventType::UserCreated,
-            &user.id,
-            format!("Enterprise user created: {}", user.full_name),
-        ).await?;
+        self.audit_logger
+            .log_user_event(
+                super::audit::AuditEventType::UserCreated,
+                &user.id,
+                format!("Enterprise user created: {}", user.full_name),
+            )
+            .await?;
 
         Ok(())
     }
@@ -593,12 +595,20 @@ impl EnterpriseRbacManager {
         Ok(auto_assigned)
     }
 
-    fn evaluate_auto_assign_conditions(&self, conditions: &[AutoAssignCondition], user: &EnterpriseUser) -> bool {
+    fn evaluate_auto_assign_conditions(
+        &self,
+        conditions: &[AutoAssignCondition],
+        user: &EnterpriseUser,
+    ) -> bool {
         for condition in conditions {
             let user_value = match condition.condition_type.as_str() {
                 "department" => user.metadata.get("department").cloned().unwrap_or_default(),
                 "email_domain" => user.email.split('@').nth(1).unwrap_or("").to_string(),
-                "employee_type" => user.metadata.get("employee_type").cloned().unwrap_or_default(),
+                "employee_type" => user
+                    .metadata
+                    .get("employee_type")
+                    .cloned()
+                    .unwrap_or_default(),
                 _ => continue,
             };
 
@@ -607,12 +617,12 @@ impl EnterpriseRbacManager {
                     if user_value != condition.value {
                         return false;
                     }
-                },
+                }
                 "contains" => {
                     if !user_value.contains(&condition.value) {
                         return false;
                     }
-                },
+                }
                 _ => return false,
             }
         }
@@ -625,7 +635,10 @@ impl EnterpriseRbacManager {
         // Check if role requires approval
         let role = {
             let roles = self.roles.read().await;
-            roles.get(role_id).cloned().ok_or_else(|| anyhow!("Role not found: {}", role_id))?
+            roles
+                .get(role_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("Role not found: {}", role_id))?
         };
 
         let assignment_id = uuid::Uuid::new_v4().to_string();
@@ -650,7 +663,10 @@ impl EnterpriseRbacManager {
 
         // Store assignment
         let mut assignments = self.role_assignments.write().await;
-        assignments.entry(user_id.to_string()).or_insert_with(Vec::new).push(assignment);
+        assignments
+            .entry(user_id.to_string())
+            .or_insert_with(Vec::new)
+            .push(assignment);
 
         // If no approval required, assign immediately
         if !role.requires_approval {
@@ -661,27 +677,39 @@ impl EnterpriseRbacManager {
                 }
             }
 
-            self.audit_logger.log_user_event(
-                super::audit::AuditEventType::RoleAssigned,
-                user_id,
-                format!("Role {} assigned", role_id),
-            ).await?;
+            self.audit_logger
+                .log_user_event(
+                    super::audit::AuditEventType::RoleAssigned,
+                    user_id,
+                    format!("Role {} assigned", role_id),
+                )
+                .await?;
         } else {
-            self.audit_logger.log_user_event(
-                super::audit::AuditEventType::RoleAssigned,
-                user_id,
-                format!("Role {} assignment pending approval", role_id),
-            ).await?;
+            self.audit_logger
+                .log_user_event(
+                    super::audit::AuditEventType::RoleAssigned,
+                    user_id,
+                    format!("Role {} assignment pending approval", role_id),
+                )
+                .await?;
         }
 
         Ok(())
     }
 
     /// Check permission for user with enterprise policies
-    pub async fn check_permission(&self, user_id: &str, permission: &str, resource: Option<&str>) -> Result<bool> {
+    pub async fn check_permission(
+        &self,
+        user_id: &str,
+        permission: &str,
+        resource: Option<&str>,
+    ) -> Result<bool> {
         let user = {
             let users = self.users.read().await;
-            users.get(user_id).cloned().ok_or_else(|| anyhow!("User not found: {}", user_id))?
+            users
+                .get(user_id)
+                .cloned()
+                .ok_or_else(|| anyhow!("User not found: {}", user_id))?
         };
 
         if !user.active || user.account_locked {
@@ -689,7 +717,10 @@ impl EnterpriseRbacManager {
         }
 
         // Check access policies first
-        if !self.evaluate_access_policies(&user, permission, resource).await? {
+        if !self
+            .evaluate_access_policies(&user, permission, resource)
+            .await?
+        {
             return Ok(false);
         }
 
@@ -700,9 +731,15 @@ impl EnterpriseRbacManager {
         Ok(effective_permissions.contains(permission) || effective_permissions.contains("*"))
     }
 
-    async fn evaluate_access_policies(&self, user: &EnterpriseUser, permission: &str, resource: Option<&str>) -> Result<bool> {
+    async fn evaluate_access_policies(
+        &self,
+        user: &EnterpriseUser,
+        permission: &str,
+        resource: Option<&str>,
+    ) -> Result<bool> {
         let policies = self.access_policies.read().await;
-        let mut applicable_policies: Vec<_> = policies.values()
+        let mut applicable_policies: Vec<_> = policies
+            .values()
             .filter(|p| p.active && self.policy_applies_to_user(p, user))
             .collect();
 
@@ -717,11 +754,11 @@ impl EnterpriseRbacManager {
                     PolicyEffect::RequireApproval => {
                         // In a real implementation, this would trigger an approval workflow
                         return Ok(false);
-                    },
+                    }
                     PolicyEffect::RequireMfa => {
                         // Check if user has completed MFA
                         return Ok(user.mfa_enabled);
-                    },
+                    }
                 }
             }
         }
@@ -753,7 +790,13 @@ impl EnterpriseRbacManager {
         policy.principals.contains(&user.id)
     }
 
-    fn evaluate_policy_conditions(&self, conditions: &[PolicyCondition], user: &EnterpriseUser, permission: &str, resource: Option<&str>) -> bool {
+    fn evaluate_policy_conditions(
+        &self,
+        conditions: &[PolicyCondition],
+        user: &EnterpriseUser,
+        permission: &str,
+        resource: Option<&str>,
+    ) -> bool {
         for condition in conditions {
             let actual_value = match condition.attribute.as_str() {
                 "permission" => permission.to_string(),
@@ -763,11 +806,15 @@ impl EnterpriseRbacManager {
                 "time" => {
                     let now = Utc::now();
                     now.format("%H:%M").to_string()
-                },
+                }
                 _ => continue,
             };
 
-            if !self.evaluate_condition_operator(&condition.operator, &actual_value, &condition.value) {
+            if !self.evaluate_condition_operator(
+                &condition.operator,
+                &actual_value,
+                &condition.value,
+            ) {
                 return false;
             }
         }
@@ -789,7 +836,7 @@ impl EnterpriseRbacManager {
                 } else {
                     false
                 }
-            },
+            }
             _ => false,
         }
     }
@@ -803,7 +850,7 @@ impl EnterpriseRbacManager {
             if let Some(role) = roles.get(role_id) {
                 if role.active {
                     permissions.extend(role.permissions.clone());
-                    
+
                     // Add inherited permissions from parent roles
                     permissions.extend(self.get_inherited_permissions_sync(role, &roles)?);
                 }
@@ -813,7 +860,11 @@ impl EnterpriseRbacManager {
         Ok(permissions)
     }
 
-    fn get_inherited_permissions_sync(&self, role: &EnterpriseRole, roles: &HashMap<String, EnterpriseRole>) -> Result<HashSet<String>> {
+    fn get_inherited_permissions_sync(
+        &self,
+        role: &EnterpriseRole,
+        roles: &HashMap<String, EnterpriseRole>,
+    ) -> Result<HashSet<String>> {
         let mut inherited = HashSet::new();
 
         for parent_role_id in &role.parent_roles {
@@ -847,7 +898,8 @@ impl EnterpriseRbacManager {
         let assignments = self.role_assignments.read().await;
 
         let total_assignments = assignments.values().map(|v| v.len()).sum::<usize>();
-        let pending_approvals = assignments.values()
+        let pending_approvals = assignments
+            .values()
             .flatten()
             .filter(|a| a.approval_status == ApprovalStatus::Pending)
             .count();
@@ -887,18 +939,22 @@ mod tests {
     async fn test_enterprise_rbac_initialization() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("rbac_test.db");
-        
+
         let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
-        
-        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger).await.unwrap();
+
+        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger)
+            .await
+            .unwrap();
         rbac.initialize_default_roles().await.unwrap();
 
         let roles = rbac.list_roles().await.unwrap();
         assert!(roles.len() >= 6); // Should have at least 6 default roles
-        
+
         let admin_role = roles.iter().find(|r| r.id == "admin").unwrap();
         assert_eq!(admin_role.risk_level, RiskLevel::High);
         assert!(admin_role.requires_approval);
@@ -908,13 +964,17 @@ mod tests {
     async fn test_user_creation_with_auto_assign() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("auto_assign_test.db");
-        
+
         let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
-        
-        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger).await.unwrap();
+
+        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger)
+            .await
+            .unwrap();
         rbac.initialize_default_roles().await.unwrap();
 
         let mut metadata = HashMap::new();
@@ -954,13 +1014,17 @@ mod tests {
     async fn test_permission_check_with_policies() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("policy_test.db");
-        
+
         let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
-        
-        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger).await.unwrap();
+
+        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger)
+            .await
+            .unwrap();
         rbac.initialize_default_roles().await.unwrap();
 
         let user = EnterpriseUser {
@@ -990,11 +1054,10 @@ mod tests {
         rbac.create_user(user).await.unwrap();
 
         // Test permission check
-        let has_permission = rbac.check_permission(
-            "admin001",
-            "user.create",
-            Some("user:test")
-        ).await.unwrap();
+        let has_permission = rbac
+            .check_permission("admin001", "user.create", Some("user:test"))
+            .await
+            .unwrap();
 
         assert!(has_permission);
     }
@@ -1003,13 +1066,17 @@ mod tests {
     async fn test_role_inheritance() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("inheritance_test.db");
-        
+
         let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
-            EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
-        
-        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger).await.unwrap();
+
+        let rbac = EnterpriseRbacManager::new(permission_manager, audit_logger)
+            .await
+            .unwrap();
         rbac.initialize_default_roles().await.unwrap();
 
         let user = EnterpriseUser {
@@ -1039,13 +1106,14 @@ mod tests {
         rbac.create_user(user).await.unwrap();
 
         // Manager should inherit permissions from admin role
-        let effective_permissions = rbac.get_effective_permissions(
-            &rbac.get_user("mgr001").await.unwrap().unwrap()
-        ).await.unwrap();
+        let effective_permissions = rbac
+            .get_effective_permissions(&rbac.get_user("mgr001").await.unwrap().unwrap())
+            .await
+            .unwrap();
 
         // Should have manager permissions
         assert!(effective_permissions.contains("team.read"));
-        
+
         // Should also have inherited admin permissions
         assert!(effective_permissions.contains("user.create"));
     }

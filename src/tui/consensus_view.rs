@@ -72,7 +72,7 @@ impl ConsensusView {
             theme: ConsensusTheme::default(),
         }
     }
-    
+
     /// Draw the real-time consensus progress display
     pub fn draw(&self, frame: &mut Frame, area: Rect, progress: &ConsensusProgress) {
         // Main consensus block
@@ -83,12 +83,12 @@ impl ConsensusView {
             .title_style(
                 Style::default()
                     .fg(self.theme.title_color)
-                    .add_modifier(Modifier::BOLD)
+                    .add_modifier(Modifier::BOLD),
             );
-        
+
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        
+
         // Layout for 4 stages
         let stage_layout = Layout::default()
             .direction(Direction::Vertical)
@@ -99,14 +99,14 @@ impl ConsensusView {
                 Constraint::Length(1), // Curator
             ])
             .split(inner);
-        
+
         // Draw each stage
         self.draw_stage_progress(frame, stage_layout[0], &progress.generator);
         self.draw_stage_progress(frame, stage_layout[1], &progress.refiner);
         self.draw_stage_progress(frame, stage_layout[2], &progress.validator);
         self.draw_stage_progress(frame, stage_layout[3], &progress.curator);
     }
-    
+
     /// Draw individual stage progress
     fn draw_stage_progress(&self, frame: &mut Frame, area: Rect, stage: &StageProgress) {
         let layout = Layout::default()
@@ -118,7 +118,7 @@ impl ConsensusView {
                 Constraint::Length(25), // Model name
             ])
             .split(area);
-        
+
         // Stage name with status color
         let name_style = match stage.status {
             StageStatus::Waiting => Style::default().fg(self.theme.waiting_color),
@@ -132,12 +132,12 @@ impl ConsensusView {
                 .fg(self.theme.error_color)
                 .add_modifier(Modifier::BOLD),
         };
-        
+
         frame.render_widget(
             Paragraph::new(stage.name.as_str()).style(name_style),
-            layout[0]
+            layout[0],
         );
-        
+
         // Status indicator
         let status_indicator = match stage.status {
             StageStatus::Waiting => "⏸",
@@ -145,23 +145,23 @@ impl ConsensusView {
             StageStatus::Completed => "✓",
             StageStatus::Error => "❌",
         };
-        
+
         frame.render_widget(
             Paragraph::new(status_indicator).style(name_style),
-            layout[1]
+            layout[1],
         );
-        
+
         // Progress bar
         self.draw_progress_bar(frame, layout[2], stage);
-        
+
         // Model name
         frame.render_widget(
             Paragraph::new(format!("({})", stage.model))
                 .style(Style::default().fg(self.theme.model_color)),
-            layout[3]
+            layout[3],
         );
     }
-    
+
     /// Draw progress bar for stage
     fn draw_progress_bar(&self, frame: &mut Frame, area: Rect, stage: &StageProgress) {
         let progress_color = match stage.status {
@@ -170,24 +170,23 @@ impl ConsensusView {
             StageStatus::Completed => self.theme.completed_color,
             StageStatus::Error => self.theme.error_color,
         };
-        
+
         // Create visual progress bar
         let width = area.width as usize;
         let filled = (stage.progress as usize * width / 100).min(width);
         let empty = width - filled;
-        
+
         let progress_text = if stage.status == StageStatus::Waiting {
             "░".repeat(width)
         } else {
             format!("{}{}", "█".repeat(filled), "░".repeat(empty))
         };
-        
+
         let progress_display = format!("{} {}%", progress_text, stage.progress);
-        
+
         frame.render_widget(
-            Paragraph::new(progress_display)
-                .style(Style::default().fg(progress_color)),
-            area
+            Paragraph::new(progress_display).style(Style::default().fg(progress_color)),
+            area,
         );
     }
 }

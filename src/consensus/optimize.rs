@@ -1,5 +1,5 @@
 //! Consensus Engine Performance Optimization
-//! 
+//!
 //! Implements aggressive optimizations to achieve <300ms consensus latency target.
 //! This module provides high-performance consensus processing with intelligent caching,
 //! request batching, and parallel execution.
@@ -71,7 +71,7 @@ impl OptimizedConsensusEngine {
     /// Process consensus request with all optimizations enabled
     pub async fn process_optimized(&self, request: ConsensusRequest) -> Result<ConsensusResponse> {
         let _timer = PerfTimer::new("consensus_optimized");
-        
+
         // Check cache first
         if self.config.enable_caching {
             let cache_key = self.generate_cache_key(&request);
@@ -113,7 +113,7 @@ impl OptimizedConsensusEngine {
     /// Process consensus stages in parallel where possible
     async fn process_parallel_stages(&self, request: ConsensusRequest) -> Result<ConsensusResponse> {
         let _timer = PerfTimer::new("parallel_stages");
-        
+
         // Generator stage (must be first)
         let generated = self.generate_stage(&request).await?;
 
@@ -138,7 +138,7 @@ impl OptimizedConsensusEngine {
     /// Sequential processing for comparison
     async fn process_sequential_stages(&self, request: ConsensusRequest) -> Result<ConsensusResponse> {
         let _timer = PerfTimer::new("sequential_stages");
-        
+
         let generated = self.generate_stage(&request).await?;
         let refined = self.refine_stage(&request, &generated).await?;
         let validated = self.validate_stage(&request, &refined).await?;
@@ -150,36 +150,36 @@ impl OptimizedConsensusEngine {
     /// Optimized generator stage with connection pooling
     async fn generate_stage(&self, request: &ConsensusRequest) -> Result<String> {
         let _timer = PerfTimer::new("generate_stage");
-        
+
         let mut pool = self.connection_pool.write().await;
         let connection = pool.get_connection().await?;
-        
+
         // Use optimized prompt engineering
         let optimized_prompt = self.optimize_prompt(request)?;
-        
+
         // Make API call with connection reuse
         let response = connection.generate(&optimized_prompt).await?;
-        
+
         Ok(response)
     }
 
     /// Optimized refinement stage
     async fn refine_stage(&self, request: &ConsensusRequest, generated: &str) -> Result<String> {
         let _timer = PerfTimer::new("refine_stage");
-        
+
         let mut pool = self.connection_pool.write().await;
         let connection = pool.get_connection().await?;
-        
+
         let refinement_prompt = self.create_refinement_prompt(request, generated)?;
         let response = connection.refine(&refinement_prompt).await?;
-        
+
         Ok(response)
     }
 
     /// Prepare validation context in parallel
     async fn prepare_validation_context(&self, request: &ConsensusRequest) -> Result<ValidationContext> {
         let _timer = PerfTimer::new("prepare_validation");
-        
+
         // Prepare validation rules and context in parallel with refinement
         Ok(ValidationContext {
             rules: self.get_validation_rules(request).await?,
@@ -195,20 +195,20 @@ impl OptimizedConsensusEngine {
         context: &ValidationContext,
     ) -> Result<String> {
         let _timer = PerfTimer::new("validate_stage");
-        
+
         let mut pool = self.connection_pool.write().await;
         let connection = pool.get_connection().await?;
-        
+
         let validation_prompt = self.create_validation_prompt(request, refined, context)?;
         let response = connection.validate(&validation_prompt).await?;
-        
+
         Ok(response)
     }
 
     /// Prepare curation context
     async fn prepare_curation_context(&self, request: &ConsensusRequest, refined: &str) -> Result<CurationContext> {
         let _timer = PerfTimer::new("prepare_curation");
-        
+
         Ok(CurationContext {
             quality_metrics: self.calculate_quality_metrics(refined).await?,
             style_preferences: self.get_style_preferences(request).await?,
@@ -223,13 +223,13 @@ impl OptimizedConsensusEngine {
         context: &CurationContext,
     ) -> Result<ConsensusResponse> {
         let _timer = PerfTimer::new("curate_stage");
-        
+
         let mut pool = self.connection_pool.write().await;
         let connection = pool.get_connection().await?;
-        
+
         let curation_prompt = self.create_curation_prompt(request, validated, context)?;
         let response = connection.curate(&curation_prompt).await?;
-        
+
         Ok(ConsensusResponse {
             content: response,
             metadata: crate::consensus::types::ResponseMetadata {
@@ -259,12 +259,12 @@ impl OptimizedConsensusEngine {
     /// Generate cache key for request deduplication
     fn generate_cache_key(&self, request: &ConsensusRequest) -> String {
         use sha2::{Sha256, Digest};
-        
+
         let mut hasher = Sha256::new();
         hasher.update(&request.query);
         hasher.update(request.context.as_deref().unwrap_or(""));
         hasher.update(format!("{:?}", request.profile));
-        
+
         format!("{:x}", hasher.finalize())
     }
 
@@ -272,14 +272,14 @@ impl OptimizedConsensusEngine {
     fn optimize_prompt(&self, request: &ConsensusRequest) -> Result<String> {
         // Implement prompt optimization logic
         let base_prompt = &request.query;
-        
+
         // Add context efficiently
         let optimized = if let Some(context) = &request.context {
             format!("Context: {}\n\nQuery: {}", context, base_prompt)
         } else {
             base_prompt.clone()
         };
-        
+
         Ok(optimized)
     }
 
@@ -402,7 +402,7 @@ impl ConnectionPool {
         let connections = (0..size)
             .map(|_| Arc::new(OptimizedConnection::new()))
             .collect();
-        
+
         Self {
             connections,
             current_index: 0,
@@ -533,7 +533,7 @@ mod tests {
     async fn test_optimized_consensus_performance() {
         let config = ConsensusOptimizationConfig::default();
         let engine = OptimizedConsensusEngine::new(config);
-        
+
         let request = ConsensusRequest {
             query: "Test query for performance".to_string(),
             context: Some("Test context".to_string()),
@@ -559,7 +559,7 @@ mod tests {
     async fn test_response_caching() {
         let config = ConsensusOptimizationConfig::default();
         let engine = OptimizedConsensusEngine::new(config);
-        
+
         let request = ConsensusRequest {
             query: "Cached query test".to_string(),
             context: None,
@@ -586,15 +586,15 @@ mod tests {
     #[test]
     async fn test_parallel_vs_sequential() {
         let mut config = ConsensusOptimizationConfig::default();
-        
+
         // Test parallel processing
         config.enable_parallel_stages = true;
         let parallel_engine = OptimizedConsensusEngine::new(config.clone());
-        
+
         // Test sequential processing
         config.enable_parallel_stages = false;
         let sequential_engine = OptimizedConsensusEngine::new(config);
-        
+
         let request = ConsensusRequest {
             query: "Performance comparison test".to_string(),
             context: Some("Test context for comparison".to_string()),
@@ -613,7 +613,7 @@ mod tests {
         let sequential_time = start.elapsed();
 
         println!("Parallel: {:?}, Sequential: {:?}", parallel_time, sequential_time);
-        
+
         // Parallel should generally be faster
         // Note: In mock implementation, this may not always be true due to overhead
     }

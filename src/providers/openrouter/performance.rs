@@ -1,8 +1,7 @@
 /// Model Performance Tracking
-/// 
+///
 /// Comprehensive performance monitoring system for OpenRouter models with
 /// latency tracking, success rates, quality metrics, and intelligent fallback.
-
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -242,10 +241,10 @@ pub struct StatisticalSignificance {
 impl Default for FallbackTriggers {
     fn default() -> Self {
         Self {
-            error_rate_threshold: 0.2,     // 20% error rate
-            latency_threshold_ms: 10000,    // 10 seconds
+            error_rate_threshold: 0.2,   // 20% error rate
+            latency_threshold_ms: 10000, // 10 seconds
             consecutive_failures: 3,
-            timeout_threshold_ms: 30000,    // 30 seconds
+            timeout_threshold_ms: 30000, // 30 seconds
         }
     }
 }
@@ -264,9 +263,9 @@ pub struct CircuitBreakerState {
 /// Circuit breaker states
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CircuitState {
-    Closed,    // Normal operation
-    Open,      // Circuit broken, using fallback
-    HalfOpen,  // Testing if circuit can be closed
+    Closed,   // Normal operation
+    Open,     // Circuit broken, using fallback
+    HalfOpen, // Testing if circuit can be closed
 }
 
 /// Fallback execution result
@@ -349,7 +348,8 @@ impl PerformanceTracker {
             window.entries.push_back(entry.clone());
 
             // Remove old entries
-            let cutoff = Utc::now() - chrono::Duration::minutes(self.window_duration_minutes as i64);
+            let cutoff =
+                Utc::now() - chrono::Duration::minutes(self.window_duration_minutes as i64);
             while let Some(front) = window.entries.front() {
                 if front.timestamp < cutoff {
                     window.entries.pop_front();
@@ -373,10 +373,10 @@ impl PerformanceTracker {
     /// Update metrics for a model
     async fn update_metrics(&self, model_id: &str) -> Result<()> {
         let windows = self.windows.read().await;
-        
+
         if let Some(window) = windows.get(model_id) {
             let entries: Vec<&PerformanceEntry> = window.entries.iter().collect();
-            
+
             if entries.is_empty() {
                 return Ok(());
             }
@@ -392,13 +392,13 @@ impl PerformanceTracker {
                 .filter(|e| e.success)
                 .map(|e| e.latency_ms)
                 .collect();
-            
+
             if latencies.is_empty() {
                 return Ok(());
             }
 
             latencies.sort_unstable();
-            
+
             let average_latency_ms = latencies.iter().sum::<u64>() as f32 / latencies.len() as f32;
             let p50_latency_ms = percentile(&latencies, 0.5) as f32;
             let p95_latency_ms = percentile(&latencies, 0.95) as f32;
@@ -421,11 +421,9 @@ impl PerformanceTracker {
             let error_rate = failed_requests as f32 / total_requests as f32;
 
             // Calculate quality score
-            let quality_ratings: Vec<f32> = entries
-                .iter()
-                .filter_map(|e| e.quality_rating)
-                .collect();
-            
+            let quality_ratings: Vec<f32> =
+                entries.iter().filter_map(|e| e.quality_rating).collect();
+
             let quality_score = if quality_ratings.is_empty() {
                 // Estimate based on success rate and latency
                 let latency_score = 1.0 - (average_latency_ms / 10000.0).min(1.0);
@@ -473,7 +471,7 @@ impl PerformanceTracker {
     /// Get model health status
     pub async fn get_model_health(&self, model_id: &str) -> Result<ModelHealth> {
         let metrics = self.get_metrics(model_id).await;
-        
+
         let (status, mut issues, recommendation) = if let Some(m) = metrics {
             let mut issues = Vec::new();
             let mut status = HealthStatus::Healthy;
@@ -481,13 +479,19 @@ impl PerformanceTracker {
             // Check success rate
             if m.success_rate < 0.5 {
                 status = HealthStatus::Unavailable;
-                issues.push(format!("Critical: Success rate {:.1}%", m.success_rate * 100.0));
+                issues.push(format!(
+                    "Critical: Success rate {:.1}%",
+                    m.success_rate * 100.0
+                ));
             } else if m.success_rate < 0.8 {
                 status = HealthStatus::Unhealthy;
                 issues.push(format!("Low success rate: {:.1}%", m.success_rate * 100.0));
             } else if m.success_rate < 0.95 {
                 status = HealthStatus::Degraded;
-                issues.push(format!("Degraded success rate: {:.1}%", m.success_rate * 100.0));
+                issues.push(format!(
+                    "Degraded success rate: {:.1}%",
+                    m.success_rate * 100.0
+                ));
             }
 
             // Check latency
@@ -507,9 +511,13 @@ impl PerformanceTracker {
             }
 
             let recommendation = match status {
-                HealthStatus::Unavailable => Some("Consider switching to fallback model immediately".to_string()),
+                HealthStatus::Unavailable => {
+                    Some("Consider switching to fallback model immediately".to_string())
+                }
                 HealthStatus::Unhealthy => Some("Monitor closely and prepare fallback".to_string()),
-                HealthStatus::Degraded => Some("Performance degraded, consider load balancing".to_string()),
+                HealthStatus::Degraded => {
+                    Some("Performance degraded, consider load balancing".to_string())
+                }
                 HealthStatus::Healthy => None,
             };
 
@@ -536,9 +544,13 @@ impl PerformanceTracker {
         model_a: &str,
         model_b: &str,
     ) -> Result<PerformanceComparison> {
-        let metrics_a = self.get_metrics(model_a).await
+        let metrics_a = self
+            .get_metrics(model_a)
+            .await
             .ok_or_else(|| anyhow::anyhow!("No metrics for model {}", model_a))?;
-        let metrics_b = self.get_metrics(model_b).await
+        let metrics_b = self
+            .get_metrics(model_b)
+            .await
             .ok_or_else(|| anyhow::anyhow!("No metrics for model {}", model_b))?;
 
         let latency_difference_ms = metrics_a.average_latency_ms - metrics_b.average_latency_ms;
@@ -553,9 +565,15 @@ impl PerformanceTracker {
         } else if quality_difference < -0.1 && latency_difference_ms > -1000.0 {
             format!("{} offers better quality with similar latency", model_b)
         } else if latency_difference_ms < -2000.0 && success_rate_difference > -0.05 {
-            format!("{} is significantly faster with similar reliability", model_a)
+            format!(
+                "{} is significantly faster with similar reliability",
+                model_a
+            )
         } else if latency_difference_ms > 2000.0 && success_rate_difference < 0.05 {
-            format!("{} is significantly faster with similar reliability", model_b)
+            format!(
+                "{} is significantly faster with similar reliability",
+                model_b
+            )
         } else {
             "Both models offer similar performance".to_string()
         };
@@ -594,7 +612,7 @@ impl PerformanceTracker {
     /// Get fallback recommendation
     pub async fn get_fallback_recommendation(&self, model_id: &str) -> Result<Option<String>> {
         let health = self.get_model_health(model_id).await?;
-        
+
         if health.status == HealthStatus::Healthy {
             return Ok(None);
         }
@@ -618,7 +636,7 @@ impl PerformanceTracker {
     /// Check if fallback should be triggered
     async fn check_fallback_triggers(&self, model_id: &str) -> Result<()> {
         let configs = self.fallback_configs.read().await;
-        
+
         if let Some(config) = configs.get(model_id) {
             if let Some(metrics) = self.get_metrics(model_id).await {
                 let mut should_trigger = false;
@@ -633,12 +651,13 @@ impl PerformanceTracker {
                     ));
                 }
 
-                if metrics.average_latency_ms > config.trigger_conditions.latency_threshold_ms as f32 {
+                if metrics.average_latency_ms
+                    > config.trigger_conditions.latency_threshold_ms as f32
+                {
                     should_trigger = true;
                     reasons.push(format!(
                         "Average latency {:.0}ms exceeds threshold {}ms",
-                        metrics.average_latency_ms,
-                        config.trigger_conditions.latency_threshold_ms
+                        metrics.average_latency_ms, config.trigger_conditions.latency_threshold_ms
                     ));
                 }
 
@@ -657,17 +676,18 @@ impl PerformanceTracker {
 
     /// Get performance ranking with customizable scoring
     pub async fn get_performance_ranking(&self) -> Vec<(String, f32)> {
-        self.get_task_specific_ranking("general", &ScoringWeights::default()).await
+        self.get_task_specific_ranking("general", &ScoringWeights::default())
+            .await
     }
 
     /// Get task-specific performance ranking
     pub async fn get_task_specific_ranking(
-        &self, 
-        task_type: &str, 
-        weights: &ScoringWeights
+        &self,
+        task_type: &str,
+        weights: &ScoringWeights,
     ) -> Vec<(String, f32)> {
         let metrics = self.metrics.read().await;
-        
+
         let mut rankings: Vec<(String, f32)> = metrics
             .iter()
             .map(|(model_id, m)| {
@@ -681,55 +701,64 @@ impl PerformanceTracker {
     }
 
     /// Calculate comprehensive model score
-    fn calculate_model_score(&self, metrics: &PerformanceMetrics, task_type: &str, weights: &ScoringWeights) -> f32 {
+    fn calculate_model_score(
+        &self,
+        metrics: &PerformanceMetrics,
+        task_type: &str,
+        weights: &ScoringWeights,
+    ) -> f32 {
         // Normalize latency score (lower is better)
         let latency_score = 1.0 - (metrics.average_latency_ms / 15000.0).min(1.0);
-        
+
         // Success rate score
         let reliability_score = metrics.success_rate;
-        
+
         // Quality score
         let quality_score = metrics.quality_score;
-        
+
         // Cost efficiency score (placeholder - would integrate with cost tracker)
         let cost_score = 0.8; // Default good value
-        
+
         // Throughput score (tokens per second)
         let throughput_score = (metrics.average_tokens_per_second / 100.0).min(1.0);
-        
+
         // Task-specific adjustments
         let task_multiplier = match task_type {
             "code-analysis" => {
                 // Favor quality and reliability for code analysis
                 quality_score * 0.5 + reliability_score * 0.3 + latency_score * 0.2
-            },
+            }
             "creative-writing" => {
                 // Favor quality and throughput for creative tasks
                 quality_score * 0.6 + throughput_score * 0.3 + reliability_score * 0.1
-            },
+            }
             "quick-response" => {
                 // Favor speed and reliability for quick responses
                 latency_score * 0.5 + reliability_score * 0.3 + quality_score * 0.2
-            },
+            }
             "cost-efficient" => {
                 // Favor cost efficiency
                 cost_score * 0.4 + reliability_score * 0.3 + quality_score * 0.3
-            },
+            }
             _ => {
                 // General balanced scoring
-                quality_score * weights.quality 
+                quality_score * weights.quality
                     + reliability_score * weights.reliability
                     + latency_score * weights.speed
                     + cost_score * weights.cost
                     + throughput_score * weights.throughput
             }
         };
-        
+
         task_multiplier.max(0.0).min(1.0)
     }
 
     /// Get model recommendations for a specific task
-    pub async fn get_task_recommendations(&self, task_type: &str, limit: usize) -> Result<TaskRecommendation> {
+    pub async fn get_task_recommendations(
+        &self,
+        task_type: &str,
+        limit: usize,
+    ) -> Result<TaskRecommendation> {
         let weights = match task_type {
             "code-analysis" => ScoringWeights {
                 quality: 0.4,
@@ -764,7 +793,7 @@ impl PerformanceTracker {
 
         let rankings = self.get_task_specific_ranking(task_type, &weights).await;
         let metrics = self.metrics.read().await;
-        
+
         let recommended_models: Vec<ModelRanking> = rankings
             .iter()
             .take(limit)
@@ -797,11 +826,11 @@ impl PerformanceTracker {
         let confidence = if recommended_models.is_empty() {
             0.0
         } else if recommended_models[0].metrics_snapshot.total_requests < 5 {
-            0.3  // Low confidence with limited data
+            0.3 // Low confidence with limited data
         } else if recommended_models[0].metrics_snapshot.total_requests < 20 {
-            0.7  // Medium confidence
+            0.7 // Medium confidence
         } else {
-            0.9  // High confidence with substantial data
+            0.9 // High confidence with substantial data
         };
 
         Ok(TaskRecommendation {
@@ -817,33 +846,49 @@ impl PerformanceTracker {
         let mut rankings = HashMap::new();
         let task_types = vec![
             "general",
-            "code-analysis", 
+            "code-analysis",
             "creative-writing",
             "quick-response",
-            "cost-efficient"
+            "cost-efficient",
         ];
 
         let metrics = self.metrics.read().await;
-        
+
         for task_type in task_types {
             let weights = match task_type {
                 "code-analysis" => ScoringWeights {
-                    quality: 0.4, reliability: 0.3, speed: 0.15, cost: 0.1, throughput: 0.05,
+                    quality: 0.4,
+                    reliability: 0.3,
+                    speed: 0.15,
+                    cost: 0.1,
+                    throughput: 0.05,
                 },
                 "creative-writing" => ScoringWeights {
-                    quality: 0.45, reliability: 0.1, speed: 0.15, cost: 0.1, throughput: 0.2,
+                    quality: 0.45,
+                    reliability: 0.1,
+                    speed: 0.15,
+                    cost: 0.1,
+                    throughput: 0.2,
                 },
                 "quick-response" => ScoringWeights {
-                    quality: 0.2, reliability: 0.3, speed: 0.4, cost: 0.05, throughput: 0.05,
+                    quality: 0.2,
+                    reliability: 0.3,
+                    speed: 0.4,
+                    cost: 0.05,
+                    throughput: 0.05,
                 },
                 "cost-efficient" => ScoringWeights {
-                    quality: 0.2, reliability: 0.25, speed: 0.15, cost: 0.35, throughput: 0.05,
+                    quality: 0.2,
+                    reliability: 0.25,
+                    speed: 0.15,
+                    cost: 0.35,
+                    throughput: 0.05,
                 },
                 _ => ScoringWeights::default(),
             };
 
             let task_rankings = self.get_task_specific_ranking(task_type, &weights).await;
-            
+
             let model_rankings: Vec<ModelRanking> = task_rankings
                 .iter()
                 .enumerate()
@@ -869,7 +914,7 @@ impl PerformanceTracker {
     pub async fn get_top_performers(&self, limit: usize) -> Vec<ModelRanking> {
         let rankings = self.get_performance_ranking().await;
         let metrics = self.metrics.read().await;
-        
+
         rankings
             .iter()
             .take(limit)
@@ -894,7 +939,11 @@ impl PerformanceTracker {
         request_fn: F,
     ) -> Result<(T, FallbackResult)>
     where
-        F: Fn(&str) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<T, E>> + Send>>,
+        F: Fn(
+            &str,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = std::result::Result<T, E>> + Send>,
+        >,
         E: std::fmt::Debug,
     {
         let mut fallback_result = FallbackResult {
@@ -907,7 +956,7 @@ impl PerformanceTracker {
 
         // Check if primary model is available (circuit breaker state)
         let models_to_try = self.get_fallback_chain(primary_model).await?;
-        
+
         for model_id in models_to_try {
             fallback_result.attempted_models.push(model_id.clone());
             fallback_result.total_attempts += 1;
@@ -916,33 +965,36 @@ impl PerformanceTracker {
             if !self.is_model_available(&model_id).await {
                 fallback_result.errors.push((
                     model_id.clone(),
-                    ErrorType::Other("Circuit breaker open".to_string())
+                    ErrorType::Other("Circuit breaker open".to_string()),
                 ));
                 continue;
             }
 
             let start_time = std::time::Instant::now();
-            
+
             match request_fn(&model_id).await {
                 Ok(result) => {
                     let latency_ms = start_time.elapsed().as_millis() as u64;
                     fallback_result.total_latency_ms += latency_ms;
                     fallback_result.successful_model = Some(model_id.clone());
-                    
+
                     // Record success
                     self.record_circuit_breaker_success(&model_id).await?;
-                    
+
                     return Ok((result, fallback_result));
                 }
                 Err(error) => {
                     let latency_ms = start_time.elapsed().as_millis() as u64;
                     fallback_result.total_latency_ms += latency_ms;
-                    
+
                     let error_type = self.classify_error(&format!("{:?}", error));
-                    fallback_result.errors.push((model_id.clone(), error_type.clone()));
-                    
+                    fallback_result
+                        .errors
+                        .push((model_id.clone(), error_type.clone()));
+
                     // Record failure and update circuit breaker
-                    self.record_circuit_breaker_failure(&model_id, error_type).await?;
+                    self.record_circuit_breaker_failure(&model_id, error_type)
+                        .await?;
                 }
             }
         }
@@ -957,7 +1009,7 @@ impl PerformanceTracker {
     /// Get the fallback chain for a model
     async fn get_fallback_chain(&self, primary_model: &str) -> Result<Vec<String>> {
         let configs = self.fallback_configs.read().await;
-        
+
         if let Some(config) = configs.get(primary_model) {
             let mut chain = vec![primary_model.to_string()];
             chain.extend(config.fallback_chain.clone());
@@ -966,14 +1018,14 @@ impl PerformanceTracker {
             // Default fallback chain based on performance ranking
             let rankings = self.get_performance_ranking().await;
             let mut chain = vec![primary_model.to_string()];
-            
+
             // Add top 3 performing models as fallbacks
             for (model_id, _) in rankings.iter().take(3) {
                 if model_id != primary_model {
                     chain.push(model_id.clone());
                 }
             }
-            
+
             Ok(chain)
         }
     }
@@ -981,7 +1033,7 @@ impl PerformanceTracker {
     /// Check if model is available (circuit breaker state)
     async fn is_model_available(&self, model_id: &str) -> bool {
         let breakers = self.circuit_breakers.read().await;
-        
+
         if let Some(breaker) = breakers.get(model_id) {
             match breaker.state {
                 CircuitState::Closed => true,
@@ -1003,12 +1055,12 @@ impl PerformanceTracker {
     /// Record circuit breaker success
     async fn record_circuit_breaker_success(&self, model_id: &str) -> Result<()> {
         let mut breakers = self.circuit_breakers.write().await;
-        
+
         if let Some(breaker) = breakers.get_mut(model_id) {
             match breaker.state {
                 CircuitState::HalfOpen => {
                     breaker.success_count_after_recovery += 1;
-                    
+
                     // After 3 successful attempts, close the circuit
                     if breaker.success_count_after_recovery >= 3 {
                         breaker.state = CircuitState::Closed;
@@ -1016,7 +1068,7 @@ impl PerformanceTracker {
                         breaker.success_count_after_recovery = 0;
                         breaker.last_failure = None;
                         breaker.next_attempt = None;
-                        
+
                         log::info!("Circuit breaker closed for model: {}", model_id);
                     }
                 }
@@ -1032,19 +1084,23 @@ impl PerformanceTracker {
     }
 
     /// Record circuit breaker failure
-    async fn record_circuit_breaker_failure(&self, model_id: &str, error_type: ErrorType) -> Result<()> {
+    async fn record_circuit_breaker_failure(
+        &self,
+        model_id: &str,
+        error_type: ErrorType,
+    ) -> Result<()> {
         let mut breakers = self.circuit_breakers.write().await;
-        
-        let breaker = breakers.entry(model_id.to_string()).or_insert_with(|| {
-            CircuitBreakerState {
+
+        let breaker = breakers
+            .entry(model_id.to_string())
+            .or_insert_with(|| CircuitBreakerState {
                 model_id: model_id.to_string(),
                 state: CircuitState::Closed,
                 failure_count: 0,
                 last_failure: None,
                 next_attempt: None,
                 success_count_after_recovery: 0,
-            }
-        });
+            });
 
         breaker.failure_count += 1;
         breaker.last_failure = Some(Utc::now());
@@ -1053,7 +1109,7 @@ impl PerformanceTracker {
         if breaker.failure_count >= 5 && breaker.state == CircuitState::Closed {
             breaker.state = CircuitState::Open;
             breaker.next_attempt = Some(Utc::now() + chrono::Duration::minutes(5));
-            
+
             log::warn!(
                 "Circuit breaker opened for model: {} after {} failures. Error: {:?}",
                 model_id,
@@ -1065,7 +1121,7 @@ impl PerformanceTracker {
             breaker.state = CircuitState::Open;
             breaker.next_attempt = Some(Utc::now() + chrono::Duration::minutes(10));
             breaker.success_count_after_recovery = 0;
-            
+
             log::warn!(
                 "Circuit breaker test failed for model: {}, staying open",
                 model_id
@@ -1078,7 +1134,7 @@ impl PerformanceTracker {
     /// Classify error for circuit breaker logic
     fn classify_error(&self, error_msg: &str) -> ErrorType {
         let error_lower = error_msg.to_lowercase();
-        
+
         if error_lower.contains("timeout") {
             ErrorType::Timeout
         } else if error_lower.contains("rate limit") || error_lower.contains("too many requests") {
@@ -1105,14 +1161,14 @@ impl PerformanceTracker {
     /// Reset circuit breaker for a model
     pub async fn reset_circuit_breaker(&self, model_id: &str) -> Result<()> {
         let mut breakers = self.circuit_breakers.write().await;
-        
+
         if let Some(breaker) = breakers.get_mut(model_id) {
             breaker.state = CircuitState::Closed;
             breaker.failure_count = 0;
             breaker.last_failure = None;
             breaker.next_attempt = None;
             breaker.success_count_after_recovery = 0;
-            
+
             log::info!("Circuit breaker manually reset for model: {}", model_id);
         }
 
@@ -1122,13 +1178,16 @@ impl PerformanceTracker {
     /// Transition circuit breaker to half-open for testing
     async fn transition_to_half_open(&self, model_id: &str) -> Result<()> {
         let mut breakers = self.circuit_breakers.write().await;
-        
+
         if let Some(breaker) = breakers.get_mut(model_id) {
             if breaker.state == CircuitState::Open {
                 breaker.state = CircuitState::HalfOpen;
                 breaker.success_count_after_recovery = 0;
-                
-                log::info!("Circuit breaker transitioned to half-open for model: {}", model_id);
+
+                log::info!(
+                    "Circuit breaker transitioned to half-open for model: {}",
+                    model_id
+                );
             }
         }
 
@@ -1147,7 +1206,7 @@ impl PerformanceTracker {
         duration_hours: u32,
     ) -> Result<String> {
         let test_id = uuid::Uuid::new_v4().to_string();
-        
+
         let config = ABTestConfig {
             test_id: test_id.clone(),
             name: name.clone(),
@@ -1180,11 +1239,11 @@ impl PerformanceTracker {
     /// Start an A/B test
     pub async fn start_ab_test(&self, test_id: &str) -> Result<()> {
         let mut tests = self.ab_tests.write().await;
-        
+
         if let Some(test) = tests.get_mut(test_id) {
             test.status = ABTestStatus::Running;
             test.started_at = Utc::now();
-            
+
             log::info!("Started A/B test: {}", test_id);
             Ok(())
         } else {
@@ -1236,7 +1295,8 @@ impl PerformanceTracker {
 
         if let (Some(test), Some(test_results)) = (tests.get(test_id), results.get(test_id)) {
             if test.status == ABTestStatus::Running {
-                let end_time = test.started_at + chrono::Duration::hours(test.duration_hours as i64);
+                let end_time =
+                    test.started_at + chrono::Duration::hours(test.duration_hours as i64);
                 let has_enough_samples = test_results.len() >= test.sample_size;
                 let time_expired = Utc::now() >= end_time;
 
@@ -1254,7 +1314,7 @@ impl PerformanceTracker {
     /// Complete an A/B test
     pub async fn complete_ab_test(&self, test_id: &str) -> Result<()> {
         let mut tests = self.ab_tests.write().await;
-        
+
         if let Some(test) = tests.get_mut(test_id) {
             test.status = ABTestStatus::Completed;
             log::info!("Completed A/B test: {}", test_id);
@@ -1268,10 +1328,12 @@ impl PerformanceTracker {
         let tests = self.ab_tests.read().await;
         let results = self.ab_results.read().await;
 
-        let test = tests.get(test_id)
+        let test = tests
+            .get(test_id)
             .ok_or_else(|| anyhow::anyhow!("A/B test not found: {}", test_id))?;
 
-        let test_results = results.get(test_id)
+        let test_results = results
+            .get(test_id)
             .ok_or_else(|| anyhow::anyhow!("A/B test results not found: {}", test_id))?;
 
         // Separate results by model
@@ -1279,7 +1341,7 @@ impl PerformanceTracker {
             .iter()
             .filter(|r| r.model_id == test.model_a)
             .collect();
-        
+
         let results_b: Vec<&ABTestResult> = test_results
             .iter()
             .filter(|r| r.model_id == test.model_b)
@@ -1299,7 +1361,9 @@ impl PerformanceTracker {
             model_a_value: metrics_a.avg_latency,
             model_b_value: metrics_b.avg_latency,
             difference: metrics_a.avg_latency - metrics_b.avg_latency,
-            percentage_change: ((metrics_a.avg_latency - metrics_b.avg_latency) / metrics_b.avg_latency) * 100.0,
+            percentage_change: ((metrics_a.avg_latency - metrics_b.avg_latency)
+                / metrics_b.avg_latency)
+                * 100.0,
             better_model: if metrics_a.avg_latency < metrics_b.avg_latency {
                 Some(test.model_a.clone())
             } else {
@@ -1312,7 +1376,9 @@ impl PerformanceTracker {
             model_a_value: metrics_a.success_rate * 100.0,
             model_b_value: metrics_b.success_rate * 100.0,
             difference: (metrics_a.success_rate - metrics_b.success_rate) * 100.0,
-            percentage_change: ((metrics_a.success_rate - metrics_b.success_rate) / metrics_b.success_rate) * 100.0,
+            percentage_change: ((metrics_a.success_rate - metrics_b.success_rate)
+                / metrics_b.success_rate)
+                * 100.0,
             better_model: if metrics_a.success_rate > metrics_b.success_rate {
                 Some(test.model_a.clone())
             } else {
@@ -1325,7 +1391,9 @@ impl PerformanceTracker {
             model_a_value: metrics_a.avg_quality,
             model_b_value: metrics_b.avg_quality,
             difference: metrics_a.avg_quality - metrics_b.avg_quality,
-            percentage_change: ((metrics_a.avg_quality - metrics_b.avg_quality) / metrics_b.avg_quality) * 100.0,
+            percentage_change: ((metrics_a.avg_quality - metrics_b.avg_quality)
+                / metrics_b.avg_quality)
+                * 100.0,
             better_model: if metrics_a.avg_quality > metrics_b.avg_quality {
                 Some(test.model_a.clone())
             } else {
@@ -1338,7 +1406,9 @@ impl PerformanceTracker {
             model_a_value: metrics_a.avg_throughput,
             model_b_value: metrics_b.avg_throughput,
             difference: metrics_a.avg_throughput - metrics_b.avg_throughput,
-            percentage_change: ((metrics_a.avg_throughput - metrics_b.avg_throughput) / metrics_b.avg_throughput) * 100.0,
+            percentage_change: ((metrics_a.avg_throughput - metrics_b.avg_throughput)
+                / metrics_b.avg_throughput)
+                * 100.0,
             better_model: if metrics_a.avg_throughput > metrics_b.avg_throughput {
                 Some(test.model_a.clone())
             } else {
@@ -1347,25 +1417,43 @@ impl PerformanceTracker {
         };
 
         // Statistical significance analysis (simplified)
-        let statistical_significance = self.calculate_statistical_significance(&results_a, &results_b);
+        let statistical_significance =
+            self.calculate_statistical_significance(&results_a, &results_b);
 
         // Generate recommendation
         let mut winning_metrics = 0;
-        if latency_comparison.better_model.as_ref() == Some(&test.model_a) { winning_metrics += 1; }
-        if success_rate_comparison.better_model.as_ref() == Some(&test.model_a) { winning_metrics += 1; }
-        if quality_comparison.better_model.as_ref() == Some(&test.model_a) { winning_metrics += 1; }
-        if throughput_comparison.better_model.as_ref() == Some(&test.model_a) { winning_metrics += 1; }
+        if latency_comparison.better_model.as_ref() == Some(&test.model_a) {
+            winning_metrics += 1;
+        }
+        if success_rate_comparison.better_model.as_ref() == Some(&test.model_a) {
+            winning_metrics += 1;
+        }
+        if quality_comparison.better_model.as_ref() == Some(&test.model_a) {
+            winning_metrics += 1;
+        }
+        if throughput_comparison.better_model.as_ref() == Some(&test.model_a) {
+            winning_metrics += 1;
+        }
 
         let recommendation = if statistical_significance.is_significant {
             if winning_metrics >= 3 {
-                format!("🎯 Recommend {} - significantly better across {} out of 4 metrics", test.model_a, winning_metrics)
+                format!(
+                    "🎯 Recommend {} - significantly better across {} out of 4 metrics",
+                    test.model_a, winning_metrics
+                )
             } else if winning_metrics <= 1 {
-                format!("🎯 Recommend {} - significantly better across {} out of 4 metrics", test.model_b, 4 - winning_metrics)
+                format!(
+                    "🎯 Recommend {} - significantly better across {} out of 4 metrics",
+                    test.model_b,
+                    4 - winning_metrics
+                )
             } else {
-                "⚖️  Mixed results - consider task-specific selection or further testing".to_string()
+                "⚖️  Mixed results - consider task-specific selection or further testing"
+                    .to_string()
             }
         } else {
-            "📊 No statistically significant difference detected - either model acceptable".to_string()
+            "📊 No statistically significant difference detected - either model acceptable"
+                .to_string()
         };
 
         let confidence_level = if statistical_significance.is_significant {
@@ -1395,16 +1483,17 @@ impl PerformanceTracker {
 
     /// Calculate metrics for A/B test results
     fn calculate_ab_test_metrics(&self, results: &[&ABTestResult]) -> ABTestMetrics {
-        let successful_results: Vec<&ABTestResult> = results
-            .iter()
-            .filter(|r| r.success)
-            .copied()
-            .collect();
+        let successful_results: Vec<&ABTestResult> =
+            results.iter().filter(|r| r.success).copied().collect();
 
         let avg_latency = if successful_results.is_empty() {
             0.0
         } else {
-            successful_results.iter().map(|r| r.latency_ms as f32).sum::<f32>() / successful_results.len() as f32
+            successful_results
+                .iter()
+                .map(|r| r.latency_ms as f32)
+                .sum::<f32>()
+                / successful_results.len() as f32
         };
 
         let success_rate = successful_results.len() as f32 / results.len() as f32;
@@ -1412,15 +1501,23 @@ impl PerformanceTracker {
         let avg_quality = successful_results
             .iter()
             .filter_map(|r| r.quality_rating)
-            .sum::<f32>() / successful_results.len().max(1) as f32;
+            .sum::<f32>()
+            / successful_results.len().max(1) as f32;
 
         let avg_throughput = if successful_results.is_empty() {
             0.0
         } else {
             successful_results
                 .iter()
-                .map(|r| if r.latency_ms > 0 { (r.tokens_generated as f32 * 1000.0) / r.latency_ms as f32 } else { 0.0 })
-                .sum::<f32>() / successful_results.len() as f32
+                .map(|r| {
+                    if r.latency_ms > 0 {
+                        (r.tokens_generated as f32 * 1000.0) / r.latency_ms as f32
+                    } else {
+                        0.0
+                    }
+                })
+                .sum::<f32>()
+                / successful_results.len() as f32
         };
 
         ABTestMetrics {
@@ -1432,7 +1529,11 @@ impl PerformanceTracker {
     }
 
     /// Calculate statistical significance (simplified t-test)
-    fn calculate_statistical_significance(&self, results_a: &[&ABTestResult], results_b: &[&ABTestResult]) -> StatisticalSignificance {
+    fn calculate_statistical_significance(
+        &self,
+        results_a: &[&ABTestResult],
+        results_b: &[&ABTestResult],
+    ) -> StatisticalSignificance {
         // Simplified statistical analysis - in production would use proper statistical libraries
         let n_a = results_a.len() as f32;
         let n_b = results_b.len() as f32;
@@ -1448,8 +1549,16 @@ impl PerformanceTracker {
         }
 
         // Use latency as primary metric for significance testing
-        let latencies_a: Vec<f32> = results_a.iter().filter(|r| r.success).map(|r| r.latency_ms as f32).collect();
-        let latencies_b: Vec<f32> = results_b.iter().filter(|r| r.success).map(|r| r.latency_ms as f32).collect();
+        let latencies_a: Vec<f32> = results_a
+            .iter()
+            .filter(|r| r.success)
+            .map(|r| r.latency_ms as f32)
+            .collect();
+        let latencies_b: Vec<f32> = results_b
+            .iter()
+            .filter(|r| r.success)
+            .map(|r| r.latency_ms as f32)
+            .collect();
 
         if latencies_a.is_empty() || latencies_b.is_empty() {
             return StatisticalSignificance {
@@ -1464,10 +1573,19 @@ impl PerformanceTracker {
         let mean_a = latencies_a.iter().sum::<f32>() / latencies_a.len() as f32;
         let mean_b = latencies_b.iter().sum::<f32>() / latencies_b.len() as f32;
 
-        let var_a = latencies_a.iter().map(|x| (x - mean_a).powi(2)).sum::<f32>() / (latencies_a.len() as f32 - 1.0);
-        let var_b = latencies_b.iter().map(|x| (x - mean_b).powi(2)).sum::<f32>() / (latencies_b.len() as f32 - 1.0);
+        let var_a = latencies_a
+            .iter()
+            .map(|x| (x - mean_a).powi(2))
+            .sum::<f32>()
+            / (latencies_a.len() as f32 - 1.0);
+        let var_b = latencies_b
+            .iter()
+            .map(|x| (x - mean_b).powi(2))
+            .sum::<f32>()
+            / (latencies_b.len() as f32 - 1.0);
 
-        let pooled_std = ((var_a / latencies_a.len() as f32) + (var_b / latencies_b.len() as f32)).sqrt();
+        let pooled_std =
+            ((var_a / latencies_a.len() as f32) + (var_b / latencies_b.len() as f32)).sqrt();
         let t_stat = (mean_a - mean_b) / pooled_std;
 
         // Simplified p-value estimation
@@ -1486,7 +1604,10 @@ impl PerformanceTracker {
         StatisticalSignificance {
             is_significant,
             p_value,
-            confidence_interval: (mean_a - mean_b - 1.96 * pooled_std, mean_a - mean_b + 1.96 * pooled_std),
+            confidence_interval: (
+                mean_a - mean_b - 1.96 * pooled_std,
+                mean_a - mean_b + 1.96 * pooled_std,
+            ),
             effect_size,
             power,
         }
@@ -1519,7 +1640,7 @@ fn percentile(sorted_data: &[u64], p: f32) -> u64 {
     if sorted_data.is_empty() {
         return 0;
     }
-    
+
     let idx = ((sorted_data.len() - 1) as f32 * p) as usize;
     sorted_data[idx]
 }
@@ -1535,10 +1656,7 @@ pub struct ModelPerformance {
 
 impl ModelPerformance {
     /// Create a performance summary
-    pub async fn from_tracker(
-        tracker: &PerformanceTracker,
-        model_id: &str,
-    ) -> Result<Self> {
+    pub async fn from_tracker(tracker: &PerformanceTracker, model_id: &str) -> Result<Self> {
         let metrics = tracker
             .get_metrics(model_id)
             .await
@@ -1573,16 +1691,7 @@ mod tests {
 
         // Track some performance entries
         tracker
-            .track_performance(
-                "test-model",
-                1000,
-                150,
-                true,
-                None,
-                Some(0.9),
-                "test",
-                None,
-            )
+            .track_performance("test-model", 1000, 150, true, None, Some(0.9), "test", None)
             .await
             .unwrap();
 

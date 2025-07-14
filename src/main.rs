@@ -1,19 +1,19 @@
 //! Hive AI: Lightning-fast codebase intelligence platform
-//! 
+//!
 //! Complete Rust reimplementation with 100% feature parity plus revolutionary enhancements.
 
+use anyhow::Result;
 use clap::{Parser, Subcommand};
-use hive_ai::tui::TuiFramework;
-use hive_ai::cli::CliFramework;
-use hive_ai::desktop::launch_desktop_app;
-use hive_ai::core::config::{Config, load_config};
-use hive_ai::core::error::HiveResult;
 use hive_ai::cli::banner::show_startup_banner;
 use hive_ai::cli::tui_capabilities::TuiCapabilities;
+use hive_ai::cli::CliFramework;
+use hive_ai::core::config::{load_config, Config};
+use hive_ai::core::error::HiveResult;
 use hive_ai::core::initialize_default_logging;
-use std::path::PathBuf;
+use hive_ai::desktop::launch_desktop_app;
+use hive_ai::tui::TuiFramework;
 use std::env;
-use anyhow::Result;
+use std::path::PathBuf;
 
 /// UI Mode for the application
 #[derive(Debug, Clone, PartialEq)]
@@ -31,27 +31,27 @@ enum UIMode {
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
-    
+
     /// Enable debug mode
     #[arg(short, long, global = true)]
     debug: bool,
-    
+
     /// Force TUI mode
     #[arg(long, global = true)]
     tui: bool,
-    
+
     /// Force CLI mode (disable TUI)
     #[arg(long, global = true)]
     no_tui: bool,
-    
+
     /// Force Desktop GUI mode
     #[arg(long, global = true)]
     desktop: bool,
-    
+
     /// Configuration file path
     #[arg(short, long, global = true)]
     config: Option<PathBuf>,
-    
+
     /// Working directory
     #[arg(short = 'D', long, global = true)]
     directory: Option<PathBuf>,
@@ -63,108 +63,108 @@ enum Commands {
     Ask {
         /// The question to ask
         query: String,
-        
+
         /// Mode to use (planning, execution, hybrid)
         #[arg(short, long)]
         mode: Option<String>,
     },
-    
+
     /// Start interactive planning session
     Plan {
         /// Task description
         task: String,
-        
+
         /// Include repository analysis
         #[arg(long)]
         repository: bool,
     },
-    
+
     /// Execute a plan
     Execute {
         /// Plan ID to execute
         plan_id: String,
-        
+
         /// Validate dependencies
         #[arg(long)]
         validate: bool,
     },
-    
+
     /// Analyze repository
     Analyze {
         /// Path to analyze
         path: Option<PathBuf>,
-        
+
         /// Analysis depth
         #[arg(short, long, default_value = "full")]
         depth: String,
     },
-    
+
     /// Manage consensus settings
     Consensus {
         #[command(subcommand)]
         command: ConsensusCommands,
     },
-    
+
     /// Manage security settings
     Security {
         #[command(subcommand)]
         command: SecurityCommands,
     },
-    
+
     /// Manage enterprise hooks
     Hooks {
         #[command(subcommand)]
         command: HookCommands,
     },
-    
+
     /// Show system status
     Status,
-    
+
     /// Show configuration
     Config {
         #[command(subcommand)]
         command: Option<ConfigCommands>,
     },
-    
+
     /// Show memory and conversation history
     Memory {
         #[command(subcommand)]
         command: Option<MemoryCommands>,
     },
-    
+
     /// Show analytics and insights
     Analytics {
         #[command(subcommand)]
         command: Option<AnalyticsCommands>,
     },
-    
+
     /// Enterprise features
     Enterprise {
         #[command(subcommand)]
         command: EnterpriseCommands,
     },
-    
+
     /// TUI mode
     Tui,
-    
+
     /// Desktop GUI mode (Dioxus)
     Desktop,
-    
+
     /// Installation management
     Install {
         #[command(flatten)]
         args: hive_ai::commands::install::InstallArgs,
     },
-    
+
     /// Run OpenRouter model maintenance
     Maintenance,
-    
+
     /// Migration from TypeScript
     Migrate {
         #[command(flatten)]
         args: hive_ai::commands::migrate::MigrateArgs,
     },
-    
+
     /// Show version information
     Version,
 }
@@ -388,23 +388,23 @@ enum CostCommands {
 fn main() -> Result<()> {
     // Initialize logging
     initialize_default_logging()?;
-    
+
     let cli = Cli::parse();
-    
+
     // Handle version command first
     if matches!(cli.command, Some(Commands::Version)) {
         println!("Hive AI {}", hive_ai::VERSION);
         return Ok(());
     }
-    
+
     // Change directory if specified
     if let Some(dir) = &cli.directory {
         env::set_current_dir(dir)?;
     }
-    
+
     // Detect capabilities
     let capabilities = TuiCapabilities::detect()?;
-    
+
     // Determine UI mode
     let ui_mode = if cli.desktop {
         UIMode::Desktop
@@ -425,16 +425,16 @@ fn main() -> Result<()> {
                 } else {
                     UIMode::CLI
                 }
-            },
+            }
             _ => UIMode::CLI,
         }
     };
-    
+
     // Handle desktop mode - create runtime to initialize database first
     if ui_mode == UIMode::Desktop {
         tracing::info!("Launching desktop GUI mode");
         let config = Config::default();
-        
+
         // Create a runtime to initialize the database before launching desktop
         let runtime = tokio::runtime::Runtime::new()?;
         runtime.block_on(async {
@@ -453,12 +453,12 @@ fn main() -> Result<()> {
             hive_ai::core::database::initialize_database(Some(db_config)).await?;
             Ok::<(), anyhow::Error>(())
         })?;
-        
+
         // Now launch the desktop app with database initialized
         launch_desktop_app(config)?;
         return Ok(());
     }
-    
+
     // For CLI and TUI modes, use tokio runtime
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async_main(cli, ui_mode))
@@ -467,12 +467,12 @@ fn main() -> Result<()> {
 async fn async_main(cli: Cli, ui_mode: UIMode) -> Result<()> {
     // Load configuration
     let config = Config::default();
-    
+
     // Show startup banner if no command specified
     if cli.command.is_none() {
         show_startup_banner().await?;
     }
-    
+
     // Initialize the appropriate framework
     match ui_mode {
         UIMode::Desktop => {
@@ -487,7 +487,7 @@ async fn async_main(cli: Cli, ui_mode: UIMode) -> Result<()> {
         UIMode::CLI => {
             tracing::info!("Using CLI mode");
             let mut cli_framework = CliFramework::new(config).await?;
-            
+
             match cli.command {
                 Some(command) => {
                     execute_command(&mut cli_framework, command).await?;
@@ -499,7 +499,7 @@ async fn async_main(cli: Cli, ui_mode: UIMode) -> Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -542,8 +542,11 @@ async fn execute_command(cli: &mut CliFramework, command: Commands) -> HiveResul
             execute_enterprise_command(cli, command).await?;
         }
         Commands::Install { args } => {
-            hive_ai::commands::install::handle_install_command(args).await
-                .map_err(|e| hive_ai::core::error::HiveError::ConfigInvalid { message: e.to_string() })?;
+            hive_ai::commands::install::handle_install_command(args)
+                .await
+                .map_err(|e| hive_ai::core::error::HiveError::ConfigInvalid {
+                    message: e.to_string(),
+                })?;
         }
         Commands::Maintenance => {
             hive_ai::commands::maintenance::run_maintenance_command().await?;
@@ -567,7 +570,10 @@ async fn execute_command(cli: &mut CliFramework, command: Commands) -> HiveResul
     Ok(())
 }
 
-async fn execute_consensus_command(cli: &mut CliFramework, command: ConsensusCommands) -> HiveResult<()> {
+async fn execute_consensus_command(
+    cli: &mut CliFramework,
+    command: ConsensusCommands,
+) -> HiveResult<()> {
     match command {
         ConsensusCommands::Test { query } => {
             cli.test_consensus(&query).await?;
@@ -582,7 +588,10 @@ async fn execute_consensus_command(cli: &mut CliFramework, command: ConsensusCom
     Ok(())
 }
 
-async fn execute_security_command(cli: &mut CliFramework, command: SecurityCommands) -> HiveResult<()> {
+async fn execute_security_command(
+    cli: &mut CliFramework,
+    command: SecurityCommands,
+) -> HiveResult<()> {
     match command {
         SecurityCommands::Status => {
             cli.show_security_status().await?;
@@ -623,7 +632,11 @@ async fn execute_user_command(cli: &mut CliFramework, command: UserCommands) -> 
         UserCommands::List => {
             cli.list_users().await?;
         }
-        UserCommands::Create { username, email, name } => {
+        UserCommands::Create {
+            username,
+            email,
+            name,
+        } => {
             cli.create_user(&username, &email, &name).await?;
         }
         UserCommands::Assign { user_id, role } => {
@@ -654,7 +667,10 @@ async fn execute_hooks_command(cli: &mut CliFramework, command: HookCommands) ->
     Ok(())
 }
 
-async fn execute_config_command(cli: &mut CliFramework, command: Option<ConfigCommands>) -> HiveResult<()> {
+async fn execute_config_command(
+    cli: &mut CliFramework,
+    command: Option<ConfigCommands>,
+) -> HiveResult<()> {
     match command {
         Some(ConfigCommands::Show) | None => {
             cli.show_config().await?;
@@ -669,7 +685,10 @@ async fn execute_config_command(cli: &mut CliFramework, command: Option<ConfigCo
     Ok(())
 }
 
-async fn execute_memory_command(cli: &mut CliFramework, command: Option<MemoryCommands>) -> HiveResult<()> {
+async fn execute_memory_command(
+    cli: &mut CliFramework,
+    command: Option<MemoryCommands>,
+) -> HiveResult<()> {
     match command {
         Some(MemoryCommands::Stats) | None => {
             cli.show_memory_stats().await?;
@@ -684,7 +703,10 @@ async fn execute_memory_command(cli: &mut CliFramework, command: Option<MemoryCo
     Ok(())
 }
 
-async fn execute_analytics_command(cli: &mut CliFramework, command: Option<AnalyticsCommands>) -> HiveResult<()> {
+async fn execute_analytics_command(
+    cli: &mut CliFramework,
+    command: Option<AnalyticsCommands>,
+) -> HiveResult<()> {
     match command {
         Some(AnalyticsCommands::Dashboard) | None => {
             cli.show_analytics_dashboard().await?;
@@ -699,7 +721,10 @@ async fn execute_analytics_command(cli: &mut CliFramework, command: Option<Analy
     Ok(())
 }
 
-async fn execute_enterprise_command(cli: &mut CliFramework, command: EnterpriseCommands) -> HiveResult<()> {
+async fn execute_enterprise_command(
+    cli: &mut CliFramework,
+    command: EnterpriseCommands,
+) -> HiveResult<()> {
     match command {
         EnterpriseCommands::Status => {
             cli.show_enterprise_status().await?;

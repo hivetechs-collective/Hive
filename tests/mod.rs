@@ -326,10 +326,10 @@ pub mod utils {
     /// Create test database with sample data
     pub async fn create_test_database(path: &Path) -> Result<()> {
         let db = hive_ai::core::database::HiveDatabase::new(path).await?;
-        
+
         // Initialize with test schema
         db.initialize().await?;
-        
+
         // Add sample data
         let conversation_id = uuid::Uuid::new_v4();
         db.store_conversation(
@@ -380,7 +380,7 @@ pub mod utils {
             let stat_path = format!("/proc/{}/stat", pid);
             let stat_content = tokio::fs::read_to_string(stat_path).await?;
             let fields: Vec<&str> = stat_content.split_whitespace().collect();
-            
+
             if fields.len() >= 23 {
                 let rss_pages = fields[23].parse::<u64>()?;
                 let page_size = 4096; // Typical page size on Linux
@@ -412,7 +412,7 @@ pub mod utils {
                 if tokio::fs::metadata(coverage_file).await.is_ok() {
                     let content = tokio::fs::read_to_string(coverage_file).await?;
                     let report: serde_json::Value = serde_json::from_str(&content)?;
-                    
+
                     if let Some(coverage) = report.get("coverage").and_then(|v| v.as_f64()) {
                         return Ok(coverage);
                     }
@@ -432,7 +432,7 @@ pub mod utils {
                         if tokio::fs::metadata(coverage_file).await.is_ok() {
                             let content = tokio::fs::read_to_string(coverage_file).await?;
                             let report: serde_json::Value = serde_json::from_str(&content)?;
-                            
+
                             // Extract coverage percentage from llvm-cov format
                             if let Some(data) = report.get("data") {
                                 if let Some(totals) = data.get(0).and_then(|d| d.get("totals")) {

@@ -12,7 +12,7 @@ pub fn Button(
 ) -> Element {
     let style = style.unwrap_or(ButtonStyle::Primary);
     let class = format!("btn btn-{}", style.class_name());
-    
+
     rsx! {
         button {
             class: "{class}",
@@ -36,7 +36,7 @@ impl ButtonStyle {
     fn class_name(&self) -> &'static str {
         match self {
             Self::Primary => "primary",
-            Self::Secondary => "secondary", 
+            Self::Secondary => "secondary",
             Self::Success => "success",
             Self::Warning => "warning",
             Self::Danger => "danger",

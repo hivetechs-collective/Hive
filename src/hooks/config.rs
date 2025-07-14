@@ -1,12 +1,12 @@
 //! Hook Configuration - Loading and validation of hook configurations
 
+use super::security::{HookSecurityValidator, SecurityPolicy};
+use super::{registry::HookMetadata, Hook, HookId, HookPriority};
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
 use tokio::fs;
-use super::{Hook, HookId, HookPriority, registry::HookMetadata};
-use super::security::{HookSecurityValidator, SecurityPolicy};
 
 /// Hook configuration as loaded from JSON/YAML files
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,42 +58,47 @@ impl HookLoader {
     pub fn new(security_validator: Arc<HookSecurityValidator>) -> Self {
         Self { security_validator }
     }
-    
+
     /// Load a hook from a configuration file
     pub async fn load_from_file(&self, path: PathBuf) -> Result<Hook> {
         // Read file contents
-        let contents = fs::read_to_string(&path).await
+        let contents = fs::read_to_string(&path)
+            .await
             .map_err(|e| anyhow!("Failed to read hook configuration: {}", e))?;
-        
+
         // Parse based on file extension
         let config: HookConfig = match path.extension().and_then(|s| s.to_str()) {
             Some("json") => serde_json::from_str(&contents)?,
             Some("yaml") | Some("yml") => serde_yaml::from_str(&contents)?,
-            _ => return Err(anyhow!("Unsupported file format. Use .json, .yaml, or .yml")),
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported file format. Use .json, .yaml, or .yml"
+                ))
+            }
         };
-        
+
         // Convert to Hook
         let hook = self.config_to_hook(config, Some(path))?;
-        
+
         // Validate security
         self.security_validator.validate_hook(&hook)?;
-        
+
         Ok(hook)
     }
-    
+
     /// Load all hooks from a directory
     pub async fn load_from_directory(&self, dir: PathBuf) -> Result<Vec<Hook>> {
         let mut hooks = Vec::new();
-        
+
         let mut entries = fs::read_dir(&dir).await?;
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            
+
             // Skip non-hook files
             if !path.is_file() {
                 continue;
             }
-            
+
             match path.extension().and_then(|s| s.to_str()) {
                 Some("json") | Some("yaml") | Some("yml") => {
                     match self.load_from_file(path.clone()).await {
@@ -106,17 +111,19 @@ impl HookLoader {
                 _ => continue,
             }
         }
-        
+
         Ok(hooks)
     }
-    
+
     /// Convert HookConfig to Hook
     fn config_to_hook(&self, config: HookConfig, source_path: Option<PathBuf>) -> Result<Hook> {
         // Parse events
-        let events = config.events.into_iter()
+        let events = config
+            .events
+            .into_iter()
             .map(|e| self.parse_event_type(&e))
             .collect::<Result<Vec<_>>>()?;
-        
+
         // Parse conditions
         let conditions = if config.conditions.is_null() {
             Vec::new()
@@ -127,12 +134,14 @@ impl HookLoader {
         } else {
             vec![serde_json::from_value(config.conditions)?]
         };
-        
+
         // Parse actions
-        let actions = config.actions.into_iter()
+        let actions = config
+            .actions
+            .into_iter()
             .map(|v| serde_json::from_value(v))
             .collect::<Result<Vec<_>, _>>()?;
-        
+
         // Create metadata
         let metadata = HookMetadata {
             author: config.metadata.author,
@@ -142,7 +151,7 @@ impl HookLoader {
             tags: config.metadata.tags.into_iter().collect(),
             source: source_path.map(|p| p.to_string_lossy().to_string()),
         };
-        
+
         Ok(Hook {
             id: HookId::from_name(&config.name),
             name: config.name,
@@ -156,11 +165,11 @@ impl HookLoader {
             metadata,
         })
     }
-    
+
     /// Parse event type string to EventType enum
     fn parse_event_type(&self, event_str: &str) -> Result<super::EventType> {
         use super::EventType;
-        
+
         let event = match event_str {
             "before_consensus" => EventType::BeforeConsensus,
             "after_consensus" => EventType::AfterConsensus,
@@ -198,7 +207,7 @@ impl HookLoader {
             }
             _ => return Err(anyhow!("Unknown event type: {}", event_str)),
         };
-        
+
         Ok(event)
     }
 }
@@ -206,7 +215,9 @@ impl HookLoader {
 /// Hook configuration examples
 pub fn example_configs() -> Vec<(&'static str, &'static str)> {
     vec![
-        ("auto-format.json", r#"{
+        (
+            "auto-format.json",
+            r#"{
   "name": "auto-format",
   "description": "Automatically format code before modifications",
   "events": ["before_code_modification"],
@@ -227,9 +238,11 @@ pub fn example_configs() -> Vec<(&'static str, &'static str)> {
     "allowed_commands": ["rustfmt"],
     "stop_on_error": true
   }
-}"#),
-        
-        ("cost-control.json", r#"{
+}"#,
+        ),
+        (
+            "cost-control.json",
+            r#"{
   "name": "cost-control",
   "description": "Require approval for expensive operations",
   "events": ["cost_threshold_reached"],
@@ -250,9 +263,11 @@ pub fn example_configs() -> Vec<(&'static str, &'static str)> {
   "metadata": {
     "tags": ["cost", "approval", "finance"]
   }
-}"#),
-        
-        ("quality-gate.json", r#"{
+}"#,
+        ),
+        (
+            "quality-gate.json",
+            r#"{
   "name": "quality-gate",
   "description": "Enforce code quality standards",
   "events": ["quality_gate_check"],
@@ -286,10 +301,12 @@ pub fn example_configs() -> Vec<(&'static str, &'static str)> {
       "message": "✅ Quality gate passed: complexity=${complexity}, coverage=${test_coverage}%"
     }
   ]
-}"#),
-        
-        ("security-hook.json", r#"{
-  "name": "security-scan", 
+}"#,
+        ),
+        (
+            "security-hook.json",
+            r#"{
+  "name": "security-scan",
   "description": "Run security checks on code changes",
   "events": ["before_code_modification"],
   "conditions": {
@@ -309,9 +326,11 @@ pub fn example_configs() -> Vec<(&'static str, &'static str)> {
     "allowed_commands": ["cargo", "npm", "pip"],
     "max_execution_time": 300
   }
-}"#),
-        
-        ("dangerous-hook.json", r#"{
+}"#,
+        ),
+        (
+            "dangerous-hook.json",
+            r#"{
   "name": "dangerous-example",
   "description": "Example of a hook that should be rejected",
   "events": ["before_consensus"],
@@ -325,26 +344,27 @@ pub fn example_configs() -> Vec<(&'static str, &'static str)> {
   "security": {
     "require_approval": false
   }
-}"#),
+}"#,
+        ),
     ]
 }
 
 /// Generate example hook configuration files
 pub async fn generate_examples(output_dir: &Path) -> Result<()> {
     fs::create_dir_all(output_dir).await?;
-    
+
     for (filename, content) in example_configs() {
         let path = output_dir.join(filename);
         fs::write(path, content).await?;
     }
-    
+
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_load_json_config() {
         let config_json = r#"{
@@ -358,7 +378,7 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let config: HookConfig = serde_json::from_str(config_json).unwrap();
         assert_eq!(config.name, "test-hook");
         assert_eq!(config.events.len(), 1);

@@ -2,11 +2,11 @@
 //!
 //! Provides automatic update checking and download functionality similar to VS Code.
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tokio::time::sleep;
-use chrono::{DateTime, Utc};
 
 /// Update channel preference
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -79,7 +79,7 @@ impl UpdateChecker {
 
         // Fetch releases metadata
         let releases = self.fetch_releases_metadata().await?;
-        
+
         // Get target release based on channel
         let target_release = match self.channel {
             UpdateChannel::Stable => &releases.stable,
@@ -89,11 +89,14 @@ impl UpdateChecker {
         // Compare versions
         if self.is_newer_version(&target_release.version)? {
             let download_url = self.get_platform_download_url(target_release)?;
-            
+
             Ok(Some(UpdateInfo {
                 version: target_release.version.clone(),
-                release_date: chrono::DateTime::parse_from_rfc3339(&format!("{}T00:00:00Z", target_release.release_date))?
-                    .with_timezone(&Utc),
+                release_date: chrono::DateTime::parse_from_rfc3339(&format!(
+                    "{}T00:00:00Z",
+                    target_release.release_date
+                ))?
+                .with_timezone(&Utc),
                 changelog_url: target_release.changelog_url.clone(),
                 download_url,
                 is_critical: false, // TODO: Add critical flag to metadata
@@ -107,9 +110,10 @@ impl UpdateChecker {
     /// Fetch releases metadata from server
     async fn fetch_releases_metadata(&self) -> Result<ReleasesMetadata> {
         let url = format!("{}/releases.json", self.base_url);
-        
+
         // Try to fetch from server, but handle network errors gracefully
-        match self.client
+        match self
+            .client
             .get(&url)
             .timeout(Duration::from_secs(10))
             .send()
@@ -117,7 +121,10 @@ impl UpdateChecker {
         {
             Ok(response) => {
                 if !response.status().is_success() {
-                    return Err(anyhow!("Failed to fetch releases: HTTP {}", response.status()));
+                    return Err(anyhow!(
+                        "Failed to fetch releases: HTTP {}",
+                        response.status()
+                    ));
                 }
 
                 let releases: ReleasesMetadata = response
@@ -130,7 +137,10 @@ impl UpdateChecker {
             Err(e) => {
                 // If it's a DNS/network error, return a fallback that indicates no updates
                 if e.is_connect() || e.is_timeout() || e.to_string().contains("dns error") {
-                    tracing::warn!("Update server unreachable, assuming no updates available: {}", e);
+                    tracing::warn!(
+                        "Update server unreachable, assuming no updates available: {}",
+                        e
+                    );
                     // Return fake metadata indicating current version is latest
                     Ok(ReleasesMetadata {
                         stable: ReleaseInfo {
@@ -142,7 +152,7 @@ impl UpdateChecker {
                                 macos_intel: "".to_string(),
                                 windows_x64: "".to_string(),
                                 linux_x64: "".to_string(),
-                            }
+                            },
                         },
                         beta: ReleaseInfo {
                             version: self.current_version.clone(),
@@ -153,8 +163,8 @@ impl UpdateChecker {
                                 macos_intel: "".to_string(),
                                 windows_x64: "".to_string(),
                                 linux_x64: "".to_string(),
-                            }
-                        }
+                            },
+                        },
                     })
                 } else {
                     Err(anyhow!("Failed to fetch releases metadata: {}", e))
@@ -197,21 +207,29 @@ impl UpdateChecker {
             return Err(anyhow!("Invalid version format: {}", version));
         }
 
-        let major = parts[0].parse::<u32>()
+        let major = parts[0]
+            .parse::<u32>()
             .map_err(|_| anyhow!("Invalid major version: {}", parts[0]))?;
-        let minor = parts[1].parse::<u32>()
+        let minor = parts[1]
+            .parse::<u32>()
             .map_err(|_| anyhow!("Invalid minor version: {}", parts[1]))?;
-        let patch = parts[2].parse::<u32>()
+        let patch = parts[2]
+            .parse::<u32>()
             .map_err(|_| anyhow!("Invalid patch version: {}", parts[2]))?;
 
         Ok((major, minor, patch))
     }
 
     /// Download update file
-    pub async fn download_update(&self, update_info: &UpdateInfo, progress_callback: impl Fn(u64, u64)) -> Result<Vec<u8>> {
+    pub async fn download_update(
+        &self,
+        update_info: &UpdateInfo,
+        progress_callback: impl Fn(u64, u64),
+    ) -> Result<Vec<u8>> {
         tracing::info!("Downloading update from: {}", update_info.download_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&update_info.download_url)
             .send()
             .await
@@ -258,10 +276,10 @@ impl UpdateService {
     /// Start background update checking
     pub async fn start_background_checking(&self) -> Result<()> {
         let mut interval = tokio::time::interval(self.check_interval);
-        
+
         loop {
             interval.tick().await;
-            
+
             match self.checker.check_for_updates().await {
                 Ok(Some(update)) => {
                     tracing::info!("Update available: {}", update.version);
@@ -290,14 +308,14 @@ mod tests {
     #[test]
     fn test_version_parsing() {
         let checker = UpdateChecker::new("2.0.2".to_string(), UpdateChannel::Stable);
-        
+
         assert_eq!(checker.parse_version("2.0.2").unwrap(), (2, 0, 2));
         assert_eq!(checker.parse_version("1.5.10").unwrap(), (1, 5, 10));
-        
+
         assert!(checker.is_newer_version("2.0.3").unwrap());
         assert!(checker.is_newer_version("2.1.0").unwrap());
         assert!(checker.is_newer_version("3.0.0").unwrap());
-        
+
         assert!(!checker.is_newer_version("2.0.2").unwrap());
         assert!(!checker.is_newer_version("2.0.1").unwrap());
         assert!(!checker.is_newer_version("1.9.9").unwrap());

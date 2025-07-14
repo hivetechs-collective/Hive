@@ -16,9 +16,9 @@ fn app() -> Element {
     rsx! {
         div {
             style: "background-color: #1e1e1e; color: white; padding: 20px; height: 100vh; font-family: system-ui;",
-            h1 { 
+            h1 {
                 style: "color: #007acc; margin-bottom: 20px;",
-                "🐝 Hive AI Desktop - Test Version" 
+                "🐝 Hive AI Desktop - Test Version"
             }
             div {
                 style: "background-color: #252526; padding: 20px; border-radius: 8px; margin-bottom: 20px;",

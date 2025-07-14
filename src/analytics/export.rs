@@ -1,5 +1,5 @@
 //! Export Functionality
-//! 
+//!
 //! Provides comprehensive data export capabilities:
 //! - Multiple format support (CSV, JSON, Excel, PDF)
 //! - Scheduled exports with email delivery
@@ -7,14 +7,14 @@
 //! - Large dataset handling with streaming
 //! - Template-based formatting
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Export formats
@@ -50,7 +50,9 @@ impl ExportFormat {
         match self {
             ExportFormat::CSV => "text/csv",
             ExportFormat::JSON => "application/json",
-            ExportFormat::Excel => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ExportFormat::Excel => {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            }
             ExportFormat::PDF => "application/pdf",
             ExportFormat::HTML => "text/html",
             ExportFormat::Markdown => "text/markdown",
@@ -113,8 +115,8 @@ pub struct FormattingOptions {
     pub number_format: String,
     pub null_value: String,
     pub delimiter: Option<String>, // For CSV
-    pub pretty_print: bool, // For JSON
-    pub template: Option<String>, // For HTML/PDF
+    pub pretty_print: bool,        // For JSON
+    pub template: Option<String>,  // For HTML/PDF
 }
 
 impl Default for FormattingOptions {
@@ -173,7 +175,7 @@ pub struct ExportSchedule {
     pub time: String, // HH:MM format
     pub timezone: String,
     pub days_of_week: Option<Vec<u8>>, // 1-7 for weekly
-    pub day_of_month: Option<u8>, // 1-31 for monthly
+    pub day_of_month: Option<u8>,      // 1-31 for monthly
 }
 
 /// Schedule frequency
@@ -268,10 +270,12 @@ impl DataExporter {
         // Start export task
         let jobs = Arc::clone(&self.jobs);
         let export_path = self.export_path.clone();
-        
+
         tokio::spawn(async move {
             let job_id_clone = job_id.clone(); // Clone for the error handling closure
-            if let Err(e) = Self::execute_export(job_id, config, data_source, jobs.clone(), export_path).await {
+            if let Err(e) =
+                Self::execute_export(job_id, config, data_source, jobs.clone(), export_path).await
+            {
                 // Update job with error
                 let mut jobs = jobs.write().await;
                 if let Some(job) = jobs.get_mut(&job_id_clone) {
@@ -323,7 +327,9 @@ impl DataExporter {
             ExportFormat::Excel => Self::export_excel(&config, data_source, &file_path).await?,
             ExportFormat::PDF => Self::export_pdf(&config, data_source, &file_path).await?,
             ExportFormat::HTML => Self::export_html(&config, data_source, &file_path).await?,
-            ExportFormat::Markdown => Self::export_markdown(&config, data_source, &file_path).await?,
+            ExportFormat::Markdown => {
+                Self::export_markdown(&config, data_source, &file_path).await?
+            }
             ExportFormat::XML => Self::export_xml(&config, data_source, &file_path).await?,
             ExportFormat::Parquet => Self::export_parquet(&config, data_source, &file_path).await?,
         };
@@ -385,12 +391,13 @@ impl DataExporter {
 
         // Write data
         let mut stream = data_source.stream_data(config.filters.clone()).await?;
-        
+
         while let Some(row) = stream.next().await {
-            let values: Vec<String> = row.values()
+            let values: Vec<String> = row
+                .values()
                 .map(|v| Self::format_value(v, &config.formatting))
                 .collect();
-            
+
             let line = values.join(delimiter) + "\n";
             file.write_all(line.as_bytes()).await?;
             row_count += 1;
@@ -398,7 +405,7 @@ impl DataExporter {
 
         file.flush().await?;
         let metadata = fs::metadata(file_path).await?;
-        
+
         Ok((row_count, metadata.len()))
     }
 
@@ -494,22 +501,24 @@ impl DataExporter {
             file.write_all(b"<thead><tr>").await?;
             let headers = data_source.get_headers().await?;
             for header in headers {
-                file.write_all(format!("<th>{}</th>", header).as_bytes()).await?;
+                file.write_all(format!("<th>{}</th>", header).as_bytes())
+                    .await?;
             }
             file.write_all(b"</tr></thead><tbody>").await?;
         }
 
         // Write data
         let mut stream = data_source.stream_data(config.filters.clone()).await?;
-        
+
         while let Some(row) = stream.next().await {
             file.write_all(b"<tr>").await?;
-            
+
             for value in row.values() {
                 let formatted = Self::format_value(value, &config.formatting);
-                file.write_all(format!("<td>{}</td>", formatted).as_bytes()).await?;
+                file.write_all(format!("<td>{}</td>", formatted).as_bytes())
+                    .await?;
             }
-            
+
             file.write_all(b"</tr>").await?;
             row_count += 1;
         }
@@ -536,19 +545,27 @@ impl DataExporter {
         if config.formatting.include_headers {
             let header_line = format!("| {} |\n", headers.join(" | "));
             file.write_all(header_line.as_bytes()).await?;
-            
-            let separator = format!("| {} |\n", headers.iter().map(|_| "---").collect::<Vec<_>>().join(" | "));
+
+            let separator = format!(
+                "| {} |\n",
+                headers
+                    .iter()
+                    .map(|_| "---")
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            );
             file.write_all(separator.as_bytes()).await?;
         }
 
         // Write data
         let mut stream = data_source.stream_data(config.filters.clone()).await?;
-        
+
         while let Some(row) = stream.next().await {
-            let values: Vec<String> = row.values()
+            let values: Vec<String> = row
+                .values()
                 .map(|v| Self::format_value(v, &config.formatting))
                 .collect();
-            
+
             let line = format!("| {} |\n", values.join(" | "));
             file.write_all(line.as_bytes()).await?;
             row_count += 1;
@@ -556,7 +573,7 @@ impl DataExporter {
 
         file.flush().await?;
         let metadata = fs::metadata(file_path).await?;
-        
+
         Ok((row_count, metadata.len()))
     }
 
@@ -569,21 +586,23 @@ impl DataExporter {
         let mut file = fs::File::create(file_path).await?;
         let mut row_count = 0u64;
 
-        file.write_all(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<data>\n").await?;
+        file.write_all(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<data>\n")
+            .await?;
 
         let headers = data_source.get_headers().await?;
         let mut stream = data_source.stream_data(config.filters.clone()).await?;
-        
+
         while let Some(row) = stream.next().await {
             file.write_all(b"  <record>\n").await?;
-            
+
             for (i, value) in row.values().enumerate() {
                 let default_header = format!("field{}", i);
                 let header = headers.get(i).unwrap_or(&default_header);
                 let formatted = Self::format_value(value, &config.formatting);
-                file.write_all(format!("    <{}>{}</{}>\n", header, formatted, header).as_bytes()).await?;
+                file.write_all(format!("    <{}>{}</{}>\n", header, formatted, header).as_bytes())
+                    .await?;
             }
-            
+
             file.write_all(b"  </record>\n").await?;
             row_count += 1;
         }
@@ -622,7 +641,11 @@ impl DataExporter {
     async fn compress_file(file_path: &Path, compression: &CompressionType) -> Result<PathBuf> {
         let compressed_path = file_path.with_extension(format!(
             "{}.{}",
-            file_path.extension().unwrap_or_default().to_str().unwrap_or(""),
+            file_path
+                .extension()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or(""),
             match compression {
                 CompressionType::Gzip => "gz",
                 CompressionType::Zip => "zip",
@@ -642,7 +665,11 @@ impl DataExporter {
     async fn encrypt_file(file_path: &Path, encryption: &EncryptionConfig) -> Result<PathBuf> {
         let encrypted_path = file_path.with_extension(format!(
             "{}.enc",
-            file_path.extension().unwrap_or_default().to_str().unwrap_or("")
+            file_path
+                .extension()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or("")
         ));
 
         // Simplified - would use actual encryption libraries
@@ -659,17 +686,30 @@ impl DataExporter {
                 // File is already saved locally
                 Ok(())
             }
-            DeliveryMethod::Email { recipients, subject, body } => {
+            DeliveryMethod::Email {
+                recipients,
+                subject,
+                body,
+            } => {
                 // Would send email with attachment
                 println!("Would send email to {:?}", recipients);
                 Ok(())
             }
-            DeliveryMethod::S3 { bucket, key_prefix, region } => {
+            DeliveryMethod::S3 {
+                bucket,
+                key_prefix,
+                region,
+            } => {
                 // Would upload to S3
                 println!("Would upload to S3 bucket {}", bucket);
                 Ok(())
             }
-            DeliveryMethod::SFTP { host, port, username, path } => {
+            DeliveryMethod::SFTP {
+                host,
+                port,
+                username,
+                path,
+            } => {
                 // Would upload via SFTP
                 println!("Would upload to SFTP {}:{}", host, port);
                 Ok(())
@@ -700,7 +740,8 @@ impl DataExporter {
     /// Cancel export job
     pub async fn cancel_job(&self, job_id: &str) -> Result<()> {
         let mut jobs = self.jobs.write().await;
-        let job = jobs.get_mut(job_id)
+        let job = jobs
+            .get_mut(job_id)
             .ok_or_else(|| anyhow::anyhow!("Job not found"))?;
 
         if job.status == ExportStatus::Running || job.status == ExportStatus::Pending {
@@ -717,10 +758,11 @@ impl DataExporter {
         let mut removed = 0;
 
         let jobs = self.jobs.read().await;
-        let old_jobs: Vec<_> = jobs.values()
+        let old_jobs: Vec<_> = jobs
+            .values()
             .filter(|job| {
-                job.status == ExportStatus::Completed &&
-                job.completed_at.map_or(false, |d| d < cutoff)
+                job.status == ExportStatus::Completed
+                    && job.completed_at.map_or(false, |d| d < cutoff)
             })
             .collect();
 
@@ -787,7 +829,7 @@ mod tests {
     fn test_export_format_properties() {
         assert_eq!(ExportFormat::CSV.extension(), "csv");
         assert_eq!(ExportFormat::CSV.mime_type(), "text/csv");
-        
+
         assert_eq!(ExportFormat::JSON.extension(), "json");
         assert_eq!(ExportFormat::JSON.mime_type(), "application/json");
     }
@@ -795,7 +837,7 @@ mod tests {
     #[tokio::test]
     async fn test_data_exporter_creation() {
         let exporter = DataExporter::new(Some(PathBuf::from("/tmp/hive_exports")));
-        
+
         let jobs = exporter.list_jobs(None).await;
         assert!(jobs.is_empty());
     }

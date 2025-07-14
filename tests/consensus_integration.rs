@@ -1,7 +1,7 @@
 // Integration tests for the 4-stage consensus pipeline
 // Verifies behavior matches TypeScript implementation
 
-use hive::{ConsensusEngine, initialize};
+use hive::{initialize, ConsensusEngine};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -25,7 +25,10 @@ async fn test_consensus_basic_query() {
 
     // Verify all stages ran
     let stage_names: Vec<_> = result.stages.iter().map(|s| &s.stage_name).collect();
-    assert_eq!(stage_names, vec!["generator", "refiner", "validator", "curator"]);
+    assert_eq!(
+        stage_names,
+        vec!["generator", "refiner", "validator", "curator"]
+    );
 }
 
 #[tokio::test]
@@ -43,7 +46,7 @@ async fn test_consensus_with_temporal_context() {
 
     assert!(result.success);
     assert!(result.result.is_some());
-    
+
     // The result should mention current date context
     // (In real implementation, this would be injected into prompts)
 }
@@ -61,7 +64,10 @@ Framework: Tokio async runtime
 Purpose: AI-powered codebase intelligence";
 
     let result = engine
-        .process("What does this code do?", Some(semantic_context.to_string()))
+        .process(
+            "What does this code do?",
+            Some(semantic_context.to_string()),
+        )
         .await
         .expect("Consensus should process with semantic context");
 
@@ -71,7 +77,7 @@ Purpose: AI-powered codebase intelligence";
 
 #[tokio::test]
 async fn test_consensus_streaming() {
-    use hive::consensus::{StreamingCallbacks, Stage};
+    use hive::consensus::{Stage, StreamingCallbacks};
     use std::sync::atomic::{AtomicU32, Ordering};
 
     initialize().await.expect("Failed to initialize");
@@ -97,7 +103,11 @@ async fn test_consensus_streaming() {
             Ok(())
         }
 
-        fn on_stage_complete(&self, _stage: Stage, _result: &hive::consensus::types::StageResult) -> anyhow::Result<()> {
+        fn on_stage_complete(
+            &self,
+            _stage: Stage,
+            _result: &hive::consensus::types::StageResult,
+        ) -> anyhow::Result<()> {
             self.stages_completed.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -129,10 +139,13 @@ async fn test_consensus_profiles() {
 
     // Test different profiles
     let profiles = ["balanced", "speed", "quality", "cost"];
-    
+
     for profile in &profiles {
-        engine.set_profile(profile).await.expect(&format!("Should set {} profile", profile));
-        
+        engine
+            .set_profile(profile)
+            .await
+            .expect(&format!("Should set {} profile", profile));
+
         let current = engine.get_current_profile().await;
         assert!(current.profile_name.to_lowercase().contains(profile));
     }

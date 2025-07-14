@@ -5,9 +5,9 @@
 
 use anyhow::Result;
 use crossterm::terminal;
+use is_terminal::IsTerminal;
 use std::env;
 use tracing;
-use is_terminal::IsTerminal;
 
 /// Terminal capabilities for progressive enhancement
 #[derive(Debug, Clone)]
@@ -27,10 +27,10 @@ pub struct TuiCapabilities {
 /// Color depth support
 #[derive(Debug, Clone, PartialEq)]
 pub enum ColorDepth {
-    Monochrome,     // No color support
-    Basic8,         // 8 basic colors
-    Extended256,    // 256 colors
-    TrueColor,      // 24-bit true color
+    Monochrome,  // No color support
+    Basic8,      // 8 basic colors
+    Extended256, // 256 colors
+    TrueColor,   // 24-bit true color
 }
 
 /// Terminal type detection
@@ -51,9 +51,9 @@ pub enum TerminalType {
 /// TUI mode based on capabilities
 #[derive(Debug, Clone, PartialEq)]
 pub enum TuiMode {
-    Disabled,       // TUI not supported
-    Simple,         // Basic TUI without advanced features
-    Enhanced,       // Full TUI with advanced features
+    Disabled, // TUI not supported
+    Simple,   // Basic TUI without advanced features
+    Enhanced, // Full TUI with advanced features
 }
 
 impl TuiCapabilities {
@@ -63,7 +63,7 @@ impl TuiCapabilities {
         if !Self::is_interactive_terminal() {
             return Self::create_fallback_capabilities();
         }
-        
+
         // Try to get terminal size with error handling
         let terminal_size = match terminal::size() {
             Ok(size) => size,
@@ -73,7 +73,7 @@ impl TuiCapabilities {
                 (80, 24) // Safe fallback
             }
         };
-        
+
         let terminal_type = Self::detect_terminal_type();
         let supports_color = Self::detect_color_support();
         let color_depth = Self::detect_color_depth();
@@ -81,7 +81,8 @@ impl TuiCapabilities {
         let supports_mouse = Self::detect_mouse_support();
         let supports_alternate_screen = Self::detect_alternate_screen_support();
         let supports_true_color = color_depth == ColorDepth::TrueColor;
-        let supports_256_color = matches!(color_depth, ColorDepth::Extended256 | ColorDepth::TrueColor);
+        let supports_256_color =
+            matches!(color_depth, ColorDepth::Extended256 | ColorDepth::TrueColor);
         let supports_focus_events = Self::detect_focus_events_support();
 
         Ok(Self {
@@ -97,7 +98,7 @@ impl TuiCapabilities {
             supports_focus_events,
         })
     }
-    
+
     /// Create fallback capabilities for non-interactive environments
     fn create_fallback_capabilities() -> Result<Self> {
         Ok(Self {
@@ -143,41 +144,40 @@ impl TuiCapabilities {
 
     /// Check if terminal supports enhanced TUI features
     pub fn supports_enhanced_tui(&self) -> bool {
-        self.terminal_size.0 >= 120 &&
-        self.terminal_size.1 >= 30 &&
-        self.supports_color &&
-        self.supports_alternate_screen &&
-        self.supports_unicode
+        self.terminal_size.0 >= 120
+            && self.terminal_size.1 >= 30
+            && self.supports_color
+            && self.supports_alternate_screen
+            && self.supports_unicode
     }
 
     /// Check if terminal supports simple TUI features
     pub fn supports_simple_tui(&self) -> bool {
-        self.terminal_size.0 >= 80 &&
-        self.terminal_size.1 >= 24 &&
-        self.supports_alternate_screen
+        self.terminal_size.0 >= 80 && self.terminal_size.1 >= 24 && self.supports_alternate_screen
     }
-    
+
     /// Check if system supports desktop GUI applications
     pub fn supports_desktop(&self) -> bool {
         // Desktop GUI is supported if we're not in a headless environment
         !self.is_headless_environment()
     }
-    
+
     /// Check if we're in a headless environment (CI, SSH, etc.)
     fn is_headless_environment(&self) -> bool {
         // Check for CI environments
-        if env::var("CI").is_ok() ||
-           env::var("GITHUB_ACTIONS").is_ok() ||
-           env::var("JENKINS_URL").is_ok() ||
-           env::var("BUILDKITE").is_ok() {
+        if env::var("CI").is_ok()
+            || env::var("GITHUB_ACTIONS").is_ok()
+            || env::var("JENKINS_URL").is_ok()
+            || env::var("BUILDKITE").is_ok()
+        {
             return true;
         }
-        
+
         // Check for SSH connection
         if env::var("SSH_CLIENT").is_ok() || env::var("SSH_TTY").is_ok() {
             return true;
         }
-        
+
         // Check for missing DISPLAY on Unix systems
         #[cfg(unix)]
         {
@@ -185,7 +185,7 @@ impl TuiCapabilities {
                 return true;
             }
         }
-        
+
         false
     }
 
@@ -259,11 +259,11 @@ impl TuiCapabilities {
 
         // Check TERM for color capabilities
         if let Ok(term) = env::var("TERM") {
-            return term.contains("color") || 
-                   term.contains("256") ||
-                   term.starts_with("xterm") ||
-                   term == "screen" ||
-                   term == "tmux";
+            return term.contains("color")
+                || term.contains("256")
+                || term.starts_with("xterm")
+                || term == "screen"
+                || term == "tmux";
         }
 
         // Default to false for safety
@@ -289,11 +289,11 @@ impl TuiCapabilities {
 
         // Check for common terminals with known capabilities
         match Self::detect_terminal_type() {
-            TerminalType::ITerm2 |
-            TerminalType::Kitty |
-            TerminalType::Alacritty |
-            TerminalType::VSCodeTerminal |
-            TerminalType::WindowsTerminal => ColorDepth::TrueColor,
+            TerminalType::ITerm2
+            | TerminalType::Kitty
+            | TerminalType::Alacritty
+            | TerminalType::VSCodeTerminal
+            | TerminalType::WindowsTerminal => ColorDepth::TrueColor,
             TerminalType::XTerm => ColorDepth::Extended256,
             _ => {
                 if Self::detect_color_support() {
@@ -316,7 +316,10 @@ impl TuiCapabilities {
         }
 
         // Modern terminals generally support Unicode
-        !matches!(Self::detect_terminal_type(), TerminalType::VT100 | TerminalType::Unknown)
+        !matches!(
+            Self::detect_terminal_type(),
+            TerminalType::VT100 | TerminalType::Unknown
+        )
     }
 
     fn detect_mouse_support() -> bool {
@@ -333,12 +336,12 @@ impl TuiCapabilities {
         // Focus events are supported by most modern terminals
         matches!(
             Self::detect_terminal_type(),
-            TerminalType::XTerm |
-            TerminalType::ITerm2 |
-            TerminalType::Kitty |
-            TerminalType::Alacritty |
-            TerminalType::VSCodeTerminal |
-            TerminalType::WindowsTerminal
+            TerminalType::XTerm
+                | TerminalType::ITerm2
+                | TerminalType::Kitty
+                | TerminalType::Alacritty
+                | TerminalType::VSCodeTerminal
+                | TerminalType::WindowsTerminal
         )
     }
 
@@ -347,18 +350,19 @@ impl TuiCapabilities {
         // Handle potential errors gracefully
         if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
             // Additional checks for CI/CD environments
-            if env::var("CI").is_ok() || 
-               env::var("GITHUB_ACTIONS").is_ok() || 
-               env::var("JENKINS_URL").is_ok() || 
-               env::var("BUILDKITE").is_ok() {
+            if env::var("CI").is_ok()
+                || env::var("GITHUB_ACTIONS").is_ok()
+                || env::var("JENKINS_URL").is_ok()
+                || env::var("BUILDKITE").is_ok()
+            {
                 return false;
             }
-            
+
             // Check for non-interactive shells
             if env::var("TERM").map_or(false, |term| term == "dumb") {
                 return false;
             }
-            
+
             true
         } else {
             false
@@ -371,9 +375,9 @@ impl TuiCapabilities {
 pub struct LayoutConstraints {
     pub min_width: u16,
     pub min_height: u16,
-    pub explorer_width: u16,     // Percentage
-    pub consensus_width: u16,    // Percentage
-    pub terminal_height: u16,    // Percentage
+    pub explorer_width: u16,  // Percentage
+    pub consensus_width: u16, // Percentage
+    pub terminal_height: u16, // Percentage
     pub supports_panels: bool,
     pub supports_tabs: bool,
     pub supports_syntax_highlighting: bool,
@@ -409,7 +413,7 @@ impl TuiLauncher {
                 return Ok(TuiMode::Disabled);
             }
         };
-        
+
         Ok(capabilities.determine_tui_mode())
     }
 
@@ -438,11 +442,11 @@ mod tests {
     #[test]
     fn test_capability_detection() {
         let capabilities = TuiCapabilities::detect().unwrap();
-        
+
         // Basic checks that should always work
         assert!(capabilities.terminal_size.0 > 0);
         assert!(capabilities.terminal_size.1 > 0);
-        
+
         // The mode should be deterministic
         let mode1 = capabilities.determine_tui_mode();
         let mode2 = capabilities.determine_tui_mode();
@@ -453,7 +457,7 @@ mod tests {
     fn test_layout_constraints() {
         let capabilities = TuiCapabilities::detect().unwrap();
         let constraints = capabilities.get_layout_constraints();
-        
+
         // Constraints should be reasonable
         assert!(constraints.min_width <= 120);
         assert!(constraints.min_height <= 50);

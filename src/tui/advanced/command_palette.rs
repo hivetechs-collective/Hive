@@ -102,7 +102,7 @@ impl CommandPalette {
     pub fn new() -> Self {
         let commands = Self::create_default_commands();
         let categories = Self::create_categories(&commands);
-        
+
         Self {
             is_open: false,
             input: String::new(),
@@ -154,7 +154,7 @@ impl CommandPalette {
                 keybinding: Some("F4".to_string()),
                 command_type: CommandType::Navigation,
             },
-            
+
             // File operations
             Command {
                 id: "file.open".to_string(),
@@ -188,7 +188,7 @@ impl CommandPalette {
                 keybinding: Some("Ctrl+W".to_string()),
                 command_type: CommandType::File,
             },
-            
+
             // Editor operations
             Command {
                 id: "editor.find".to_string(),
@@ -214,7 +214,7 @@ impl CommandPalette {
                 keybinding: Some("Ctrl+G".to_string()),
                 command_type: CommandType::Editor,
             },
-            
+
             // View operations
             Command {
                 id: "view.toggle_terminal".to_string(),
@@ -248,7 +248,7 @@ impl CommandPalette {
                 keybinding: None,
                 command_type: CommandType::View,
             },
-            
+
             // Terminal operations
             Command {
                 id: "terminal.clear".to_string(),
@@ -266,7 +266,7 @@ impl CommandPalette {
                 keybinding: None,
                 command_type: CommandType::Terminal,
             },
-            
+
             // Hive operations
             Command {
                 id: "hive.ask".to_string(),
@@ -300,7 +300,7 @@ impl CommandPalette {
                 keybinding: None,
                 command_type: CommandType::Hive,
             },
-            
+
             // System operations
             Command {
                 id: "system.quit".to_string(),
@@ -324,14 +324,14 @@ impl CommandPalette {
     /// Create command categories
     fn create_categories(commands: &[Command]) -> HashMap<String, Vec<Command>> {
         let mut categories = HashMap::new();
-        
+
         for command in commands {
             categories
                 .entry(command.category.clone())
                 .or_insert_with(Vec::new)
                 .push(command.clone());
         }
-        
+
         categories
     }
 
@@ -371,31 +371,31 @@ impl CommandPalette {
         } else {
             // Fuzzy match commands
             let mut matches = Vec::new();
-            
+
             for command in &self.commands {
                 if let Some(ref category) = self.category_filter {
                     if &command.category != category {
                         continue;
                     }
                 }
-                
+
                 // Try to match against name and description
                 let name_score = self.matcher.fuzzy_match(&command.name, &self.input);
                 let desc_score = self.matcher.fuzzy_match(&command.description, &self.input);
-                
+
                 let best_score = name_score.max(desc_score);
-                
+
                 if let Some(score) = best_score {
                     matches.push((command.clone(), score));
                 }
             }
-            
+
             // Sort by score (highest first)
             matches.sort_by(|a, b| b.1.cmp(&a.1));
-            
+
             self.filtered_commands = matches;
         }
-        
+
         // Reset selection to first item
         if !self.filtered_commands.is_empty() {
             self.list_state.select(Some(0));
@@ -503,7 +503,7 @@ impl CommandPalette {
 
         // Create centered popup area
         let popup_area = Self::centered_rect(80, 60, area);
-        
+
         // Clear the area
         frame.render_widget(Clear, popup_area);
 
@@ -518,7 +518,7 @@ impl CommandPalette {
 
         // Render input area
         self.render_input(frame, chunks[0], theme);
-        
+
         // Render command list
         self.render_command_list(frame, chunks[1], theme);
     }

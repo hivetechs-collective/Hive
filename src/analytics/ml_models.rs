@@ -1,5 +1,5 @@
 //! Advanced Machine Learning Models for Predictive Analytics
-//! 
+//!
 //! Provides sophisticated ML capabilities including:
 //! - ARIMA models for time series forecasting
 //! - Prophet-style decomposition for seasonality
@@ -7,10 +7,10 @@
 //! - Neural network predictions for complex patterns
 //! - Ensemble methods for improved accuracy
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration, Datelike};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Datelike, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -187,7 +187,7 @@ impl MLEngine {
     /// Initialize ML models
     async fn initialize_models(&self) -> Result<()> {
         let mut models = self.models.write().await;
-        
+
         // Initialize ARIMA model
         models.insert(
             "arima".to_string(),
@@ -230,7 +230,10 @@ impl MLEngine {
         // Generate forecast
         let predictions = match model_type {
             ModelType::Ensemble => self.ensemble_forecast(data, horizon).await?,
-            _ => self.single_model_forecast(data, horizon, model_type).await?,
+            _ => {
+                self.single_model_forecast(data, horizon, model_type)
+                    .await?
+            }
         };
 
         // Cache results
@@ -275,7 +278,7 @@ impl MLEngine {
         model_type: ModelType,
     ) -> Result<Vec<MLPrediction>> {
         let models = self.models.read().await;
-        
+
         let model_key = match model_type {
             ModelType::ARIMA => "arima",
             ModelType::Prophet => "prophet",
@@ -296,10 +299,10 @@ impl MLEngine {
         data: &TimeSeriesData,
     ) -> Result<Vec<AnomalyDetectionResult>> {
         let models = self.models.read().await;
-        
+
         // Use ensemble approach for anomaly detection
         let mut all_results = Vec::new();
-        
+
         for (_, model) in models.iter() {
             match model.detect_anomalies(data) {
                 Ok(results) => all_results.extend(results),
@@ -314,7 +317,7 @@ impl MLEngine {
     /// Decompose time series
     pub async fn decompose(&self, data: &TimeSeriesData) -> Result<TimeSeriesDecomposition> {
         let models = self.models.read().await;
-        
+
         // Use Prophet model for decomposition
         let model = models
             .get("prophet")
@@ -327,12 +330,21 @@ impl MLEngine {
     pub async fn auto_select_model(&self, data: &TimeSeriesData) -> Result<ModelType> {
         // Analyze data characteristics
         let characteristics = self.analyze_data_characteristics(data)?;
-        
+
         // Select model based on characteristics
         Ok(match characteristics {
-            DataCharacteristics { has_seasonality: true, has_trend: true, .. } => ModelType::Prophet,
-            DataCharacteristics { is_stationary: true, .. } => ModelType::ARIMA,
-            DataCharacteristics { has_trend: true, .. } => ModelType::ExponentialSmoothing,
+            DataCharacteristics {
+                has_seasonality: true,
+                has_trend: true,
+                ..
+            } => ModelType::Prophet,
+            DataCharacteristics {
+                is_stationary: true,
+                ..
+            } => ModelType::ARIMA,
+            DataCharacteristics {
+                has_trend: true, ..
+            } => ModelType::ExponentialSmoothing,
             _ => ModelType::Ensemble,
         })
     }
@@ -358,7 +370,9 @@ impl MLEngine {
 
         // Generate predictions
         let horizon = test_data.values.len() as u32;
-        let predictions = self.forecast(&train_data, horizon, Some(model_type)).await?;
+        let predictions = self
+            .forecast(&train_data, horizon, Some(model_type))
+            .await?;
 
         // Calculate metrics
         self.calculate_performance_metrics(&test_data, &predictions)
@@ -378,7 +392,9 @@ impl MLEngine {
 
     async fn cache_prediction(&self, key: &str, predictions: Vec<MLPrediction>) {
         let mut cache = self.cache.write().await;
-        cache.predictions.insert(key.to_string(), (Utc::now(), predictions));
+        cache
+            .predictions
+            .insert(key.to_string(), (Utc::now(), predictions));
     }
 
     fn combine_ensemble_predictions(
@@ -387,11 +403,11 @@ impl MLEngine {
         horizon: u32,
     ) -> Result<Vec<MLPrediction>> {
         let mut combined = Vec::new();
-        
+
         for i in 0..horizon as usize {
             let mut values = Vec::new();
             let mut timestamp = None;
-            
+
             for predictions in &all_predictions {
                 if i < predictions.len() {
                     values.push(predictions[i].value);
@@ -400,16 +416,17 @@ impl MLEngine {
                     }
                 }
             }
-            
+
             if values.is_empty() {
                 continue;
             }
-            
+
             // Calculate ensemble prediction
             let mean = values.iter().sum::<f64>() / values.len() as f64;
-            let std_dev = (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() 
-                / values.len() as f64).sqrt();
-            
+            let std_dev = (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>()
+                / values.len() as f64)
+                .sqrt();
+
             combined.push(MLPrediction {
                 timestamp: timestamp.unwrap(),
                 value: mean,
@@ -423,7 +440,7 @@ impl MLEngine {
                 trend: None,
             });
         }
-        
+
         Ok(combined)
     }
 
@@ -433,27 +450,31 @@ impl MLEngine {
     ) -> Result<Vec<AnomalyDetectionResult>> {
         // Sort by timestamp
         results.sort_by_key(|r| r.timestamp);
-        
+
         // Group by timestamp and combine
         let mut combined = HashMap::new();
-        
+
         for result in results {
             let entry = combined.entry(result.timestamp).or_insert(Vec::new());
             entry.push(result);
         }
-        
+
         // Create final results
         let mut final_results = Vec::new();
         for (timestamp, group) in combined {
             let avg_score = group.iter().map(|r| r.anomaly_score).sum::<f64>() / group.len() as f64;
             let is_anomaly = avg_score > 0.8; // Threshold
-            
+
             final_results.push(AnomalyDetectionResult {
                 timestamp,
                 value: group[0].value,
                 anomaly_score: avg_score,
                 is_anomaly,
-                anomaly_type: if is_anomaly { group[0].anomaly_type } else { None },
+                anomaly_type: if is_anomaly {
+                    group[0].anomaly_type
+                } else {
+                    None
+                },
                 explanation: if is_anomaly {
                     format!("Anomaly detected by {} models", group.len())
                 } else {
@@ -461,27 +482,29 @@ impl MLEngine {
                 },
             });
         }
-        
+
         Ok(final_results)
     }
 
     fn analyze_data_characteristics(&self, data: &TimeSeriesData) -> Result<DataCharacteristics> {
         // Simple analysis - in production would use more sophisticated methods
         let values = &data.values;
-        
+
         // Check for trend
-        let first_half_mean = values[..values.len()/2].iter().sum::<f64>() / (values.len()/2) as f64;
-        let second_half_mean = values[values.len()/2..].iter().sum::<f64>() / (values.len()/2) as f64;
+        let first_half_mean =
+            values[..values.len() / 2].iter().sum::<f64>() / (values.len() / 2) as f64;
+        let second_half_mean =
+            values[values.len() / 2..].iter().sum::<f64>() / (values.len() / 2) as f64;
         let has_trend = (second_half_mean - first_half_mean).abs() > first_half_mean * 0.1;
-        
+
         // Check for seasonality (simplified)
         let has_seasonality = values.len() > 7;
-        
+
         // Check stationarity
         let mean = values.iter().sum::<f64>() / values.len() as f64;
         let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
         let is_stationary = variance < mean * 0.5;
-        
+
         Ok(DataCharacteristics {
             has_trend,
             has_seasonality,
@@ -497,26 +520,32 @@ impl MLEngine {
     ) -> Result<ModelPerformanceMetrics> {
         let actual_values = &actual.values;
         let predicted_values: Vec<f64> = predictions.iter().map(|p| p.value).collect();
-        
+
         // Calculate RMSE
-        let mse = actual_values.iter()
+        let mse = actual_values
+            .iter()
             .zip(predicted_values.iter())
             .map(|(a, p)| (a - p).powi(2))
-            .sum::<f64>() / actual_values.len() as f64;
+            .sum::<f64>()
+            / actual_values.len() as f64;
         let rmse = mse.sqrt();
-        
+
         // Calculate MAE
-        let mae = actual_values.iter()
+        let mae = actual_values
+            .iter()
             .zip(predicted_values.iter())
             .map(|(a, p)| (a - p).abs())
-            .sum::<f64>() / actual_values.len() as f64;
-        
+            .sum::<f64>()
+            / actual_values.len() as f64;
+
         // Calculate MAPE
-        let mape = actual_values.iter()
+        let mape = actual_values
+            .iter()
             .zip(predicted_values.iter())
             .map(|(a, p)| ((a - p).abs() / a.abs()) * 100.0)
-            .sum::<f64>() / actual_values.len() as f64;
-        
+            .sum::<f64>()
+            / actual_values.len() as f64;
+
         Ok(ModelPerformanceMetrics {
             rmse,
             mae,
@@ -556,13 +585,22 @@ impl MLModel for ARIMAModel {
     fn forecast(&self, data: &TimeSeriesData, horizon: u32) -> Result<Vec<MLPrediction>> {
         // Simplified ARIMA implementation
         let mut predictions = Vec::new();
-        let last_value = data.values.last().ok_or_else(|| anyhow::anyhow!("No data"))?;
-        let last_timestamp = data.timestamps.last().ok_or_else(|| anyhow::anyhow!("No timestamps"))?;
-        
+        let last_value = data
+            .values
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("No data"))?;
+        let last_timestamp = data
+            .timestamps
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("No timestamps"))?;
+
         // Simple moving average as placeholder
         let window = 7.min(data.values.len());
-        let ma = data.values[data.values.len()-window..].iter().sum::<f64>() / window as f64;
-        
+        let ma = data.values[data.values.len() - window..]
+            .iter()
+            .sum::<f64>()
+            / window as f64;
+
         for i in 1..=horizon {
             predictions.push(MLPrediction {
                 timestamp: *last_timestamp + Duration::days(i as i64),
@@ -577,7 +615,7 @@ impl MLModel for ARIMAModel {
                 trend: None,
             });
         }
-        
+
         Ok(predictions)
     }
 
@@ -585,37 +623,44 @@ impl MLModel for ARIMAModel {
         // Simplified anomaly detection
         let mut results = Vec::new();
         let values = &data.values;
-        
+
         if values.len() < 3 {
             return Ok(results);
         }
-        
+
         let mean = values.iter().sum::<f64>() / values.len() as f64;
-        let std_dev = (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() 
-            / values.len() as f64).sqrt();
-        
+        let std_dev =
+            (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64).sqrt();
+
         for (i, value) in values.iter().enumerate() {
             let z_score = (value - mean).abs() / std_dev;
             let is_anomaly = z_score > 3.0;
-            
+
             results.push(AnomalyDetectionResult {
                 timestamp: data.timestamps[i],
                 value: *value,
                 anomaly_score: z_score / 4.0, // Normalize to 0-1
                 is_anomaly,
                 anomaly_type: if is_anomaly {
-                    if value > &mean { Some(AnomalyType::Spike) } else { Some(AnomalyType::Dip) }
+                    if value > &mean {
+                        Some(AnomalyType::Spike)
+                    } else {
+                        Some(AnomalyType::Dip)
+                    }
                 } else {
                     None
                 },
                 explanation: if is_anomaly {
-                    format!("Value deviates {:.1} standard deviations from mean", z_score)
+                    format!(
+                        "Value deviates {:.1} standard deviations from mean",
+                        z_score
+                    )
                 } else {
                     "Normal".to_string()
                 },
             });
         }
-        
+
         Ok(results)
     }
 
@@ -625,7 +670,7 @@ impl MLModel for ARIMAModel {
         let trend = values.clone(); // Placeholder
         let seasonal = vec![0.0; values.len()];
         let residual = vec![0.0; values.len()];
-        
+
         Ok(TimeSeriesDecomposition {
             trend,
             seasonal,
@@ -653,21 +698,23 @@ impl MLModel for ProphetModel {
         let mut predictions = Vec::new();
         let values = &data.values;
         let timestamps = &data.timestamps;
-        
+
         // Detect trend
         let trend = self.detect_trend(values)?;
-        
+
         // Detect seasonality
         let seasonality = self.detect_seasonality(values, timestamps)?;
-        
+
         let last_value = values.last().ok_or_else(|| anyhow::anyhow!("No data"))?;
-        let last_timestamp = timestamps.last().ok_or_else(|| anyhow::anyhow!("No timestamps"))?;
-        
+        let last_timestamp = timestamps
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("No timestamps"))?;
+
         for i in 1..=horizon {
             let future_timestamp = *last_timestamp + Duration::days(i as i64);
             let trend_component = trend.project(i);
             let seasonal_component = seasonality.get_value(future_timestamp);
-            
+
             predictions.push(MLPrediction {
                 timestamp: future_timestamp,
                 value: trend_component + seasonal_component,
@@ -681,7 +728,7 @@ impl MLModel for ProphetModel {
                 trend: Some(trend.clone()),
             });
         }
-        
+
         Ok(predictions)
     }
 
@@ -689,10 +736,10 @@ impl MLModel for ProphetModel {
         // Prophet-style anomaly detection using decomposition
         let decomposition = self.decompose(data)?;
         let mut results = Vec::new();
-        
+
         for (i, residual) in decomposition.residual.iter().enumerate() {
             let is_anomaly = residual.abs() > 2.0; // Simplified threshold
-            
+
             results.push(AnomalyDetectionResult {
                 timestamp: data.timestamps[i],
                 value: data.values[i],
@@ -710,37 +757,37 @@ impl MLModel for ProphetModel {
                 },
             });
         }
-        
+
         Ok(results)
     }
 
     fn decompose(&self, data: &TimeSeriesData) -> Result<TimeSeriesDecomposition> {
         let values = &data.values;
-        
+
         // Simple decomposition
         let trend = self.calculate_trend(values)?;
-        let detrended: Vec<f64> = values.iter()
+        let detrended: Vec<f64> = values
+            .iter()
             .zip(trend.iter())
             .map(|(v, t)| v - t)
             .collect();
-        
+
         let seasonal = self.calculate_seasonal(&detrended)?;
-        let residual: Vec<f64> = detrended.iter()
+        let residual: Vec<f64> = detrended
+            .iter()
             .zip(seasonal.iter())
             .map(|(d, s)| d - s)
             .collect();
-        
+
         Ok(TimeSeriesDecomposition {
             trend,
             seasonal,
             residual,
-            seasonal_periods: vec![
-                SeasonalComponent {
-                    period: "weekly".to_string(),
-                    strength: 0.7,
-                    pattern: vec![1.0, 0.9, 0.8, 0.85, 0.95, 1.1, 1.05],
-                }
-            ],
+            seasonal_periods: vec![SeasonalComponent {
+                period: "weekly".to_string(),
+                strength: 0.7,
+                pattern: vec![1.0, 0.9, 0.8, 0.85, 0.95, 1.1, 1.05],
+            }],
         })
     }
 
@@ -754,22 +801,21 @@ impl ProphetModel {
     fn detect_trend(&self, values: &[f64]) -> Result<TrendComponent> {
         let n = values.len() as f64;
         let x: Vec<f64> = (0..values.len()).map(|i| i as f64).collect();
-        
+
         // Simple linear regression
         let x_mean = x.iter().sum::<f64>() / n;
         let y_mean = values.iter().sum::<f64>() / n;
-        
-        let numerator: f64 = x.iter()
+
+        let numerator: f64 = x
+            .iter()
             .zip(values.iter())
             .map(|(xi, yi)| (xi - x_mean) * (yi - y_mean))
             .sum();
-        
-        let denominator: f64 = x.iter()
-            .map(|xi| (xi - x_mean).powi(2))
-            .sum();
-        
+
+        let denominator: f64 = x.iter().map(|xi| (xi - x_mean).powi(2)).sum();
+
         let slope = numerator / denominator;
-        
+
         Ok(TrendComponent {
             direction: if slope > 0.01 {
                 TrendDirection::Increasing
@@ -783,7 +829,11 @@ impl ProphetModel {
         })
     }
 
-    fn detect_seasonality(&self, values: &[f64], timestamps: &[DateTime<Utc>]) -> Result<SeasonalComponent> {
+    fn detect_seasonality(
+        &self,
+        values: &[f64],
+        timestamps: &[DateTime<Utc>],
+    ) -> Result<SeasonalComponent> {
         // Simplified weekly seasonality
         Ok(SeasonalComponent {
             period: "weekly".to_string(),
@@ -796,14 +846,14 @@ impl ProphetModel {
         // Moving average for trend
         let window = 7.min(values.len());
         let mut trend = Vec::new();
-        
+
         for i in 0..values.len() {
             let start = i.saturating_sub(window / 2);
             let end = (i + window / 2 + 1).min(values.len());
             let avg = values[start..end].iter().sum::<f64>() / (end - start) as f64;
             trend.push(avg);
         }
-        
+
         Ok(trend)
     }
 
@@ -811,16 +861,16 @@ impl ProphetModel {
         // Simplified seasonal calculation
         let period = 7; // Weekly
         let mut seasonal = Vec::new();
-        
+
         for i in 0..detrended.len() {
             let seasonal_index = i % period;
             let seasonal_value = match seasonal_index {
-                0 | 6 => 0.1,  // Weekend
-                _ => -0.02,    // Weekday
+                0 | 6 => 0.1, // Weekend
+                _ => -0.02,   // Weekday
             };
             seasonal.push(seasonal_value);
         }
-        
+
         Ok(seasonal)
     }
 }
@@ -854,22 +904,24 @@ impl MLModel for ExponentialSmoothingModel {
     fn forecast(&self, data: &TimeSeriesData, horizon: u32) -> Result<Vec<MLPrediction>> {
         let values = &data.values;
         let timestamps = &data.timestamps;
-        
+
         if values.is_empty() {
             return Err(anyhow::anyhow!("No data for forecasting"));
         }
-        
+
         // Simple exponential smoothing
         let alpha = 0.3;
         let mut level = values[0];
-        
+
         for value in values.iter().skip(1) {
             level = alpha * value + (1.0 - alpha) * level;
         }
-        
-        let last_timestamp = timestamps.last().ok_or_else(|| anyhow::anyhow!("No timestamps"))?;
+
+        let last_timestamp = timestamps
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("No timestamps"))?;
         let mut predictions = Vec::new();
-        
+
         for i in 1..=horizon {
             predictions.push(MLPrediction {
                 timestamp: *last_timestamp + Duration::days(i as i64),
@@ -884,7 +936,7 @@ impl MLModel for ExponentialSmoothingModel {
                 trend: None,
             });
         }
-        
+
         Ok(predictions)
     }
 
@@ -892,13 +944,13 @@ impl MLModel for ExponentialSmoothingModel {
         // Simple threshold-based detection
         let values = &data.values;
         let mut results = Vec::new();
-        
+
         let mean = values.iter().sum::<f64>() / values.len() as f64;
-        
+
         for (i, value) in values.iter().enumerate() {
             let deviation = (value - mean).abs() / mean;
             let is_anomaly = deviation > 0.5;
-            
+
             results.push(AnomalyDetectionResult {
                 timestamp: data.timestamps[i],
                 value: *value,
@@ -916,7 +968,7 @@ impl MLModel for ExponentialSmoothingModel {
                 },
             });
         }
-        
+
         Ok(results)
     }
 
@@ -944,13 +996,13 @@ mod tests {
     async fn test_ml_engine_creation() -> Result<()> {
         let config = MLConfig::default();
         let engine = MLEngine::new(config).await?;
-        
+
         // Test that models are initialized
         let models = engine.models.read().await;
         assert!(models.contains_key("arima"));
         assert!(models.contains_key("prophet"));
         assert!(models.contains_key("exp_smoothing"));
-        
+
         Ok(())
     }
 
@@ -958,20 +1010,22 @@ mod tests {
     async fn test_forecast_generation() -> Result<()> {
         let config = MLConfig::default();
         let engine = MLEngine::new(config).await?;
-        
+
         // Create test data
         let data = TimeSeriesData {
-            timestamps: (0..30).map(|i| Utc::now() - Duration::days(30 - i)).collect(),
+            timestamps: (0..30)
+                .map(|i| Utc::now() - Duration::days(30 - i))
+                .collect(),
             values: (0..30).map(|i| 100.0 + (i as f64) * 2.0).collect(),
             metadata: HashMap::new(),
         };
-        
+
         // Generate forecast
         let predictions = engine.forecast(&data, 7, Some(ModelType::ARIMA)).await?;
-        
+
         assert_eq!(predictions.len(), 7);
         assert!(predictions[0].value > 0.0);
-        
+
         Ok(())
     }
 }

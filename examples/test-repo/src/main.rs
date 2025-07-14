@@ -5,7 +5,7 @@ use std::collections::HashMap;
 /// Main function - high complexity example
 fn main() {
     let password = "hardcoded_secret"; // Security vulnerability
-    
+
     // Nested loops - performance issue
     for i in 0..100 {
         for j in 0..100 {
@@ -14,7 +14,7 @@ fn main() {
             }
         }
     }
-    
+
     // Call other functions
     UserController::new().create_user("test");
     UserModel::load_all();
@@ -31,40 +31,40 @@ impl UserController {
             users: HashMap::new(),
         }
     }
-    
+
     // Method with high complexity
     pub fn create_user(&mut self, name: &str) -> Result<(), String> {
         if name.is_empty() {
             return Err("Name cannot be empty".to_string());
         }
-        
+
         if name.len() < 3 {
             return Err("Name too short".to_string());
         }
-        
+
         if name.len() > 50 {
             return Err("Name too long".to_string());
         }
-        
+
         if name.contains("@") {
             return Err("Invalid character".to_string());
         }
-        
+
         if name.starts_with("admin") {
             return Err("Reserved name".to_string());
         }
-        
+
         // More conditions...
         if name.to_lowercase() == "root" {
             return Err("Reserved name".to_string());
         }
-        
+
         let user = User {
             id: generate_id(),
             name: name.to_string(),
             email: format!("{}@example.com", name),
         };
-        
+
         self.users.insert(name.to_string(), user);
         Ok(())
     }
@@ -77,16 +77,16 @@ impl UserModel {
     // N+1 query pattern - performance issue
     pub fn load_all() -> Vec<User> {
         let mut users = Vec::new();
-        
+
         for i in 1..=100 {
             // Simulating database query in loop
             let user = Self::find_by_id(i);
             users.push(user);
         }
-        
+
         users
     }
-    
+
     fn find_by_id(id: u32) -> User {
         // Simulate database access
         User {
@@ -138,6 +138,6 @@ mod tests {
         let mut controller = UserController::new();
         assert!(controller.create_user("testuser").is_ok());
     }
-    
+
     // Missing test coverage for edge cases
 }

@@ -1,11 +1,11 @@
 //! Migration Guide Module
-//! 
+//!
 //! Provides interactive guidance, documentation, and help for users
 //! performing TypeScript to Rust migration.
 
 use crate::core::error::HiveError;
-use crate::migration::{MigrationConfig, MigrationType, ValidationLevel};
 use crate::migration::analyzer::TypeScriptAnalysis;
+use crate::migration::{MigrationConfig, MigrationType, ValidationLevel};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -36,11 +36,11 @@ pub enum MigrationScenario {
 /// Migration approaches
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MigrationApproach {
-    QuickMigration,     // Fast, automated migration
-    SafeMigration,      // Conservative, step-by-step
-    ParallelMigration,  // Run both versions temporarily
-    StagedMigration,    // Gradual feature migration
-    CustomMigration,    // Tailored approach
+    QuickMigration,    // Fast, automated migration
+    SafeMigration,     // Conservative, step-by-step
+    ParallelMigration, // Run both versions temporarily
+    StagedMigration,   // Gradual feature migration
+    CustomMigration,   // Tailored approach
 }
 
 /// Preparation step
@@ -194,31 +194,33 @@ pub async fn generate_migration_guide(
     config: &MigrationConfig,
 ) -> Result<MigrationGuide, HiveError> {
     log::info!("Generating personalized migration guide");
-    
+
     // Determine migration scenario
     let scenario = determine_migration_scenario(analysis, config).await?;
-    
+
     // Recommend approach based on scenario and analysis
     let recommended_approach = recommend_migration_approach(&scenario, analysis, config).await?;
-    
+
     // Generate preparation steps
-    let preparation_steps = generate_preparation_steps(&scenario, &recommended_approach, analysis).await?;
-    
+    let preparation_steps =
+        generate_preparation_steps(&scenario, &recommended_approach, analysis).await?;
+
     // Generate migration steps
     let migration_steps = generate_migration_steps(&recommended_approach, config).await?;
-    
+
     // Generate post-migration steps
     let post_migration_steps = generate_post_migration_steps(&scenario).await?;
-    
+
     // Generate troubleshooting tips
     let troubleshooting = generate_troubleshooting_tips(&scenario, analysis).await?;
-    
+
     // Estimate timeline
-    let estimated_timeline = estimate_migration_timeline(&migration_steps, &preparation_steps).await?;
-    
+    let estimated_timeline =
+        estimate_migration_timeline(&migration_steps, &preparation_steps).await?;
+
     // Assess risks
     let risk_assessment = assess_migration_risks(analysis, config, &scenario).await?;
-    
+
     Ok(MigrationGuide {
         scenario,
         recommended_approach,
@@ -240,7 +242,7 @@ async fn determine_migration_scenario(
     let conversation_count = analysis.database_info.conversation_count;
     let custom_profiles = analysis.custom_profiles.len();
     let has_enterprise_features = analysis.config_files.len() > 3;
-    
+
     let scenario = if conversation_count == 0 {
         MigrationScenario::FirstTimeUser
     } else if conversation_count < 50 && custom_profiles == 0 {
@@ -254,7 +256,7 @@ async fn determine_migration_scenario(
     } else {
         MigrationScenario::DeveloperUser
     };
-    
+
     log::info!("Determined migration scenario: {:?}", scenario);
     Ok(scenario)
 }
@@ -273,19 +275,19 @@ async fn recommend_migration_approach(
             } else {
                 MigrationApproach::SafeMigration
             }
-        },
+        }
         MigrationScenario::ExistingHeavyUser => {
             if config.preserve_original {
                 MigrationApproach::ParallelMigration
             } else {
                 MigrationApproach::SafeMigration
             }
-        },
+        }
         MigrationScenario::EnterpriseUser => MigrationApproach::StagedMigration,
         MigrationScenario::TeamMigration => MigrationApproach::StagedMigration,
         MigrationScenario::DeveloperUser => MigrationApproach::CustomMigration,
     };
-    
+
     log::info!("Recommended migration approach: {:?}", approach);
     Ok(approach)
 }
@@ -297,7 +299,7 @@ async fn generate_preparation_steps(
     analysis: &TypeScriptAnalysis,
 ) -> Result<Vec<PreparationStep>, HiveError> {
     let mut steps = Vec::new();
-    
+
     // Common preparation steps
     steps.push(PreparationStep {
         step_number: 1,
@@ -312,7 +314,7 @@ async fn generate_preparation_steps(
         estimated_time: std::time::Duration::from_secs(300),
         required: true,
     });
-    
+
     steps.push(PreparationStep {
         step_number: 2,
         title: "Verify System Requirements".to_string(),
@@ -326,7 +328,7 @@ async fn generate_preparation_steps(
         estimated_time: std::time::Duration::from_secs(120),
         required: true,
     });
-    
+
     // Scenario-specific steps
     match scenario {
         MigrationScenario::ExistingHeavyUser | MigrationScenario::EnterpriseUser => {
@@ -339,33 +341,36 @@ async fn generate_preparation_steps(
                     "hive config export --include-secrets".to_string(),
                 ],
                 expected_outcome: "Configurations exported".to_string(),
-                troubleshooting: Some("Manually backup configuration files if export fails".to_string()),
+                troubleshooting: Some(
+                    "Manually backup configuration files if export fails".to_string(),
+                ),
                 estimated_time: std::time::Duration::from_secs(180),
                 required: true,
             });
-        },
+        }
         _ => {}
     }
-    
+
     // Approach-specific steps
     match approach {
         MigrationApproach::ParallelMigration => {
             steps.push(PreparationStep {
                 step_number: steps.len() as u32 + 1,
                 title: "Prepare Parallel Environment".to_string(),
-                description: "Set up environment to run both TypeScript and Rust versions".to_string(),
-                commands: vec![
-                    "hive migrate setup-parallel".to_string(),
-                ],
+                description: "Set up environment to run both TypeScript and Rust versions"
+                    .to_string(),
+                commands: vec!["hive migrate setup-parallel".to_string()],
                 expected_outcome: "Parallel environment ready".to_string(),
-                troubleshooting: Some("Ensure sufficient disk space for both installations".to_string()),
+                troubleshooting: Some(
+                    "Ensure sufficient disk space for both installations".to_string(),
+                ),
                 estimated_time: std::time::Duration::from_secs(240),
                 required: true,
             });
-        },
+        }
         _ => {}
     }
-    
+
     Ok(steps)
 }
 
@@ -375,7 +380,7 @@ async fn generate_migration_steps(
     config: &MigrationConfig,
 ) -> Result<Vec<MigrationStep>, HiveError> {
     let mut steps = Vec::new();
-    
+
     match approach {
         MigrationApproach::QuickMigration => {
             steps.push(MigrationStep {
@@ -389,21 +394,21 @@ async fn generate_migration_steps(
                 estimated_time: std::time::Duration::from_secs(300),
                 dependencies: Vec::new(),
             });
-        },
+        }
         MigrationApproach::SafeMigration => {
             steps.extend(generate_safe_migration_steps().await?);
-        },
+        }
         MigrationApproach::ParallelMigration => {
             steps.extend(generate_parallel_migration_steps().await?);
-        },
+        }
         MigrationApproach::StagedMigration => {
             steps.extend(generate_staged_migration_steps().await?);
-        },
+        }
         MigrationApproach::CustomMigration => {
             steps.extend(generate_custom_migration_steps(config).await?);
-        },
+        }
     }
-    
+
     Ok(steps)
 }
 
@@ -528,9 +533,11 @@ async fn generate_staged_migration_steps() -> Result<Vec<MigrationStep>, HiveErr
 }
 
 /// Generate custom migration steps
-async fn generate_custom_migration_steps(config: &MigrationConfig) -> Result<Vec<MigrationStep>, HiveError> {
+async fn generate_custom_migration_steps(
+    config: &MigrationConfig,
+) -> Result<Vec<MigrationStep>, HiveError> {
     let mut steps = Vec::new();
-    
+
     // Customize based on configuration
     if config.validation_level == ValidationLevel::Paranoid {
         steps.push(MigrationStep {
@@ -545,7 +552,7 @@ async fn generate_custom_migration_steps(config: &MigrationConfig) -> Result<Vec
             dependencies: Vec::new(),
         });
     }
-    
+
     steps.push(MigrationStep {
         step_number: steps.len() as u32 + 1,
         phase: "Custom Migration".to_string(),
@@ -555,14 +562,20 @@ async fn generate_custom_migration_steps(config: &MigrationConfig) -> Result<Vec
         verification: vec!["hive migrate verify --custom".to_string()],
         rollback_info: Some("Custom rollback plan available".to_string()),
         estimated_time: std::time::Duration::from_secs(480),
-        dependencies: if steps.is_empty() { Vec::new() } else { vec![1] },
+        dependencies: if steps.is_empty() {
+            Vec::new()
+        } else {
+            vec![1]
+        },
     });
-    
+
     Ok(steps)
 }
 
 /// Generate post-migration steps
-async fn generate_post_migration_steps(scenario: &MigrationScenario) -> Result<Vec<PostMigrationStep>, HiveError> {
+async fn generate_post_migration_steps(
+    scenario: &MigrationScenario,
+) -> Result<Vec<PostMigrationStep>, HiveError> {
     let mut steps = vec![
         PostMigrationStep {
             step_number: 1,
@@ -599,7 +612,7 @@ async fn generate_post_migration_steps(scenario: &MigrationScenario) -> Result<V
             benefits: "Optimized performance for your hardware".to_string(),
         },
     ];
-    
+
     // Add scenario-specific post-migration steps
     match scenario {
         MigrationScenario::EnterpriseUser | MigrationScenario::TeamMigration => {
@@ -615,10 +628,10 @@ async fn generate_post_migration_steps(scenario: &MigrationScenario) -> Result<V
                 optional: true,
                 benefits: "Enhanced team collaboration and analytics".to_string(),
             });
-        },
+        }
         _ => {}
     }
-    
+
     Ok(steps)
 }
 
@@ -657,7 +670,7 @@ async fn generate_troubleshooting_tips(
             severity: TroubleshootingSeverity::Critical,
         },
     ];
-    
+
     // Add scenario-specific tips
     match scenario {
         MigrationScenario::ExistingHeavyUser => {
@@ -672,10 +685,10 @@ async fn generate_troubleshooting_tips(
                 prevention: Some("Estimate time based on data volume".to_string()),
                 severity: TroubleshootingSeverity::Medium,
             });
-        },
+        }
         _ => {}
     }
-    
+
     // Add analysis-specific tips
     if !analysis.database_info.integrity_check {
         tips.push(TroubleshootingTip {
@@ -690,7 +703,7 @@ async fn generate_troubleshooting_tips(
             severity: TroubleshootingSeverity::Critical,
         });
     }
-    
+
     Ok(tips)
 }
 
@@ -699,38 +712,45 @@ async fn estimate_migration_timeline(
     migration_steps: &[MigrationStep],
     preparation_steps: &[PreparationStep],
 ) -> Result<Timeline, HiveError> {
-    let preparation_time: std::time::Duration = preparation_steps.iter()
-        .map(|s| s.estimated_time)
-        .sum();
-    
-    let migration_time: std::time::Duration = migration_steps.iter()
-        .map(|s| s.estimated_time)
-        .sum();
-    
+    let preparation_time: std::time::Duration =
+        preparation_steps.iter().map(|s| s.estimated_time).sum();
+
+    let migration_time: std::time::Duration =
+        migration_steps.iter().map(|s| s.estimated_time).sum();
+
     let verification_time = std::time::Duration::from_secs(300); // 5 minutes
     let total_time = preparation_time + migration_time + verification_time;
-    
+
     let milestones = vec![
         Milestone {
             name: "Preparation Complete".to_string(),
             description: "All preparation steps finished".to_string(),
-            completion_criteria: vec!["Backups created".to_string(), "Requirements verified".to_string()],
+            completion_criteria: vec![
+                "Backups created".to_string(),
+                "Requirements verified".to_string(),
+            ],
             estimated_completion: preparation_time,
         },
         Milestone {
             name: "Migration Complete".to_string(),
             description: "Data migration finished".to_string(),
-            completion_criteria: vec!["All data transferred".to_string(), "Configuration migrated".to_string()],
+            completion_criteria: vec![
+                "All data transferred".to_string(),
+                "Configuration migrated".to_string(),
+            ],
             estimated_completion: preparation_time + migration_time,
         },
         Milestone {
             name: "Verification Complete".to_string(),
             description: "Migration validated successfully".to_string(),
-            completion_criteria: vec!["All checks passed".to_string(), "System operational".to_string()],
+            completion_criteria: vec![
+                "All checks passed".to_string(),
+                "System operational".to_string(),
+            ],
             estimated_completion: total_time,
         },
     ];
-    
+
     Ok(Timeline {
         preparation_time,
         migration_time,
@@ -747,7 +767,7 @@ async fn assess_migration_risks(
     scenario: &MigrationScenario,
 ) -> Result<RiskAssessment, HiveError> {
     let mut risks = Vec::new();
-    
+
     // Data loss risk
     if !config.preserve_original {
         risks.push(IdentifiedRisk {
@@ -758,7 +778,7 @@ async fn assess_migration_risks(
             mitigation: "Create comprehensive backups".to_string(),
         });
     }
-    
+
     // Database integrity risk
     if !analysis.database_info.integrity_check {
         risks.push(IdentifiedRisk {
@@ -769,7 +789,7 @@ async fn assess_migration_risks(
             mitigation: "Repair database before migration".to_string(),
         });
     }
-    
+
     // Configuration loss risk
     if analysis.custom_profiles.len() > 5 {
         risks.push(IdentifiedRisk {
@@ -780,7 +800,7 @@ async fn assess_migration_risks(
             mitigation: "Manual verification of custom profiles".to_string(),
         });
     }
-    
+
     // Service downtime risk
     match scenario {
         MigrationScenario::EnterpriseUser | MigrationScenario::TeamMigration => {
@@ -791,12 +811,13 @@ async fn assess_migration_risks(
                 impact: RiskImpact::Medium,
                 mitigation: "Use parallel migration approach".to_string(),
             });
-        },
+        }
         _ => {}
     }
-    
+
     // Determine overall risk level
-    let max_impact = risks.iter()
+    let max_impact = risks
+        .iter()
         .map(|r| match r.impact {
             RiskImpact::Minimal => 1,
             RiskImpact::Low => 2,
@@ -806,7 +827,7 @@ async fn assess_migration_risks(
         })
         .max()
         .unwrap_or(1);
-    
+
     let overall_risk = match max_impact {
         1 => RiskLevel::Low,
         2 => RiskLevel::Low,
@@ -815,7 +836,7 @@ async fn assess_migration_risks(
         5 => RiskLevel::Critical,
         _ => RiskLevel::Low,
     };
-    
+
     let mitigation_strategies = vec![
         MitigationStrategy {
             strategy_name: "Comprehensive Backup".to_string(),
@@ -838,21 +859,22 @@ async fn assess_migration_risks(
             effectiveness: 0.8,
         },
     ];
-    
-    let contingency_plans = vec![
-        ContingencyPlan {
-            scenario: "Migration failure".to_string(),
-            trigger_conditions: vec!["Data corruption detected".to_string(), "Validation fails".to_string()],
-            response_steps: vec![
-                "Stop migration immediately".to_string(),
-                "Restore from backup".to_string(),
-                "Investigate root cause".to_string(),
-                "Plan alternative approach".to_string(),
-            ],
-            recovery_time: std::time::Duration::from_secs(1800), // 30 minutes
-        },
-    ];
-    
+
+    let contingency_plans = vec![ContingencyPlan {
+        scenario: "Migration failure".to_string(),
+        trigger_conditions: vec![
+            "Data corruption detected".to_string(),
+            "Validation fails".to_string(),
+        ],
+        response_steps: vec![
+            "Stop migration immediately".to_string(),
+            "Restore from backup".to_string(),
+            "Investigate root cause".to_string(),
+            "Plan alternative approach".to_string(),
+        ],
+        recovery_time: std::time::Duration::from_secs(1800), // 30 minutes
+    }];
+
     Ok(RiskAssessment {
         overall_risk,
         risks,
@@ -864,35 +886,52 @@ async fn assess_migration_risks(
 /// Display migration guide in a user-friendly format
 pub fn display_migration_guide(guide: &MigrationGuide) -> String {
     let mut output = String::new();
-    
+
     output.push_str(&format!("# Hive AI Migration Guide\n\n"));
     output.push_str(&format!("**Scenario**: {:?}\n", guide.scenario));
-    output.push_str(&format!("**Recommended Approach**: {:?}\n", guide.recommended_approach));
-    output.push_str(&format!("**Estimated Time**: {:?}\n\n", guide.estimated_timeline.total_time));
-    
+    output.push_str(&format!(
+        "**Recommended Approach**: {:?}\n",
+        guide.recommended_approach
+    ));
+    output.push_str(&format!(
+        "**Estimated Time**: {:?}\n\n",
+        guide.estimated_timeline.total_time
+    ));
+
     output.push_str("## Risk Assessment\n");
-    output.push_str(&format!("**Overall Risk**: {:?}\n", guide.risk_assessment.overall_risk));
+    output.push_str(&format!(
+        "**Overall Risk**: {:?}\n",
+        guide.risk_assessment.overall_risk
+    ));
     for risk in &guide.risk_assessment.risks {
-        output.push_str(&format!("- {}: {} (Probability: {:.1}%)\n", 
-            format!("{:?}", risk.risk_type), risk.description, risk.probability * 100.0));
+        output.push_str(&format!(
+            "- {}: {} (Probability: {:.1}%)\n",
+            format!("{:?}", risk.risk_type),
+            risk.description,
+            risk.probability * 100.0
+        ));
     }
     output.push_str("\n");
-    
+
     output.push_str("## Preparation Steps\n");
     for step in &guide.preparation_steps {
-        output.push_str(&format!("{}. **{}** ({:?})\n", 
-            step.step_number, step.title, step.estimated_time));
+        output.push_str(&format!(
+            "{}. **{}** ({:?})\n",
+            step.step_number, step.title, step.estimated_time
+        ));
         output.push_str(&format!("   {}\n", step.description));
         for command in &step.commands {
             output.push_str(&format!("   ```\n   {}\n   ```\n", command));
         }
         output.push_str("\n");
     }
-    
+
     output.push_str("## Migration Steps\n");
     for step in &guide.migration_steps {
-        output.push_str(&format!("{}. **{}** - {} ({:?})\n", 
-            step.step_number, step.title, step.phase, step.estimated_time));
+        output.push_str(&format!(
+            "{}. **{}** - {} ({:?})\n",
+            step.step_number, step.title, step.phase, step.estimated_time
+        ));
         output.push_str(&format!("   {}\n", step.description));
         for command in &step.commands {
             output.push_str(&format!("   ```\n   {}\n   ```\n", command));
@@ -902,17 +941,19 @@ pub fn display_migration_guide(guide: &MigrationGuide) -> String {
         }
         output.push_str("\n");
     }
-    
+
     output.push_str("## Post-Migration Steps\n");
     for step in &guide.post_migration_steps {
         let optional = if step.optional { " (Optional)" } else { "" };
-        output.push_str(&format!("{}. **{}**{}\n", 
-            step.step_number, step.title, optional));
+        output.push_str(&format!(
+            "{}. **{}**{}\n",
+            step.step_number, step.title, optional
+        ));
         output.push_str(&format!("   {}\n", step.description));
         output.push_str(&format!("   **Benefits**: {}\n", step.benefits));
         output.push_str("\n");
     }
-    
+
     output.push_str("## Troubleshooting\n");
     for tip in &guide.troubleshooting {
         output.push_str(&format!("**{}** ({:?})\n", tip.issue, tip.severity));
@@ -929,7 +970,7 @@ pub fn display_migration_guide(guide: &MigrationGuide) -> String {
         }
         output.push_str("\n");
     }
-    
+
     output
 }
 
@@ -942,18 +983,16 @@ mod tests {
         let guide = MigrationGuide {
             scenario: MigrationScenario::ExistingLightUser,
             recommended_approach: MigrationApproach::QuickMigration,
-            preparation_steps: vec![
-                PreparationStep {
-                    step_number: 1,
-                    title: "Test Step".to_string(),
-                    description: "Test description".to_string(),
-                    commands: vec!["test command".to_string()],
-                    expected_outcome: "Test outcome".to_string(),
-                    troubleshooting: None,
-                    estimated_time: std::time::Duration::from_secs(60),
-                    required: true,
-                }
-            ],
+            preparation_steps: vec![PreparationStep {
+                step_number: 1,
+                title: "Test Step".to_string(),
+                description: "Test description".to_string(),
+                commands: vec!["test command".to_string()],
+                expected_outcome: "Test outcome".to_string(),
+                troubleshooting: None,
+                estimated_time: std::time::Duration::from_secs(60),
+                required: true,
+            }],
             migration_steps: Vec::new(),
             post_migration_steps: Vec::new(),
             troubleshooting: Vec::new(),
@@ -971,7 +1010,7 @@ mod tests {
                 contingency_plans: Vec::new(),
             },
         };
-        
+
         let output = display_migration_guide(&guide);
         assert!(output.contains("Hive AI Migration Guide"));
         assert!(output.contains("ExistingLightUser"));

@@ -154,14 +154,16 @@ impl ModelManager {
 
     /// Sync models from OpenRouter API
     pub async fn sync_models(&mut self, db: &DatabaseManager) -> Result<u32> {
-        let api_key = self.openrouter_api_key
+        let api_key = self
+            .openrouter_api_key
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("OpenRouter API key not configured"))?;
 
         println!("🔄 Syncing models from OpenRouter API...");
 
         // Fetch models from OpenRouter
-        let response = self.client
+        let response = self
+            .client
             .get("https://openrouter.ai/api/v1/models")
             .header("Authorization", format!("Bearer {}", api_key))
             .header("HTTP-Referer", "https://hive.ai")
@@ -174,12 +176,13 @@ impl ModelManager {
             anyhow::bail!("OpenRouter API error: {}", response.status());
         }
 
-        let models_response: serde_json::Value = response.json().await
+        let models_response: serde_json::Value = response
+            .json()
+            .await
             .context("Failed to parse OpenRouter response")?;
 
-        let models: Vec<OpenRouterModel> = serde_json::from_value(
-            models_response["data"].clone()
-        ).context("Failed to deserialize models")?;
+        let models: Vec<OpenRouterModel> = serde_json::from_value(models_response["data"].clone())
+            .context("Failed to deserialize models")?;
 
         println!("📥 Fetched {} models from OpenRouter", models.len());
 
@@ -193,20 +196,24 @@ impl ModelManager {
         // Mark all models as potentially inactive first
         let updated = conn.execute("UPDATE openrouter_models SET is_active = 0", [])?;
         println!("🔄 Marked {} existing models as inactive", updated);
-        
+
         for model in models {
             // Skip pseudo-models that aren't real endpoints
             if model.id.starts_with("openrouter/") {
                 skipped_count += 1;
                 continue;
             }
-            
+
             // Parse pricing
-            let pricing_input = model.pricing.as_ref()
+            let pricing_input = model
+                .pricing
+                .as_ref()
                 .and_then(|p| p.prompt.as_ref())
                 .and_then(|s| s.parse::<f64>().ok());
-            
-            let pricing_output = model.pricing.as_ref()
+
+            let pricing_output = model
+                .pricing
+                .as_ref()
                 .and_then(|p| p.completion.as_ref())
                 .and_then(|s| s.parse::<f64>().ok());
 
@@ -228,14 +235,16 @@ impl ModelManager {
 
             // Extract provider name
             let provider_name = model.id.split('/').next().unwrap_or("unknown").to_string();
-            
+
             // Check if model already exists
-            let existing_id: Option<i64> = conn.query_row(
-                "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
-                [&model.id],
-                |row| row.get(0)
-            ).optional()?;
-            
+            let existing_id: Option<i64> = conn
+                .query_row(
+                    "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
+                    [&model.id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+
             if let Some(internal_id) = existing_id {
                 // Update existing model, preserving internal_id
                 conn.execute(
@@ -254,7 +263,7 @@ impl ModelManager {
                     "#,
                     rusqlite::params![
                         internal_id,
-                        provider_name,  // provider_id
+                        provider_name, // provider_id
                         provider_name,
                         model.name.clone(),
                         model.context_length.unwrap_or(0) as i64,
@@ -267,18 +276,23 @@ impl ModelManager {
                 )?;
             } else {
                 // Check for potential rename by looking for similar models
-                let potential_rename: Option<i64> = conn.query_row(
-                    r#"
-                    SELECT internal_id FROM openrouter_models 
-                    WHERE provider_name = ?1 
+                let potential_rename: Option<i64> = conn
+                    .query_row(
+                        r#"
+                    SELECT internal_id FROM openrouter_models
+                    WHERE provider_name = ?1
                     AND is_active = 0
                     AND name LIKE ?2
                     LIMIT 1
                     "#,
-                    [&provider_name, &format!("%{}%", model.name.split('-').next().unwrap_or(""))],
-                    |row| row.get(0)
-                ).optional()?;
-                
+                        [
+                            &provider_name,
+                            &format!("%{}%", model.name.split('-').next().unwrap_or("")),
+                        ],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+
                 if let Some(renamed_id) = potential_rename {
                     // This looks like a rename - update the existing record
                     conn.execute(
@@ -311,16 +325,16 @@ impl ModelManager {
                     let provider_exists: bool = conn.query_row(
                         "SELECT EXISTS(SELECT 1 FROM openrouter_providers WHERE id = ?1)",
                         [&provider_name],
-                        |row| row.get(0)
+                        |row| row.get(0),
                     )?;
-                    
+
                     if !provider_exists {
                         conn.execute(
                             "INSERT INTO openrouter_providers (id, name, display_name, model_count, average_cost, capabilities, last_updated, is_active, created_at) VALUES (?1, ?2, ?3, 0, 0.0, '[]', ?4, 1, ?4)",
                             rusqlite::params![&provider_name, &provider_name, &provider_name, Utc::now().to_rfc3339()],
                         )?;
                     }
-                    
+
                     // Genuinely new model - insert with auto-generated internal_id
                     conn.execute(
                         r#"
@@ -351,8 +365,11 @@ impl ModelManager {
         }
 
         conn.execute("COMMIT", [])?;
-        
-        println!("💾 Committed transaction: {} models stored, {} skipped", stored_count, skipped_count);
+
+        println!(
+            "💾 Committed transaction: {} models stored, {} skipped",
+            stored_count, skipped_count
+        );
 
         // Update rankings
         self.update_model_rankings(db).await?;
@@ -372,22 +389,22 @@ impl ModelManager {
         // Get all active models with performance data
         let mut stmt = conn.prepare(
             r#"
-            SELECT internal_id, openrouter_id, provider_name, 
+            SELECT internal_id, openrouter_id, provider_name,
                    pricing_input, pricing_output, context_window
-            FROM openrouter_models 
+            FROM openrouter_models
             WHERE is_active = 1
             ORDER BY internal_id
-            "#
+            "#,
         )?;
 
         let model_rows = stmt.query_map([], |row| {
             Ok((
-                row.get::<_, u32>(0)?,  // internal_id
-                row.get::<_, String>(1)?, // openrouter_id
-                row.get::<_, String>(2)?, // provider_name
+                row.get::<_, u32>(0)?,         // internal_id
+                row.get::<_, String>(1)?,      // openrouter_id
+                row.get::<_, String>(2)?,      // provider_name
                 row.get::<_, Option<f64>>(3)?, // pricing_input
                 row.get::<_, Option<f64>>(4)?, // pricing_output
-                row.get::<_, u32>(5)?,  // context_window
+                row.get::<_, u32>(5)?,         // context_window
             ))
         })?;
 
@@ -397,10 +414,18 @@ impl ModelManager {
         let mut performance_ranks = Vec::new();
 
         for model_result in model_rows {
-            let (internal_id, openrouter_id, provider_name, pricing_input, pricing_output, context_window) = model_result?;
+            let (
+                internal_id,
+                openrouter_id,
+                provider_name,
+                pricing_input,
+                pricing_output,
+                context_window,
+            ) = model_result?;
 
             // Calculate programming rank (based on provider reputation and context window)
-            let programming_score = self.calculate_programming_score(&provider_name, context_window, pricing_input);
+            let programming_score =
+                self.calculate_programming_score(&provider_name, context_window, pricing_input);
             programming_ranks.push((internal_id, programming_score));
 
             // Calculate cost efficiency rank
@@ -408,14 +433,18 @@ impl ModelManager {
             cost_efficient_ranks.push((internal_id, cost_score));
 
             // Calculate performance rank (context window weighted)
-            let performance_score = self.calculate_performance_score(&provider_name, context_window);
+            let performance_score =
+                self.calculate_performance_score(&provider_name, context_window);
             performance_ranks.push((internal_id, performance_score));
         }
 
         // Sort rankings
-        programming_ranks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        cost_efficient_ranks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        performance_ranks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        programming_ranks
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        cost_efficient_ranks
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        performance_ranks
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Store rankings
         conn.execute("DELETE FROM model_rankings", [])?;
@@ -425,7 +454,7 @@ impl ModelManager {
             conn.execute(
                 r#"
                 INSERT INTO model_rankings (
-                    model_internal_id, ranking_source, rank_position, 
+                    model_internal_id, ranking_source, rank_position,
                     score, category, last_updated
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
@@ -445,7 +474,7 @@ impl ModelManager {
             conn.execute(
                 r#"
                 INSERT INTO model_rankings (
-                    model_internal_id, ranking_source, rank_position, 
+                    model_internal_id, ranking_source, rank_position,
                     score, category, last_updated
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
@@ -465,7 +494,7 @@ impl ModelManager {
             conn.execute(
                 r#"
                 INSERT INTO model_rankings (
-                    model_internal_id, ranking_source, rank_position, 
+                    model_internal_id, ranking_source, rank_position,
                     score, category, last_updated
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
                 "#,
@@ -485,13 +514,18 @@ impl ModelManager {
     }
 
     /// Get models by ranking position
-    pub async fn get_models_by_ranking(&self, db: &DatabaseManager, category: &str, top_n: usize) -> Result<Vec<ModelInfo>> {
+    pub async fn get_models_by_ranking(
+        &self,
+        db: &DatabaseManager,
+        category: &str,
+        top_n: usize,
+    ) -> Result<Vec<ModelInfo>> {
         let conn = db.get_connection()?;
 
         let mut stmt = conn.prepare(
             r#"
             SELECT om.internal_id, om.openrouter_id, om.provider_name, om.name,
-                   om.context_window, om.pricing_input, om.pricing_output, 
+                   om.context_window, om.pricing_input, om.pricing_output,
                    om.capabilities, om.is_active, om.last_updated,
                    mr.rank_position, mr.relative_score
             FROM openrouter_models om
@@ -499,13 +533,14 @@ impl ModelManager {
             WHERE mr.ranking_source = ?1 AND om.is_active = 1
             ORDER BY mr.rank_position ASC
             LIMIT ?2
-            "#
+            "#,
         )?;
 
         let model_rows = stmt.query_map(rusqlite::params![category, top_n], |row| {
             let capabilities_json: String = row.get(7)?;
-            let capabilities: Vec<String> = serde_json::from_str(&capabilities_json).unwrap_or_default();
-            
+            let capabilities: Vec<String> =
+                serde_json::from_str(&capabilities_json).unwrap_or_default();
+
             let last_updated_str: String = row.get(9)?;
             let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
                 .unwrap_or_else(|_| Utc::now().into())
@@ -535,23 +570,28 @@ impl ModelManager {
     }
 
     /// Get model by internal ID
-    pub async fn get_model_by_id(&self, db: &DatabaseManager, internal_id: u32) -> Result<Option<ModelInfo>> {
+    pub async fn get_model_by_id(
+        &self,
+        db: &DatabaseManager,
+        internal_id: u32,
+    ) -> Result<Option<ModelInfo>> {
         let conn = db.get_connection()?;
 
         let mut stmt = conn.prepare(
             r#"
             SELECT internal_id, openrouter_id, provider_name, name,
-                   context_window, pricing_input, pricing_output, 
+                   context_window, pricing_input, pricing_output,
                    capabilities, is_active, last_updated
             FROM openrouter_models
             WHERE internal_id = ?1
-            "#
+            "#,
         )?;
 
         let result = stmt.query_row(rusqlite::params![internal_id], |row| {
             let capabilities_json: String = row.get(7)?;
-            let capabilities: Vec<String> = serde_json::from_str(&capabilities_json).unwrap_or_default();
-            
+            let capabilities: Vec<String> =
+                serde_json::from_str(&capabilities_json).unwrap_or_default();
+
             let last_updated_str: String = row.get(9)?;
             let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
                 .unwrap_or_else(|_| Utc::now().into())
@@ -580,23 +620,28 @@ impl ModelManager {
     }
 
     /// Get model by OpenRouter ID
-    pub async fn get_model_by_openrouter_id(&self, db: &DatabaseManager, openrouter_id: &str) -> Result<Option<ModelInfo>> {
+    pub async fn get_model_by_openrouter_id(
+        &self,
+        db: &DatabaseManager,
+        openrouter_id: &str,
+    ) -> Result<Option<ModelInfo>> {
         let conn = db.get_connection()?;
 
         let mut stmt = conn.prepare(
             r#"
             SELECT internal_id, openrouter_id, provider_name, name,
-                   context_window, pricing_input, pricing_output, 
+                   context_window, pricing_input, pricing_output,
                    capabilities, is_active, last_updated
             FROM openrouter_models
             WHERE openrouter_id = ?1 AND is_active = 1
-            "#
+            "#,
         )?;
 
         let result = stmt.query_row(rusqlite::params![openrouter_id], |row| {
             let capabilities_json: String = row.get(7)?;
-            let capabilities: Vec<String> = serde_json::from_str(&capabilities_json).unwrap_or_default();
-            
+            let capabilities: Vec<String> =
+                serde_json::from_str(&capabilities_json).unwrap_or_default();
+
             let last_updated_str: String = row.get(9)?;
             let last_updated = DateTime::parse_from_rfc3339(&last_updated_str)
                 .unwrap_or_else(|_| Utc::now().into())
@@ -633,7 +678,12 @@ impl ModelManager {
     }
 
     /// Calculate programming score for a model
-    fn calculate_programming_score(&self, provider: &str, context_window: u32, pricing: Option<f64>) -> f64 {
+    fn calculate_programming_score(
+        &self,
+        provider: &str,
+        context_window: u32,
+        pricing: Option<f64>,
+    ) -> f64 {
         let mut score = 0.0;
 
         // Provider reputation scores
@@ -669,7 +719,11 @@ impl ModelManager {
     }
 
     /// Calculate cost efficiency score
-    fn calculate_cost_efficiency_score(&self, input_pricing: Option<f64>, output_pricing: Option<f64>) -> f64 {
+    fn calculate_cost_efficiency_score(
+        &self,
+        input_pricing: Option<f64>,
+        output_pricing: Option<f64>,
+    ) -> f64 {
         let avg_pricing = match (input_pricing, output_pricing) {
             (Some(input), Some(output)) => (input + output) / 2.0,
             (Some(price), None) | (None, Some(price)) => price,
@@ -724,8 +778,10 @@ impl DynamicModelSelector {
         criteria: &ModelSelectionCriteria,
         conversation_id: Option<&str>,
     ) -> Result<Option<ModelCandidate>> {
-        println!("🎯 Selecting optimal model for {} stage ({} complexity)", 
-                 criteria.stage, criteria.question_complexity);
+        println!(
+            "🎯 Selecting optimal model for {} stage ({} complexity)",
+            criteria.stage, criteria.question_complexity
+        );
 
         // 1. Get available models based on criteria
         let candidates = self.get_candidate_models(db, criteria).await?;
@@ -743,12 +799,15 @@ impl DynamicModelSelector {
 
         // 4. Select top model
         if let Some(selected_model) = scored_candidates.first() {
-            println!("✅ Selected {} (score: {:.3}) for {}", 
-                     selected_model.openrouter_id, selected_model.suitability_score, criteria.stage);
+            println!(
+                "✅ Selected {} (score: {:.3}) for {}",
+                selected_model.openrouter_id, selected_model.suitability_score, criteria.stage
+            );
 
             // 5. Record selection for learning
             if let Some(conv_id) = conversation_id {
-                self.record_model_selection(db, selected_model, criteria, conv_id).await?;
+                self.record_model_selection(db, selected_model, criteria, conv_id)
+                    .await?;
             }
 
             return Ok(Some(selected_model.clone()));
@@ -759,32 +818,50 @@ impl DynamicModelSelector {
     }
 
     /// Get candidate models based on criteria
-    async fn get_candidate_models(&self, db: &DatabaseManager, criteria: &ModelSelectionCriteria) -> Result<Vec<ModelCandidate>> {
+    async fn get_candidate_models(
+        &self,
+        db: &DatabaseManager,
+        criteria: &ModelSelectionCriteria,
+    ) -> Result<Vec<ModelCandidate>> {
         let mut candidates = Vec::new();
 
         // Get models based on stage requirements
         let models = match criteria.stage.as_str() {
             "generator" => {
                 // For generator: prefer top-ranked models with good context
-                self.model_manager.get_models_by_ranking(db, "programming", 20).await?
+                self.model_manager
+                    .get_models_by_ranking(db, "programming", 20)
+                    .await?
             }
             "refiner" => {
                 // For refiner: balance between quality and cost
-                let mut prog_models = self.model_manager.get_models_by_ranking(db, "programming", 15).await?;
-                let cost_models = self.model_manager.get_models_by_ranking(db, "cost", 10).await?;
+                let mut prog_models = self
+                    .model_manager
+                    .get_models_by_ranking(db, "programming", 15)
+                    .await?;
+                let cost_models = self
+                    .model_manager
+                    .get_models_by_ranking(db, "cost", 10)
+                    .await?;
                 prog_models.extend(cost_models);
                 prog_models
             }
             "validator" => {
                 // For validator: prefer cost-efficient models
-                self.model_manager.get_models_by_ranking(db, "cost", 15).await?
+                self.model_manager
+                    .get_models_by_ranking(db, "cost", 15)
+                    .await?
             }
             "curator" => {
                 // For curator: prefer top quality models
-                self.model_manager.get_models_by_ranking(db, "programming", 10).await?
+                self.model_manager
+                    .get_models_by_ranking(db, "programming", 10)
+                    .await?
             }
             _ => {
-                self.model_manager.get_models_by_ranking(db, "programming", 20).await?
+                self.model_manager
+                    .get_models_by_ranking(db, "programming", 20)
+                    .await?
             }
         };
 
@@ -810,7 +887,11 @@ impl DynamicModelSelector {
     }
 
     /// Apply constraint filtering
-    fn apply_constraint_filtering(&self, mut candidates: Vec<ModelCandidate>, criteria: &ModelSelectionCriteria) -> Vec<ModelCandidate> {
+    fn apply_constraint_filtering(
+        &self,
+        mut candidates: Vec<ModelCandidate>,
+        criteria: &ModelSelectionCriteria,
+    ) -> Vec<ModelCandidate> {
         // Budget constraints
         if let Some(budget) = &criteria.budget_constraints {
             if let Some(max_cost) = budget.max_cost_per_stage {
@@ -834,10 +915,10 @@ impl DynamicModelSelector {
             if !prefs.preferred_providers.is_empty() {
                 candidates.retain(|c| prefs.preferred_providers.contains(&c.provider));
             }
-            
+
             // Filter avoided providers
             candidates.retain(|c| !prefs.avoided_providers.contains(&c.provider));
-            
+
             // Filter blacklisted models
             candidates.retain(|c| !prefs.model_blacklist.contains(&c.openrouter_id));
         }
@@ -846,7 +927,11 @@ impl DynamicModelSelector {
     }
 
     /// Score model suitability
-    fn score_model_suitability(&self, mut candidates: Vec<ModelCandidate>, criteria: &ModelSelectionCriteria) -> Vec<ModelCandidate> {
+    fn score_model_suitability(
+        &self,
+        mut candidates: Vec<ModelCandidate>,
+        criteria: &ModelSelectionCriteria,
+    ) -> Vec<ModelCandidate> {
         for candidate in &mut candidates {
             let mut score = 0.0;
 
@@ -904,23 +989,37 @@ impl DynamicModelSelector {
         }
 
         // Sort by suitability score (descending)
-        candidates.sort_by(|a, b| b.suitability_score.partial_cmp(&a.suitability_score).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| {
+            b.suitability_score
+                .partial_cmp(&a.suitability_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         candidates
     }
 
     /// Get fallback model for a stage
-    async fn get_fallback_model(&self, db: &DatabaseManager, stage: &str) -> Result<Option<ModelCandidate>> {
+    async fn get_fallback_model(
+        &self,
+        db: &DatabaseManager,
+        stage: &str,
+    ) -> Result<Option<ModelCandidate>> {
         // Try to get any active model for the stage
         let models = match stage {
             "generator" | "curator" => {
-                self.model_manager.get_models_by_ranking(db, "programming", 1).await?
+                self.model_manager
+                    .get_models_by_ranking(db, "programming", 1)
+                    .await?
             }
             "refiner" | "validator" => {
-                self.model_manager.get_models_by_ranking(db, "cost", 1).await?
+                self.model_manager
+                    .get_models_by_ranking(db, "cost", 1)
+                    .await?
             }
             _ => {
-                self.model_manager.get_models_by_ranking(db, "programming", 1).await?
+                self.model_manager
+                    .get_models_by_ranking(db, "programming", 1)
+                    .await?
             }
         };
 

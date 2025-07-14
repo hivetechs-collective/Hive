@@ -3,6 +3,7 @@
 //! This module provides the command-line interface with comprehensive
 //! command support, interactive mode, and TUI integration.
 
+pub mod accessibility;
 pub mod args;
 pub mod banner;
 pub mod commands;
@@ -10,10 +11,9 @@ pub mod completions;
 pub mod framework;
 pub mod interactive;
 pub mod trust;
-pub mod tui_commands;
 pub mod tui_capabilities;
+pub mod tui_commands;
 pub mod tui_themes;
-pub mod accessibility;
 
 pub use args::{Cli, Commands};
 pub use banner::print_banner;
@@ -26,7 +26,7 @@ use std::env;
 /// Check if TUI should be launched based on terminal capabilities
 pub async fn should_launch_tui() -> bool {
     use tui_capabilities::{TuiLauncher, TuiMode};
-    
+
     match TuiLauncher::should_launch_tui() {
         Ok(TuiMode::Enhanced) | Ok(TuiMode::Simple) => true,
         _ => false,
@@ -36,7 +36,7 @@ pub async fn should_launch_tui() -> bool {
 /// Check TUI capabilities synchronously
 pub fn check_tui_capabilities() -> bool {
     use tui_capabilities::TuiCapabilities;
-    
+
     match TuiCapabilities::detect() {
         Ok(capabilities) => capabilities.supports_simple_tui(),
         Err(_) => false,
@@ -60,12 +60,9 @@ pub fn get_current_dir_display() -> String {
 pub async fn check_internet_connection() -> bool {
     // In a real implementation, this would check actual connectivity
     // For now, simulate with a simple check
-    tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        check_dns_resolution()
-    )
-    .await
-    .unwrap_or(false)
+    tokio::time::timeout(std::time::Duration::from_secs(2), check_dns_resolution())
+        .await
+        .unwrap_or(false)
 }
 
 /// Check DNS resolution as a proxy for internet connectivity
@@ -102,7 +99,7 @@ pub fn get_memory_usage() -> usize {
             }
         }
     }
-    
+
     // Default fallback for other platforms
     // Estimate based on a typical Rust CLI application
     25 * 1024 * 1024 // 25 MB

@@ -37,7 +37,7 @@ impl MotionPreferences {
     /// Set reduce motion preference
     pub fn set_reduce_motion(&mut self, reduce: bool) {
         self.reduce_motion = reduce;
-        
+
         if reduce {
             self.animation_speed = AnimationSpeed::None;
             self.disable_parallax = true;
@@ -93,8 +93,8 @@ impl MotionPreferences {
             AnimationType::Parallax => !self.disable_parallax,
             AnimationType::Spin => false, // Always disable spinning animations
             AnimationType::Bounce => self.animation_speed != AnimationSpeed::None,
-            AnimationType::Instant => true,  // Always allow instant animations
-            AnimationType::Static => true,   // Always allow static (no animation)
+            AnimationType::Instant => true, // Always allow instant animations
+            AnimationType::Static => true,  // Always allow static (no animation)
             AnimationType::Jump => !self.reduce_motion,
         }
     }

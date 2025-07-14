@@ -1,24 +1,28 @@
 //! Migration User Interface
-//! 
+//!
 //! Professional user experience for database migration with progress indicators,
 //! detailed status reporting, and interactive wizard functionality.
 
 use crate::core::error::HiveError;
-use crate::migration::{MigrationManager, MigrationConfig, MigrationType, ValidationLevel, MigrationPhase, MigrationStatus};
 use crate::migration::database_impl::MigrationStats;
+use crate::migration::{
+    MigrationConfig, MigrationManager, MigrationPhase, MigrationStatus, MigrationType,
+    ValidationLevel,
+};
+use console::{Style, Term};
+use crossterm::{
+    cursor,
+    event::{self, Event, KeyCode, KeyEvent},
+    execute, queue, style,
+    terminal::{self, Clear, ClearType},
+};
+use dialoguer::{Confirm, Input, MultiSelect, Select};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
-use std::time::{Duration, Instant};
-use crossterm::{
-    cursor, execute, queue, style,
-    terminal::{self, Clear, ClearType},
-    event::{self, Event, KeyCode, KeyEvent},
-};
-use indicatif::{ProgressBar, ProgressStyle, MultiProgress};
-use console::{Style, Term};
-use dialoguer::{Confirm, Select, Input, MultiSelect};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 /// Migration UI configuration
@@ -144,7 +148,7 @@ impl MigrationWizard {
     /// Create new migration wizard
     pub fn new(config: MigrationUIConfig) -> io::Result<Self> {
         let terminal = Term::stdout();
-        
+
         Ok(Self {
             config,
             current_step: WizardStep::Welcome,
@@ -158,54 +162,56 @@ impl MigrationWizard {
     /// Run interactive migration wizard
     pub async fn run_wizard(&mut self) -> Result<MigrationConfig, HiveError> {
         self.is_running.store(true, Ordering::Relaxed);
-        
+
         // Clear screen and show welcome
         self.terminal.clear_screen()?;
         self.show_welcome_screen()?;
 
         // Guide user through each step
-        while self.current_step != WizardStep::CompletionSummary && self.is_running.load(Ordering::Relaxed) {
+        while self.current_step != WizardStep::CompletionSummary
+            && self.is_running.load(Ordering::Relaxed)
+        {
             match self.current_step {
                 WizardStep::Welcome => {
                     if self.handle_welcome_step()? {
                         self.current_step = WizardStep::SourceSelection;
                     }
-                },
+                }
                 WizardStep::SourceSelection => {
                     if self.handle_source_selection()? {
                         self.current_step = WizardStep::MigrationTypeSelection;
                     }
-                },
+                }
                 WizardStep::MigrationTypeSelection => {
                     if self.handle_migration_type_selection()? {
                         self.current_step = WizardStep::ValidationLevelSelection;
                     }
-                },
+                }
                 WizardStep::ValidationLevelSelection => {
                     if self.handle_validation_level_selection()? {
                         self.current_step = WizardStep::AdvancedOptions;
                     }
-                },
+                }
                 WizardStep::AdvancedOptions => {
                     if self.handle_advanced_options()? {
                         self.current_step = WizardStep::PreMigrationCheck;
                     }
-                },
+                }
                 WizardStep::PreMigrationCheck => {
                     if self.handle_pre_migration_check().await? {
                         self.current_step = WizardStep::MigrationExecution;
                     }
-                },
+                }
                 WizardStep::MigrationExecution => {
                     if self.handle_migration_execution().await? {
                         self.current_step = WizardStep::PostMigrationValidation;
                     }
-                },
+                }
                 WizardStep::PostMigrationValidation => {
                     if self.handle_post_migration_validation().await? {
                         self.current_step = WizardStep::CompletionSummary;
                     }
-                },
+                }
                 WizardStep::CompletionSummary => break,
             }
         }
@@ -217,18 +223,48 @@ impl MigrationWizard {
     /// Show professional welcome screen
     fn show_welcome_screen(&self) -> io::Result<()> {
         let style = self.get_theme_style();
-        
+
         println!("{}", style.apply_to(""));
-        println!("{}", style.apply_to("╭─────────────────────────────────────────────────────────────╮"));
-        println!("{}", style.apply_to("│  🐝 HiveTechs Consensus - Database Migration Wizard       │"));
-        println!("{}", style.apply_to("│                                                             │"));
-        println!("{}", style.apply_to("│  Seamless TypeScript to Rust Migration                    │"));
-        println!("{}", style.apply_to("│  • Zero data loss guarantee                                │"));
-        println!("{}", style.apply_to("│  • 10-40x performance improvement                          │"));
-        println!("{}", style.apply_to("│  • Comprehensive validation                                │"));
-        println!("{}", style.apply_to("│  • Professional installation experience                   │"));
-        println!("{}", style.apply_to("│                                                             │"));
-        println!("{}", style.apply_to("╰─────────────────────────────────────────────────────────────╯"));
+        println!(
+            "{}",
+            style.apply_to("╭─────────────────────────────────────────────────────────────╮")
+        );
+        println!(
+            "{}",
+            style.apply_to("│  🐝 HiveTechs Consensus - Database Migration Wizard       │")
+        );
+        println!(
+            "{}",
+            style.apply_to("│                                                             │")
+        );
+        println!(
+            "{}",
+            style.apply_to("│  Seamless TypeScript to Rust Migration                    │")
+        );
+        println!(
+            "{}",
+            style.apply_to("│  • Zero data loss guarantee                                │")
+        );
+        println!(
+            "{}",
+            style.apply_to("│  • 10-40x performance improvement                          │")
+        );
+        println!(
+            "{}",
+            style.apply_to("│  • Comprehensive validation                                │")
+        );
+        println!(
+            "{}",
+            style.apply_to("│  • Professional installation experience                   │")
+        );
+        println!(
+            "{}",
+            style.apply_to("│                                                             │")
+        );
+        println!(
+            "{}",
+            style.apply_to("╰─────────────────────────────────────────────────────────────╯")
+        );
         println!();
 
         Ok(())
@@ -259,11 +295,12 @@ impl MigrationWizard {
 
         // Auto-detect common TypeScript installation paths
         let common_paths = self.detect_typescript_installations();
-        
+
         if !common_paths.is_empty() {
             println!("\n🔍 Found TypeScript installations:");
-            
-            let mut options = common_paths.iter()
+
+            let mut options = common_paths
+                .iter()
                 .map(|p| p.display().to_string())
                 .collect::<Vec<_>>();
             options.push("Enter custom path".to_string());
@@ -315,7 +352,7 @@ impl MigrationWizard {
 
         let migration_types = vec![
             "Upgrade - Replace TypeScript with Rust (Recommended)",
-            "Parallel - Run both versions temporarily", 
+            "Parallel - Run both versions temporarily",
             "Fresh - Clean Rust installation",
             "Staged - Gradual feature-by-feature migration",
         ];
@@ -335,7 +372,10 @@ impl MigrationWizard {
             _ => MigrationType::Upgrade,
         });
 
-        println!("✅ Migration type selected: {:?}", self.user_preferences.migration_type);
+        println!(
+            "✅ Migration type selected: {:?}",
+            self.user_preferences.migration_type
+        );
         Ok(true)
     }
 
@@ -366,7 +406,10 @@ impl MigrationWizard {
             _ => ValidationLevel::Standard,
         });
 
-        println!("✅ Validation level selected: {:?}", self.user_preferences.validation_level);
+        println!(
+            "✅ Validation level selected: {:?}",
+            self.user_preferences.validation_level
+        );
         Ok(true)
     }
 
@@ -408,7 +451,7 @@ impl MigrationWizard {
             .with_prompt("Customize batch size for performance tuning?")
             .default(false)
             .interact()
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))? 
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
         {
             let batch_size: u32 = Input::new()
                 .with_prompt("Batch size (100-10000)")
@@ -438,7 +481,7 @@ impl MigrationWizard {
         check_spinner.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.green} {msg}")
-                .unwrap()
+                .unwrap(),
         );
 
         // Perform various checks
@@ -453,9 +496,9 @@ impl MigrationWizard {
         for message in checks {
             check_spinner.set_message(message);
             check_spinner.tick();
-            
+
             tokio::time::sleep(Duration::from_millis(500)).await; // Simulate check time
-            
+
             let result = match message {
                 "Validating source database" => self.check_source_database().await,
                 "Checking disk space" => self.check_disk_space().await,
@@ -464,7 +507,7 @@ impl MigrationWizard {
                 "Estimating migration time" => self.estimate_migration_time().await,
                 _ => Ok(()),
             };
-            
+
             match result {
                 Ok(()) => println!("✅ {}", message),
                 Err(e) => {
@@ -476,7 +519,7 @@ impl MigrationWizard {
         }
 
         check_spinner.finish_and_clear();
-        
+
         // Show migration summary
         self.show_migration_summary()?;
 
@@ -500,16 +543,12 @@ impl MigrationWizard {
 
         // Set up progress display
         let status_display = MigrationStatusDisplay::new()?;
-        
+
         // Start migration with progress tracking
-        let migration_task = tokio::spawn(async move {
-            migration_manager.migrate().await
-        });
+        let migration_task = tokio::spawn(async move { migration_manager.migrate().await });
 
         // Update progress display
-        let display_task = tokio::spawn(async move {
-            status_display.run_display_loop().await
-        });
+        let display_task = tokio::spawn(async move { status_display.run_display_loop().await });
 
         // Wait for migration completion
         let migration_result = migration_task.await?;
@@ -519,10 +558,10 @@ impl MigrationWizard {
             Ok(()) => {
                 println!("\n✅ Migration completed successfully!");
                 Ok(true)
-            },
+            }
             Err(e) => {
                 println!("\n❌ Migration failed: {}", e);
-                
+
                 let retry = Confirm::new()
                     .with_prompt("Would you like to retry the migration?")
                     .default(false)
@@ -543,7 +582,7 @@ impl MigrationWizard {
         validation_spinner.set_style(
             ProgressStyle::default_spinner()
                 .template("{spinner:.green} {msg}")
-                .unwrap()
+                .unwrap(),
         );
 
         // Run validation tests
@@ -560,7 +599,7 @@ impl MigrationWizard {
         for message in validations {
             validation_spinner.set_message(message);
             validation_spinner.tick();
-            
+
             let result = match message {
                 "Verifying row counts" => self.validate_row_counts().await,
                 "Checking data integrity" => self.validate_data_integrity().await,
@@ -569,7 +608,7 @@ impl MigrationWizard {
                 "Running functional tests" => self.validate_functionality().await,
                 _ => Ok(()),
             };
-            
+
             match result {
                 Ok(()) => println!("✅ {}", message),
                 Err(e) => {
@@ -592,15 +631,24 @@ impl MigrationWizard {
 
     /// Build migration configuration from user preferences
     fn build_migration_config(&self) -> Result<MigrationConfig, HiveError> {
-        let source_path = self.user_preferences.source_path.as_ref()
-            .ok_or_else(|| HiveError::Migration { 
-                message: "Source path not specified".to_string()
-            })?;
-        
-        let migration_type = self.user_preferences.migration_type.clone()
+        let source_path =
+            self.user_preferences
+                .source_path
+                .as_ref()
+                .ok_or_else(|| HiveError::Migration {
+                    message: "Source path not specified".to_string(),
+                })?;
+
+        let migration_type = self
+            .user_preferences
+            .migration_type
+            .clone()
             .unwrap_or(MigrationType::Upgrade);
-        
-        let validation_level = self.user_preferences.validation_level.clone()
+
+        let validation_level = self
+            .user_preferences
+            .validation_level
+            .clone()
             .unwrap_or(ValidationLevel::Standard);
 
         Ok(MigrationConfig {
@@ -617,7 +665,7 @@ impl MigrationWizard {
         match self.config.theme {
             UITheme::Professional => Style::new().blue().bold(),
             UITheme::Dark => Style::new().white().bold(),
-            UITheme::Light => Style::new().black().bold(), 
+            UITheme::Light => Style::new().black().bold(),
             UITheme::Default => Style::new().cyan().bold(),
             UITheme::Minimal => Style::new().bold(),
         }
@@ -627,22 +675,36 @@ impl MigrationWizard {
     fn show_migration_summary(&self) -> io::Result<()> {
         println!("\n📋 Migration Summary");
         println!("─────────────────────");
-        
+
         if let Some(ref source) = self.user_preferences.source_path {
             println!("Source: {}", source.display());
         }
-        
+
         if let Some(ref migration_type) = self.user_preferences.migration_type {
             println!("Type: {:?}", migration_type);
         }
-        
+
         if let Some(ref validation_level) = self.user_preferences.validation_level {
             println!("Validation: {:?}", validation_level);
         }
-        
-        println!("Preserve Original: {}", if self.user_preferences.preserve_original { "Yes" } else { "No" });
-        println!("Parallel Processing: {}", if self.user_preferences.parallel_processing { "Yes" } else { "No" });
-        
+
+        println!(
+            "Preserve Original: {}",
+            if self.user_preferences.preserve_original {
+                "Yes"
+            } else {
+                "No"
+            }
+        );
+        println!(
+            "Parallel Processing: {}",
+            if self.user_preferences.parallel_processing {
+                "Yes"
+            } else {
+                "No"
+            }
+        );
+
         if let Some(ref backup_path) = self.user_preferences.backup_path {
             println!("Backup Path: {}", backup_path.display());
         }
@@ -652,16 +714,36 @@ impl MigrationWizard {
     }
 
     // Helper methods for checks and validations (stubs)
-    async fn check_source_database(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn check_disk_space(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn check_dependencies(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn check_permissions(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn estimate_migration_time(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn validate_row_counts(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn validate_data_integrity(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn validate_performance(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn validate_schema(&self) -> Result<(), HiveError> { Ok(()) }
-    async fn validate_functionality(&self) -> Result<(), HiveError> { Ok(()) }
+    async fn check_source_database(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn check_disk_space(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn check_dependencies(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn check_permissions(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn estimate_migration_time(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn validate_row_counts(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn validate_data_integrity(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn validate_performance(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn validate_schema(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn validate_functionality(&self) -> Result<(), HiveError> {
+        Ok(())
+    }
 
     fn detect_typescript_installations(&self) -> Vec<std::path::PathBuf> {
         vec![
@@ -679,13 +761,13 @@ impl MigrationStatusDisplay {
     /// Create new status display
     pub fn new() -> io::Result<Self> {
         let multi_progress = MultiProgress::new();
-        
+
         let overall_progress = multi_progress.add(ProgressBar::new(100));
         overall_progress.set_style(
             ProgressStyle::default_bar()
                 .template("{prefix:.bold.dim} {bar:40.cyan/blue} {pos:>3}/{len:3} {msg}")
                 .unwrap()
-                .progress_chars("██░")
+                .progress_chars("██░"),
         );
         overall_progress.set_prefix("Overall");
 
@@ -694,7 +776,7 @@ impl MigrationStatusDisplay {
             ProgressStyle::default_bar()
                 .template("{prefix:.bold.dim} {bar:40.green/blue} {pos:>3}/{len:3} {msg}")
                 .unwrap()
-                .progress_chars("██░")
+                .progress_chars("██░"),
         );
         phase_progress.set_prefix("Phase  ");
 
@@ -703,7 +785,7 @@ impl MigrationStatusDisplay {
             ProgressStyle::default_bar()
                 .template("{prefix:.bold.dim} {bar:40.yellow/blue} {pos:>3}/{len:3} {msg}")
                 .unwrap()
-                .progress_chars("██░")
+                .progress_chars("██░"),
         );
         detail_progress.set_prefix("Detail ");
 
@@ -723,10 +805,10 @@ impl MigrationStatusDisplay {
         while self.is_active.load(Ordering::Relaxed) {
             // Update progress bars
             self.update_progress_display().await?;
-            
+
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        
+
         Ok(())
     }
 
@@ -734,7 +816,7 @@ impl MigrationStatusDisplay {
     async fn update_progress_display(&self) -> Result<(), HiveError> {
         // This would integrate with actual migration progress
         // For now, simulate progress updates
-        
+
         Ok(())
     }
 
@@ -749,7 +831,7 @@ impl MigrationStatusDisplay {
 
         let mut messages = self.status_messages.write().await;
         messages.push(status_message);
-        
+
         // Keep only last 100 messages
         if messages.len() > 100 {
             messages.remove(0);
@@ -775,13 +857,13 @@ pub async fn run_quick_migration(
     };
 
     let mut migration_manager = MigrationManager::new(config);
-    
+
     // Simple progress indicator
     let progress = ProgressBar::new_spinner();
     progress.set_style(
         ProgressStyle::default_spinner()
             .template("{spinner:.green} {msg}")
-            .unwrap()
+            .unwrap(),
     );
     progress.set_message("Migrating database...");
 
@@ -792,7 +874,7 @@ pub async fn run_quick_migration(
         Ok(()) => {
             println!("✅ Quick migration completed successfully");
             Ok(MigrationStats::default()) // Placeholder
-        },
+        }
         Err(e) => {
             println!("❌ Quick migration failed: {}", e);
             Err(e)
@@ -828,12 +910,14 @@ mod tests {
     #[tokio::test]
     async fn test_status_message_creation() {
         let display = MigrationStatusDisplay::new().unwrap();
-        
-        display.add_message(
-            MessageLevel::Info,
-            "Test message".to_string(),
-            Some("Test details".to_string())
-        ).await;
+
+        display
+            .add_message(
+                MessageLevel::Info,
+                "Test message".to_string(),
+                Some("Test details".to_string()),
+            )
+            .await;
 
         let messages = display.status_messages.read().await;
         assert_eq!(messages.len(), 1);

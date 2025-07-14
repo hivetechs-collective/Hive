@@ -58,7 +58,7 @@ enum ConfigCommands {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    
+
     match cli.command {
         Some(Commands::Init { path }) => {
             essential_commands::essential_init(path).await?;
@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
             show_banner().await?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -100,14 +100,14 @@ async fn show_banner() -> Result<()> {
     println!("│   {} {}          │", style("cwd:").dim(), get_cwd_display());
     println!("╰─────────────────────────────────────────────────────────────╯");
     println!();
-    
+
     println!(" {}:", style("Available commands").bold());
     println!("   {} - Initialize Hive in current directory", style("hive init").cyan());
     println!("   {} - Show system status", style("hive status").cyan());
     println!("   {} - Show configuration", style("hive config show").cyan());
     println!("   {} - Ask a question (demo)", style("hive ask \"<question>\"").cyan());
     println!();
-    
+
     println!(" {}:", style("Phase 1 Progress").bold());
     println!("   ✅ CLI infrastructure working");
     println!("   ✅ Configuration system functional");
@@ -116,7 +116,7 @@ async fn show_banner() -> Result<()> {
     println!("   🚧 Full AI consensus (Phase 3)");
     println!("   🚧 TUI interface (Phase 7)");
     println!();
-    
+
     Ok(())
 }
 
@@ -136,7 +136,7 @@ fn get_cwd_display() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_cwd_display() {
         let display = get_cwd_display();

@@ -116,11 +116,15 @@ impl OpenRouterClient {
     /// Make a standard chat completion request
     pub async fn chat_completion(&self, request: OpenRouterRequest) -> Result<OpenRouterResponse> {
         let start_time = Instant::now();
-        
-        tracing::info!("🚀 Calling OpenRouter API: {} (temp: {:.1})", 
-                 request.model, request.temperature.unwrap_or(0.7));
 
-        let response = self.build_request("/chat/completions")
+        tracing::info!(
+            "🚀 Calling OpenRouter API: {} (temp: {:.1})",
+            request.model,
+            request.temperature.unwrap_or(0.7)
+        );
+
+        let response = self
+            .build_request("/chat/completions")
             .json(&request)
             .send()
             .await
@@ -138,9 +142,15 @@ impl OpenRouterClient {
             .context("Failed to parse OpenRouter response")?;
 
         let duration = start_time.elapsed();
-        tracing::info!("✅ OpenRouter response received in {:.2}s (tokens: {})", 
-                 duration.as_secs_f64(),
-                 openrouter_response.usage.as_ref().map(|u| u.total_tokens).unwrap_or(0));
+        tracing::info!(
+            "✅ OpenRouter response received in {:.2}s (tokens: {})",
+            duration.as_secs_f64(),
+            openrouter_response
+                .usage
+                .as_ref()
+                .map(|u| u.total_tokens)
+                .unwrap_or(0)
+        );
 
         Ok(openrouter_response)
     }
@@ -152,16 +162,20 @@ impl OpenRouterClient {
         callbacks: Option<Box<dyn StreamingCallbacks>>,
     ) -> Result<String> {
         request.stream = Some(true);
-        
+
         let start_time = Instant::now();
-        tracing::info!("🌊 Starting streaming request: {} (temp: {:.1})", 
-                 request.model, request.temperature.unwrap_or(0.7));
+        tracing::info!(
+            "🌊 Starting streaming request: {} (temp: {:.1})",
+            request.model,
+            request.temperature.unwrap_or(0.7)
+        );
 
         if let Some(cb) = &callbacks {
             cb.on_start();
         }
 
-        let mut response = self.build_request("/chat/completions")
+        let mut response = self
+            .build_request("/chat/completions")
             .json(&request)
             .send()
             .await
@@ -170,7 +184,8 @@ impl OpenRouterClient {
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            let error = anyhow::anyhow!("OpenRouter streaming API error {}: {}", status, error_text);
+            let error =
+                anyhow::anyhow!("OpenRouter streaming API error {}: {}", status, error_text);
             if let Some(cb) = &callbacks {
                 cb.on_error(&error);
             }
@@ -184,16 +199,16 @@ impl OpenRouterClient {
         // Process streaming response
         while let Some(chunk) = response.chunk().await.context("Failed to read chunk")? {
             let chunk_str = String::from_utf8_lossy(&chunk);
-            
+
             // Parse Server-Sent Events format
             for line in chunk_str.lines() {
                 if line.starts_with("data: ") {
                     let data = &line[6..]; // Remove "data: " prefix
-                    
+
                     if data == "[DONE]" {
                         break;
                     }
-                    
+
                     if let Ok(parsed) = serde_json::from_str::<Value>(data) {
                         if let Some(choices) = parsed["choices"].as_array() {
                             if let Some(choice) = choices.first() {
@@ -201,11 +216,14 @@ impl OpenRouterClient {
                                     if let Some(content) = delta["content"].as_str() {
                                         full_content.push_str(content);
                                         chunk_count += 1;
-                                        
+
                                         if let Some(cb) = &callbacks {
-                                            tracing::debug!("OpenRouter: Forwarding chunk '{}' to callbacks", content);
+                                            tracing::debug!(
+                                                "OpenRouter: Forwarding chunk '{}' to callbacks",
+                                                content
+                                            );
                                             cb.on_chunk(content.to_string(), full_content.clone());
-                                            
+
                                             // Estimate progress
                                             let progress = StreamingProgress {
                                                 tokens: Some(chunk_count * 2), // Rough estimate
@@ -217,7 +235,7 @@ impl OpenRouterClient {
                                 }
                             }
                         }
-                        
+
                         // Check for usage information
                         if let Some(usage) = parsed["usage"].as_object() {
                             if let Some(tokens) = usage["total_tokens"].as_u64() {
@@ -230,8 +248,12 @@ impl OpenRouterClient {
         }
 
         let duration = start_time.elapsed();
-        tracing::debug!("✅ Streaming completed in {:.2}s ({} chunks, {} tokens)", 
-                 duration.as_secs_f64(), chunk_count, total_tokens);
+        tracing::debug!(
+            "✅ Streaming completed in {:.2}s ({} chunks, {} tokens)",
+            duration.as_secs_f64(),
+            chunk_count,
+            total_tokens
+        );
 
         let usage = if total_tokens > 0 {
             Some(Usage {
@@ -252,7 +274,8 @@ impl OpenRouterClient {
 
     /// Get available models
     pub async fn get_models(&self) -> Result<Vec<Value>> {
-        let response = self.build_request("/models")
+        let response = self
+            .build_request("/models")
             .send()
             .await
             .context("Failed to fetch models from OpenRouter")?;
@@ -266,12 +289,16 @@ impl OpenRouterClient {
             .await
             .context("Failed to parse models response")?;
 
-        Ok(models_response["data"].as_array().unwrap_or(&vec![]).clone())
+        Ok(models_response["data"]
+            .as_array()
+            .unwrap_or(&vec![])
+            .clone())
     }
 
     /// Get generation statistics
     pub async fn get_generation_stats(&self) -> Result<Value> {
-        let response = self.build_request("/generation")
+        let response = self
+            .build_request("/generation")
             .send()
             .await
             .context("Failed to fetch generation stats")?;
@@ -280,18 +307,21 @@ impl OpenRouterClient {
             anyhow::bail!("Failed to fetch generation stats: {}", response.status());
         }
 
-        response.json().await.context("Failed to parse generation stats")
+        response
+            .json()
+            .await
+            .context("Failed to parse generation stats")
     }
 
     /// Build a request with default headers
     fn build_request(&self, path: &str) -> RequestBuilder {
         let url = format!("{}{}", self.base_url, path);
         let mut request = self.client.post(&url);
-        
+
         for (key, value) in &self.default_headers {
             request = request.header(key, value);
         }
-        
+
         request
     }
 
@@ -376,28 +406,32 @@ impl RetryPolicy {
         Fut: std::future::Future<Output = Result<T>>,
     {
         let mut last_error = None;
-        
+
         for attempt in 0..=self.max_retries {
             match operation().await {
                 Ok(result) => return Ok(result),
                 Err(error) => {
                     last_error = Some(error);
-                    
+
                     if attempt < self.max_retries {
                         let delay = self.calculate_delay(attempt);
-                        tracing::info!("⚠️ Request failed (attempt {}), retrying in {:.1}s...", 
-                                 attempt + 1, delay.as_secs_f64());
+                        tracing::info!(
+                            "⚠️ Request failed (attempt {}), retrying in {:.1}s...",
+                            attempt + 1,
+                            delay.as_secs_f64()
+                        );
                         tokio::time::sleep(delay).await;
                     }
                 }
             }
         }
-        
+
         Err(last_error.unwrap_or_else(|| anyhow::anyhow!("All retry attempts failed")))
     }
-    
+
     fn calculate_delay(&self, attempt: u32) -> Duration {
-        let delay_ms = (self.base_delay.as_millis() as f64 * self.backoff_factor.powi(attempt as i32)) as u64;
+        let delay_ms =
+            (self.base_delay.as_millis() as f64 * self.backoff_factor.powi(attempt as i32)) as u64;
         Duration::from_millis(delay_ms.min(self.max_delay.as_millis() as u64))
     }
 }
@@ -410,7 +444,7 @@ pub struct FallbackManager {
 impl Default for FallbackManager {
     fn default() -> Self {
         let mut fallback_chains = HashMap::new();
-        
+
         // Anthropic fallbacks
         fallback_chains.insert(
             "anthropic/claude-3-opus".to_string(),
@@ -418,9 +452,9 @@ impl Default for FallbackManager {
                 "anthropic/claude-3.5-sonnet".to_string(),
                 "anthropic/claude-3-haiku".to_string(),
                 "openai/gpt-4o".to_string(),
-            ]
+            ],
         );
-        
+
         // OpenAI fallbacks
         fallback_chains.insert(
             "openai/gpt-4o".to_string(),
@@ -428,9 +462,9 @@ impl Default for FallbackManager {
                 "openai/gpt-4-turbo".to_string(),
                 "anthropic/claude-3.5-sonnet".to_string(),
                 "openai/gpt-3.5-turbo".to_string(),
-            ]
+            ],
         );
-        
+
         // Google fallbacks
         fallback_chains.insert(
             "google/gemini-pro-1.5".to_string(),
@@ -438,9 +472,9 @@ impl Default for FallbackManager {
                 "google/gemini-pro".to_string(),
                 "anthropic/claude-3.5-sonnet".to_string(),
                 "openai/gpt-4-turbo".to_string(),
-            ]
+            ],
         );
-        
+
         Self { fallback_chains }
     }
 }
@@ -449,7 +483,7 @@ impl FallbackManager {
     pub fn get_fallbacks(&self, model: &str) -> Vec<String> {
         self.fallback_chains.get(model).cloned().unwrap_or_default()
     }
-    
+
     pub fn add_fallback_chain(&mut self, model: String, fallbacks: Vec<String>) {
         self.fallback_chains.insert(model, fallbacks);
     }
@@ -464,29 +498,34 @@ impl StreamingCallbacks for SimpleStreamingCallbacks {
     fn on_start(&self) {
         tracing::info!("🌊 Starting stream for {}", self.model_name);
     }
-    
+
     fn on_chunk(&self, chunk: String, _total_content: String) {
         print!("{}", chunk);
         std::io::Write::flush(&mut std::io::stdout()).ok();
     }
-    
+
     fn on_progress(&self, progress: StreamingProgress) {
         if let Some(tokens) = progress.tokens {
-            if tokens % 50 == 0 { // Progress every 50 tokens
+            if tokens % 50 == 0 {
+                // Progress every 50 tokens
                 tracing::info!("\n[{} tokens]", tokens);
             }
         }
     }
-    
+
     fn on_error(&self, error: &anyhow::Error) {
         tracing::error!("❌ Streaming error for {}: {}", self.model_name, error);
     }
-    
+
     fn on_complete(&self, _final_content: String, usage: Option<Usage>) {
         tracing::info!("\n✅ Stream completed for {}", self.model_name);
         if let Some(u) = usage {
-            tracing::info!("📊 Tokens: {} total ({} prompt + {} completion)", 
-                     u.total_tokens, u.prompt_tokens, u.completion_tokens);
+            tracing::info!(
+                "📊 Tokens: {} total ({} prompt + {} completion)",
+                u.total_tokens,
+                u.prompt_tokens,
+                u.completion_tokens
+            );
         }
     }
 }
@@ -506,15 +545,15 @@ mod tests {
     #[test]
     fn test_cost_estimation() {
         let client = OpenRouterClient::new("test-key".to_string());
-        
+
         let cost = client.estimate_cost(
             "test-model",
-            1000, // input tokens
-            500,  // output tokens
+            1000,        // input tokens
+            500,         // output tokens
             Some(0.001), // $0.001 per 1k input tokens
-            Some(0.002)  // $0.002 per 1k output tokens
+            Some(0.002), // $0.002 per 1k output tokens
         );
-        
+
         assert_eq!(cost, 0.002); // 1000*0.001/1000 + 500*0.002/1000 = 0.001 + 0.001 = 0.002
     }
 
@@ -522,7 +561,7 @@ mod tests {
     fn test_fallback_manager() {
         let manager = FallbackManager::default();
         let fallbacks = manager.get_fallbacks("anthropic/claude-3-opus");
-        
+
         assert!(!fallbacks.is_empty());
         assert!(fallbacks.contains(&"anthropic/claude-3.5-sonnet".to_string()));
     }

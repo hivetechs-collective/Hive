@@ -46,7 +46,7 @@ impl UpdateServer {
     pub fn new(config: UpdateConfig) -> Self {
         let github_client = GithubClient::new(&config.github_token);
         let metrics = Metrics::new();
-        
+
         Self {
             config,
             github_client,
@@ -284,7 +284,7 @@ impl UpdateServer {
 
     fn is_force_update_required(&self, current: &semver::Version, latest: &semver::Version) -> bool {
         // Force update for major version changes or critical security updates
-        latest.major > current.major || 
+        latest.major > current.major ||
         self.is_security_update(latest)
     }
 

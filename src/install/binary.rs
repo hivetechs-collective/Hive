@@ -1,11 +1,11 @@
 //! Binary distribution and installation management
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
 use tokio::fs as afs;
-use serde::{Deserialize, Serialize};
 
 /// Binary distribution manager
 #[derive(Debug, Clone)]
@@ -54,18 +54,17 @@ impl BinaryManager {
     /// Install the binary to the target directory
     pub async fn install(&self) -> Result<()> {
         println!("📦 Installing Hive binary...");
-        
+
         // Get current executable path
-        let current_exe = std::env::current_exe()
-            .context("Failed to get current executable path")?;
-        
+        let current_exe =
+            std::env::current_exe().context("Failed to get current executable path")?;
+
         // Target binary path
         let target_path = self.install_dir.join(&self.binary_name);
-        
+
         // Copy binary
-        fs::copy(&current_exe, &target_path)
-            .context("Failed to copy binary")?;
-        
+        fs::copy(&current_exe, &target_path).context("Failed to copy binary")?;
+
         // Make executable on Unix systems
         #[cfg(unix)]
         {
@@ -74,7 +73,7 @@ impl BinaryManager {
             fs::set_permissions(&target_path, perms)
                 .context("Failed to set executable permissions")?;
         }
-        
+
         // Save binary info
         let info = BinaryInfo {
             version: crate::VERSION.to_string(),
@@ -83,31 +82,29 @@ impl BinaryManager {
             checksum: self.calculate_checksum(&target_path).await?,
             method: BinaryInstallMethod::SelfCopy,
         };
-        
+
         self.save_binary_info(&info).await?;
-        
+
         println!("✅ Binary installed: {}", target_path.display());
-        
+
         Ok(())
     }
 
     /// Uninstall the binary
     pub async fn uninstall(&self) -> Result<()> {
         let binary_path = self.install_dir.join(&self.binary_name);
-        
+
         if binary_path.exists() {
-            fs::remove_file(&binary_path)
-                .context("Failed to remove binary")?;
+            fs::remove_file(&binary_path).context("Failed to remove binary")?;
             println!("🗑️  Binary removed: {}", binary_path.display());
         }
-        
+
         // Remove binary info
         let info_path = self.get_binary_info_path();
         if info_path.exists() {
-            fs::remove_file(&info_path)
-                .context("Failed to remove binary info")?;
+            fs::remove_file(&info_path).context("Failed to remove binary info")?;
         }
-        
+
         Ok(())
     }
 
@@ -119,34 +116,32 @@ impl BinaryManager {
     /// Get binary information
     pub async fn get_info(&self) -> Result<Option<BinaryInfo>> {
         let info_path = self.get_binary_info_path();
-        
+
         if !info_path.exists() {
             return Ok(None);
         }
-        
+
         let content = afs::read_to_string(&info_path).await?;
         let info: BinaryInfo = serde_json::from_str(&content)?;
-        
+
         Ok(Some(info))
     }
 
     /// Update binary to new version
     pub async fn update(&self, new_binary_path: &PathBuf) -> Result<()> {
         println!("🔄 Updating Hive binary...");
-        
+
         let target_path = self.install_dir.join(&self.binary_name);
-        
+
         // Backup current binary
         let backup_path = target_path.with_extension("backup");
         if target_path.exists() {
-            fs::copy(&target_path, &backup_path)
-                .context("Failed to create backup")?;
+            fs::copy(&target_path, &backup_path).context("Failed to create backup")?;
         }
-        
+
         // Copy new binary
-        fs::copy(new_binary_path, &target_path)
-            .context("Failed to copy new binary")?;
-        
+        fs::copy(new_binary_path, &target_path).context("Failed to copy new binary")?;
+
         // Make executable on Unix systems
         #[cfg(unix)]
         {
@@ -155,17 +150,16 @@ impl BinaryManager {
             fs::set_permissions(&target_path, perms)
                 .context("Failed to set executable permissions")?;
         }
-        
+
         // Verify new binary works
         if let Err(e) = self.verify_binary(&target_path).await {
             // Restore backup if verification fails
             if backup_path.exists() {
-                fs::copy(&backup_path, &target_path)
-                    .context("Failed to restore backup")?;
+                fs::copy(&backup_path, &target_path).context("Failed to restore backup")?;
             }
             return Err(e);
         }
-        
+
         // Update binary info
         let info = BinaryInfo {
             version: crate::VERSION.to_string(),
@@ -174,16 +168,16 @@ impl BinaryManager {
             checksum: self.calculate_checksum(&target_path).await?,
             method: BinaryInstallMethod::Download,
         };
-        
+
         self.save_binary_info(&info).await?;
-        
+
         // Clean up backup
         if backup_path.exists() {
             fs::remove_file(&backup_path).ok();
         }
-        
+
         println!("✅ Binary updated successfully!");
-        
+
         Ok(())
     }
 
@@ -193,51 +187,51 @@ impl BinaryManager {
         if !binary_path.exists() {
             return Err(anyhow::anyhow!("Binary does not exist"));
         }
-        
+
         // Try to run --version command
         let output = tokio::process::Command::new(binary_path)
             .arg("--version")
             .output()
             .await
             .context("Failed to run binary")?;
-        
+
         if !output.status.success() {
             return Err(anyhow::anyhow!("Binary failed to run"));
         }
-        
+
         // Check if output contains version string
         let version_output = String::from_utf8_lossy(&output.stdout);
         if !version_output.contains("hive") {
             return Err(anyhow::anyhow!("Binary does not appear to be Hive"));
         }
-        
+
         Ok(())
     }
 
     /// Calculate SHA256 checksum of binary
     async fn calculate_checksum(&self, binary_path: &PathBuf) -> Result<String> {
-        use sha2::{Sha256, Digest};
-        
+        use sha2::{Digest, Sha256};
+
         let content = afs::read(binary_path).await?;
         let mut hasher = Sha256::new();
         hasher.update(&content);
         let hash = hasher.finalize();
-        
+
         Ok(format!("{:x}", hash))
     }
 
     /// Save binary information
     async fn save_binary_info(&self, info: &BinaryInfo) -> Result<()> {
         let info_path = self.get_binary_info_path();
-        
+
         // Ensure directory exists
         if let Some(parent) = info_path.parent() {
             afs::create_dir_all(parent).await?;
         }
-        
+
         let json = serde_json::to_string_pretty(info)?;
         afs::write(&info_path, json).await?;
-        
+
         Ok(())
     }
 
@@ -247,14 +241,14 @@ impl BinaryManager {
             .or_else(|_| std::env::var("USERPROFILE"))
             .map(|home| PathBuf::from(home).join(".hive"))
             .unwrap_or_else(|_| PathBuf::from(".hive"));
-        
+
         config_dir.join("binary_info.json")
     }
 
     /// Get binary statistics
     pub async fn get_stats(&self) -> Result<BinaryStats> {
         let binary_path = self.install_dir.join(&self.binary_name);
-        
+
         if !binary_path.exists() {
             return Ok(BinaryStats {
                 installed: false,
@@ -263,10 +257,10 @@ impl BinaryManager {
                 last_used: None,
             });
         }
-        
+
         let metadata = fs::metadata(&binary_path)?;
         let info = self.get_info().await?;
-        
+
         Ok(BinaryStats {
             installed: true,
             size: metadata.len(),
@@ -315,7 +309,7 @@ impl InstallerBuilder {
 
     pub async fn build(&self, output_path: &PathBuf) -> Result<()> {
         println!("🏗️  Building installer for {}...", self.target_platform);
-        
+
         // Create installer package
         let installer = InstallerPackage {
             binary_path: self.binary_path.clone(),
@@ -324,11 +318,11 @@ impl InstallerBuilder {
             include_completions: self.include_completions,
             include_config: self.include_config,
         };
-        
+
         installer.create(output_path).await?;
-        
+
         println!("✅ Installer created: {}", output_path.display());
-        
+
         Ok(())
     }
 }
@@ -350,7 +344,7 @@ impl InstallerPackage {
         {
             self.create_unix_installer(output_path).await
         }
-        
+
         // Create a PowerShell installer for Windows
         #[cfg(windows)]
         {
@@ -410,7 +404,7 @@ fi
         );
 
         afs::write(output_path, installer_script).await?;
-        
+
         // Make installer executable
         #[cfg(unix)]
         {
@@ -418,7 +412,7 @@ fi
             perms.set_mode(0o755);
             fs::set_permissions(output_path, perms)?;
         }
-        
+
         Ok(())
     }
 
@@ -476,7 +470,7 @@ try {{
         );
 
         afs::write(output_path, installer_script).await?;
-        
+
         Ok(())
     }
 }

@@ -1,11 +1,11 @@
 /// Model management commands
-/// 
+///
 /// Commands for listing, testing, and benchmarking OpenRouter models
-
 use crate::core::Result;
 use crate::providers::openrouter::{
-    create_client, ModelSelector, ModelSelectionStrategy, PerformanceTracker, TaskComplexity,
-    ScoringWeights, ABTestConfig, ABTestStatus, ModelRanking, TaskRecommendation, HealthStatus, CircuitState,
+    create_client, ABTestConfig, ABTestStatus, CircuitState, HealthStatus, ModelRanking,
+    ModelSelectionStrategy, ModelSelector, PerformanceTracker, ScoringWeights, TaskComplexity,
+    TaskRecommendation,
 };
 use anyhow::Context;
 
@@ -39,7 +39,7 @@ pub async fn list_models(
     };
 
     let total_count = filtered_models.len();
-    
+
     match format.as_deref() {
         Some("json") => {
             println!("{}", serde_json::to_string_pretty(&filtered_models)?);
@@ -61,9 +61,12 @@ pub async fn list_models(
         }
         _ => {
             // Default table format
-            println!("{:<50} {:<15} {:<10} {:<12} {:<10}", "Model ID", "Provider", "Tier", "Input $/1k", "Context");
+            println!(
+                "{:<50} {:<15} {:<10} {:<12} {:<10}",
+                "Model ID", "Provider", "Tier", "Input $/1k", "Context"
+            );
             println!("{}", "-".repeat(100));
-            
+
             for model in filtered_models {
                 println!(
                     "{:<50} {:<15} {:<10} ${:<11.4} {:<10}",
@@ -74,7 +77,7 @@ pub async fn list_models(
                     model.context_window
                 );
             }
-            
+
             println!("\nTotal models: {}", total_count);
         }
     }
@@ -95,7 +98,10 @@ pub async fn test_model(model_id: &str, api_key: Option<String>) -> Result<()> {
 
     match client.test_connection(Some(model_id)).await? {
         true => {
-            println!("✅ Model {} is accessible and responding correctly", model_id);
+            println!(
+                "✅ Model {} is accessible and responding correctly",
+                model_id
+            );
         }
         false => {
             println!("❌ Model {} did not respond as expected", model_id);
@@ -134,13 +140,8 @@ pub async fn benchmark_models(
         model_list
     } else {
         // Default selection based on complexity
-        let selection = selector.select_model(
-            "Benchmark test query",
-            complexity,
-            vec![],
-            None,
-        )?;
-        
+        let selection = selector.select_model("Benchmark test query", complexity, vec![], None)?;
+
         vec![selection.primary]
             .into_iter()
             .chain(selection.fallbacks.into_iter().take(2))
@@ -156,13 +157,13 @@ pub async fn benchmark_models(
     // Simulate benchmark results (in real implementation, would make actual API calls)
     for model in &models_to_test {
         println!("Benchmarking {}...", model);
-        
+
         for i in 0..iterations {
             // Simulate performance data
             let latency = (1000.0 + (i as f32 * 100.0) + (rand::random::<f32>() * 500.0)) as u64;
             let tokens = 100 + (rand::random::<u32>() % 200);
             let success = rand::random::<f32>() > 0.1; // 90% success rate
-            
+
             tracker
                 .track_performance(
                     model,
@@ -175,7 +176,7 @@ pub async fn benchmark_models(
                     None,
                 )
                 .await?;
-            
+
             print!(".");
             use std::io::{self, Write};
             io::stdout().flush()?;
@@ -184,7 +185,10 @@ pub async fn benchmark_models(
     }
 
     println!("\nBenchmark Results:");
-    println!("{:<40} {:<12} {:<12} {:<12} {:<12}", "Model", "Success Rate", "Avg Latency", "P95 Latency", "Quality");
+    println!(
+        "{:<40} {:<12} {:<12} {:<12} {:<12}",
+        "Model", "Success Rate", "Avg Latency", "P95 Latency", "Quality"
+    );
     println!("{}", "-".repeat(90));
 
     for model in &models_to_test {
@@ -219,7 +223,7 @@ pub async fn recommend_models(
     min_quality: Option<f32>,
 ) -> Result<()> {
     println!("Model Recommendations for: {}", task_type);
-    
+
     let complexity = match task_type {
         "simple" | "basic" => TaskComplexity::Simple,
         "moderate" | "general" => TaskComplexity::Moderate,
@@ -229,7 +233,7 @@ pub async fn recommend_models(
     };
 
     let selector = ModelSelector::new(ModelSelectionStrategy::Balanced);
-    
+
     // Get recommendations for different strategies
     let strategies = [
         ModelSelectionStrategy::CostOptimized,
@@ -243,25 +247,26 @@ pub async fn recommend_models(
 
     for strategy in &strategies {
         let mut strategy_selector = ModelSelector::new(*strategy);
-        
-        match strategy_selector.select_model(
-            task_type,
-            complexity,
-            vec![],
-            budget,
-        ) {
+
+        match strategy_selector.select_model(task_type, complexity, vec![], budget) {
             Ok(selection) => {
                 println!("\n{:?} Strategy:", strategy);
                 println!("  Primary: {}", selection.primary);
-                println!("  Estimated cost: ${:.4} per request", selection.estimated_cost);
+                println!(
+                    "  Estimated cost: ${:.4} per request",
+                    selection.estimated_cost
+                );
                 println!("  Reasoning: {}", selection.reasoning);
-                
+
                 if !selection.fallbacks.is_empty() {
                     println!("  Fallbacks: {}", selection.fallbacks.join(", "));
                 }
             }
             Err(e) => {
-                println!("\n{:?} Strategy: No suitable models found - {}", strategy, e);
+                println!(
+                    "\n{:?} Strategy: No suitable models found - {}",
+                    strategy, e
+                );
             }
         }
     }
@@ -276,7 +281,7 @@ pub async fn show_performance(
     details: bool,
 ) -> Result<()> {
     let tracker = PerformanceTracker::new(60); // 60 minute window
-    
+
     match model_id {
         Some(model) => {
             // Show performance for specific model
@@ -286,12 +291,18 @@ pub async fn show_performance(
                 println!("📊 Success Rate: {:.1}%", metrics.success_rate * 100.0);
                 println!("⚡ Average Latency: {:.0}ms", metrics.average_latency_ms);
                 println!("📈 P95 Latency: {:.0}ms", metrics.p95_latency_ms);
-                println!("🚀 Throughput: {:.1} tokens/sec", metrics.average_tokens_per_second);
+                println!(
+                    "🚀 Throughput: {:.1} tokens/sec",
+                    metrics.average_tokens_per_second
+                );
                 println!("⭐ Quality Score: {:.2}/1.0", metrics.quality_score);
                 println!("❌ Error Rate: {:.1}%", metrics.error_rate * 100.0);
                 println!("⏱️  Timeout Rate: {:.1}%", metrics.timeout_rate * 100.0);
-                println!("📅 Last Updated: {}", metrics.last_updated.format("%Y-%m-%d %H:%M:%S UTC"));
-                
+                println!(
+                    "📅 Last Updated: {}",
+                    metrics.last_updated.format("%Y-%m-%d %H:%M:%S UTC")
+                );
+
                 if details {
                     // Show detailed health information
                     let health = tracker.get_model_health(&model).await?;
@@ -313,7 +324,7 @@ pub async fn show_performance(
         None => {
             // Show performance for all models
             let all_metrics = tracker.get_all_metrics().await;
-            
+
             if all_metrics.is_empty() {
                 println!("No performance data available yet.");
                 return Ok(());
@@ -326,12 +337,20 @@ pub async fn show_performance(
                 _ => {
                     println!("Model Performance Overview");
                     println!("{}", "=".repeat(100));
-                    println!("{:<40} {:<12} {:<12} {:<12} {:<12} {:<10}", 
-                        "Model", "Success Rate", "Avg Latency", "P95 Latency", "Throughput", "Quality");
+                    println!(
+                        "{:<40} {:<12} {:<12} {:<12} {:<12} {:<10}",
+                        "Model",
+                        "Success Rate",
+                        "Avg Latency",
+                        "P95 Latency",
+                        "Throughput",
+                        "Quality"
+                    );
                     println!("{}", "-".repeat(100));
-                    
+
                     for metrics in &all_metrics {
-                        println!("{:<40} {:<12.1}% {:<12.0}ms {:<12.0}ms {:<12.1}/s {:<10.2}",
+                        println!(
+                            "{:<40} {:<12.1}% {:<12.0}ms {:<12.0}ms {:<12.1}/s {:<10.2}",
                             metrics.model_id,
                             metrics.success_rate * 100.0,
                             metrics.average_latency_ms,
@@ -340,13 +359,13 @@ pub async fn show_performance(
                             metrics.quality_score
                         );
                     }
-                    
+
                     println!("\nTotal models with data: {}", all_metrics.len());
                 }
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -358,27 +377,48 @@ pub async fn show_rankings(
 ) -> Result<()> {
     let tracker = PerformanceTracker::new(60);
     let limit = limit.unwrap_or(10);
-    
+
     match task_type.as_deref() {
         Some(task) => {
             // Show ranking for specific task type
             let weights = match metric.as_deref() {
-                Some("speed") => ScoringWeights { speed: 0.6, reliability: 0.3, quality: 0.1, cost: 0.0, throughput: 0.0 },
-                Some("quality") => ScoringWeights { quality: 0.7, reliability: 0.2, speed: 0.1, cost: 0.0, throughput: 0.0 },
-                Some("cost") => ScoringWeights { cost: 0.5, reliability: 0.3, quality: 0.2, speed: 0.0, throughput: 0.0 },
+                Some("speed") => ScoringWeights {
+                    speed: 0.6,
+                    reliability: 0.3,
+                    quality: 0.1,
+                    cost: 0.0,
+                    throughput: 0.0,
+                },
+                Some("quality") => ScoringWeights {
+                    quality: 0.7,
+                    reliability: 0.2,
+                    speed: 0.1,
+                    cost: 0.0,
+                    throughput: 0.0,
+                },
+                Some("cost") => ScoringWeights {
+                    cost: 0.5,
+                    reliability: 0.3,
+                    quality: 0.2,
+                    speed: 0.0,
+                    throughput: 0.0,
+                },
                 _ => ScoringWeights::default(),
             };
-            
+
             let rankings = tracker.get_task_specific_ranking(task, &weights).await;
-            
+
             println!("Top {} Models for: {}", limit, task);
             if let Some(m) = &metric {
                 println!("Optimized for: {}", m);
             }
             println!("{}", "=".repeat(70));
-            println!("{:<5} {:<40} {:<12} {:<12}", "Rank", "Model", "Score", "Health");
+            println!(
+                "{:<5} {:<40} {:<12} {:<12}",
+                "Rank", "Model", "Score", "Health"
+            );
             println!("{}", "-".repeat(70));
-            
+
             for (i, (model_id, score)) in rankings.iter().take(limit).enumerate() {
                 let health = tracker.get_model_health(model_id).await?;
                 let health_emoji = match health.status {
@@ -387,8 +427,9 @@ pub async fn show_rankings(
                     HealthStatus::Unhealthy => "❌",
                     HealthStatus::Unavailable => "🚫",
                 };
-                
-                println!("{:<5} {:<40} {:<12.3} {:<12}",
+
+                println!(
+                    "{:<5} {:<40} {:<12.3} {:<12}",
                     i + 1,
                     model_id,
                     score,
@@ -399,13 +440,14 @@ pub async fn show_rankings(
         None => {
             // Show comprehensive rankings for all task types
             let comprehensive = tracker.get_comprehensive_rankings().await;
-            
+
             for (task_type, rankings) in comprehensive {
                 println!("\n{} Task Rankings:", task_type.to_uppercase());
                 println!("{}", "-".repeat(50));
-                
+
                 for (i, ranking) in rankings.iter().take(5).enumerate() {
-                    println!("{}. {} (score: {:.3})",
+                    println!(
+                        "{}. {} (score: {:.3})",
                         i + 1,
                         ranking.model_id,
                         ranking.score
@@ -414,7 +456,7 @@ pub async fn show_rankings(
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -427,48 +469,48 @@ pub async fn get_recommendations(
 ) -> Result<()> {
     let tracker = PerformanceTracker::new(60);
     let limit = limit.unwrap_or(5);
-    
+
     let recommendation = tracker.get_task_recommendations(task_type, limit).await?;
-    
+
     println!("🎯 Model Recommendations for: {}", recommendation.task_type);
     println!("{}", "=".repeat(60));
     println!("Confidence: {:.0}%", recommendation.confidence * 100.0);
     println!("Reasoning: {}", recommendation.reasoning);
     println!();
-    
+
     if recommendation.recommended_models.is_empty() {
         println!("No recommendations available. More performance data needed.");
         return Ok(());
     }
-    
-    println!("{:<5} {:<30} {:<12} {:<12} {:<12}", "Rank", "Model", "Score", "Success Rate", "Avg Latency");
+
+    println!(
+        "{:<5} {:<30} {:<12} {:<12} {:<12}",
+        "Rank", "Model", "Score", "Success Rate", "Avg Latency"
+    );
     println!("{}", "-".repeat(75));
-    
+
     for model in &recommendation.recommended_models {
         let success_rate = model.metrics_snapshot.success_rate * 100.0;
         let avg_latency = model.metrics_snapshot.average_latency_ms;
-        
+
         // Apply filters if specified
         if let Some(budget) = budget {
             // Cost filtering would be implemented with cost tracker integration
             continue;
         }
-        
+
         if let Some(quality_min) = quality_threshold {
             if model.metrics_snapshot.quality_score < quality_min {
                 continue;
             }
         }
-        
-        println!("{:<5} {:<30} {:<12.3} {:<12.1}% {:<12.0}ms",
-            model.rank,
-            model.model_id,
-            model.score,
-            success_rate,
-            avg_latency
+
+        println!(
+            "{:<5} {:<30} {:<12.3} {:<12.1}% {:<12.0}ms",
+            model.rank, model.model_id, model.score, success_rate, avg_latency
         );
     }
-    
+
     Ok(())
 }
 
@@ -484,16 +526,18 @@ pub async fn manage_ab_test(
     duration_hours: Option<u32>,
 ) -> Result<()> {
     let tracker = PerformanceTracker::new(60);
-    
+
     match action {
         "create" => {
             let model_a = model_a.context("--model-a required for creating A/B test")?;
             let model_b = model_b.context("--model-b required for creating A/B test")?;
             let name = name.unwrap_or_else(|| format!("{} vs {}", model_a, model_b));
-            let description = description.unwrap_or_else(|| format!("Performance comparison between {} and {}", model_a, model_b));
+            let description = description.unwrap_or_else(|| {
+                format!("Performance comparison between {} and {}", model_a, model_b)
+            });
             let sample_size = sample_size.unwrap_or(50);
             let duration_hours = duration_hours.unwrap_or(24);
-            
+
             let test_queries = vec![
                 "Analyze this code for potential improvements".to_string(),
                 "Explain the concept of async/await in Rust".to_string(),
@@ -501,43 +545,51 @@ pub async fn manage_ab_test(
                 "Debug this error message".to_string(),
                 "Optimize this algorithm".to_string(),
             ];
-            
-            let test_id = tracker.create_ab_test(
-                name.clone(),
-                description,
-                model_a,
-                model_b,
-                test_queries,
-                sample_size,
-                duration_hours,
-            ).await?;
-            
+
+            let test_id = tracker
+                .create_ab_test(
+                    name.clone(),
+                    description,
+                    model_a,
+                    model_b,
+                    test_queries,
+                    sample_size,
+                    duration_hours,
+                )
+                .await?;
+
             println!("✅ Created A/B test: {}", name);
             println!("Test ID: {}", test_id);
             println!("Sample size: {} requests", sample_size);
             println!("Duration: {} hours", duration_hours);
-            println!("\nTo start the test, run: hive models ab-test start --test-id {}", test_id);
+            println!(
+                "\nTo start the test, run: hive models ab-test start --test-id {}",
+                test_id
+            );
         }
-        
+
         "start" => {
             let test_id = test_id.context("--test-id required for starting A/B test")?;
             tracker.start_ab_test(&test_id).await?;
             println!("✅ Started A/B test: {}", test_id);
         }
-        
+
         "list" => {
             let tests = tracker.get_ab_tests().await;
-            
+
             if tests.is_empty() {
                 println!("No A/B tests found.");
                 return Ok(());
             }
-            
+
             println!("A/B Tests:");
             println!("{}", "=".repeat(80));
-            println!("{:<20} {:<30} {:<15} {:<15}", "Test ID", "Name", "Status", "Progress");
+            println!(
+                "{:<20} {:<30} {:<15} {:<15}",
+                "Test ID", "Name", "Status", "Progress"
+            );
             println!("{}", "-".repeat(80));
-            
+
             for test in tests {
                 let status_emoji = match test.status {
                     ABTestStatus::Planned => "📋",
@@ -546,8 +598,9 @@ pub async fn manage_ab_test(
                     ABTestStatus::Paused => "⏸️",
                     ABTestStatus::Cancelled => "❌",
                 };
-                
-                println!("{:<20} {:<30} {:<15} {:<15}",
+
+                println!(
+                    "{:<20} {:<30} {:<15} {:<15}",
                     &test.test_id[..8],
                     test.name,
                     format!("{} {:?}", status_emoji, test.status),
@@ -555,49 +608,57 @@ pub async fn manage_ab_test(
                 );
             }
         }
-        
+
         "analyze" => {
             let test_id = test_id.context("--test-id required for analyzing A/B test")?;
-            
+
             match tracker.analyze_ab_test(&test_id).await {
                 Ok(analysis) => {
                     println!("📊 A/B Test Analysis");
                     println!("{}", "=".repeat(60));
                     println!("Test ID: {}", analysis.test_id);
                     println!("Models: {} vs {}", analysis.model_a, analysis.model_b);
-                    println!("Sample sizes: {} vs {}", analysis.sample_size_a, analysis.sample_size_b);
+                    println!(
+                        "Sample sizes: {} vs {}",
+                        analysis.sample_size_a, analysis.sample_size_b
+                    );
                     println!("Confidence: {:.0}%", analysis.confidence_level * 100.0);
                     println!();
-                    
+
                     println!("📈 Results:");
                     let metrics = &analysis.metrics_comparison;
-                    
-                    println!("  Latency: {:.0}ms vs {:.0}ms ({:+.1}%)",
+
+                    println!(
+                        "  Latency: {:.0}ms vs {:.0}ms ({:+.1}%)",
                         metrics.latency_comparison.model_a_value,
                         metrics.latency_comparison.model_b_value,
                         metrics.latency_comparison.percentage_change
                     );
-                    
-                    println!("  Success Rate: {:.1}% vs {:.1}% ({:+.1}%)",
+
+                    println!(
+                        "  Success Rate: {:.1}% vs {:.1}% ({:+.1}%)",
                         metrics.success_rate_comparison.model_a_value,
                         metrics.success_rate_comparison.model_b_value,
                         metrics.success_rate_comparison.percentage_change
                     );
-                    
-                    println!("  Quality: {:.2} vs {:.2} ({:+.1}%)",
+
+                    println!(
+                        "  Quality: {:.2} vs {:.2} ({:+.1}%)",
                         metrics.quality_comparison.model_a_value,
                         metrics.quality_comparison.model_b_value,
                         metrics.quality_comparison.percentage_change
                     );
-                    
+
                     println!();
                     println!("🎯 Recommendation: {}", analysis.recommendation);
-                    
+
                     if analysis.statistical_significance.is_significant {
                         println!("📊 Statistically significant (p < 0.05)");
                     } else {
-                        println!("📊 Not statistically significant (p = {:.3})", 
-                            analysis.statistical_significance.p_value);
+                        println!(
+                            "📊 Not statistically significant (p = {:.3})",
+                            analysis.statistical_significance.p_value
+                        );
                     }
                 }
                 Err(e) => {
@@ -605,12 +666,12 @@ pub async fn manage_ab_test(
                 }
             }
         }
-        
+
         _ => {
             println!("Available actions: create, start, list, analyze");
         }
     }
-    
+
     Ok(())
 }
 
@@ -618,36 +679,38 @@ pub async fn manage_ab_test(
 pub async fn show_circuit_breakers() -> Result<()> {
     let tracker = PerformanceTracker::new(60);
     let circuit_breakers = tracker.get_circuit_breaker_status().await;
-    
+
     if circuit_breakers.is_empty() {
         println!("No circuit breakers active.");
         return Ok(());
     }
-    
+
     println!("Circuit Breaker Status:");
     println!("{}", "=".repeat(70));
-    println!("{:<30} {:<15} {:<10} {:<15}", "Model", "State", "Failures", "Next Attempt");
+    println!(
+        "{:<30} {:<15} {:<10} {:<15}",
+        "Model", "State", "Failures", "Next Attempt"
+    );
     println!("{}", "-".repeat(70));
-    
+
     for breaker in circuit_breakers {
         let state_emoji = match breaker.state {
             CircuitState::Closed => "✅ Closed",
             CircuitState::Open => "🔴 Open",
             CircuitState::HalfOpen => "🟡 Half-Open",
         };
-        
-        let next_attempt = breaker.next_attempt
+
+        let next_attempt = breaker
+            .next_attempt
             .map(|t| t.format("%H:%M:%S").to_string())
             .unwrap_or_else(|| "N/A".to_string());
-        
-        println!("{:<30} {:<15} {:<10} {:<15}",
-            breaker.model_id,
-            state_emoji,
-            breaker.failure_count,
-            next_attempt
+
+        println!(
+            "{:<30} {:<15} {:<10} {:<15}",
+            breaker.model_id, state_emoji, breaker.failure_count, next_attempt
         );
     }
-    
+
     Ok(())
 }
 

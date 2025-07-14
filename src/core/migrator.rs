@@ -157,7 +157,7 @@ pub struct HiveMigrator {
 impl HiveMigrator {
     pub fn new(rust_config_dir: PathBuf, typescript_config_dir: Option<PathBuf>) -> Self {
         let backup_dir = rust_config_dir.join("migration_backups");
-        
+
         Self {
             rust_config_dir,
             typescript_config_dir,
@@ -176,7 +176,9 @@ impl HiveMigrator {
         let possible_paths = [
             dirs::home_dir().map(|h| h.join(".hive")),
             dirs::config_dir().map(|c| c.join("hive")),
-            std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".hive")),
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".hive")),
         ];
 
         for path_opt in possible_paths {
@@ -197,15 +199,15 @@ impl HiveMigrator {
         // Check for key TypeScript Hive files
         let config_file = path.join("config.json");
         let db_file = path.join("hive-ai.db");
-        
+
         if !config_file.exists() {
             return Ok(false);
         }
 
         // Try to read and parse config
         let config_content = fs::read_to_string(&config_file).await?;
-        let _: serde_json::Value = serde_json::from_str(&config_content)
-            .context("Invalid TypeScript config JSON")?;
+        let _: serde_json::Value =
+            serde_json::from_str(&config_content).context("Invalid TypeScript config JSON")?;
 
         // Check if database exists (optional)
         if db_file.exists() {
@@ -217,16 +219,18 @@ impl HiveMigrator {
 
     /// Create migration plan
     pub async fn create_migration_plan(&self) -> Result<MigrationPlan> {
-        let ts_dir = self.typescript_config_dir.as_ref()
+        let ts_dir = self
+            .typescript_config_dir
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No TypeScript installation detected"))?;
 
         // Analyze source data
         let ts_data = self.analyze_typescript_data(ts_dir).await?;
-        
+
         let plan_id = Uuid::new_v4().to_string();
         let steps = self.create_migration_steps(&ts_data).await?;
         let validation_checks = self.create_validation_checks(&ts_data).await?;
-        
+
         // Estimate duration based on data size
         let estimated_duration = self.estimate_migration_duration(&ts_data);
 
@@ -249,10 +253,11 @@ impl HiveMigrator {
         let database_path = ts_dir.join("hive-ai.db");
 
         // Read config
-        let config_content = fs::read_to_string(&config_path).await
+        let config_content = fs::read_to_string(&config_path)
+            .await
             .context("Failed to read TypeScript config")?;
-        let raw_config: serde_json::Value = serde_json::from_str(&config_content)
-            .context("Failed to parse TypeScript config")?;
+        let raw_config: serde_json::Value =
+            serde_json::from_str(&config_content).context("Failed to parse TypeScript config")?;
 
         let config = self.parse_legacy_config(&raw_config)?;
 
@@ -264,17 +269,20 @@ impl HiveMigrator {
         };
 
         let metadata = LegacyMetadata {
-            version: raw_config.get("version")
+            version: raw_config
+                .get("version")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string(),
-            install_date: raw_config.get("install_date")
+            install_date: raw_config
+                .get("install_date")
                 .and_then(|v| v.as_str())
                 .unwrap_or(&Utc::now().to_rfc3339())
                 .to_string(),
             total_conversations: conversations.len(),
             total_messages: conversations.iter().map(|c| c.messages.len()).sum(),
-            total_cost: raw_config.get("total_cost")
+            total_cost: raw_config
+                .get("total_cost")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(0.0),
         };
@@ -292,55 +300,63 @@ impl HiveMigrator {
     /// Parse legacy config format
     fn parse_legacy_config(&self, raw_config: &serde_json::Value) -> Result<LegacyConfig> {
         Ok(LegacyConfig {
-            openrouter_api_key: raw_config.get("openrouter_api_key")
+            openrouter_api_key: raw_config
+                .get("openrouter_api_key")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string()),
-            consensus_profile: raw_config.get("consensus_profile")
+            consensus_profile: raw_config
+                .get("consensus_profile")
                 .and_then(|v| v.as_str())
                 .unwrap_or("balanced")
                 .to_string(),
-            default_model: raw_config.get("default_model")
+            default_model: raw_config
+                .get("default_model")
                 .and_then(|v| v.as_str())
                 .unwrap_or("gpt-4")
                 .to_string(),
-            cost_limits: raw_config.get("cost_limits")
+            cost_limits: raw_config
+                .get("cost_limits")
                 .and_then(|v| v.as_object())
-                .map(|obj| obj.iter()
-                    .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f)))
-                    .collect())
+                .map(|obj| {
+                    obj.iter()
+                        .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f)))
+                        .collect()
+                })
                 .unwrap_or_default(),
-            preferences: raw_config.get("preferences")
+            preferences: raw_config
+                .get("preferences")
                 .and_then(|v| v.as_object())
-                .map(|obj| obj.iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect())
+                .map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
                 .unwrap_or_default(),
         })
     }
 
     /// Read TypeScript SQLite database
-    async fn read_typescript_database(&self, db_path: &Path) -> Result<(Vec<LegacyConversation>, Vec<LegacyTheme>)> {
+    async fn read_typescript_database(
+        &self,
+        db_path: &Path,
+    ) -> Result<(Vec<LegacyConversation>, Vec<LegacyTheme>)> {
         info!("Reading TypeScript database: {}", db_path.display());
 
-        let conn = rusqlite::Connection::open(db_path)
-            .context("Failed to open TypeScript database")?;
+        let conn =
+            rusqlite::Connection::open(db_path).context("Failed to open TypeScript database")?;
 
         // Read conversations
         let mut conversations = Vec::new();
         let mut stmt = conn.prepare("SELECT id, title, created_at, updated_at, metadata FROM conversations ORDER BY created_at")?;
         let rows = stmt.query_map([], |row| {
             Ok((
-                row.get::<_, String>(0)?,       // id
-                row.get::<_, String>(1)?,       // title
-                row.get::<_, String>(2)?,       // created_at
-                row.get::<_, String>(3)?,       // updated_at
+                row.get::<_, String>(0)?,         // id
+                row.get::<_, String>(1)?,         // title
+                row.get::<_, String>(2)?,         // created_at
+                row.get::<_, String>(3)?,         // updated_at
                 row.get::<_, Option<String>>(4)?, // metadata
             ))
         })?;
 
         for row in rows {
             let (id, title, created_at, updated_at, metadata_str) = row?;
-            
+
             let metadata: HashMap<String, serde_json::Value> = metadata_str
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default();
@@ -360,13 +376,15 @@ impl HiveMigrator {
 
         // Read themes
         let mut themes = Vec::new();
-        if let Ok(mut stmt) = conn.prepare("SELECT id, name, description, created_at, concepts, conversation_ids FROM themes") {
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT id, name, description, created_at, concepts, conversation_ids FROM themes",
+        ) {
             let rows = stmt.query_map([], |row| {
                 Ok((
-                    row.get::<_, String>(0)?,       // id
-                    row.get::<_, String>(1)?,       // name
-                    row.get::<_, String>(2)?,       // description
-                    row.get::<_, String>(3)?,       // created_at
+                    row.get::<_, String>(0)?,         // id
+                    row.get::<_, String>(1)?,         // name
+                    row.get::<_, String>(2)?,         // description
+                    row.get::<_, String>(3)?,         // created_at
                     row.get::<_, Option<String>>(4)?, // concepts JSON
                     row.get::<_, Option<String>>(5)?, // conversation_ids JSON
                 ))
@@ -374,11 +392,11 @@ impl HiveMigrator {
 
             for row in rows {
                 let (id, name, description, created_at, concepts_str, conv_ids_str) = row?;
-                
+
                 let concepts: Vec<String> = concepts_str
                     .and_then(|s| serde_json::from_str(&s).ok())
                     .unwrap_or_default();
-                
+
                 let conversation_ids: Vec<String> = conv_ids_str
                     .and_then(|s| serde_json::from_str(&s).ok())
                     .unwrap_or_default();
@@ -394,27 +412,35 @@ impl HiveMigrator {
             }
         }
 
-        info!("Read {} conversations and {} themes", conversations.len(), themes.len());
+        info!(
+            "Read {} conversations and {} themes",
+            conversations.len(),
+            themes.len()
+        );
         Ok((conversations, themes))
     }
 
     /// Read messages for a conversation
-    fn read_conversation_messages(&self, conn: &rusqlite::Connection, conversation_id: &str) -> Result<Vec<LegacyMessage>> {
+    fn read_conversation_messages(
+        &self,
+        conn: &rusqlite::Connection,
+        conversation_id: &str,
+    ) -> Result<Vec<LegacyMessage>> {
         let mut messages = Vec::new();
         let mut stmt = conn.prepare("SELECT id, role, content, timestamp, metadata FROM messages WHERE conversation_id = ? ORDER BY timestamp")?;
         let rows = stmt.query_map([conversation_id], |row| {
             Ok((
-                row.get::<_, String>(0)?,       // id
-                row.get::<_, String>(1)?,       // role
-                row.get::<_, String>(2)?,       // content
-                row.get::<_, String>(3)?,       // timestamp
+                row.get::<_, String>(0)?,         // id
+                row.get::<_, String>(1)?,         // role
+                row.get::<_, String>(2)?,         // content
+                row.get::<_, String>(3)?,         // timestamp
                 row.get::<_, Option<String>>(4)?, // metadata
             ))
         })?;
 
         for row in rows {
             let (id, role, content, timestamp, metadata_str) = row?;
-            
+
             let metadata: HashMap<String, serde_json::Value> = metadata_str
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default();
@@ -432,7 +458,10 @@ impl HiveMigrator {
     }
 
     /// Create migration steps
-    async fn create_migration_steps(&self, ts_data: &TypeScriptHiveData) -> Result<Vec<MigrationStep>> {
+    async fn create_migration_steps(
+        &self,
+        ts_data: &TypeScriptHiveData,
+    ) -> Result<Vec<MigrationStep>> {
         let mut steps = Vec::new();
 
         // Step 1: Backup existing data
@@ -570,7 +599,10 @@ impl HiveMigrator {
     }
 
     /// Create validation checks
-    async fn create_validation_checks(&self, ts_data: &TypeScriptHiveData) -> Result<Vec<ValidationCheck>> {
+    async fn create_validation_checks(
+        &self,
+        ts_data: &TypeScriptHiveData,
+    ) -> Result<Vec<ValidationCheck>> {
         let mut checks = Vec::new();
 
         // Check conversation count
@@ -617,7 +649,7 @@ impl HiveMigrator {
         let per_conversation = std::time::Duration::from_millis(100); // 100ms per conversation
         let per_message = std::time::Duration::from_millis(10); // 10ms per message
 
-        base_duration 
+        base_duration
             + per_conversation * ts_data.conversations.len() as u32
             + per_message * ts_data.metadata.total_messages as u32
     }
@@ -625,14 +657,15 @@ impl HiveMigrator {
     /// Execute migration plan
     pub async fn execute_migration(&self, mut plan: MigrationPlan) -> Result<MigrationResult> {
         info!("Starting migration execution: {}", plan.plan_id);
-        
+
         let started_at = Utc::now();
         let mut completed_steps = 0;
         let total_steps = plan.steps.len();
 
         // Create backup directory
         if !self.dry_run {
-            fs::create_dir_all(&self.backup_dir).await
+            fs::create_dir_all(&self.backup_dir)
+                .await
                 .context("Failed to create backup directory")?;
         }
 
@@ -643,7 +676,7 @@ impl HiveMigrator {
             if !self.are_dependencies_completed(&plan.steps, &dependencies) {
                 continue; // Skip if dependencies not met
             }
-            
+
             let step = &mut plan.steps[i];
 
             info!("Executing step: {}", step.description);
@@ -652,12 +685,20 @@ impl HiveMigrator {
             let result = match step.step_type {
                 MigrationStepType::BackupData => self.execute_backup_step(step).await,
                 MigrationStepType::ValidateSource => self.execute_validate_source_step(step).await,
-                MigrationStepType::ConvertDatabase => self.execute_convert_database_step(step).await,
+                MigrationStepType::ConvertDatabase => {
+                    self.execute_convert_database_step(step).await
+                }
                 MigrationStepType::MigrateConfig => self.execute_migrate_config_step(step).await,
-                MigrationStepType::TransferConversations => self.execute_transfer_conversations_step(step).await,
+                MigrationStepType::TransferConversations => {
+                    self.execute_transfer_conversations_step(step).await
+                }
                 MigrationStepType::MigrateThemes => self.execute_migrate_themes_step(step).await,
-                MigrationStepType::ValidateIntegrity => self.execute_validate_integrity_step(step).await,
-                MigrationStepType::UpdateReferences => self.execute_update_references_step(step).await,
+                MigrationStepType::ValidateIntegrity => {
+                    self.execute_validate_integrity_step(step).await
+                }
+                MigrationStepType::UpdateReferences => {
+                    self.execute_update_references_step(step).await
+                }
                 MigrationStepType::Cleanup => self.execute_cleanup_step(step).await,
             };
 
@@ -672,7 +713,7 @@ impl HiveMigrator {
                 Err(e) => {
                     step.error_message = Some(e.to_string());
                     error!("❌ Step failed: {}: {}", step.description, e);
-                    
+
                     return Ok(MigrationResult {
                         plan_id: plan.plan_id,
                         success: false,
@@ -691,7 +732,9 @@ impl HiveMigrator {
 
         // Run validation checks
         let validation_results = self.run_validation_checks(plan.validation_checks).await?;
-        let validation_passed = validation_results.iter().all(|check| check.passed.unwrap_or(false));
+        let validation_passed = validation_results
+            .iter()
+            .all(|check| check.passed.unwrap_or(false));
 
         let completed_at = Utc::now();
         let duration = completed_at.signed_duration_since(started_at).to_std()?;
@@ -713,7 +756,9 @@ impl HiveMigrator {
     /// Check if step dependencies are completed
     fn are_dependencies_completed(&self, steps: &[MigrationStep], dependencies: &[String]) -> bool {
         dependencies.iter().all(|dep_id| {
-            steps.iter().any(|step| step.step_id == *dep_id && step.completed)
+            steps
+                .iter()
+                .any(|step| step.step_id == *dep_id && step.completed)
         })
     }
 
@@ -724,11 +769,16 @@ impl HiveMigrator {
             return Ok(());
         }
 
-        let ts_dir = self.typescript_config_dir.as_ref()
+        let ts_dir = self
+            .typescript_config_dir
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No TypeScript directory set"))?;
 
         // Create timestamped backup
-        let backup_subdir = self.backup_dir.join(format!("typescript_backup_{}", Utc::now().format("%Y%m%d_%H%M%S")));
+        let backup_subdir = self.backup_dir.join(format!(
+            "typescript_backup_{}",
+            Utc::now().format("%Y%m%d_%H%M%S")
+        ));
         fs::create_dir_all(&backup_subdir).await?;
 
         // Copy all files from TypeScript directory
@@ -736,7 +786,7 @@ impl HiveMigrator {
         while let Some(entry) = entries.next_entry().await? {
             let source = entry.path();
             let dest = backup_subdir.join(entry.file_name());
-            
+
             if source.is_file() {
                 fs::copy(&source, &dest).await?;
                 debug!("Backed up: {} -> {}", source.display(), dest.display());
@@ -749,11 +799,13 @@ impl HiveMigrator {
 
     /// Execute validate source step
     async fn execute_validate_source_step(&self, _step: &MigrationStep) -> Result<()> {
-        let ts_dir = self.typescript_config_dir.as_ref()
+        let ts_dir = self
+            .typescript_config_dir
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No TypeScript directory set"))?;
 
         let ts_data = self.analyze_typescript_data(ts_dir).await?;
-        
+
         // Validate data integrity
         if ts_data.config.openrouter_api_key.is_none() {
             warn!("No OpenRouter API key found in TypeScript config");
@@ -763,9 +815,12 @@ impl HiveMigrator {
             warn!("No conversations found to migrate");
         }
 
-        info!("Source validation passed: {} conversations, {} themes", 
-              ts_data.conversations.len(), ts_data.themes.len());
-        
+        info!(
+            "Source validation passed: {} conversations, {} themes",
+            ts_data.conversations.len(),
+            ts_data.themes.len()
+        );
+
         Ok(())
     }
 
@@ -775,11 +830,11 @@ impl HiveMigrator {
             info!("DRY RUN: Would convert database schema");
             return Ok(());
         }
-        
+
         // Initialize new Rust database
         let db_path = self.rust_config_dir.join("hive-ai.db");
         initialize_database(None).await?;
-        
+
         info!("Database schema converted");
         Ok(())
     }
@@ -840,16 +895,23 @@ impl HiveMigrator {
     }
 
     /// Run validation checks
-    async fn run_validation_checks(&self, mut checks: Vec<ValidationCheck>) -> Result<Vec<ValidationCheck>> {
+    async fn run_validation_checks(
+        &self,
+        mut checks: Vec<ValidationCheck>,
+    ) -> Result<Vec<ValidationCheck>> {
         for check in &mut checks {
             match check.check_type {
                 ValidationType::ConversationCount => {
                     // Count conversations in new database
                     let db_path = self.rust_config_dir.join("hive-ai.db");
                     if db_path.exists() {
-                        let count = self.count_migrated_conversations(&db_path).await.unwrap_or(0);
+                        let count = self
+                            .count_migrated_conversations(&db_path)
+                            .await
+                            .unwrap_or(0);
                         check.actual_result = Some(serde_json::json!(count));
-                        check.passed = Some(check.expected_result == *check.actual_result.as_ref().unwrap());
+                        check.passed =
+                            Some(check.expected_result == *check.actual_result.as_ref().unwrap());
                     } else {
                         check.actual_result = Some(serde_json::json!(0));
                         check.passed = Some(false);
@@ -900,9 +962,13 @@ impl HiveMigrator {
         // Find the latest backup directory
         let mut latest_backup: Option<&tokio::fs::DirEntry> = None;
         let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
-        
+
         for entry in &backup_dirs {
-            if entry.file_name().to_string_lossy().starts_with("typescript_backup_") {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("typescript_backup_")
+            {
                 if let Ok(metadata) = entry.metadata().await {
                     if let Ok(modified) = metadata.modified() {
                         if modified > latest_time {
@@ -913,9 +979,8 @@ impl HiveMigrator {
                 }
             }
         }
-        
+
         if let Some(latest_backup) = latest_backup {
-            
             let backup_path = latest_backup.path();
             info!("Restoring from backup: {}", backup_path.display());
 
@@ -957,10 +1022,12 @@ mod tests {
 
         // Create mock TypeScript installation
         tokio::fs::create_dir_all(&ts_dir).await.unwrap();
-        tokio::fs::write(ts_dir.join("config.json"), r#"{"version": "1.0.0"}"#).await.unwrap();
+        tokio::fs::write(ts_dir.join("config.json"), r#"{"version": "1.0.0"}"#)
+            .await
+            .unwrap();
 
         let mut migrator = HiveMigrator::new(rust_dir, Some(ts_dir));
-        
+
         if let Ok(plan) = migrator.create_migration_plan().await {
             assert!(!plan.steps.is_empty());
             assert!(!plan.validation_checks.is_empty());

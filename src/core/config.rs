@@ -4,11 +4,11 @@
 //! support for TOML files, environment variables, and runtime updates.
 
 use anyhow::{anyhow, Result};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::fs;
 use tokio::sync::RwLock;
-use once_cell::sync::Lazy;
 
 /// Global configuration instance
 static CONFIG: Lazy<RwLock<Option<HiveConfig>>> = Lazy::new(|| RwLock::new(None));
@@ -166,7 +166,7 @@ pub struct LicenseConfig {
 impl Default for HiveConfig {
     fn default() -> Self {
         let hive_dir = get_hive_config_dir();
-        
+
         Self {
             consensus: ConsensusConfig {
                 streaming: StreamingConfig {
@@ -253,24 +253,24 @@ pub fn get_hive_config_dir() -> PathBuf {
 /// Load configuration from file or create default
 pub async fn load_config() -> Result<HiveConfig> {
     let config_path = get_hive_config_dir().join("config.toml");
-    
+
     if config_path.exists() {
         let contents = fs::read_to_string(&config_path).await?;
         let config: HiveConfig = toml::from_str(&contents)?;
-        
+
         // Store in global state
         let mut global = CONFIG.write().await;
         *global = Some(config.clone());
-        
+
         Ok(config)
     } else {
         // Create default config
         let config = HiveConfig::default();
-        
+
         // Store in global state
         let mut global = CONFIG.write().await;
         *global = Some(config.clone());
-        
+
         Ok(config)
     }
 }
@@ -289,23 +289,26 @@ pub async fn get_config() -> Result<HiveConfig> {
 /// Set a configuration value using dot notation
 pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
     let mut config = get_config().await?;
-    
+
     // Parse the key and update the value
     match key {
         // Consensus profiles are now stored in database, not config files
         "consensus.streaming.enabled" => config.consensus.streaming.enabled = value.parse()?,
         // Max tokens and temperature are hardcoded in consensus engine
-        
         "performance.cache_size" => config.performance.cache_size = value.to_string(),
         "performance.max_workers" => config.performance.max_workers = value.parse()?,
-        "performance.incremental_parsing" => config.performance.incremental_parsing = value.parse()?,
-        "performance.background_indexing" => config.performance.background_indexing = value.parse()?,
-        
+        "performance.incremental_parsing" => {
+            config.performance.incremental_parsing = value.parse()?
+        }
+        "performance.background_indexing" => {
+            config.performance.background_indexing = value.parse()?
+        }
+
         "interface.tui_mode" => config.interface.tui_mode = value.parse()?,
         "interface.prefer_tui" => config.interface.prefer_tui = value.parse()?,
         "interface.tui.theme" => config.interface.tui.theme = value.to_string(),
         "interface.tui.mouse_enabled" => config.interface.tui.mouse_enabled = value.parse()?,
-        
+
         "security.trust_mode" => config.security.trust_mode = value.to_string(),
         "security.require_confirmation" => config.security.require_confirmation = value.parse()?,
         "security.audit_logging" => config.security.audit_logging = value.parse()?,
@@ -313,28 +316,32 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
         "security.enable_mfa" => config.security.enable_mfa = value.parse()?,
         "security.session_timeout" => config.security.session_timeout = value.parse()?,
         "security.trust_dialog.enabled" => config.security.trust_dialog.enabled = value.parse()?,
-        "security.trust_dialog.auto_trust_git" => config.security.trust_dialog.auto_trust_git = value.parse()?,
-        "security.trust_dialog.trust_timeout" => config.security.trust_dialog.trust_timeout = value.parse()?,
-        
+        "security.trust_dialog.auto_trust_git" => {
+            config.security.trust_dialog.auto_trust_git = value.parse()?
+        }
+        "security.trust_dialog.trust_timeout" => {
+            config.security.trust_dialog.trust_timeout = value.parse()?
+        }
+
         "logging.level" => config.logging.level = value.to_string(),
         "logging.format" => config.logging.format = value.to_string(),
-        
+
         // Handle Analytics config
         "analytics.collection_enabled" => config.analytics.collection_enabled = value.parse()?,
         "analytics.retention_days" => config.analytics.retention_days = value.parse()?,
         "analytics.export_enabled" => config.analytics.export_enabled = value.parse()?,
-        
+
         // Handle Database config
         "database.connection_pool_size" => config.database.connection_pool_size = value.parse()?,
         "database.enable_wal" => config.database.enable_wal = value.parse()?,
         "database.auto_vacuum" => config.database.auto_vacuum = value.parse()?,
-        
+
         // Handle Memory config
         "memory.max_conversations" => config.memory.max_conversations = value.parse()?,
         "memory.context_window_size" => config.memory.context_window_size = value.parse()?,
         "memory.clustering_enabled" => config.memory.clustering_enabled = value.parse()?,
         "memory.embedding_model" => config.memory.embedding_model = value.to_string(),
-        
+
         // Handle OpenRouter config
         key if key.starts_with("openrouter.") => {
             if config.openrouter.is_none() {
@@ -345,7 +352,7 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
                     max_retries: 3,
                 });
             }
-            
+
             if let Some(ref mut openrouter) = config.openrouter {
                 match key {
                     "openrouter.api_key" => openrouter.api_key = Some(value.to_string()),
@@ -356,7 +363,7 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
                 }
             }
         }
-        
+
         // Handle License config
         key if key.starts_with("license.") => {
             if config.license.is_none() {
@@ -366,7 +373,7 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
                     tier: None,
                 });
             }
-            
+
             if let Some(ref mut license) = config.license {
                 match key {
                     "license.key" => license.key = Some(value.to_string()),
@@ -376,39 +383,38 @@ pub async fn set_config_value(key: &str, value: &str) -> Result<()> {
                 }
             }
         }
-        
+
         _ => return Err(anyhow!("Unknown configuration key: {}", key)),
     }
-    
+
     // Update global state
     let mut global = CONFIG.write().await;
     *global = Some(config.clone());
-    
+
     // Save to file
     save_config(&config).await?;
-    
+
     Ok(())
 }
 
 /// Get a configuration value using dot notation
 pub async fn get_config_value(key: &str) -> Result<String> {
     let config = get_config().await?;
-    
+
     let value = match key {
         // Consensus profiles are now loaded from database
         "consensus.streaming.enabled" => config.consensus.streaming.enabled.to_string(),
         // Max tokens and temperature are hardcoded
-        
         "performance.cache_size" => config.performance.cache_size,
         "performance.max_workers" => config.performance.max_workers.to_string(),
         "performance.incremental_parsing" => config.performance.incremental_parsing.to_string(),
         "performance.background_indexing" => config.performance.background_indexing.to_string(),
-        
+
         "interface.tui_mode" => config.interface.tui_mode.to_string(),
         "interface.prefer_tui" => config.interface.prefer_tui.to_string(),
         "interface.tui.theme" => config.interface.tui.theme,
         "interface.tui.mouse_enabled" => config.interface.tui.mouse_enabled.to_string(),
-        
+
         "security.trust_mode" => config.security.trust_mode,
         "security.require_confirmation" => config.security.require_confirmation.to_string(),
         "security.audit_logging" => config.security.audit_logging.to_string(),
@@ -416,61 +422,93 @@ pub async fn get_config_value(key: &str) -> Result<String> {
         "security.enable_mfa" => config.security.enable_mfa.to_string(),
         "security.session_timeout" => config.security.session_timeout.to_string(),
         "security.trust_dialog.enabled" => config.security.trust_dialog.enabled.to_string(),
-        "security.trust_dialog.auto_trust_git" => config.security.trust_dialog.auto_trust_git.to_string(),
-        "security.trust_dialog.trust_timeout" => config.security.trust_dialog.trust_timeout.to_string(),
-        
+        "security.trust_dialog.auto_trust_git" => {
+            config.security.trust_dialog.auto_trust_git.to_string()
+        }
+        "security.trust_dialog.trust_timeout" => {
+            config.security.trust_dialog.trust_timeout.to_string()
+        }
+
         "logging.level" => config.logging.level,
         "logging.format" => config.logging.format,
-        
+
         // Handle Analytics config
         "analytics.collection_enabled" => config.analytics.collection_enabled.to_string(),
         "analytics.retention_days" => config.analytics.retention_days.to_string(),
         "analytics.export_enabled" => config.analytics.export_enabled.to_string(),
-        
-        // Handle Database config  
+
+        // Handle Database config
         "database.connection_pool_size" => config.database.connection_pool_size.to_string(),
         "database.enable_wal" => config.database.enable_wal.to_string(),
         "database.auto_vacuum" => config.database.auto_vacuum.to_string(),
-        
+
         // Handle Memory config
         "memory.max_conversations" => config.memory.max_conversations.to_string(),
         "memory.context_window_size" => config.memory.context_window_size.to_string(),
         "memory.clustering_enabled" => config.memory.clustering_enabled.to_string(),
         "memory.embedding_model" => config.memory.embedding_model,
-        
+
         // Handle Core dirs config
         "core_dirs.data_dir" => config.core_dirs.data_dir.display().to_string(),
         "core_dirs.config_dir" => config.core_dirs.config_dir.display().to_string(),
         "core_dirs.cache_dir" => config.core_dirs.cache_dir.display().to_string(),
-        
+
         // Handle OpenRouter config
-        "openrouter.api_key" => config.openrouter.as_ref().and_then(|o| o.api_key.clone()).unwrap_or_default(),
-        "openrouter.base_url" => config.openrouter.as_ref().map(|o| o.base_url.clone()).unwrap_or_default(),
-        "openrouter.timeout_seconds" => config.openrouter.as_ref().map(|o| o.timeout_seconds.to_string()).unwrap_or_default(),
-        "openrouter.max_retries" => config.openrouter.as_ref().map(|o| o.max_retries.to_string()).unwrap_or_default(),
-        
+        "openrouter.api_key" => config
+            .openrouter
+            .as_ref()
+            .and_then(|o| o.api_key.clone())
+            .unwrap_or_default(),
+        "openrouter.base_url" => config
+            .openrouter
+            .as_ref()
+            .map(|o| o.base_url.clone())
+            .unwrap_or_default(),
+        "openrouter.timeout_seconds" => config
+            .openrouter
+            .as_ref()
+            .map(|o| o.timeout_seconds.to_string())
+            .unwrap_or_default(),
+        "openrouter.max_retries" => config
+            .openrouter
+            .as_ref()
+            .map(|o| o.max_retries.to_string())
+            .unwrap_or_default(),
+
         // Handle License config
-        "license.key" => config.license.as_ref().and_then(|l| l.key.clone()).unwrap_or_default(),
-        "license.email" => config.license.as_ref().and_then(|l| l.email.clone()).unwrap_or_default(),
-        "license.tier" => config.license.as_ref().and_then(|l| l.tier.clone()).unwrap_or_default(),
-        
+        "license.key" => config
+            .license
+            .as_ref()
+            .and_then(|l| l.key.clone())
+            .unwrap_or_default(),
+        "license.email" => config
+            .license
+            .as_ref()
+            .and_then(|l| l.email.clone())
+            .unwrap_or_default(),
+        "license.tier" => config
+            .license
+            .as_ref()
+            .and_then(|l| l.tier.clone())
+            .unwrap_or_default(),
+
         _ => return Err(anyhow!("Unknown configuration key: {}", key)),
     };
-    
+
     Ok(value)
 }
 
 /// Reset configuration to defaults
 pub async fn reset_config() -> Result<()> {
     let config = HiveConfig::default();
-    
+
     // Update global state
     let mut global = CONFIG.write().await;
     *global = Some(config.clone());
-    
+
     // Save to file
     save_config(&config).await?;
-    
+
     Ok(())
 }
 
@@ -478,11 +516,11 @@ pub async fn reset_config() -> Result<()> {
 pub async fn save_config(config: &HiveConfig) -> Result<()> {
     let config_dir = get_hive_config_dir();
     fs::create_dir_all(&config_dir).await?;
-    
+
     let config_path = config_dir.join("config.toml");
     let toml_str = toml::to_string_pretty(config)?;
     fs::write(&config_path, toml_str).await?;
-    
+
     Ok(())
 }
 
@@ -497,17 +535,17 @@ pub async fn init_config() -> Result<()> {
     // Ensure config directory exists
     let config_dir = get_hive_config_dir();
     fs::create_dir_all(&config_dir).await?;
-    
+
     // Load or create config
     let _ = load_config().await?;
-    
+
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_default_config() {
         let config = HiveConfig::default();
@@ -515,24 +553,24 @@ mod tests {
         assert_eq!(config.interface.tui_mode, true);
         assert_eq!(config.security.telemetry, false);
     }
-    
+
     #[tokio::test]
     async fn test_config_value_access() {
         let config = HiveConfig::default();
-        
+
         // Store in global state for testing
         let mut global = CONFIG.write().await;
         *global = Some(config);
         drop(global);
-        
+
         // Test getting values
         let timeout = get_config_value("consensus.timeout_seconds").await.unwrap();
         assert_eq!(timeout, "300");
-        
+
         let tui_mode = get_config_value("interface.tui_mode").await.unwrap();
         assert_eq!(tui_mode, "true");
     }
-    
+
     #[test]
     fn test_config_dir() {
         let config_dir = get_hive_config_dir();

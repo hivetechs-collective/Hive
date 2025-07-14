@@ -65,22 +65,22 @@ impl MigrationManager {
     }
 
     /// Parse migration content to extract metadata and SQL
-    pub fn parse_migration_content(&self, content: &str) -> Result<(HashMap<String, String>, String)> {
+    pub fn parse_migration_content(
+        &self,
+        content: &str,
+    ) -> Result<(HashMap<String, String>, String)> {
         let mut metadata = HashMap::new();
         let mut sql_lines = Vec::new();
         let mut in_metadata = false;
 
         for line in content.lines() {
             let trimmed = line.trim();
-            
+
             if trimmed.starts_with("-- @") {
                 in_metadata = true;
                 let parts: Vec<&str> = trimmed[3..].splitn(2, ':').collect();
                 if parts.len() == 2 {
-                    metadata.insert(
-                        parts[0].trim().to_lowercase(),
-                        parts[1].trim().to_string(),
-                    );
+                    metadata.insert(parts[0].trim().to_lowercase(), parts[1].trim().to_string());
                 }
             } else if trimmed.starts_with("--") && !in_metadata {
                 // Regular comment, skip
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn test_migration_content_parsing() -> Result<()> {
         let manager = MigrationManager::new(PathBuf::new());
-        
+
         let content = r#"-- @ version: 001
 -- @ name: test_migration
 -- @ description: A test migration
@@ -160,7 +160,7 @@ CREATE TABLE test (
 INSERT INTO test (id, name) VALUES ('1', 'test');"#;
 
         let (metadata, sql) = manager.parse_migration_content(content)?;
-        
+
         assert_eq!(metadata.get("version"), Some(&"001".to_string()));
         assert_eq!(metadata.get("name"), Some(&"test_migration".to_string()));
         assert!(sql.contains("CREATE TABLE test"));
@@ -174,10 +174,10 @@ INSERT INTO test (id, name) VALUES ('1', 'test');"#;
     async fn test_migration_manager() -> Result<()> {
         let manager = MigrationManager::new(PathBuf::from("migrations"));
         let status = manager.get_migration_status().await?;
-        
+
         assert_eq!(status.applied_count, 0);
         assert_eq!(status.total_migrations, 0);
-        
+
         Ok(())
     }
 }

@@ -2,10 +2,10 @@
 //!
 //! Provides centralized prompt templates and context injection
 
-use anyhow::{Result, anyhow};
-use std::collections::HashMap;
-use serde_json::Value;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use serde_json::Value;
+use std::collections::HashMap;
 
 /// Prompt template manager
 pub struct PromptManager {
@@ -54,7 +54,7 @@ impl PromptManager {
 
         // Register default templates
         manager.register_default_templates();
-        
+
         // Register default context injectors
         manager.register_default_injectors();
 
@@ -91,7 +91,8 @@ Language-specific considerations for {{language}}:
 {{/if}}
 
 Current timestamp: {{timestamp}}
-Analysis requested by: {{session_id}}"#.to_string(),
+Analysis requested by: {{session_id}}"#
+                .to_string(),
             required_params: vec!["code".to_string()],
             optional_params: vec!["focus".to_string(), "context".to_string()],
             language_specific: true,
@@ -134,7 +135,8 @@ Analysis requested by: {{session_id}}"#.to_string(),
 
 {{temporal_context}}
 
-Please be thorough and systematic in your analysis."#.to_string(),
+Please be thorough and systematic in your analysis."#
+                .to_string(),
             required_params: vec!["code".to_string(), "error_message".to_string()],
             optional_params: vec!["stack_trace".to_string(), "context".to_string()],
             language_specific: true,
@@ -179,9 +181,14 @@ Please be thorough and systematic in your analysis."#.to_string(),
 
 {{temporal_context}}
 
-Please provide complete, production-ready code with explanations."#.to_string(),
+Please provide complete, production-ready code with explanations."#
+                .to_string(),
             required_params: vec!["requirements".to_string()],
-            optional_params: vec!["existing_code".to_string(), "constraints".to_string(), "style_preferences".to_string()],
+            optional_params: vec![
+                "existing_code".to_string(),
+                "constraints".to_string(),
+                "style_preferences".to_string(),
+            ],
             language_specific: true,
             context_aware: true,
         });
@@ -230,7 +237,8 @@ Please provide complete, production-ready code with explanations."#.to_string(),
 
 {{security_context}}
 
-Please be thorough and provide actionable security recommendations."#.to_string(),
+Please be thorough and provide actionable security recommendations."#
+                .to_string(),
             required_params: vec!["code".to_string()],
             optional_params: vec!["scan_depth".to_string(), "framework".to_string()],
             language_specific: true,
@@ -274,7 +282,8 @@ Please be thorough and provide actionable security recommendations."#.to_string(
 
 {{refactoring_context}}
 
-Please ensure the refactored code maintains compatibility while improving quality."#.to_string(),
+Please ensure the refactored code maintains compatibility while improving quality."#
+                .to_string(),
             required_params: vec!["code".to_string(), "refactor_type".to_string()],
             optional_params: vec!["target".to_string(), "complexity_constraints".to_string()],
             language_specific: true,
@@ -328,9 +337,14 @@ Please ensure the refactored code maintains compatibility while improving qualit
 
 {{testing_context}}
 
-Please generate production-ready tests with comprehensive coverage."#.to_string(),
+Please generate production-ready tests with comprehensive coverage."#
+                .to_string(),
             required_params: vec!["code".to_string()],
-            optional_params: vec!["test_framework".to_string(), "coverage_target".to_string(), "test_types".to_string()],
+            optional_params: vec![
+                "test_framework".to_string(),
+                "coverage_target".to_string(),
+                "test_types".to_string(),
+            ],
             language_specific: true,
             context_aware: true,
         });
@@ -338,11 +352,16 @@ Please generate production-ready tests with comprehensive coverage."#.to_string(
 
     /// Register default context injectors
     fn register_default_injectors(&mut self) {
-        self.context_injectors.push(Box::new(TemporalContextInjector));
-        self.context_injectors.push(Box::new(LanguageContextInjector));
-        self.context_injectors.push(Box::new(SecurityContextInjector));
-        self.context_injectors.push(Box::new(RefactoringContextInjector));
-        self.context_injectors.push(Box::new(TestingContextInjector));
+        self.context_injectors
+            .push(Box::new(TemporalContextInjector));
+        self.context_injectors
+            .push(Box::new(LanguageContextInjector));
+        self.context_injectors
+            .push(Box::new(SecurityContextInjector));
+        self.context_injectors
+            .push(Box::new(RefactoringContextInjector));
+        self.context_injectors
+            .push(Box::new(TestingContextInjector));
     }
 
     /// Register a prompt template
@@ -362,7 +381,8 @@ Please generate production-ready tests with comprehensive coverage."#.to_string(
         params: HashMap<String, Value>,
         context: PromptContext,
     ) -> Result<String> {
-        let template = self.get_template(template_id)
+        let template = self
+            .get_template(template_id)
             .ok_or_else(|| anyhow!("Template not found: {}", template_id))?;
 
         // Validate required parameters
@@ -400,13 +420,13 @@ Please generate production-ready tests with comprehensive coverage."#.to_string(
     fn clean_template_placeholders(&self, prompt: String) -> String {
         // Remove conditional blocks that weren't processed
         let mut cleaned = prompt;
-        
+
         // Simple cleanup - in a full implementation, you'd use a proper template engine
         cleaned = cleaned.replace("{{#if context}}", "");
         cleaned = cleaned.replace("{{/if}}", "");
         cleaned = cleaned.replace("{{#each constraints}}", "");
         cleaned = cleaned.replace("{{/each}}", "");
-        
+
         // Remove empty template variables
         let re = regex::Regex::new(r"\{\{[^}]+\}\}").unwrap();
         cleaned = re.replace_all(&cleaned, "").to_string();
@@ -480,7 +500,8 @@ impl ContextInjector for SecurityContextInjector {
             "**General Security Context:**\n\
             - OWASP Top 10 vulnerabilities\n\
             - Common security anti-patterns\n\
-            - Secure coding practices".to_string()
+            - Secure coding practices"
+                .to_string()
         };
 
         Ok(prompt.replace("{{security_context}}", &security_context))
@@ -509,7 +530,8 @@ impl ContextInjector for RefactoringContextInjector {
             "**General Refactoring Context:**\n\
             - Universal refactoring principles\n\
             - Code smell identification\n\
-            - Design pattern opportunities".to_string()
+            - Design pattern opportunities"
+                .to_string()
         };
 
         Ok(prompt.replace("{{refactoring_context}}", &refactoring_context))
@@ -538,7 +560,8 @@ impl ContextInjector for TestingContextInjector {
             "**General Testing Context:**\n\
             - Universal testing principles\n\
             - Test-driven development practices\n\
-            - Testing pyramid concepts".to_string()
+            - Testing pyramid concepts"
+                .to_string()
         };
 
         Ok(prompt.replace("{{testing_context}}", &testing_context))

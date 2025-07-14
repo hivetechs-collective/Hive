@@ -1,19 +1,19 @@
 //! Compliance Management System
-//! 
+//!
 //! Provides comprehensive compliance monitoring and reporting for:
 //! - SOX (Sarbanes-Oxley Act)
 //! - GDPR (General Data Protection Regulation)
 //! - ISO 27001 (Information Security Management)
 //! - Custom compliance frameworks
 
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use anyhow::{Result, anyhow};
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 use tokio::sync::RwLock;
 
-use super::audit::{EnterpriseAuditLogger, AuditEvent, AuditEventType};
+use super::audit::{AuditEvent, AuditEventType, EnterpriseAuditLogger};
 
 /// Compliance manager
 pub struct ComplianceManager {
@@ -291,7 +291,10 @@ pub struct ComplianceAttestation {
 }
 
 impl ComplianceManager {
-    pub async fn new(standards: Vec<String>, audit_logger: Arc<EnterpriseAuditLogger>) -> Result<Self> {
+    pub async fn new(
+        standards: Vec<String>,
+        audit_logger: Arc<EnterpriseAuditLogger>,
+    ) -> Result<Self> {
         let compliance_standards = Self::load_standards(standards).await?;
         let rules = Arc::new(RwLock::new(HashMap::new()));
         let violations = Arc::new(RwLock::new(Vec::new()));
@@ -337,7 +340,8 @@ impl ComplianceManager {
                 ComplianceRequirement {
                     id: "SOX_404".to_string(),
                     title: "Management Assessment of Internal Controls".to_string(),
-                    description: "Assessment of internal control over financial reporting".to_string(),
+                    description: "Assessment of internal control over financial reporting"
+                        .to_string(),
                     category: "Internal Controls".to_string(),
                     mandatory: true,
                     evidence_required: true,
@@ -348,7 +352,9 @@ impl ComplianceManager {
                 ("financial_access".to_string(), ViolationSeverity::Critical),
                 ("audit_log".to_string(), ViolationSeverity::High),
                 ("change_control".to_string(), ViolationSeverity::High),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         }
     }
 
@@ -361,7 +367,8 @@ impl ComplianceManager {
                 ComplianceRequirement {
                     id: "GDPR_25".to_string(),
                     title: "Data Protection by Design and by Default".to_string(),
-                    description: "Implement appropriate technical and organizational measures".to_string(),
+                    description: "Implement appropriate technical and organizational measures"
+                        .to_string(),
                     category: "Data Protection".to_string(),
                     mandatory: true,
                     evidence_required: true,
@@ -381,7 +388,9 @@ impl ComplianceManager {
                 ("data_breach".to_string(), ViolationSeverity::Critical),
                 ("data_access".to_string(), ViolationSeverity::High),
                 ("consent".to_string(), ViolationSeverity::High),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         }
     }
 
@@ -414,7 +423,9 @@ impl ComplianceManager {
                 ("security_incident".to_string(), ViolationSeverity::Critical),
                 ("access_violation".to_string(), ViolationSeverity::High),
                 ("log_tampering".to_string(), ViolationSeverity::High),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         }
     }
 
@@ -479,48 +490,50 @@ impl ComplianceManager {
                     notification_required: true,
                 },
             ],
-            "GDPR" => vec![
-                ComplianceRule {
-                    id: "GDPR_DATA_BREACH".to_string(),
-                    standard: "GDPR".to_string(),
-                    requirement_id: "GDPR_25".to_string(),
-                    name: "Data Breach Detection".to_string(),
-                    description: "Detect potential data breaches".to_string(),
-                    rule_type: ComplianceRuleType::DataProtection,
-                    condition: RuleCondition {
-                        event_types: Some(vec![AuditEventType::DataExport, AuditEventType::UnauthorizedAccess]),
-                        time_window_hours: Some(1),
-                        frequency_threshold: Some(5),
-                        user_pattern: None,
-                        resource_pattern: Some("data:personal:*".to_string()),
-                        custom_expression: None,
-                    },
-                    severity: ViolationSeverity::Critical,
-                    auto_remediate: false,
-                    notification_required: true,
+            "GDPR" => vec![ComplianceRule {
+                id: "GDPR_DATA_BREACH".to_string(),
+                standard: "GDPR".to_string(),
+                requirement_id: "GDPR_25".to_string(),
+                name: "Data Breach Detection".to_string(),
+                description: "Detect potential data breaches".to_string(),
+                rule_type: ComplianceRuleType::DataProtection,
+                condition: RuleCondition {
+                    event_types: Some(vec![
+                        AuditEventType::DataExport,
+                        AuditEventType::UnauthorizedAccess,
+                    ]),
+                    time_window_hours: Some(1),
+                    frequency_threshold: Some(5),
+                    user_pattern: None,
+                    resource_pattern: Some("data:personal:*".to_string()),
+                    custom_expression: None,
                 },
-            ],
-            "ISO27001" => vec![
-                ComplianceRule {
-                    id: "ISO_ACCESS_VIOLATION".to_string(),
-                    standard: "ISO27001".to_string(),
-                    requirement_id: "ISO_A9_1_1".to_string(),
-                    name: "Access Control Violation".to_string(),
-                    description: "Detect access control policy violations".to_string(),
-                    rule_type: ComplianceRuleType::AccessControl,
-                    condition: RuleCondition {
-                        event_types: Some(vec![AuditEventType::PermissionDenied, AuditEventType::UnauthorizedAccess]),
-                        time_window_hours: Some(24),
-                        frequency_threshold: Some(3),
-                        user_pattern: None,
-                        resource_pattern: None,
-                        custom_expression: None,
-                    },
-                    severity: ViolationSeverity::High,
-                    auto_remediate: false,
-                    notification_required: true,
+                severity: ViolationSeverity::Critical,
+                auto_remediate: false,
+                notification_required: true,
+            }],
+            "ISO27001" => vec![ComplianceRule {
+                id: "ISO_ACCESS_VIOLATION".to_string(),
+                standard: "ISO27001".to_string(),
+                requirement_id: "ISO_A9_1_1".to_string(),
+                name: "Access Control Violation".to_string(),
+                description: "Detect access control policy violations".to_string(),
+                rule_type: ComplianceRuleType::AccessControl,
+                condition: RuleCondition {
+                    event_types: Some(vec![
+                        AuditEventType::PermissionDenied,
+                        AuditEventType::UnauthorizedAccess,
+                    ]),
+                    time_window_hours: Some(24),
+                    frequency_threshold: Some(3),
+                    user_pattern: None,
+                    resource_pattern: None,
+                    custom_expression: None,
                 },
-            ],
+                severity: ViolationSeverity::High,
+                auto_remediate: false,
+                notification_required: true,
+            }],
             _ => vec![],
         }
     }
@@ -542,7 +555,9 @@ impl ComplianceManager {
     }
 
     pub async fn generate_report(&self, standard: &str) -> Result<ComplianceReport> {
-        let standard_def = self.standards.iter()
+        let standard_def = self
+            .standards
+            .iter()
             .find(|s| s.name == standard)
             .ok_or_else(|| anyhow!("Standard not found: {}", standard))?;
 
@@ -561,7 +576,8 @@ impl ComplianceManager {
                 compliance_score: self.calculate_compliance_score(standard, &violations),
                 total_controls: standard_def.requirements.len() as u32,
                 effective_controls: (standard_def.requirements.len() - violations.len()) as u32,
-                critical_findings: violations.iter()
+                critical_findings: violations
+                    .iter()
                     .filter(|v| v.severity == ViolationSeverity::Critical)
                     .count() as u32,
                 improvement_areas: self.identify_improvement_areas(&violations),
@@ -575,15 +591,23 @@ impl ComplianceManager {
         })
     }
 
-    async fn get_violations_for_standard(&self, standard: &str) -> Result<Vec<ComplianceViolation>> {
+    async fn get_violations_for_standard(
+        &self,
+        standard: &str,
+    ) -> Result<Vec<ComplianceViolation>> {
         let violations = self.violations.read().await;
-        Ok(violations.iter()
+        Ok(violations
+            .iter()
             .filter(|v| v.standard == standard)
             .cloned()
             .collect())
     }
 
-    async fn generate_findings(&self, _standard: &ComplianceStandard, violations: &[ComplianceViolation]) -> Result<Vec<ComplianceFinding>> {
+    async fn generate_findings(
+        &self,
+        _standard: &ComplianceStandard,
+        violations: &[ComplianceViolation],
+    ) -> Result<Vec<ComplianceFinding>> {
         let mut findings = Vec::new();
 
         for violation in violations {
@@ -613,41 +637,60 @@ impl ComplianceManager {
         }
     }
 
-    fn calculate_compliance_score(&self, _standard: &str, violations: &[ComplianceViolation]) -> f64 {
+    fn calculate_compliance_score(
+        &self,
+        _standard: &str,
+        violations: &[ComplianceViolation],
+    ) -> f64 {
         if violations.is_empty() {
             return 100.0;
         }
 
         let total_risk = violations.iter().map(|v| v.risk_score as f64).sum::<f64>();
         let max_possible_risk = violations.len() as f64 * 100.0;
-        
+
         ((max_possible_risk - total_risk) / max_possible_risk * 100.0).max(0.0)
     }
 
     fn identify_improvement_areas(&self, violations: &[ComplianceViolation]) -> Vec<String> {
         let mut areas = Vec::new();
-        
-        if violations.iter().any(|v| matches!(v.rule_id.as_str(), s if s.contains("ACCESS"))) {
+
+        if violations
+            .iter()
+            .any(|v| matches!(v.rule_id.as_str(), s if s.contains("ACCESS")))
+        {
             areas.push("Access Control Management".to_string());
         }
-        
-        if violations.iter().any(|v| matches!(v.rule_id.as_str(), s if s.contains("LOG"))) {
+
+        if violations
+            .iter()
+            .any(|v| matches!(v.rule_id.as_str(), s if s.contains("LOG")))
+        {
             areas.push("Audit Logging and Monitoring".to_string());
         }
-        
-        if violations.iter().any(|v| matches!(v.rule_id.as_str(), s if s.contains("DATA"))) {
+
+        if violations
+            .iter()
+            .any(|v| matches!(v.rule_id.as_str(), s if s.contains("DATA")))
+        {
             areas.push("Data Protection and Privacy".to_string());
         }
 
         areas
     }
 
-    fn determine_certification_status(&self, _standard: &str, violations: &[ComplianceViolation]) -> CertificationStatus {
-        let critical_violations = violations.iter()
+    fn determine_certification_status(
+        &self,
+        _standard: &str,
+        violations: &[ComplianceViolation],
+    ) -> CertificationStatus {
+        let critical_violations = violations
+            .iter()
             .filter(|v| v.severity == ViolationSeverity::Critical)
             .count();
-        
-        let high_violations = violations.iter()
+
+        let high_violations = violations
+            .iter()
             .filter(|v| v.severity == ViolationSeverity::High)
             .count();
 
@@ -668,7 +711,8 @@ impl ComplianceManager {
                 ComplianceRecommendation {
                     priority: 1,
                     category: "Access Control".to_string(),
-                    description: "Implement role-based access control for financial systems".to_string(),
+                    description: "Implement role-based access control for financial systems"
+                        .to_string(),
                     impact: "Reduces risk of unauthorized financial data access".to_string(),
                     effort: EffortLevel::Medium,
                     timeline_days: 60,
@@ -682,44 +726,58 @@ impl ComplianceManager {
                     timeline_days: 30,
                 },
             ],
-            "GDPR" => vec![
-                ComplianceRecommendation {
-                    priority: 1,
-                    category: "Data Protection".to_string(),
-                    description: "Implement data classification and labeling".to_string(),
-                    impact: "Better protection of personal data".to_string(),
-                    effort: EffortLevel::High,
-                    timeline_days: 90,
-                },
-            ],
-            "ISO27001" => vec![
-                ComplianceRecommendation {
-                    priority: 1,
-                    category: "Security Management".to_string(),
-                    description: "Establish formal security governance framework".to_string(),
-                    impact: "Systematic approach to information security".to_string(),
-                    effort: EffortLevel::VeryHigh,
-                    timeline_days: 180,
-                },
-            ],
+            "GDPR" => vec![ComplianceRecommendation {
+                priority: 1,
+                category: "Data Protection".to_string(),
+                description: "Implement data classification and labeling".to_string(),
+                impact: "Better protection of personal data".to_string(),
+                effort: EffortLevel::High,
+                timeline_days: 90,
+            }],
+            "ISO27001" => vec![ComplianceRecommendation {
+                priority: 1,
+                category: "Security Management".to_string(),
+                description: "Establish formal security governance framework".to_string(),
+                impact: "Systematic approach to information security".to_string(),
+                effort: EffortLevel::VeryHigh,
+                timeline_days: 180,
+            }],
             _ => vec![],
         }
     }
 
     pub async fn get_compliance_status(&self, standard: &str) -> Result<ComplianceStatus> {
         let violations = self.get_violations_for_standard(standard).await?;
-        let standard_def = self.standards.iter()
+        let standard_def = self
+            .standards
+            .iter()
             .find(|s| s.name == standard)
             .ok_or_else(|| anyhow!("Standard not found: {}", standard))?;
 
         let violation_summary = ComplianceViolationSummary {
             total: violations.len() as u32,
-            critical: violations.iter().filter(|v| v.severity == ViolationSeverity::Critical).count() as u32,
-            high: violations.iter().filter(|v| v.severity == ViolationSeverity::High).count() as u32,
-            medium: violations.iter().filter(|v| v.severity == ViolationSeverity::Medium).count() as u32,
-            low: violations.iter().filter(|v| v.severity == ViolationSeverity::Low).count() as u32,
-            open: violations.iter().filter(|v| v.status == ViolationStatus::Open).count() as u32,
-            overdue: violations.iter()
+            critical: violations
+                .iter()
+                .filter(|v| v.severity == ViolationSeverity::Critical)
+                .count() as u32,
+            high: violations
+                .iter()
+                .filter(|v| v.severity == ViolationSeverity::High)
+                .count() as u32,
+            medium: violations
+                .iter()
+                .filter(|v| v.severity == ViolationSeverity::Medium)
+                .count() as u32,
+            low: violations
+                .iter()
+                .filter(|v| v.severity == ViolationSeverity::Low)
+                .count() as u32,
+            open: violations
+                .iter()
+                .filter(|v| v.status == ViolationStatus::Open)
+                .count() as u32,
+            overdue: violations
+                .iter()
                 .filter(|v| v.due_date.map_or(false, |d| d < Utc::now()))
                 .count() as u32,
         };
@@ -746,14 +804,18 @@ mod tests {
     async fn test_compliance_manager_creation() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("compliance_test.db");
-        
+
         let audit_logger = Arc::new(
-            EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
-        
+
         let standards = vec!["SOX".to_string(), "GDPR".to_string()];
-        let manager = ComplianceManager::new(standards, audit_logger).await.unwrap();
-        
+        let manager = ComplianceManager::new(standards, audit_logger)
+            .await
+            .unwrap();
+
         assert_eq!(manager.standards.len(), 2);
         assert!(manager.standards.iter().any(|s| s.name == "SOX"));
         assert!(manager.standards.iter().any(|s| s.name == "GDPR"));
@@ -764,16 +826,14 @@ mod tests {
         let sox_standard = ComplianceManager::create_sox_standard();
         assert_eq!(sox_standard.name, "SOX");
         assert_eq!(sox_standard.requirements.len(), 2);
-        
+
         let manager = ComplianceManager {
             standards: vec![sox_standard.clone()],
             rules: Arc::new(RwLock::new(HashMap::new())),
             violations: Arc::new(RwLock::new(Vec::new())),
-            audit_logger: Arc::new(
-                EnterpriseAuditLogger::new(None, 365).await.unwrap()
-            ),
+            audit_logger: Arc::new(EnterpriseAuditLogger::new(None, 365).await.unwrap()),
         };
-        
+
         let rules = manager.create_rules_for_standard(&sox_standard);
         assert_eq!(rules.len(), 2);
         assert!(rules.iter().any(|r| r.id == "SOX_FINANCIAL_ACCESS"));
@@ -784,39 +844,41 @@ mod tests {
     async fn test_compliance_score_calculation() {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("score_test.db");
-        
+
         let audit_logger = Arc::new(
-            EnterpriseAuditLogger::new(Some(db_path), 365).await.unwrap()
+            EnterpriseAuditLogger::new(Some(db_path), 365)
+                .await
+                .unwrap(),
         );
-        
-        let manager = ComplianceManager::new(vec!["SOX".to_string()], audit_logger).await.unwrap();
-        
+
+        let manager = ComplianceManager::new(vec!["SOX".to_string()], audit_logger)
+            .await
+            .unwrap();
+
         // Test with no violations (100% score)
         let score = manager.calculate_compliance_score("SOX", &[]);
         assert_eq!(score, 100.0);
-        
+
         // Test with violations
-        let violations = vec![
-            ComplianceViolation {
-                id: "test_violation".to_string(),
-                standard: "SOX".to_string(),
-                rule_id: "test_rule".to_string(),
-                requirement_id: "test_req".to_string(),
-                severity: ViolationSeverity::High,
-                title: "Test violation".to_string(),
-                description: "Test description".to_string(),
-                detected_at: Utc::now(),
-                related_events: vec![],
-                affected_users: vec![],
-                affected_resources: vec![],
-                status: ViolationStatus::Open,
-                assigned_to: None,
-                due_date: None,
-                resolution: None,
-                risk_score: 80,
-            }
-        ];
-        
+        let violations = vec![ComplianceViolation {
+            id: "test_violation".to_string(),
+            standard: "SOX".to_string(),
+            rule_id: "test_rule".to_string(),
+            requirement_id: "test_req".to_string(),
+            severity: ViolationSeverity::High,
+            title: "Test violation".to_string(),
+            description: "Test description".to_string(),
+            detected_at: Utc::now(),
+            related_events: vec![],
+            affected_users: vec![],
+            affected_resources: vec![],
+            status: ViolationStatus::Open,
+            assigned_to: None,
+            due_date: None,
+            resolution: None,
+            risk_score: 80,
+        }];
+
         let score = manager.calculate_compliance_score("SOX", &violations);
         assert_eq!(score, 20.0); // 100 - 80 = 20%
     }

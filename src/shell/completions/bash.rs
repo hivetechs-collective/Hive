@@ -12,13 +12,13 @@ _hive_completion() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    
+
     # Global options available for all commands
     local global_opts="-h --help -V --version -v --verbose -q --quiet --format --no-color -c --config"
-    
+
     # Main commands
     local commands="analyze ask consensus plan execute improve search memory analytics tool serve index config trust hooks interactive tui status completion self-update shell"
-    
+
     # Handle subcommands based on previous word
     case "${prev}" in
         hive)
@@ -259,7 +259,7 @@ _hive_completion() {
             return 0
             ;;
     esac
-    
+
     # Handle flag-like options
     case "${cur}" in
         -*)
@@ -278,28 +278,28 @@ _hive_completion() {
 _hive_smart_complete() {
     local current_dir=$(pwd)
     local context_suggestions=""
-    
+
     # Detect project context and add relevant suggestions
     if [[ -d ".git" ]]; then
         context_suggestions="$context_suggestions git-analyze git-status"
     fi
-    
+
     if [[ -f "Cargo.toml" ]]; then
         context_suggestions="$context_suggestions rust-check rust-test rust-build"
     fi
-    
+
     if [[ -f "package.json" ]]; then
         context_suggestions="$context_suggestions npm-audit js-analyze node-deps"
     fi
-    
+
     if [[ -f "requirements.txt" ]] || [[ -f "pyproject.toml" ]]; then
         context_suggestions="$context_suggestions python-deps py-analyze venv-check"
     fi
-    
+
     if [[ -f "go.mod" ]]; then
         context_suggestions="$context_suggestions go-mod go-analyze go-deps"
     fi
-    
+
     # Add context suggestions to completions if any detected
     if [[ -n "$context_suggestions" ]]; then
         COMPREPLY=( "${COMPREPLY[@]}" $(compgen -W "$context_suggestions" -- ${COMP_WORDS[COMP_CWORD]}) )
@@ -310,7 +310,7 @@ _hive_smart_complete() {
 _hive_file_context() {
     local current_word="${COMP_WORDS[COMP_CWORD]}"
     local file_suggestions=""
-    
+
     # Suggest relevant files based on command context
     case "${COMP_WORDS[1]}" in
         analyze)
@@ -322,7 +322,7 @@ _hive_file_context() {
             file_suggestions=$(find . -maxdepth 3 \( -name "*.rs" -o -name "*.ts" -o -name "*.js" -o -name "*.py" -o -name "*.go" \) 2>/dev/null | head -20)
             ;;
     esac
-    
+
     if [[ -n "$file_suggestions" ]]; then
         COMPREPLY=( "${COMPREPLY[@]}" $(compgen -W "$file_suggestions" -- $current_word) )
     fi
@@ -339,7 +339,7 @@ complete -F _hive_completion hive-plan hp
 
 # Professional aliases with descriptions
 alias ha='hive analyze'
-alias hq='hive ask'  
+alias hq='hive ask'
 alias hp='hive plan'
 alias hs='hive search'
 alias hm='hive memory search'
@@ -350,7 +350,7 @@ alias htui='hive tui'
 
 # Advanced aliases for power users
 alias hive-quick='hive ask --profile=speed'
-alias hive-best='hive ask --profile=elite'  
+alias hive-best='hive ask --profile=elite'
 alias hive-cheap='hive ask --profile=cost'
 alias hive-here='hive analyze . --depth=standard'
 alias hive-full='hive analyze . --depth=comprehensive --dependencies --recommendations'
@@ -400,23 +400,23 @@ export HIVE_AUTO_TRUST_CURRENT="false"
 # Context detection for better UX
 _hive_detect_context() {
     local context=""
-    
+
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         context="git"
     fi
-    
+
     if [[ -f "Cargo.toml" ]]; then
         context="$context rust"
     fi
-    
+
     if [[ -f "package.json" ]]; then
         context="$context javascript"
     fi
-    
+
     if [[ -f "requirements.txt" || -f "pyproject.toml" ]]; then
         context="$context python"
     fi
-    
+
     export HIVE_CONTEXT="$context"
 }
 
@@ -428,7 +428,7 @@ fi
 # Professional command not found handler
 command_not_found_handle() {
     local command="$1"
-    
+
     # Suggest hive commands for common typos
     case "$command" in
         hiv|hive-*)
@@ -460,21 +460,21 @@ mod tests {
     #[test]
     fn test_bash_completions_generation() {
         let completions = generate_bash_completions();
-        
+
         // Basic structure checks
         assert!(completions.contains("_hive_completion"));
         assert!(completions.contains("complete -F _hive_completion hive"));
-        
+
         // Check for main commands
         assert!(completions.contains("analyze"));
         assert!(completions.contains("ask"));
         assert!(completions.contains("consensus"));
         assert!(completions.contains("plan"));
-        
+
         // Check for aliases
         assert!(completions.contains("alias ha='hive analyze'"));
         assert!(completions.contains("alias hq='hive ask'"));
-        
+
         // Check for smart functions
         assert!(completions.contains("hive_quick_ask"));
         assert!(completions.contains("_hive_detect_context"));
@@ -483,7 +483,7 @@ mod tests {
     #[test]
     fn test_bash_completions_contains_all_shells() {
         let completions = generate_bash_completions();
-        
+
         // Should support all shell types in completion command
         assert!(completions.contains("bash zsh fish powershell elvish"));
     }

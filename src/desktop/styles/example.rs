@@ -1,21 +1,21 @@
 //! Example usage of VS Code styled components
-//! 
+//!
 //! This module demonstrates how to use the styling system
 
-use dioxus::prelude::*;
 use super::components::*;
 use super::theme::*;
+use dioxus::prelude::*;
 
 /// Example app showing styled components
 #[component]
 pub fn StyledExample() -> Element {
     let mut count = use_signal(|| 0);
     let theme = use_theme();
-    
+
     rsx! {
         div { class: "p-4",
             h1 { "VS Code Styled Components Example" }
-            
+
             // Button examples
             div { class: "m-2",
                 h3 { "Buttons" }
@@ -39,7 +39,7 @@ pub fn StyledExample() -> Element {
                     }
                 }
             }
-            
+
             // Panel examples
             div { class: "m-2",
                 h3 { "Panels" }
@@ -63,7 +63,7 @@ pub fn StyledExample() -> Element {
                     }
                 }
             }
-            
+
             // Tab examples
             div { class: "m-2",
                 h3 { "Tabs" }
@@ -88,7 +88,7 @@ pub fn StyledExample() -> Element {
                     }
                 }
             }
-            
+
             // Theme switcher
             div { class: "m-2",
                 h3 { "Theme" }
@@ -98,7 +98,7 @@ pub fn StyledExample() -> Element {
                     ThemeSwitcher {}
                 }
             }
-            
+
             // Counter display
             div { class: "m-2",
                 h3 { "Interactive Counter" }
@@ -122,7 +122,7 @@ pub fn StyledExample() -> Element {
                     }
                 }
             }
-            
+
             // Notifications example
             div { class: "m-2",
                 h3 { "Notifications" }
@@ -144,7 +144,7 @@ pub fn StyledExample() -> Element {
                     }
                 }
             }
-            
+
             // Search input example
             div { class: "m-2",
                 h3 { "Search Input" }
@@ -157,12 +157,12 @@ pub fn StyledExample() -> Element {
                     }
                 }
             }
-            
+
             // Progress bar example
             div { class: "m-2",
                 h3 { "Progress Bar" }
                 div { class: "progress-bar",
-                    div { 
+                    div {
                         class: "progress-bar-fill",
                         style: "width: {count}%",
                     }
@@ -171,7 +171,7 @@ pub fn StyledExample() -> Element {
                     div { class: "progress-bar-fill" }
                 }
             }
-            
+
             // Status bar example
             div { class: "status-bar",
                 StatusBarItem {
@@ -199,7 +199,10 @@ pub fn StyledExample() -> Element {
 
 fn show_notification(title: &str, message: &str, notification_type: &str) {
     // In a real app, this would show an actual notification
-    println!("Notification [{}]: {} - {}", notification_type, title, message);
+    println!(
+        "Notification [{}]: {} - {}",
+        notification_type, title, message
+    );
 }
 
 /// Example of using the styling system in a real component
@@ -214,7 +217,7 @@ pub fn ConsensusStageIndicator(
         StageStatus::Active => ("consensus-stage active", "spinner"),
         StageStatus::Complete => ("consensus-stage complete", "check-circle"),
     };
-    
+
     rsx! {
         div { class: "{class}",
             i { class: "fa fa-{icon} consensus-stage-icon" }

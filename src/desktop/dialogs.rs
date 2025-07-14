@@ -1,9 +1,9 @@
 //! Dialog components for the desktop application
 
-use dioxus::prelude::*;
+use crate::desktop::state::AppState;
 use anyhow;
 use chrono::Timelike;
-use crate::desktop::state::AppState;
+use dioxus::prelude::*;
 
 /// Information about a consensus profile
 #[derive(Debug, Clone, PartialEq)]
@@ -38,13 +38,13 @@ fn ExpertTemplateOption(
     rsx! {
         div {
             class: if is_selected { "template-option selected" } else { "template-option" },
-            style: if is_selected { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s;" 
-            } else { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;" 
+            style: if is_selected {
+                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+            } else {
+                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
             },
             onclick: move |_| on_select.call(()),
-            
+
             div {
                 style: "display: flex; align-items: center; margin-bottom: 8px;",
                 h4 {
@@ -58,12 +58,12 @@ fn ExpertTemplateOption(
                     }
                 }
             }
-            
+
             p {
                 style: "margin: 0 0 8px 0; color: #cccccc; font-size: 13px;",
                 "{description}"
             }
-            
+
             p {
                 style: "margin: 0; color: #858585; font-size: 12px;",
                 "Use cases: {use_cases}"
@@ -82,13 +82,13 @@ fn ExistingProfileOption(
     rsx! {
         div {
             class: if is_selected { "profile-option selected" } else { "profile-option" },
-            style: if is_selected { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;" 
-            } else { 
-                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;" 
+            style: if is_selected {
+                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;"
+            } else {
+                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;"
             },
             onclick: move |_| on_select.call(()),
-            
+
             div {
                 style: "display: flex; align-items: center; justify-content: space-between;",
                 h4 {
@@ -108,7 +108,7 @@ fn ExistingProfileOption(
                     }
                 }
             }
-            
+
             p {
                 style: "margin: 5px 0 0 0; color: #858585; font-size: 12px;",
                 "Created: {profile.created_at}"
@@ -128,11 +128,11 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show_about.write() = false,
-            
+
             div {
                 class: "dialog-box about-dialog",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     h2 { "About Hive Consensus" }
@@ -142,17 +142,17 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content",
-                    div { 
+                    div {
                         class: "app-icon",
                         dangerous_inner_html: "{crate::desktop::assets::get_about_logo_html()}"
                     }
                     h3 { "Hive Consensus" }
                     p { "Version {env!(\"CARGO_PKG_VERSION\")}" }
                     p { "A VS Code-inspired AI development environment" }
-                    
+
                     div {
                         class: "dialog-features",
                         h4 { "Features:" }
@@ -164,7 +164,7 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
                             li { "✓ Git integration" }
                         }
                     }
-                    
+
                     p {
                         class: "dialog-footer-text",
                         "Built with Rust and Dioxus"
@@ -185,36 +185,36 @@ pub fn WelcomeTab(show_welcome: Signal<bool>, on_action: EventHandler<WelcomeAct
     rsx! {
         div {
             class: "welcome-tab",
-            
+
             div {
                 class: "welcome-header",
                 h1 { "Welcome to Hive Consensus" }
                 p { "Get started with your AI-powered development environment" }
             }
-            
+
             div {
                 class: "welcome-sections",
-                
+
                 div {
                     class: "welcome-section",
                     h3 { "🚀 Quick Start" }
-                    button { 
+                    button {
                         class: "welcome-button",
                         onclick: move |_| on_action.call(WelcomeAction::OpenFolder),
                         "Open Folder"
                     }
-                    button { 
+                    button {
                         class: "welcome-button",
                         onclick: move |_| on_action.call(WelcomeAction::OpenRecent),
                         "Open Recent"
                     }
-                    button { 
+                    button {
                         class: "welcome-button",
                         onclick: move |_| on_action.call(WelcomeAction::NewFile),
                         "New File"
                     }
                 }
-                
+
                 div {
                     class: "welcome-section",
                     h3 { "💡 Tips" }
@@ -224,28 +224,28 @@ pub fn WelcomeTab(show_welcome: Signal<bool>, on_action: EventHandler<WelcomeAct
                         li { "Click files to view and edit them" }
                     }
                 }
-                
+
                 div {
                     class: "welcome-section",
                     h3 { "📚 Resources" }
-                    a { 
+                    a {
                         href: "#",
                         class: "welcome-link",
                         "Documentation"
                     }
-                    a { 
+                    a {
                         href: "#",
                         class: "welcome-link",
                         "Keyboard Shortcuts"
                     }
-                    a { 
+                    a {
                         href: "#",
                         class: "welcome-link",
                         "Report Issue"
                     }
                 }
             }
-            
+
             button {
                 class: "welcome-close",
                 onclick: move |_| *show_welcome.write() = false,
@@ -259,7 +259,7 @@ pub fn WelcomeTab(show_welcome: Signal<bool>, on_action: EventHandler<WelcomeAct
 #[component]
 pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
     let mut search_query = use_signal(String::new);
-    
+
     if !*show_palette.read() {
         return rsx! {};
     }
@@ -275,10 +275,13 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
         ("Settings", "Ctrl+,"),
     ];
 
-    let filtered_commands: Vec<_> = COMMANDS.iter()
+    let filtered_commands: Vec<_> = COMMANDS
+        .iter()
         .filter(|(cmd, _)| {
-            (*search_query.read()).is_empty() || 
-            cmd.to_lowercase().contains(&(*search_query.read()).to_lowercase())
+            (*search_query.read()).is_empty()
+                || cmd
+                    .to_lowercase()
+                    .contains(&(*search_query.read()).to_lowercase())
         })
         .collect();
 
@@ -286,11 +289,11 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show_palette.write() = false,
-            
+
             div {
                 class: "command-palette",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 input {
                     class: "command-palette-input",
                     placeholder: "Type a command...",
@@ -298,7 +301,7 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
                     oninput: move |evt| *search_query.write() = evt.value().clone(),
                     autofocus: true,
                 }
-                
+
                 div {
                     class: "command-palette-results",
                     for (cmd, shortcut) in filtered_commands {
@@ -320,7 +323,11 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
 
 /// Settings Dialog Component
 #[component]
-pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String>, hive_key: Signal<String>) -> Element {
+pub fn SettingsDialog(
+    show_settings: Signal<bool>,
+    openrouter_key: Signal<String>,
+    hive_key: Signal<String>,
+) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
     let mut profiles = use_signal(|| Vec::<ProfileInfo>::new());
@@ -337,15 +344,15 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
     let mut selected_curator = use_signal(|| None::<crate::desktop::model_browser::ModelInfo>);
     let mut show_embedded_browser = use_signal(|| false);
     let mut current_stage_selection = use_signal(|| String::new());
-    
+
     // Add visibility toggles for API keys
     let mut show_openrouter_key = use_signal(|| false);
     let mut show_hive_key = use_signal(|| false);
-    
+
     // Local copies of keys for editing
     let mut local_openrouter_key = use_signal(|| openrouter_key.read().clone());
     let mut local_hive_key = use_signal(|| hive_key.read().clone());
-    
+
     // Load existing keys and profiles from database on mount
     use_effect(move || {
         // Load OpenRouter key if exists
@@ -355,7 +362,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                 *local_openrouter_key.write() = key;
             }
         }
-        
+
         // Load Hive key if exists
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
             if !key.is_empty() && hive_key.read().is_empty() {
@@ -363,18 +370,19 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                 *local_hive_key.write() = key;
             }
         }
-        
+
         // Load consensus profiles from database
         spawn(async move {
             match load_existing_profiles().await {
                 Ok(loaded_profiles) => {
                     // Find the default profile
-                    let default_profile_id = loaded_profiles.iter()
+                    let default_profile_id = loaded_profiles
+                        .iter()
                         .find(|p| p.is_default)
                         .map(|p| p.id.to_string())
                         .or_else(|| loaded_profiles.first().map(|p| p.id.to_string()))
                         .unwrap_or_default();
-                    
+
                     *selected_profile.write() = default_profile_id;
                     *profiles.write() = loaded_profiles;
                     *profiles_loading.write() = false;
@@ -386,17 +394,17 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
             }
         });
     });
-    
+
     rsx! {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show_settings.write() = false,
-            
+
             div {
                 class: "dialog settings-dialog",
                 style: "width: 600px; max-height: 80vh; overflow-y: auto;",
                 onclick: move |evt| evt.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     h2 { "⚙️ Settings" }
@@ -406,25 +414,25 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content settings-content",
-                    
+
                     // API Keys Section
                     div {
                         class: "settings-section",
                         h3 { "🔑 API Keys" }
-                        p { 
+                        p {
                             class: "settings-description",
-                            "Configure your API keys to enable Hive Consensus functionality." 
+                            "Configure your API keys to enable Hive Consensus functionality."
                         }
-                        
+
                         // OpenRouter API Key
                         div {
                             class: "settings-field",
-                            label { 
+                            label {
                                 class: "settings-label",
-                                "OpenRouter API Key" 
+                                "OpenRouter API Key"
                             }
                             div {
                                 style: "display: flex; gap: 10px; align-items: center;",
@@ -452,7 +460,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     "Clear"
                                 }
                             }
-                            p { 
+                            p {
                                 class: "settings-hint",
                                 "Get your API key from ",
                                 a {
@@ -467,13 +475,13 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 }
                             }
                         }
-                        
+
                         // Hive API Key
                         div {
                             class: "settings-field",
-                            label { 
+                            label {
                                 class: "settings-label",
-                                "Hive License Key" 
+                                "Hive License Key"
                             }
                             div {
                                 style: "display: flex; gap: 10px; align-items: center;",
@@ -501,12 +509,12 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     "Clear"
                                 }
                             }
-                            p { 
+                            p {
                                 class: "settings-hint",
-                                "Used for syncing conversations and advanced features" 
+                                "Used for syncing conversations and advanced features"
                             }
                         }
-                        
+
                         // Show validation error if any
                         if let Some(error) = validation_error.read().as_ref() {
                             div {
@@ -515,16 +523,16 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             }
                         }
                     }
-                    
+
                     // Consensus Profile Section
                     div {
                         class: "settings-section",
                         h3 { "🧠 Consensus Profiles" }
-                        p { 
+                        p {
                             class: "settings-description",
-                            "Manage your consensus processing profiles. Each profile uses a 4-stage AI pipeline with different model configurations." 
+                            "Manage your consensus processing profiles. Each profile uses a 4-stage AI pipeline with different model configurations."
                         }
-                        
+
                         if *profiles_loading.read() {
                             div {
                                 class: "loading-container",
@@ -541,7 +549,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             // Show profile management UI
                             div {
                                 style: "margin-top: 15px;",
-                                
+
                                 // Profile tabs
                                 div {
                                     style: "display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid #333;",
@@ -565,14 +573,14 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         "+ New Profile"
                                     }
                                 }
-                                
+
                                 // Content area
                                 if !*show_profile_details.read() {
                                     // Profile selection grid
                                     div {
                                         class: "profile-grid",
                                         for profile in profiles.read().iter() {
-                                            DatabaseProfileOption { 
+                                            DatabaseProfileOption {
                                                 profile_id: profile.id.to_string(),
                                                 name: profile.name.clone(),
                                                 is_selected: *selected_profile.read() == profile.id.to_string(),
@@ -588,7 +596,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     div {
                                         class: "profile-details-list",
                                         style: "max-height: 400px; overflow-y: auto;",
-                                        
+
                                         for profile in profiles.read().iter() {
                                             ProfileDetailCard {
                                                 profile: profile.clone(),
@@ -600,7 +608,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                         if profile_id == -1 {
                                                             // Exit edit mode
                                                             *editing_profile_id.write() = None;
-                                                            
+
                                                             // Reload profiles to get updated data
                                                             *profiles_loading.write() = true;
                                                             spawn(async move {
@@ -638,7 +646,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         }
                                     }
                                 }
-                                
+
                                 // Show current selection info
                                 if !*show_profile_details.read() && !selected_profile.read().is_empty() {
                                     if let Some(current) = profiles.read().iter().find(|p| p.id.to_string() == *selected_profile.read()) {
@@ -659,7 +667,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                         }
                     }
                 }
-                
+
                 div {
                     class: "dialog-footer",
                     button {
@@ -674,11 +682,11 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             // Clear previous error
                             *validation_error.write() = None;
                             *is_validating.write() = true;
-                            
+
                             // Save settings with validation
                             let openrouter = local_openrouter_key.read().clone();
                             let hive = local_hive_key.read().clone();
-                            
+
                             // Update parent signals
                             *openrouter_key.write() = openrouter.clone();
                             *hive_key.write() = hive.clone();
@@ -686,15 +694,15 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             let mut validation_error = validation_error.clone();
                             let mut show_settings = show_settings.clone();
                             let app_state = use_context::<Signal<AppState>>();
-                            
+
                             let selected_profile_id = selected_profile.read().clone();
                             let mut app_state_clone = app_state.clone();
-                            
+
                             spawn(async move {
                                 // Simple synchronous saves
                                 let mut success = true;
                                 let mut error_msg = String::new();
-                                
+
                                 // Save OpenRouter key
                                 if !openrouter.is_empty() {
                                     if let Err(e) = crate::desktop::simple_db::save_config("openrouter_api_key", &openrouter) {
@@ -702,7 +710,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         error_msg = format!("Failed to save OpenRouter key: {}", e);
                                     }
                                 }
-                                
+
                                 // Save and validate Hive key
                                 if !hive.is_empty() {
                                     // First save to simple_db
@@ -714,7 +722,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         let license_manager = crate::core::license::LicenseManager::new(
                                             crate::core::config::get_hive_config_dir()
                                         );
-                                        
+
                                         match license_manager.validate_license(&hive).await {
                                             Ok(validation) => {
                                                 if validation.valid {
@@ -723,31 +731,31 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                         tracing::error!("Failed to store validated license: {}", e);
                                                     } else {
                                                         tracing::info!("License validated and stored successfully");
-                                                        
+
                                                         // Update users table - replace any existing user with new license user
                                                         if let Ok(db) = crate::core::get_database().await {
                                                             if let Ok(conn) = db.get_connection() {
                                                                 // Use INSERT OR REPLACE to handle user switching cleanly
                                                                 // This will replace any existing user with the same ID or create a new one
                                                                 if let Err(e) = conn.execute(
-                                                                    "INSERT OR REPLACE INTO users (id, email, license_key, tier, created_at, updated_at) 
+                                                                    "INSERT OR REPLACE INTO users (id, email, license_key, tier, created_at, updated_at)
                                                                      VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
                                                                     rusqlite::params![
-                                                                        &validation.user_id, 
-                                                                        &validation.email.as_ref().unwrap_or(&"".to_string()), 
+                                                                        &validation.user_id,
+                                                                        &validation.email.as_ref().unwrap_or(&"".to_string()),
                                                                         &hive,
                                                                         &validation.tier
                                                                     ]
                                                                 ) {
                                                                     tracing::error!("Failed to insert/update user: {}", e);
                                                                 } else {
-                                                                    tracing::info!("Updated user {} ({}) with license key {}", 
-                                                                        &validation.user_id, 
+                                                                    tracing::info!("Updated user {} ({}) with license key {}",
+                                                                        &validation.user_id,
                                                                         &validation.email.as_ref().unwrap_or(&"unknown".to_string()),
                                                                         &hive
                                                                     );
                                                                 }
-                                                                
+
                                                                 // Clean up any old users that don't match the current license key
                                                                 if let Err(e) = conn.execute(
                                                                     "DELETE FROM users WHERE license_key != ?1",
@@ -759,13 +767,13 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                                 }
                                                             }
                                                         }
-                                                        
+
                                                         // IMMEDIATE UI REFRESH: Update app state with new user info right away
                                                         if let Ok(db) = crate::core::get_database().await {
                                                             let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
-                                                            
+
                                                             if let Ok(usage_display) = usage_tracker.get_usage_display(&validation.user_id).await {
-                                                                tracing::info!("Immediately updating UI with new user: {} ({})", 
+                                                                tracing::info!("Immediately updating UI with new user: {} ({})",
                                                                     &validation.email.as_ref().unwrap_or(&"unknown".to_string()),
                                                                     &validation.tier
                                                                 );
@@ -779,7 +787,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                                 );
                                                             }
                                                         }
-                                                        
+
                                                         // Force immediate UI refresh: directly update the app state
                                                         // with the newly validated user information to ensure instant display update
                                                         tracing::info!("License key change completed - UI should update immediately");
@@ -797,14 +805,14 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         }
                                     }
                                 }
-                                
+
                                 // Update selected profile as default if changed
                                 if !selected_profile_id.is_empty() {
                                     if let Err(e) = update_default_profile(&selected_profile_id).await {
                                         tracing::error!("Failed to update default profile: {}", e);
                                     }
                                 }
-                                
+
                                 if success {
                                     // Success - close dialog
                                     *show_settings.write() = false;
@@ -812,7 +820,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     // Show error
                                     *validation_error.write() = Some(error_msg);
                                 }
-                                
+
                                 *is_validating.write() = false;
                             });
                         },
@@ -821,7 +829,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                 }
             }
         }
-        
+
         // Create Profile Dialog - Multi-step wizard
         if *show_create_profile.read() {
             div {
@@ -836,12 +844,12 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                     *selected_validator.write() = None;
                     *selected_curator.write() = None;
                 },
-                
+
                 div {
                     class: "dialog",
                     style: "width: 700px;",
                     onclick: move |evt| evt.stop_propagation(),
-                    
+
                     div {
                         class: "dialog-header",
                         h2 { "🐝 Create New Profile" }
@@ -859,7 +867,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             "×"
                         }
                     }
-                    
+
                     // Progress indicator
                     div {
                         style: "padding: 15px 20px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
@@ -889,17 +897,17 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             }
                         }
                     }
-                    
+
                     div {
                         class: "dialog-content",
                         style: "padding: 20px; min-height: 400px; max-height: 70vh; overflow-y: auto;",
-                        
+
                         // Toggle between profile form and model browser
                         if *show_embedded_browser.read() {
                             // Embedded model browser
                             div {
                                 style: "height: 100%;",
-                                
+
                                 // Header with back button
                                 div {
                                     style: "padding: 15px; border-bottom: 1px solid #3e3e42; background: #2d2d30;",
@@ -916,7 +924,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                             "Select Model for ",
                                             {match current_stage_selection.read().as_str() {
                                                 "generator" => "Generator Stage",
-                                                "refiner" => "Refiner Stage", 
+                                                "refiner" => "Refiner Stage",
                                                 "validator" => "Validator Stage",
                                                 "curator" => "Curator Stage",
                                                 _ => "Unknown Stage"
@@ -924,7 +932,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         }
                                     }
                                 }
-                                
+
                                 // Embedded model browser content (simplified inline)
                                 div {
                                     style: "height: calc(100% - 70px); overflow-y: auto; padding: 15px;",
@@ -967,7 +975,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     }
                                 }
                             }
-                            
+
                             // Model Selection Section
                             div {
                                 h3 {
@@ -978,7 +986,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     style: "margin-bottom: 25px; color: #cccccc; font-size: 14px; line-height: 1.5;",
                                     "Choose a model for each stage of the 4-stage consensus pipeline. Each stage serves a specific purpose in creating high-quality responses."
                                 }
-                                
+
                                 // Generator Stage
                                 div {
                                     style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
@@ -1039,7 +1047,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         }
                                     }
                                 }
-                                
+
                                 // Refiner Stage
                                 div {
                                     style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
@@ -1100,7 +1108,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         }
                                     }
                                 }
-                                
+
                                 // Validator Stage
                                 div {
                                     style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
@@ -1161,7 +1169,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         }
                                     }
                                 }
-                                
+
                                 // Curator Stage
                                 div {
                                     style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #3e3e42;",
@@ -1226,11 +1234,11 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                         }
                     }
                 }
-                    
+
                     div {
                         class: "dialog-footer",
                         style: "padding: 20px; border-top: 1px solid #3e3e42; display: flex; justify-content: space-between; align-items: center;",
-                        
+
                         // Progress indicator
                         div {
                             style: "color: #858585; font-size: 13px;",
@@ -1244,7 +1252,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                         selected_validator.read().is_some(),
                                         selected_curator.read().is_some()
                                     ].iter().filter(|&&x| x).count();
-                                    
+
                                     if models_selected == 0 {
                                         rsx! { "⚪ Select models for all 4 stages" }
                                     } else if models_selected < 4 {
@@ -1255,7 +1263,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                 }
                             }
                         }
-                        
+
                         // Action buttons
                         div {
                             style: "display: flex; gap: 10px;",
@@ -1273,10 +1281,10 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                             }
                             button {
                                 class: "button button-primary",
-                                disabled: new_profile_name.read().trim().is_empty() || 
-                                         selected_generator.read().is_none() || 
-                                         selected_refiner.read().is_none() || 
-                                         selected_validator.read().is_none() || 
+                                disabled: new_profile_name.read().trim().is_empty() ||
+                                         selected_generator.read().is_none() ||
+                                         selected_refiner.read().is_none() ||
+                                         selected_validator.read().is_none() ||
                                          selected_curator.read().is_none(),
                                 onclick: move |_| {
                                     let profile_name = new_profile_name.read().trim().to_string();
@@ -1284,12 +1292,12 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                     let ref_m = selected_refiner.read().clone();
                                     let val = selected_validator.read().clone();
                                     let cur = selected_curator.read().clone();
-                                    
+
                                     if !profile_name.is_empty() && gen.is_some() && ref_m.is_some() && val.is_some() && cur.is_some() {
                                         tracing::info!("Creating profile: {}", profile_name);
                                         *profiles_loading.write() = true;
                                         *show_create_profile.write() = false;
-                                        
+
                                         spawn(async move {
                                             // Create profile with selected models
                                             match create_custom_profile_with_models(
@@ -1311,7 +1319,7 @@ pub fn SettingsDialog(show_settings: Signal<bool>, openrouter_key: Signal<String
                                                 }
                                             }
                                             *profiles_loading.write() = false;
-                                            
+
                                             // Reset form
                                             *new_profile_name.write() = String::new();
                                             *selected_generator.write() = None;
@@ -1344,7 +1352,12 @@ struct ProfileDisplayInfo {
 }
 
 #[component]
-fn ProfileOption(name: &'static str, description: &'static str, models: &'static str, is_selected: bool) -> Element {
+fn ProfileOption(
+    name: &'static str,
+    description: &'static str,
+    models: &'static str,
+    is_selected: bool,
+) -> Element {
     rsx! {
         div {
             class: if is_selected { "profile-option selected" } else { "profile-option" },
@@ -1361,25 +1374,25 @@ fn DatabaseProfileOption(
     name: String,
     is_selected: bool,
     is_default: bool,
-    on_select: EventHandler<String>
+    on_select: EventHandler<String>,
 ) -> Element {
     rsx! {
         div {
             class: if is_selected { "profile-option selected" } else { "profile-option" },
             onclick: move |_| on_select.call(profile_id.clone()),
             style: "cursor: pointer;",
-            
-            h4 { 
+
+            h4 {
                 "{name}"
                 if is_default {
-                    span { 
+                    span {
                         style: "font-size: 12px; margin-left: 8px; padding: 2px 6px; background: #4a5568; border-radius: 4px;",
-                        "Default" 
+                        "Default"
                     }
                 }
             }
-            p { 
-                class: "profile-description", 
+            p {
+                class: "profile-description",
                 style: "font-size: 12px; color: #888;",
                 "Expert consensus profile"
             }
@@ -1402,12 +1415,12 @@ fn ProfileDetailCard(
     let mut curator_model = use_signal(|| profile.curator_model.clone().unwrap_or_default());
     let mut show_model_browser = use_signal(|| false);
     let mut editing_stage = use_signal(|| String::new());
-    
+
     rsx! {
         div {
             class: "profile-detail-card",
             style: "margin-bottom: 15px; padding: 15px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 8px;",
-            
+
             // Profile header
             div {
                 style: "display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;",
@@ -1427,7 +1440,7 @@ fn ProfileDetailCard(
                         "Created: {profile.created_at}"
                     }
                 }
-                
+
                 // Action buttons
                 div {
                     style: "display: flex; gap: 8px;",
@@ -1449,7 +1462,7 @@ fn ProfileDetailCard(
                                 let ref_m = refiner_model.read().clone();
                                 let val = validator_model.read().clone();
                                 let cur = curator_model.read().clone();
-                                
+
                                 spawn(async move {
                                     if let Err(e) = update_profile_models(profile_id, &gen, &ref_m, &val, &cur).await {
                                         tracing::error!("Failed to update profile models: {}", e);
@@ -1457,7 +1470,7 @@ fn ProfileDetailCard(
                                         tracing::info!("Successfully updated profile {}", profile_id);
                                     }
                                 });
-                                
+
                                 on_edit.call(-1i64); // Signal to exit edit mode
                             },
                             "💾 Save"
@@ -1469,7 +1482,7 @@ fn ProfileDetailCard(
                             "✖️ Cancel"
                         }
                     }
-                    
+
                     // Profile activation controls
                     if !is_editing {
                         if !profile.is_default {
@@ -1491,7 +1504,7 @@ fn ProfileDetailCard(
                                 "⭐ Set Default"
                             }
                         }
-                        
+
                         if !profile.is_default {
                             button {
                                 class: "icon-button",
@@ -1503,11 +1516,11 @@ fn ProfileDetailCard(
                     }
                 }
             }
-            
+
             // Model configuration
             div {
                 style: "display: grid; gap: 10px;",
-                
+
                 // Generator
                 div {
                     style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
@@ -1531,7 +1544,7 @@ fn ProfileDetailCard(
                         }
                     }
                 }
-                
+
                 // Refiner
                 div {
                     style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
@@ -1555,7 +1568,7 @@ fn ProfileDetailCard(
                         }
                     }
                 }
-                
+
                 // Validator
                 div {
                     style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
@@ -1579,7 +1592,7 @@ fn ProfileDetailCard(
                         }
                     }
                 }
-                
+
                 // Curator
                 div {
                     style: "display: grid; grid-template-columns: 100px 1fr; gap: 10px; align-items: center;",
@@ -1605,7 +1618,7 @@ fn ProfileDetailCard(
                 }
             }
         }
-        
+
         // Model Browser Dialog for editing
         if *show_model_browser.read() {
             crate::desktop::model_browser::ModelBrowserDialog {
@@ -1640,9 +1653,9 @@ async fn update_profile_models(
     validator_model: &str,
     curator_model: &str,
 ) -> anyhow::Result<()> {
-    use crate::core::database::{DatabaseManager, DatabaseConfig};
     use crate::core::config::get_hive_config_dir;
-    
+    use crate::core::database::{DatabaseConfig, DatabaseManager};
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = DatabaseConfig {
         path: db_path,
@@ -1650,9 +1663,9 @@ async fn update_profile_models(
     };
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     conn.execute(
-        "UPDATE consensus_profiles SET 
+        "UPDATE consensus_profiles SET
             generator_model = ?1,
             refiner_model = ?2,
             validator_model = ?3,
@@ -1664,23 +1677,23 @@ async fn update_profile_models(
             validator_model,
             curator_model,
             profile_id
-        ]
+        ],
     )?;
-    
+
     tracing::info!("Updated profile {} models", profile_id);
     Ok(())
 }
 
 /// Update the default profile in the database
 async fn update_default_profile(profile_id: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
-    
+    use crate::core::database::DatabaseManager;
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     if !db_path.exists() {
         return Err(anyhow::anyhow!("Database not found"));
     }
-    
+
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
         max_connections: 10,
@@ -1692,34 +1705,34 @@ async fn update_default_profile(profile_id: &str) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let mut conn = db.get_connection()?;
     let tx = conn.transaction()?;
-    
+
     // First, unset all profiles as default
     tx.execute("UPDATE consensus_profiles SET is_default = 0", [])?;
-    
+
     // Then set the selected profile as default
     tx.execute(
         "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
-        rusqlite::params![profile_id]
+        rusqlite::params![profile_id],
     )?;
-    
+
     tx.commit()?;
     tracing::info!("Updated default profile to: {}", profile_id);
-    
+
     Ok(())
 }
 
 /// Onboarding Dialog for first-time users
 #[component]
 pub fn OnboardingDialog(
-    mut show_onboarding: Signal<bool>, 
-    mut openrouter_key: Signal<String>, 
+    mut show_onboarding: Signal<bool>,
+    mut openrouter_key: Signal<String>,
     mut hive_key: Signal<String>,
     mut current_step: Signal<i32>,
-    mut api_keys_version: Signal<u32>
+    mut api_keys_version: Signal<u32>,
 ) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
@@ -1741,11 +1754,11 @@ pub fn OnboardingDialog(
             hive_key.read().clone()
         }
     });
-    
+
     // Track if keys already exist in database
     let has_existing_openrouter = crate::desktop::simple_db::has_openrouter_key();
     let has_existing_hive = crate::desktop::simple_db::has_hive_key();
-    
+
     // Profile configuration state
     let mut profile_mode = use_signal(|| "expert".to_string()); // expert, existing, custom
     let mut selected_template = use_signal(|| String::new());
@@ -1758,10 +1771,10 @@ pub fn OnboardingDialog(
     let mut show_profile_success = use_signal(|| false);
     let mut continue_creating_profiles = use_signal(|| false);
     let mut is_closing = use_signal(|| false);
-    
+
     // License validation result
     let mut license_info = use_signal(|| None::<LicenseValidationResult>);
-    
+
     // Load existing profiles on mount
     use_effect(move || {
         let mut existing_profiles = existing_profiles.clone();
@@ -1771,7 +1784,7 @@ pub fn OnboardingDialog(
             }
         });
     });
-    
+
     // Load existing keys from database on mount
     use_effect(move || {
         // Load OpenRouter key if exists
@@ -1781,7 +1794,7 @@ pub fn OnboardingDialog(
                 *temp_openrouter_key.write() = key;
             }
         }
-        
+
         // Load Hive key if exists
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
             if !key.is_empty() {
@@ -1790,7 +1803,7 @@ pub fn OnboardingDialog(
             }
         }
     });
-    
+
     // Handle closing state changes
     use_effect(move || {
         if *is_closing.read() {
@@ -1803,13 +1816,13 @@ pub fn OnboardingDialog(
             });
         }
     });
-    
+
     // Check onboarding state ONLY on initial mount to determine starting step
     use_effect(move || {
         let openrouter_key = openrouter_key.clone();
         let mut current_step = current_step.clone();
         let mut existing_profiles = existing_profiles.clone();
-        
+
         // Only run this check once on mount
         spawn(async move {
             // If we have keys, check if profiles exist to determine starting step
@@ -1817,10 +1830,12 @@ pub fn OnboardingDialog(
                 // Load profiles to check if any exist
                 if let Ok(profiles) = load_existing_profiles().await {
                     *existing_profiles.write() = profiles.clone();
-                    
+
                     if profiles.is_empty() {
                         // We have keys but no profiles, go directly to profile step
-                        tracing::info!("Keys exist but no profiles - starting at profile configuration step");
+                        tracing::info!(
+                            "Keys exist but no profiles - starting at profile configuration step"
+                        );
                         *current_step.write() = 4;
                     }
                     // Note: We don't close the dialog here even if profiles exist
@@ -1829,12 +1844,12 @@ pub fn OnboardingDialog(
             }
         });
     });
-    
+
     // Load the default profile name from database
     use_effect(move || {
         let mut selected_profile = selected_profile.clone();
         let mut default_profile_id = default_profile_id.clone();
-        
+
         spawn(async move {
             // Load the current default profile from database
             match load_default_profile().await {
@@ -1852,32 +1867,36 @@ pub fn OnboardingDialog(
             }
         });
     });
-    
+
     // Early return if dialog should not be shown or is closing
     let show = *show_onboarding.read();
     let closing = *is_closing.read();
     if !show || closing {
-        tracing::info!("OnboardingDialog render check: show = {}, closing = {}, returning empty", show, closing);
+        tracing::info!(
+            "OnboardingDialog render check: show = {}, closing = {}, returning empty",
+            show,
+            closing
+        );
         return rsx! {};
     }
     tracing::info!("OnboardingDialog render check: show = true, rendering dialog");
-    
+
     rsx! {
         div {
             class: "dialog-overlay",
             onclick: move |_| {
                 // Allow closing by clicking overlay
                 tracing::info!("Overlay clicked - closing onboarding dialog");
-                
+
                 // Just set closing flag - useEffect will handle the actual close
                 *is_closing.write() = true;
             },
-            
+
             div {
                 class: "dialog onboarding-dialog",
                 style: "width: 700px;",
                 onclick: move |evt| evt.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     style: "display: flex; justify-content: space-between; align-items: center;",
@@ -1886,14 +1905,14 @@ pub fn OnboardingDialog(
                         style: "background: none; border: none; color: #cccccc; font-size: 20px; cursor: pointer; padding: 0; width: 30px; height: 30px;",
                         onclick: move |_| {
                             tracing::info!("Close button clicked - closing dialog");
-                            
+
                             // Just set closing flag - useEffect will handle the actual close
                             *is_closing.write() = true;
                         },
                         "×"
                     }
                 }
-                
+
                 // Progress indicator
                 div {
                     class: "onboarding-progress",
@@ -1928,18 +1947,18 @@ pub fn OnboardingDialog(
                         "5. Complete"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content onboarding-content",
-                    
+
                     if *current_step.read() == 1 {
                         div {
                             class: "onboarding-step",
                             h3 { "Let's get you started!" }
-                            p { 
-                                "Hive Consensus uses advanced AI models to provide the best possible responses through a 4-stage consensus process." 
+                            p {
+                                "Hive Consensus uses advanced AI models to provide the best possible responses through a 4-stage consensus process."
                             }
-                            
+
                             div {
                                 class: "features-list",
                                 div { class: "feature-item", "✅ 4-stage consensus pipeline" }
@@ -1947,7 +1966,7 @@ pub fn OnboardingDialog(
                                 div { class: "feature-item", "✅ VS Code-like interface" }
                                 div { class: "feature-item", "✅ Full file system access" }
                             }
-                            
+
                             p {
                                 style: "margin-top: 20px; color: #cccccc;",
                                 "To get started, you'll need to configure your license key and API access."
@@ -1957,10 +1976,10 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🏷️ Configure Your Hive License" }
-                            p { 
-                                "Enter your Hive license key to unlock all features and enable cloud sync." 
+                            p {
+                                "Enter your Hive license key to unlock all features and enable cloud sync."
                             }
-                            
+
                             // Show existing key message if applicable
                             if has_existing_hive {
                                 div {
@@ -1968,7 +1987,7 @@ pub fn OnboardingDialog(
                                     "✅ A Hive license key is already configured. Enter a new key to update it or click Skip to keep the current one."
                                 }
                             }
-                            
+
                             // Show current license info if saved
                             if let Some(license) = license_info.read().as_ref() {
                                 div {
@@ -1981,14 +2000,14 @@ pub fn OnboardingDialog(
                                         style: "display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;",
                                         div {
                                             "🎯 Tier: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.tier}"
                                             }
                                         }
                                         div {
                                             "💬 Daily Limit: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.daily_limit}"
                                             }
@@ -1996,12 +2015,12 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             div {
                                 class: "settings-field",
-                                label { 
+                                label {
                                     class: "settings-label",
-                                    "Hive License Key" 
+                                    "Hive License Key"
                                 }
                                 input {
                                     class: "settings-input",
@@ -2017,12 +2036,12 @@ pub fn OnboardingDialog(
                                         *temp_hive_key.write() = value;
                                     },
                                 }
-                                
+
                                 div {
                                     class: "api-key-help",
-                                    p { 
+                                    p {
                                         class: "settings-hint",
-                                        "Your license key is required for consensus to work properly. It enables conversation sync and premium features." 
+                                        "Your license key is required for consensus to work properly. It enables conversation sync and premium features."
                                     }
                                     p {
                                         style: "margin-top: 10px;",
@@ -2040,7 +2059,7 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             // Show validation error if any
                             if let Some(error) = validation_error.read().as_ref() {
                                 div {
@@ -2053,10 +2072,10 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🔗 Configure Your OpenRouter API Key" }
-                            p { 
-                                "To use Hive Consensus, you'll need an OpenRouter API key. This gives you access to 323+ models from various providers." 
+                            p {
+                                "To use Hive Consensus, you'll need an OpenRouter API key. This gives you access to 323+ models from various providers."
                             }
-                            
+
                             // Show existing key message if applicable
                             if has_existing_openrouter {
                                 div {
@@ -2064,7 +2083,7 @@ pub fn OnboardingDialog(
                                     "✅ An OpenRouter API key already exists. Enter a new key to update it."
                                 }
                             }
-                            
+
                             // Show current key status
                             if !openrouter_key.read().is_empty() {
                                 div {
@@ -2080,12 +2099,12 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             div {
                                 class: "settings-field",
-                                label { 
+                                label {
                                     class: "settings-label",
-                                    "OpenRouter API Key" 
+                                    "OpenRouter API Key"
                                 }
                                 input {
                                     class: "settings-input",
@@ -2094,10 +2113,10 @@ pub fn OnboardingDialog(
                                     placeholder: "sk-or-v1-...",
                                     oninput: move |evt| *temp_openrouter_key.write() = evt.value().clone(),
                                 }
-                                
+
                                 div {
                                     class: "api-key-help",
-                                    p { 
+                                    p {
                                         "Don't have an API key? ",
                                         a {
                                             href: "#",
@@ -2110,13 +2129,13 @@ pub fn OnboardingDialog(
                                             "Get one from OpenRouter"
                                         }
                                     }
-                                    p { 
+                                    p {
                                         class: "settings-hint",
-                                        "OpenRouter provides unified access to models from OpenAI, Anthropic, Google, Meta, and more." 
+                                        "OpenRouter provides unified access to models from OpenAI, Anthropic, Google, Meta, and more."
                                     }
                                 }
                             }
-                            
+
                             // Show validation error if any
                             if let Some(error) = validation_error.read().as_ref() {
                                 div {
@@ -2129,19 +2148,19 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🧠 Configure Your Consensus Profile" }
-                            p { 
-                                "Choose from expert-crafted profiles or create your own. Each profile uses a 4-stage AI consensus pipeline." 
+                            p {
+                                "Choose from expert-crafted profiles or create your own. Each profile uses a 4-stage AI consensus pipeline."
                             }
-                            
+
                             // Show license info if available
                             if let Some(license) = license_info.read().as_ref() {
                                 div {
                                     style: "margin: 15px 0; padding: 15px; background: #1e3a2e; border: 1px solid #2e5a3e; border-radius: 6px;",
                                     div {
                                         style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
-                                        span { 
+                                        span {
                                             style: "font-size: 18px;",
-                                            "✅" 
+                                            "✅"
                                         }
                                         span {
                                             style: "color: #4ade80; font-weight: 600;",
@@ -2152,14 +2171,14 @@ pub fn OnboardingDialog(
                                         style: "display: grid; grid-template-columns: 1fr 1fr; gap: 10px; color: #cccccc; font-size: 13px;",
                                         div {
                                             "🎯 Tier: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.tier}"
                                             }
                                         }
                                         div {
                                             "💬 Daily Conversations: ",
-                                            span { 
+                                            span {
                                                 style: "font-weight: 600; color: #4ade80;",
                                                 "{license.daily_limit}"
                                             }
@@ -2168,7 +2187,7 @@ pub fn OnboardingDialog(
                                             div {
                                                 style: "grid-column: span 2;",
                                                 "📧 Account: ",
-                                                span { 
+                                                span {
                                                     style: "color: #858585;",
                                                     "{email}"
                                                 }
@@ -2177,7 +2196,7 @@ pub fn OnboardingDialog(
                                     }
                                 }
                             }
-                            
+
                             // Profile selection mode tabs
                             div {
                                 class: "profile-tabs",
@@ -2193,7 +2212,7 @@ pub fn OnboardingDialog(
                                     style: "padding: 8px 16px; background: transparent; border: none; color: #cccccc; cursor: pointer; border-bottom: 2px solid transparent;",
                                     onclick: move |_| {
                                         *profile_mode.write() = "existing".to_string();
-                                        
+
                                         // Load existing profiles when tab is clicked
                                         let mut existing_profiles = existing_profiles.clone();
                                         spawn(async move {
@@ -2211,19 +2230,19 @@ pub fn OnboardingDialog(
                                     "🛠️ Custom Profile"
                                 }
                             }
-                            
+
                             // Profile content based on selected mode
                             div {
                                 class: "profile-content",
                                 style: "max-height: 400px; overflow-y: auto; padding: 10px 0;",
-                                
+
                                 if *profile_mode.read() == "expert" {
                                     div {
                                         p {
                                             style: "margin-bottom: 15px; color: #cccccc;",
                                             "Select an expert template optimized for specific use cases:"
                                         }
-                                        
+
                                         // Show profile creation options prominently at the top
                                         div {
                                             style: "margin-bottom: 20px; padding: 20px; background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%); border: 2px solid #48bb78; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);",
@@ -2248,11 +2267,11 @@ pub fn OnboardingDialog(
                                                         let mut profiles_created = profiles_created.clone();
                                                         let mut show_profile_success = show_profile_success.clone();
                                                         let mut existing_profiles = existing_profiles.clone();
-                                                        
+
                                                         spawn(async move {
                                                             *is_creating_profile.write() = true;
                                                             *profile_error.write() = None;
-                                                            
+
                                                             let templates = vec![
                                                                 ("lightning-fast", "Lightning Fast"),
                                                                 ("precision-architect", "Precision Architect"),
@@ -2265,15 +2284,15 @@ pub fn OnboardingDialog(
                                                                 ("ml-ai-specialist", "ML/AI Specialist"),
                                                                 ("debugging-detective", "Debugging Detective")
                                                             ];
-                                                            
+
                                                             let mut created = Vec::new();
                                                             let total = templates.len();
-                                                            
+
                                                             for (index, (template_id, name)) in templates.into_iter().enumerate() {
                                                                 // Update progress
                                                                 let progress = index + 1;
                                                                 *profiles_created.write() = created.clone();
-                                                                
+
                                                                 match create_profile_from_template(template_id, name).await {
                                                                     Ok(_) => {
                                                                         created.push(name.to_string());
@@ -2283,15 +2302,15 @@ pub fn OnboardingDialog(
                                                                         tracing::warn!("Failed to create profile {}: {}", name, e);
                                                                     }
                                                                 }
-                                                                
+
                                                                 // Small delay to show progress
                                                                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                                                             }
-                                                            
+
                                                             *profiles_created.write() = created;
                                                             *show_profile_success.write() = true;
                                                             *is_creating_profile.write() = false;
-                                                            
+
                                                             // Reload profiles
                                                             if let Ok(profiles) = load_existing_profiles().await {
                                                                 *existing_profiles.write() = profiles;
@@ -2299,10 +2318,10 @@ pub fn OnboardingDialog(
                                                         });
                                                     },
                                                     {
-                                                        if *is_creating_profile.read() { 
+                                                        if *is_creating_profile.read() {
                                                             format!("⏳ Creating profiles... ({}/10)", profiles_created.read().len())
-                                                        } else { 
-                                                            "🚀 Add All 10 Expert Templates".to_string() 
+                                                        } else {
+                                                            "🚀 Add All 10 Expert Templates".to_string()
                                                         }
                                                     }
                                                 }
@@ -2341,12 +2360,12 @@ pub fn OnboardingDialog(
                                                 }
                                             }
                                         }
-                                        
+
                                         // Expert templates grid
                                         div {
                                             class: "expert-templates-grid",
                                             style: "display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;",
-                                            
+
                                             // Lightning Fast
                                             ExpertTemplateOption {
                                                 id: "lightning-fast",
@@ -2356,7 +2375,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "lightning-fast",
                                                 on_select: move |_| *selected_template.write() = "lightning-fast".to_string(),
                                             }
-                                            
+
                                             // Precision Architect
                                             ExpertTemplateOption {
                                                 id: "precision-architect",
@@ -2366,7 +2385,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "precision-architect",
                                                 on_select: move |_| *selected_template.write() = "precision-architect".to_string(),
                                             }
-                                            
+
                                             // Budget Optimizer
                                             ExpertTemplateOption {
                                                 id: "budget-optimizer",
@@ -2376,7 +2395,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "budget-optimizer",
                                                 on_select: move |_| *selected_template.write() = "budget-optimizer".to_string(),
                                             }
-                                            
+
                                             // Research Deep Dive
                                             ExpertTemplateOption {
                                                 id: "research-deep-dive",
@@ -2386,7 +2405,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "research-deep-dive",
                                                 on_select: move |_| *selected_template.write() = "research-deep-dive".to_string(),
                                             }
-                                            
+
                                             // Startup MVP
                                             ExpertTemplateOption {
                                                 id: "startup-mvp",
@@ -2396,7 +2415,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "startup-mvp",
                                                 on_select: move |_| *selected_template.write() = "startup-mvp".to_string(),
                                             }
-                                            
+
                                             // Enterprise Grade
                                             ExpertTemplateOption {
                                                 id: "enterprise-grade",
@@ -2406,7 +2425,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "enterprise-grade",
                                                 on_select: move |_| *selected_template.write() = "enterprise-grade".to_string(),
                                             }
-                                            
+
                                             // Security Focused
                                             ExpertTemplateOption {
                                                 id: "security-focused",
@@ -2416,7 +2435,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "security-focused",
                                                 on_select: move |_| *selected_template.write() = "security-focused".to_string(),
                                             }
-                                            
+
                                             // Creative Innovator
                                             ExpertTemplateOption {
                                                 id: "creative-innovator",
@@ -2426,7 +2445,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "creative-innovator",
                                                 on_select: move |_| *selected_template.write() = "creative-innovator".to_string(),
                                             }
-                                            
+
                                             // ML/AI Specialist
                                             ExpertTemplateOption {
                                                 id: "ml-ai-specialist",
@@ -2436,7 +2455,7 @@ pub fn OnboardingDialog(
                                                 is_selected: *selected_template.read() == "ml-ai-specialist",
                                                 on_select: move |_| *selected_template.write() = "ml-ai-specialist".to_string(),
                                             }
-                                            
+
                                             // Debugging Detective
                                             ExpertTemplateOption {
                                                 id: "debugging-detective",
@@ -2447,7 +2466,7 @@ pub fn OnboardingDialog(
                                                 on_select: move |_| *selected_template.write() = "debugging-detective".to_string(),
                                             }
                                         }
-                                        
+
                                         // Profile name input for template
                                         if !selected_template.read().is_empty() {
                                             div {
@@ -2467,7 +2486,7 @@ pub fn OnboardingDialog(
                                                     style: "margin-top: 5px; font-size: 12px; color: #858585;",
                                                     "Give your profile a memorable name (e.g., 'My Production Config')"
                                                 }
-                                                
+
                                                 // Create profile button
                                                 button {
                                                     class: "button button-primary",
@@ -2476,7 +2495,7 @@ pub fn OnboardingDialog(
                                                     onclick: move |_| {
                                                         let template_id = selected_template.read().clone();
                                                         let profile_name_val = profile_name.read().clone();
-                                                        
+
                                                         if !template_id.is_empty() && !profile_name_val.is_empty() {
                                                             tracing::info!("Creating profile from template: {} as {}", template_id, profile_name_val);
                                                             let name_for_spawn = profile_name_val.clone();
@@ -2487,11 +2506,11 @@ pub fn OnboardingDialog(
                                                             let mut show_profile_success = show_profile_success.clone();
                                                             let mut existing_profiles = existing_profiles.clone();
                                                             let mut selected_profile = selected_profile.clone();
-                                                            
+
                                                             spawn(async move {
                                                                 *is_creating_profile.write() = true;
                                                                 *profile_error.write() = None;
-                                                                
+
                                                                 match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
                                                                     Ok(_) => {
                                                                         tracing::info!("Profile created successfully: {}", name_for_spawn);
@@ -2500,7 +2519,7 @@ pub fn OnboardingDialog(
                                                                         *profiles_created.write() = created;
                                                                         *show_profile_success.write() = true;
                                                                         *selected_profile.write() = name_for_spawn;
-                                                                        
+
                                                                         // Reload profiles
                                                                         if let Ok(profiles) = load_existing_profiles().await {
                                                                             *existing_profiles.write() = profiles;
@@ -2511,7 +2530,7 @@ pub fn OnboardingDialog(
                                                                         *profile_error.write() = Some(e.to_string());
                                                                     }
                                                                 }
-                                                                
+
                                                                 *is_creating_profile.write() = false;
                                                             });
                                                         }
@@ -2531,7 +2550,7 @@ pub fn OnboardingDialog(
                                                 "Select from your existing profiles:"
                                             }
                                         }
-                                        
+
                                         // Load and display existing profiles
                                         if !existing_profiles.read().is_empty() {
                                             div {
@@ -2542,7 +2561,7 @@ pub fn OnboardingDialog(
                                                         let profile_id = profile.id;
                                                         let is_selected = *selected_profile_id.read() == Some(profile_id);
                                                         let mut selected_profile_id = selected_profile_id.clone();
-                                                        
+
                                                         rsx! {
                                                             ExistingProfileOption {
                                                                 profile: profile,
@@ -2565,7 +2584,7 @@ pub fn OnboardingDialog(
                                             style: "margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 6px; color: #e9c46a;",
                                             "⚠️ Custom profile creation is an advanced feature. For best results, use expert templates."
                                         }
-                                        
+
                                         // TODO: Implement custom model selection UI
                                         // This would involve loading available models and allowing selection for each stage
                                         div {
@@ -2580,30 +2599,30 @@ pub fn OnboardingDialog(
                         div {
                             class: "onboarding-step",
                             h3 { "🎉 You're all set!" }
-                            p { 
-                                "Hive Consensus is ready to use. Here are some things you can try:" 
+                            p {
+                                "Hive Consensus is ready to use. Here are some things you can try:"
                             }
-                            
+
                             div {
                                 class: "suggestions-list",
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "💡 Ask about your code: \"What does this function do?\"" 
+                                    "💡 Ask about your code: \"What does this function do?\""
                                 }
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "🔧 Request help: \"How can I optimize this algorithm?\"" 
+                                    "🔧 Request help: \"How can I optimize this algorithm?\""
                                 }
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "📚 Learn concepts: \"Explain async/await in Rust\"" 
+                                    "📚 Learn concepts: \"Explain async/await in Rust\""
                                 }
-                                div { 
+                                div {
                                     class: "suggestion-item",
-                                    "🐛 Debug issues: \"Why is this code not working?\"" 
+                                    "🐛 Debug issues: \"Why is this code not working?\""
                                 }
                             }
-                            
+
                             div {
                                 style: "margin-top: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px;",
                                 p {
@@ -2622,7 +2641,7 @@ pub fn OnboardingDialog(
                         }
                     }
                 }
-                
+
                 div {
                     class: "dialog-footer onboarding-footer",
                     if *current_step.read() > 1 {
@@ -2638,7 +2657,7 @@ pub fn OnboardingDialog(
                             "Back"
                         }
                     }
-                    
+
                     // Skip button for optional Hive license key
                     if *current_step.read() == 2 {
                         button {
@@ -2650,7 +2669,7 @@ pub fn OnboardingDialog(
                             "Skip"
                         }
                     }
-                    
+
                     // Skip button for OpenRouter key if it already exists
                     if *current_step.read() == 3 && has_existing_openrouter {
                         button {
@@ -2662,7 +2681,7 @@ pub fn OnboardingDialog(
                             "Skip"
                         }
                     }
-                    
+
                     // Show different buttons for profile creation step
                     if *current_step.read() == 4 && *show_profile_success.read() {
                         // After creating profiles, show options to create more or continue
@@ -2697,16 +2716,16 @@ pub fn OnboardingDialog(
                                 "Skip to Finish"
                             }
                         }
-                        
+
                         // Normal Next/Get Started button
                         button {
                             class: "button button-primary",
-                            disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) || 
+                            disabled: if (*current_step.read() == 3 && temp_openrouter_key.read().is_empty()) ||
                                      *is_validating.read() || *is_creating_profile.read() { true } else { false },
                             onclick: move |_| {
                             let step = *current_step.read();
                             tracing::info!("Button clicked at step: {}", step);
-                            
+
                             if step == 1 {
                                 // Welcome -> License Key
                                 *current_step.write() = 2;
@@ -2722,18 +2741,18 @@ pub fn OnboardingDialog(
                                         return;
                                     } else {
                                         tracing::info!("Hive key saved successfully to database");
-                                        
+
                                         // Validate the license asynchronously
                                         let app_state = use_context::<Signal<AppState>>();
                                         let h_key_clone = h_key.clone();
                                         let mut license_info = license_info.clone();
                                         let mut app_state_clone = app_state.clone();
-                                        
+
                                         spawn(async move {
                                             let license_manager = crate::core::license::LicenseManager::new(
                                                 crate::core::config::get_hive_config_dir()
                                             );
-                                            
+
                                             match license_manager.validate_license(&h_key_clone).await {
                                                 Ok(validation) => {
                                                     if validation.valid {
@@ -2742,7 +2761,7 @@ pub fn OnboardingDialog(
                                                             tracing::error!("Failed to store validated license: {}", e);
                                                         } else {
                                                             tracing::info!("License validated and stored successfully");
-                                                            
+
                                                             // Update license info for display
                                                             *license_info.write() = Some(LicenseValidationResult {
                                                                 valid: validation.valid,
@@ -2751,11 +2770,11 @@ pub fn OnboardingDialog(
                                                                 user_id: validation.user_id.clone(),
                                                                 email: validation.email.clone(),
                                                             });
-                                                            
+
                                                             // Update app state with usage info
                                                             if let Ok(db) = crate::core::get_database().await {
                                                                 let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
-                                                                
+
                                                                 if let Ok(usage_display) = usage_tracker.get_usage_display(&validation.user_id).await {
                                                                     app_state_clone.write().update_usage_info(
                                                                         Some(validation.user_id),
@@ -2786,13 +2805,13 @@ pub fn OnboardingDialog(
                                 if or_key.is_empty() {
                                     return;
                                 }
-                                
+
                                 // Simple validation - just check it starts with sk-or-v1-
                                 if !or_key.starts_with("sk-or-v1-") {
                                     *validation_error.write() = Some("Invalid key format. OpenRouter keys start with 'sk-or-v1-'".to_string());
                                     return;
                                 }
-                                
+
                                 // Save the key
                                 *openrouter_key.write() = or_key.clone();
                                 if let Err(e) = crate::desktop::simple_db::save_config("openrouter_api_key", &or_key) {
@@ -2813,7 +2832,7 @@ pub fn OnboardingDialog(
                                 let template_id = selected_template.read().clone();
                                 let profile_name_val = profile_name.read().clone();
                                 let existing_id = *selected_profile_id.read();
-                                
+
                                 if mode == "expert" && !template_id.is_empty() {
                                     // Create profile from template
                                     let name = if profile_name_val.is_empty() {
@@ -2831,7 +2850,7 @@ pub fn OnboardingDialog(
                                     } else {
                                         profile_name_val
                                     };
-                                    
+
                                     tracing::info!("Creating profile from template: {} as {}", template_id, name);
                                     let name_for_spawn = name.clone();
                                     let template_for_spawn = template_id.clone();
@@ -2841,11 +2860,11 @@ pub fn OnboardingDialog(
                                     let mut show_profile_success = show_profile_success.clone();
                                     let mut existing_profiles = existing_profiles.clone();
                                     let mut selected_profile = selected_profile.clone();
-                                    
+
                                     spawn(async move {
                                         *is_creating_profile.write() = true;
                                         *profile_error.write() = None;
-                                        
+
                                         match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
                                             Ok(_) => {
                                                 tracing::info!("Profile created successfully: {}", name_for_spawn);
@@ -2854,7 +2873,7 @@ pub fn OnboardingDialog(
                                                 *profiles_created.write() = created;
                                                 *show_profile_success.write() = true;
                                                 *selected_profile.write() = name_for_spawn;
-                                                
+
                                                 // Reload profiles
                                                 if let Ok(profiles) = load_existing_profiles().await {
                                                     *existing_profiles.write() = profiles;
@@ -2865,10 +2884,10 @@ pub fn OnboardingDialog(
                                                 *profile_error.write() = Some(e.to_string());
                                             }
                                         }
-                                        
+
                                         *is_creating_profile.write() = false;
                                     });
-                                    
+
                                 } else if mode == "existing" && existing_id.is_some() {
                                     // Set existing profile as default
                                     if let Some(profile_id) = existing_id {
@@ -2876,7 +2895,7 @@ pub fn OnboardingDialog(
                                         let mut selected_profile = selected_profile.clone();
                                         let existing_profiles = existing_profiles.clone();
                                         let mut show_profile_success = show_profile_success.clone();
-                                        
+
                                         spawn(async move {
                                             if let Err(e) = set_default_profile(profile_id).await {
                                                 tracing::error!("Failed to set default profile: {}", e);
@@ -2890,7 +2909,7 @@ pub fn OnboardingDialog(
                                             }
                                         });
                                     }
-                                    
+
                                     // Move to step 5 after setting existing profile
                                     *current_step.write() = 5;
                                 } else if !existing_profiles.read().is_empty() || !profiles_created.read().is_empty() {
@@ -2902,35 +2921,35 @@ pub fn OnboardingDialog(
                                     tracing::info!("No profiles selected - moving to completion");
                                     *current_step.write() = 5;
                                 }
-                                
+
                                 // Note: We don't automatically move to step 5 anymore
                                 // User must click "Continue to Finish" after creating profiles
                             } else if step == 5 {
                                 // Save onboarding completion and close
                                 tracing::info!("Get Started clicked - saving completion and closing");
-                                
+
                                 // Simple save - no async
                                 if let Err(e) = crate::desktop::simple_db::mark_onboarding_complete() {
                                     tracing::error!("Failed to mark onboarding complete: {}", e);
                                 }
-                                
+
                                 // Just set closing flag - useEffect will handle the actual close
                                 *is_closing.write() = true;
-                                
+
                                 tracing::info!("Dialog close initiated");
                             } else {
                                 // This shouldn't happen, but log it
                                 tracing::warn!("Unexpected step in button handler: {}", step);
                             }
                             },
-                            if *is_validating.read() { 
-                                "Validating..." 
-                            } else if *is_creating_profile.read() { 
-                                "Creating Profile..." 
-                            } else if *current_step.read() < 5 { 
-                                "Next" 
-                            } else { 
-                                "Get Started" 
+                            if *is_validating.read() {
+                                "Validating..."
+                            } else if *is_creating_profile.read() {
+                                "Creating Profile..."
+                            } else if *current_step.read() < 5 {
+                                "Next"
+                            } else {
+                                "Get Started"
                             }
                         }
                     }
@@ -2952,10 +2971,10 @@ struct LicenseValidationResult {
 
 /// Save just the Hive key to database - simple synchronous version
 fn save_hive_key_sync(hive_key: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use rusqlite::params;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -2968,29 +2987,30 @@ fn save_hive_key_sync(hive_key: &str) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     // Use sync version
-    let db = std::sync::Arc::new(tokio::runtime::Handle::current().block_on(async {
-        DatabaseManager::new(db_config).await
-    })?);
-    
+    let db = std::sync::Arc::new(
+        tokio::runtime::Handle::current()
+            .block_on(async { DatabaseManager::new(db_config).await })?,
+    );
+
     let conn = db.get_connection()?;
-    
+
     conn.execute(
         "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at) VALUES ('hive_license_key', ?, datetime('now'), datetime('now'))",
         params![hive_key],
     )?;
-    
+
     tracing::info!("Hive key saved to configurations table");
     Ok(())
 }
 
 /// Save OpenRouter key synchronously
 fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use rusqlite::params;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -3003,43 +3023,54 @@ fn save_openrouter_key_sync(openrouter_key: &str) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
-    let db = std::sync::Arc::new(tokio::runtime::Handle::current().block_on(async {
-        DatabaseManager::new(db_config).await
-    })?);
-    
+
+    let db = std::sync::Arc::new(
+        tokio::runtime::Handle::current()
+            .block_on(async { DatabaseManager::new(db_config).await })?,
+    );
+
     let conn = db.get_connection()?;
-    
+
     conn.execute(
         "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at) VALUES ('openrouter_api_key', ?, datetime('now'), datetime('now'))",
         params![openrouter_key],
     )?;
-    
+
     tracing::info!("OpenRouter key saved to configurations table");
     Ok(())
 }
 
 /// Save API keys with validation and database storage
-async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<Option<LicenseValidationResult>> {
+async fn save_api_keys(
+    openrouter_key: &str,
+    hive_key: &str,
+) -> anyhow::Result<Option<LicenseValidationResult>> {
     use crate::core::api_keys::ApiKeyManager;
-    use crate::core::{license::LicenseManager, config::get_hive_config_dir};
-    
-    tracing::info!("save_api_keys called - OpenRouter: {} chars, Hive: {} chars",
-                 openrouter_key.len(), if hive_key.is_empty() { 0 } else { hive_key.len() });
-    
+    use crate::core::{config::get_hive_config_dir, license::LicenseManager};
+
+    tracing::info!(
+        "save_api_keys called - OpenRouter: {} chars, Hive: {} chars",
+        openrouter_key.len(),
+        if hive_key.is_empty() {
+            0
+        } else {
+            hive_key.len()
+        }
+    );
+
     let mut license_result = None;
-    
+
     // Validate Hive license key if provided
     if !hive_key.is_empty() {
         tracing::info!("Validating Hive license key...");
         let license_manager = LicenseManager::new(get_hive_config_dir());
-        
+
         match license_manager.validate_license(hive_key).await {
             Ok(validation) => {
                 if validation.valid {
                     // Store license
                     license_manager.store_license(hive_key, &validation).await?;
-                    
+
                     license_result = Some(LicenseValidationResult {
                         valid: validation.valid,
                         tier: validation.tier.clone(),
@@ -3047,12 +3078,19 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
                         user_id: validation.user_id.clone(),
                         email: validation.email.clone(),
                     });
-                    
-                    tracing::info!("License validated - tier: {}, daily_limit: {}", 
-                                 validation.tier, validation.daily_limit);
+
+                    tracing::info!(
+                        "License validated - tier: {}, daily_limit: {}",
+                        validation.tier,
+                        validation.daily_limit
+                    );
                 } else {
-                    return Err(anyhow::anyhow!("Invalid license key: {}", 
-                        validation.message.unwrap_or_else(|| "Unknown error".to_string())));
+                    return Err(anyhow::anyhow!(
+                        "Invalid license key: {}",
+                        validation
+                            .message
+                            .unwrap_or_else(|| "Unknown error".to_string())
+                    ));
                 }
             }
             Err(e) => {
@@ -3061,11 +3099,11 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
             }
         }
     }
-    
+
     // Validate OpenRouter key format first
     if !openrouter_key.is_empty() {
         ApiKeyManager::validate_format(openrouter_key)?;
-        
+
         // Test with live API call
         match ApiKeyManager::test_openrouter_key(openrouter_key).await {
             Ok(true) => {
@@ -3084,7 +3122,7 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
     } else {
         return Err(anyhow::anyhow!("OpenRouter API key is required"));
     }
-    
+
     Ok(license_result)
 }
 
@@ -3095,90 +3133,27 @@ async fn save_profile_preference(profile: &str) -> anyhow::Result<()> {
     // 1. Create the profile in the pipeline_profiles table
     // 2. Set it as the default profile
     // 3. Configure the appropriate models for each stage
-    
+
     tracing::info!("User selected profile: {}", profile);
-    
+
     // TODO: When database is fully implemented:
     // - Create profile in pipeline_profiles table
     // - Set appropriate models for each stage based on profile type
     // - Mark as default profile
-    
+
     Ok(())
 }
 
 /// Load existing profiles from database
 pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
-    
+    use crate::core::database::DatabaseManager;
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     if !db_path.exists() {
         return Ok(vec![]);
     }
-    
-    let db_config = crate::core::database::DatabaseConfig {
-        path: db_path,
-        max_connections: 10,
-        connection_timeout: std::time::Duration::from_secs(5),
-        idle_timeout: std::time::Duration::from_secs(300),
-        enable_wal: true,
-        enable_foreign_keys: true,
-        cache_size: 8192,
-        synchronous: "NORMAL".to_string(),
-        journal_mode: "WAL".to_string(),
-    };
-    
-    let db = DatabaseManager::new(db_config).await?;
-    let conn = db.get_connection()?;
-    
-    let mut stmt = conn.prepare(
-        "SELECT id, profile_name, profile_name, created_at, 
-                generator_model, refiner_model, validator_model, curator_model
-         FROM consensus_profiles 
-         ORDER BY created_at DESC"
-    )?;
-    
-    let mut profiles_vec: Vec<ProfileInfo> = stmt.query_map([], |row| {
-        // Note: id is TEXT in database, but ProfileInfo expects i64
-        let id_str: String = row.get(0)?;
-        let id = id_str.parse::<i64>().unwrap_or_else(|_| {
-            // If it's not a number, use a hash of the string
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            id_str.hash(&mut hasher);
-            hasher.finish() as i64
-        });
-        
-        Ok(ProfileInfo {
-            id,
-            name: row.get(1)?,
-            is_default: false, // Will set first one as default below
-            created_at: row.get(3)?,
-            generator_model: row.get(4)?,
-            refiner_model: row.get(5)?,
-            validator_model: row.get(6)?,
-            curator_model: row.get(7)?,
-        })
-    })?
-    .filter_map(Result::ok)
-    .collect();
-    
-    // Set first profile as default
-    if let Some(first) = profiles_vec.first_mut() {
-        first.is_default = true;
-    }
-    
-    Ok(profiles_vec)
-}
 
-/// Load the current default profile from database
-async fn load_default_profile() -> anyhow::Result<Option<(i64, String)>> {
-    use crate::core::database::DatabaseManager;
-    use crate::core::config::get_hive_config_dir;
-    use rusqlite::OptionalExtension;
-    
-    let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
         max_connections: 10,
@@ -3190,36 +3165,102 @@ async fn load_default_profile() -> anyhow::Result<Option<(i64, String)>> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
-    // Query for the first profile (since we don't have is_default column)
-    let result = conn.query_row(
-        "SELECT id, profile_name FROM consensus_profiles ORDER BY created_at DESC LIMIT 1",
-        [],
-        |row| {
+
+    let mut stmt = conn.prepare(
+        "SELECT id, profile_name, profile_name, created_at,
+                generator_model, refiner_model, validator_model, curator_model
+         FROM consensus_profiles
+         ORDER BY created_at DESC",
+    )?;
+
+    let mut profiles_vec: Vec<ProfileInfo> = stmt
+        .query_map([], |row| {
+            // Note: id is TEXT in database, but ProfileInfo expects i64
             let id_str: String = row.get(0)?;
             let id = id_str.parse::<i64>().unwrap_or_else(|_| {
+                // If it's not a number, use a hash of the string
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
                 id_str.hash(&mut hasher);
                 hasher.finish() as i64
             });
-            Ok((id, row.get::<_, String>(1)?))
-        }
-    ).optional()?;
-    
+
+            Ok(ProfileInfo {
+                id,
+                name: row.get(1)?,
+                is_default: false, // Will set first one as default below
+                created_at: row.get(3)?,
+                generator_model: row.get(4)?,
+                refiner_model: row.get(5)?,
+                validator_model: row.get(6)?,
+                curator_model: row.get(7)?,
+            })
+        })?
+        .filter_map(Result::ok)
+        .collect();
+
+    // Set first profile as default
+    if let Some(first) = profiles_vec.first_mut() {
+        first.is_default = true;
+    }
+
+    Ok(profiles_vec)
+}
+
+/// Load the current default profile from database
+async fn load_default_profile() -> anyhow::Result<Option<(i64, String)>> {
+    use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
+    use rusqlite::OptionalExtension;
+
+    let db_path = get_hive_config_dir().join("hive-ai.db");
+    let db_config = crate::core::database::DatabaseConfig {
+        path: db_path,
+        max_connections: 10,
+        connection_timeout: std::time::Duration::from_secs(5),
+        idle_timeout: std::time::Duration::from_secs(300),
+        enable_wal: true,
+        enable_foreign_keys: true,
+        cache_size: 8192,
+        synchronous: "NORMAL".to_string(),
+        journal_mode: "WAL".to_string(),
+    };
+
+    let db = DatabaseManager::new(db_config).await?;
+    let conn = db.get_connection()?;
+
+    // Query for the first profile (since we don't have is_default column)
+    let result = conn
+        .query_row(
+            "SELECT id, profile_name FROM consensus_profiles ORDER BY created_at DESC LIMIT 1",
+            [],
+            |row| {
+                let id_str: String = row.get(0)?;
+                let id = id_str.parse::<i64>().unwrap_or_else(|_| {
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = DefaultHasher::new();
+                    id_str.hash(&mut hasher);
+                    hasher.finish() as i64
+                });
+                Ok((id, row.get::<_, String>(1)?))
+            },
+        )
+        .optional()?;
+
     Ok(result)
 }
 
 /// Create profile from expert template
 async fn create_profile_from_template(template_id: &str, profile_name: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use crate::core::profiles::ExpertTemplateManager;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -3232,20 +3273,22 @@ async fn create_profile_from_template(template_id: &str, profile_name: &str) -> 
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let template_manager = ExpertTemplateManager::new(db);
-    
-    template_manager.create_profile_from_template(template_id, profile_name, None).await?;
-    
+
+    template_manager
+        .create_profile_from_template(template_id, profile_name, None)
+        .await?;
+
     Ok(())
 }
 
 /// Set a profile as default
 async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
-    
+    use crate::core::database::DatabaseManager;
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -3258,24 +3301,24 @@ async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     // Since we don't have is_default column, store the active profile in consensus_settings
     conn.execute(
         "INSERT OR REPLACE INTO consensus_settings (key, value, updated_at) VALUES ('active_profile_id', ?1, CURRENT_TIMESTAMP)",
         [profile_id.to_string()]
     )?;
-    
+
     Ok(())
 }
 
 /// Mark onboarding as complete in the database
 pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
-    
+    use crate::core::database::DatabaseManager;
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -3288,26 +3331,26 @@ pub async fn mark_onboarding_complete() -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     // Store onboarding completion in configurations table
     conn.execute(
-        "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at) 
+        "INSERT OR REPLACE INTO configurations (key, value, created_at, updated_at)
          VALUES ('onboarding_completed', 'true', datetime('now'), datetime('now'))",
-        []
+        [],
     )?;
-    
+
     Ok(())
 }
 
 /// Create a custom profile with default model configuration
 async fn create_custom_profile(profile_name: &str) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use uuid::Uuid;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -3320,13 +3363,13 @@ async fn create_custom_profile(profile_name: &str) -> anyhow::Result<()> {
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     // Generate a UUID for the profile
     let profile_id = Uuid::new_v4().to_string();
-    
+
     // Use default fast models for the new profile
     let default_models = [
         "anthropic/claude-3-haiku",
@@ -3334,10 +3377,10 @@ async fn create_custom_profile(profile_name: &str) -> anyhow::Result<()> {
         "anthropic/claude-3-haiku",
         "openai/gpt-3.5-turbo",
     ];
-    
+
     // Create the profile with default configuration
     conn.execute(
-        "INSERT INTO consensus_profiles (id, profile_name, generator_model, refiner_model, validator_model, curator_model, created_at, updated_at) 
+        "INSERT INTO consensus_profiles (id, profile_name, generator_model, refiner_model, validator_model, curator_model, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))",
         rusqlite::params![
             &profile_id,
@@ -3348,9 +3391,13 @@ async fn create_custom_profile(profile_name: &str) -> anyhow::Result<()> {
             default_models[3],
         ]
     )?;
-    
-    tracing::info!("Created custom profile '{}' with ID: {}", profile_name, profile_id);
-    
+
+    tracing::info!(
+        "Created custom profile '{}' with ID: {}",
+        profile_name,
+        profile_id
+    );
+
     Ok(())
 }
 
@@ -3362,10 +3409,10 @@ async fn create_custom_profile_with_models(
     validator_internal_id: i64,
     curator_internal_id: i64,
 ) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
+    use crate::core::database::DatabaseManager;
     use uuid::Uuid;
-    
+
     let db_path = get_hive_config_dir().join("hive-ai.db");
     let db_config = crate::core::database::DatabaseConfig {
         path: db_path,
@@ -3378,31 +3425,31 @@ async fn create_custom_profile_with_models(
         synchronous: "NORMAL".to_string(),
         journal_mode: "WAL".to_string(),
     };
-    
+
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
-    
+
     // Generate a UUID for the profile
     let profile_id = Uuid::new_v4().to_string();
-    
+
     // First, get the OpenRouter IDs for the selected internal IDs
     let mut get_model_id = |internal_id: i64| -> anyhow::Result<String> {
         let openrouter_id: String = conn.query_row(
             "SELECT openrouter_id FROM openrouter_models WHERE internal_id = ?",
             rusqlite::params![internal_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
         Ok(openrouter_id)
     };
-    
+
     let generator_model = get_model_id(generator_internal_id)?;
     let refiner_model = get_model_id(refiner_internal_id)?;
     let validator_model = get_model_id(validator_internal_id)?;
     let curator_model = get_model_id(curator_internal_id)?;
-    
+
     // Create the profile with selected models
     conn.execute(
-        "INSERT INTO consensus_profiles (id, profile_name, generator_model, refiner_model, validator_model, curator_model, created_at, updated_at) 
+        "INSERT INTO consensus_profiles (id, profile_name, generator_model, refiner_model, validator_model, curator_model, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))",
         rusqlite::params![
             &profile_id,
@@ -3413,16 +3460,23 @@ async fn create_custom_profile_with_models(
             curator_model,
         ]
     )?;
-    
-    tracing::info!("Created custom profile '{}' with ID: {} and models: G={}, R={}, V={}, C={}", 
-        profile_name, profile_id, generator_model, refiner_model, validator_model, curator_model);
-    
+
+    tracing::info!(
+        "Created custom profile '{}' with ID: {} and models: G={}, R={}, V={}, C={}",
+        profile_name,
+        profile_id,
+        generator_model,
+        refiner_model,
+        validator_model,
+        curator_model
+    );
+
     Ok(())
 }
 
 /// Embedded Model Browser Component for Profile Creation
-/// 
-/// This component provides a clean model selection interface that doesn't 
+///
+/// This component provides a clean model selection interface that doesn't
 /// use dialog overlays, preventing the UX flow issues with overlapping modals.
 #[component]
 pub fn EmbeddedModelBrowser(
@@ -3436,7 +3490,7 @@ pub fn EmbeddedModelBrowser(
     let mut show_free_only = use_signal(|| false);
     let mut loading = use_signal(|| true);
     let mut error_message = use_signal(|| None::<String>);
-    
+
     // Load models on first render
     use_effect({
         let stage_key_clone = stage_key.clone();
@@ -3445,7 +3499,12 @@ pub fn EmbeddedModelBrowser(
             spawn(async move {
                 match crate::desktop::model_browser::load_all_models().await {
                     Ok(loaded_models) => {
-                        let top_recommendations = crate::desktop::model_browser::get_top_recommendations(&loaded_models, &stage_key, 10);
+                        let top_recommendations =
+                            crate::desktop::model_browser::get_top_recommendations(
+                                &loaded_models,
+                                &stage_key,
+                                10,
+                            );
                         *filtered_models.write() = top_recommendations.clone();
                         *models.write() = loaded_models;
                         *loading.write() = false;
@@ -3458,7 +3517,7 @@ pub fn EmbeddedModelBrowser(
             });
         }
     });
-    
+
     // Filter models when search/filters change
     use_effect({
         let stage_key_clone = stage_key.clone();
@@ -3468,47 +3527,56 @@ pub fn EmbeddedModelBrowser(
             let provider = selected_provider.read().clone();
             let free_only = *show_free_only.read();
             let stage_key = stage_key_clone.clone();
-            
-            let mut filtered: Vec<crate::desktop::model_browser::ModelInfo> = all_models.into_iter()
+
+            let mut filtered: Vec<crate::desktop::model_browser::ModelInfo> = all_models
+                .into_iter()
                 .filter(|model| {
                     // Provider filter
                     if provider != "all" && model.provider_name != provider {
                         return false;
                     }
-                    
+
                     // Free filter
                     if free_only && (model.pricing_input > 0.0 || model.pricing_output > 0.0) {
                         return false;
                     }
-                    
+
                     // Search filter
                     if !query.is_empty() {
-                        let search_text = format!("{} {} {}", 
+                        let search_text = format!(
+                            "{} {} {}",
                             model.name.to_lowercase(),
                             model.provider_name.to_lowercase(),
-                            model.description.as_ref().unwrap_or(&String::new()).to_lowercase()
+                            model
+                                .description
+                                .as_ref()
+                                .unwrap_or(&String::new())
+                                .to_lowercase()
                         );
                         if !search_text.contains(&query) {
                             return false;
                         }
                     }
-                    
+
                     true
                 })
                 .collect();
-            
+
             // If no search query and showing all providers, show top recommendations
             if query.is_empty() && provider == "all" && !free_only {
-                filtered = crate::desktop::model_browser::get_top_recommendations(&filtered, &stage_key, 20);
+                filtered = crate::desktop::model_browser::get_top_recommendations(
+                    &filtered, &stage_key, 20,
+                );
             }
-            
+
             *filtered_models.write() = filtered;
         }
     });
-    
+
     // Get unique providers for filter dropdown
     let providers = {
-        let mut provider_set: Vec<String> = models.read()
+        let mut provider_set: Vec<String> = models
+            .read()
             .iter()
             .map(|m| m.provider_name.clone())
             .collect();
@@ -3516,14 +3584,14 @@ pub fn EmbeddedModelBrowser(
         provider_set.dedup();
         provider_set
     };
-    
+
     let recommendations = crate::desktop::model_browser::get_stage_recommendations();
     let stage_info = recommendations.get(stage_key.as_str());
-    
+
     rsx! {
         div {
             style: "width: 100%; height: 100%; display: flex; flex-direction: column;",
-            
+
             // Stage info header
             if let Some(info) = stage_info {
                 div {
@@ -3543,13 +3611,13 @@ pub fn EmbeddedModelBrowser(
                     }
                 }
             }
-            
+
             // Filters
             div {
                 style: "padding: 15px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
                 div {
                     style: "display: flex; gap: 15px; align-items: center;",
-                    
+
                     // Search
                     input {
                         r#type: "text",
@@ -3558,7 +3626,7 @@ pub fn EmbeddedModelBrowser(
                         style: "flex: 1; padding: 8px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 4px; color: #cccccc;",
                         oninput: move |evt| *search_query.write() = evt.value(),
                     }
-                    
+
                     // Provider filter
                     select {
                         style: "padding: 8px 12px; background: #3c3c3c; border: 1px solid #3e3e42; border-radius: 4px; color: #cccccc;",
@@ -3569,7 +3637,7 @@ pub fn EmbeddedModelBrowser(
                             option { value: "{provider}", "{provider}" }
                         }
                     }
-                    
+
                     // Free only checkbox
                     label {
                         style: "display: flex; align-items: center; gap: 5px; cursor: pointer;",
@@ -3582,11 +3650,11 @@ pub fn EmbeddedModelBrowser(
                     }
                 }
             }
-            
+
             // Model list
             div {
                 style: "flex: 1; overflow-y: auto; padding: 15px;",
-                
+
                 if *loading.read() {
                     div {
                         style: "text-align: center; padding: 50px; color: #858585;",
@@ -3625,7 +3693,7 @@ fn EmbeddedModelCard(
 ) -> Element {
     let is_free = model.pricing_input == 0.0 && model.pricing_output == 0.0;
     let cost_per_1k = (model.pricing_input + model.pricing_output) * 1000.0;
-    
+
     rsx! {
         div {
             style: "padding: 15px; margin-bottom: 10px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; cursor: pointer; transition: all 0.2s;",
@@ -3633,7 +3701,7 @@ fn EmbeddedModelCard(
                 // Hover styling handled by CSS
             },
             onclick: move |_| on_select.call(model.clone()),
-            
+
             div {
                 style: "display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;",
                 div {
@@ -3667,7 +3735,7 @@ fn EmbeddedModelCard(
                     }
                 }
             }
-            
+
             if let Some(desc) = &model.description {
                 p {
                     style: "margin: 0; color: #cccccc; font-size: 13px; line-height: 1.4;",
@@ -3687,26 +3755,34 @@ pub fn UpgradeDialog(
     daily_limit: u32,
     average_usage: f32,
 ) -> Element {
-    let recommended_plan = if average_usage <= 50.0 { "Basic" } else if average_usage <= 100.0 { "Standard" } else if average_usage <= 200.0 { "Premium" } else { "Unlimited" };
+    let recommended_plan = if average_usage <= 50.0 {
+        "Basic"
+    } else if average_usage <= 100.0 {
+        "Standard"
+    } else if average_usage <= 200.0 {
+        "Premium"
+    } else {
+        "Unlimited"
+    };
     let recommended_price = match recommended_plan {
         "Basic" => "$5/month",
-        "Standard" => "$10/month", 
+        "Standard" => "$10/month",
         "Premium" => "$20/month",
         _ => "$30/month",
     };
-    
+
     let hours_until_reset = 24 - chrono::Utc::now().hour();
-    
+
     rsx! {
         div {
             class: "dialog-overlay",
             onclick: move |e| e.stop_propagation(),
-            
+
             div {
                 class: "dialog upgrade-dialog",
                 style: "max-width: 600px; width: 90%; background: #0E1414 !important; border-radius: 8px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.1);",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); color: white; position: relative;",
@@ -3722,11 +3798,11 @@ pub fn UpgradeDialog(
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content",
                     style: "padding: 30px !important; background: #0E1414 !important; color: #FFFFFF !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; border-radius: 0 0 8px 8px !important;",
-                    
+
                     div {
                         style: "text-align: center; margin-bottom: 25px;",
                         div {
@@ -3738,7 +3814,7 @@ pub fn UpgradeDialog(
                             "Your FREE plan includes {daily_limit} conversations per day"
                         }
                     }
-                    
+
                     div {
                         style: "background: linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(0, 123, 255, 0.1) 100%) !important; border: 2px solid #FFC107 !important; border-radius: 8px !important; padding: 20px !important; margin-bottom: 25px !important;",
                         h3 { style: "margin: 0 0 15px 0 !important; color: #FFFFFF !important; font-weight: 700 !important;", "🎯 Recommended for you: {recommended_plan} Plan" }
@@ -3751,14 +3827,14 @@ pub fn UpgradeDialog(
                             "{recommended_price}"
                         }
                     }
-                    
+
                     div {
                         style: "margin-bottom: 25px;",
                         h4 { style: "margin: 0 0 15px 0 !important; color: #FFFFFF !important; font-weight: 600 !important;", "Your Options:" }
-                        
+
                         div {
                             style: "display: grid; gap: 15px;",
-                            
+
                             // Option 1: Wait
                             div {
                                 style: "border: 2px solid #2D3336 !important; background: #181E21 !important; border-radius: 8px !important; padding: 15px !important; transition: all 0.2s;",
@@ -3771,7 +3847,7 @@ pub fn UpgradeDialog(
                                     "Your conversations reset in ~{hours_until_reset} hours (midnight UTC)"
                                 }
                             }
-                            
+
                             // Option 2: Upgrade
                             div {
                                 style: "border: 2px solid #007BFF; border-radius: 8px; padding: 15px; background: linear-gradient(135deg, rgba(255, 193, 7, 0.05) 0%, rgba(0, 123, 255, 0.05) 100%);",
@@ -3793,7 +3869,7 @@ pub fn UpgradeDialog(
                                     "View Plans & Pricing"
                                 }
                             }
-                            
+
                             // Option 3: Credit Packs
                             div {
                                 style: "border: 2px solid #28a745; border-radius: 8px; padding: 15px; background: linear-gradient(135deg, rgba(40, 167, 69, 0.05) 0%, rgba(255, 193, 7, 0.05) 100%);",
@@ -3838,7 +3914,7 @@ pub fn UpgradeDialog(
                             }
                         }
                     }
-                    
+
                     div {
                         style: "text-align: center !important; padding-top: 20px !important; border-top: 1px solid #2D3336 !important; color: #9CA3AF !important; font-size: 13px !important; font-weight: 500 !important;",
                         "Questions? Visit "
@@ -3873,7 +3949,7 @@ pub const DIALOG_STYLES: &str = r#"
         justify-content: center;
         z-index: 1000;
     }
-    
+
     .dialog-box {
         background: #0E1414 !important;
         border: 1px solid #3e3e42;
@@ -3883,23 +3959,23 @@ pub const DIALOG_STYLES: &str = r#"
         max-height: 90vh;
         overflow: auto;
     }
-    
+
     .upgrade-dialog {
         background: #0E1414 !important;
         color: #FFFFFF !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
     }
-    
+
     .dialog-content {
         background: #0E1414 !important;
         color: #FFFFFF !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
     }
-    
+
     .about-dialog {
         width: 500px;
     }
-    
+
     .dialog-header {
         display: flex;
         justify-content: space-between;
@@ -3907,13 +3983,13 @@ pub const DIALOG_STYLES: &str = r#"
         padding: 20px;
         border-bottom: 1px solid #3e3e42;
     }
-    
+
     .dialog-header h2 {
         margin: 0;
         font-size: 20px;
         color: #ffffff;
     }
-    
+
     .dialog-close {
         background: none;
         border: none;
@@ -3927,95 +4003,95 @@ pub const DIALOG_STYLES: &str = r#"
         align-items: center;
         justify-content: center;
     }
-    
+
     .dialog-close:hover {
         color: #ffffff;
         background: #3e3e42;
         border-radius: 4px;
     }
-    
+
     .dialog-content {
         padding: 30px;
         text-align: center;
     }
-    
+
     .app-icon {
         font-size: 64px;
         margin-bottom: 20px;
     }
-    
+
     .dialog-content h3 {
         margin: 10px 0;
         font-size: 24px;
         color: #ffffff;
     }
-    
+
     .dialog-content p {
         margin: 10px 0;
         color: #cccccc;
     }
-    
+
     .dialog-features {
         margin: 30px 0;
         text-align: left;
     }
-    
+
     .dialog-features h4 {
         margin-bottom: 10px;
         color: #ffffff;
     }
-    
+
     .dialog-features ul {
         list-style: none;
         padding: 0;
     }
-    
+
     .dialog-features li {
         padding: 5px 0;
         color: #cccccc;
     }
-    
+
     .dialog-footer-text {
         margin-top: 30px;
         font-size: 12px;
         color: #858585;
     }
-    
+
     /* Welcome tab styles */
     .welcome-tab {
         padding: 40px;
         max-width: 800px;
         margin: 0 auto;
     }
-    
+
     .welcome-header {
         text-align: center;
         margin-bottom: 40px;
     }
-    
+
     .welcome-header h1 {
         font-size: 36px;
         margin-bottom: 10px;
     }
-    
+
     .welcome-sections {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
         gap: 30px;
         margin-bottom: 40px;
     }
-    
+
     .welcome-section {
         background: #2d2d30;
         padding: 20px;
         border-radius: 8px;
         border: 1px solid #3e3e42;
     }
-    
+
     .welcome-section h3 {
         margin-bottom: 15px;
     }
-    
+
     .welcome-button {
         display: block;
         width: 100%;
@@ -4027,61 +4103,61 @@ pub const DIALOG_STYLES: &str = r#"
         border-radius: 4px;
         cursor: pointer;
     }
-    
+
     .welcome-button:hover {
         background: #005a9e;
     }
-    
+
     .welcome-link {
         display: block;
         padding: 5px 0;
         color: #007acc;
         text-decoration: none;
     }
-    
+
     .welcome-link:hover {
         text-decoration: underline;
     }
-    
+
     /* Template and profile option styles */
     .template-option, .profile-option {
         transition: all 0.2s ease;
     }
-    
+
     .template-option:hover, .profile-option:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
-    
+
     .template-option.selected, .profile-option.selected {
         background: #1e1e1e !important;
         border-color: #007acc !important;
     }
-    
+
     .expert-templates-grid {
         max-height: 350px;
         overflow-y: auto;
         padding-right: 10px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar {
         width: 8px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar-track {
         background: #1e1e1e;
         border-radius: 4px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar-thumb {
         background: #3e3e42;
         border-radius: 4px;
     }
-    
+
     .expert-templates-grid::-webkit-scrollbar-thumb:hover {
         background: #4e4e52;
     }
-    
+
     .welcome-close {
         display: block;
         margin: 0 auto;
@@ -4092,11 +4168,11 @@ pub const DIALOG_STYLES: &str = r#"
         border-radius: 4px;
         cursor: pointer;
     }
-    
+
     .welcome-close:hover {
         background: #4e4e52;
     }
-    
+
     /* Command palette styles */
     .command-palette {
         background: #252526;
@@ -4107,7 +4183,7 @@ pub const DIALOG_STYLES: &str = r#"
         overflow: hidden;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     }
-    
+
     .command-palette-input {
         width: 100%;
         padding: 15px 20px;
@@ -4118,74 +4194,74 @@ pub const DIALOG_STYLES: &str = r#"
         font-size: 16px;
         outline: none;
     }
-    
+
     .command-palette-results {
         max-height: 350px;
         overflow-y: auto;
     }
-    
+
     .command-palette-item {
         display: flex;
         justify-content: space-between;
         padding: 10px 20px;
         cursor: pointer;
     }
-    
+
     .command-palette-item:hover {
         background: #094771;
     }
-    
+
     .command-name {
         color: #cccccc;
     }
-    
+
     .command-shortcut {
         color: #858585;
         font-size: 12px;
     }
-    
+
     /* Settings dialog styles */
     .settings-dialog {
         width: 600px;
     }
-    
+
     .settings-content {
         padding: 0;
         text-align: left;
     }
-    
+
     .settings-section {
         padding: 20px 30px;
         border-bottom: 1px solid #3e3e42;
     }
-    
+
     .settings-section:last-child {
         border-bottom: none;
     }
-    
+
     .settings-section h3 {
         margin: 0 0 10px 0;
         color: #ffffff;
         font-size: 16px;
     }
-    
+
     .settings-description {
         margin: 0 0 20px 0;
         color: #858585;
         font-size: 13px;
     }
-    
+
     .settings-field {
         margin-bottom: 20px;
     }
-    
+
     .settings-label {
         display: block;
         margin-bottom: 8px;
         color: #cccccc;
         font-size: 14px;
     }
-    
+
     .settings-input {
         width: 100%;
         padding: 8px 12px;
@@ -4195,33 +4271,33 @@ pub const DIALOG_STYLES: &str = r#"
         color: #ffffff;
         font-size: 14px;
     }
-    
+
     .settings-input:focus {
         outline: none;
         border-color: #007acc;
     }
-    
+
     .settings-hint {
         margin: 5px 0 0 0;
         font-size: 12px;
         color: #858585;
     }
-    
+
     .settings-hint a {
         color: #007acc;
         text-decoration: none;
     }
-    
+
     .settings-hint a:hover {
         text-decoration: underline;
     }
-    
+
     .profile-grid {
         display: grid;
         grid-template-columns: repeat(2, 1fr);
         gap: 15px;
     }
-    
+
     .profile-option {
         padding: 15px;
         background: #1e1e1e;
@@ -4230,34 +4306,34 @@ pub const DIALOG_STYLES: &str = r#"
         cursor: pointer;
         transition: all 0.2s;
     }
-    
+
     .profile-option:hover {
         border-color: #007acc;
     }
-    
+
     .profile-option.selected {
         border-color: #007acc;
         background: #094771;
     }
-    
+
     .profile-option h4 {
         margin: 0 0 5px 0;
         color: #ffffff;
         font-size: 14px;
     }
-    
+
     .profile-description {
         margin: 0 0 8px 0;
         color: #cccccc;
         font-size: 12px;
     }
-    
+
     .profile-models {
         margin: 0;
         color: #858585;
         font-size: 11px;
     }
-    
+
     /* Dialog footer */
     .dialog-footer {
         display: flex;
@@ -4267,7 +4343,7 @@ pub const DIALOG_STYLES: &str = r#"
         border-top: 1px solid #3e3e42;
         background: #252526;
     }
-    
+
     .button {
         padding: 8px 16px;
         border: none;
@@ -4276,57 +4352,57 @@ pub const DIALOG_STYLES: &str = r#"
         cursor: pointer;
         transition: background 0.2s;
     }
-    
+
     .button-primary {
         background: #007acc;
         color: white;
     }
-    
+
     .button-primary:hover {
         background: #005a9e;
     }
-    
+
     .button-secondary {
         background: #3e3e42;
         color: #cccccc;
     }
-    
+
     .button-secondary:hover {
         background: #4e4e52;
     }
-    
+
     /* Onboarding dialog styles */
     .onboarding-dialog {
         width: 600px;
     }
-    
+
     .onboarding-content {
         padding: 30px;
         text-align: left;
     }
-    
+
     .onboarding-step h3 {
         margin: 0 0 15px 0;
         color: #ffffff;
         font-size: 20px;
     }
-    
+
     .onboarding-step p {
         margin: 0 0 20px 0;
         color: #cccccc;
         line-height: 1.5;
     }
-    
+
     .features-list {
         margin: 20px 0;
     }
-    
+
     .feature-item {
         padding: 8px 0;
         color: #cccccc;
         font-size: 14px;
     }
-    
+
     .api-key-help {
         margin-top: 15px;
         padding: 15px;
@@ -4334,19 +4410,19 @@ pub const DIALOG_STYLES: &str = r#"
         border-radius: 6px;
         border: 1px solid #3e3e42;
     }
-    
+
     .api-key-help p {
         margin: 0 0 10px 0;
     }
-    
+
     .api-key-help p:last-child {
         margin: 0;
     }
-    
+
     .suggestions-list {
         margin-top: 20px;
     }
-    
+
     .suggestion-item {
         padding: 10px 15px;
         margin: 8px 0;
@@ -4356,11 +4432,11 @@ pub const DIALOG_STYLES: &str = r#"
         font-size: 14px;
         color: #cccccc;
     }
-    
+
     .onboarding-footer {
         justify-content: space-between;
     }
-    
+
     .dialog {
         background: #2d2d30;
         border: 1px solid #3e3e42;
@@ -4368,7 +4444,7 @@ pub const DIALOG_STYLES: &str = r#"
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
         overflow: hidden;
     }
-    
+
     /* Progress indicator styles */
     .onboarding-progress {
         display: flex;
@@ -4377,7 +4453,7 @@ pub const DIALOG_STYLES: &str = r#"
         padding: 20px;
         border-bottom: 1px solid #3e3e42;
     }
-    
+
     .progress-step {
         padding: 8px 16px;
         border-radius: 20px;
@@ -4386,17 +4462,17 @@ pub const DIALOG_STYLES: &str = r#"
         font-size: 13px;
         transition: all 0.3s;
     }
-    
+
     .progress-step.active {
         background: #007acc;
         color: #ffffff;
     }
-    
+
     .progress-separator {
         margin: 0 5px;
         color: #858585;
     }
-    
+
     /* Tab button styles */
     .tab-button {
         padding: 8px 16px;
@@ -4408,39 +4484,39 @@ pub const DIALOG_STYLES: &str = r#"
         transition: all 0.2s;
         font-size: 14px;
     }
-    
+
     .tab-button:hover {
         color: #cccccc;
     }
-    
+
     .tab-button.active {
         color: #ffffff;
         border-bottom-color: #007acc;
     }
-    
+
     /* Profile detail card styles */
     .profile-detail-card {
         animation: fadeIn 0.3s ease-in;
     }
-    
+
     .icon-button {
         transition: all 0.2s;
     }
-    
+
     .icon-button:hover {
         transform: translateY(-1px);
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     }
-    
+
     .model-input {
         transition: all 0.2s;
     }
-    
+
     .model-input:focus {
         border-color: #007acc !important;
         outline: none;
     }
-    
+
     @keyframes fadeIn {
         from {
             opacity: 0;
@@ -4456,7 +4532,7 @@ pub const DIALOG_STYLES: &str = r#"
 /// Update available dialog
 #[component]
 pub fn UpdateAvailableDialog(
-    show: Signal<bool>, 
+    show: Signal<bool>,
     version: String,
     release_date: String,
     download_url: String,
@@ -4470,11 +4546,11 @@ pub fn UpdateAvailableDialog(
         div {
             class: "dialog-overlay",
             onclick: move |_| *show.write() = false,
-            
+
             div {
                 class: "dialog-box",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     h2 { "🚀 Update Available" }
@@ -4484,24 +4560,24 @@ pub fn UpdateAvailableDialog(
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content",
                     style: "text-align: center;",
-                    
+
                     div {
                         style: "font-size: 18px; color: var(--hive-yellow); margin-bottom: 10px;",
                         "Version {version} is available!"
                     }
-                    
+
                     p {
                         style: "color: #cccccc; margin-bottom: 20px;",
                         "Released on {release_date}"
                     }
-                    
+
                     div {
                         style: "display: flex; gap: 10px; justify-content: center;",
-                        
+
                         button {
                             class: "dialog-button primary",
                             onclick: move |_| {
@@ -4516,7 +4592,7 @@ pub fn UpdateAvailableDialog(
                             },
                             "Download Now"
                         }
-                        
+
                         button {
                             class: "dialog-button secondary",
                             onclick: move |_| {
@@ -4530,7 +4606,7 @@ pub fn UpdateAvailableDialog(
                             },
                             "View Changelog"
                         }
-                        
+
                         button {
                             class: "dialog-button",
                             onclick: move |_| *show.write() = false,
@@ -4554,11 +4630,11 @@ pub fn NoUpdatesDialog(show: Signal<bool>, current_version: String) -> Element {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show.write() = false,
-            
+
             div {
                 class: "dialog-box",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     h2 { "✅ Up to Date" }
@@ -4568,21 +4644,21 @@ pub fn NoUpdatesDialog(show: Signal<bool>, current_version: String) -> Element {
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content",
                     style: "text-align: center;",
-                    
+
                     div {
                         style: "font-size: 18px; color: var(--hive-green); margin-bottom: 10px;",
                         "You're running the latest version!"
                     }
-                    
+
                     p {
                         style: "color: #cccccc; margin-bottom: 20px;",
                         "Version {current_version} is the most recent release."
                     }
-                    
+
                     button {
                         class: "dialog-button primary",
                         onclick: move |_| *show.write() = false,
@@ -4605,11 +4681,11 @@ pub fn UpdateErrorDialog(show: Signal<bool>, error_message: String) -> Element {
         div {
             class: "dialog-overlay",
             onclick: move |_| *show.write() = false,
-            
+
             div {
                 class: "dialog-box",
                 onclick: move |e| e.stop_propagation(),
-                
+
                 div {
                     class: "dialog-header",
                     h2 { "❌ Update Check Failed" }
@@ -4619,21 +4695,21 @@ pub fn UpdateErrorDialog(show: Signal<bool>, error_message: String) -> Element {
                         "×"
                     }
                 }
-                
+
                 div {
                     class: "dialog-content",
                     style: "text-align: center;",
-                    
+
                     div {
                         style: "font-size: 16px; color: #ff6b6b; margin-bottom: 10px;",
                         "Failed to check for updates"
                     }
-                    
+
                     p {
                         style: "color: #cccccc; margin-bottom: 20px; font-size: 14px;",
                         "{error_message}"
                     }
-                    
+
                     button {
                         class: "dialog-button primary",
                         onclick: move |_| *show.write() = false,

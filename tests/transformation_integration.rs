@@ -12,9 +12,9 @@ fn test_transformation_types() {
         context: None,
         multi_file: false,
     };
-    
+
     assert_eq!(request.aspect, "performance");
-    
+
     let change = CodeChange {
         file_path: PathBuf::from("test.rs"),
         original_content: "old content".to_string(),
@@ -23,7 +23,7 @@ fn test_transformation_types() {
         description: "Test change".to_string(),
         confidence: 0.85,
     };
-    
+
     assert_eq!(change.confidence, 0.85);
 }
 
@@ -33,18 +33,18 @@ fn test_risk_levels() {
     let low = RiskLevel::Low;
     let medium = RiskLevel::Medium;
     let high = RiskLevel::High;
-    
+
     // Just ensure they can be created and matched
     match low {
         RiskLevel::Low => assert!(true),
         _ => assert!(false),
     }
-    
+
     match medium {
         RiskLevel::Medium => assert!(true),
         _ => assert!(false),
     }
-    
+
     match high {
         RiskLevel::High => assert!(true),
         _ => assert!(false),

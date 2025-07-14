@@ -1006,7 +1006,7 @@ impl ExpertProfileManager {
                         return false;
                     }
                 }
-                
+
                 if let Some(scope) = &filter.scope {
                     if !matches!(
                         (&template.scope, scope.as_str()),
@@ -1017,7 +1017,7 @@ impl ExpertProfileManager {
                         return false;
                     }
                 }
-                
+
                 if let Some(expert_level) = &filter.expert_level {
                     if !matches!(
                         (&template.expert_level, expert_level.as_str()),
@@ -1029,7 +1029,7 @@ impl ExpertProfileManager {
                         return false;
                     }
                 }
-                
+
                 if let Some(use_cases) = &filter.use_cases {
                     if !use_cases.iter().any(|filter_use_case| {
                         template.use_cases.iter().any(|template_use_case| {
@@ -1039,13 +1039,13 @@ impl ExpertProfileManager {
                         return false;
                     }
                 }
-                
+
                 if let Some(tags) = &filter.tags {
                     if !tags.iter().any(|tag| template.tags.contains(tag)) {
                         return false;
                     }
                 }
-                
+
                 true
             })
             .collect()
@@ -1116,7 +1116,7 @@ impl ExpertProfileManager {
                         _ => {}
                     }
                 }
-                
+
                 if let Some(speed) = &prefs.speed {
                     match speed.as_str() {
                         "fast" => {
@@ -1132,7 +1132,7 @@ impl ExpertProfileManager {
                         _ => {}
                     }
                 }
-                
+
                 if let Some(expert_level) = &prefs.expert_level {
                     if matches!(
                         (&template.expert_level, expert_level.as_str()),
@@ -1154,7 +1154,7 @@ impl ExpertProfileManager {
             .iter()
             .filter(|template| scores.get(&template.id).copied().unwrap_or(0.0) > 0.0)
             .collect();
-        
+
         result.sort_by(|a, b| {
             let score_a = scores.get(&a.id).copied().unwrap_or(0.0);
             let score_b = scores.get(&b.id).copied().unwrap_or(0.0);
@@ -1167,7 +1167,7 @@ impl ExpertProfileManager {
     /// Get template recommendations for a user level
     pub fn get_recommendations(&self, user_level: Option<&ExpertLevel>) -> Vec<&ExpertTemplate> {
         let level = user_level.unwrap_or(&ExpertLevel::Intermediate);
-        
+
         match level {
             ExpertLevel::Beginner => {
                 vec![

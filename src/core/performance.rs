@@ -1,14 +1,14 @@
 //! Core Performance Optimization Utilities
-//! 
+//!
 //! This module provides the foundational performance optimization infrastructure
 //! for achieving revolutionary performance targets in HiveTechs Consensus.
 
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
 /// Performance metrics tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,18 +97,18 @@ impl PerformanceProfiler {
     /// Record performance metrics
     pub async fn record_metrics(&self, metrics: PerformanceMetrics) -> Result<()> {
         let mut history = self.metrics_history.write().await;
-        
+
         // Validate against targets
         self.validate_targets(&metrics)?;
-        
+
         history.push(metrics.clone());
-        
+
         // Keep only last 1000 metrics for memory efficiency
         let len = history.len();
         if len > 1000 {
             history.drain(0..len - 1000);
         }
-        
+
         info!("Performance metrics recorded: {:?}", metrics);
         Ok(())
     }
@@ -116,79 +116,85 @@ impl PerformanceProfiler {
     /// Validate metrics against performance targets
     fn validate_targets(&self, metrics: &PerformanceMetrics) -> Result<()> {
         let mut warnings = Vec::new();
-        
+
         if metrics.startup_time > self.targets.startup_time {
             warnings.push(format!(
                 "Startup time exceeded target: {:?} > {:?}",
                 metrics.startup_time, self.targets.startup_time
             ));
         }
-        
+
         if metrics.memory_usage > self.targets.memory_usage {
             warnings.push(format!(
                 "Memory usage exceeded target: {} > {} bytes",
                 metrics.memory_usage, self.targets.memory_usage
             ));
         }
-        
+
         if metrics.consensus_latency > self.targets.consensus_latency {
             warnings.push(format!(
                 "Consensus latency exceeded target: {:?} > {:?}",
                 metrics.consensus_latency, self.targets.consensus_latency
             ));
         }
-        
+
         if metrics.file_parse_time > self.targets.file_parse_time {
             warnings.push(format!(
                 "File parse time exceeded target: {:?} > {:?}",
                 metrics.file_parse_time, self.targets.file_parse_time
             ));
         }
-        
+
         if metrics.database_latency > self.targets.database_latency {
             warnings.push(format!(
                 "Database latency exceeded target: {:?} > {:?}",
                 metrics.database_latency, self.targets.database_latency
             ));
         }
-        
+
         for warning in warnings {
             warn!("{}", warning);
         }
-        
+
         Ok(())
     }
 
     /// Get performance statistics
     pub async fn get_statistics(&self) -> Result<PerformanceStatistics> {
         let history = self.metrics_history.read().await;
-        
+
         if history.is_empty() {
             return Ok(PerformanceStatistics::default());
         }
-        
+
         let len = history.len() as f64;
-        
-        let avg_startup_time = history.iter()
+
+        let avg_startup_time = history
+            .iter()
             .map(|m| m.startup_time.as_nanos() as f64)
-            .sum::<f64>() / len;
-            
-        let avg_memory_usage = history.iter()
-            .map(|m| m.memory_usage as f64)
-            .sum::<f64>() / len;
-            
-        let avg_consensus_latency = history.iter()
+            .sum::<f64>()
+            / len;
+
+        let avg_memory_usage = history.iter().map(|m| m.memory_usage as f64).sum::<f64>() / len;
+
+        let avg_consensus_latency = history
+            .iter()
             .map(|m| m.consensus_latency.as_nanos() as f64)
-            .sum::<f64>() / len;
-            
-        let avg_file_parse_time = history.iter()
+            .sum::<f64>()
+            / len;
+
+        let avg_file_parse_time = history
+            .iter()
             .map(|m| m.file_parse_time.as_nanos() as f64)
-            .sum::<f64>() / len;
-            
-        let avg_database_latency = history.iter()
+            .sum::<f64>()
+            / len;
+
+        let avg_database_latency = history
+            .iter()
             .map(|m| m.database_latency.as_nanos() as f64)
-            .sum::<f64>() / len;
-        
+            .sum::<f64>()
+            / len;
+
         Ok(PerformanceStatistics {
             sample_count: history.len(),
             avg_startup_time: Duration::from_nanos(avg_startup_time as u64),
@@ -205,17 +211,18 @@ impl PerformanceProfiler {
         if history.is_empty() {
             return 0.0;
         }
-        
-        let met_count = history.iter()
+
+        let met_count = history
+            .iter()
             .filter(|m| {
-                m.startup_time <= self.targets.startup_time &&
-                m.memory_usage <= self.targets.memory_usage &&
-                m.consensus_latency <= self.targets.consensus_latency &&
-                m.file_parse_time <= self.targets.file_parse_time &&
-                m.database_latency <= self.targets.database_latency
+                m.startup_time <= self.targets.startup_time
+                    && m.memory_usage <= self.targets.memory_usage
+                    && m.consensus_latency <= self.targets.consensus_latency
+                    && m.file_parse_time <= self.targets.file_parse_time
+                    && m.database_latency <= self.targets.database_latency
             })
             .count();
-            
+
         (met_count as f64 / history.len() as f64) * 100.0
     }
 
@@ -287,7 +294,7 @@ impl<T: Clone> HotPathCache<T> {
     pub fn new(capacity: usize) -> Self {
         Self {
             data: Arc::new(RwLock::new(lru::LruCache::new(
-                std::num::NonZeroUsize::new(capacity).unwrap()
+                std::num::NonZeroUsize::new(capacity).unwrap(),
             ))),
             capacity,
         }
@@ -328,18 +335,18 @@ pub mod simd {
 
         let len = a.len();
         let chunks = len / 32;
-        
+
         for i in 0..chunks {
             let offset = i * 32;
             let a_chunk = _mm256_loadu_si256(a.as_ptr().add(offset) as *const __m256i);
             let b_chunk = _mm256_loadu_si256(b.as_ptr().add(offset) as *const __m256i);
             let cmp = _mm256_cmpeq_epi8(a_chunk, b_chunk);
-            
+
             if _mm256_movemask_epi8(cmp) != -1 {
                 return false;
             }
         }
-        
+
         // Handle remaining bytes
         let remaining = len % 32;
         if remaining > 0 {
@@ -350,7 +357,7 @@ pub mod simd {
                 }
             }
         }
-        
+
         true
     }
 
@@ -362,7 +369,7 @@ pub mod simd {
 }
 
 /// Global performance profiler instance
-static PROFILER: once_cell::sync::Lazy<PerformanceProfiler> = 
+static PROFILER: once_cell::sync::Lazy<PerformanceProfiler> =
     once_cell::sync::Lazy::new(|| PerformanceProfiler::new());
 
 /// Get global performance profiler
@@ -389,12 +396,12 @@ mod tests {
     #[test]
     async fn test_memory_pool() {
         let pool = MemoryPool::new(1024, 10);
-        
+
         let buffer1 = pool.get_buffer().await;
         assert_eq!(buffer1.capacity(), 1024);
-        
+
         pool.return_buffer(buffer1).await;
-        
+
         let buffer2 = pool.get_buffer().await;
         assert_eq!(buffer2.len(), 0);
     }
@@ -402,7 +409,7 @@ mod tests {
     #[test]
     async fn test_performance_profiler() {
         let profiler = PerformanceProfiler::new();
-        
+
         let metrics = PerformanceMetrics {
             startup_time: Duration::from_millis(20),
             memory_usage: 15 * 1024 * 1024,
@@ -411,9 +418,9 @@ mod tests {
             database_latency: Duration::from_nanos(500_000),
             timestamp: std::time::SystemTime::now(),
         };
-        
+
         profiler.record_metrics(metrics).await.unwrap();
-        
+
         let stats = profiler.get_statistics().await.unwrap();
         assert_eq!(stats.sample_count, 1);
         assert!(stats.targets_met > 99.0);
@@ -422,12 +429,12 @@ mod tests {
     #[test]
     async fn test_hot_path_cache() {
         let cache = HotPathCache::new(100);
-        
+
         cache.put("key1".to_string(), "value1".to_string()).await;
-        
+
         let value = cache.get("key1").await;
         assert_eq!(value, Some("value1".to_string()));
-        
+
         assert!(cache.contains("key1").await);
         assert_eq!(cache.len().await, 1);
     }
@@ -437,7 +444,7 @@ mod tests {
         let a = b"hello world test string";
         let b = b"hello world test string";
         let c = b"hello world different";
-        
+
         assert!(simd::fast_string_compare(a, b));
         assert!(!simd::fast_string_compare(a, c));
     }

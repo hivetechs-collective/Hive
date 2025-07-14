@@ -1,5 +1,5 @@
 //! TypeScript Installation Analyzer
-//! 
+//!
 //! Analyzes existing TypeScript Hive AI installations to understand
 //! configuration, database structure, and usage patterns for migration.
 
@@ -35,10 +35,10 @@ pub struct ConfigFile {
 /// Configuration file types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ConfigFileType {
-    MainConfig,     // ~/.hive/config.json
-    UserSettings,   // User-specific settings
-    ModelProfiles,  // Custom model configurations
-    ApiKeys,        // API key storage
+    MainConfig,    // ~/.hive/config.json
+    UserSettings,  // User-specific settings
+    ModelProfiles, // Custom model configurations
+    ApiKeys,       // API key storage
     Unknown,
 }
 
@@ -140,35 +140,37 @@ pub struct CompatibilityAssessment {
 /// Migration complexity levels
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MigrationComplexity {
-    Simple,     // Direct migration possible
-    Moderate,   // Some manual intervention needed
-    Complex,    // Significant customization required
-    Expert,     // Requires expert knowledge
+    Simple,   // Direct migration possible
+    Moderate, // Some manual intervention needed
+    Complex,  // Significant customization required
+    Expert,   // Requires expert knowledge
 }
 
 impl TypeScriptAnalysis {
     /// Check if analysis found critical issues
     pub fn has_critical_issues(&self) -> bool {
-        self.issues.iter().any(|issue| {
-            matches!(issue.severity, IssueSeverity::Critical) && issue.blocking
-        })
+        self.issues
+            .iter()
+            .any(|issue| matches!(issue.severity, IssueSeverity::Critical) && issue.blocking)
     }
 
     /// Get migration readiness score
     pub fn migration_readiness(&self) -> f32 {
         let mut score = self.compatibility.overall_score;
-        
+
         // Penalize for critical issues
-        let critical_issues = self.issues.iter()
+        let critical_issues = self
+            .issues
+            .iter()
             .filter(|i| matches!(i.severity, IssueSeverity::Critical))
             .count() as f32;
         score -= critical_issues * 0.2;
-        
+
         // Penalize for database integrity issues
         if !self.database_info.integrity_check {
             score -= 0.3;
         }
-        
+
         score.max(0.0).min(1.0)
     }
 
@@ -186,13 +188,15 @@ impl TypeScriptAnalysis {
 }
 
 /// Analyze TypeScript installation at given path
-pub async fn analyze_typescript_installation(path: &PathBuf) -> Result<TypeScriptAnalysis, HiveError> {
+pub async fn analyze_typescript_installation(
+    path: &PathBuf,
+) -> Result<TypeScriptAnalysis, HiveError> {
     log::info!("Analyzing TypeScript installation at: {}", path.display());
-    
+
     // Check if path exists
     if !path.exists() {
-        return Err(HiveError::Migration { 
-            message: format!("TypeScript installation not found at: {}", path.display())
+        return Err(HiveError::Migration {
+            message: format!("TypeScript installation not found at: {}", path.display()),
         });
     }
 
@@ -237,7 +241,7 @@ pub async fn analyze_typescript_installation(path: &PathBuf) -> Result<TypeScrip
 
     // Find and analyze configuration files
     analysis.config_files = find_config_files(path).await?;
-    
+
     // Analyze database
     if let Ok(db_info) = analyze_database(path).await {
         analysis.database_info = db_info;
@@ -264,26 +268,29 @@ pub async fn analyze_typescript_installation(path: &PathBuf) -> Result<TypeScrip
 /// Analyze package.json to determine version
 async fn analyze_package_version(path: &PathBuf) -> Result<String, HiveError> {
     let package_path = path.join("package.json");
-    
+
     if !package_path.exists() {
         // Try node_modules
         let node_modules_path = path.join("node_modules/@hivetechs/hive-ai/package.json");
         if node_modules_path.exists() {
-            return Box::pin(analyze_package_version(&path.join("node_modules/@hivetechs/hive-ai"))).await;
+            return Box::pin(analyze_package_version(
+                &path.join("node_modules/@hivetechs/hive-ai"),
+            ))
+            .await;
         }
-        return Err(HiveError::Migration { 
-            message: "package.json not found".to_string()
+        return Err(HiveError::Migration {
+            message: "package.json not found".to_string(),
         });
     }
 
     let content = fs::read_to_string(&package_path).await?;
     let package: serde_json::Value = serde_json::from_str(&content)?;
-    
+
     if let Some(version) = package.get("version").and_then(|v| v.as_str()) {
         Ok(version.to_string())
     } else {
-        Err(HiveError::Migration { 
-            message: "Version not found in package.json".to_string()
+        Err(HiveError::Migration {
+            message: "Version not found in package.json".to_string(),
         })
     }
 }
@@ -291,11 +298,14 @@ async fn analyze_package_version(path: &PathBuf) -> Result<String, HiveError> {
 /// Find all configuration files
 async fn find_config_files(path: &PathBuf) -> Result<Vec<ConfigFile>, HiveError> {
     let mut config_files = Vec::new();
-    
+
     // Standard locations to check
     let locations = vec![
         (path.join(".hive"), ConfigFileType::MainConfig),
-        (dirs::home_dir().unwrap_or_default().join(".hive"), ConfigFileType::MainConfig),
+        (
+            dirs::home_dir().unwrap_or_default().join(".hive"),
+            ConfigFileType::MainConfig,
+        ),
         (path.join("config"), ConfigFileType::UserSettings),
         (path.join("profiles"), ConfigFileType::ModelProfiles),
     ];
@@ -312,13 +322,16 @@ async fn find_config_files(path: &PathBuf) -> Result<Vec<ConfigFile>, HiveError>
 }
 
 /// Scan directory for configuration files
-async fn scan_directory_for_configs(dir: &PathBuf, file_type: ConfigFileType) -> Result<Vec<ConfigFile>, HiveError> {
+async fn scan_directory_for_configs(
+    dir: &PathBuf,
+    file_type: ConfigFileType,
+) -> Result<Vec<ConfigFile>, HiveError> {
     let mut configs = Vec::new();
     let mut entries = fs::read_dir(dir).await?;
 
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
-        
+
         if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext == "json" || ext == "toml" || ext == "yaml" {
@@ -347,7 +360,7 @@ async fn validate_config_file(path: &PathBuf) -> bool {
         if serde_json::from_str::<serde_json::Value>(&content).is_ok() {
             return true;
         }
-        
+
         // Try TOML if JSON fails
         if path.extension().map_or(false, |ext| ext == "toml") {
             return toml::from_str::<toml::Value>(&content).is_ok();
@@ -357,15 +370,17 @@ async fn validate_config_file(path: &PathBuf) -> bool {
 }
 
 /// Load configuration settings
-async fn load_config_settings(path: &PathBuf) -> Result<HashMap<String, serde_json::Value>, HiveError> {
+async fn load_config_settings(
+    path: &PathBuf,
+) -> Result<HashMap<String, serde_json::Value>, HiveError> {
     let content = fs::read_to_string(path).await?;
-    
+
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
         if let Some(obj) = json.as_object() {
             return Ok(obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect());
         }
     }
-    
+
     Ok(HashMap::new())
 }
 
@@ -374,7 +389,9 @@ async fn analyze_database(path: &PathBuf) -> Result<DatabaseInfo, HiveError> {
     // Look for SQLite database files
     let potential_db_paths = vec![
         path.join(".hive/hive-ai.db"),
-        dirs::home_dir().unwrap_or_default().join(".hive/hive-ai.db"),
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".hive/hive-ai.db"),
         path.join("storage/hive-ai.db"),
     ];
 
@@ -384,15 +401,15 @@ async fn analyze_database(path: &PathBuf) -> Result<DatabaseInfo, HiveError> {
         }
     }
 
-    Err(HiveError::Migration { 
-        message: "No database found".to_string()
+    Err(HiveError::Migration {
+        message: "No database found".to_string(),
     })
 }
 
 /// Analyze SQLite database
 async fn analyze_sqlite_database(db_path: &PathBuf) -> Result<DatabaseInfo, HiveError> {
     let metadata = fs::metadata(db_path).await?;
-    
+
     // Note: In a real implementation, we would open the SQLite database
     // and query for actual statistics. For now, we provide a placeholder.
     Ok(DatabaseInfo {
@@ -425,25 +442,29 @@ async fn analyze_usage_stats(db_info: &DatabaseInfo) -> Result<UsageStats, HiveE
 }
 
 /// Find custom consensus profiles
-async fn find_custom_profiles(config_files: &[ConfigFile]) -> Result<Vec<ConsensusProfile>, HiveError> {
+async fn find_custom_profiles(
+    config_files: &[ConfigFile],
+) -> Result<Vec<ConsensusProfile>, HiveError> {
     let mut profiles = Vec::new();
-    
+
     for config_file in config_files {
         if matches!(config_file.file_type, ConfigFileType::ModelProfiles) {
             // Parse profile files to extract custom profiles
             // This would be implemented based on the actual file format
         }
     }
-    
+
     Ok(profiles)
 }
 
 /// Assess migration compatibility
-async fn assess_compatibility(analysis: &TypeScriptAnalysis) -> Result<CompatibilityAssessment, HiveError> {
+async fn assess_compatibility(
+    analysis: &TypeScriptAnalysis,
+) -> Result<CompatibilityAssessment, HiveError> {
     let mut config_compat = 1.0;
     let mut db_compat = 1.0;
     let mut feature_compat = 1.0;
-    
+
     // Assess configuration compatibility
     for config in &analysis.config_files {
         if !config.valid {
@@ -451,12 +472,12 @@ async fn assess_compatibility(analysis: &TypeScriptAnalysis) -> Result<Compatibi
         }
     }
     config_compat = f64::max(config_compat, 0.0);
-    
+
     // Assess database compatibility
     if !analysis.database_info.integrity_check {
         db_compat -= 0.5;
     }
-    
+
     // Determine migration complexity
     let complexity = if config_compat > 0.8 && db_compat > 0.8 && feature_compat > 0.8 {
         MigrationComplexity::Simple
@@ -469,7 +490,7 @@ async fn assess_compatibility(analysis: &TypeScriptAnalysis) -> Result<Compatibi
     };
 
     let overall = (config_compat + db_compat + feature_compat) / 3.0;
-    
+
     Ok(CompatibilityAssessment {
         overall_score: overall as f32,
         config_compatibility: config_compat as f32,
@@ -478,7 +499,9 @@ async fn assess_compatibility(analysis: &TypeScriptAnalysis) -> Result<Compatibi
         migration_complexity: complexity.clone(),
         recommended_approach: match complexity {
             MigrationComplexity::Simple => "Direct automated migration".to_string(),
-            MigrationComplexity::Moderate => "Assisted migration with manual verification".to_string(),
+            MigrationComplexity::Moderate => {
+                "Assisted migration with manual verification".to_string()
+            }
             MigrationComplexity::Complex => "Staged migration with careful testing".to_string(),
             MigrationComplexity::Expert => "Expert consultation recommended".to_string(),
         },
@@ -488,7 +511,7 @@ async fn assess_compatibility(analysis: &TypeScriptAnalysis) -> Result<Compatibi
 /// Find issues that might affect migration
 async fn find_issues(analysis: &TypeScriptAnalysis) -> Result<Vec<AnalysisIssue>, HiveError> {
     let mut issues = Vec::new();
-    
+
     // Check for version compatibility
     if let Some(version) = &analysis.version {
         if version.starts_with('0') {
@@ -501,7 +524,7 @@ async fn find_issues(analysis: &TypeScriptAnalysis) -> Result<Vec<AnalysisIssue>
             });
         }
     }
-    
+
     // Check database integrity
     if !analysis.database_info.integrity_check {
         issues.push(AnalysisIssue {
@@ -512,7 +535,7 @@ async fn find_issues(analysis: &TypeScriptAnalysis) -> Result<Vec<AnalysisIssue>
             blocking: true,
         });
     }
-    
+
     // Check for invalid configuration files
     for config in &analysis.config_files {
         if !config.valid {
@@ -525,7 +548,7 @@ async fn find_issues(analysis: &TypeScriptAnalysis) -> Result<Vec<AnalysisIssue>
             });
         }
     }
-    
+
     // Check permissions
     if !analysis.installation_path.exists() {
         issues.push(AnalysisIssue {
@@ -536,7 +559,7 @@ async fn find_issues(analysis: &TypeScriptAnalysis) -> Result<Vec<AnalysisIssue>
             blocking: true,
         });
     }
-    
+
     Ok(issues)
 }
 

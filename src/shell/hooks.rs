@@ -2,12 +2,12 @@
 // Shell hooks, aliases, and convenient functions
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
-use std::fs::{OpenOptions, read_to_string};
+use std::fs::{read_to_string, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
 
+use super::{utils, ShellType};
 use crate::core::config::Config;
-use super::{ShellType, utils};
 
 /// Shell hooks manager for aliases and convenient functions
 pub struct ShellHooks {
@@ -23,7 +23,7 @@ impl ShellHooks {
     /// Install hooks and aliases for a specific shell
     pub fn install(&self, shell: ShellType) -> Result<()> {
         let shell_config = self.get_shell_config_file(shell)?;
-        
+
         // Backup config file before modification
         if shell_config.exists() {
             utils::backup_file(&shell_config)?;
@@ -37,15 +37,19 @@ impl ShellHooks {
 
         // Add hooks to shell config
         self.add_hooks_to_config(shell, &shell_config)?;
-        
-        tracing::info!("Installed hooks and aliases for {} in {}", shell.as_str(), shell_config.display());
+
+        tracing::info!(
+            "Installed hooks and aliases for {} in {}",
+            shell.as_str(),
+            shell_config.display()
+        );
         Ok(())
     }
 
     /// Check if hooks are installed for a shell
     pub fn are_installed(&self, shell: ShellType) -> Result<bool> {
         let shell_config = self.get_shell_config_file(shell)?;
-        
+
         if !shell_config.exists() {
             return Ok(false);
         }
@@ -57,13 +61,13 @@ impl ShellHooks {
     /// Check if aliases are configured for a shell
     pub fn are_aliases_configured(&self, shell: ShellType) -> Result<bool> {
         let shell_config = self.get_shell_config_file(shell)?;
-        
+
         if !shell_config.exists() {
             return Ok(false);
         }
 
         let content = read_to_string(&shell_config)?;
-        
+
         // Check for common aliases
         let alias_patterns = match shell {
             ShellType::PowerShell => vec!["Set-Alias -Name ha", "Set-Alias -Name hq"],
@@ -81,9 +85,8 @@ impl ShellHooks {
 
     /// Get shell configuration file path
     fn get_shell_config_file(&self, shell: ShellType) -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .context("HOME environment variable not found")?;
-        
+        let home = std::env::var("HOME").context("HOME environment variable not found")?;
+
         let config_file = match shell {
             ShellType::Bash => {
                 let bashrc = PathBuf::from(&home).join(".bashrc");
@@ -101,9 +104,15 @@ impl ShellHooks {
             }
             ShellType::PowerShell => {
                 if cfg!(windows) {
-                    PathBuf::from(&home).join("Documents").join("PowerShell").join("Microsoft.PowerShell_profile.ps1")
+                    PathBuf::from(&home)
+                        .join("Documents")
+                        .join("PowerShell")
+                        .join("Microsoft.PowerShell_profile.ps1")
                 } else {
-                    PathBuf::from(&home).join(".config").join("powershell").join("Microsoft.PowerShell_profile.ps1")
+                    PathBuf::from(&home)
+                        .join(".config")
+                        .join("powershell")
+                        .join("Microsoft.PowerShell_profile.ps1")
                 }
             }
             ShellType::Elvish => PathBuf::from(&home).join(".elvish").join("rc.elv"),
@@ -129,7 +138,7 @@ impl ShellHooks {
 
         let hooks_config = self.generate_hooks_config(shell);
         writeln!(file, "\n{}", hooks_config)?;
-        
+
         Ok(())
     }
 
@@ -207,18 +216,18 @@ hive_memory_find() {
 hive_project_status() {
     echo "🔍 Hive AI Project Status"
     echo "========================"
-    
+
     # Check trust status
     echo "Trust Status:"
     hive trust check . 2>/dev/null || echo "  Not trusted"
-    
+
     # Check if we're in a git repo
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         echo "Git Repository: ✓"
     else
         echo "Git Repository: ✗"
     fi
-    
+
     # Detect project type
     if [[ -f "Cargo.toml" ]]; then
         echo "Project Type: Rust"
@@ -231,7 +240,7 @@ hive_project_status() {
     else
         echo "Project Type: Unknown"
     fi
-    
+
     echo ""
     echo "💡 Suggested commands:"
     echo "  ha .          # Quick analyze"
@@ -241,39 +250,39 @@ hive_project_status() {
 
 hive_context_suggest() {
     local context=""
-    
+
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         context="git"
     fi
-    
+
     if [[ -f "Cargo.toml" ]]; then
         context="$context rust"
         echo "🦀 Rust project detected"
         echo "💡 Try: hive analyze . --focus=performance"
         echo "💡 Ask: 'How can I optimize this Rust code?'"
     fi
-    
+
     if [[ -f "package.json" ]]; then
         context="$context javascript"
         echo "📦 JavaScript/Node.js project detected"
         echo "💡 Try: hive analyze . --focus=security"
         echo "💡 Ask: 'Review this code for security vulnerabilities'"
     fi
-    
+
     if [[ -f "requirements.txt" || -f "pyproject.toml" ]]; then
         context="$context python"
         echo "🐍 Python project detected"
         echo "💡 Try: hive analyze . --include-tests"
         echo "💡 Ask: 'Suggest Python best practices'"
     fi
-    
+
     if [[ -f "go.mod" ]]; then
         context="$context go"
         echo "🐹 Go project detected"
         echo "💡 Try: hive analyze . --focus=efficiency"
         echo "💡 Ask: 'How can I improve Go performance?'"
     fi
-    
+
     if [[ -z "$context" || "$context" == "git" ]]; then
         echo "📁 Generic project detected"
         echo "💡 Try: hive analyze . --depth=standard"
@@ -312,7 +321,8 @@ if [[ -z "$HIVE_HOOKS_WELCOME_SHOWN" ]]; then
     echo "💡 New aliases: ha, hq, hp, hs, hm, ht, hc, hst, htui"
     echo "🚀 New functions: hive_quick_ask, hive_project_status, hive_context_suggest"
     export HIVE_HOOKS_WELCOME_SHOWN="true"
-fi"#.to_string()
+fi"#
+        .to_string()
     }
 
     /// Generate Zsh hooks and aliases
@@ -378,11 +388,11 @@ hive_memory_find() {
 
 hive_smart_cd() {
     cd "$@"
-    
+
     # Auto-detect context and suggest commands
     if command -v hive >/dev/null 2>&1; then
         local suggestions=""
-        
+
         if [[ -f "Cargo.toml" ]]; then
             suggestions="🦀 Rust project | Try: ha . --focus=performance"
         elif [[ -f "package.json" ]]; then
@@ -394,7 +404,7 @@ hive_smart_cd() {
         elif [[ -d ".git" ]]; then
             suggestions="📁 Git repository | Try: ha . --depth=standard"
         fi
-        
+
         if [[ -n "$suggestions" ]]; then
             echo "$suggestions"
         fi
@@ -409,13 +419,13 @@ _hive_detect_context() {
     # Only show suggestions 10% of the time to avoid spam
     if (( RANDOM % 10 == 0 )) && command -v hive >/dev/null 2>&1; then
         local context=""
-        
+
         [[ -f "Cargo.toml" ]] && context="rust"
         [[ -f "package.json" ]] && context="javascript"
         [[ -f "requirements.txt" || -f "pyproject.toml" ]] && context="python"
         [[ -f "go.mod" ]] && context="go"
         [[ -d ".git" ]] && context="${context:+$context }git"
-        
+
         if [[ -n "$context" ]]; then
             echo "💡 Context: $context | Quick commands: ha, hq, hp"
         fi
@@ -427,7 +437,7 @@ add-zsh-hook chpwd _hive_detect_context
 # Smart command suggestions
 _hive_command_not_found() {
     local command="$1"
-    
+
     case "$command" in
         analyze|analyse)
             echo "Command '$command' not found. Did you mean 'hive analyze' or 'ha'?"
@@ -461,7 +471,8 @@ if [[ -z "$HIVE_HOOKS_WELCOME_SHOWN" ]]; then
     echo "💡 Aliases: ha, hq, hp, hs, hm, ht + smart cd with context detection"
     echo "🚀 Functions: hive_quick_ask, hive_smart_cd, auto context suggestions"
     export HIVE_HOOKS_WELCOME_SHOWN="true"
-fi"#.to_string()
+fi"#
+        .to_string()
     }
 
     /// Generate Fish hooks and aliases
@@ -531,7 +542,7 @@ end
 function hive_project_status -d "📊 Show comprehensive project status"
     echo "🔍 Hive AI Project Status"
     echo "========================"
-    
+
     # Check trust status
     echo "Trust Status:"
     if hive trust check . 2>/dev/null
@@ -539,14 +550,14 @@ function hive_project_status -d "📊 Show comprehensive project status"
     else
         echo "  ❌ Not trusted"
     end
-    
+
     # Check if we're in a git repo
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1
         echo "Git Repository: ✅"
     else
         echo "Git Repository: ❌"
     end
-    
+
     # Detect project type
     if test -f Cargo.toml
         echo "Project Type: 🦀 Rust"
@@ -559,7 +570,7 @@ function hive_project_status -d "📊 Show comprehensive project status"
     else
         echo "Project Type: ❓ Unknown"
     end
-    
+
     echo ""
     echo "💡 Suggested commands:"
     echo "  ha .          # Quick analyze"
@@ -607,7 +618,7 @@ end
 # Smart command suggestions for typos
 function __hive_command_not_found --on-event fish_command_not_found
     set -l cmd $argv[1]
-    
+
     switch $cmd
         case 'analyse' 'analyze'
             echo "💡 Did you mean 'hive analyze' or 'ha'?"
@@ -630,7 +641,8 @@ if not set -q HIVE_HOOKS_WELCOME_SHOWN
     echo "🚀 Functions: hive_quick_ask, hive_project_status, hive_context_suggest"
     echo "🐟 Enhanced with Fish events and abbreviations"
     set -gx HIVE_HOOKS_WELCOME_SHOWN "true"
-end"#.to_string()
+end"#
+            .to_string()
     }
 
     /// Generate PowerShell hooks and aliases
@@ -654,13 +666,13 @@ function Invoke-HiveQuickAsk {
     <#
     .SYNOPSIS
     Ask Hive AI a quick question with speed profile
-    
+
     .DESCRIPTION
     Wrapper function for hive ask with speed profile and streaming enabled
-    
+
     .PARAMETER Question
     The question to ask Hive AI
-    
+
     .EXAMPLE
     Invoke-HiveQuickAsk "How can I optimize this PowerShell script?"
     #>
@@ -669,7 +681,7 @@ function Invoke-HiveQuickAsk {
         [Parameter(Mandatory = $true, Position = 0, ValueFromRemainingArguments = $true)]
         [string[]]$Question
     )
-    
+
     Write-Host "🤖 Quick AI analysis..." -ForegroundColor Cyan
     $questionString = $Question -join ' '
     hive ask $questionString --profile=speed --stream
@@ -679,13 +691,13 @@ function Invoke-HiveAnalyzeCurrent {
     <#
     .SYNOPSIS
     Analyze the current directory with Hive AI
-    
+
     .DESCRIPTION
     Analyze the current directory with specified depth and generate recommendations
-    
+
     .PARAMETER Depth
     Analysis depth level (quick, standard, comprehensive)
-    
+
     .EXAMPLE
     Invoke-HiveAnalyzeCurrent -Depth standard
     #>
@@ -695,7 +707,7 @@ function Invoke-HiveAnalyzeCurrent {
         [ValidateSet('quick', 'standard', 'comprehensive')]
         [string]$Depth = 'standard'
     )
-    
+
     Write-Host "🔍 Analyzing current directory with depth: $Depth" -ForegroundColor Yellow
     hive analyze . --depth=$Depth --recommendations --format=text
 }
@@ -704,13 +716,13 @@ function Invoke-HivePlanFeature {
     <#
     .SYNOPSIS
     Plan a new feature with Hive AI
-    
+
     .DESCRIPTION
     Create an interactive plan for a new feature using Hive AI's planning mode
-    
+
     .PARAMETER Description
     Description of the feature to plan
-    
+
     .EXAMPLE
     Invoke-HivePlanFeature "Add user authentication system"
     #>
@@ -719,7 +731,7 @@ function Invoke-HivePlanFeature {
         [Parameter(Mandatory = $true, Position = 0, ValueFromRemainingArguments = $true)]
         [string[]]$Description
     )
-    
+
     $descriptionString = $Description -join ' '
     Write-Host "📋 Planning feature: $descriptionString" -ForegroundColor Green
     hive plan $descriptionString --template=feature --interactive
@@ -729,16 +741,16 @@ function Search-HiveMemory {
     <#
     .SYNOPSIS
     Search Hive AI memory with formatted output
-    
+
     .DESCRIPTION
     Search conversation history and knowledge base with table formatting
-    
+
     .PARAMETER SearchTerm
     Term to search for in memory
-    
+
     .PARAMETER Limit
     Maximum number of results to return
-    
+
     .EXAMPLE
     Search-HiveMemory "PowerShell optimization" -Limit 5
     #>
@@ -746,11 +758,11 @@ function Search-HiveMemory {
     param(
         [Parameter(Mandatory = $true, Position = 0, ValueFromRemainingArguments = $true)]
         [string[]]$SearchTerm,
-        
+
         [Parameter()]
         [int]$Limit = 10
     )
-    
+
     $searchString = $SearchTerm -join ' '
     Write-Host "🧠 Searching memory for: $searchString" -ForegroundColor Magenta
     hive memory search $searchString --format=table --limit=$Limit
@@ -760,19 +772,19 @@ function Get-HiveProjectStatus {
     <#
     .SYNOPSIS
     Show comprehensive project status with Hive AI context
-    
+
     .DESCRIPTION
     Analyze current directory for project type, trust status, and suggest relevant commands
-    
+
     .EXAMPLE
     Get-HiveProjectStatus
     #>
     [CmdletBinding()]
     param()
-    
+
     Write-Host "🔍 Hive AI Project Status" -ForegroundColor Cyan
     Write-Host "========================" -ForegroundColor Cyan
-    
+
     # Check trust status
     Write-Host "Trust Status:" -ForegroundColor Yellow
     try {
@@ -781,7 +793,7 @@ function Get-HiveProjectStatus {
     } catch {
         Write-Host "  ❌ Not trusted" -ForegroundColor Red
     }
-    
+
     # Check if we're in a git repo
     try {
         git rev-parse --is-inside-work-tree *>$null
@@ -789,7 +801,7 @@ function Get-HiveProjectStatus {
     } catch {
         Write-Host "Git Repository: ❌" -ForegroundColor Red
     }
-    
+
     # Detect project type
     if (Test-Path "Cargo.toml") {
         Write-Host "Project Type: 🦀 Rust" -ForegroundColor Yellow
@@ -804,7 +816,7 @@ function Get-HiveProjectStatus {
     } else {
         Write-Host "Project Type: ❓ Unknown" -ForegroundColor Gray
     }
-    
+
     Write-Host ""
     Write-Host "💡 Suggested commands:" -ForegroundColor Green
     Write-Host "  ha .          # Quick analyze" -ForegroundColor Gray
@@ -816,16 +828,16 @@ function Get-HiveContextSuggestions {
     <#
     .SYNOPSIS
     Get context-aware suggestions for the current directory
-    
+
     .DESCRIPTION
     Analyze the current directory to detect project type and suggest relevant Hive AI commands
-    
+
     .EXAMPLE
     Get-HiveContextSuggestions
     #>
     [CmdletBinding()]
     param()
-    
+
     if (Test-Path "Cargo.toml") {
         Write-Host "🦀 Rust project detected" -ForegroundColor Yellow
         Write-Host "💡 Try: hive analyze . --focus=performance" -ForegroundColor Cyan
@@ -869,7 +881,7 @@ $env:HIVE_POWERSHELL_ENHANCED = "true"
 # PowerShell prompt customization (optional)
 function prompt {
     $originalPrompt = & $function:prompt.OriginalDefinition
-    
+
     # Add Hive context indicator if in a trusted directory
     try {
         hive trust check . *>$null
@@ -965,13 +977,14 @@ if (not (has-env HIVE_HOOKS_WELCOME_SHOWN)) {
     echo "💡 Functions: ha, hq, hp, hs, hm, ht, hc, hst, htui"
     echo "🚀 Enhanced: hive-quick-ask, hive-context-suggest"
     set-env HIVE_HOOKS_WELCOME_SHOWN true
-}"#.to_string()
+}"#
+        .to_string()
     }
 
     /// Remove hooks from shell configuration
     pub fn uninstall(&self, shell: ShellType) -> Result<()> {
         let shell_config = self.get_shell_config_file(shell)?;
-        
+
         if !shell_config.exists() {
             return Ok(());
         }
@@ -981,33 +994,40 @@ if (not (has-env HIVE_HOOKS_WELCOME_SHOWN)) {
 
         let content = read_to_string(&shell_config)?;
         let lines: Vec<&str> = content.lines().collect();
-        
+
         // Remove Hive AI hooks block
         let mut in_hive_block = false;
         let mut filtered_lines = Vec::new();
-        
+
         for line in lines {
             if line.contains("# Hive AI Shell Hooks") {
                 in_hive_block = true;
                 continue;
             }
-            
+
             if in_hive_block {
                 // End of block detection
-                if line.trim().is_empty() && 
-                   filtered_lines.last().map_or(false, |l: &&str| l.trim().is_empty()) {
+                if line.trim().is_empty()
+                    && filtered_lines
+                        .last()
+                        .map_or(false, |l: &&str| l.trim().is_empty())
+                {
                     in_hive_block = false;
                 }
                 continue;
             }
-            
+
             filtered_lines.push(line);
         }
 
         // Write cleaned content back
         std::fs::write(&shell_config, filtered_lines.join("\n"))?;
-        
-        tracing::info!("Removed hooks for {} from {}", shell.as_str(), shell_config.display());
+
+        tracing::info!(
+            "Removed hooks for {} from {}",
+            shell.as_str(),
+            shell_config.display()
+        );
         Ok(())
     }
 }
@@ -1015,24 +1035,24 @@ if (not (has-env HIVE_HOOKS_WELCOME_SHOWN)) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::env;
+    use tempfile::TempDir;
 
     #[test]
     fn test_hooks_generation() {
         let config = Config::default();
         let hooks = ShellHooks::new(config);
-        
+
         let bash_hooks = hooks.generate_bash_hooks();
         assert!(bash_hooks.contains("alias ha='hive analyze'"));
         assert!(bash_hooks.contains("hive_quick_ask()"));
         assert!(bash_hooks.contains("export -f"));
-        
+
         let fish_hooks = hooks.generate_fish_hooks();
         assert!(fish_hooks.contains("abbr -a ha"));
         assert!(fish_hooks.contains("function hive_quick_ask"));
         assert!(fish_hooks.contains("set -gx"));
-        
+
         let ps_hooks = hooks.generate_powershell_hooks();
         assert!(ps_hooks.contains("Set-Alias -Name ha"));
         assert!(ps_hooks.contains("function Invoke-HiveQuickAsk"));
@@ -1044,19 +1064,19 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let original_home = env::var("HOME").ok();
         env::set_var("HOME", temp_dir.path());
-        
+
         let config = Config::default();
         let hooks = ShellHooks::new(config);
-        
+
         let bash_config = hooks.get_shell_config_file(ShellType::Bash).unwrap();
         assert!(bash_config.ends_with(".bash_profile"));
-        
+
         let zsh_config = hooks.get_shell_config_file(ShellType::Zsh).unwrap();
         assert!(zsh_config.ends_with(".zshrc"));
-        
+
         let fish_config = hooks.get_shell_config_file(ShellType::Fish).unwrap();
         assert!(fish_config.ends_with("config.fish"));
-        
+
         // Restore original HOME
         if let Some(home) = original_home {
             env::set_var("HOME", home);
@@ -1069,10 +1089,14 @@ mod tests {
     fn test_hook_detection() {
         let temp_dir = TempDir::new().unwrap();
         let config_file = temp_dir.path().join("test_config");
-        
+
         // Create a config file with Hive hooks
-        std::fs::write(&config_file, "# Hive AI Shell Hooks\nalias ha='hive analyze'").unwrap();
-        
+        std::fs::write(
+            &config_file,
+            "# Hive AI Shell Hooks\nalias ha='hive analyze'",
+        )
+        .unwrap();
+
         let content = std::fs::read_to_string(&config_file).unwrap();
         assert!(content.contains("# Hive AI Shell Hooks"));
         assert!(content.contains("alias ha="));

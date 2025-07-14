@@ -2,11 +2,11 @@
 //!
 //! Provides basic functionality for terminals that don't support advanced TUI
 
+use crate::core::temporal::TemporalContext;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use std::io::{self, Write};
-use crate::core::temporal::TemporalContext;
 use is_terminal::IsTerminal;
+use std::io::{self, Write};
 
 /// Simple CLI interface for fallback mode
 pub struct SimpleCli {
@@ -42,10 +42,10 @@ impl SimpleCli {
     /// Run the simple CLI interface
     pub async fn run(&mut self) -> Result<()> {
         self.show_welcome();
-        
+
         loop {
             self.show_prompt();
-            
+
             match self.read_input().await? {
                 CliResult::Continue => continue,
                 CliResult::Exit => break,
@@ -54,7 +54,7 @@ impl SimpleCli {
                 }
             }
         }
-        
+
         self.show_goodbye();
         Ok(())
     }
@@ -67,9 +67,19 @@ impl SimpleCli {
         println!("░                                      ░");
         println!("░  Simple Mode - Basic Functionality   ░");
         println!("░                                      ░");
-        println!("░  Time: {}              ░", self.temporal.current_time_formatted());
-        println!("░  Dir:  {}                             ░", 
-                 self.current_dir.display().to_string().chars().take(28).collect::<String>());
+        println!(
+            "░  Time: {}              ░",
+            self.temporal.current_time_formatted()
+        );
+        println!(
+            "░  Dir:  {}                             ░",
+            self.current_dir
+                .display()
+                .to_string()
+                .chars()
+                .take(28)
+                .collect::<String>()
+        );
         println!("░                                      ░");
         println!("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░");
         println!();
@@ -95,11 +105,12 @@ impl SimpleCli {
 
     /// Show command prompt
     fn show_prompt(&self) {
-        let dir_name = self.current_dir
+        let dir_name = self
+            .current_dir
             .file_name()
             .unwrap_or_else(|| std::ffi::OsStr::new("/"))
             .to_string_lossy();
-        
+
         print!("🐝 {}> ", dir_name);
         io::stdout().flush().unwrap();
     }
@@ -107,7 +118,7 @@ impl SimpleCli {
     /// Read user input with fallback to basic stdin
     async fn read_input(&mut self) -> Result<CliResult> {
         let mut input = String::new();
-        
+
         // Try to use crossterm events first
         if Self::can_use_crossterm_events() {
             loop {
@@ -145,10 +156,10 @@ impl SimpleCli {
             io::stdin().read_line(&mut input)?;
             input = input.trim().to_string();
         }
-        
+
         self.process_command(input.trim()).await
     }
-    
+
     /// Check if we can use crossterm events
     fn can_use_crossterm_events() -> bool {
         // Try to poll for events to test if it works
@@ -163,15 +174,15 @@ impl SimpleCli {
         if command.is_empty() {
             return Ok(CliResult::Continue);
         }
-        
+
         // Add to history
         self.history.push(command.to_string());
-        
+
         let parts: Vec<&str> = command.split_whitespace().collect();
         if parts.is_empty() {
             return Ok(CliResult::Continue);
         }
-        
+
         match parts[0] {
             "help" => {
                 self.show_help();
@@ -185,9 +196,7 @@ impl SimpleCli {
                 self.show_status();
                 Ok(CliResult::Continue)
             }
-            "analyze" => {
-                self.analyze_directory().await
-            }
+            "analyze" => self.analyze_directory().await,
             "history" => {
                 self.show_history();
                 Ok(CliResult::Continue)
@@ -212,9 +221,7 @@ impl SimpleCli {
                 self.show_time();
                 Ok(CliResult::Continue)
             }
-            "exit" | "quit" => {
-                Ok(CliResult::Exit)
-            }
+            "exit" | "quit" => Ok(CliResult::Exit),
             _ => {
                 println!("Unknown command: {}", parts[0]);
                 println!("Type 'help' for available commands.");
@@ -263,21 +270,21 @@ impl SimpleCli {
             println!("Please provide a question. Example: ask What is Rust?");
             return Ok(CliResult::Continue);
         }
-        
+
         println!();
         println!("🧠 Asking HiveTechs Consensus: {}", question);
         println!();
-        
+
         // Show processing animation
         self.show_processing().await;
-        
+
         // TODO: Integrate with actual consensus engine
         // For now, provide a simulated response
         println!("🐝 Consensus Response:");
         println!();
         self.simulate_consensus_response(question);
         println!();
-        
+
         Ok(CliResult::Continue)
     }
 
@@ -320,15 +327,15 @@ impl SimpleCli {
         println!();
         println!("🔍 Analyzing directory: {}", self.current_dir.display());
         println!();
-        
+
         self.show_processing().await;
-        
+
         // Analyze directory contents
         let entries = std::fs::read_dir(&self.current_dir)?;
         let mut files = Vec::new();
         let mut dirs = Vec::new();
         let mut total_size = 0u64;
-        
+
         for entry in entries {
             if let Ok(entry) = entry {
                 let path = entry.path();
@@ -343,7 +350,7 @@ impl SimpleCli {
                 }
             }
         }
-        
+
         println!("📁 Analysis Results:");
         println!();
         println!("Directory Structure:");
@@ -351,7 +358,7 @@ impl SimpleCli {
         println!("  Files: {}", files.len());
         println!("  Total size: {} bytes", total_size);
         println!();
-        
+
         if !dirs.is_empty() {
             println!("Subdirectories:");
             for dir in &dirs {
@@ -359,7 +366,7 @@ impl SimpleCli {
             }
             println!();
         }
-        
+
         if !files.is_empty() {
             println!("Files (first 10):");
             for (i, file) in files.iter().take(10).enumerate() {
@@ -371,24 +378,27 @@ impl SimpleCli {
             }
             println!();
         }
-        
+
         // Simple project detection
         self.detect_project_type(&files);
-        
+
         Ok(CliResult::Continue)
     }
 
     /// Detect project type based on files
     fn detect_project_type(&self, files: &[String]) {
         let mut project_types = Vec::new();
-        
+
         if files.iter().any(|f| f == "Cargo.toml") {
             project_types.push("Rust Project");
         }
         if files.iter().any(|f| f == "package.json") {
             project_types.push("Node.js Project");
         }
-        if files.iter().any(|f| f == "requirements.txt" || f == "pyproject.toml") {
+        if files
+            .iter()
+            .any(|f| f == "requirements.txt" || f == "pyproject.toml")
+        {
             project_types.push("Python Project");
         }
         if files.iter().any(|f| f == "Makefile") {
@@ -397,7 +407,7 @@ impl SimpleCli {
         if files.iter().any(|f| f == ".git") {
             project_types.push("Git Repository");
         }
-        
+
         if !project_types.is_empty() {
             println!("Detected Project Types:");
             for project_type in project_types {
@@ -431,7 +441,7 @@ impl SimpleCli {
         println!("📃 Command History ({} commands)", self.history.len());
         println!("========================");
         println!();
-        
+
         if self.history.is_empty() {
             println!("No commands in history yet.");
         } else {
@@ -456,7 +466,7 @@ impl SimpleCli {
         } else {
             std::path::PathBuf::from(target)
         };
-        
+
         match std::env::set_current_dir(&new_dir) {
             Ok(()) => {
                 self.current_dir = std::env::current_dir()?;
@@ -466,7 +476,7 @@ impl SimpleCli {
                 println!("Cannot change directory: {}", e);
             }
         }
-        
+
         Ok(CliResult::Continue)
     }
 
@@ -475,12 +485,12 @@ impl SimpleCli {
         println!();
         println!("📁 Contents of: {}", self.current_dir.display());
         println!();
-        
+
         match std::fs::read_dir(&self.current_dir) {
             Ok(entries) => {
                 let mut dirs = Vec::new();
                 let mut files = Vec::new();
-                
+
                 for entry in entries {
                     if let Ok(entry) = entry {
                         let name = entry.file_name().to_string_lossy().to_string();
@@ -491,11 +501,11 @@ impl SimpleCli {
                         }
                     }
                 }
-                
+
                 // Sort and display
                 dirs.sort();
                 files.sort();
-                
+
                 if dirs.is_empty() && files.is_empty() {
                     println!("  (empty directory)");
                 } else {
@@ -518,7 +528,10 @@ impl SimpleCli {
     /// Show current time
     fn show_time(&self) {
         println!();
-        println!("🕰️ Current Time: {}", self.temporal.current_time_formatted());
+        println!(
+            "🕰️ Current Time: {}",
+            self.temporal.current_time_formatted()
+        );
         println!("   Date: {}", self.temporal.current_date_formatted());
         println!();
     }
@@ -527,7 +540,7 @@ impl SimpleCli {
     async fn show_processing(&self) {
         let frames = ["|", "/", "-", "\\"];
         print!("Processing ");
-        
+
         for _ in 0..8 {
             for frame in &frames {
                 print!("\r{}Processing {}", " ".repeat(20), frame);
@@ -535,7 +548,7 @@ impl SimpleCli {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
         }
-        
+
         print!("\rProcessing... Done!\n");
         io::stdout().flush().unwrap();
     }
@@ -549,14 +562,14 @@ impl SimpleCli {
             "The question has been processed through our 4-stage pipeline.",
             "For real functionality, please use the full TUI version.",
         ];
-        
+
         println!("Question: {}", question);
         println!();
-        
+
         for response in responses {
             println!("{}", response);
         }
-        
+
         println!();
         println!("Note: This is a simulated response. The full consensus engine");
         println!("      is available in the advanced TUI mode.");
@@ -573,7 +586,10 @@ impl SimpleCli {
         println!("░                                      ░");
         println!("░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░");
         println!();
-        println!("Session ended at: {}", self.temporal.current_time_formatted());
+        println!(
+            "Session ended at: {}",
+            self.temporal.current_time_formatted()
+        );
         println!("Commands executed: {}", self.history.len());
         println!();
         println!("For the full experience, please upgrade to a TUI-capable terminal.");
@@ -592,7 +608,7 @@ pub async fn run_simple_cli() -> Result<()> {
             return run_basic_text_mode().await;
         }
     };
-    
+
     // Run the CLI with error handling
     match cli.run().await {
         Ok(()) => Ok(()),
@@ -608,26 +624,33 @@ pub async fn run_simple_cli() -> Result<()> {
 async fn run_basic_text_mode() -> Result<()> {
     println!("HiveTechs Consensus - Basic Text Mode");
     println!("=====================================\n");
-    
+
     println!("This is a minimal text-only interface for HiveTechs Consensus.");
     println!("Your terminal doesn't support interactive features.\n");
-    
+
     println!("To use the full interface, please:");
     println!("1. Use a modern terminal (iTerm2, Windows Terminal, etc.)");
     println!("2. Ensure you're running in an interactive shell");
     println!("3. Check that your TERM environment variable is set\n");
-    
+
     println!("Current environment:");
     if let Ok(term) = std::env::var("TERM") {
         println!("  TERM: {}", term);
     } else {
         println!("  TERM: (not set)");
     }
-    
-    println!("  TTY: {}", if std::io::stdout().is_terminal() { "yes" } else { "no" });
-    
+
+    println!(
+        "  TTY: {}",
+        if std::io::stdout().is_terminal() {
+            "yes"
+        } else {
+            "no"
+        }
+    );
+
     println!("\nFor help, visit: https://docs.hivetechs.com/troubleshooting");
-    
+
     Ok(())
 }
 

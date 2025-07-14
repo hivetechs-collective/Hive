@@ -25,46 +25,46 @@ pub async fn show_trust_dialog(path: &Path) -> Result<TrustDecision> {
         // Non-interactive mode - default to deny
         return Ok(TrustDecision::TrustDenied);
     }
-    
+
     // Enable raw mode for keyboard input
     enable_raw_mode().context("Failed to enable raw mode")?;
-    
+
     let result = show_dialog_impl(path).await;
-    
+
     // Always disable raw mode
     let _ = disable_raw_mode();
-    
+
     result
 }
 
 /// Internal implementation of the trust dialog
 async fn show_dialog_impl(path: &Path) -> Result<TrustDecision> {
     let mut stdout = io::stdout();
-    
+
     // Clear screen and hide cursor
     execute!(stdout, Clear(ClearType::All), Hide)?;
-    
+
     // Format path for display (truncate if too long)
     let display_path = format_path_for_display(path);
-    
+
     // Calculate dialog positioning
     let terminal_size = crossterm::terminal::size()?;
     let dialog_width = 58;
     let dialog_height = 20;
     let start_col = (terminal_size.0.saturating_sub(dialog_width)) / 2;
     let start_row = (terminal_size.1.saturating_sub(dialog_height)) / 2;
-    
+
     // Draw the dialog box
     draw_dialog_box(&mut stdout, start_row, start_col, &display_path)?;
-    
+
     // Selection state (0 = Yes, 1 = No)
     let mut selected = 0;
-    
+
     loop {
         // Draw selection indicators
         draw_selection_buttons(&mut stdout, start_row + 16, start_col, selected)?;
         stdout.flush()?;
-        
+
         // Handle keyboard input
         if let Event::Key(key_event) = event::read()? {
             match key_event {
@@ -96,7 +96,7 @@ async fn show_dialog_impl(path: &Path) -> Result<TrustDecision> {
                 } => {
                     // Clear screen and show cursor
                     execute!(stdout, Clear(ClearType::All), Show, MoveTo(0, 0))?;
-                    
+
                     let decision = match selected {
                         0 => {
                             info!("User granted trust for: {}", path.display());
@@ -107,7 +107,7 @@ async fn show_dialog_impl(path: &Path) -> Result<TrustDecision> {
                             TrustDecision::TrustDenied
                         }
                     };
-                    
+
                     return Ok(decision);
                 }
                 KeyEvent {
@@ -156,11 +156,11 @@ async fn show_dialog_impl(path: &Path) -> Result<TrustDecision> {
 fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, display_path: &str) -> Result<()> {
     // Set colors
     execute!(stdout, SetForegroundColor(Color::White), SetBackgroundColor(Color::Black))?;
-    
+
     // Top border
     execute!(stdout, MoveTo(start_col, start_row))?;
     execute!(stdout, Print("┌──────────────────────────────────────────────────────┐"))?;
-    
+
     // Title
     execute!(stdout, MoveTo(start_col, start_row + 1))?;
     execute!(stdout, Print("│"))?;
@@ -168,11 +168,11 @@ fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, disp
     execute!(stdout, Print("     Do you trust the files in this folder?"))?;
     execute!(stdout, SetForegroundColor(Color::White))?;
     execute!(stdout, Print("          │"))?;
-    
+
     // Empty line
     execute!(stdout, MoveTo(start_col, start_row + 2))?;
     execute!(stdout, Print("│                                                      │"))?;
-    
+
     // Path line
     execute!(stdout, MoveTo(start_col, start_row + 3))?;
     execute!(stdout, Print("│ "))?;
@@ -180,11 +180,11 @@ fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, disp
     execute!(stdout, Print(&format!("{:<52}", display_path)))?;
     execute!(stdout, SetForegroundColor(Color::White))?;
     execute!(stdout, Print(" │"))?;
-    
+
     // Empty line
     execute!(stdout, MoveTo(start_col, start_row + 4))?;
     execute!(stdout, Print("│                                                      │"))?;
-    
+
     // Warning text
     let warning_lines = [
         "│ HiveTechs Consensus may read files in this folder.  │",
@@ -199,22 +199,22 @@ fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, disp
         "│ https://docs.hivetechs.com/security/trust           │",
         "│                                                      │",
     ];
-    
+
     for (i, line) in warning_lines.iter().enumerate() {
         execute!(stdout, MoveTo(start_col, start_row + 5 + i as u16))?;
         execute!(stdout, Print(line))?;
     }
-    
+
     // Instructions
     execute!(stdout, MoveTo(start_col, start_row + 17))?;
     execute!(stdout, Print("│ Use arrow keys to navigate, Enter to select, Esc to │"))?;
     execute!(stdout, MoveTo(start_col, start_row + 18))?;
     execute!(stdout, Print("│ cancel, or press Y/N for quick selection.           │"))?;
-    
+
     // Bottom border
     execute!(stdout, MoveTo(start_col, start_row + 19))?;
     execute!(stdout, Print("└──────────────────────────────────────────────────────┘"))?;
-    
+
     execute!(stdout, ResetColor)?;
     Ok(())
 }
@@ -223,7 +223,7 @@ fn draw_dialog_box(stdout: &mut io::Stdout, start_row: u16, start_col: u16, disp
 fn draw_selection_buttons(stdout: &mut io::Stdout, row: u16, start_col: u16, selected: usize) -> Result<()> {
     execute!(stdout, MoveTo(start_col, row))?;
     execute!(stdout, Print("│ "))?;
-    
+
     // Yes button
     if selected == 0 {
         execute!(stdout, SetForegroundColor(Color::Black), SetBackgroundColor(Color::Green))?;
@@ -232,10 +232,10 @@ fn draw_selection_buttons(stdout: &mut io::Stdout, row: u16, start_col: u16, sel
         execute!(stdout, SetForegroundColor(Color::Green), SetBackgroundColor(Color::Black))?;
         execute!(stdout, Print(" Yes, proceed "))?;
     }
-    
+
     execute!(stdout, ResetColor)?;
     execute!(stdout, Print("  "))?;
-    
+
     // No button
     if selected == 1 {
         execute!(stdout, SetForegroundColor(Color::Black), SetBackgroundColor(Color::Red))?;
@@ -244,10 +244,10 @@ fn draw_selection_buttons(stdout: &mut io::Stdout, row: u16, start_col: u16, sel
         execute!(stdout, SetForegroundColor(Color::Red), SetBackgroundColor(Color::Black))?;
         execute!(stdout, Print(" No, exit "))?;
     }
-    
+
     execute!(stdout, ResetColor)?;
     execute!(stdout, Print("              │"))?;
-    
+
     Ok(())
 }
 
@@ -285,14 +285,14 @@ pub fn show_fallback_dialog(path: &Path) -> Result<TrustDecision> {
     println!("│                                                      │");
     println!("└──────────────────────────────────────────────────────┘");
     println!();
-    
+
     loop {
         print!("Do you want to proceed? [y/N]: ");
         io::stdout().flush()?;
-        
+
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
-        
+
         match input.trim().to_lowercase().as_str() {
             "y" | "yes" => {
                 info!("User granted trust for: {}", path.display());
@@ -313,18 +313,18 @@ pub fn show_fallback_dialog(path: &Path) -> Result<TrustDecision> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
-    
+
     #[test]
     fn test_format_path_for_display() {
         let short_path = PathBuf::from("/home/user/project");
         assert_eq!(format_path_for_display(&short_path), "/home/user/project");
-        
+
         let long_path = PathBuf::from("/very/long/path/that/exceeds/the/maximum/allowed/length/for/display/in/the/dialog/box");
         let formatted = format_path_for_display(&long_path);
         assert!(formatted.len() <= 50);
         assert!(formatted.contains("..."));
     }
-    
+
     #[test]
     fn test_fallback_dialog_path_formatting() {
         let path = PathBuf::from("/test/path");

@@ -5,14 +5,14 @@
 
 use crate::core::{HiveError, Result};
 use anyhow::Context;
-use reqwest;
-use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use rusqlite::{params, OptionalExtension};
 use chrono::{DateTime, Utc};
-use tokio::fs;
-use sha2::{Sha256, Digest};
+use reqwest;
+use rusqlite::{params, OptionalExtension};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::path::PathBuf;
 use sysinfo::System;
+use tokio::fs;
 
 /// License tiers available in the system
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -112,28 +112,25 @@ impl LicenseManager {
             .build()
             .unwrap_or_default();
 
-        Self {
-            config_dir,
-            client,
-        }
+        Self { config_dir, client }
     }
 
     /// Get device fingerprint for license validation (matching conversation gateway)
     async fn get_device_fingerprint(&self) -> Result<String> {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         use sysinfo::System;
-        
+
         let hostname = hostname::get()
             .ok()
             .and_then(|h| h.to_str().map(|s| s.to_string()))
             .unwrap_or_else(|| "unknown".to_string());
-        
+
         let username = std::env::var("USER")
             .or_else(|_| std::env::var("USERNAME"))
             .unwrap_or_else(|_| "unknown".to_string());
-        
+
         let os_version = System::os_version().unwrap_or_default();
-        
+
         let machine_data = serde_json::json!({
             "hostname": hostname,
             "platform": std::env::consts::OS,
@@ -142,7 +139,7 @@ impl LicenseManager {
             "username": username,
             "os_version": os_version,
         });
-        
+
         let machine_string = serde_json::to_string(&machine_data)?;
         let mut hasher = Sha256::new();
         hasher.update(machine_string.as_bytes());
@@ -155,7 +152,8 @@ impl LicenseManager {
         // Validate license key format first
         if !self.is_valid_format(license_key) {
             return Err(HiveError::LicenseValidation {
-                message: "Invalid license key format. Expected: HIVE-XXXX-XXXX-XXXX-XXXX-XXXX".to_string()
+                message: "Invalid license key format. Expected: HIVE-XXXX-XXXX-XXXX-XXXX-XXXX"
+                    .to_string(),
             });
         }
 
@@ -163,8 +161,9 @@ impl LicenseManager {
         let url = std::env::var("HIVE_API_ENDPOINT")
             .unwrap_or_else(|_| "https://gateway.hivetechs.io".to_string());
         let validation_url = format!("{}/v1/session/validate", url);
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&validation_url)
             .header("Authorization", format!("Bearer {}", license_key))
             .json(&serde_json::json!({
@@ -180,12 +179,24 @@ impl LicenseManager {
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
-            
+
             return match status.as_u16() {
-                401 => Err(HiveError::AuthenticationFailed { service: "license".to_string(), message: "Invalid license key".to_string() }),
-                403 => Err(HiveError::AuthenticationFailed { service: "license".to_string(), message: "License key expired or revoked".to_string() }),
-                429 => Err(HiveError::RateLimitExceeded { provider: "license".to_string(), retry_after: 60 }),
-                _ => Err(HiveError::Internal { context: "license".to_string(), message: format!("License validation failed: {} - {}", status, error_text) }),
+                401 => Err(HiveError::AuthenticationFailed {
+                    service: "license".to_string(),
+                    message: "Invalid license key".to_string(),
+                }),
+                403 => Err(HiveError::AuthenticationFailed {
+                    service: "license".to_string(),
+                    message: "License key expired or revoked".to_string(),
+                }),
+                429 => Err(HiveError::RateLimitExceeded {
+                    provider: "license".to_string(),
+                    retry_after: 60,
+                }),
+                _ => Err(HiveError::Internal {
+                    context: "license".to_string(),
+                    message: format!("License validation failed: {} - {}", status, error_text),
+                }),
             };
         }
 
@@ -198,9 +209,14 @@ impl LicenseManager {
     }
 
     /// Store validated license locally
-    pub async fn store_license(&self, license_key: &str, validation: &LicenseValidationResponse) -> Result<()> {
+    pub async fn store_license(
+        &self,
+        license_key: &str,
+        validation: &LicenseValidationResponse,
+    ) -> Result<()> {
         // Ensure config directory exists
-        fs::create_dir_all(&self.config_dir).await
+        fs::create_dir_all(&self.config_dir)
+            .await
             .context("Failed to create config directory")?;
 
         let license_info = LicenseInfo {
@@ -217,13 +233,13 @@ impl LicenseManager {
         // Store license in database
         let db = crate::core::get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let features_json = serde_json::to_string(&license_info.features)
             .context("Failed to serialize features")?;
-        
+
         conn.execute(
-            "INSERT OR REPLACE INTO licenses 
-             (key, tier, daily_limit, features, user_id, email, expires_at, validated_at, updated_at) 
+            "INSERT OR REPLACE INTO licenses
+             (key, tier, daily_limit, features, user_id, email, expires_at, validated_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, CURRENT_TIMESTAMP)",
             params![
                 license_info.key,
@@ -236,18 +252,25 @@ impl LicenseManager {
                 license_info.validated_at.to_rfc3339()
             ],
         ).context("Failed to store license in database")?;
-        
+
         // Update user tier in database if available
         if let Ok(db) = crate::core::get_database().await {
             let usage_tracker = crate::core::usage_tracker::UsageTracker::new(db);
             let tier = self.parse_tier(&validation.tier);
-            
-            if let Err(e) = usage_tracker.update_user_tier(&validation.user_id, tier).await {
+
+            if let Err(e) = usage_tracker
+                .update_user_tier(&validation.user_id, tier)
+                .await
+            {
                 tracing::warn!("Failed to update user tier in database: {}", e);
                 // Don't fail the license storage operation
             } else {
-                tracing::info!("Updated user {} to {} tier with {} daily limit", 
-                             validation.user_id, tier, validation.daily_limit);
+                tracing::info!(
+                    "Updated user {} to {} tier with {} daily limit",
+                    validation.user_id,
+                    tier,
+                    validation.daily_limit
+                );
             }
         }
 
@@ -258,48 +281,55 @@ impl LicenseManager {
     pub async fn load_license(&self) -> Result<Option<LicenseInfo>> {
         let db = crate::core::get_database().await?;
         let conn = db.get_connection()?;
-        
-        let mut stmt = conn.prepare(
-            "SELECT key, tier, daily_limit, features, user_id, email, expires_at, validated_at 
-             FROM licenses 
-             ORDER BY validated_at DESC 
-             LIMIT 1"
-        ).context("Failed to prepare statement")?;
-        
-        let license_info = stmt.query_row([], |row| {
-            let features_json: Option<String> = row.get(3)?;
-            let features = features_json
-                .and_then(|json| serde_json::from_str(&json).ok())
-                .unwrap_or_default();
-            
-            let expires_at_str: Option<String> = row.get(6)?;
-            let validated_at_str: String = row.get(7)?;
-            let validated_at = DateTime::parse_from_rfc3339(&validated_at_str)
-                .map(|dt| dt.with_timezone(&Utc))
-                .unwrap_or_else(|_| Utc::now());
-            
-            let tier_str: String = row.get(1)?;
-            let tier = match tier_str.as_str() {
-                "free" | "Free" => LicenseTier::Free,
-                "basic" | "Basic" => LicenseTier::Basic,
-                "standard" | "Standard" => LicenseTier::Standard,
-                "premium" | "Premium" => LicenseTier::Premium,
-                "unlimited" | "Unlimited" => LicenseTier::Unlimited,
-                "enterprise" | "Enterprise" => LicenseTier::Enterprise,
-                _ => LicenseTier::Free,
-            };
-            
-            Ok(LicenseInfo {
-                key: row.get(0)?,
-                tier,
-                daily_limit: row.get(2)?,
-                features,
-                user_id: row.get(4)?,
-                email: row.get(5)?,
-                expires_at: row.get(6)?,
-                validated_at,
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT key, tier, daily_limit, features, user_id, email, expires_at, validated_at
+             FROM licenses
+             ORDER BY validated_at DESC
+             LIMIT 1",
+            )
+            .context("Failed to prepare statement")?;
+
+        let license_info = stmt
+            .query_row([], |row| {
+                let features_json: Option<String> = row.get(3)?;
+                let features = features_json
+                    .and_then(|json| serde_json::from_str(&json).ok())
+                    .unwrap_or_default();
+
+                let expires_at_str: Option<String> = row.get(6)?;
+                let validated_at_str: String = row.get(7)?;
+                let validated_at = DateTime::parse_from_rfc3339(&validated_at_str)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now());
+
+                let tier_str: String = row.get(1)?;
+                let tier = match tier_str.as_str() {
+                    "free" | "Free" => LicenseTier::Free,
+                    "basic" | "Basic" => LicenseTier::Basic,
+                    "standard" | "Standard" => LicenseTier::Standard,
+                    "premium" | "Premium" => LicenseTier::Premium,
+                    "unlimited" | "Unlimited" => LicenseTier::Unlimited,
+                    "enterprise" | "Enterprise" => LicenseTier::Enterprise,
+                    _ => LicenseTier::Free,
+                };
+
+                Ok(LicenseInfo {
+                    key: row.get(0)?,
+                    tier,
+                    daily_limit: row.get(2)?,
+                    features,
+                    user_id: row.get(4)?,
+                    email: row.get(5)?,
+                    expires_at: row.get(6)?,
+                    validated_at,
+                })
             })
-        }).optional().map_err(|e| HiveError::DatabaseQuery { query: format!("Failed to load license: {}", e) })?;
+            .optional()
+            .map_err(|e| HiveError::DatabaseQuery {
+                query: format!("Failed to load license: {}", e),
+            })?;
 
         Ok(license_info)
     }
@@ -326,7 +356,8 @@ impl LicenseManager {
                 // Check if license needs revalidation (older than 24 hours)
                 let needs_revalidation = chrono::Utc::now()
                     .signed_duration_since(license.validated_at)
-                    .num_hours() > 24;
+                    .num_hours()
+                    > 24;
 
                 if needs_revalidation {
                     // Try to revalidate
@@ -334,10 +365,11 @@ impl LicenseManager {
                         Ok(validation) => {
                             if validation.valid {
                                 // Update stored license
-                                if let Err(e) = self.store_license(&license.key, &validation).await {
+                                if let Err(e) = self.store_license(&license.key, &validation).await
+                                {
                                     eprintln!("Warning: Failed to update license cache: {}", e);
                                 }
-                                
+
                                 Ok(LicenseStatus {
                                     has_license: true,
                                     is_valid: true,
@@ -351,7 +383,9 @@ impl LicenseManager {
                                     is_valid: false,
                                     tier: license.tier,
                                     user_id: Some(license.user_id),
-                                    message: validation.message.unwrap_or_else(|| "License invalid".to_string()),
+                                    message: validation
+                                        .message
+                                        .unwrap_or_else(|| "License invalid".to_string()),
                                 })
                             }
                         }
@@ -390,9 +424,11 @@ impl LicenseManager {
     pub async fn remove_license(&self) -> Result<()> {
         let db = crate::core::get_database().await?;
         let conn = db.get_connection()?;
-        
+
         conn.execute("DELETE FROM licenses", [])
-            .map_err(|e| HiveError::DatabaseQuery { query: format!("Failed to delete licenses: {}", e) })?;
+            .map_err(|e| HiveError::DatabaseQuery {
+                query: format!("Failed to delete licenses: {}", e),
+            })?;
 
         Ok(())
     }
@@ -401,7 +437,7 @@ impl LicenseManager {
     fn is_valid_format(&self, license_key: &str) -> bool {
         // HIVE-XXXX-XXXX-XXXX-XXXX-XXXX format
         let parts: Vec<&str> = license_key.split('-').collect();
-        
+
         if parts.len() != 6 {
             return false;
         }
@@ -464,7 +500,7 @@ impl LicenseWizard {
 
         // Check current status
         let current_status = self.manager.check_license_status().await?;
-        
+
         if current_status.has_license && current_status.is_valid {
             println!("✅ Current license: {}", current_status.message);
             if let Some(user_id) = &current_status.user_id {
@@ -474,9 +510,10 @@ impl LicenseWizard {
 
             println!("Would you like to update your license? (y/N)");
             let mut input = String::new();
-            std::io::stdin().read_line(&mut input)
+            std::io::stdin()
+                .read_line(&mut input)
                 .context("Failed to read input")?;
-            
+
             if !input.trim().to_lowercase().starts_with('y') {
                 return Ok(current_status);
             }
@@ -489,11 +526,12 @@ impl LicenseWizard {
         let license_key = loop {
             println!("Enter your Hive license key (or 'skip' for free tier):");
             let mut input = String::new();
-            std::io::stdin().read_line(&mut input)
+            std::io::stdin()
+                .read_line(&mut input)
                 .context("Failed to read input")?;
-            
+
             let input = input.trim();
-            
+
             if input.to_lowercase() == "skip" {
                 return Ok(LicenseStatus {
                     has_license: false,
@@ -520,19 +558,21 @@ impl LicenseWizard {
         // Validate license
         println!();
         println!("🔄 Validating license with HiveTechs servers...");
-        
+
         match self.manager.validate_license(&license_key).await {
             Ok(validation) => {
                 if validation.valid {
                     // Store license
-                    self.manager.store_license(&license_key, &validation).await?;
-                    
+                    self.manager
+                        .store_license(&license_key, &validation)
+                        .await?;
+
                     println!("✅ License validated successfully!");
                     println!("🎯 Tier: {}", validation.tier);
                     println!("👤 User: {}", validation.user_id);
                     println!("📊 Daily limit: {} conversations", validation.daily_limit);
                     println!("🔓 Features: {}", validation.features.join(", "));
-                    
+
                     Ok(LicenseStatus {
                         has_license: true,
                         is_valid: true,
@@ -541,10 +581,15 @@ impl LicenseWizard {
                         message: format!("{} tier activated", validation.tier),
                     })
                 } else {
-                    let message = validation.message.unwrap_or_else(|| "License validation failed".to_string());
+                    let message = validation
+                        .message
+                        .unwrap_or_else(|| "License validation failed".to_string());
                     println!("❌ {}", message);
-                    
-                    Err(HiveError::AuthenticationFailed { service: "license".to_string(), message })
+
+                    Err(HiveError::AuthenticationFailed {
+                        service: "license".to_string(),
+                        message,
+                    })
                 }
             }
             Err(e) => {
@@ -585,7 +630,7 @@ mod tests {
 
         // Valid format
         assert!(manager.is_valid_format("HIVE-1234-ABCD-5678-EFGH-IJKL"));
-        
+
         // Invalid formats
         assert!(!manager.is_valid_format("INVALID-1234-ABCD-5678-EFGH-IJKL"));
         assert!(!manager.is_valid_format("HIVE-1234-ABCD-5678-EFGH"));

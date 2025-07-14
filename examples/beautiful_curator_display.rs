@@ -21,10 +21,31 @@ fn main() {
 
     // Create sample stage results
     let stages = vec![
-        create_stage_result("generator", "anthropic/claude-3-sonnet-20240229", 320, 0.0089, 0.8, 720),
-        create_stage_result("refiner", "openai/gpt-4-turbo-preview", 380, 0.0124, 0.92, 880),
+        create_stage_result(
+            "generator",
+            "anthropic/claude-3-sonnet-20240229",
+            320,
+            0.0089,
+            0.8,
+            720,
+        ),
+        create_stage_result(
+            "refiner",
+            "openai/gpt-4-turbo-preview",
+            380,
+            0.0124,
+            0.92,
+            880,
+        ),
         create_stage_result("validator", "google/gemini-pro", 290, 0.0067, 0.87, 640),
-        create_stage_result("curator", "meta-llama/llama-2-70b-chat", 260, 0.0062, 0.95, 600),
+        create_stage_result(
+            "curator",
+            "meta-llama/llama-2-70b-chat",
+            260,
+            0.0062,
+            0.95,
+            600,
+        ),
     ];
 
     // Sample curator output (markdown-formatted response)
@@ -70,20 +91,17 @@ IMPORTANT: Always validate tokens on the server side and implement proper CORS p
 5. Set up proper error boundaries"#;
 
     // Create formatted result
-    let formatted_result = FormattedConsensusResult::from_curator_output(
-        curator_content,
-        metadata,
-        stages,
-    );
+    let formatted_result =
+        FormattedConsensusResult::from_curator_output(curator_content, metadata, stages);
 
     // Display the beautiful formatted result
     println!("╔══════════════════════════════════════════════════════════════════════════╗");
     println!("║                     BEAUTIFUL CURATOR RESULT DEMO                       ║");
     println!("╚══════════════════════════════════════════════════════════════════════════╝");
     println!();
-    
+
     println!("{}", formatted_result.format_for_display());
-    
+
     println!("\n\n🎨 This demonstrates the beautiful visual presentation that users will see");
     println!("   in the TUI when consensus completes, with:");
     println!("   • Executive summary boxes with key points and action items");
@@ -94,12 +112,22 @@ IMPORTANT: Always validate tokens on the server side and implement proper CORS p
     println!("   • Confidence scoring with visual indicators");
 }
 
-fn create_stage_result(stage: &str, model: &str, tokens: u32, cost: f64, quality: f64, duration_ms: u64) -> StageResult {
+fn create_stage_result(
+    stage: &str,
+    model: &str,
+    tokens: u32,
+    cost: f64,
+    quality: f64,
+    duration_ms: u64,
+) -> StageResult {
     StageResult {
         stage_id: format!("{}-{}", stage, Utc::now().timestamp()),
         stage_name: stage.to_string(),
         question: "How do I implement authentication in React?".to_string(),
-        answer: format!("Sample {} response for authentication implementation", stage),
+        answer: format!(
+            "Sample {} response for authentication implementation",
+            stage
+        ),
         model: model.to_string(),
         conversation_id: "demo-conversation-123".to_string(),
         timestamp: Utc::now(),

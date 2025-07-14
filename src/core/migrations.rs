@@ -122,7 +122,7 @@ impl MigrationManager {
 
         for line in content.lines() {
             let trimmed = line.trim();
-            
+
             if trimmed.starts_with("-- @") {
                 in_metadata = true;
                 let parts: Vec<&str> = trimmed[3..].splitn(2, ':').collect();
@@ -157,8 +157,8 @@ impl MigrationManager {
                 execution_time_ms INTEGER NOT NULL,
                 rollback_sql TEXT
             );
-            
-            CREATE INDEX IF NOT EXISTS idx_schema_migrations_executed 
+
+            CREATE INDEX IF NOT EXISTS idx_schema_migrations_executed
             ON schema_migrations(executed_at);
         "#;
 
@@ -185,7 +185,7 @@ impl MigrationManager {
     /// Run all pending migrations
     pub async fn migrate(&self) -> Result<Vec<MigrationResult>> {
         self.initialize_migration_table().await?;
-        
+
         let applied_migrations = self.get_applied_migrations().await?;
         let mut results = Vec::new();
 
@@ -197,14 +197,14 @@ impl MigrationManager {
 
             info!("Applying migration: {} - {}", migration.version, migration.name);
             let result = self.apply_migration(migration).await;
-            
+
             match &result {
                 Ok(mr) if mr.success => {
-                    info!("Migration {} completed successfully in {}ms", 
+                    info!("Migration {} completed successfully in {}ms",
                           migration.version, mr.execution_time_ms);
                 }
                 Ok(mr) => {
-                    error!("Migration {} failed: {}", 
+                    error!("Migration {} failed: {}",
                            migration.version, mr.error.as_deref().unwrap_or("Unknown error"));
                 }
                 Err(e) => {
@@ -233,7 +233,7 @@ impl MigrationManager {
     /// Apply a single migration
     async fn apply_migration(&self, migration: &Migration) -> Result<MigrationResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Verify migration hasn't been tampered with
         let current_checksum = format!("{:x}", md5::compute(&migration.sql));
         if current_checksum != migration.checksum {
@@ -250,7 +250,7 @@ impl MigrationManager {
             Ok(_) => {
                 // Record successful migration
                 self.record_migration(migration, start_time.elapsed().as_millis() as u64).await?;
-                
+
                 MigrationResult {
                     version: migration.version.clone(),
                     name: migration.name.clone(),
@@ -274,7 +274,7 @@ impl MigrationManager {
     /// Execute migration SQL with proper error handling
     async fn execute_migration_sql(&self, sql: &str) -> Result<()> {
         let db = get_database().await?;
-        
+
         // Split SQL into statements and execute each one
         let statements: Vec<&str> = sql
             .split(';')
@@ -297,7 +297,7 @@ impl MigrationManager {
     /// Record a successful migration in the tracking table
     async fn record_migration(&self, migration: &Migration, execution_time_ms: u64) -> Result<()> {
         let sql = r#"
-            INSERT INTO schema_migrations 
+            INSERT INTO schema_migrations
             (version, name, description, checksum, executed_at, execution_time_ms, rollback_sql)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         "#;
@@ -467,7 +467,7 @@ mod tests {
     async fn create_test_migration(dir: &PathBuf, version: &str, name: &str, sql: &str) -> Result<()> {
         let filename = format!("{}_{}.sql", version, name);
         let file_path = dir.join(filename);
-        
+
         let content = format!(
             r#"-- @ version: {}
 -- @ name: {}
@@ -477,7 +477,7 @@ mod tests {
 {}"#,
             version, name, sql
         );
-        
+
         fs::write(file_path, content).await?;
         Ok(())
     }
@@ -515,7 +515,7 @@ mod tests {
     #[tokio::test]
     async fn test_migration_content_parsing() -> Result<()> {
         let manager = MigrationManager::new(PathBuf::new());
-        
+
         let content = r#"-- @ version: 001
 -- @ name: test_migration
 -- @ description: A test migration
@@ -530,7 +530,7 @@ CREATE TABLE test (
 INSERT INTO test (id, name) VALUES ('1', 'test');"#;
 
         let (metadata, sql) = manager.parse_migration_content(content)?;
-        
+
         assert_eq!(metadata.get("version"), Some(&"001".to_string()));
         assert_eq!(metadata.get("name"), Some(&"test_migration".to_string()));
         assert!(sql.contains("CREATE TABLE test"));

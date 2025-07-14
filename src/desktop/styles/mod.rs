@@ -1,11 +1,11 @@
 //! VS Code Theme Styles for Dioxus Desktop
-//! 
+//!
 //! Provides complete VS Code dark theme styling with professional appearance
 
 pub mod components;
-pub mod theme;
 pub mod example;
 pub mod hivetechs_theme;
+pub mod theme;
 
 /// Get the complete global CSS styles for VS Code theming
 pub fn get_global_styles() -> String {
@@ -64,69 +64,69 @@ body {
     --vscode-editor-foreground: #cccccc;
     --vscode-editor-selectionBackground: #264f78;
     --vscode-editor-lineHighlightBackground: #2a2d2e;
-    
+
     /* Activity Bar */
     --vscode-activityBar-background: #333333;
     --vscode-activityBar-foreground: #ffffff;
     --vscode-activityBar-activeBorder: #007acc;
     --vscode-activityBar-inactiveForeground: #868686;
-    
+
     /* Side Bar */
     --vscode-sideBar-background: #252526;
     --vscode-sideBar-foreground: #cccccc;
     --vscode-sideBar-border: #1e1e1e;
-    
+
     /* Title Bar */
     --vscode-titleBar-activeBackground: #3c3c3c;
     --vscode-titleBar-activeForeground: #cccccc;
     --vscode-titleBar-inactiveBackground: #3c3c3c;
-    
+
     /* Tabs */
     --vscode-tab-activeBackground: #1e1e1e;
     --vscode-tab-activeForeground: #ffffff;
     --vscode-tab-inactiveBackground: #2d2d30;
     --vscode-tab-inactiveForeground: #969696;
     --vscode-tab-border: #252526;
-    
+
     /* Input */
     --vscode-input-background: #3c3c3c;
     --vscode-input-foreground: #cccccc;
     --vscode-input-border: #3c3c3c;
     --vscode-inputOption-activeBorder: #007acc;
-    
+
     /* Button */
     --vscode-button-background: #0e639c;
     --vscode-button-foreground: #ffffff;
     --vscode-button-hoverBackground: #1177bb;
     --vscode-button-secondaryBackground: #3a3d41;
     --vscode-button-secondaryForeground: #cccccc;
-    
+
     /* Dropdown */
     --vscode-dropdown-background: #3c3c3c;
     --vscode-dropdown-foreground: #cccccc;
     --vscode-dropdown-border: #3c3c3c;
-    
+
     /* Lists */
     --vscode-list-activeSelectionBackground: #094771;
     --vscode-list-activeSelectionForeground: #ffffff;
     --vscode-list-hoverBackground: #2a2d2e;
     --vscode-list-inactiveSelectionBackground: #37373d;
-    
+
     /* Scrollbar */
     --vscode-scrollbar-shadow: #000000;
     --vscode-scrollbarSlider-background: #79797966;
     --vscode-scrollbarSlider-hoverBackground: #646464b3;
     --vscode-scrollbarSlider-activeBackground: #bfbfbf66;
-    
+
     /* Badge */
     --vscode-badge-background: #4d4d4d;
     --vscode-badge-foreground: #ffffff;
-    
+
     /* Status Bar */
     --vscode-statusBar-background: #007acc;
     --vscode-statusBar-foreground: #ffffff;
     --vscode-statusBar-noFolderBackground: #68217a;
-    
+
     /* Terminal */
     --vscode-terminal-background: #1e1e1e;
     --vscode-terminal-foreground: #cccccc;
@@ -138,7 +138,7 @@ body {
     --vscode-terminal-ansiMagenta: #bc3fbc;
     --vscode-terminal-ansiCyan: #11a8cd;
     --vscode-terminal-ansiWhite: #e5e5e5;
-    
+
     /* Syntax Highlighting */
     --vscode-syntax-keyword: #569cd6;
     --vscode-syntax-string: #ce9178;
@@ -664,11 +664,11 @@ button:focus,
     body {
         font-size: 14px;
     }
-    
+
     .panel-body {
         padding: 8px;
     }
-    
+
     .tab {
         padding: 6px 12px;
     }
@@ -680,7 +680,7 @@ button:focus,
         background: white;
         color: black;
     }
-    
+
     .no-print {
         display: none !important;
     }
@@ -1169,7 +1169,7 @@ pub fn get_platform_fonts() -> &'static str {
         }
         "#
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         r#"
@@ -1181,7 +1181,7 @@ pub fn get_platform_fonts() -> &'static str {
         }
         "#
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         r#"
@@ -1223,48 +1223,48 @@ pub fn get_file_icon(extension: &str) -> &'static str {
         "kt" => "fa-solid fa-code",
         "dart" => "fa-solid fa-code",
         "r" => "fa-brands fa-r-project",
-        
+
         // Web files
         "html" | "htm" => "fa-brands fa-html5",
         "css" | "scss" | "sass" | "less" => "fa-brands fa-css3-alt",
         "vue" => "fa-brands fa-vuejs",
         "react" => "fa-brands fa-react",
-        
+
         // Config files
         "json" => "fa-solid fa-brackets-curly",
         "toml" => "fa-solid fa-gear",
         "yaml" | "yml" => "fa-solid fa-gear",
         "xml" => "fa-solid fa-code",
         "ini" | "cfg" | "conf" => "fa-solid fa-gear",
-        
+
         // Documentation
         "md" | "markdown" => "fa-brands fa-markdown",
         "txt" => "fa-solid fa-file-lines",
         "pdf" => "fa-solid fa-file-pdf",
         "doc" | "docx" => "fa-solid fa-file-word",
-        
+
         // Images
         "png" | "jpg" | "jpeg" | "gif" | "bmp" | "ico" | "svg" | "webp" => "fa-solid fa-image",
-        
+
         // Archives
         "zip" | "tar" | "gz" | "rar" | "7z" => "fa-solid fa-file-zipper",
-        
+
         // Scripts
         "sh" | "bash" | "zsh" | "fish" => "fa-solid fa-terminal",
         "ps1" | "psm1" | "psd1" => "fa-solid fa-terminal",
         "bat" | "cmd" => "fa-solid fa-terminal",
-        
+
         // Data files
         "sql" => "fa-solid fa-database",
         "db" | "sqlite" => "fa-solid fa-database",
         "csv" => "fa-solid fa-table",
-        
+
         // Git files
         "gitignore" | "gitattributes" => "fa-brands fa-git-alt",
-        
+
         // Lock files
         "lock" => "fa-solid fa-lock",
-        
+
         // Default
         _ => "fa-solid fa-file",
     }
@@ -1278,31 +1278,31 @@ pub mod themes {
         --vscode-editor-foreground: #000000;
         --vscode-editor-selectionBackground: #add6ff;
         --vscode-editor-lineHighlightBackground: #f3f3f3;
-        
+
         --vscode-activityBar-background: #2c2c2c;
         --vscode-activityBar-foreground: #ffffff;
         --vscode-activityBar-activeBorder: #0078d4;
-        
+
         --vscode-sideBar-background: #f3f3f3;
         --vscode-sideBar-foreground: #616161;
         --vscode-sideBar-border: #e7e7e7;
-        
+
         --vscode-statusBar-background: #0078d4;
         --vscode-statusBar-foreground: #ffffff;
     }
     "#;
-    
+
     pub const HIGH_CONTRAST_THEME_OVERRIDES: &str = r#"
     :root {
         --vscode-editor-background: #000000;
         --vscode-editor-foreground: #ffffff;
         --vscode-editor-selectionBackground: #ffffff;
         --vscode-editor-lineHighlightBackground: #ffffff1a;
-        
+
         --vscode-activityBar-background: #000000;
         --vscode-activityBar-foreground: #ffffff;
         --vscode-activityBar-activeBorder: #f38518;
-        
+
         --vscode-sideBar-background: #000000;
         --vscode-sideBar-foreground: #ffffff;
         --vscode-sideBar-border: #6fc3df;

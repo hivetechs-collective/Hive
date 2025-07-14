@@ -3,12 +3,12 @@
 //! This module provides pre-built expert templates for different use cases,
 //! dynamic model selection, and consensus pipeline configuration.
 
-use crate::core::{HiveError, Result};
 use crate::core::database::DatabaseManager;
+use crate::core::{HiveError, Result};
 use anyhow::Context;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use rusqlite::OptionalExtension;
 
 /// Expert template category
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -32,9 +32,9 @@ pub enum ExpertLevel {
 /// Model selection strategy
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SelectionStrategy {
-    Fixed,      // Use specific models
-    Dynamic,    // Select based on current rankings
-    Hybrid,     // Mix of fixed and dynamic
+    Fixed,   // Use specific models
+    Dynamic, // Select based on current rankings
+    Hybrid,  // Mix of fixed and dynamic
 }
 
 /// Budget priority setting
@@ -80,7 +80,7 @@ pub struct ModelCriteria {
     pub context_window: Option<String>,   // "small", "medium", "large", "xl"
     pub capabilities: Option<Vec<String>>,
     pub cost_range: Option<CostRange>,
-    pub fallback_model: Option<String>,   // OpenRouter ID or internal ID as string
+    pub fallback_model: Option<String>, // OpenRouter ID or internal ID as string
 }
 
 /// Budget profile configuration
@@ -135,18 +135,18 @@ pub struct ExpertTemplate {
     pub category: ProfileCategory,
     pub expert_level: ExpertLevel,
     pub selection_strategy: SelectionStrategy,
-    
+
     // Model configuration
     pub fixed_models: Option<FixedModels>,
     pub selection_criteria: Option<StageSelectionCriteria>,
-    
+
     // Temperature settings
     pub temperatures: StageTemperatures,
-    
+
     // Profiles
     pub budget_profile: Option<BudgetProfile>,
     pub performance_profile: Option<PerformanceProfile>,
-    
+
     // Metadata
     pub use_cases: Vec<String>,
     pub tags: Vec<String>,
@@ -181,11 +181,8 @@ impl ExpertTemplateManager {
     /// Create new template manager
     pub fn new(db: DatabaseManager) -> Self {
         let templates = Self::create_builtin_templates();
-        
-        Self {
-            db,
-            templates,
-        }
+
+        Self { db, templates }
     }
 
     /// Get all available templates
@@ -200,7 +197,8 @@ impl ExpertTemplateManager {
 
     /// Get templates by category
     pub fn get_templates_by_category(&self, category: &ProfileCategory) -> Vec<&ExpertTemplate> {
-        self.templates.iter()
+        self.templates
+            .iter()
             .filter(|t| &t.category == category)
             .collect()
     }
@@ -238,8 +236,12 @@ impl ExpertTemplateManager {
         profile_name: &str,
         user_id: Option<&str>,
     ) -> Result<ConsensusProfile> {
-        let template = self.get_template(template_id)
-            .ok_or_else(|| HiveError::Internal { context: "profiles".to_string(), message: format!("Template not found: {}", template_id) })?;
+        let template = self
+            .get_template(template_id)
+            .ok_or_else(|| HiveError::Internal {
+                context: "profiles".to_string(),
+                message: format!("Template not found: {}", template_id),
+            })?;
 
         // Resolve models for the profile
         let model_ids = self.resolve_models_for_template(template).await?;
@@ -249,23 +251,25 @@ impl ExpertTemplateManager {
         let now = chrono::Utc::now().to_rfc3339();
 
         // Check if profile name already exists
-        let existing: Option<i64> = conn.query_row(
-            "SELECT id FROM consensus_profiles WHERE name = ?1",
-            [profile_name],
-            |row| row.get(0),
-        ).optional()?;
+        let existing: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM consensus_profiles WHERE name = ?1",
+                [profile_name],
+                |row| row.get(0),
+            )
+            .optional()?;
 
         if existing.is_some() {
-            return Err(HiveError::Internal { 
-                context: "profiles".to_string(), 
-                message: format!("Profile '{}' already exists", profile_name) 
+            return Err(HiveError::Internal {
+                context: "profiles".to_string(),
+                message: format!("Profile '{}' already exists", profile_name),
             });
         }
 
         // Insert new profile
         conn.execute(
-            "INSERT INTO consensus_profiles 
-             (name, user_id, generator_model_id, generator_temperature, 
+            "INSERT INTO consensus_profiles
+             (name, user_id, generator_model_id, generator_temperature,
               refiner_model_id, refiner_temperature, validator_model_id, validator_temperature,
               curator_model_id, curator_temperature, is_default, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
@@ -289,11 +293,10 @@ impl ExpertTemplateManager {
         let profile_id = conn.last_insert_rowid();
 
         // Set as default if this is the first profile
-        let profile_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM consensus_profiles",
-            [],
-            |row| row.get(0),
-        )?;
+        let profile_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM consensus_profiles", [], |row| {
+                row.get(0)
+            })?;
 
         let is_default = profile_count == 1;
         if is_default {
@@ -316,8 +319,12 @@ impl ExpertTemplateManager {
             curator_model_id: model_ids.curator,
             curator_temperature: template.temperatures.curator,
             is_default,
-            created_at: chrono::DateTime::parse_from_rfc3339(&now).unwrap().with_timezone(&chrono::Utc),
-            updated_at: chrono::DateTime::parse_from_rfc3339(&now).unwrap().with_timezone(&chrono::Utc),
+            created_at: chrono::DateTime::parse_from_rfc3339(&now)
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+            updated_at: chrono::DateTime::parse_from_rfc3339(&now)
+                .unwrap()
+                .with_timezone(&chrono::Utc),
         })
     }
 
@@ -325,13 +332,20 @@ impl ExpertTemplateManager {
     async fn resolve_models_for_template(&self, template: &ExpertTemplate) -> Result<FixedModels> {
         match template.selection_strategy {
             SelectionStrategy::Fixed => {
-                template.fixed_models.clone()
-                    .ok_or_else(|| HiveError::ConfigInvalid { message: "Fixed strategy requires fixed_models".to_string() })
+                template
+                    .fixed_models
+                    .clone()
+                    .ok_or_else(|| HiveError::ConfigInvalid {
+                        message: "Fixed strategy requires fixed_models".to_string(),
+                    })
             }
             SelectionStrategy::Dynamic => {
-                let criteria = template.selection_criteria.as_ref()
-                    .ok_or_else(|| HiveError::ConfigInvalid { message: "Dynamic strategy requires selection_criteria".to_string() })?;
-                
+                let criteria = template.selection_criteria.as_ref().ok_or_else(|| {
+                    HiveError::ConfigInvalid {
+                        message: "Dynamic strategy requires selection_criteria".to_string(),
+                    }
+                })?;
+
                 self.select_models_from_criteria(criteria).await
             }
             SelectionStrategy::Hybrid => {
@@ -340,32 +354,54 @@ impl ExpertTemplateManager {
                     match self.select_models_from_criteria(criteria).await {
                         Ok(models) => Ok(models),
                         Err(_) => {
-                            template.fixed_models.clone()
-                                .ok_or_else(|| HiveError::ConfigInvalid { message: "Hybrid strategy requires fixed_models as fallback".to_string() })
+                            template
+                                .fixed_models
+                                .clone()
+                                .ok_or_else(|| HiveError::ConfigInvalid {
+                                    message: "Hybrid strategy requires fixed_models as fallback"
+                                        .to_string(),
+                                })
                         }
                     }
                 } else {
-                    template.fixed_models.clone()
-                        .ok_or_else(|| HiveError::ConfigInvalid { message: "Hybrid strategy requires either selection_criteria or fixed_models".to_string() })
+                    template
+                        .fixed_models
+                        .clone()
+                        .ok_or_else(|| HiveError::ConfigInvalid {
+                            message:
+                                "Hybrid strategy requires either selection_criteria or fixed_models"
+                                    .to_string(),
+                        })
                 }
             }
         }
     }
 
     /// Select models based on criteria
-    async fn select_models_from_criteria(&self, criteria: &StageSelectionCriteria) -> Result<FixedModels> {
+    async fn select_models_from_criteria(
+        &self,
+        criteria: &StageSelectionCriteria,
+    ) -> Result<FixedModels> {
         Ok(FixedModels {
-            generator: self.select_model_for_stage(&criteria.generator, "generator").await?,
-            refiner: self.select_model_for_stage(&criteria.refiner, "refiner").await?,
-            validator: self.select_model_for_stage(&criteria.validator, "validator").await?,
-            curator: self.select_model_for_stage(&criteria.curator, "curator").await?,
+            generator: self
+                .select_model_for_stage(&criteria.generator, "generator")
+                .await?,
+            refiner: self
+                .select_model_for_stage(&criteria.refiner, "refiner")
+                .await?,
+            validator: self
+                .select_model_for_stage(&criteria.validator, "validator")
+                .await?,
+            curator: self
+                .select_model_for_stage(&criteria.curator, "curator")
+                .await?,
         })
     }
 
     /// Select a single model for a stage based on criteria
     async fn select_model_for_stage(&self, criteria: &ModelCriteria, stage: &str) -> Result<i64> {
         let conn = self.db.get_connection()?;
-        
+
         // Build SQL query based on criteria
         let mut query = "SELECT internal_id FROM openrouter_models WHERE is_active = 1".to_string();
         let mut params = Vec::new();
@@ -373,7 +409,10 @@ impl ExpertTemplateManager {
         // Add provider filter
         if let Some(providers) = &criteria.providers {
             let placeholders: Vec<&str> = providers.iter().map(|_| "?").collect();
-            query.push_str(&format!(" AND provider_name IN ({})", placeholders.join(",")));
+            query.push_str(&format!(
+                " AND provider_name IN ({})",
+                placeholders.join(",")
+            ));
             for provider in providers {
                 params.push(provider.as_str());
             }
@@ -435,8 +474,11 @@ impl ExpertTemplateManager {
         query.push_str(" LIMIT 1");
 
         // Execute query
-        let stmt_params: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
-        let result: Option<i64> = conn.query_row(&query, stmt_params.as_slice(), |row| row.get(0)).optional()?;
+        let stmt_params: Vec<&dyn rusqlite::ToSql> =
+            params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+        let result: Option<i64> = conn
+            .query_row(&query, stmt_params.as_slice(), |row| row.get(0))
+            .optional()?;
 
         match result {
             Some(internal_id) => Ok(internal_id),
@@ -455,7 +497,7 @@ impl ExpertTemplateManager {
     /// Resolve fallback model from OpenRouter ID or internal ID
     async fn resolve_fallback_model(&self, fallback: &str) -> Result<i64> {
         let conn = self.db.get_connection()?;
-        
+
         // Try as internal ID first
         if let Ok(internal_id) = fallback.parse::<i64>() {
             let exists: Option<i64> = conn.query_row(
@@ -463,7 +505,7 @@ impl ExpertTemplateManager {
                 [internal_id],
                 |row| row.get(0),
             ).optional()?;
-            
+
             if exists.is_some() {
                 return Ok(internal_id);
             }
@@ -476,13 +518,16 @@ impl ExpertTemplateManager {
             |row| row.get(0),
         ).optional()?;
 
-        result.ok_or_else(|| HiveError::Internal { context: "profiles".to_string(), message: format!("Fallback model not found: {}", fallback) })
+        result.ok_or_else(|| HiveError::Internal {
+            context: "profiles".to_string(),
+            message: format!("Fallback model not found: {}", fallback),
+        })
     }
 
     /// Get any available model for emergency fallback
     async fn get_any_available_model(&self, stage: &str) -> Result<i64> {
         let conn = self.db.get_connection()?;
-        
+
         // Stage-specific fallback preferences
         let query = match stage {
             "generator" => "SELECT internal_id FROM openrouter_models WHERE is_active = 1 ORDER BY context_window DESC LIMIT 1",
@@ -491,8 +536,11 @@ impl ExpertTemplateManager {
         };
 
         let result: Option<i64> = conn.query_row(query, [], |row| row.get(0)).optional()?;
-        
-        result.ok_or_else(|| HiveError::Internal { context: "profiles".to_string(), message: format!("No models available for stage: {}", stage) })
+
+        result.ok_or_else(|| HiveError::Internal {
+            context: "profiles".to_string(),
+            message: format!("No models available for stage: {}", stage),
+        })
     }
 
     /// Get all consensus profiles
@@ -509,13 +557,25 @@ impl ExpertTemplateManager {
         let profile_iter = stmt.query_map([], |row| {
             let created_at_str: String = row.get(12)?;
             let updated_at_str: String = row.get(13)?;
-            
+
             let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
-                .map_err(|_| rusqlite::Error::InvalidColumnType(12, "created_at".to_string(), rusqlite::types::Type::Text))?
+                .map_err(|_| {
+                    rusqlite::Error::InvalidColumnType(
+                        12,
+                        "created_at".to_string(),
+                        rusqlite::types::Type::Text,
+                    )
+                })?
                 .with_timezone(&chrono::Utc);
-                
+
             let updated_at = chrono::DateTime::parse_from_rfc3339(&updated_at_str)
-                .map_err(|_| rusqlite::Error::InvalidColumnType(13, "updated_at".to_string(), rusqlite::types::Type::Text))?
+                .map_err(|_| {
+                    rusqlite::Error::InvalidColumnType(
+                        13,
+                        "updated_at".to_string(),
+                        rusqlite::types::Type::Text,
+                    )
+                })?
                 .with_timezone(&chrono::Utc);
 
             Ok(ConsensusProfile {
@@ -547,20 +607,28 @@ impl ExpertTemplateManager {
     /// Create all expert templates
     pub async fn create_all_expert_templates(&self, user_id: Option<&str>) -> Result<Vec<String>> {
         let mut created_profiles = Vec::new();
-        
+
         for template in &self.templates {
             let profile_name = format!("{} Profile", template.name);
-            
-            match self.create_profile_from_template(&template.id, &profile_name, user_id).await {
+
+            match self
+                .create_profile_from_template(&template.id, &profile_name, user_id)
+                .await
+            {
                 Ok(_) => {
                     created_profiles.push(profile_name);
                 }
-                Err(HiveError::Internal { context, message }) if message.contains("already exists") => {
+                Err(HiveError::Internal { context, message })
+                    if message.contains("already exists") =>
+                {
                     // Profile already exists, skip
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to create profile for template {}: {}", template.name, e);
+                    eprintln!(
+                        "Warning: Failed to create profile for template {}: {}",
+                        template.name, e
+                    );
                     continue;
                 }
             }

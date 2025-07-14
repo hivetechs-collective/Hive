@@ -1,7 +1,7 @@
 //! Type definitions for the planning engine
 
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -134,10 +134,10 @@ pub struct Dependency {
 /// Type of dependency
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DependencyType {
-    FinishToStart,    // Task B can't start until Task A finishes
-    StartToStart,     // Task B can't start until Task A starts
-    FinishToFinish,   // Task B can't finish until Task A finishes
-    StartToFinish,    // Task B can't finish until Task A starts
+    FinishToStart,  // Task B can't start until Task A finishes
+    StartToStart,   // Task B can't start until Task A starts
+    FinishToFinish, // Task B can't finish until Task A finishes
+    StartToFinish,  // Task B can't finish until Task A starts
 }
 
 /// Dependency graph for task ordering
@@ -211,11 +211,11 @@ pub enum ResourceAvailability {
 /// Operating mode for the planning engine
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum ModeType {
-    Planning,      // Focus on creating comprehensive plans
-    Execution,     // Focus on implementing and coding
-    Hybrid,        // Balance between planning and execution
-    Analysis,      // Focus on understanding existing code
-    Learning,      // Adaptive mode that learns preferences
+    Planning,  // Focus on creating comprehensive plans
+    Execution, // Focus on implementing and coding
+    Hybrid,    // Balance between planning and execution
+    Analysis,  // Focus on understanding existing code
+    Learning,  // Adaptive mode that learns preferences
 }
 
 /// Context for planning operations
@@ -270,35 +270,35 @@ pub struct UserPreferences {
 /// Level of detail in plans
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DetailLevel {
-    High,      // Very detailed, step-by-step
-    Medium,    // Balanced detail
-    Low,       // High-level overview
+    High,   // Very detailed, step-by-step
+    Medium, // Balanced detail
+    Low,    // High-level overview
 }
 
 /// Risk tolerance levels
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RiskTolerance {
-    Conservative,  // Minimize all risks
-    Balanced,      // Balance risk vs reward
-    Aggressive,    // Accept higher risks for faster delivery
+    Conservative, // Minimize all risks
+    Balanced,     // Balance risk vs reward
+    Aggressive,   // Accept higher risks for faster delivery
 }
 
 /// Automation preference
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AutomationLevel {
-    Full,      // Automate everything possible
-    Guided,    // Automate with user confirmation
-    Manual,    // User controls all decisions
+    Full,   // Automate everything possible
+    Guided, // Automate with user confirmation
+    Manual, // User controls all decisions
 }
 
 /// Collaboration style
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CollaborationStyle {
-    Solo,         // Working alone
+    Solo, // Working alone
     PairProgramming,
-    SmallTeam,    // 2-5 people
-    LargeTeam,    // 6+ people
-    Distributed,  // Remote team
+    SmallTeam,   // 2-5 people
+    LargeTeam,   // 6+ people
+    Distributed, // Remote team
 }
 
 impl Default for PlanningContext {
@@ -316,7 +316,6 @@ impl Default for PlanningContext {
         }
     }
 }
-
 
 impl fmt::Display for TaskType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

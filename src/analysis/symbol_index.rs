@@ -3,25 +3,25 @@
 //! This module provides high-performance symbol indexing with sub-millisecond
 //! search performance using SQLite FTS5 and petgraph for reference tracking.
 
+use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Utc};
+use petgraph::algo::{is_cyclic_directed, toposort};
+use petgraph::graph::{DiGraph, NodeIndex};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
-use anyhow::{Result, Context, anyhow};
-use rusqlite::{params, Connection, Transaction, OptionalExtension};
-use serde::{Serialize, Deserialize};
-use petgraph::graph::{DiGraph, NodeIndex};
-use petgraph::algo::{toposort, is_cyclic_directed};
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
-use chrono::{DateTime, Utc};
 
-use crate::core::{
-    ast::{Symbol, SymbolKind, ParseResult, AstNode},
-    Language, Position, 
-};
 use crate::analysis::parser::TreeSitterParser;
 use crate::core::database::{DatabaseManager, DbConnection};
+use crate::core::{
+    ast::{AstNode, ParseResult, Symbol, SymbolKind},
+    Language, Position,
+};
 
 /// Symbol index entry with enhanced metadata
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -187,7 +187,7 @@ impl SymbolIndexer {
 
         // Triggers to keep FTS in sync
         conn.execute(
-            "CREATE TRIGGER IF NOT EXISTS symbols_insert_fts 
+            "CREATE TRIGGER IF NOT EXISTS symbols_insert_fts
              AFTER INSERT ON symbols BEGIN
                 INSERT INTO symbols_fts(rowid, id, name, documentation, signature, file_path)
                 VALUES (new.rowid, new.id, new.name, new.documentation, new.signature, new.file_path);
@@ -213,11 +213,26 @@ impl SymbolIndexer {
         )?;
 
         // Indexes for performance
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)", [])?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind)", [])?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path)", [])?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_references_from ON symbol_references(from_symbol_id)", [])?;
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_references_to ON symbol_references(to_symbol_id)", [])?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_references_from ON symbol_references(from_symbol_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_references_to ON symbol_references(to_symbol_id)",
+            [],
+        )?;
 
         Ok(())
     }
@@ -226,51 +241,55 @@ impl SymbolIndexer {
     #[instrument(skip(self, content))]
     pub async fn index_file(&self, file_path: &Path, content: &str) -> Result<()> {
         let start = Instant::now();
-        
+
         // Detect language
         let language = self.detect_language(file_path)?;
-        
+
         // Get or create parser
         let parser = self.get_parser(language).await?;
         let mut parser = parser.lock().await;
-        
+
         // Parse file
         let parse_result = parser.parse(content)?;
-        
+
         // Extract symbols with enhanced metadata
         let symbols = self.extract_symbols(&parse_result, file_path, content)?;
-        
+
         // Extract references
         let references = self.extract_references(&parse_result, file_path, content)?;
-        
+
         // Store in database - complete all DB operations before async
         {
             let mut conn = self.db.get_connection()?;
             let tx = conn.transaction()?;
-            
+
             // Clear existing symbols for this file
-            tx.execute("DELETE FROM symbols WHERE file_path = ?1", params![file_path.to_str()])?;
-            
+            tx.execute(
+                "DELETE FROM symbols WHERE file_path = ?1",
+                params![file_path.to_str()],
+            )?;
+
             // Insert symbols
             for symbol in &symbols {
                 self.insert_symbol(&tx, symbol)?;
             }
-            
+
             // Insert references
             for reference in &references {
                 self.insert_reference(&tx, reference)?;
             }
-            
+
             tx.commit()?;
         } // conn and tx are dropped here, before any await
-        
+
         // Update call graph
         self.update_call_graph(&symbols, &references).await?;
-        
+
         // Update statistics
         let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-        self.update_stats(symbols.len(), references.len(), elapsed).await;
-        
+        self.update_stats(symbols.len(), references.len(), elapsed)
+            .await;
+
         debug!(
             "Indexed {} with {} symbols and {} references in {:.2}ms",
             file_path.display(),
@@ -278,7 +297,7 @@ impl SymbolIndexer {
             references.len(),
             elapsed
         );
-        
+
         Ok(())
     }
 
@@ -287,99 +306,103 @@ impl SymbolIndexer {
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SymbolEntry>> {
         let start = Instant::now();
         let conn = self.db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
             "SELECT s.* FROM symbols s
              INNER JOIN symbols_fts f ON s.id = f.id
              WHERE symbols_fts MATCH ?1
              ORDER BY rank
-             LIMIT ?2"
+             LIMIT ?2",
         )?;
-        
-        let symbols = stmt.query_map(params![query, limit], |row| {
-            Ok(SymbolEntry {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                file_path: PathBuf::from(row.get::<_, String>(3)?),
-                start_pos: Position {
-                    line: row.get(4)?,
-                    column: row.get(5)?,
-                    offset: 0,
-                },
-                end_pos: Position {
-                    line: row.get(6)?,
-                    column: row.get(7)?,
-                    offset: 0,
-                },
-                parent_id: row.get(8)?,
-                signature: row.get(9)?,
-                documentation: row.get(10)?,
-                visibility: row.get(11)?,
-                type_info: row.get(12)?,
-                complexity: row.get(13)?,
-                quality_score: row.get(14)?,
-                reference_count: row.get(15)?,
-                is_exported: row.get(16)?,
-                usage_count: 0,
-                last_modified: chrono::Utc::now(),
-                attributes: HashMap::new(),
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+
+        let symbols = stmt
+            .query_map(params![query, limit], |row| {
+                Ok(SymbolEntry {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                    file_path: PathBuf::from(row.get::<_, String>(3)?),
+                    start_pos: Position {
+                        line: row.get(4)?,
+                        column: row.get(5)?,
+                        offset: 0,
+                    },
+                    end_pos: Position {
+                        line: row.get(6)?,
+                        column: row.get(7)?,
+                        offset: 0,
+                    },
+                    parent_id: row.get(8)?,
+                    signature: row.get(9)?,
+                    documentation: row.get(10)?,
+                    visibility: row.get(11)?,
+                    type_info: row.get(12)?,
+                    complexity: row.get(13)?,
+                    quality_score: row.get(14)?,
+                    reference_count: row.get(15)?,
+                    is_exported: row.get(16)?,
+                    usage_count: 0,
+                    last_modified: chrono::Utc::now(),
+                    attributes: HashMap::new(),
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         let elapsed = start.elapsed().as_secs_f64() * 1000.0;
         debug!("Symbol search for '{}' took {:.2}ms", query, elapsed);
-        
+
         Ok(symbols)
     }
 
     /// Find all references to a symbol
     pub async fn find_references(&self, symbol_id: &str) -> Result<Vec<SymbolReference>> {
         let conn = self.db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
             "SELECT from_symbol_id, to_symbol_id, reference_kind, file_path, line, col, context
              FROM symbol_references
-             WHERE to_symbol_id = ?1"
+             WHERE to_symbol_id = ?1",
         )?;
-        
-        let references = stmt.query_map(params![symbol_id], |row| {
-            Ok(SymbolReference {
-                from_symbol_id: row.get(0)?,
-                to_symbol_id: row.get(1)?,
-                reference_kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
-                file_path: PathBuf::from(row.get::<_, String>(3)?),
-                position: Position {
-                    line: row.get(4)?,
-                    column: row.get(5)?,
-                    offset: 0,
-                },
-                context: row.get(6)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+
+        let references = stmt
+            .query_map(params![symbol_id], |row| {
+                Ok(SymbolReference {
+                    from_symbol_id: row.get(0)?,
+                    to_symbol_id: row.get(1)?,
+                    reference_kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap(),
+                    file_path: PathBuf::from(row.get::<_, String>(3)?),
+                    position: Position {
+                        line: row.get(4)?,
+                        column: row.get(5)?,
+                        offset: 0,
+                    },
+                    context: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(references)
     }
 
     /// Get call graph for a symbol
     pub async fn get_call_graph(&self, symbol_id: &str) -> Result<CallGraphInfo> {
         let graph = self.call_graph.read().await;
-        
+
         if let Some(&node_idx) = graph.symbol_to_node.get(symbol_id) {
             // Get direct calls
-            let calls: Vec<String> = graph.graph
+            let calls: Vec<String> = graph
+                .graph
                 .neighbors(node_idx)
                 .filter_map(|n| graph.node_to_symbol.get(&n).cloned())
                 .collect();
-                
+
             // Get callers (reverse edges)
-            let called_by: Vec<String> = graph.graph
+            let called_by: Vec<String> = graph
+                .graph
                 .neighbors_directed(node_idx, petgraph::Direction::Incoming)
                 .filter_map(|n| graph.node_to_symbol.get(&n).cloned())
                 .collect();
-                
+
             Ok(CallGraphInfo {
                 symbol_id: symbol_id.to_string(),
                 calls,
@@ -397,11 +420,11 @@ impl SymbolIndexer {
     /// Find circular dependencies
     pub async fn find_circular_dependencies(&self) -> Result<Vec<Vec<String>>> {
         let graph = self.call_graph.read().await;
-        
+
         if is_cyclic_directed(&graph.graph) {
             // Find strongly connected components
             let scc = petgraph::algo::tarjan_scc(&graph.graph);
-            
+
             let cycles: Vec<Vec<String>> = scc
                 .into_iter()
                 .filter(|component| component.len() > 1)
@@ -412,7 +435,7 @@ impl SymbolIndexer {
                         .collect()
                 })
                 .collect();
-                
+
             Ok(cycles)
         } else {
             Ok(vec![])
@@ -420,18 +443,28 @@ impl SymbolIndexer {
     }
 
     /// Extract symbols with enhanced metadata
-    fn extract_symbols(&self, parse_result: &ParseResult, file_path: &Path, content: &str) -> Result<Vec<SymbolEntry>> {
+    fn extract_symbols(
+        &self,
+        parse_result: &ParseResult,
+        file_path: &Path,
+        content: &str,
+    ) -> Result<Vec<SymbolEntry>> {
         let mut symbols = Vec::new();
-        
+
         for symbol in &parse_result.symbols {
-            let id = format!("{}:{}:{}", file_path.display(), symbol.name, symbol.location.line);
-            
+            let id = format!(
+                "{}:{}:{}",
+                file_path.display(),
+                symbol.name,
+                symbol.location.line
+            );
+
             // Calculate quality score
             let quality_score = self.calculate_quality_score(symbol, &parse_result.ast, content);
-            
+
             // Determine if exported
             let is_exported = self.is_symbol_exported(symbol);
-            
+
             symbols.push(SymbolEntry {
                 id,
                 name: symbol.name.clone(),
@@ -443,7 +476,7 @@ impl SymbolIndexer {
                 signature: symbol.signature.clone(),
                 documentation: symbol.docs.clone(),
                 visibility: None, // TODO: Extract from AST
-                type_info: None, // TODO: Type inference
+                type_info: None,  // TODO: Type inference
                 complexity: self.calculate_complexity(&parse_result.ast),
                 quality_score,
                 reference_count: 0,
@@ -453,17 +486,22 @@ impl SymbolIndexer {
                 usage_count: 0,
             });
         }
-        
+
         Ok(symbols)
     }
 
     /// Extract references from AST
-    fn extract_references(&self, parse_result: &ParseResult, file_path: &Path, content: &str) -> Result<Vec<SymbolReference>> {
+    fn extract_references(
+        &self,
+        parse_result: &ParseResult,
+        file_path: &Path,
+        content: &str,
+    ) -> Result<Vec<SymbolReference>> {
         let mut references = Vec::new();
-        
+
         // Walk AST to find references
         self.walk_ast_for_references(&parse_result.ast, file_path, content, &mut references)?;
-        
+
         Ok(references)
     }
 
@@ -480,7 +518,7 @@ impl SymbolIndexer {
             if let Some(name) = &node.name {
                 // Extract context
                 let context = self.extract_context(content, &node.start_pos);
-                
+
                 references.push(SymbolReference {
                     from_symbol_id: String::new(), // TODO: Resolve current scope
                     to_symbol_id: name.clone(),
@@ -491,73 +529,79 @@ impl SymbolIndexer {
                 });
             }
         }
-        
+
         // Recurse into children
         for child in &node.children {
             self.walk_ast_for_references(child, file_path, content, references)?;
         }
-        
+
         Ok(())
     }
 
     /// Calculate quality score for a symbol
     fn calculate_quality_score(&self, symbol: &Symbol, ast: &AstNode, content: &str) -> f32 {
         let mut score = 10.0;
-        
+
         // Deduct for missing documentation
         if symbol.docs.is_none() {
             score -= 2.0;
         }
-        
+
         // Deduct for high complexity
         let complexity = self.calculate_complexity(ast);
         if complexity > 10 {
             score -= ((complexity - 10) as f32 * 0.2).min(3.0);
         }
-        
+
         // Deduct for long functions
         let lines = content.lines().count();
         if symbol.kind == SymbolKind::Function && lines > 50 {
             score -= 1.0;
         }
-        
+
         // Deduct for poor naming
         if symbol.name.len() < 3 || symbol.name.chars().all(|c| c.is_uppercase()) {
             score -= 1.0;
         }
-        
+
         score.max(0.0)
     }
 
     /// Calculate cyclomatic complexity
     fn calculate_complexity(&self, ast: &AstNode) -> u32 {
         let mut complexity = 1;
-        
+
         // Add complexity for control flow
-        complexity += self.count_nodes(ast, &["if", "else", "match", "while", "for", "?", "&&", "||"]);
-        
+        complexity += self.count_nodes(
+            ast,
+            &["if", "else", "match", "while", "for", "?", "&&", "||"],
+        );
+
         complexity
     }
 
     /// Count specific node types in AST
     fn count_nodes(&self, ast: &AstNode, node_types: &[&str]) -> u32 {
         let mut count = 0;
-        
+
         if node_types.iter().any(|&t| ast.node_type.contains(t)) {
             count += 1;
         }
-        
+
         for child in &ast.children {
             count += self.count_nodes(child, node_types);
         }
-        
+
         count
     }
 
     /// Determine if symbol is exported/public
     fn is_symbol_exported(&self, symbol: &Symbol) -> bool {
         // Simple heuristic - can be enhanced
-        matches!(symbol.kind, SymbolKind::Function | SymbolKind::Class | SymbolKind::Interface | SymbolKind::Struct)
+        matches!(
+            symbol.kind,
+            SymbolKind::Function | SymbolKind::Class | SymbolKind::Interface | SymbolKind::Struct
+        )
     }
 
     /// Determine reference kind from node type
@@ -575,16 +619,20 @@ impl SymbolIndexer {
 
     /// Extract context line
     fn extract_context(&self, content: &str, pos: &Position) -> String {
-        content.lines()
+        content
+            .lines()
             .nth(pos.line)
             .map(|line| line.trim().to_string())
             .unwrap_or_default()
     }
 
     /// Get or create parser for language
-    async fn get_parser(&self, language: Language) -> Result<Arc<tokio::sync::Mutex<TreeSitterParser>>> {
+    async fn get_parser(
+        &self,
+        language: Language,
+    ) -> Result<Arc<tokio::sync::Mutex<TreeSitterParser>>> {
         let mut parsers = self.parsers.write().await;
-        
+
         if let Some(parser) = parsers.get(&language) {
             Ok(Arc::clone(parser))
         } else {
@@ -597,10 +645,11 @@ impl SymbolIndexer {
 
     /// Detect language from file extension
     fn detect_language(&self, path: &Path) -> Result<Language> {
-        let ext = path.extension()
+        let ext = path
+            .extension()
             .and_then(|e| e.to_str())
             .ok_or_else(|| anyhow!("No file extension"))?;
-            
+
         match ext {
             "rs" => Ok(Language::Rust),
             "ts" | "tsx" => Ok(Language::TypeScript),
@@ -642,7 +691,7 @@ impl SymbolIndexer {
                 symbol.is_exported as i32,
             ],
         )?;
-        
+
         Ok(())
     }
 
@@ -662,26 +711,34 @@ impl SymbolIndexer {
                 reference.context,
             ],
         )?;
-        
+
         Ok(())
     }
 
     /// Update call graph with new symbols and references
-    async fn update_call_graph(&self, symbols: &[SymbolEntry], references: &[SymbolReference]) -> Result<()> {
+    async fn update_call_graph(
+        &self,
+        symbols: &[SymbolEntry],
+        references: &[SymbolReference],
+    ) -> Result<()> {
         let mut graph = self.call_graph.write().await;
-        
+
         // Add symbol nodes
         for symbol in symbols {
             graph.add_symbol(&symbol.id);
         }
-        
+
         // Add reference edges
         for reference in references {
             if !reference.from_symbol_id.is_empty() {
-                graph.add_reference(&reference.from_symbol_id, &reference.to_symbol_id, reference.reference_kind);
+                graph.add_reference(
+                    &reference.from_symbol_id,
+                    &reference.to_symbol_id,
+                    reference.reference_kind,
+                );
             }
         }
-        
+
         Ok(())
     }
 
@@ -697,61 +754,63 @@ impl SymbolIndexer {
     /// Get all symbols from the index
     pub async fn get_all_symbols(&self) -> Result<Vec<SymbolEntry>> {
         let conn = self.db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
-            "SELECT id, name, kind, file_path, start_line, start_col, end_line, end_col, 
-                    parent_id, signature, documentation, visibility, type_info, complexity, 
-                    usage_count, last_modified, attributes 
-             FROM symbols ORDER BY name"
+            "SELECT id, name, kind, file_path, start_line, start_col, end_line, end_col,
+                    parent_id, signature, documentation, visibility, type_info, complexity,
+                    usage_count, last_modified, attributes
+             FROM symbols ORDER BY name",
         )?;
-        
-        let symbols = stmt.query_map([], |row| {
-            Ok(SymbolEntry {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap_or_default(),
-                file_path: PathBuf::from(row.get::<_, String>(3)?),
-                start_pos: Position {
-                    line: row.get(4)?,
-                    column: row.get(5)?,
-                    offset: 0,
-                },
-                end_pos: Position {
-                    line: row.get(6)?,
-                    column: row.get(7)?,
-                    offset: 0,
-                },
-                parent_id: row.get(8)?,
-                signature: row.get(9)?,
-                documentation: row.get(10)?,
-                visibility: row.get(11)?,
-                type_info: row.get(12)?,
-                complexity: row.get(13)?,
-                usage_count: row.get(14)?,
-                last_modified: row.get(15)?,
-                attributes: row.get::<_, Option<String>>(16)?
-                    .map(|s| serde_json::from_str(&s).unwrap_or_default())
-                    .unwrap_or_default(),
-                quality_score: 5.0,
-                reference_count: 0,
-                is_exported: false,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+
+        let symbols = stmt
+            .query_map([], |row| {
+                Ok(SymbolEntry {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    kind: serde_json::from_str(&row.get::<_, String>(2)?).unwrap_or_default(),
+                    file_path: PathBuf::from(row.get::<_, String>(3)?),
+                    start_pos: Position {
+                        line: row.get(4)?,
+                        column: row.get(5)?,
+                        offset: 0,
+                    },
+                    end_pos: Position {
+                        line: row.get(6)?,
+                        column: row.get(7)?,
+                        offset: 0,
+                    },
+                    parent_id: row.get(8)?,
+                    signature: row.get(9)?,
+                    documentation: row.get(10)?,
+                    visibility: row.get(11)?,
+                    type_info: row.get(12)?,
+                    complexity: row.get(13)?,
+                    usage_count: row.get(14)?,
+                    last_modified: row.get(15)?,
+                    attributes: row
+                        .get::<_, Option<String>>(16)?
+                        .map(|s| serde_json::from_str(&s).unwrap_or_default())
+                        .unwrap_or_default(),
+                    quality_score: 5.0,
+                    reference_count: 0,
+                    is_exported: false,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(symbols)
     }
-    
+
     /// Get index statistics
     pub async fn get_stats(&self) -> IndexStatistics {
         let stats = self.stats.read().await;
         let mut result = stats.clone();
-        
+
         // Find circular dependencies
         if let Ok(cycles) = self.find_circular_dependencies().await {
             result.cyclic_dependencies = cycles;
         }
-        
+
         result
     }
 }
@@ -804,10 +863,10 @@ mod tests {
             ..Default::default()
         };
         let db = Arc::new(DatabaseManager::new(config).await?);
-        
+
         // Create indexer
         let indexer = SymbolIndexer::new(db).await?;
-        
+
         // Test Rust code
         let rust_code = r#"
 fn main() {
@@ -819,15 +878,15 @@ fn helper() {
     // Helper function
 }
 "#;
-        
+
         // Index the code
         indexer.index_file(Path::new("test.rs"), rust_code).await?;
-        
+
         // Search for symbols
         let results = indexer.search("main", 10).await?;
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "main");
-        
+
         Ok(())
     }
 

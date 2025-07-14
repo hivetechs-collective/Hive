@@ -40,68 +40,89 @@ impl KeybindingManager {
             bindings: HashMap::new(),
             context_bindings: HashMap::new(),
         };
-        
+
         manager.setup_default_bindings();
         manager
     }
-    
+
     /// Setup default VS Code-like keybindings
     fn setup_default_bindings(&mut self) {
         // Global shortcuts
         self.add_binding(
-            KeySequence { modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT, key: KeyCode::Char('P') },
-            Action::ShowDialog("command_palette".to_string())
+            KeySequence {
+                modifiers: KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                key: KeyCode::Char('P'),
+            },
+            Action::ShowDialog("command_palette".to_string()),
         );
-        
+
         self.add_binding(
-            KeySequence { modifiers: KeyModifiers::CONTROL, key: KeyCode::Char('p') },
-            Action::ShowDialog("quick_open".to_string())
+            KeySequence {
+                modifiers: KeyModifiers::CONTROL,
+                key: KeyCode::Char('p'),
+            },
+            Action::ShowDialog("quick_open".to_string()),
         );
-        
+
         self.add_binding(
-            KeySequence { modifiers: KeyModifiers::CONTROL, key: KeyCode::Char('`') },
-            Action::SwitchPanel("terminal".to_string())
+            KeySequence {
+                modifiers: KeyModifiers::CONTROL,
+                key: KeyCode::Char('`'),
+            },
+            Action::SwitchPanel("terminal".to_string()),
         );
-        
+
         // Panel shortcuts
         self.add_binding(
-            KeySequence { modifiers: KeyModifiers::NONE, key: KeyCode::F(1) },
-            Action::SwitchPanel("explorer".to_string())
+            KeySequence {
+                modifiers: KeyModifiers::NONE,
+                key: KeyCode::F(1),
+            },
+            Action::SwitchPanel("explorer".to_string()),
         );
-        
+
         self.add_binding(
-            KeySequence { modifiers: KeyModifiers::NONE, key: KeyCode::F(2) },
-            Action::SwitchPanel("editor".to_string())
+            KeySequence {
+                modifiers: KeyModifiers::NONE,
+                key: KeyCode::F(2),
+            },
+            Action::SwitchPanel("editor".to_string()),
         );
-        
+
         self.add_binding(
-            KeySequence { modifiers: KeyModifiers::NONE, key: KeyCode::F(3) },
-            Action::SwitchPanel("terminal".to_string())
+            KeySequence {
+                modifiers: KeyModifiers::NONE,
+                key: KeyCode::F(3),
+            },
+            Action::SwitchPanel("terminal".to_string()),
         );
-        
+
         self.add_binding(
-            KeySequence { modifiers: KeyModifiers::NONE, key: KeyCode::F(4) },
-            Action::SwitchPanel("consensus".to_string())
+            KeySequence {
+                modifiers: KeyModifiers::NONE,
+                key: KeyCode::F(4),
+            },
+            Action::SwitchPanel("consensus".to_string()),
         );
     }
-    
+
     /// Add custom keybinding
     pub fn add_binding(&mut self, sequence: KeySequence, action: Action) {
         self.bindings.insert(sequence, action);
     }
-    
+
     /// Remove keybinding
     pub fn remove_binding(&mut self, sequence: &KeySequence) {
         self.bindings.remove(sequence);
     }
-    
+
     /// Get action for key event
     pub fn get_action(&self, key: KeyEvent, context: Option<&str>) -> Option<&Action> {
         let sequence = KeySequence {
             modifiers: key.modifiers,
             key: key.code,
         };
-        
+
         // Check context-specific bindings first
         if let Some(context) = context {
             if let Some(context_bindings) = self.context_bindings.get(context) {
@@ -110,11 +131,11 @@ impl KeybindingManager {
                 }
             }
         }
-        
+
         // Check global bindings
         self.bindings.get(&sequence)
     }
-    
+
     /// Add context-specific binding
     pub fn add_context_binding(&mut self, context: String, sequence: KeySequence, action: Action) {
         self.context_bindings
@@ -122,10 +143,13 @@ impl KeybindingManager {
             .or_insert_with(HashMap::new)
             .insert(sequence, action);
     }
-    
+
     /// Get all bindings for display
     pub fn get_all_bindings(&self) -> Vec<(KeySequence, Action)> {
-        self.bindings.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        self.bindings
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 }
 
@@ -143,11 +167,11 @@ impl KeySequence {
             key: key.code,
         }
     }
-    
+
     /// Display string for keybinding
     pub fn display_string(&self) -> String {
         let mut parts = Vec::new();
-        
+
         if self.modifiers.contains(KeyModifiers::CONTROL) {
             parts.push("Ctrl".to_string());
         }
@@ -157,7 +181,7 @@ impl KeySequence {
         if self.modifiers.contains(KeyModifiers::ALT) {
             parts.push("Alt".to_string());
         }
-        
+
         let key_str = match self.key {
             KeyCode::Char(c) => c.to_uppercase().to_string(),
             KeyCode::F(n) => format!("F{}", n),
@@ -173,7 +197,7 @@ impl KeySequence {
             _ => "?".to_string(),
         };
         parts.push(key_str);
-        
+
         parts.join("+")
     }
 }

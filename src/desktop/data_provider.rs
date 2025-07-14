@@ -49,19 +49,19 @@ impl SystemDataProvider {
             alert_threshold: 0.8,
             enforce_limits: false,
         };
-        
+
         let mut cost_tracker = self.cost_tracker.write().await;
         *cost_tracker = Some(CostTracker::new(budget_config));
 
         // Note: ConsensusEngine will be initialized when needed
-        
+
         Ok(())
     }
 
     /// Get conversation count from database
     pub async fn get_conversation_count(&self) -> usize {
         let database = self.database.read().await;
-        
+
         if let Some(db) = database.as_ref() {
             match db.get_statistics().await {
                 Ok(stats) => stats.conversation_count as usize,
@@ -78,7 +78,7 @@ impl SystemDataProvider {
     /// Get total cost spent
     pub async fn get_total_cost(&self) -> f64 {
         let cost_tracker = self.cost_tracker.read().await;
-        
+
         if let Some(tracker) = cost_tracker.as_ref() {
             match tracker.get_budget_status().await {
                 Ok(status) => status.monthly_spent as f64,
@@ -98,7 +98,7 @@ impl SystemDataProvider {
     pub async fn get_context_usage(&self) -> u8 {
         // Get from active consensus engine if available
         let consensus = self.consensus_engine.read().await;
-        
+
         if let Some(engine) = consensus.as_ref() {
             // If consensus engine is active, get its context usage
             engine.get_context_usage_percentage() as u8
@@ -107,28 +107,28 @@ impl SystemDataProvider {
             self.estimate_context_usage().await
         }
     }
-    
+
     /// Estimate context usage based on conversation history
     async fn estimate_context_usage(&self) -> u8 {
         let database = self.database.read().await;
-        
+
         if let Some(db) = database.as_ref() {
             // Get approximate token count from current conversation
             match db.get_connection() {
                 Ok(conn) => {
                     // Get the most recent conversation's messages
                     let result: Result<(i64, Option<String>), rusqlite::Error> = conn.query_row(
-                        "SELECT 
+                        "SELECT
                             COALESCE(message_count, 0),
                             messages
-                         FROM conversations 
+                         FROM conversations
                          WHERE datetime(updated_at) > datetime('now', '-1 hour')
                          ORDER BY updated_at DESC
                          LIMIT 1",
                         [],
                         |row| Ok((row.get(0)?, row.get(1)?))
                     );
-                    
+
                     match result {
                         Ok((message_count, messages_json)) => {
                             // More accurate estimation based on actual content
@@ -139,10 +139,10 @@ impl SystemDataProvider {
                                 // Fallback: assume average 150 tokens per message
                                 (message_count * 150) as usize
                             };
-                            
+
                             // Get actual model context window from config
                             let context_window = self.get_model_context_window().await.unwrap_or(8192);
-                            
+
                             let usage = ((estimated_tokens as f64 / context_window as f64) * 100.0) as u8;
                             usage.min(100)
                         }
@@ -163,15 +163,15 @@ impl SystemDataProvider {
             Ok(config) => config,
             Err(_) => return ConnectionStatus::Disconnected,
         };
-        
+
         let api_key = match config.openrouter.as_ref().and_then(|or| or.api_key.as_ref()) {
             Some(key) => key,
             None => return ConnectionStatus::Disconnected,
         };
-        
+
         let client = reqwest::Client::new();
         let url = "https://openrouter.ai/api/v1/models";
-        
+
         match client.get(url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("HTTP-Referer", "https://github.com/hivetechs/hive")
@@ -206,7 +206,7 @@ impl SystemDataProvider {
     /// Get database size in MB
     pub async fn get_database_size_mb(&self) -> f64 {
         let database = self.database.read().await;
-        
+
         if let Some(db) = database.as_ref() {
             match db.get_statistics().await {
                 Ok(stats) => stats.database_size_bytes as f64 / 1024.0 / 1024.0,
@@ -220,7 +220,7 @@ impl SystemDataProvider {
     /// Get daily cost spent
     pub async fn get_daily_cost(&self) -> f64 {
         let cost_tracker = self.cost_tracker.read().await;
-        
+
         if let Some(tracker) = cost_tracker.as_ref() {
             match tracker.get_budget_status().await {
                 Ok(status) => status.daily_spent as f64,
@@ -230,28 +230,28 @@ impl SystemDataProvider {
             0.0
         }
     }
-    
+
     /// Set the active consensus engine reference
     pub async fn set_consensus_engine(&self, engine: Option<ConsensusEngine>) {
         let mut consensus = self.consensus_engine.write().await;
         *consensus = engine;
     }
-    
+
     /// Get cost from database as fallback
     async fn get_cost_from_database(&self) -> Result<f64> {
         let database = self.database.read().await;
-        
+
         if let Some(db) = database.as_ref() {
             match db.get_connection() {
                 Ok(conn) => {
                     // Get total cost from consensus_costs table
                     let total_cost: f64 = conn.query_row(
-                        "SELECT COALESCE(SUM(total_cost), 0.0) FROM consensus_costs 
+                        "SELECT COALESCE(SUM(total_cost), 0.0) FROM consensus_costs
                          WHERE datetime(created_at) > datetime('now', '-30 days')",
                         [],
                         |row| row.get(0)
                     ).unwrap_or(0.0);
-                    
+
                     Ok(total_cost)
                 }
                 Err(_) => Ok(0.0),
@@ -260,11 +260,11 @@ impl SystemDataProvider {
             Ok(0.0)
         }
     }
-    
+
     /// Get the context window size for the current model
     async fn get_model_context_window(&self) -> Result<usize> {
         let config = get_config().await?;
-        
+
         // Map common models to their context windows
         let model = config.consensus.models.generator.as_str();
         let context_window = match model {
@@ -277,7 +277,7 @@ impl SystemDataProvider {
             model if model.contains("llama") => 8192,
             _ => 8192, // Default fallback
         };
-        
+
         Ok(context_window)
     }
 }

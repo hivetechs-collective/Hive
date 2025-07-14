@@ -3,9 +3,9 @@
 //! Provides secure access control for MCP server
 
 use crate::core::config::Config;
-use anyhow::{Result, anyhow};
-use std::sync::Arc;
+use anyhow::{anyhow, Result};
 use std::collections::HashSet;
+use std::sync::Arc;
 use tracing::{info, warn};
 
 /// Authentication manager for MCP server
@@ -18,7 +18,7 @@ impl AuthManager {
     /// Create new auth manager
     pub async fn new(config: Arc<Config>) -> Result<Self> {
         let mut trusted_clients = HashSet::new();
-        
+
         // Add default trusted clients
         trusted_clients.insert("vscode".to_string());
         trusted_clients.insert("claude-desktop".to_string());
@@ -51,7 +51,7 @@ impl AuthManager {
         }
 
         warn!("Unknown client attempted connection: {}", client_name);
-        
+
         // For now, allow all clients but log the warning
         // In production, this could be more restrictive
         Ok(true)

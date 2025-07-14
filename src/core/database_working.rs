@@ -84,21 +84,21 @@ impl DatabaseManager {
 
         // Get a connection to apply initial pragmas
         let conn = pool.get().context("Failed to get initial connection")?;
-        
+
         // Apply performance optimizations
         if config.enable_wal {
             let _mode: String = conn.query_row(
                 &format!("PRAGMA journal_mode = {}", config.journal_mode),
                 [],
-                |row| row.get(0)
+                |row| row.get(0),
             )?;
         }
-        
+
         conn.execute(&format!("PRAGMA cache_size = {}", config.cache_size), [])?;
         conn.execute("PRAGMA temp_store = MEMORY", [])?;
         conn.execute("PRAGMA mmap_size = 268435456", [])?; // 256MB mmap
         conn.execute(&format!("PRAGMA synchronous = {}", config.synchronous), [])?;
-        
+
         if config.enable_foreign_keys {
             conn.execute("PRAGMA foreign_keys = ON", [])?;
         }
@@ -112,10 +112,10 @@ impl DatabaseManager {
         );
 
         let manager = Self { pool, config };
-        
+
         // Create minimal schema
         manager.create_schema().await?;
-        
+
         Ok(manager)
     }
 
@@ -129,7 +129,7 @@ impl DatabaseManager {
     /// Create minimal database schema
     async fn create_schema(&self) -> Result<()> {
         let conn = self.get_connection()?;
-        
+
         // Create users table
         conn.execute(
             "CREATE TABLE IF NOT EXISTS users (
@@ -255,15 +255,12 @@ impl DatabaseManager {
     /// Execute a health check to ensure database is responding
     pub async fn health_check(&self) -> Result<DatabaseHealthStatus> {
         let start = Instant::now();
-        
+
         let conn = self.get_connection()?;
-        
+
         // Test basic connectivity
-        let timestamp: String = conn.query_row(
-            "SELECT datetime('now') as timestamp",
-            [],
-            |row| row.get(0),
-        )?;
+        let timestamp: String =
+            conn.query_row("SELECT datetime('now') as timestamp", [], |row| row.get(0))?;
 
         let response_time = start.elapsed();
 
@@ -273,18 +270,10 @@ impl DatabaseManager {
         let idle_connections = pool_state.idle_connections;
 
         // Check if WAL mode is active
-        let wal_mode: String = conn.query_row(
-            "PRAGMA journal_mode",
-            [],
-            |row| row.get(0),
-        )?;
+        let wal_mode: String = conn.query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
 
         // Check foreign key enforcement
-        let foreign_keys: i32 = conn.query_row(
-            "PRAGMA foreign_keys",
-            [],
-            |row| row.get(0),
-        )?;
+        let foreign_keys: i32 = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
 
         Ok(DatabaseHealthStatus {
             healthy: true,
@@ -300,9 +289,9 @@ impl DatabaseManager {
     /// Get database statistics for monitoring
     pub async fn get_statistics(&self) -> Result<DatabaseStatistics> {
         let conn = self.get_connection()?;
-        
+
         let stats_query = r#"
-            SELECT 
+            SELECT
                 (SELECT COUNT(*) FROM conversations) as conversation_count,
                 (SELECT COUNT(*) FROM messages) as message_count,
                 (SELECT COUNT(*) FROM openrouter_models) as model_count,
@@ -311,17 +300,23 @@ impl DatabaseManager {
                 (SELECT COUNT(*) FROM knowledge_conversations) as knowledge_count
         "#;
 
-        let (conversation_count, message_count, model_count, user_count, profile_count, knowledge_count) = 
-            conn.query_row(stats_query, [], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?,
-                    row.get::<_, i64>(5)?,
-                ))
-            })?;
+        let (
+            conversation_count,
+            message_count,
+            model_count,
+            user_count,
+            profile_count,
+            knowledge_count,
+        ) = conn.query_row(stats_query, [], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })?;
 
         // Get database file size
         let db_size = tokio::fs::metadata(&self.config.path)
@@ -375,7 +370,7 @@ pub struct DatabaseStatistics {
 pub async fn initialize_database(config: Option<DatabaseConfig>) -> Result<()> {
     let config = config.unwrap_or_default();
     let db_manager = Arc::new(DatabaseManager::new(config).await?);
-    
+
     DATABASE
         .set(db_manager)
         .map_err(|_| anyhow::anyhow!("Database already initialized"))?;
@@ -420,7 +415,7 @@ impl User {
     pub async fn create(email: Option<String>, license_key: Option<String>) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let user = User {
             id: generate_id(),
             email,
@@ -431,7 +426,7 @@ impl User {
         };
 
         conn.execute(
-            "INSERT INTO users (id, email, license_key, tier, created_at, updated_at) 
+            "INSERT INTO users (id, email, license_key, tier, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 &user.id,
@@ -450,10 +445,10 @@ impl User {
     pub async fn find_by_id(id: &str) -> Result<Option<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let user = conn
             .query_row(
-                "SELECT id, email, license_key, tier, created_at, updated_at 
+                "SELECT id, email, license_key, tier, created_at, updated_at
                  FROM users WHERE id = ?1",
                 params![id],
                 |row| {
@@ -501,7 +496,7 @@ impl Conversation {
     ) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let conversation = Conversation {
             id: generate_id(),
             user_id,
@@ -512,10 +507,10 @@ impl Conversation {
             start_time: Some(current_timestamp()),
             end_time: None,
             success_rate: "0".to_string(), // Will be calculated after completion
-            quality_score: 0.0, // Will be calculated based on actual consensus
-            consensus_improvement: 0, // Will be calculated from stage analysis
+            quality_score: 0.0,            // Will be calculated based on actual consensus
+            consensus_improvement: 0,      // Will be calculated from stage analysis
             confidence_level: "Unknown".to_string(), // Will be determined by validator
-            success: false, // Will be set to true when consensus completes
+            success: false,                // Will be set to true when consensus completes
             created_at: current_timestamp(),
             updated_at: current_timestamp(),
         };
@@ -572,7 +567,7 @@ impl Message {
     ) -> Result<Self> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let message = Message {
             id: generate_id(),
             conversation_id,
@@ -604,10 +599,10 @@ impl Message {
     pub async fn find_by_conversation(conversation_id: &str) -> Result<Vec<Self>> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         let mut stmt = conn.prepare(
             "SELECT id, conversation_id, role, content, stage, model_used, timestamp
-             FROM messages 
+             FROM messages
              WHERE conversation_id = ?1
              ORDER BY timestamp ASC",
         )?;
@@ -637,7 +632,7 @@ where
 {
     let db = get_database().await?;
     let mut conn = db.get_connection()?;
-    
+
     let tx = conn.transaction()?;
     match f(&tx) {
         Ok(result) => {

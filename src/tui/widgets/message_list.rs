@@ -8,26 +8,26 @@ use ratatui::{
     widgets::{Block, List, ListItem, Widget},
 };
 
-use crate::tui::app::{TuiMessage, MessageType};
 use super::WidgetTheme;
+use crate::tui::app::{MessageType, TuiMessage};
 
 /// Enhanced message list for TUI display
 pub struct MessageList<'a> {
     /// Messages to display
     messages: &'a [TuiMessage],
-    
+
     /// Block around the list
     block: Option<Block<'a>>,
-    
+
     /// Default style
     style: Style,
-    
+
     /// Widget theme
     theme: &'a WidgetTheme,
-    
+
     /// Show timestamps
     show_timestamps: bool,
-    
+
     /// Scroll offset
     scroll_offset: usize,
 }
@@ -44,32 +44,30 @@ impl<'a> MessageList<'a> {
             scroll_offset: 0,
         }
     }
-    
+
     /// Set block around the list
     pub fn block(mut self, block: Block<'a>) -> Self {
         self.block = Some(block);
         self
     }
-    
+
     /// Set overall style
     pub fn style(mut self, style: Style) -> Self {
         self.style = style;
         self
     }
-    
+
     /// Show/hide timestamps
     pub fn show_timestamps(mut self, show: bool) -> Self {
         self.show_timestamps = show;
         self
     }
-    
+
     /// Set scroll offset
     pub fn scroll_offset(mut self, offset: usize) -> Self {
         self.scroll_offset = offset;
         self
     }
-    
-    
 }
 
 impl<'a> Widget for MessageList<'a> {
@@ -80,7 +78,7 @@ impl<'a> Widget for MessageList<'a> {
         let style = self.style;
         let theme = self.theme;
         let show_timestamps = self.show_timestamps;
-        
+
         let area = match self.block {
             Some(b) => {
                 let inner_area = b.inner(area);
@@ -89,14 +87,14 @@ impl<'a> Widget for MessageList<'a> {
             }
             None => area,
         };
-        
+
         // Convert messages to list items
         let items: Vec<ListItem> = messages
             .iter()
             .skip(scroll_offset)
             .map(|msg| ListItem::new(format_message(msg, theme, show_timestamps)))
             .collect();
-        
+
         // Create and render the list
         let list = List::new(items).style(style);
         list.render(area, buf);
@@ -104,19 +102,26 @@ impl<'a> Widget for MessageList<'a> {
 }
 
 /// Format message content with optional timestamp
-fn format_message<'a>(message: &'a TuiMessage, theme: &WidgetTheme, show_timestamps: bool) -> Text<'a> {
+fn format_message<'a>(
+    message: &'a TuiMessage,
+    theme: &WidgetTheme,
+    show_timestamps: bool,
+) -> Text<'a> {
     let style = get_message_style(&message.message_type, theme);
-    
-    if show_timestamps && !matches!(message.message_type, MessageType::Welcome | MessageType::UserInput) {
+
+    if show_timestamps
+        && !matches!(
+            message.message_type,
+            MessageType::Welcome | MessageType::UserInput
+        )
+    {
         let timestamp = message.timestamp.format("%H:%M:%S");
         let timestamp_style = Style::default().fg(Color::DarkGray);
-        
-        Text::from(vec![
-            Line::from(vec![
-                Span::styled(format!("[{}] ", timestamp), timestamp_style),
-                Span::styled(&message.content, style),
-            ]),
-        ])
+
+        Text::from(vec![Line::from(vec![
+            Span::styled(format!("[{}] ", timestamp), timestamp_style),
+            Span::styled(&message.content, style),
+        ])])
     } else {
         Text::from(Span::styled(&message.content, style))
     }
@@ -150,10 +155,10 @@ impl<'a> MessageList<'a> {
         } else {
             0
         };
-        
+
         Self::new(messages, theme).scroll_offset(scroll_offset)
     }
-    
+
     /// Create message list for specific message types
     pub fn filtered(
         messages: &'a [TuiMessage],
@@ -164,7 +169,7 @@ impl<'a> MessageList<'a> {
         // In practice, you'd want to filter the messages first
         Self::new(messages, theme)
     }
-    
+
     /// Create compact message list (no timestamps)
     pub fn compact(messages: &'a [TuiMessage], theme: &'a WidgetTheme) -> Self {
         Self::new(messages, theme).show_timestamps(false)

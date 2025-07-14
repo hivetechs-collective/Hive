@@ -1,53 +1,53 @@
 //! Application State Management
 
-use std::path::PathBuf;
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Main application state
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppState {
     /// Current project information
     pub current_project: Option<ProjectInfo>,
-    
+
     /// File explorer state
     pub file_explorer: FileExplorerState,
-    
+
     /// Chat interface state
     pub chat: ChatState,
-    
+
     /// Consensus engine state
     pub consensus: ConsensusState,
-    
+
     /// Application settings
     pub settings: AppSettings,
-    
+
     /// Connection status
     pub connection_status: ConnectionStatus,
-    
+
     /// Cost tracking
     pub total_cost: f64,
-    
+
     /// Context usage percentage
     pub context_usage: u8,
-    
+
     /// Auto-accept edits setting
     pub auto_accept: bool,
-    
+
     /// Current model being used
     pub current_model: Option<String>,
-    
+
     /// User license information
     pub user_id: Option<String>,
     pub license_tier: String,
-    
+
     /// Usage tracking
     pub daily_conversations_used: u32,
     pub daily_conversations_limit: u32,
     pub total_conversations_remaining: Option<u32>, // From D1 (includes credits)
     pub is_trial_active: bool,
     pub trial_days_remaining: Option<i32>,
-    
+
     /// Trigger for subscription display refresh
     pub subscription_refresh_trigger: u32,
 }
@@ -81,7 +81,7 @@ impl AppState {
             subscription_refresh_trigger: 0,
         }
     }
-    
+
     /// Load a project from a directory
     pub async fn load_project(&mut self, path: PathBuf) -> anyhow::Result<()> {
         let project = ProjectInfo::from_path(path).await?;
@@ -89,22 +89,22 @@ impl AppState {
         self.file_explorer.refresh().await?;
         Ok(())
     }
-    
+
     /// Update connection status
     pub fn set_connection_status(&mut self, status: ConnectionStatus) {
         self.connection_status = status;
     }
-    
+
     /// Add cost to total
     pub fn add_cost(&mut self, cost: f64) {
         self.total_cost += cost;
     }
-    
+
     /// Update context usage
     pub fn set_context_usage(&mut self, usage: u8) {
         self.context_usage = usage.min(100);
     }
-    
+
     /// Update usage tracking information
     pub fn update_usage_info(
         &mut self,
@@ -142,22 +142,22 @@ impl ProjectInfo {
             .and_then(|n| n.to_str())
             .unwrap_or("Unknown")
             .to_string();
-            
+
         // Detect primary language
         let language = detect_primary_language(&path).await;
-        
+
         // Check Git status
         let git_status = check_git_status(&path).await;
-        
+
         // Count files
         let file_count = count_project_files(&path).await;
-        
+
         // Extract git branch if available
         let git_branch = match &git_status {
             GitStatus::Repository { branch, .. } => Some(branch.clone()),
             _ => None,
         };
-        
+
         Ok(Self {
             name,
             path,
@@ -191,19 +191,19 @@ impl FileExplorerState {
             show_hidden: false,
         }
     }
-    
+
     pub async fn refresh(&mut self) -> anyhow::Result<()> {
         if let Some(root) = &self.root_path {
             self.files = load_directory_tree(root, &self.expanded_dirs, self.show_hidden).await?;
         }
         Ok(())
     }
-    
+
     pub fn toggle_directory(&mut self, path: &PathBuf) {
         let expanded = self.expanded_dirs.get(path).copied().unwrap_or(false);
         self.expanded_dirs.insert(path.clone(), !expanded);
     }
-    
+
     pub fn select_file(&mut self, path: PathBuf) {
         self.selected_file = Some(path);
     }
@@ -293,7 +293,7 @@ impl FileType {
             _ => Self::Unknown,
         }
     }
-    
+
     pub fn icon(&self) -> &'static str {
         match self {
             Self::Rust => "🦀",
@@ -319,7 +319,7 @@ impl FileType {
             Self::Unknown => "❓",
         }
     }
-    
+
     pub fn extension(&self) -> &'static str {
         match self {
             Self::Rust => "rs",
@@ -368,16 +368,16 @@ impl ChatState {
             selected_message: None,
         }
     }
-    
+
     pub fn add_message(&mut self, message: ChatMessage) {
         self.messages.push(message);
         self.scroll_to_bottom();
     }
-    
+
     pub fn scroll_to_bottom(&mut self) {
         self.scroll_position = 1.0; // Bottom
     }
-    
+
     pub fn clear_input(&mut self) {
         self.input_text.clear();
     }
@@ -451,7 +451,7 @@ impl ConsensusState {
             streaming_content: String::new(),
         }
     }
-    
+
     pub fn start_consensus(&mut self) {
         self.is_active = true;
         self.is_running = true;
@@ -461,7 +461,7 @@ impl ConsensusState {
         self.estimated_cost = 0.0;
         self.streaming_content.clear();
     }
-    
+
     pub fn update_progress(&mut self, stage: ConsensusStage, progress: u8) {
         match stage {
             ConsensusStage::Generator => self.progress.generator = progress,
@@ -470,13 +470,13 @@ impl ConsensusState {
             ConsensusStage::Curator => self.progress.curator = progress,
         }
     }
-    
+
     pub fn complete_consensus(&mut self) {
         self.is_active = false;
         self.is_running = false;
         self.current_stage = None;
     }
-    
+
     pub fn add_tokens(&mut self, tokens: usize, cost: f64) {
         self.total_tokens += tokens;
         self.estimated_cost += cost;

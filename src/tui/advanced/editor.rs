@@ -7,13 +7,14 @@
 //! - Find and replace
 //! - Basic code completion
 
+use crate::tui::themes::Theme;
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     backend::Backend,
     layout::Rect,
-    style::{Color, Style, Modifier},
-    text::{Span, Line},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Tabs},
     Frame,
 };
@@ -22,7 +23,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use crate::tui::themes::Theme;
 use tokio::fs as async_fs;
 
 /// Code editor panel state
@@ -123,9 +123,10 @@ impl EditorPanel {
         let content = fs::read_to_string(path)?;
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
         let language = FileLanguage::from_path(path);
-        
+
         let tab = EditorTab {
-            title: path.file_name()
+            title: path
+                .file_name()
                 .unwrap_or_else(|| path.as_os_str())
                 .to_string_lossy()
                 .to_string(),
@@ -137,10 +138,10 @@ impl EditorPanel {
             language,
             selection: None,
         };
-        
+
         self.tabs.push(tab);
         self.active_tab = self.tabs.len() - 1;
-        
+
         Ok(())
     }
 
@@ -182,18 +183,17 @@ impl EditorPanel {
     pub fn current_tab_mut(&mut self) -> Option<&mut EditorTab> {
         self.tabs.get_mut(self.active_tab)
     }
-    
+
     /// Save file (async version for menu action)
     pub async fn save_file(&mut self) -> Result<()> {
         self.save_current_tab().await
     }
-    
+
     /// Get current file path
     pub fn current_file(&self) -> Option<&PathBuf> {
-        self.current_tab()
-            .and_then(|tab| tab.path.as_ref())
+        self.current_tab().and_then(|tab| tab.path.as_ref())
     }
-    
+
     /// Close all files
     pub fn close_all_files(&mut self) {
         self.tabs.clear();
@@ -202,19 +202,13 @@ impl EditorPanel {
     }
 
     /// Render the editor panel
-    pub fn render(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         // Split area for tabs and editor content
         let chunks = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .constraints([
                 ratatui::layout::Constraint::Length(1), // Tab bar
-                ratatui::layout::Constraint::Min(0),     // Editor content
+                ratatui::layout::Constraint::Min(0),    // Editor content
             ])
             .split(area);
 
@@ -249,13 +243,7 @@ impl EditorPanel {
     }
 
     /// Render editor content
-    fn render_editor_content(
-        &self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    fn render_editor_content(&self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         if let Some(tab) = self.current_tab() {
             let visible_lines = self.get_visible_lines(tab, area.height as usize);
             let content = self.format_editor_content(tab, &visible_lines, theme);
@@ -282,14 +270,15 @@ impl EditorPanel {
             }
         } else {
             // No tabs open - show welcome message
-            let welcome = Paragraph::new("Welcome to HiveTechs Editor\n\nPress Ctrl+O to open a file")
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title("Editor")
-                        .border_style(theme.inactive_border_style()),
-                )
-                .style(theme.editor_style());
+            let welcome =
+                Paragraph::new("Welcome to HiveTechs Editor\n\nPress Ctrl+O to open a file")
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title("Editor")
+                            .border_style(theme.inactive_border_style()),
+                    )
+                    .style(theme.editor_style());
 
             frame.render_widget(welcome, area);
         }
@@ -299,7 +288,7 @@ impl EditorPanel {
     fn get_visible_lines<'a>(&self, tab: &'a EditorTab, height: usize) -> Vec<(usize, &'a String)> {
         let start = tab.scroll_offset;
         let end = (start + height.saturating_sub(2)).min(tab.lines.len());
-        
+
         tab.lines[start..end]
             .iter()
             .enumerate()
@@ -318,7 +307,7 @@ impl EditorPanel {
             .iter()
             .map(|(line_num, line)| {
                 let mut spans = Vec::new();
-                
+
                 // Add line number if enabled
                 if self.settings.show_line_numbers {
                     let line_num_str = format!("{:4} ", line_num + 1);
@@ -327,11 +316,11 @@ impl EditorPanel {
                         Style::default().fg(theme.line_number_color()),
                     ));
                 }
-                
+
                 // Add line content with syntax highlighting
                 let highlighted_spans = self.apply_syntax_highlighting(line, &tab.language, theme);
                 spans.extend(highlighted_spans);
-                
+
                 Line::from(spans)
             })
             .collect()
@@ -347,7 +336,9 @@ impl EditorPanel {
         // Basic syntax highlighting implementation
         match language {
             FileLanguage::Rust => self.highlight_rust(line, theme),
-            FileLanguage::JavaScript | FileLanguage::TypeScript => self.highlight_javascript(line, theme),
+            FileLanguage::JavaScript | FileLanguage::TypeScript => {
+                self.highlight_javascript(line, theme)
+            }
             FileLanguage::Python => self.highlight_python(line, theme),
             FileLanguage::Markdown => self.highlight_markdown(line, theme),
             _ => vec![Span::raw(line.to_string())],
@@ -357,54 +348,84 @@ impl EditorPanel {
     /// Rust syntax highlighting
     fn highlight_rust(&self, line: &str, theme: &Theme) -> Vec<Span> {
         let keywords = [
-            "fn", "let", "mut", "pub", "struct", "enum", "impl", "trait",
-            "use", "mod", "crate", "super", "self", "Self", "match", "if",
-            "else", "while", "for", "loop", "break", "continue", "return",
+            "fn", "let", "mut", "pub", "struct", "enum", "impl", "trait", "use", "mod", "crate",
+            "super", "self", "Self", "match", "if", "else", "while", "for", "loop", "break",
+            "continue", "return",
         ];
-        
+
         self.basic_keyword_highlighting(line, &keywords, theme)
     }
 
     /// JavaScript/TypeScript syntax highlighting
     fn highlight_javascript(&self, line: &str, theme: &Theme) -> Vec<Span> {
         let keywords = [
-            "function", "const", "let", "var", "class", "interface", "type",
-            "import", "export", "from", "as", "if", "else", "while", "for",
-            "return", "break", "continue", "try", "catch", "finally",
+            "function",
+            "const",
+            "let",
+            "var",
+            "class",
+            "interface",
+            "type",
+            "import",
+            "export",
+            "from",
+            "as",
+            "if",
+            "else",
+            "while",
+            "for",
+            "return",
+            "break",
+            "continue",
+            "try",
+            "catch",
+            "finally",
         ];
-        
+
         self.basic_keyword_highlighting(line, &keywords, theme)
     }
 
     /// Python syntax highlighting
     fn highlight_python(&self, line: &str, theme: &Theme) -> Vec<Span> {
         let keywords = [
-            "def", "class", "import", "from", "as", "if", "elif", "else",
-            "while", "for", "in", "return", "break", "continue", "try",
-            "except", "finally", "with", "lambda", "yield",
+            "def", "class", "import", "from", "as", "if", "elif", "else", "while", "for", "in",
+            "return", "break", "continue", "try", "except", "finally", "with", "lambda", "yield",
         ];
-        
+
         self.basic_keyword_highlighting(line, &keywords, theme)
     }
 
     /// Markdown syntax highlighting
     fn highlight_markdown(&self, line: &str, theme: &Theme) -> Vec<Span> {
         if line.starts_with('#') {
-            vec![Span::styled(line.to_string(), Style::default().fg(theme.heading_color()).add_modifier(Modifier::BOLD))]
+            vec![Span::styled(
+                line.to_string(),
+                Style::default()
+                    .fg(theme.heading_color())
+                    .add_modifier(Modifier::BOLD),
+            )]
         } else if line.starts_with("```") {
-            vec![Span::styled(line.to_string(), Style::default().fg(theme.code_block_color()))]
+            vec![Span::styled(
+                line.to_string(),
+                Style::default().fg(theme.code_block_color()),
+            )]
         } else {
             vec![Span::raw(line.to_string())]
         }
     }
 
     /// Basic keyword highlighting implementation
-    fn basic_keyword_highlighting(&self, line: &str, keywords: &[&str], theme: &Theme) -> Vec<Span> {
+    fn basic_keyword_highlighting(
+        &self,
+        line: &str,
+        keywords: &[&str],
+        theme: &Theme,
+    ) -> Vec<Span> {
         let mut spans = Vec::new();
         let mut current_word = String::new();
         let mut in_string = false;
         let mut string_char = '\0';
-        
+
         for ch in line.chars() {
             match ch {
                 '"' | '\'' if !in_string => {
@@ -418,7 +439,10 @@ impl EditorPanel {
                 }
                 c if c == string_char && in_string => {
                     current_word.push(ch);
-                    spans.push(Span::styled(current_word.clone(), Style::default().fg(theme.string_color())));
+                    spans.push(Span::styled(
+                        current_word.clone(),
+                        Style::default().fg(theme.string_color()),
+                    ));
                     current_word.clear();
                     in_string = false;
                     string_char = '\0';
@@ -445,22 +469,30 @@ impl EditorPanel {
                 }
             }
         }
-        
+
         if !current_word.is_empty() {
             if in_string {
-                spans.push(Span::styled(current_word, Style::default().fg(theme.string_color())));
+                spans.push(Span::styled(
+                    current_word,
+                    Style::default().fg(theme.string_color()),
+                ));
             } else {
                 spans.push(self.create_word_span(&current_word, keywords, theme));
             }
         }
-        
+
         spans
     }
 
     /// Create span for a word (keyword or regular text)
     fn create_word_span(&self, word: &str, keywords: &[&str], theme: &Theme) -> Span {
         if keywords.contains(&word) {
-            Span::styled(word.to_string(), Style::default().fg(theme.keyword_color()).add_modifier(Modifier::BOLD))
+            Span::styled(
+                word.to_string(),
+                Style::default()
+                    .fg(theme.keyword_color())
+                    .add_modifier(Modifier::BOLD),
+            )
         } else {
             Span::raw(word.to_string())
         }
@@ -515,7 +547,8 @@ impl EditorPanel {
             // Editor navigation
             _ => {
                 if self.active_tab < self.tabs.len() {
-                    self.handle_editor_navigation_by_index(self.active_tab, key).await
+                    self.handle_editor_navigation_by_index(self.active_tab, key)
+                        .await
                 } else {
                     Ok(false)
                 }
@@ -524,7 +557,11 @@ impl EditorPanel {
     }
 
     /// Handle editor navigation by tab index
-    async fn handle_editor_navigation_by_index(&mut self, tab_index: usize, key: KeyEvent) -> Result<bool> {
+    async fn handle_editor_navigation_by_index(
+        &mut self,
+        tab_index: usize,
+        key: KeyEvent,
+    ) -> Result<bool> {
         // First, handle the navigation on the tab
         let navigation_handled = if let Some(tab) = self.tabs.get_mut(tab_index) {
             let handled = Self::handle_tab_navigation(tab, key);
@@ -534,7 +571,7 @@ impl EditorPanel {
         } else {
             return Ok(false);
         };
-        
+
         Ok(navigation_handled)
     }
 
@@ -544,13 +581,19 @@ impl EditorPanel {
             KeyCode::Up => {
                 if tab.cursor.0 > 0 {
                     tab.cursor.0 -= 1;
-                    tab.cursor.1 = tab.cursor.1.min(tab.lines.get(tab.cursor.0).map_or(0, |l| l.len()));
+                    tab.cursor.1 = tab
+                        .cursor
+                        .1
+                        .min(tab.lines.get(tab.cursor.0).map_or(0, |l| l.len()));
                 }
             }
             KeyCode::Down => {
                 if tab.cursor.0 < tab.lines.len().saturating_sub(1) {
                     tab.cursor.0 += 1;
-                    tab.cursor.1 = tab.cursor.1.min(tab.lines.get(tab.cursor.0).map_or(0, |l| l.len()));
+                    tab.cursor.1 = tab
+                        .cursor
+                        .1
+                        .min(tab.lines.get(tab.cursor.0).map_or(0, |l| l.len()));
                 }
             }
             KeyCode::Left => {
@@ -584,7 +627,7 @@ impl EditorPanel {
             }
             _ => return false,
         }
-        
+
         true
     }
 
@@ -593,7 +636,7 @@ impl EditorPanel {
         // TODO: Implement proper scroll offset calculation
         // This would need viewport height information
     }
-    
+
     /// Update scroll offset to keep cursor visible
     fn update_scroll_offset(&self, tab: &mut EditorTab) {
         Self::update_scroll_offset_static(tab);

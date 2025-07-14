@@ -2,7 +2,7 @@
 //!
 //! Provides current time awareness and temporal intelligence
 
-use chrono::{DateTime, Local, TimeZone, Timelike, Datelike};
+use chrono::{DateTime, Datelike, Local, TimeZone, Timelike};
 use serde::{Deserialize, Serialize};
 
 /// Temporal context manager
@@ -23,7 +23,7 @@ pub struct TemporalContext {
 pub struct BusinessHours {
     /// Start hour (24-hour format)
     pub start_hour: u32,
-    /// End hour (24-hour format)  
+    /// End hour (24-hour format)
     pub end_hour: u32,
     /// Working days (0 = Sunday, 6 = Saturday)
     pub working_days: Vec<u32>,
@@ -87,11 +87,15 @@ impl TemporalContext {
     /// Get relative time since session start
     pub fn session_duration(&self) -> String {
         let duration = self.current_time.signed_duration_since(self.session_start);
-        
+
         if duration.num_hours() > 0 {
             format!("{}h {}m", duration.num_hours(), duration.num_minutes() % 60)
         } else if duration.num_minutes() > 0 {
-            format!("{}m {}s", duration.num_minutes(), duration.num_seconds() % 60)
+            format!(
+                "{}m {}s",
+                duration.num_minutes(),
+                duration.num_seconds() % 60
+            )
         } else {
             format!("{}s", duration.num_seconds())
         }
@@ -110,11 +114,10 @@ impl TemporalContext {
 
         let day_of_week = self.current_time.format("%A").to_string();
         let weekday = self.current_time.weekday().num_days_from_sunday();
-        
-        let is_business_hours = 
-            self.business_hours.working_days.contains(&weekday) &&
-            hour >= self.business_hours.start_hour &&
-            hour < self.business_hours.end_hour;
+
+        let is_business_hours = self.business_hours.working_days.contains(&weekday)
+            && hour >= self.business_hours.start_hour
+            && hour < self.business_hours.end_hour;
 
         TimeContext {
             is_business_hours,
@@ -146,7 +149,7 @@ impl TemporalContext {
     pub fn get_time_suggestions(&self) -> Vec<String> {
         let context = self.get_context();
         let mut suggestions = Vec::new();
-        
+
         match context.time_of_day {
             TimeOfDay::EarlyMorning => {
                 suggestions.push("Start your day with a quick project analysis".to_string());
@@ -169,11 +172,11 @@ impl TemporalContext {
                 suggestions.push("Light tasks only recommended".to_string());
             }
         }
-        
+
         if !context.is_business_hours {
             suggestions.push("Outside business hours - personal projects?".to_string());
         }
-        
+
         suggestions
     }
 
@@ -190,7 +193,9 @@ impl TemporalContext {
 
     /// Get timestamp for logging
     pub fn timestamp(&self) -> String {
-        self.current_time.format("%Y-%m-%d %H:%M:%S%.3f").to_string()
+        self.current_time
+            .format("%Y-%m-%d %H:%M:%S%.3f")
+            .to_string()
     }
 
     /// Get ISO 8601 formatted timestamp
@@ -213,11 +218,14 @@ impl TemporalContext {
     pub fn time_until_next_hour(&self) -> chrono::Duration {
         let current = self.current_time;
         let next_hour = current
-            .with_minute(0).unwrap()
-            .with_second(0).unwrap()
-            .with_nanosecond(0).unwrap()
+            .with_minute(0)
+            .unwrap()
+            .with_second(0)
+            .unwrap()
+            .with_nanosecond(0)
+            .unwrap()
             + chrono::Duration::hours(1);
-        
+
         next_hour.signed_duration_since(current)
     }
 
@@ -225,17 +233,17 @@ impl TemporalContext {
     pub fn get_whats_new(&self) -> Vec<String> {
         let mut items = Vec::new();
         let context = self.get_context();
-        
+
         // Add time-based items
         items.push(format!("Current time: {}", context.formatted_time));
         items.push(format!("Session duration: {}", context.relative_time));
-        
+
         if context.is_business_hours {
             items.push("Business hours are active".to_string());
         } else {
             items.push("Outside business hours".to_string());
         }
-        
+
         // Add day-specific items
         match context.day_of_week.as_str() {
             "Monday" => items.push("Start of the work week".to_string()),
@@ -243,7 +251,7 @@ impl TemporalContext {
             "Saturday" | "Sunday" => items.push("Weekend time".to_string()),
             _ => {}
         }
-        
+
         items
     }
 

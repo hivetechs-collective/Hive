@@ -253,137 +253,137 @@ impl ZeroDowntimeMigrator {
     /// Execute zero-downtime migration
     pub async fn migrate(&self) -> Result<()> {
         println!("🚀 Starting zero-downtime migration...");
-        
+
         // Phase 1: Preparation
         self.run_preparation_phase().await?;
-        
+
         // Phase 2: Set up replication
         self.run_replication_phase().await?;
-        
+
         // Phase 3: Configure hot standby
         self.run_hot_standby_phase().await?;
-        
+
         // Phase 4: Start traffic mirroring
         self.run_traffic_mirroring_phase().await?;
-        
+
         // Phase 5: Gradual traffic switching
         self.run_gradual_switch_phase().await?;
-        
+
         // Phase 6: Full traffic switch
         self.run_full_switch_phase().await?;
-        
+
         // Phase 7: Cleanup
         self.run_cleanup_phase().await?;
-        
+
         // Mark as completed
         self.update_state(MigrationPhase::Completed, 1.0, "Migration completed successfully").await?;
-        
+
         println!("✅ Zero-downtime migration completed successfully!");
-        
+
         Ok(())
     }
 
     /// Phase 1: Preparation
     async fn run_preparation_phase(&self) -> Result<()> {
         self.update_state(MigrationPhase::Preparation, 0.0, "Preparing migration environment").await?;
-        
+
         // Validate source installation
         self.validate_source_installation().await?;
-        
+
         // Prepare target environment
         self.prepare_target_environment().await?;
-        
+
         // Create backup
         self.create_backup().await?;
-        
+
         // Initialize monitoring
         self.initialize_monitoring().await?;
-        
+
         self.update_phase_progress(1.0).await?;
-        
+
         Ok(())
     }
 
     /// Phase 2: Replication setup
     async fn run_replication_phase(&self) -> Result<()> {
         self.update_state(MigrationPhase::Replication, 0.1, "Setting up data replication").await?;
-        
+
         // Set up database replication
         self.setup_database_replication().await?;
-        
+
         // Set up configuration replication
         self.setup_config_replication().await?;
-        
+
         // Set up file replication
         self.setup_file_replication().await?;
-        
+
         // Verify replication
         self.verify_replication().await?;
-        
+
         self.update_phase_progress(1.0).await?;
-        
+
         Ok(())
     }
 
     /// Phase 3: Hot standby configuration
     async fn run_hot_standby_phase(&self) -> Result<()> {
         self.update_state(MigrationPhase::HotStandby, 0.2, "Configuring hot standby").await?;
-        
+
         if self.config.hot_standby {
             // Start Rust instance in standby mode
             self.start_standby_instance().await?;
-            
+
             // Configure load balancer
             self.configure_load_balancer().await?;
-            
+
             // Verify standby health
             self.verify_standby_health().await?;
         }
-        
+
         self.update_phase_progress(1.0).await?;
-        
+
         Ok(())
     }
 
     /// Phase 4: Traffic mirroring
     async fn run_traffic_mirroring_phase(&self) -> Result<()> {
         self.update_state(MigrationPhase::TrafficMirroring, 0.3, "Starting traffic mirroring").await?;
-        
+
         // Configure traffic mirroring
         self.configure_traffic_mirroring().await?;
-        
+
         // Start monitoring mirrored traffic
         self.start_mirror_monitoring().await?;
-        
+
         // Gradually increase mirror percentage
         self.increase_mirror_traffic().await?;
-        
+
         // Validate performance
         self.validate_mirror_performance().await?;
-        
+
         self.update_phase_progress(1.0).await?;
-        
+
         Ok(())
     }
 
     /// Phase 5: Gradual traffic switching
     async fn run_gradual_switch_phase(&self) -> Result<()> {
         self.update_state(MigrationPhase::GradualSwitch, 0.5, "Starting gradual traffic switch").await?;
-        
+
         let mut current_percentage = 0.0;
-        
+
         for &target_percentage in &self.config.switch_steps {
             if target_percentage >= 1.0 {
                 break; // Handle full switch in next phase
             }
-            
+
             // Switch traffic percentage
             self.switch_traffic_percentage(target_percentage).await?;
             current_percentage = target_percentage;
-            
+
             // Wait for stabilization
             tokio::time::sleep(self.config.step_delay).await;
-            
+
             // Health check
             let health_ok = self.perform_health_check().await?;
             if !health_ok {
@@ -391,60 +391,60 @@ impl ZeroDowntimeMigrator {
                 self.trigger_rollback("Health check failed during gradual switch").await?;
                 return Err(anyhow::anyhow!("Health check failed, rollback initiated"));
             }
-            
+
             // Update progress
             let phase_progress = current_percentage;
             self.update_phase_progress(phase_progress).await?;
         }
-        
+
         self.update_phase_progress(1.0).await?;
-        
+
         Ok(())
     }
 
     /// Phase 6: Full traffic switch
     async fn run_full_switch_phase(&self) -> Result<()> {
         self.update_state(MigrationPhase::FullSwitch, 0.8, "Switching to full traffic").await?;
-        
+
         // Final health check before full switch
         let health_ok = self.perform_health_check().await?;
         if !health_ok {
             self.trigger_rollback("Final health check failed").await?;
             return Err(anyhow::anyhow!("Final health check failed"));
         }
-        
+
         // Switch 100% traffic to Rust
         self.switch_traffic_percentage(1.0).await?;
-        
+
         // Monitor for issues
         self.monitor_full_switch().await?;
-        
+
         // Stop TypeScript instance
         self.stop_typescript_instance().await?;
-        
+
         self.update_phase_progress(1.0).await?;
-        
+
         Ok(())
     }
 
     /// Phase 7: Cleanup
     async fn run_cleanup_phase(&self) -> Result<()> {
         self.update_state(MigrationPhase::Cleanup, 0.9, "Cleaning up migration artifacts").await?;
-        
+
         // Clean up replication
         self.cleanup_replication().await?;
-        
+
         // Clean up monitoring
         self.cleanup_monitoring().await?;
-        
+
         // Clean up temporary files
         self.cleanup_temporary_files().await?;
-        
+
         // Update system configuration
         self.update_system_configuration().await?;
-        
+
         self.update_phase_progress(1.0).await?;
-        
+
         Ok(())
     }
 
@@ -453,16 +453,16 @@ impl ZeroDowntimeMigrator {
         if !self.source_path.exists() {
             return Err(anyhow::anyhow!("Source installation not found"));
         }
-        
+
         // Check TypeScript installation health
         let package_json = self.source_path.join("package.json");
         if !package_json.exists() {
             return Err(anyhow::anyhow!("Invalid TypeScript installation"));
         }
-        
+
         // Verify database accessibility
         self.verify_source_database().await?;
-        
+
         Ok(())
     }
 
@@ -470,16 +470,16 @@ impl ZeroDowntimeMigrator {
     async fn prepare_target_environment(&self) -> Result<()> {
         // Create target directory
         afs::create_dir_all(&self.target_path).await?;
-        
+
         // Install Rust binary
         self.install_rust_binary().await?;
-        
+
         // Create configuration
         self.create_initial_configuration().await?;
-        
+
         // Initialize database
         self.initialize_target_database().await?;
-        
+
         Ok(())
     }
 
@@ -488,13 +488,13 @@ impl ZeroDowntimeMigrator {
         let backup_path = self.source_path.parent()
             .unwrap()
             .join(format!("hive_backup_{}", Utc::now().format("%Y%m%d_%H%M%S")));
-        
+
         // Copy source installation
         self.copy_directory(&self.source_path, &backup_path).await?;
-        
+
         // Create backup manifest
         self.create_backup_manifest(&backup_path).await?;
-        
+
         Ok(())
     }
 
@@ -502,13 +502,13 @@ impl ZeroDowntimeMigrator {
     async fn initialize_monitoring(&self) -> Result<()> {
         // Set up performance monitoring
         self.setup_performance_monitoring().await?;
-        
+
         // Set up error monitoring
         self.setup_error_monitoring().await?;
-        
+
         // Set up health monitoring
         self.setup_health_monitoring().await?;
-        
+
         Ok(())
     }
 
@@ -516,13 +516,13 @@ impl ZeroDowntimeMigrator {
     async fn setup_database_replication(&self) -> Result<()> {
         // Configure real-time database sync
         self.configure_database_sync().await?;
-        
+
         // Start initial data transfer
         self.start_initial_data_transfer().await?;
-        
+
         // Set up continuous sync
         self.setup_continuous_sync().await?;
-        
+
         Ok(())
     }
 
@@ -530,10 +530,10 @@ impl ZeroDowntimeMigrator {
     async fn setup_config_replication(&self) -> Result<()> {
         // Mirror configuration changes
         self.setup_config_sync().await?;
-        
+
         // Convert configuration format
         self.convert_configuration().await?;
-        
+
         Ok(())
     }
 
@@ -541,13 +541,13 @@ impl ZeroDowntimeMigrator {
     async fn perform_health_check(&self) -> Result<bool> {
         let mut success_count = 0;
         let total_checks = self.config.health_checks.endpoints.len();
-        
+
         for endpoint in &self.config.health_checks.endpoints {
             if self.check_endpoint_health(endpoint).await? {
                 success_count += 1;
             }
         }
-        
+
         let success_rate = success_count as f64 / total_checks as f64;
         Ok(success_rate >= self.config.health_checks.success_threshold)
     }
@@ -563,33 +563,33 @@ impl ZeroDowntimeMigrator {
     /// Switch traffic percentage
     async fn switch_traffic_percentage(&self, percentage: f64) -> Result<()> {
         println!("🔄 Switching {}% traffic to Rust implementation...", (percentage * 100.0) as u32);
-        
+
         // Configure load balancer to route traffic
         self.configure_traffic_routing(percentage).await?;
-        
+
         // Update monitoring
         self.update_traffic_monitoring(percentage).await?;
-        
+
         Ok(())
     }
 
     /// Trigger rollback
     async fn trigger_rollback(&self, reason: &str) -> Result<()> {
         println!("⚠️ Triggering rollback: {}", reason);
-        
+
         self.update_state(MigrationPhase::RollingBack, 0.0, &format!("Rolling back: {}", reason)).await?;
-        
+
         // Switch traffic back to TypeScript
         self.switch_traffic_percentage(0.0).await?;
-        
+
         // Stop Rust instance
         self.stop_rust_instance().await?;
-        
+
         // Restore original configuration
         self.restore_original_configuration().await?;
-        
+
         self.update_state(MigrationPhase::RolledBack, 0.0, "Rollback completed").await?;
-        
+
         Ok(())
     }
 
@@ -598,21 +598,21 @@ impl ZeroDowntimeMigrator {
         // Monitor for a period after full switch
         let monitor_duration = std::time::Duration::from_secs(300); // 5 minutes
         let start_time = std::time::Instant::now();
-        
+
         while start_time.elapsed() < monitor_duration {
             // Check metrics
             let metrics = self.collect_metrics().await?;
-            
+
             // Check rollback triggers
             if self.should_rollback(&metrics).await? {
                 self.trigger_rollback("Metrics exceeded rollback thresholds").await?;
                 return Err(anyhow::anyhow!("Rollback triggered due to poor metrics"));
             }
-            
+
             // Wait before next check
             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
         }
-        
+
         Ok(())
     }
 
@@ -621,13 +621,13 @@ impl ZeroDowntimeMigrator {
         if metrics.error_rate > self.config.rollback_triggers.max_error_rate {
             return Ok(true);
         }
-        
+
         if metrics.cpu_usage > self.config.rollback_triggers.max_cpu_usage {
             return Ok(true);
         }
-        
+
         // Add more rollback conditions
-        
+
         Ok(false)
     }
 
@@ -652,7 +652,7 @@ impl ZeroDowntimeMigrator {
         state.phase = phase;
         state.progress = progress;
         state.operation = operation.to_string();
-        
+
         // Update estimated completion
         if progress > 0.0 {
             let elapsed = Utc::now().signed_duration_since(state.started_at);
@@ -660,9 +660,9 @@ impl ZeroDowntimeMigrator {
             let remaining = total_estimated - elapsed.num_seconds() as f64;
             state.estimated_completion = Some(Utc::now() + chrono::Duration::seconds(remaining as i64));
         }
-        
+
         println!("📊 Migration: {:.1}% - {}", progress * 100.0, operation);
-        
+
         Ok(())
     }
 
@@ -755,7 +755,7 @@ impl PerformanceAnalyzer {
     /// Add metrics sample
     pub fn add_sample(&mut self, metrics: MigrationMetrics) {
         self.metrics_history.push((Utc::now(), metrics));
-        
+
         // Keep only last 1000 samples
         if self.metrics_history.len() > 1000 {
             self.metrics_history.remove(0);
@@ -778,10 +778,10 @@ impl PerformanceAnalyzer {
         if self.metrics_history.len() < 2 {
             return 0.0;
         }
-        
+
         let recent = &self.metrics_history[self.metrics_history.len() - 1].1;
         let older = &self.metrics_history[self.metrics_history.len() / 2].1;
-        
+
         (recent.average_latency - older.average_latency) / older.average_latency
     }
 
@@ -797,21 +797,21 @@ impl PerformanceAnalyzer {
 
     fn generate_recommendations(&self) -> Vec<String> {
         let mut recommendations = Vec::new();
-        
+
         if let Some((_, latest)) = self.metrics_history.last() {
             if latest.error_rate > 0.05 {
                 recommendations.push("Consider increasing error handling capacity".to_string());
             }
-            
+
             if latest.average_latency > 1000.0 {
                 recommendations.push("Optimize database queries to reduce latency".to_string());
             }
-            
+
             if latest.cpu_usage > 0.8 {
                 recommendations.push("Consider scaling up compute resources".to_string());
             }
         }
-        
+
         recommendations
     }
 }

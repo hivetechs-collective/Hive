@@ -12,7 +12,7 @@ pub async fn start_mcp_server(port: u16) -> Result<()> {
     mcp::start_mcp_server(port).await
 }
 
-/// Start LSP server  
+/// Start LSP server
 pub async fn start_lsp_server(port: u16) -> Result<()> {
     // lsp::start_lsp_server(port).await // Temporarily disabled
     Ok(())

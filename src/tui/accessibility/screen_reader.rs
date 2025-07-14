@@ -6,8 +6,8 @@
 //! - VoiceOver (macOS)
 //! - Orca (Linux)
 
-use crate::tui::themes::Theme;
 use super::{AnnouncementPriority, FocusState};
+use crate::tui::themes::Theme;
 
 /// Screen reader interface
 pub struct ScreenReaderInterface {
@@ -48,9 +48,12 @@ impl ScreenReaderInterface {
     /// Enable or disable screen reader support
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
-        
+
         if enabled {
-            self.announce("Screen reader support enabled", AnnouncementPriority::Medium);
+            self.announce(
+                "Screen reader support enabled",
+                AnnouncementPriority::Medium,
+            );
         }
     }
 
@@ -77,9 +80,15 @@ impl ScreenReaderInterface {
                 self.announcement_queue.insert(0, announcement);
             }
             AnnouncementPriority::High => {
-                let pos = self.announcement_queue
+                let pos = self
+                    .announcement_queue
                     .iter()
-                    .position(|a| matches!(a.priority, AnnouncementPriority::Medium | AnnouncementPriority::Low))
+                    .position(|a| {
+                        matches!(
+                            a.priority,
+                            AnnouncementPriority::Medium | AnnouncementPriority::Low
+                        )
+                    })
                     .unwrap_or(self.announcement_queue.len());
                 self.announcement_queue.insert(pos, announcement);
             }
@@ -99,7 +108,7 @@ impl ScreenReaderInterface {
         }
 
         let focus_description = self.describe_element(element);
-        
+
         if self.current_focus.as_ref() != Some(&focus_description) {
             self.current_focus = Some(focus_description.clone());
             self.announce(&focus_description, AnnouncementPriority::High);
@@ -163,7 +172,7 @@ impl ScreenReaderInterface {
         }
 
         let mut description = vec!["Available shortcuts:".to_string()];
-        
+
         for (key, action) in shortcuts {
             description.push(format!("{} for {}", key, action));
         }
@@ -172,7 +181,12 @@ impl ScreenReaderInterface {
     }
 
     /// Describe table or list structure
-    pub fn describe_structure(&self, element_type: &str, rows: usize, columns: Option<usize>) -> String {
+    pub fn describe_structure(
+        &self,
+        element_type: &str,
+        rows: usize,
+        columns: Option<usize>,
+    ) -> String {
         match columns {
             Some(cols) => format!("{} with {} rows and {} columns", element_type, rows, cols),
             None => format!("{} with {} items", element_type, rows),
@@ -182,7 +196,10 @@ impl ScreenReaderInterface {
     /// Announce progress updates
     pub fn announce_progress(&mut self, current: usize, total: usize, operation: &str) {
         let percentage = (current as f32 / total as f32 * 100.0) as usize;
-        let message = format!("{}: {}% complete, {} of {}", operation, percentage, current, total);
+        let message = format!(
+            "{}: {}% complete, {} of {}",
+            operation, percentage, current, total
+        );
         self.announce(&message, AnnouncementPriority::Low);
     }
 
@@ -209,9 +226,11 @@ impl ScreenReaderInterface {
 
         // Ensure high contrast for better screen reader compatibility
         theme.apply_accessibility(true, false);
-        
+
         // Make focus indicators more prominent
-        theme.styles.active_border = theme.styles.active_border
+        theme.styles.active_border = theme
+            .styles
+            .active_border
             .add_modifier(ratatui::style::Modifier::BOLD)
             .add_modifier(ratatui::style::Modifier::UNDERLINED);
     }
@@ -224,14 +243,17 @@ impl ScreenReaderInterface {
 
         // In a real implementation, this would interface with platform-specific
         // screen reader APIs to actually speak the announcements
-        
+
         // For now, we just log them (in a real app, this would be removed)
         if cfg!(debug_assertions) {
             for announcement in &self.announcement_queue {
-                eprintln!("[SCREEN READER] {:?}: {}", announcement.priority, announcement.text);
+                eprintln!(
+                    "[SCREEN READER] {:?}: {}",
+                    announcement.priority, announcement.text
+                );
             }
         }
-        
+
         // Clear processed announcements
         self.announcement_queue.clear();
     }
@@ -263,7 +285,8 @@ impl ScreenReaderInterface {
             "Use Enter or Space to activate buttons",
             "Use Escape to close dialogs and menus",
             "Use F1 for help, F2-F4 to switch panels",
-        ].join(". ")
+        ]
+        .join(". ")
     }
 
     /// Describe current UI layout
@@ -341,12 +364,20 @@ impl ScreenReaderElement {
 
     /// Create tab element description
     pub fn tab(name: &str, position: (usize, usize), is_selected: bool) -> Self {
-        let state = if is_selected { FocusState::Active } else { FocusState::None };
-        
+        let state = if is_selected {
+            FocusState::Active
+        } else {
+            FocusState::None
+        };
+
         Self {
             role: "tab".to_string(),
             name: name.to_string(),
-            description: if is_selected { Some("selected".to_string()) } else { None },
+            description: if is_selected {
+                Some("selected".to_string())
+            } else {
+                None
+            },
             state,
             value: None,
             position: Some(position),

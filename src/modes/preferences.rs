@@ -1,17 +1,17 @@
 //! User Preference Learning and Adaptation
-//! 
+//!
 //! Learns from user behavior to improve mode detection and switching
 //! recommendations over time.
 
-use crate::core::error::{HiveResult, HiveError};
-use crate::planning::{ModeType, PlanningContext, UserPreferences as BasePreferences};
+use crate::core::error::{HiveError, HiveResult};
 use crate::modes::detector::DetectionResult;
 use crate::modes::switcher::SwitchResult;
+use crate::planning::{ModeType, PlanningContext, UserPreferences as BasePreferences};
+use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::{DateTime, Utc, Timelike};
-use tokio::sync::RwLock;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Preference manager with learning capabilities
 pub struct PreferenceManager {
@@ -223,17 +223,25 @@ impl PreferenceManager {
             predictor: PreferencePredictor::new(),
         })
     }
-    
+
     /// Enhance context with learned preferences
-    pub async fn enhance_context(&self, mut context: PlanningContext) -> HiveResult<PlanningContext> {
+    pub async fn enhance_context(
+        &self,
+        mut context: PlanningContext,
+    ) -> HiveResult<PlanningContext> {
         let storage = self.storage.read().await;
-        
+
         // Apply learned mode biases
-        if let Some(bias) = storage.user_preferences.mode_biases.get(&context.user_preferences.preferred_mode) {
+        if let Some(bias) = storage
+            .user_preferences
+            .mode_biases
+            .get(&context.user_preferences.preferred_mode)
+        {
             context.user_preferences.preference_strength += bias * 0.3;
-            context.user_preferences.preference_strength = context.user_preferences.preference_strength.clamp(0.0, 1.0);
+            context.user_preferences.preference_strength =
+                context.user_preferences.preference_strength.clamp(0.0, 1.0);
         }
-        
+
         // Apply temporal patterns
         let current_hour = Utc::now().time().hour() as u32;
         if let Some(pattern) = self.find_time_pattern(&storage.learning_data, current_hour) {
@@ -241,14 +249,18 @@ impl PreferenceManager {
                 context.user_preferences.preferred_mode = preferred_mode.clone();
             }
         }
-        
+
         Ok(context)
     }
-    
+
     /// Learn from detection result
-    pub async fn learn_from_detection(&mut self, query: &str, result: &DetectionResult) -> HiveResult<()> {
+    pub async fn learn_from_detection(
+        &mut self,
+        query: &str,
+        result: &DetectionResult,
+    ) -> HiveResult<()> {
         let mut storage = self.storage.write().await;
-        
+
         // Record detection
         let record = DetectionRecord {
             query: query.to_string(),
@@ -258,34 +270,37 @@ impl PreferenceManager {
             timestamp: Utc::now(),
             context_hash: self.hash_context(&result),
         };
-        
+
         storage.learning_data.detection_history.push(record.clone());
         storage.learning_data.total_detections += 1;
-        
+
         // Learn patterns
         if storage.user_preferences.learning_enabled {
-            let patterns = self.learner.learn_from_detection(&record, &storage.learning_data)?;
+            let patterns = self
+                .learner
+                .learn_from_detection(&record, &storage.learning_data)?;
             for pattern in patterns {
                 storage.learning_data.pattern_cache.insert(
                     format!("{:?}_{}", pattern.pattern_type, pattern.occurrences),
-                    pattern
+                    pattern,
                 );
             }
         }
-        
+
         // Update behavior metrics
-        self.analyzer.update_detection_metrics(&mut storage.learning_data, &result.primary_mode);
-        
+        self.analyzer
+            .update_detection_metrics(&mut storage.learning_data, &result.primary_mode);
+
         // Trim history if needed
         self.trim_history(&mut storage.learning_data);
-        
+
         Ok(())
     }
-    
+
     /// Learn from switch result
     pub async fn learn_from_switch(&mut self, result: &SwitchResult) -> HiveResult<()> {
         let mut storage = self.storage.write().await;
-        
+
         // Record switch
         let record = SwitchRecord {
             from_mode: result.from_mode.clone(),
@@ -295,41 +310,46 @@ impl PreferenceManager {
             timestamp: Utc::now(),
             user_initiated: true, // TODO: Track this properly
         };
-        
+
         storage.learning_data.switch_history.push(record.clone());
         storage.learning_data.total_switches += 1;
-        
+
         // Learn patterns
         if storage.user_preferences.learning_enabled && result.success {
-            let patterns = self.learner.learn_from_switch(&record, &storage.learning_data)?;
+            let patterns = self
+                .learner
+                .learn_from_switch(&record, &storage.learning_data)?;
             for pattern in patterns {
                 storage.learning_data.pattern_cache.insert(
                     format!("{:?}_switch_{}", pattern.pattern_type, pattern.occurrences),
-                    pattern
+                    pattern,
                 );
             }
         }
-        
+
         // Update mode biases based on success
         if result.success {
-            let bias = storage.user_preferences.mode_biases
+            let bias = storage
+                .user_preferences
+                .mode_biases
                 .entry(result.to_mode.clone())
                 .or_insert(0.0);
             *bias = (*bias * 0.9 + 0.1).min(0.5); // Slowly increase bias, cap at 0.5
         }
-        
+
         Ok(())
     }
-    
+
     /// Learn from hybrid execution
-    pub async fn learn_from_hybrid_execution(&mut self, task: &super::hybrid::HybridTask) -> HiveResult<()> {
+    pub async fn learn_from_hybrid_execution(
+        &mut self,
+        task: &super::hybrid::HybridTask,
+    ) -> HiveResult<()> {
         let mut storage = self.storage.write().await;
-        
+
         // Analyze mode sequence effectiveness
-        let sequence: Vec<ModeType> = task.segments.iter()
-            .map(|s| s.mode.clone())
-            .collect();
-        
+        let sequence: Vec<ModeType> = task.segments.iter().map(|s| s.mode.clone()).collect();
+
         // Create sequence pattern
         let pattern = Pattern {
             pattern_type: PatternType::SwitchSequence,
@@ -341,54 +361,59 @@ impl PreferenceManager {
                 frequency: 1.0,
             },
         };
-        
-        storage.learning_data.pattern_cache.insert(
-            format!("hybrid_seq_{}", task.id),
-            pattern
-        );
-        
+
+        storage
+            .learning_data
+            .pattern_cache
+            .insert(format!("hybrid_seq_{}", task.id), pattern);
+
         Ok(())
     }
-    
+
     /// Update user preferences
     pub async fn update_preferences(&mut self, preferences: UserPreference) -> HiveResult<()> {
         let mut storage = self.storage.write().await;
         storage.user_preferences = preferences;
         Ok(())
     }
-    
+
     /// Get learning statistics
     pub async fn get_learning_stats(&self) -> HiveResult<super::LearningStats> {
         let storage = self.storage.read().await;
-        
+
         // Calculate mode distribution
         let mut mode_distribution = HashMap::new();
         for record in &storage.learning_data.detection_history {
-            *mode_distribution.entry(record.detected_mode.clone()).or_insert(0) += 1;
+            *mode_distribution
+                .entry(record.detected_mode.clone())
+                .or_insert(0) += 1;
         }
-        
+
         // Find top patterns
         let mut pattern_counts: HashMap<String, usize> = HashMap::new();
         for pattern in storage.learning_data.pattern_cache.values() {
             let key = format!("{:?}", pattern.pattern_type);
             *pattern_counts.entry(key).or_insert(0) += pattern.occurrences;
         }
-        
+
         let mut top_patterns: Vec<(String, usize)> = pattern_counts.into_iter().collect();
         top_patterns.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
         top_patterns.truncate(5);
-        
+
         // Calculate accuracy
-        let correct_detections = storage.learning_data.detection_history.iter()
+        let correct_detections = storage
+            .learning_data
+            .detection_history
+            .iter()
             .filter(|r| r.actual_mode.as_ref() == Some(&r.detected_mode))
             .count();
-        
+
         let mode_accuracy = if storage.learning_data.total_detections > 0 {
             correct_detections as f32 / storage.learning_data.total_detections as f32
         } else {
             1.0
         };
-        
+
         Ok(super::LearningStats {
             total_detections: storage.learning_data.total_detections,
             total_switches: storage.learning_data.total_switches,
@@ -398,26 +423,31 @@ impl PreferenceManager {
             mode_distribution,
         })
     }
-    
+
     /// Predict next mode based on patterns
-    pub async fn predict_next_mode(&self, query: &str, context: &PlanningContext) -> HiveResult<ModeType> {
+    pub async fn predict_next_mode(
+        &self,
+        query: &str,
+        context: &PlanningContext,
+    ) -> HiveResult<ModeType> {
         let storage = self.storage.read().await;
-        
+
         let input = PredictionInput {
             query: Some(query.to_string()),
             current_mode: context.user_preferences.preferred_mode.clone(),
             context: context.clone(),
             timestamp: Utc::now(),
         };
-        
+
         let output = self.predictor.predict(&input, &storage.learning_data);
         Ok(output.prediction)
     }
-    
+
     // Private helper methods
-    
+
     fn find_time_pattern<'a>(&self, data: &'a LearningData, hour: u32) -> Option<&'a Pattern> {
-        data.pattern_cache.values()
+        data.pattern_cache
+            .values()
             .filter(|p| p.pattern_type == PatternType::TimeBasedMode)
             .find(|p| {
                 if let PatternData::TimeBasedMode { hour_range, .. } = &p.data {
@@ -427,21 +457,21 @@ impl PreferenceManager {
                 }
             })
     }
-    
+
     fn hash_context(&self, result: &DetectionResult) -> String {
         // Simple hash of key context elements
         format!("{:?}_{}", result.primary_mode, result.confidence as i32)
     }
-    
+
     fn trim_history(&self, data: &mut LearningData) {
         const MAX_DETECTION_HISTORY: usize = 1000;
         const MAX_SWITCH_HISTORY: usize = 500;
-        
+
         if data.detection_history.len() > MAX_DETECTION_HISTORY {
             let excess = data.detection_history.len() - MAX_DETECTION_HISTORY;
             data.detection_history.drain(0..excess);
         }
-        
+
         if data.switch_history.len() > MAX_SWITCH_HISTORY {
             let excess = data.switch_history.len() - MAX_SWITCH_HISTORY;
             data.switch_history.drain(0..excess);
@@ -467,19 +497,21 @@ impl PatternLearner {
             min_samples: 3,
         }
     }
-    
+
     fn learn_from_detection(
         &self,
         record: &DetectionRecord,
-        data: &LearningData
+        data: &LearningData,
     ) -> HiveResult<Vec<Pattern>> {
         let mut patterns = Vec::new();
-        
+
         // Query-mode pattern
-        let similar_queries = data.detection_history.iter()
+        let similar_queries = data
+            .detection_history
+            .iter()
             .filter(|r| self.is_similar_query(&r.query, &record.query))
             .collect::<Vec<_>>();
-        
+
         if similar_queries.len() >= self.min_samples {
             let mode_counts = self.count_modes(&similar_queries);
             if let Some((mode, count)) = mode_counts.iter().max_by_key(|(_, c)| *c) {
@@ -498,24 +530,26 @@ impl PatternLearner {
                 }
             }
         }
-        
+
         Ok(patterns)
     }
-    
+
     fn learn_from_switch(
         &self,
         record: &SwitchRecord,
-        data: &LearningData
+        data: &LearningData,
     ) -> HiveResult<Vec<Pattern>> {
         let mut patterns = Vec::new();
-        
+
         // Switch sequence pattern
-        let recent_switches: Vec<ModeType> = data.switch_history.iter()
+        let recent_switches: Vec<ModeType> = data
+            .switch_history
+            .iter()
             .rev()
             .take(5)
             .map(|r| r.to_mode.clone())
             .collect();
-        
+
         if recent_switches.len() >= 3 {
             patterns.push(Pattern {
                 pattern_type: PatternType::SwitchSequence,
@@ -528,23 +562,21 @@ impl PatternLearner {
                 },
             });
         }
-        
+
         Ok(patterns)
     }
-    
+
     fn is_similar_query(&self, q1: &str, q2: &str) -> bool {
         // Simple similarity check - in real implementation would use better metrics
         let words1: Vec<&str> = q1.split_whitespace().collect();
         let words2: Vec<&str> = q2.split_whitespace().collect();
-        
-        let common_words = words1.iter()
-            .filter(|w| words2.contains(w))
-            .count();
-        
+
+        let common_words = words1.iter().filter(|w| words2.contains(w)).count();
+
         let similarity = common_words as f32 / words1.len().max(words2.len()) as f32;
         similarity > 0.5
     }
-    
+
     fn count_modes(&self, records: &[&DetectionRecord]) -> HashMap<ModeType, usize> {
         let mut counts = HashMap::new();
         for record in records {
@@ -552,12 +584,13 @@ impl PatternLearner {
         }
         counts
     }
-    
+
     fn extract_pattern(&self, query: &str) -> String {
         // Extract key pattern from query
         let key_words = ["implement", "plan", "analyze", "design", "fix", "create"];
-        
-        query.split_whitespace()
+
+        query
+            .split_whitespace()
             .filter(|w| key_words.contains(&w.to_lowercase().as_str()))
             .collect::<Vec<_>>()
             .join(" ")
@@ -589,12 +622,16 @@ impl BehaviorAnalyzer {
             },
         }
     }
-    
+
     fn update_detection_metrics(&mut self, data: &mut LearningData, mode: &ModeType) {
         // Update mode preference
-        let count = self.metrics.mode_preferences.entry(mode.clone()).or_insert(0.0);
+        let count = self
+            .metrics
+            .mode_preferences
+            .entry(mode.clone())
+            .or_insert(0.0);
         *count += 1.0;
-        
+
         // Normalize preferences
         let total: f32 = self.metrics.mode_preferences.values().sum();
         if total > 0.0 {
@@ -602,7 +639,7 @@ impl BehaviorAnalyzer {
                 *value /= total;
             }
         }
-        
+
         // Update time of day pattern
         let hour = Utc::now().time().hour();
         self.metrics.time_of_day_patterns.insert(hour, mode.clone());
@@ -611,35 +648,40 @@ impl BehaviorAnalyzer {
 
 impl PreferencePredictor {
     fn new() -> Self {
-        let mut models: HashMap<PredictionType, Box<dyn PredictionModel + Send + Sync>> = HashMap::new();
-        
+        let mut models: HashMap<PredictionType, Box<dyn PredictionModel + Send + Sync>> =
+            HashMap::new();
+
         models.insert(PredictionType::NextMode, Box::new(FrequencyModel::new()));
-        models.insert(PredictionType::OptimalSwitch, Box::new(TransitionModel::new()));
+        models.insert(
+            PredictionType::OptimalSwitch,
+            Box::new(TransitionModel::new()),
+        );
         models.insert(PredictionType::TaskTypeMode, Box::new(ContextModel::new()));
-        
+
         Self { models }
     }
-    
+
     fn predict(&self, input: &PredictionInput, data: &LearningData) -> PredictionOutput {
         // Use ensemble of models
         let mut predictions = Vec::new();
-        
+
         for (pred_type, model) in &self.models {
             let output = model.predict(input);
             predictions.push((output.prediction, output.confidence));
         }
-        
+
         // Weighted average
         let mut mode_scores: HashMap<ModeType, f32> = HashMap::new();
         for (mode, confidence) in predictions {
             *mode_scores.entry(mode).or_insert(0.0) += confidence;
         }
-        
-        let (best_mode, best_score) = mode_scores.iter()
+
+        let (best_mode, best_score) = mode_scores
+            .iter()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(m, s)| (m.clone(), *s))
             .unwrap_or((ModeType::Hybrid, 0.5));
-        
+
         PredictionOutput {
             prediction: best_mode,
             confidence: best_score / self.models.len() as f32,
@@ -665,18 +707,20 @@ impl FrequencyModel {
 
 impl PredictionModel for FrequencyModel {
     fn predict(&self, _input: &PredictionInput) -> PredictionOutput {
-        let (mode, _) = self.frequencies.iter()
+        let (mode, _) = self
+            .frequencies
+            .iter()
             .max_by_key(|(_, count)| *count)
             .map(|(m, c)| (m.clone(), *c))
             .unwrap_or((ModeType::Hybrid, 0));
-        
+
         PredictionOutput {
             prediction: mode,
             confidence: 0.6,
             alternatives: Vec::new(),
         }
     }
-    
+
     fn update(&mut self, feedback: &PredictionFeedback) {
         if feedback.success {
             *self.frequencies.entry(feedback.actual.clone()).or_insert(0) += 1;
@@ -702,14 +746,14 @@ impl PredictionModel for TransitionModel {
             ModeType::Analysis => ModeType::Planning,
             _ => ModeType::Hybrid,
         };
-        
+
         PredictionOutput {
             prediction: next_mode,
             confidence: 0.5,
             alternatives: Vec::new(),
         }
     }
-    
+
     fn update(&mut self, _feedback: &PredictionFeedback) {
         // Update transition probabilities
     }
@@ -732,14 +776,14 @@ impl PredictionModel for ContextModel {
             crate::planning::types::ProjectType::Library => ModeType::Execution,
             _ => ModeType::Hybrid,
         };
-        
+
         PredictionOutput {
             prediction: mode,
             confidence: 0.7,
             alternatives: Vec::new(),
         }
     }
-    
+
     fn update(&mut self, _feedback: &PredictionFeedback) {
         // Update context mappings
     }
@@ -800,22 +844,22 @@ impl Default for BasePreferences {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_preference_manager_creation() {
         // Test preference manager initialization
     }
-    
+
     #[tokio::test]
     async fn test_pattern_learning() {
         // Test pattern learning from detections
     }
-    
+
     #[tokio::test]
     async fn test_preference_prediction() {
         // Test mode prediction
     }
-    
+
     #[tokio::test]
     async fn test_behavior_analysis() {
         // Test behavior analysis

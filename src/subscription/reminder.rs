@@ -29,17 +29,14 @@ impl EmailService {
     pub fn new() -> Self {
         let api_url = std::env::var("HIVE_API_ENDPOINT")
             .unwrap_or_else(|_| "https://hivetechs.io".to_string());
-            
+
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .user_agent("hive-rust/2.0.0")
             .build()
             .unwrap_or_default();
-            
-        Self {
-            api_url,
-            client,
-        }
+
+        Self { api_url, client }
     }
 
     async fn send_reminder_email(
@@ -49,20 +46,21 @@ impl EmailService {
         trigger_type: &str,
     ) -> Result<()> {
         let url = format!("{}/api/trial/send-expiration-email", self.api_url);
-        
+
         let request_data = serde_json::json!({
             "licenseKey": license_key,
             "email": email,
             "triggerType": trigger_type
         });
-        
-        let response = self.client
+
+        let response = self
+            .client
             .post(&url)
             .json(&request_data)
             .send()
             .await
             .context("Failed to send email request")?;
-            
+
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
@@ -72,12 +70,12 @@ impl EmailService {
                 error_text
             ));
         }
-        
+
         let result: serde_json::Value = response
             .json()
             .await
             .context("Failed to parse email response")?;
-            
+
         if result["success"].as_bool() == Some(true) {
             tracing::info!("Email sent successfully: {:?}", result["messageId"]);
             Ok(())
@@ -105,43 +103,45 @@ impl ReminderManager {
     /// Load reminder tracking data from database
     async fn load_reminders(&self) -> Result<Vec<SubscriptionReminder>> {
         use crate::core::database::get_database;
-        
+
         let db = get_database().await?;
         let conn = db.get_connection()?;
-        
+
         tokio::task::spawn_blocking(move || -> Result<Vec<SubscriptionReminder>> {
             // Query reminder tracking from database
             // Note: In production, this would be stored in a dedicated reminder_tracking table
             // For now, we track reminders based on subscription data
             let mut stmt = conn.prepare(
-                "SELECT 
+                "SELECT
                     id as user_id,
                     email,
                     subscription_expires_at,
                     created_at
-                FROM users 
-                WHERE license_key IS NOT NULL 
-                AND subscription_expires_at IS NOT NULL"
+                FROM users
+                WHERE license_key IS NOT NULL
+                AND subscription_expires_at IS NOT NULL",
             )?;
-            
-            let reminders = stmt.query_map([], |row| {
-                let expires_str: String = row.get(2)?;
-                let expires = DateTime::parse_from_rfc3339(&expires_str)
-                    .unwrap_or_else(|_| Utc::now().into())
-                    .with_timezone(&Utc);
-                
-                Ok(SubscriptionReminder {
-                    user_id: row.get(0)?,
-                    email: row.get(1)?,
-                    expires_at: expires,
-                    reminder_sent: HashSet::new(), // TODO: Track in database
-                    last_checked: Utc::now(),
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-            
+
+            let reminders = stmt
+                .query_map([], |row| {
+                    let expires_str: String = row.get(2)?;
+                    let expires = DateTime::parse_from_rfc3339(&expires_str)
+                        .unwrap_or_else(|_| Utc::now().into())
+                        .with_timezone(&Utc);
+
+                    Ok(SubscriptionReminder {
+                        user_id: row.get(0)?,
+                        email: row.get(1)?,
+                        expires_at: expires,
+                        reminder_sent: HashSet::new(), // TODO: Track in database
+                        last_checked: Utc::now(),
+                    })
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+
             Ok(reminders)
-        }).await?
+        })
+        .await?
     }
 
     /// Save reminder tracking data to database
@@ -155,9 +155,11 @@ impl ReminderManager {
     /// Check and send reminders for a specific subscription
     pub async fn check_and_send_reminders(&self, subscription: &SubscriptionInfo) -> Result<()> {
         let mut reminders = self.load_reminders().await?;
-        
+
         // Find or create reminder record
-        let reminder_idx = reminders.iter().position(|r| r.user_id == subscription.user_id);
+        let reminder_idx = reminders
+            .iter()
+            .position(|r| r.user_id == subscription.user_id);
         let mut reminder = if let Some(idx) = reminder_idx {
             reminders[idx].clone()
         } else {
@@ -178,7 +180,8 @@ impl ReminderManager {
 
         // Check if we should send reminders
         let now = Utc::now();
-        let days_until_expiry = subscription.expires_at
+        let days_until_expiry = subscription
+            .expires_at
             .signed_duration_since(now)
             .num_days();
 
@@ -192,7 +195,8 @@ impl ReminderManager {
         // Send appropriate reminders
         for days in &[3, 2, 1] {
             if days_until_expiry == *days as i64 && !reminder.reminder_sent.contains(days) {
-                self.send_reminder_email(&reminder, *days, subscription).await?;
+                self.send_reminder_email(&reminder, *days, subscription)
+                    .await?;
                 reminder.reminder_sent.insert(*days);
             }
         }
@@ -217,7 +221,7 @@ impl ReminderManager {
     ) -> Result<()> {
         // Get license key from subscription
         let license_key = self.get_license_key_for_user(&subscription.user_id).await?;
-        
+
         // Map days to trigger type
         let trigger_type = match days_remaining {
             3 => "3-day",
@@ -240,28 +244,29 @@ impl ReminderManager {
 
         Ok(())
     }
-    
+
     /// Get license key for a user from database
     async fn get_license_key_for_user(&self, user_id: &str) -> Result<String> {
         // In a real implementation, this would query the database
         // For now, return a placeholder or error
-        Err(anyhow::anyhow!("License key lookup not implemented - requires database integration"))
+        Err(anyhow::anyhow!(
+            "License key lookup not implemented - requires database integration"
+        ))
     }
-
 
     /// Check all subscriptions for reminders (batch process)
     pub async fn check_all_reminders(&self) -> Result<()> {
         // This would be called by a scheduled job to check all users
         // For now, it's a placeholder for the batch processing logic
-        
+
         tracing::info!("Checking all subscription reminders...");
-        
+
         // In production, this would:
         // 1. Query all active subscriptions from D1
         // 2. Check each one for reminder eligibility
         // 3. Send reminders as needed
         // 4. Update tracking data
-        
+
         Ok(())
     }
 }
@@ -290,12 +295,14 @@ mod tests {
         };
 
         // Should attempt to send 3-day reminder
-        manager.check_and_send_reminders(&subscription).await.unwrap();
+        manager
+            .check_and_send_reminders(&subscription)
+            .await
+            .unwrap();
 
         // Verify reminder was tracked
         let reminders = manager.load_reminders().await.unwrap();
         assert_eq!(reminders.len(), 1);
         assert!(reminders[0].reminder_sent.contains(&3));
     }
-
 }

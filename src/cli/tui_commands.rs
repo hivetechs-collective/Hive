@@ -23,7 +23,7 @@ impl TuiCommandProcessor {
     pub fn new() -> Self {
         Self
     }
-    
+
     /// Process a command in TUI context (placeholder)
     pub async fn process_command(&self, _command: &str) -> Result<()> {
         // Placeholder - TUI commands not implemented yet

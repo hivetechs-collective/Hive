@@ -1,5 +1,5 @@
 //! Migration Validation Module
-//! 
+//!
 //! Validates migration success with comprehensive integrity checks,
 //! data verification, and performance validation.
 
@@ -7,11 +7,11 @@ use crate::core::error::HiveError;
 // Database will be implemented when the database module is complete
 // For now, we'll use a placeholder from the database migration module
 use crate::migration::database::Database;
-use crate::migration::{ValidationLevel, MigrationConfig};
+use crate::migration::{MigrationConfig, ValidationLevel};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 
 /// Migration validation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,10 +82,10 @@ pub enum ValidationSeverity {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceMetrics {
     pub migration_duration: std::time::Duration,
-    pub data_transfer_rate: f64, // MB/s
+    pub data_transfer_rate: f64,                    // MB/s
     pub query_response_times: HashMap<String, f64>, // ms
-    pub memory_usage: u64, // bytes
-    pub disk_usage: u64, // bytes
+    pub memory_usage: u64,                          // bytes
+    pub disk_usage: u64,                            // bytes
     pub cpu_usage_percent: f32,
 }
 
@@ -151,15 +151,30 @@ pub struct ConstraintCheck {
 impl ValidationResult {
     /// Check if validation passed
     pub fn is_valid(&self) -> bool {
-        matches!(self.overall_status, ValidationStatus::Passed | ValidationStatus::PassedWithWarnings)
+        matches!(
+            self.overall_status,
+            ValidationStatus::Passed | ValidationStatus::PassedWithWarnings
+        )
     }
 
     /// Get a summary of the validation result
     pub fn summary(&self) -> String {
-        let passed = self.checks.iter().filter(|c| c.status == ValidationCheckStatus::Passed).count();
-        let failed = self.checks.iter().filter(|c| c.status == ValidationCheckStatus::Failed).count();
-        let warnings = self.checks.iter().filter(|c| c.status == ValidationCheckStatus::Warning).count();
-        
+        let passed = self
+            .checks
+            .iter()
+            .filter(|c| c.status == ValidationCheckStatus::Passed)
+            .count();
+        let failed = self
+            .checks
+            .iter()
+            .filter(|c| c.status == ValidationCheckStatus::Failed)
+            .count();
+        let warnings = self
+            .checks
+            .iter()
+            .filter(|c| c.status == ValidationCheckStatus::Warning)
+            .count();
+
         format!(
             "Validation: {} - {} passed, {} failed, {} warnings",
             self.overall_status_string(),
@@ -182,47 +197,47 @@ impl ValidationResult {
 /// Validate migration based on specified level
 pub async fn validate_migration(level: &ValidationLevel) -> Result<ValidationResult, HiveError> {
     log::info!("Starting migration validation (level: {:?})", level);
-    
+
     let start_time = std::time::Instant::now();
     let mut checks = Vec::new();
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    
+
     // Run validation checks based on level
     match level {
         ValidationLevel::Basic => {
             checks.extend(run_basic_validation().await?);
-        },
+        }
         ValidationLevel::Standard => {
             checks.extend(run_basic_validation().await?);
             checks.extend(run_standard_validation().await?);
-        },
+        }
         ValidationLevel::Strict => {
             checks.extend(run_basic_validation().await?);
             checks.extend(run_standard_validation().await?);
             checks.extend(run_strict_validation().await?);
-        },
+        }
         ValidationLevel::Paranoid => {
             checks.extend(run_basic_validation().await?);
             checks.extend(run_standard_validation().await?);
             checks.extend(run_strict_validation().await?);
             checks.extend(run_paranoid_validation().await?);
-        },
+        }
     }
-    
+
     // Collect errors and warnings
     for check in &checks {
         match check.status {
             ValidationCheckStatus::Failed => {
                 errors.push(format!("{}: {}", check.name, check.description));
-            },
+            }
             ValidationCheckStatus::Warning => {
                 warnings.push(format!("{}: {}", check.name, check.description));
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
-    
+
     // Determine overall status
     let overall_status = if errors.is_empty() {
         if warnings.is_empty() {
@@ -233,16 +248,16 @@ pub async fn validate_migration(level: &ValidationLevel) -> Result<ValidationRes
     } else {
         ValidationStatus::Failed
     };
-    
+
     // Generate performance metrics
     let performance_metrics = generate_performance_metrics(start_time).await?;
-    
+
     // Generate data integrity report
     let data_integrity = generate_integrity_report().await?;
-    
+
     // Generate recommendations
     let recommendations = generate_recommendations(&checks, &data_integrity);
-    
+
     let result = ValidationResult {
         overall_status,
         checks,
@@ -252,7 +267,7 @@ pub async fn validate_migration(level: &ValidationLevel) -> Result<ValidationRes
         warnings,
         errors,
     };
-    
+
     log::info!("Validation completed: {}", result.summary());
     Ok(result)
 }
@@ -260,95 +275,104 @@ pub async fn validate_migration(level: &ValidationLevel) -> Result<ValidationRes
 /// Run basic validation checks
 async fn run_basic_validation() -> Result<Vec<ValidationCheck>, HiveError> {
     let mut checks = Vec::new();
-    
+
     // Check if target database exists and is accessible
     checks.push(validate_database_accessibility().await?);
-    
+
     // Check basic row counts
     checks.push(validate_basic_row_counts().await?);
-    
+
     // Check configuration files
     checks.push(validate_configuration_files().await?);
-    
+
     Ok(checks)
 }
 
 /// Run standard validation checks
 async fn run_standard_validation() -> Result<Vec<ValidationCheck>, HiveError> {
     let mut checks = Vec::new();
-    
+
     // Detailed row count verification
     checks.push(validate_detailed_row_counts().await?);
-    
+
     // Schema validation
     checks.push(validate_schema_structure().await?);
-    
+
     // Basic functionality test
     checks.push(validate_basic_functionality().await?);
-    
+
     // Performance baseline check
     checks.push(validate_performance_baseline().await?);
-    
+
     Ok(checks)
 }
 
 /// Run strict validation checks
 async fn run_strict_validation() -> Result<Vec<ValidationCheck>, HiveError> {
     let mut checks = Vec::new();
-    
+
     // Data integrity checksums
     checks.push(validate_data_checksums().await?);
-    
+
     // Foreign key integrity
     checks.push(validate_foreign_key_integrity().await?);
-    
+
     // Data type consistency
     checks.push(validate_data_types().await?);
-    
+
     // Constraint validation
     checks.push(validate_constraints().await?);
-    
+
     // Advanced functionality tests
     checks.push(validate_advanced_functionality().await?);
-    
+
     Ok(checks)
 }
 
 /// Run paranoid validation checks
 async fn run_paranoid_validation() -> Result<Vec<ValidationCheck>, HiveError> {
     let mut checks = Vec::new();
-    
+
     // Byte-level data comparison
     checks.push(validate_byte_level_comparison().await?);
-    
+
     // Query result verification
     checks.push(validate_query_results().await?);
-    
+
     // Stress testing
     checks.push(validate_stress_testing().await?);
-    
+
     // Security validation
     checks.push(validate_security_settings().await?);
-    
+
     // Full system integration test
     checks.push(validate_full_integration().await?);
-    
+
     Ok(checks)
 }
 
 /// Validate database accessibility
 async fn validate_database_accessibility() -> Result<ValidationCheck, HiveError> {
     let target_db_path = get_target_database_path()?;
-    
+
     let (status, actual) = if target_db_path.exists() {
         match Database::new(&target_db_path).await {
-            Ok(_) => (ValidationCheckStatus::Passed, "Database accessible".to_string()),
-            Err(e) => (ValidationCheckStatus::Failed, format!("Database error: {}", e)),
+            Ok(_) => (
+                ValidationCheckStatus::Passed,
+                "Database accessible".to_string(),
+            ),
+            Err(e) => (
+                ValidationCheckStatus::Failed,
+                format!("Database error: {}", e),
+            ),
         }
     } else {
-        (ValidationCheckStatus::Failed, "Database file not found".to_string())
+        (
+            ValidationCheckStatus::Failed,
+            "Database file not found".to_string(),
+        )
     };
-    
+
     Ok(ValidationCheck {
         name: "Database Accessibility".to_string(),
         category: ValidationCategory::DataIntegrity,
@@ -365,10 +389,10 @@ async fn validate_database_accessibility() -> Result<ValidationCheck, HiveError>
 async fn validate_basic_row_counts() -> Result<ValidationCheck, HiveError> {
     // This would query both source and target databases to compare counts
     // For now, we'll simulate the check
-    
+
     let status = ValidationCheckStatus::Passed; // Placeholder
     let actual = "Row counts match".to_string(); // Placeholder
-    
+
     Ok(ValidationCheck {
         name: "Basic Row Counts".to_string(),
         category: ValidationCategory::DataCount,
@@ -384,22 +408,34 @@ async fn validate_basic_row_counts() -> Result<ValidationCheck, HiveError> {
 /// Validate configuration files
 async fn validate_configuration_files() -> Result<ValidationCheck, HiveError> {
     let config_path = get_target_config_path()?;
-    
+
     let (status, actual) = if config_path.exists() {
         match tokio::fs::read_to_string(&config_path).await {
             Ok(content) => {
                 if toml::from_str::<toml::Value>(&content).is_ok() {
-                    (ValidationCheckStatus::Passed, "Configuration valid".to_string())
+                    (
+                        ValidationCheckStatus::Passed,
+                        "Configuration valid".to_string(),
+                    )
                 } else {
-                    (ValidationCheckStatus::Failed, "Invalid TOML format".to_string())
+                    (
+                        ValidationCheckStatus::Failed,
+                        "Invalid TOML format".to_string(),
+                    )
                 }
-            },
-            Err(e) => (ValidationCheckStatus::Failed, format!("Cannot read config: {}", e)),
+            }
+            Err(e) => (
+                ValidationCheckStatus::Failed,
+                format!("Cannot read config: {}", e),
+            ),
         }
     } else {
-        (ValidationCheckStatus::Warning, "Configuration file not found".to_string())
+        (
+            ValidationCheckStatus::Warning,
+            "Configuration file not found".to_string(),
+        )
     };
-    
+
     Ok(ValidationCheck {
         name: "Configuration Files".to_string(),
         category: ValidationCategory::Configuration,
@@ -416,7 +452,7 @@ async fn validate_configuration_files() -> Result<ValidationCheck, HiveError> {
 async fn validate_detailed_row_counts() -> Result<ValidationCheck, HiveError> {
     // In a real implementation, this would connect to both databases
     // and perform detailed row count comparisons
-    
+
     Ok(ValidationCheck {
         name: "Detailed Row Counts".to_string(),
         category: ValidationCategory::DataCount,
@@ -612,9 +648,11 @@ async fn validate_full_integration() -> Result<ValidationCheck, HiveError> {
 }
 
 /// Generate performance metrics
-async fn generate_performance_metrics(start_time: std::time::Instant) -> Result<PerformanceMetrics, HiveError> {
+async fn generate_performance_metrics(
+    start_time: std::time::Instant,
+) -> Result<PerformanceMetrics, HiveError> {
     let migration_duration = start_time.elapsed();
-    
+
     Ok(PerformanceMetrics {
         migration_duration,
         data_transfer_rate: 50.0, // MB/s - placeholder
@@ -636,108 +674,122 @@ async fn generate_integrity_report() -> Result<DataIntegrityReport, HiveError> {
     Ok(DataIntegrityReport {
         row_count_verification: {
             let mut counts = HashMap::new();
-            counts.insert("conversations".to_string(), CountComparison {
-                source_count: 100,
-                target_count: 100,
-                matches: true,
-                difference: 0,
-            });
-            counts.insert("messages".to_string(), CountComparison {
-                source_count: 1500,
-                target_count: 1500,
-                matches: true,
-                difference: 0,
-            });
+            counts.insert(
+                "conversations".to_string(),
+                CountComparison {
+                    source_count: 100,
+                    target_count: 100,
+                    matches: true,
+                    difference: 0,
+                },
+            );
+            counts.insert(
+                "messages".to_string(),
+                CountComparison {
+                    source_count: 1500,
+                    target_count: 1500,
+                    matches: true,
+                    difference: 0,
+                },
+            );
             counts
         },
         checksum_verification: {
             let mut checksums = HashMap::new();
-            checksums.insert("conversations".to_string(), ChecksumComparison {
-                source_checksum: "abc123".to_string(),
-                target_checksum: "abc123".to_string(),
-                matches: true,
-                algorithm: "SHA-256".to_string(),
-            });
+            checksums.insert(
+                "conversations".to_string(),
+                ChecksumComparison {
+                    source_checksum: "abc123".to_string(),
+                    target_checksum: "abc123".to_string(),
+                    matches: true,
+                    algorithm: "SHA-256".to_string(),
+                },
+            );
             checksums
         },
-        foreign_key_integrity: vec![
-            ForeignKeyCheck {
-                table: "messages".to_string(),
-                column: "conversation_id".to_string(),
-                referenced_table: "conversations".to_string(),
-                orphaned_records: 0,
-                integrity_preserved: true,
-            }
-        ],
-        data_type_validation: vec![
-            DataTypeCheck {
-                table: "conversations".to_string(),
-                column: "created_at".to_string(),
-                expected_type: "TIMESTAMP".to_string(),
-                actual_type: "TIMESTAMP".to_string(),
-                valid: true,
-                conversion_errors: 0,
-            }
-        ],
-        constraint_validation: vec![
-            ConstraintCheck {
-                table: "conversations".to_string(),
-                constraint_name: "pk_conversations".to_string(),
-                constraint_type: "PRIMARY KEY".to_string(),
-                violations: 0,
-                valid: true,
-            }
-        ],
+        foreign_key_integrity: vec![ForeignKeyCheck {
+            table: "messages".to_string(),
+            column: "conversation_id".to_string(),
+            referenced_table: "conversations".to_string(),
+            orphaned_records: 0,
+            integrity_preserved: true,
+        }],
+        data_type_validation: vec![DataTypeCheck {
+            table: "conversations".to_string(),
+            column: "created_at".to_string(),
+            expected_type: "TIMESTAMP".to_string(),
+            actual_type: "TIMESTAMP".to_string(),
+            valid: true,
+            conversion_errors: 0,
+        }],
+        constraint_validation: vec![ConstraintCheck {
+            table: "conversations".to_string(),
+            constraint_name: "pk_conversations".to_string(),
+            constraint_type: "PRIMARY KEY".to_string(),
+            violations: 0,
+            valid: true,
+        }],
     })
 }
 
 /// Generate recommendations based on validation results
-fn generate_recommendations(checks: &[ValidationCheck], integrity: &DataIntegrityReport) -> Vec<String> {
+fn generate_recommendations(
+    checks: &[ValidationCheck],
+    integrity: &DataIntegrityReport,
+) -> Vec<String> {
     let mut recommendations = Vec::new();
-    
+
     // Check for failed validations
-    let failed_checks = checks.iter().filter(|c| c.status == ValidationCheckStatus::Failed).count();
+    let failed_checks = checks
+        .iter()
+        .filter(|c| c.status == ValidationCheckStatus::Failed)
+        .count();
     if failed_checks > 0 {
         recommendations.push("Address all failed validation checks before proceeding".to_string());
     }
-    
+
     // Check for warnings
-    let warning_checks = checks.iter().filter(|c| c.status == ValidationCheckStatus::Warning).count();
+    let warning_checks = checks
+        .iter()
+        .filter(|c| c.status == ValidationCheckStatus::Warning)
+        .count();
     if warning_checks > 0 {
         recommendations.push("Review warning messages and consider addressing them".to_string());
     }
-    
+
     // Check data integrity
     for (table, count) in &integrity.row_count_verification {
         if !count.matches {
-            recommendations.push(format!("Investigate row count mismatch in table: {}", table));
+            recommendations.push(format!(
+                "Investigate row count mismatch in table: {}",
+                table
+            ));
         }
     }
-    
+
     // Performance recommendations
     recommendations.push("Monitor performance metrics after migration".to_string());
-    recommendations.push("Consider creating backup schedule for ongoing data protection".to_string());
-    
+    recommendations
+        .push("Consider creating backup schedule for ongoing data protection".to_string());
+
     recommendations
 }
 
 /// Get target database path
 fn get_target_database_path() -> Result<PathBuf, HiveError> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| HiveError::Migration { 
-            message: "Cannot determine home directory".to_string()
-        })?;
-    
+    let home_dir = dirs::home_dir().ok_or_else(|| HiveError::Migration {
+        message: "Cannot determine home directory".to_string(),
+    })?;
+
     Ok(home_dir.join(".hive").join("hive-ai.db"))
 }
 
 /// Get target configuration path
 fn get_target_config_path() -> Result<PathBuf, HiveError> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| HiveError::Migration { 
-            message: "Cannot determine home directory".to_string()
-        })?;
-    
+    let home_dir = dirs::home_dir().ok_or_else(|| HiveError::Migration {
+        message: "Cannot determine home directory".to_string(),
+    })?;
+
     Ok(home_dir.join(".hive").join("config.toml"))
 }
 

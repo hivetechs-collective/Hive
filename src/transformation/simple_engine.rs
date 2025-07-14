@@ -1,6 +1,6 @@
 //! Simplified transformation engine for initial implementation
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -24,22 +24,29 @@ impl SimpleTransformationEngine {
     pub async fn transform(&self, request: TransformationRequest) -> Result<TransformationPreview> {
         // Check file exists
         if !request.file_path.exists() {
-            return Err(anyhow!("File does not exist: {}", request.file_path.display()));
+            return Err(anyhow!(
+                "File does not exist: {}",
+                request.file_path.display()
+            ));
         }
 
         // Read file content
         let content = tokio::fs::read_to_string(&request.file_path).await?;
-        
+
         // Generate mock improvements based on aspect
         let changes = self.generate_mock_changes(&request, &content).await?;
-        
+
         // Create transformation
         let transformation = Transformation {
             id: Uuid::new_v4().to_string(),
             timestamp: Utc::now(),
             request: request.clone(),
             changes,
-            description: format!("Improve {} in {}", request.aspect, request.file_path.display()),
+            description: format!(
+                "Improve {} in {}",
+                request.aspect,
+                request.file_path.display()
+            ),
             applied: false,
             transaction_id: None,
             confidence: 0.8,
@@ -49,12 +56,16 @@ impl SimpleTransformationEngine {
 
         // Generate preview
         let preview = self.generate_preview(&transformation).await?;
-        
+
         Ok(preview)
     }
 
     /// Generate mock changes for demonstration
-    async fn generate_mock_changes(&self, request: &TransformationRequest, content: &str) -> Result<Vec<CodeChange>> {
+    async fn generate_mock_changes(
+        &self,
+        request: &TransformationRequest,
+        content: &str,
+    ) -> Result<Vec<CodeChange>> {
         let mut changes = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
         let total_lines = lines.len();
@@ -92,7 +103,8 @@ impl SimpleTransformationEngine {
                     original_content: content.to_string(),
                     new_content,
                     line_range: (1, total_lines.min(20)),
-                    description: "Enhanced code readability with better naming and comments".to_string(),
+                    description: "Enhanced code readability with better naming and comments"
+                        .to_string(),
                     confidence: 0.90,
                 });
             }
@@ -118,21 +130,24 @@ impl SimpleTransformationEngine {
         // Simple mock: add error handling comments
         let lines: Vec<&str> = content.lines().collect();
         let mut result = Vec::new();
-        
+
         for (i, line) in lines.iter().enumerate() {
             result.push(line.to_string());
-            
+
             // Add error handling suggestions on function definitions
             if line.contains("fn ") && !line.contains("->") {
-                result.push("    // TODO: Consider returning Result<T, Error> for better error handling".to_string());
+                result.push(
+                    "    // TODO: Consider returning Result<T, Error> for better error handling"
+                        .to_string(),
+                );
             }
-            
+
             // Add error handling for unwrap calls
             if line.contains(".unwrap()") {
                 result.push("    // TODO: Replace unwrap() with proper error handling".to_string());
             }
         }
-        
+
         result.join("\n")
     }
 
@@ -140,20 +155,21 @@ impl SimpleTransformationEngine {
     fn improve_performance(&self, content: &str) -> String {
         let lines: Vec<&str> = content.lines().collect();
         let mut result = Vec::new();
-        
+
         for line in lines.iter() {
             result.push(line.to_string());
-            
+
             // Add performance suggestions
             if line.contains("clone()") {
-                result.push("    // PERF: Consider using references instead of cloning".to_string());
+                result
+                    .push("    // PERF: Consider using references instead of cloning".to_string());
             }
-            
+
             if line.contains("Vec::new()") {
                 result.push("    // PERF: Consider pre-allocating Vec with capacity".to_string());
             }
         }
-        
+
         result.join("\n")
     }
 
@@ -161,28 +177,40 @@ impl SimpleTransformationEngine {
     fn improve_readability(&self, content: &str) -> String {
         let lines: Vec<&str> = content.lines().collect();
         let mut result = Vec::new();
-        
+
         for line in lines.iter() {
             // Add documentation suggestions
-            if line.trim().starts_with("fn ") && !lines.get(result.len().saturating_sub(1)).unwrap_or(&"").trim().starts_with("///") {
+            if line.trim().starts_with("fn ")
+                && !lines
+                    .get(result.len().saturating_sub(1))
+                    .unwrap_or(&"")
+                    .trim()
+                    .starts_with("///")
+            {
                 result.push("    /// TODO: Add documentation for this function".to_string());
             }
-            
+
             result.push(line.to_string());
-            
+
             // Add naming suggestions
             if line.contains("let x ") || line.contains("let y ") || line.contains("let temp ") {
-                result.push("    // READABILITY: Consider using more descriptive variable names".to_string());
+                result.push(
+                    "    // READABILITY: Consider using more descriptive variable names"
+                        .to_string(),
+                );
             }
         }
-        
+
         result.join("\n")
     }
 
     /// Generate a preview for the transformation
-    async fn generate_preview(&self, transformation: &Transformation) -> Result<TransformationPreview> {
+    async fn generate_preview(
+        &self,
+        transformation: &Transformation,
+    ) -> Result<TransformationPreview> {
         let mut diffs = Vec::new();
-        
+
         for change in &transformation.changes {
             let diff = self.generate_file_diff(change).await?;
             diffs.push(diff);
@@ -191,7 +219,7 @@ impl SimpleTransformationEngine {
         let impact = ImpactAnalysis {
             files_modified: transformation.changes.len(),
             files_affected: transformation.changes.len() * 2, // Rough estimate
-            functions_modified: vec!["main".to_string()], // Mock
+            functions_modified: vec!["main".to_string()],     // Mock
             risk_level: RiskLevel::Low,
             tests_affected: false,
         };
@@ -214,7 +242,7 @@ impl SimpleTransformationEngine {
         // Simple diff calculation
         let original_lines: Vec<&str> = change.original_content.lines().collect();
         let new_lines: Vec<&str> = change.new_content.lines().collect();
-        
+
         let additions = new_lines.len().saturating_sub(original_lines.len());
         let deletions = original_lines.len().saturating_sub(new_lines.len());
 
@@ -237,12 +265,16 @@ impl SimpleTransformationEngine {
 }
 
 /// Simple convenience functions
-pub async fn simple_transform_code(request: TransformationRequest) -> Result<TransformationPreview> {
+pub async fn simple_transform_code(
+    request: TransformationRequest,
+) -> Result<TransformationPreview> {
     let engine = SimpleTransformationEngine::new();
     engine.transform(request).await
 }
 
-pub async fn simple_generate_preview(transformation: &Transformation) -> Result<TransformationPreview> {
+pub async fn simple_generate_preview(
+    transformation: &Transformation,
+) -> Result<TransformationPreview> {
     let engine = SimpleTransformationEngine::new();
     engine.generate_preview(transformation).await
 }

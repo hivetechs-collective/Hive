@@ -18,7 +18,7 @@ pub async fn start_server(port: u16, host: &str) -> Result<()> {
 
     // Start the server
     crate::integration::mcp::start_mcp_server(port).await?;
-    
+
     Ok(())
 }
 
@@ -52,11 +52,11 @@ pub async fn list_tools() -> Result<()> {
 
     let config = Arc::new(Config::load().await?);
     let server = McpServer::new().await?;
-    
+
     // Get tool registry through a temporary server instance
     println!("📋 Registered tools:");
     println!("─────────────────────────────────────────────────");
-    
+
     // List of tools we know are registered
     let tools = vec![
         ("ask_hive", "Ask Hive AI a question using multi-model consensus"),
@@ -105,13 +105,13 @@ pub async fn test_tool(tool_name: &str, params: Option<String>) -> Result<()> {
     // Create a temporary server instance for testing
     let config = Arc::new(Config::load().await?);
     let server = McpServer::new().await?;
-    
+
     // Simulate tool execution
     println!("⏳ Executing tool...");
-    
+
     // Add a small delay to simulate processing
     sleep(Duration::from_millis(500)).await;
-    
+
     println!("✅ Tool execution simulated successfully");
     println!("\n💡 To test with a real server, ensure it's running with: hive mcp start");
 
@@ -124,7 +124,7 @@ pub async fn show_logs(follow: bool) -> Result<()> {
 
     if follow {
         println!("👀 Following logs (press Ctrl+C to stop)...\n");
-        
+
         // In a real implementation, this would tail the log file
         loop {
             println!("{} [INFO] MCP server: Waiting for connections...", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"));
@@ -153,13 +153,13 @@ pub async fn list_resources() -> Result<()> {
     println!("  {} - Current Hive AI configuration", style("hive://config").cyan());
     println!("  {} - Recent conversation summaries", style("hive://memory/conversations").cyan());
     println!("  {} - Current repository analysis data", style("hive://analysis/repository").cyan());
-    
+
     println!("\n📋 File resources:");
     println!("─────────────────────────────────────────────────");
     println!("  Source files in current directory (*.rs, *.js, *.ts, etc.)");
     println!("  Configuration files (*.toml, *.json, *.yaml)");
     println!("  Documentation files (*.md)");
-    
+
     println!("\n💡 Resources are automatically exposed to connected IDEs");
 
     Ok(())
@@ -174,7 +174,7 @@ pub async fn show_protocol_info() -> Result<()> {
     println!("  Version: {}", style("2024-11-05").cyan());
     println!("  Transport: {}", style("JSON-RPC over HTTP/WebSocket").cyan());
     println!("  Capabilities: {}", style("tools, resources, logging").cyan());
-    
+
     println!("\n📋 Supported IDEs:");
     println!("─────────────────────────────────────────────────");
     println!("  ✅ VS Code (via MCP extension)");
@@ -183,7 +183,7 @@ pub async fn show_protocol_info() -> Result<()> {
     println!("  ✅ Zed (via language server)");
     println!("  ✅ IntelliJ IDEA (via plugin)");
     println!("  ✅ Neovim (via MCP client)");
-    
+
     println!("\n📋 Message Flow:");
     println!("─────────────────────────────────────────────────");
     println!("  1. IDE → initialize → Server");
@@ -191,7 +191,7 @@ pub async fn show_protocol_info() -> Result<()> {
     println!("  3. IDE → tools/list → Server");
     println!("  4. IDE → tools/call → Server");
     println!("  5. Server → streaming response → IDE");
-    
+
     println!("\n💡 Learn more: https://modelcontextprotocol.io");
 
     Ok(())

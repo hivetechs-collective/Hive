@@ -1,19 +1,24 @@
 //! Chat Interface Component - Claude Code Style
 
-use dioxus::prelude::*;
+use crate::desktop::{
+    components::*,
+    consensus_integration::{use_consensus_with_version, DesktopConsensusManager},
+    events::KeyboardEventUtils,
+    state::*,
+};
 use dioxus::events::{KeyboardEvent, MouseEvent};
-use crate::desktop::{state::*, components::*, events::KeyboardEventUtils, consensus_integration::{use_consensus_with_version, DesktopConsensusManager}};
+use dioxus::prelude::*;
 
 /// Chat Interface Component
 #[component]
 pub fn ChatInterface() -> Element {
     let app_state = use_context::<Signal<AppState>>();
     let state = app_state.read();
-    
+
     rsx! {
         div {
             class: "chat-container",
-            
+
             // Chat Messages Area
             div {
                 class: "chat-messages",
@@ -25,7 +30,7 @@ pub fn ChatInterface() -> Element {
                     }
                 }
             }
-            
+
             // Chat Input Area
             ChatInput {}
         }
@@ -38,61 +43,61 @@ fn WelcomeMessage() -> Element {
     rsx! {
         div {
             class: "welcome-container",
-            
+
             div {
                 class: "welcome-content",
-                h1 { 
+                h1 {
                     class: "welcome-title",
-                    "HiveTechs Consensus" 
+                    "HiveTechs Consensus"
                 }
-                p { 
+                p {
                     class: "welcome-subtitle",
-                    "AI-powered development assistant with 4-stage consensus pipeline" 
+                    "AI-powered development assistant with 4-stage consensus pipeline"
                 }
-                
+
                 div {
                     class: "system-status-grid",
-                    div { 
+                    div {
                         class: "status-card",
                         div { class: "status-icon success", "✓" }
                         div { class: "status-text", "323+ AI Models" }
                     }
-                    div { 
+                    div {
                         class: "status-card",
                         div { class: "status-icon success", "✓" }
                         div { class: "status-text", "Repository Ready" }
                     }
-                    div { 
+                    div {
                         class: "status-card",
                         div { class: "status-icon success", "✓" }
                         div { class: "status-text", "Memory Active" }
                     }
                 }
-                
+
                 div {
                     class: "commands-section",
-                    h3 { 
+                    h3 {
                         class: "commands-title",
-                        "Quick Commands" 
+                        "Quick Commands"
                     }
                     div {
                         class: "command-list",
-                        div { 
+                        div {
                             class: "command-item",
                             code { class: "command-code", "ask \"your question\"" }
                             span { class: "command-desc", "Ask the AI anything" }
                         }
-                        div { 
+                        div {
                             class: "command-item",
                             code { class: "command-code", "analyze ." }
                             span { class: "command-desc", "Analyze current directory" }
                         }
-                        div { 
+                        div {
                             class: "command-item",
                             code { class: "command-code", "plan \"your goal\"" }
                             span { class: "command-desc", "Create a development plan" }
                         }
-                        div { 
+                        div {
                             class: "command-item",
                             code { class: "command-code", "help" }
                             span { class: "command-desc", "Show all commands" }
@@ -109,7 +114,7 @@ fn WelcomeMessage() -> Element {
 fn ChatMessageItem(message: ChatMessage) -> Element {
     let is_user = matches!(message.message_type, MessageType::User);
     let is_error = matches!(message.message_type, MessageType::Error);
-    
+
     let message_class = match message.message_type {
         MessageType::User => "message-row user",
         MessageType::Assistant => "message-row assistant",
@@ -117,14 +122,14 @@ fn ChatMessageItem(message: ChatMessage) -> Element {
         MessageType::Error => "message-row error",
         MessageType::Welcome => "message-row welcome",
     };
-    
+
     rsx! {
         div {
             class: message_class,
-            
+
             div {
                 class: "message-bubble",
-                
+
                 // Message header (for non-user messages)
                 if !is_user {
                     div {
@@ -137,13 +142,13 @@ fn ChatMessageItem(message: ChatMessage) -> Element {
                         }
                     }
                 }
-                
+
                 // Message content
                 div {
                     class: "message-content",
                     dangerous_inner_html: format_message_content(&message.content),
                 }
-                
+
                 // Timestamp
                 div {
                     class: "message-timestamp",
@@ -163,7 +168,7 @@ fn format_message_content(content: &str) -> String {
         .replace("`", "<code>")
         .replace("`", "</code>")
         .replace("\n", "<br>");
-    
+
     formatted
 }
 
@@ -187,7 +192,7 @@ fn process_message(
         let mut show_onboarding_clone = show_onboarding.clone();
         spawn(async move {
             use crate::desktop::dialogs::load_existing_profiles;
-            
+
             match load_existing_profiles().await {
                 Ok(profiles) if profiles.is_empty() => {
                     tracing::info!("No profiles configured - showing onboarding");
@@ -214,7 +219,7 @@ fn process_message(
         });
         return;
     }
-    
+
     // Add user message
     let message = ChatMessage {
         id: uuid::Uuid::new_v4().to_string(),
@@ -223,22 +228,22 @@ fn process_message(
         timestamp: chrono::Utc::now(),
         metadata: MessageMetadata::default(),
     };
-    
+
     app_state.write().chat.add_message(message);
-    
+
     // Start consensus processing
     app_state.write().consensus.start_consensus();
-    
+
     // Clear input
     input_text.set(String::new());
-    
+
     // Send to consensus engine
     if let Some(consensus) = consensus_manager {
         let query = text.clone();
         let mut app_state_consensus = app_state.clone();
         let mut show_onboarding_clone = show_onboarding.clone();
         let mut consensus_clone = consensus.clone();
-        
+
         spawn(async move {
             match consensus_clone.process_query(&query).await {
                 Ok(response) => {
@@ -251,7 +256,9 @@ fn process_message(
                             cost: Some(app_state_consensus.read().consensus.estimated_cost),
                             model: Some("4-stage consensus".to_string()),
                             processing_time: None,
-                            token_count: Some(app_state_consensus.read().consensus.total_tokens as u32),
+                            token_count: Some(
+                                app_state_consensus.read().consensus.total_tokens as u32,
+                            ),
                         },
                     };
                     app_state_consensus.write().chat.add_message(response_msg);
@@ -266,15 +273,16 @@ fn process_message(
                         metadata: MessageMetadata::default(),
                     };
                     app_state_consensus.write().chat.add_message(error_msg);
-                    
+
                     // If the error is about missing profiles or API key, show onboarding
-                    if e.to_string().contains("No valid OpenRouter API key") || 
-                       e.to_string().contains("profile") {
+                    if e.to_string().contains("No valid OpenRouter API key")
+                        || e.to_string().contains("profile")
+                    {
                         show_onboarding_clone.set(true);
                     }
                 }
             }
-            
+
             // Complete consensus
             app_state_consensus.write().consensus.complete_consensus();
         });
@@ -290,48 +298,65 @@ fn ChatInput() -> Element {
     let api_keys_version = use_context::<Signal<u32>>();
     let consensus_manager = use_consensus_with_version(*api_keys_version.read());
     let mut show_onboarding = use_context::<Signal<bool>>();
-    
+
     let on_send_click = {
         let mut app_state = app_state.clone();
         let mut input_text = input_text.clone();
         let consensus_manager = consensus_manager.clone();
         let mut show_onboarding = show_onboarding.clone();
-        
+
         move |_evt: MouseEvent| {
             let text = input_text.read().clone();
             if !text.trim().is_empty() {
-                process_message(text, &mut app_state, &mut input_text, &consensus_manager, &mut show_onboarding);
+                process_message(
+                    text,
+                    &mut app_state,
+                    &mut input_text,
+                    &consensus_manager,
+                    &mut show_onboarding,
+                );
             }
         }
     };
-    
+
     let on_key_down = {
         let mut app_state = app_state.clone();
         let mut input_text = input_text.clone();
         let consensus_manager = consensus_manager.clone();
         let mut show_onboarding = show_onboarding.clone();
         let is_composing = is_composing.clone();
-        
+
         move |evt: KeyboardEvent| {
-            if KeyboardEventUtils::is_enter_key(&evt) && !evt.modifiers().shift() && !*is_composing.read() {
+            if KeyboardEventUtils::is_enter_key(&evt)
+                && !evt.modifiers().shift()
+                && !*is_composing.read()
+            {
                 let text = input_text.read().clone();
                 if !text.trim().is_empty() {
-                    process_message(text, &mut app_state, &mut input_text, &consensus_manager, &mut show_onboarding);
+                    process_message(
+                        text,
+                        &mut app_state,
+                        &mut input_text,
+                        &consensus_manager,
+                        &mut show_onboarding,
+                    );
                 }
             } else if KeyboardEventUtils::is_escape(&evt) {
                 // Clear input on Escape
                 input_text.set(String::new());
-            } else if evt.key() == dioxus::html::input_data::keyboard_types::Key::Tab && !evt.modifiers().shift() {
+            } else if evt.key() == dioxus::html::input_data::keyboard_types::Key::Tab
+                && !evt.modifiers().shift()
+            {
                 // Auto-complete or show suggestions
                 // TODO: Implement auto-complete
             }
         }
     };
-    
+
     rsx! {
         div {
             class: "chat-input-container",
-            
+
             div {
                 class: "input-wrapper",
                 textarea {
@@ -350,7 +375,7 @@ fn ChatInput() -> Element {
                     autofocus: true,
                     spellcheck: "false",
                 }
-                
+
                 button {
                     class: if input_text.read().trim().is_empty() { "send-btn disabled" } else { "send-btn" },
                     onclick: on_send_click,
@@ -373,7 +398,7 @@ fn ChatInput() -> Element {
                     }
                 }
             }
-            
+
             div {
                 class: "input-shortcuts",
                 span {

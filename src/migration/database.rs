@@ -1,5 +1,5 @@
 //! Database Migration Module
-//! 
+//!
 //! Handles migration of conversation data, thematic clusters, and usage statistics
 //! from TypeScript SQLite databases to Rust format with 100% data preservation.
 
@@ -34,21 +34,26 @@ impl Query {
     pub async fn fetch_all(self, _pool: &SqlitePool) -> Result<Vec<MockRow>, HiveError> {
         Ok(Vec::new())
     }
-    
+
     pub async fn fetch_one(self, _pool: &SqlitePool) -> Result<MockRow, HiveError> {
         Ok(MockRow)
     }
 }
 
 pub fn query_scalar<T>(_sql: &str) -> QueryScalar<T> {
-    QueryScalar { _phantom: std::marker::PhantomData }
+    QueryScalar {
+        _phantom: std::marker::PhantomData,
+    }
 }
 
 pub struct QueryScalar<T> {
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T> QueryScalar<T> where T: Default {
+impl<T> QueryScalar<T>
+where
+    T: Default,
+{
     pub async fn fetch_one(self, _pool: &SqlitePool) -> Result<T, HiveError> {
         Ok(T::default())
     }
@@ -56,20 +61,23 @@ impl<T> QueryScalar<T> where T: Default {
 
 // Row placeholder
 pub trait Row {
-    fn get<T>(&self, _column: &str) -> T where T: Default {
+    fn get<T>(&self, _column: &str) -> T
+    where
+        T: Default,
+    {
         T::default()
     }
 }
 
 pub struct MockRow;
 impl Row for MockRow {}
-use crate::migration::analyzer::{TypeScriptAnalysis, DatabaseInfo, ThematicCluster};
+use crate::migration::analyzer::{DatabaseInfo, ThematicCluster, TypeScriptAnalysis};
 use serde::{Deserialize, Serialize};
 // SQLite operations will be implemented when sqlx is added as dependency
 // For now, we'll use placeholders
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use chrono::{DateTime, Utc};
 
 /// Database migration changes preview
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,12 +157,12 @@ pub struct DataTransformation {
 /// Types of data transformations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransformationType {
-    DirectCopy,      // Copy value as-is
-    TypeConversion,  // Convert data type
-    JsonParsing,     // Parse JSON strings
-    Concatenation,   // Combine multiple columns
-    Extraction,      // Extract part of a value
-    Default,         // Use default value
+    DirectCopy,     // Copy value as-is
+    TypeConversion, // Convert data type
+    JsonParsing,    // Parse JSON strings
+    Concatenation,  // Combine multiple columns
+    Extraction,     // Extract part of a value
+    Default,        // Use default value
 }
 
 /// TypeScript database schema (for reference)
@@ -185,23 +193,25 @@ struct ColumnSchema {
 }
 
 /// Preview database migration changes
-pub async fn preview_database_changes(analysis: &TypeScriptAnalysis) -> Result<DatabaseChanges, HiveError> {
+pub async fn preview_database_changes(
+    analysis: &TypeScriptAnalysis,
+) -> Result<DatabaseChanges, HiveError> {
     let source_db = analysis.database_info.path.clone();
     let target_db = get_target_database_path()?;
-    
+
     // Analyze source schema
     let source_schema = analyze_typescript_schema(&source_db).await?;
-    
+
     // Plan schema transformations
     let schema_changes = plan_schema_changes(&source_schema).await?;
-    
+
     // Plan data migration
     let data_migration = plan_data_migration(&analysis.database_info, &source_schema).await?;
-    
+
     // Estimate migration time and risks
     let estimated_duration = estimate_migration_duration(&data_migration);
     let risks = assess_migration_risks(&analysis.database_info, &schema_changes);
-    
+
     Ok(DatabaseChanges {
         source_database: source_db,
         target_database: target_db,
@@ -216,20 +226,20 @@ pub async fn preview_database_changes(analysis: &TypeScriptAnalysis) -> Result<D
 /// Perform actual database migration
 pub async fn migrate_database(analysis: &TypeScriptAnalysis) -> Result<(), HiveError> {
     log::info!("Starting database migration");
-    
+
     let source_db = &analysis.database_info.path;
     let target_db = get_target_database_path()?;
-    
+
     // Create backup of source database
     create_database_backup(source_db).await?;
-    
+
     // Open connections
     let source_pool = open_source_database(source_db).await?;
     let target_db_instance = Database::new(&target_db).await?;
-    
+
     // Initialize target database schema
     initialize_target_schema(&target_db_instance).await?;
-    
+
     // Migrate data in dependency order
     migrate_conversations(&source_pool, &target_db_instance).await?;
     migrate_messages(&source_pool, &target_db_instance).await?;
@@ -237,47 +247,76 @@ pub async fn migrate_database(analysis: &TypeScriptAnalysis) -> Result<(), HiveE
     migrate_thematic_clusters(&source_pool, &target_db_instance).await?;
     migrate_usage_statistics(&source_pool, &target_db_instance).await?;
     migrate_user_settings(&source_pool, &target_db_instance).await?;
-    
+
     // Verify migration integrity
     verify_migration_integrity(&source_pool, &target_db_instance).await?;
-    
+
     log::info!("Database migration completed successfully");
     Ok(())
 }
 
 /// Get target database path for Rust version
 fn get_target_database_path() -> Result<PathBuf, HiveError> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| HiveError::Migration { 
-            message: "Cannot determine home directory".to_string()
-        })?;
-    
+    let home_dir = dirs::home_dir().ok_or_else(|| HiveError::Migration {
+        message: "Cannot determine home directory".to_string(),
+    })?;
+
     Ok(home_dir.join(".hive").join("hive-ai.db"))
 }
 
 /// Analyze TypeScript database schema
 async fn analyze_typescript_schema(db_path: &PathBuf) -> Result<TypeScriptSchema, HiveError> {
     let pool = open_source_database(db_path).await?;
-    
+
     // Query schema information from SQLite system tables
     let tables = query("SELECT name FROM sqlite_master WHERE type='table'")
         .fetch_all(&pool)
         .await?;
-    
+
     let mut schema = TypeScriptSchema {
-        conversations: TableSchema { name: "conversations".to_string(), columns: Vec::new(), indexes: Vec::new(), constraints: Vec::new() },
-        messages: TableSchema { name: "messages".to_string(), columns: Vec::new(), indexes: Vec::new(), constraints: Vec::new() },
-        consensus_profiles: TableSchema { name: "consensus_profiles".to_string(), columns: Vec::new(), indexes: Vec::new(), constraints: Vec::new() },
-        thematic_clusters: TableSchema { name: "thematic_clusters".to_string(), columns: Vec::new(), indexes: Vec::new(), constraints: Vec::new() },
-        usage_stats: TableSchema { name: "usage_stats".to_string(), columns: Vec::new(), indexes: Vec::new(), constraints: Vec::new() },
-        user_settings: TableSchema { name: "user_settings".to_string(), columns: Vec::new(), indexes: Vec::new(), constraints: Vec::new() },
+        conversations: TableSchema {
+            name: "conversations".to_string(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            constraints: Vec::new(),
+        },
+        messages: TableSchema {
+            name: "messages".to_string(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            constraints: Vec::new(),
+        },
+        consensus_profiles: TableSchema {
+            name: "consensus_profiles".to_string(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            constraints: Vec::new(),
+        },
+        thematic_clusters: TableSchema {
+            name: "thematic_clusters".to_string(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            constraints: Vec::new(),
+        },
+        usage_stats: TableSchema {
+            name: "usage_stats".to_string(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            constraints: Vec::new(),
+        },
+        user_settings: TableSchema {
+            name: "user_settings".to_string(),
+            columns: Vec::new(),
+            indexes: Vec::new(),
+            constraints: Vec::new(),
+        },
     };
-    
+
     // Analyze each table
     for table_row in tables {
         let table_name: String = table_row.get("name");
         let columns = analyze_table_columns(&pool, &table_name).await?;
-        
+
         match table_name.as_str() {
             "conversations" => schema.conversations.columns = columns,
             "messages" => schema.messages.columns = columns,
@@ -290,17 +329,18 @@ async fn analyze_typescript_schema(db_path: &PathBuf) -> Result<TypeScriptSchema
             }
         }
     }
-    
+
     Ok(schema)
 }
 
 /// Analyze columns for a specific table
-async fn analyze_table_columns(pool: &SqlitePool, table_name: &str) -> Result<Vec<ColumnSchema>, HiveError> {
+async fn analyze_table_columns(
+    pool: &SqlitePool,
+    table_name: &str,
+) -> Result<Vec<ColumnSchema>, HiveError> {
     let pragma_query = format!("PRAGMA table_info({})", table_name);
-    let rows = query(&pragma_query)
-        .fetch_all(pool)
-        .await?;
-    
+    let rows = query(&pragma_query).fetch_all(pool).await?;
+
     let mut columns = Vec::new();
     for row in rows {
         let column = ColumnSchema {
@@ -311,14 +351,16 @@ async fn analyze_table_columns(pool: &SqlitePool, table_name: &str) -> Result<Ve
         };
         columns.push(column);
     }
-    
+
     Ok(columns)
 }
 
 /// Plan schema changes needed for migration
-async fn plan_schema_changes(source_schema: &TypeScriptSchema) -> Result<Vec<SchemaChange>, HiveError> {
+async fn plan_schema_changes(
+    source_schema: &TypeScriptSchema,
+) -> Result<Vec<SchemaChange>, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Plan changes for each table
     changes.extend(plan_conversation_changes(&source_schema.conversations)?);
     changes.extend(plan_message_changes(&source_schema.messages)?);
@@ -326,24 +368,25 @@ async fn plan_schema_changes(source_schema: &TypeScriptSchema) -> Result<Vec<Sch
     changes.extend(plan_cluster_changes(&source_schema.thematic_clusters)?);
     changes.extend(plan_usage_changes(&source_schema.usage_stats)?);
     changes.extend(plan_settings_changes(&source_schema.user_settings)?);
-    
+
     Ok(changes)
 }
 
 /// Plan conversation table changes
 fn plan_conversation_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Add new columns for enhanced features
     changes.push(SchemaChange {
         table_name: "conversations".to_string(),
         change_type: SchemaChangeType::ColumnAdd,
         old_schema: None,
         new_schema: "quality_score REAL DEFAULT 0.0".to_string(),
-        migration_sql: "ALTER TABLE conversations ADD COLUMN quality_score REAL DEFAULT 0.0".to_string(),
+        migration_sql: "ALTER TABLE conversations ADD COLUMN quality_score REAL DEFAULT 0.0"
+            .to_string(),
         data_preservation: DataPreservationLevel::Complete,
     });
-    
+
     // Add performance metrics column
     changes.push(SchemaChange {
         table_name: "conversations".to_string(),
@@ -353,14 +396,14 @@ fn plan_conversation_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, 
         migration_sql: "ALTER TABLE conversations ADD COLUMN performance_metrics TEXT".to_string(),
         data_preservation: DataPreservationLevel::Complete,
     });
-    
+
     Ok(changes)
 }
 
 /// Plan message table changes
 fn plan_message_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Add token usage tracking
     changes.push(SchemaChange {
         table_name: "messages".to_string(),
@@ -370,7 +413,7 @@ fn plan_message_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveE
         migration_sql: "ALTER TABLE messages ADD COLUMN token_usage INTEGER DEFAULT 0".to_string(),
         data_preservation: DataPreservationLevel::Complete,
     });
-    
+
     // Add cost tracking
     changes.push(SchemaChange {
         table_name: "messages".to_string(),
@@ -380,14 +423,14 @@ fn plan_message_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveE
         migration_sql: "ALTER TABLE messages ADD COLUMN cost_usd REAL DEFAULT 0.0".to_string(),
         data_preservation: DataPreservationLevel::Complete,
     });
-    
+
     Ok(changes)
 }
 
 /// Plan consensus profile changes
 fn plan_profile_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Transform JSON configurations to structured format
     changes.push(SchemaChange {
         table_name: "consensus_profiles".to_string(),
@@ -397,14 +440,14 @@ fn plan_profile_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveE
         migration_sql: "UPDATE consensus_profiles SET config = ? WHERE id = ?".to_string(),
         data_preservation: DataPreservationLevel::Transformed,
     });
-    
+
     Ok(changes)
 }
 
 /// Plan thematic cluster changes
 fn plan_cluster_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Add semantic embedding column
     changes.push(SchemaChange {
         table_name: "thematic_clusters".to_string(),
@@ -414,14 +457,14 @@ fn plan_cluster_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveE
         migration_sql: "ALTER TABLE thematic_clusters ADD COLUMN embedding BLOB".to_string(),
         data_preservation: DataPreservationLevel::Complete,
     });
-    
+
     Ok(changes)
 }
 
 /// Plan usage statistics changes
 fn plan_usage_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Add detailed analytics
     changes.push(SchemaChange {
         table_name: "usage_stats".to_string(),
@@ -431,14 +474,14 @@ fn plan_usage_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveErr
         migration_sql: "ALTER TABLE usage_stats ADD COLUMN analytics_data TEXT".to_string(),
         data_preservation: DataPreservationLevel::Complete,
     });
-    
+
     Ok(changes)
 }
 
 /// Plan user settings changes
 fn plan_settings_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, HiveError> {
     let mut changes = Vec::new();
-    
+
     // Convert settings format
     changes.push(SchemaChange {
         table_name: "user_settings".to_string(),
@@ -448,14 +491,17 @@ fn plan_settings_changes(source: &TableSchema) -> Result<Vec<SchemaChange>, Hive
         migration_sql: "UPDATE user_settings SET settings = ? WHERE user_id = ?".to_string(),
         data_preservation: DataPreservationLevel::Transformed,
     });
-    
+
     Ok(changes)
 }
 
 /// Plan data migration strategy
-async fn plan_data_migration(db_info: &DatabaseInfo, schema: &TypeScriptSchema) -> Result<DataMigrationPlan, HiveError> {
+async fn plan_data_migration(
+    db_info: &DatabaseInfo,
+    schema: &TypeScriptSchema,
+) -> Result<DataMigrationPlan, HiveError> {
     let mut tables = Vec::new();
-    
+
     // Plan conversation migration
     tables.push(TableMigration {
         source_table: "conversations".to_string(),
@@ -483,31 +529,29 @@ async fn plan_data_migration(db_info: &DatabaseInfo, schema: &TypeScriptSchema) 
             "SELECT MAX(created_at) FROM conversations".to_string(),
         ],
     });
-    
+
     // Plan message migration (depends on conversations)
     tables.push(TableMigration {
         source_table: "messages".to_string(),
         target_table: "messages".to_string(),
         row_count: db_info.message_count,
-        transformations: vec![
-            DataTransformation {
-                source_column: "content".to_string(),
-                target_column: "content".to_string(),
-                transformation_type: TransformationType::DirectCopy,
-                transformation_logic: "DIRECT".to_string(),
-                fallback_value: None,
-            },
-        ],
+        transformations: vec![DataTransformation {
+            source_column: "content".to_string(),
+            target_column: "content".to_string(),
+            transformation_type: TransformationType::DirectCopy,
+            transformation_logic: "DIRECT".to_string(),
+            fallback_value: None,
+        }],
         dependencies: vec!["conversations".to_string()],
         validation_queries: vec![
             "SELECT COUNT(*) FROM messages".to_string(),
             "SELECT COUNT(DISTINCT conversation_id) FROM messages".to_string(),
         ],
     });
-    
+
     let total_rows = db_info.conversation_count + db_info.message_count;
     let estimated_transfer_time = std::time::Duration::from_millis(total_rows * 10); // 10ms per row estimate
-    
+
     Ok(DataMigrationPlan {
         tables,
         total_rows,
@@ -531,9 +575,9 @@ async fn open_source_database(_db_path: &PathBuf) -> Result<SqlitePool, HiveErro
 /// Create backup of source database
 async fn create_database_backup(source_db: &PathBuf) -> Result<(), HiveError> {
     let backup_path = source_db.with_extension("db.backup");
-    
+
     tokio::fs::copy(source_db, &backup_path).await?;
-    
+
     log::info!("Database backup created: {}", backup_path.display());
     Ok(())
 }
@@ -549,16 +593,16 @@ async fn initialize_target_schema(target_db: &Database) -> Result<(), HiveError>
 /// Migrate conversations table
 async fn migrate_conversations(source: &SqlitePool, target: &Database) -> Result<(), HiveError> {
     log::info!("Migrating conversations...");
-    
+
     let rows = query("SELECT * FROM conversations ORDER BY created_at")
         .fetch_all(source)
         .await?;
-    
+
     for _row in rows {
         // Placeholder: In real implementation, we would extract data and migrate
         log::debug!("Migrating conversation (placeholder)");
     }
-    
+
     log::info!("Conversations migration completed");
     Ok(())
 }
@@ -566,65 +610,72 @@ async fn migrate_conversations(source: &SqlitePool, target: &Database) -> Result
 /// Migrate messages table
 async fn migrate_messages(source: &SqlitePool, _target: &Database) -> Result<(), HiveError> {
     log::info!("Migrating messages...");
-    
+
     let rows = query("SELECT * FROM messages ORDER BY created_at")
         .fetch_all(source)
         .await?;
-    
+
     for _row in rows {
         // Placeholder: In real implementation, we would extract data and migrate
         log::debug!("Migrating message (placeholder)");
     }
-    
+
     log::info!("Messages migration completed");
     Ok(())
 }
 
 /// Migrate consensus profiles
-async fn migrate_consensus_profiles(source: &SqlitePool, _target: &Database) -> Result<(), HiveError> {
+async fn migrate_consensus_profiles(
+    source: &SqlitePool,
+    _target: &Database,
+) -> Result<(), HiveError> {
     log::info!("Migrating consensus profiles...");
-    
+
     let rows = query("SELECT * FROM consensus_profiles")
         .fetch_all(source)
         .await?;
-    
+
     for _row in rows {
         // Placeholder: In real implementation, we would extract data and migrate
         log::debug!("Migrating profile (placeholder)");
     }
-    
+
     log::info!("Consensus profiles migration completed");
     Ok(())
 }
 
 /// Migrate thematic clusters
-async fn migrate_thematic_clusters(source: &SqlitePool, _target: &Database) -> Result<(), HiveError> {
+async fn migrate_thematic_clusters(
+    source: &SqlitePool,
+    _target: &Database,
+) -> Result<(), HiveError> {
     log::info!("Migrating thematic clusters...");
-    
+
     let rows = query("SELECT * FROM thematic_clusters")
         .fetch_all(source)
         .await?;
-    
+
     for _row in rows {
         log::debug!("Migrating cluster (placeholder)");
     }
-    
+
     log::info!("Thematic clusters migration completed");
     Ok(())
 }
 
 /// Migrate usage statistics
-async fn migrate_usage_statistics(source: &SqlitePool, _target: &Database) -> Result<(), HiveError> {
+async fn migrate_usage_statistics(
+    source: &SqlitePool,
+    _target: &Database,
+) -> Result<(), HiveError> {
     log::info!("Migrating usage statistics...");
-    
-    let rows = query("SELECT * FROM usage_stats")
-        .fetch_all(source)
-        .await?;
-    
+
+    let rows = query("SELECT * FROM usage_stats").fetch_all(source).await?;
+
     for _row in rows {
         log::debug!("Migrating stats (placeholder)");
     }
-    
+
     log::info!("Usage statistics migration completed");
     Ok(())
 }
@@ -632,15 +683,15 @@ async fn migrate_usage_statistics(source: &SqlitePool, _target: &Database) -> Re
 /// Migrate user settings
 async fn migrate_user_settings(source: &SqlitePool, _target: &Database) -> Result<(), HiveError> {
     log::info!("Migrating user settings...");
-    
+
     let rows = query("SELECT * FROM user_settings")
         .fetch_all(source)
         .await?;
-    
+
     for _row in rows {
         log::debug!("Migrating settings (placeholder)");
     }
-    
+
     log::info!("User settings migration completed");
     Ok(())
 }
@@ -651,36 +702,39 @@ fn parse_typescript_timestamp(timestamp: &str) -> Result<DateTime<Utc>, HiveErro
     if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
         return Ok(dt.with_timezone(&Utc));
     }
-    
+
     if let Ok(ts) = timestamp.parse::<i64>() {
         if let Some(dt) = DateTime::from_timestamp(ts, 0) {
             return Ok(dt);
         }
     }
-    
-    Err(HiveError::Migration { 
-        message: format!("Invalid timestamp format: {}", timestamp)
+
+    Err(HiveError::Migration {
+        message: format!("Invalid timestamp format: {}", timestamp),
     })
 }
 
 /// Verify migration integrity
-async fn verify_migration_integrity(source: &SqlitePool, _target: &Database) -> Result<(), HiveError> {
+async fn verify_migration_integrity(
+    source: &SqlitePool,
+    _target: &Database,
+) -> Result<(), HiveError> {
     log::info!("Verifying migration integrity...");
-    
+
     // Verify conversation counts
     let source_conversations = query_scalar::<i64>("SELECT COUNT(*) FROM conversations")
         .fetch_one(source)
         .await?;
-    
+
     log::info!("Source conversations: {}", source_conversations);
-    
+
     // Verify message counts
     let source_messages = query_scalar::<i64>("SELECT COUNT(*) FROM messages")
         .fetch_one(source)
         .await?;
-    
+
     log::info!("Source messages: {}", source_messages);
-    
+
     log::info!("Migration integrity verification completed");
     Ok(())
 }
@@ -689,47 +743,57 @@ async fn verify_migration_integrity(source: &SqlitePool, _target: &Database) -> 
 fn estimate_migration_duration(plan: &DataMigrationPlan) -> std::time::Duration {
     // Base time for setup and verification
     let mut duration = std::time::Duration::from_secs(60);
-    
+
     // Add time based on data volume
     duration += plan.estimated_transfer_time;
-    
+
     // Add time for each validation point
     duration += std::time::Duration::from_secs(plan.validation_points.len() as u64 * 30);
-    
+
     // Add buffer for safety
     duration += std::time::Duration::from_secs(120);
-    
+
     duration
 }
 
 /// Assess migration risks
 fn assess_migration_risks(db_info: &DatabaseInfo, schema_changes: &[SchemaChange]) -> Vec<String> {
     let mut risks = Vec::new();
-    
+
     // Check database size
-    if db_info.size > 1_000_000_000 {  // 1GB
+    if db_info.size > 1_000_000_000 {
+        // 1GB
         risks.push("Large database size may require extended migration time".to_string());
     }
-    
+
     // Check integrity
     if !db_info.integrity_check {
         risks.push("Source database integrity issues detected".to_string());
     }
-    
+
     // Check schema changes
-    let complex_changes = schema_changes.iter()
-        .filter(|c| matches!(c.data_preservation, DataPreservationLevel::Partial | DataPreservationLevel::Manual))
+    let complex_changes = schema_changes
+        .iter()
+        .filter(|c| {
+            matches!(
+                c.data_preservation,
+                DataPreservationLevel::Partial | DataPreservationLevel::Manual
+            )
+        })
         .count();
-    
+
     if complex_changes > 0 {
-        risks.push(format!("{} schema changes require manual verification", complex_changes));
+        risks.push(format!(
+            "{} schema changes require manual verification",
+            complex_changes
+        ));
     }
-    
+
     // Check conversation volume
     if db_info.conversation_count > 10_000 {
         risks.push("High conversation volume may impact migration performance".to_string());
     }
-    
+
     risks
 }
 
@@ -742,11 +806,11 @@ mod tests {
         // Test RFC3339 format
         let rfc3339 = "2023-01-01T00:00:00Z";
         assert!(parse_typescript_timestamp(rfc3339).is_ok());
-        
+
         // Test Unix timestamp
         let unix_ts = "1672531200";
         assert!(parse_typescript_timestamp(unix_ts).is_ok());
-        
+
         // Test invalid format
         let invalid = "not-a-timestamp";
         assert!(parse_typescript_timestamp(invalid).is_err());
@@ -761,9 +825,9 @@ mod tests {
             batch_size: 100,
             validation_points: vec!["test1".to_string(), "test2".to_string()],
         };
-        
+
         let duration = estimate_migration_duration(&plan);
-        
+
         // Should include base time (60s) + transfer time (10s) + validation time (60s) + buffer (120s)
         assert!(duration.as_secs() >= 250);
     }
@@ -780,20 +844,18 @@ mod tests {
             integrity_check: false,
             clusters: Vec::new(),
         };
-        
-        let schema_changes = vec![
-            SchemaChange {
-                table_name: "test".to_string(),
-                change_type: SchemaChangeType::DataTransform,
-                old_schema: None,
-                new_schema: "test".to_string(),
-                migration_sql: "test".to_string(),
-                data_preservation: DataPreservationLevel::Partial,
-            }
-        ];
-        
+
+        let schema_changes = vec![SchemaChange {
+            table_name: "test".to_string(),
+            change_type: SchemaChangeType::DataTransform,
+            old_schema: None,
+            new_schema: "test".to_string(),
+            migration_sql: "test".to_string(),
+            data_preservation: DataPreservationLevel::Partial,
+        }];
+
         let risks = assess_migration_risks(&db_info, &schema_changes);
-        
+
         assert!(risks.len() >= 3); // Should identify multiple risks
         assert!(risks.iter().any(|r| r.contains("Large database")));
         assert!(risks.iter().any(|r| r.contains("integrity issues")));

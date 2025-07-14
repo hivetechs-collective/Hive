@@ -66,7 +66,7 @@ pub struct AppState {
 
 pub async fn start_web_server(port: u16, workspace_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let (tx, _) = broadcast::channel(1024);
-    
+
     let app_state = AppState {
         workspace_path,
         tx,
@@ -76,18 +76,18 @@ pub async fn start_web_server(port: u16, workspace_path: PathBuf) -> Result<(), 
         // Static files
         .route("/", get(serve_index))
         .route("/static/*path", get(serve_static))
-        
+
         // API endpoints
         .route("/api/files", get(list_files))
         .route("/api/files/*path", get(get_file_content))
         .route("/api/chat", post(handle_chat))
-        
+
         // WebSocket endpoint
         .route("/ws", get(websocket_handler))
-        
+
         // Serve the main HTML page for any other route
         .fallback(serve_index)
-        
+
         .layer(
             ServiceBuilder::new()
                 .layer(CorsLayer::permissive())

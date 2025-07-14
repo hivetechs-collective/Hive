@@ -1,16 +1,16 @@
 //! Migration Validation Suite
-//! 
+//!
 //! Comprehensive validation framework for ensuring migration quality,
 //! data integrity, and performance standards are met.
 
 use crate::core::error::HiveError;
-use crate::migration::database_impl::{ProductionDatabase, MigrationStats};
-use crate::migration::{ValidationLevel, MigrationConfig};
+use crate::migration::database_impl::{MigrationStats, ProductionDatabase};
+use crate::migration::{MigrationConfig, ValidationLevel};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::time::{Duration, Instant};
-use rusqlite::{Connection, params};
 
 /// Comprehensive validation suite configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,7 +255,7 @@ impl Default for ValidationSuiteConfig {
             enable_schema_validation: true,
             enable_functional_validation: true,
             enable_regression_testing: true,
-            sample_size_percentage: 10.0, // 10% sample
+            sample_size_percentage: 10.0,      // 10% sample
             performance_threshold_factor: 2.0, // 2x improvement minimum
             timeout_minutes: 30,
             parallel_validation: true,
@@ -270,14 +270,14 @@ impl ValidationSuite {
         source_db_path: &Path,
         target_db_path: &Path,
     ) -> Result<Self, HiveError> {
-        let source_connection = Connection::open(source_db_path)
-            .map_err(|e| HiveError::Migration { 
-                message: format!("Failed to open source database: {}", e)
+        let source_connection =
+            Connection::open(source_db_path).map_err(|e| HiveError::Migration {
+                message: format!("Failed to open source database: {}", e),
             })?;
-        
-        let target_connection = Connection::open(target_db_path)
-            .map_err(|e| HiveError::Migration { 
-                message: format!("Failed to open target database: {}", e)
+
+        let target_connection =
+            Connection::open(target_db_path).map_err(|e| HiveError::Migration {
+                message: format!("Failed to open target database: {}", e),
             })?;
 
         let results = ValidationResults {
@@ -310,7 +310,7 @@ impl ValidationSuite {
     /// Run complete validation suite
     pub async fn run_full_validation(&mut self) -> Result<ValidationResults, HiveError> {
         log::info!("Starting comprehensive validation suite");
-        
+
         self.results.overall_status = ValidationStatus::InProgress;
         let validation_start = Instant::now();
 
@@ -338,12 +338,15 @@ impl ValidationSuite {
         // Calculate final results
         self.calculate_final_results();
         self.generate_recommendations();
-        
+
         self.results.validation_end_time = Some(chrono::Utc::now());
-        self.results.performance_metrics.total_validation_time_ms = 
+        self.results.performance_metrics.total_validation_time_ms =
             validation_start.elapsed().as_millis() as u64;
 
-        log::info!("Validation suite completed with status: {:?}", self.results.overall_status);
+        log::info!(
+            "Validation suite completed with status: {:?}",
+            self.results.overall_status
+        );
         Ok(self.results.clone())
     }
 
@@ -359,11 +362,14 @@ impl ValidationSuite {
         // Sample-based content validation
         let sample_size = self.calculate_sample_size().await?;
         let content_validation = self.validate_content_samples(sample_size).await?;
-        
-        self.results.data_integrity_report.sample_conversations_validated = content_validation.samples_validated;
+
+        self.results
+            .data_integrity_report
+            .sample_conversations_validated = content_validation.samples_validated;
         self.results.data_integrity_report.content_hash_matches = content_validation.matches;
         self.results.data_integrity_report.content_hash_mismatches = content_validation.mismatches;
-        self.results.data_integrity_report.detailed_mismatches = content_validation.detailed_mismatches;
+        self.results.data_integrity_report.detailed_mismatches =
+            content_validation.detailed_mismatches;
 
         // Validate data types
         self.validate_data_types().await?;
@@ -378,8 +384,10 @@ impl ValidationSuite {
             row_count_valid && content_validation.matches > content_validation.mismatches,
             execution_time,
         );
-        
-        self.results.validation_categories.insert(ValidationCategory::DataIntegrity, category_result);
+
+        self.results
+            .validation_categories
+            .insert(ValidationCategory::DataIntegrity, category_result);
         self.results.performance_metrics.data_sampling_time_ms = execution_time;
 
         Ok(())
@@ -392,8 +400,12 @@ impl ValidationSuite {
 
         // Compare table structures
         let table_comparison = self.compare_table_structures().await?;
-        self.results.schema_compatibility_report.table_structure_matches = table_comparison.matches;
-        self.results.schema_compatibility_report.table_structure_differences = table_comparison.differences;
+        self.results
+            .schema_compatibility_report
+            .table_structure_matches = table_comparison.matches;
+        self.results
+            .schema_compatibility_report
+            .table_structure_differences = table_comparison.differences;
         self.results.schema_compatibility_report.missing_tables = table_comparison.missing_tables;
         self.results.schema_compatibility_report.extra_tables = table_comparison.extra_tables;
 
@@ -404,14 +416,16 @@ impl ValidationSuite {
         // Record results
         let execution_time = start_time.elapsed().as_millis() as u64;
         let schema_valid = table_comparison.differences == 0;
-        
+
         let category_result = self.create_category_result(
             ValidationCategory::SchemaCompatibility,
             schema_valid,
             execution_time,
         );
-        
-        self.results.validation_categories.insert(ValidationCategory::SchemaCompatibility, category_result);
+
+        self.results
+            .validation_categories
+            .insert(ValidationCategory::SchemaCompatibility, category_result);
         self.results.performance_metrics.schema_validation_time_ms = execution_time;
 
         Ok(())
@@ -424,25 +438,35 @@ impl ValidationSuite {
 
         // Benchmark query performance
         let query_performance = self.benchmark_query_performance().await?;
-        self.results.performance_metrics.average_query_response_ms = query_performance.avg_response_time;
-        self.results.performance_metrics.throughput_queries_per_second = query_performance.throughput;
+        self.results.performance_metrics.average_query_response_ms =
+            query_performance.avg_response_time;
+        self.results
+            .performance_metrics
+            .throughput_queries_per_second = query_performance.throughput;
 
         // Verify performance improvement
         let improvement_factor = self.calculate_performance_improvement().await?;
-        self.results.performance_metrics.performance_improvement_verified = 
+        self.results
+            .performance_metrics
+            .performance_improvement_verified =
             improvement_factor >= self.config.performance_threshold_factor;
 
         // Record results
         let execution_time = start_time.elapsed().as_millis() as u64;
-        let performance_valid = self.results.performance_metrics.performance_improvement_verified;
-        
+        let performance_valid = self
+            .results
+            .performance_metrics
+            .performance_improvement_verified;
+
         let category_result = self.create_category_result(
             ValidationCategory::PerformanceValidation,
             performance_valid,
             execution_time,
         );
-        
-        self.results.validation_categories.insert(ValidationCategory::PerformanceValidation, category_result);
+
+        self.results
+            .validation_categories
+            .insert(ValidationCategory::PerformanceValidation, category_result);
         self.results.performance_metrics.query_performance_time_ms = execution_time;
 
         Ok(())
@@ -454,26 +478,44 @@ impl ValidationSuite {
         let start_time = Instant::now();
 
         // Test basic database operations
-        self.results.functional_test_report.basic_queries_working = self.test_basic_queries().await?;
-        self.results.functional_test_report.search_functionality_working = self.test_search_functionality().await?;
-        self.results.functional_test_report.insertion_functionality_working = self.test_insertion_functionality().await?;
-        self.results.functional_test_report.update_functionality_working = self.test_update_functionality().await?;
-        self.results.functional_test_report.deletion_functionality_working = self.test_deletion_functionality().await?;
-        self.results.functional_test_report.transaction_support_working = self.test_transaction_support().await?;
-        self.results.functional_test_report.concurrent_access_working = self.test_concurrent_access().await?;
+        self.results.functional_test_report.basic_queries_working =
+            self.test_basic_queries().await?;
+        self.results
+            .functional_test_report
+            .search_functionality_working = self.test_search_functionality().await?;
+        self.results
+            .functional_test_report
+            .insertion_functionality_working = self.test_insertion_functionality().await?;
+        self.results
+            .functional_test_report
+            .update_functionality_working = self.test_update_functionality().await?;
+        self.results
+            .functional_test_report
+            .deletion_functionality_working = self.test_deletion_functionality().await?;
+        self.results
+            .functional_test_report
+            .transaction_support_working = self.test_transaction_support().await?;
+        self.results
+            .functional_test_report
+            .concurrent_access_working = self.test_concurrent_access().await?;
 
         // Record results
         let execution_time = start_time.elapsed().as_millis() as u64;
-        let functional_valid = self.results.functional_test_report.basic_queries_working &&
-                              self.results.functional_test_report.search_functionality_working;
-        
+        let functional_valid = self.results.functional_test_report.basic_queries_working
+            && self
+                .results
+                .functional_test_report
+                .search_functionality_working;
+
         let category_result = self.create_category_result(
             ValidationCategory::FunctionalTesting,
             functional_valid,
             execution_time,
         );
-        
-        self.results.validation_categories.insert(ValidationCategory::FunctionalTesting, category_result);
+
+        self.results
+            .validation_categories
+            .insert(ValidationCategory::FunctionalTesting, category_result);
         self.results.performance_metrics.functional_test_time_ms = execution_time;
 
         Ok(())
@@ -485,36 +527,64 @@ impl ValidationSuite {
         let start_time = Instant::now();
 
         // Test TypeScript feature parity
-        self.results.regression_test_report.typescript_feature_parity = self.test_typescript_parity().await?;
-        self.results.regression_test_report.consensus_engine_compatibility = self.test_consensus_compatibility().await?;
-        self.results.regression_test_report.memory_system_compatibility = self.test_memory_compatibility().await?;
-        self.results.regression_test_report.configuration_compatibility = self.test_config_compatibility().await?;
-        self.results.regression_test_report.cli_command_compatibility = self.test_cli_compatibility().await?;
+        self.results
+            .regression_test_report
+            .typescript_feature_parity = self.test_typescript_parity().await?;
+        self.results
+            .regression_test_report
+            .consensus_engine_compatibility = self.test_consensus_compatibility().await?;
+        self.results
+            .regression_test_report
+            .memory_system_compatibility = self.test_memory_compatibility().await?;
+        self.results
+            .regression_test_report
+            .configuration_compatibility = self.test_config_compatibility().await?;
+        self.results
+            .regression_test_report
+            .cli_command_compatibility = self.test_cli_compatibility().await?;
 
         // Calculate compatibility score
         let compatibility_tests = vec![
-            self.results.regression_test_report.typescript_feature_parity,
-            self.results.regression_test_report.consensus_engine_compatibility,
-            self.results.regression_test_report.memory_system_compatibility,
-            self.results.regression_test_report.configuration_compatibility,
-            self.results.regression_test_report.cli_command_compatibility,
+            self.results
+                .regression_test_report
+                .typescript_feature_parity,
+            self.results
+                .regression_test_report
+                .consensus_engine_compatibility,
+            self.results
+                .regression_test_report
+                .memory_system_compatibility,
+            self.results
+                .regression_test_report
+                .configuration_compatibility,
+            self.results
+                .regression_test_report
+                .cli_command_compatibility,
         ];
-        
+
         let passed_tests = compatibility_tests.iter().filter(|&&x| x).count();
-        self.results.regression_test_report.compatibility_score_percentage = 
+        self.results
+            .regression_test_report
+            .compatibility_score_percentage =
             (passed_tests as f64 / compatibility_tests.len() as f64) * 100.0;
 
         // Record results
         let execution_time = start_time.elapsed().as_millis() as u64;
-        let regression_valid = self.results.regression_test_report.compatibility_score_percentage >= 80.0;
-        
+        let regression_valid = self
+            .results
+            .regression_test_report
+            .compatibility_score_percentage
+            >= 80.0;
+
         let category_result = self.create_category_result(
             ValidationCategory::RegressionTesting,
             regression_valid,
             execution_time,
         );
-        
-        self.results.validation_categories.insert(ValidationCategory::RegressionTesting, category_result);
+
+        self.results
+            .validation_categories
+            .insert(ValidationCategory::RegressionTesting, category_result);
 
         Ok(())
     }
@@ -522,19 +592,31 @@ impl ValidationSuite {
     /// Calculate final validation results
     fn calculate_final_results(&mut self) {
         let total_categories = self.results.validation_categories.len() as u32;
-        let passed_categories = self.results.validation_categories.values()
+        let passed_categories = self
+            .results
+            .validation_categories
+            .values()
             .filter(|r| r.status == ValidationStatus::Passed)
             .count() as u32;
-        
-        self.results.total_tests_run = self.results.validation_categories.values()
+
+        self.results.total_tests_run = self
+            .results
+            .validation_categories
+            .values()
             .map(|r| r.tests_run)
             .sum();
-        
-        self.results.tests_passed = self.results.validation_categories.values()
+
+        self.results.tests_passed = self
+            .results
+            .validation_categories
+            .values()
             .map(|r| r.tests_passed)
             .sum();
-        
-        self.results.tests_failed = self.results.validation_categories.values()
+
+        self.results.tests_failed = self
+            .results
+            .validation_categories
+            .values()
             .map(|r| r.tests_failed)
             .sum();
 
@@ -554,38 +636,33 @@ impl ValidationSuite {
         for (category, result) in &self.results.validation_categories {
             if result.status != ValidationStatus::Passed {
                 let recommendation = match category {
-                    ValidationCategory::DataIntegrity => {
-                        ValidationRecommendation {
-                            category: category.clone(),
-                            priority: RecommendationPriority::Critical,
-                            title: "Data Integrity Issues Detected".to_string(),
-                            description: "Some data integrity issues were found during validation".to_string(),
-                            action_required: true,
-                            estimated_fix_time: Some(Duration::from_secs(2 * 60 * 60)),
-                        }
+                    ValidationCategory::DataIntegrity => ValidationRecommendation {
+                        category: category.clone(),
+                        priority: RecommendationPriority::Critical,
+                        title: "Data Integrity Issues Detected".to_string(),
+                        description: "Some data integrity issues were found during validation"
+                            .to_string(),
+                        action_required: true,
+                        estimated_fix_time: Some(Duration::from_secs(2 * 60 * 60)),
                     },
-                    ValidationCategory::PerformanceValidation => {
-                        ValidationRecommendation {
-                            category: category.clone(),
-                            priority: RecommendationPriority::High,
-                            title: "Performance Target Not Met".to_string(),
-                            description: "Performance improvement target was not achieved".to_string(),
-                            action_required: false,
-                            estimated_fix_time: Some(Duration::from_secs(4 * 60 * 60)),
-                        }
+                    ValidationCategory::PerformanceValidation => ValidationRecommendation {
+                        category: category.clone(),
+                        priority: RecommendationPriority::High,
+                        title: "Performance Target Not Met".to_string(),
+                        description: "Performance improvement target was not achieved".to_string(),
+                        action_required: false,
+                        estimated_fix_time: Some(Duration::from_secs(4 * 60 * 60)),
                     },
-                    _ => {
-                        ValidationRecommendation {
-                            category: category.clone(),
-                            priority: RecommendationPriority::Medium,
-                            title: format!("{:?} Validation Failed", category),
-                            description: "Review validation results and address issues".to_string(),
-                            action_required: true,
-                            estimated_fix_time: Some(Duration::from_secs(60 * 60)),
-                        }
-                    }
+                    _ => ValidationRecommendation {
+                        category: category.clone(),
+                        priority: RecommendationPriority::Medium,
+                        title: format!("{:?} Validation Failed", category),
+                        description: "Review validation results and address issues".to_string(),
+                        action_required: true,
+                        estimated_fix_time: Some(Duration::from_secs(60 * 60)),
+                    },
                 };
-                
+
                 self.results.recommendations.push(recommendation);
             }
         }
@@ -599,7 +676,11 @@ impl ValidationSuite {
         execution_time: u64,
     ) -> CategoryResults {
         CategoryResults {
-            status: if passed { ValidationStatus::Passed } else { ValidationStatus::Failed },
+            status: if passed {
+                ValidationStatus::Passed
+            } else {
+                ValidationStatus::Failed
+            },
             tests_run: 1,
             tests_passed: if passed { 1 } else { 0 },
             tests_failed: if passed { 0 } else { 1 },
@@ -621,7 +702,10 @@ impl ValidationSuite {
         Ok(100) // Placeholder
     }
 
-    async fn validate_content_samples(&self, _sample_size: u32) -> Result<ContentValidationResult, HiveError> {
+    async fn validate_content_samples(
+        &self,
+        _sample_size: u32,
+    ) -> Result<ContentValidationResult, HiveError> {
         Ok(ContentValidationResult {
             samples_validated: 100,
             matches: 95,
@@ -630,8 +714,12 @@ impl ValidationSuite {
         })
     }
 
-    async fn validate_data_types(&mut self) -> Result<(), HiveError> { Ok(()) }
-    async fn validate_foreign_keys(&mut self) -> Result<(), HiveError> { Ok(()) }
+    async fn validate_data_types(&mut self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn validate_foreign_keys(&mut self) -> Result<(), HiveError> {
+        Ok(())
+    }
     async fn compare_table_structures(&self) -> Result<TableComparisonResult, HiveError> {
         Ok(TableComparisonResult {
             matches: 10,
@@ -640,27 +728,57 @@ impl ValidationSuite {
             extra_tables: Vec::new(),
         })
     }
-    async fn compare_indexes(&mut self) -> Result<(), HiveError> { Ok(()) }
-    async fn compare_constraints(&mut self) -> Result<(), HiveError> { Ok(()) }
+    async fn compare_indexes(&mut self) -> Result<(), HiveError> {
+        Ok(())
+    }
+    async fn compare_constraints(&mut self) -> Result<(), HiveError> {
+        Ok(())
+    }
     async fn benchmark_query_performance(&self) -> Result<QueryPerformanceResult, HiveError> {
         Ok(QueryPerformanceResult {
             avg_response_time: 5.0,
             throughput: 200.0,
         })
     }
-    async fn calculate_performance_improvement(&self) -> Result<f64, HiveError> { Ok(25.0) }
-    async fn test_basic_queries(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_search_functionality(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_insertion_functionality(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_update_functionality(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_deletion_functionality(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_transaction_support(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_concurrent_access(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_typescript_parity(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_consensus_compatibility(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_memory_compatibility(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_config_compatibility(&self) -> Result<bool, HiveError> { Ok(true) }
-    async fn test_cli_compatibility(&self) -> Result<bool, HiveError> { Ok(true) }
+    async fn calculate_performance_improvement(&self) -> Result<f64, HiveError> {
+        Ok(25.0)
+    }
+    async fn test_basic_queries(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_search_functionality(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_insertion_functionality(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_update_functionality(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_deletion_functionality(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_transaction_support(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_concurrent_access(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_typescript_parity(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_consensus_compatibility(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_memory_compatibility(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_config_compatibility(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
+    async fn test_cli_compatibility(&self) -> Result<bool, HiveError> {
+        Ok(true)
+    }
 }
 
 // Helper structs for validation results
@@ -701,8 +819,8 @@ pub async fn run_quick_validation(
     let mut suite = ValidationSuite::new(config, source_db_path, target_db_path)?;
     let results = suite.run_full_validation().await?;
 
-    Ok(results.overall_status == ValidationStatus::Passed || 
-       results.overall_status == ValidationStatus::PassedWithWarnings)
+    Ok(results.overall_status == ValidationStatus::Passed
+        || results.overall_status == ValidationStatus::PassedWithWarnings)
 }
 
 #[cfg(test)]

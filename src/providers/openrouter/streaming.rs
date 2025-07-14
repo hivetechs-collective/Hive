@@ -1,9 +1,8 @@
 /// OpenRouter Streaming Client
-/// 
+///
 /// Advanced streaming client for real-time consensus with live token streaming,
 /// progress updates, and cancellation support. Handles Server-Sent Events (SSE)
 /// for OpenRouter's streaming API.
-
 use anyhow::{Context, Result};
 use bytes::Bytes;
 use futures::{Stream, StreamExt};

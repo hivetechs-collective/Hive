@@ -1,7 +1,7 @@
 //! Types for code analysis
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 
 /// Represents an analyzed file with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]

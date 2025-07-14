@@ -1,5 +1,5 @@
 //! Mode management CLI commands
-//! 
+//!
 //! Provides commands for intelligent mode detection, switching,
 //! and preference management.
 
@@ -17,45 +17,45 @@ pub enum ModeCommands {
     /// Show current mode status
     #[command(visible_alias = "s")]
     Status,
-    
+
     /// Set operating mode
     #[command(visible_alias = "set")]
     Switch {
         /// Target mode (planning, execution, hybrid, analysis, learning)
         mode: String,
-        
+
         /// Preserve context during switch
         #[arg(short, long, default_value = "true")]
         preserve_context: bool,
     },
-    
+
     /// Detect appropriate mode for a query
     #[command(visible_alias = "d")]
     Detect {
         /// Query to analyze
         query: String,
-        
+
         /// Show confidence scores
         #[arg(short, long)]
         confidence: bool,
     },
-    
+
     /// Manage user preferences
     #[command(visible_alias = "p")]
     Preferences {
         /// Show current preferences
         #[arg(short, long)]
         show: bool,
-        
+
         /// Enable/disable learning
         #[arg(short, long)]
         learning: Option<bool>,
-        
+
         /// Reset preferences to default
         #[arg(short, long)]
         reset: bool,
     },
-    
+
     /// Enable automatic mode switching
     #[command(visible_alias = "auto")]
     Auto {
@@ -70,47 +70,47 @@ pub async fn execute(
     consensus_engine: Arc<ConsensusEngine>,
 ) -> HiveResult<()> {
     let mode_manager = Arc::new(ModeManager::new(consensus_engine.clone()).await?);
-    
+
     match cmd {
         ModeCommands::Status => {
             show_status(&mode_manager).await?;
         }
-        
+
         ModeCommands::Switch { mode, preserve_context } => {
             switch_mode(&mode_manager, &mode, preserve_context).await?;
         }
-        
+
         ModeCommands::Detect { query, confidence } => {
             detect_mode(&mode_manager, &query, confidence).await?;
         }
-        
+
         ModeCommands::Preferences { show, learning, reset } => {
             manage_preferences(&mode_manager, show, learning, reset).await?;
         }
-        
+
         ModeCommands::Auto { enabled } => {
             set_auto_mode(&mode_manager, enabled).await?;
         }
     }
-    
+
     Ok(())
 }
 
 /// Show current mode status
 async fn show_status(manager: &Arc<ModeManager>) -> HiveResult<()> {
     let status = manager.get_status().await?;
-    
+
     println!("\n{}", "Mode Status".bold().cyan());
     println!("{}", "─".repeat(40));
-    
+
     // Current mode with indicator
     let mode_icon = get_mode_icon(&status.current_mode);
     println!("Current Mode: {} {:?}", mode_icon, status.current_mode);
-    
+
     // Confidence
     let confidence_bar = format_confidence_bar(status.confidence);
     println!("Confidence:   {}", confidence_bar);
-    
+
     // Health status
     let health_color = match status.health {
         crate::modes::visualization::HealthStatus::Excellent => "Excellent".green(),
@@ -119,19 +119,19 @@ async fn show_status(manager: &Arc<ModeManager>) -> HiveResult<()> {
         crate::modes::visualization::HealthStatus::Critical => "Critical".red(),
     };
     println!("Health:       {}", health_color);
-    
+
     // Active duration
     let duration = format_duration(status.active_duration);
     println!("Active:       {}", duration);
-    
+
     // Context items
     println!("Context:      {} items", status.context_items);
-    
+
     // Last switch
     if let Some(last_switch) = status.last_switch {
         println!("Last Switch:  {}", last_switch.format("%Y-%m-%d %H:%M:%S"));
     }
-    
+
     // Learning stats
     let stats = manager.get_learning_stats().await?;
     if stats.total_detections > 0 {
@@ -140,7 +140,7 @@ async fn show_status(manager: &Arc<ModeManager>) -> HiveResult<()> {
         println!("Switches:     {}", stats.total_switches);
         println!("Accuracy:     {:.1}%", stats.mode_accuracy * 100.0);
     }
-    
+
     Ok(())
 }
 
@@ -151,15 +151,15 @@ async fn switch_mode(
     preserve_context: bool
 ) -> HiveResult<()> {
     let target_mode = parse_mode(mode_str)?;
-    
+
     println!("Switching to {:?} mode...", target_mode);
-    
+
     let result = manager.switch_mode(target_mode.clone(), preserve_context).await?;
-    
+
     if result.success {
         println!("\n{}", "✓ Mode switch successful!".green().bold());
         println!("Duration: {}ms", result.duration.as_millis());
-        
+
         if preserve_context {
             let ctx = &result.context_transformation;
             println!("\nContext preserved:");
@@ -168,7 +168,7 @@ async fn switch_mode(
             println!("  • Items dropped:     {}", ctx.items_dropped);
             println!("  • Quality:           {:.0}%", ctx.transformation_quality * 100.0);
         }
-        
+
         if !result.recommendations.is_empty() {
             println!("\n{}", "Recommendations:".bold());
             for rec in &result.recommendations {
@@ -177,7 +177,7 @@ async fn switch_mode(
         }
     } else {
         println!("\n{}", "✗ Mode switch failed".red().bold());
-        
+
         if !result.warnings.is_empty() {
             println!("\n{}", "Warnings:".yellow());
             for warning in &result.warnings {
@@ -185,7 +185,7 @@ async fn switch_mode(
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -196,21 +196,21 @@ async fn detect_mode(
     show_confidence: bool
 ) -> HiveResult<()> {
     println!("Analyzing query: \"{}\"", query.italic());
-    
+
     let context = PlanningContext::default(); // Use default context for CLI
     let recommendation = manager.get_recommendation(query, &context).await?;
-    
+
     println!("\n{}", "Detection Result".bold().cyan());
     println!("{}", "─".repeat(40));
-    
+
     let mode_icon = get_mode_icon(&recommendation.recommended_mode);
     println!("Recommended Mode: {} {:?}", mode_icon, recommendation.recommended_mode);
     println!("Confidence:       {:.0}%", recommendation.confidence * 100.0);
-    
+
     if !recommendation.reasoning.is_empty() {
         println!("Reasoning:        {}", recommendation.reasoning);
     }
-    
+
     if show_confidence && !recommendation.alternatives.is_empty() {
         println!("\n{}", "Alternative Modes:".bold());
         for (mode, confidence) in &recommendation.alternatives {
@@ -219,12 +219,12 @@ async fn detect_mode(
             println!("  {} {:?} {}", icon, mode, bar);
         }
     }
-    
+
     if recommendation.user_preference_weight > 0.0 {
-        println!("\nUser preference influence: {:.0}%", 
+        println!("\nUser preference influence: {:.0}%",
             recommendation.user_preference_weight * 100.0);
     }
-    
+
     Ok(())
 }
 
@@ -240,12 +240,12 @@ async fn manage_preferences(
         println!("{}", "✓ Preferences reset to default".green());
         return Ok(());
     }
-    
+
     if let Some(enabled) = learning {
         let mut prefs = crate::modes::UserPreference::default();
         prefs.learning_enabled = enabled;
         manager.update_preferences(prefs).await?;
-        
+
         if enabled {
             println!("{}", "✓ Learning enabled".green());
         } else {
@@ -253,13 +253,13 @@ async fn manage_preferences(
         }
         return Ok(());
     }
-    
+
     if show {
         let stats = manager.get_learning_stats().await?;
-        
+
         println!("\n{}", "User Preferences".bold().cyan());
         println!("{}", "─".repeat(40));
-        
+
         // Mode distribution
         if !stats.mode_distribution.is_empty() {
             println!("\n{}", "Mode Usage:".bold());
@@ -269,7 +269,7 @@ async fn manage_preferences(
                 println!("  {:?}: {} {:.0}%", mode, bar, percentage);
             }
         }
-        
+
         // Top patterns
         if !stats.top_patterns.is_empty() {
             println!("\n{}", "Top Patterns:".bold());
@@ -277,10 +277,10 @@ async fn manage_preferences(
                 println!("  • {} ({}x)", pattern, count);
             }
         }
-        
+
         println!("\nPreference influence: {:.0}%", stats.preference_influence * 100.0);
     }
-    
+
     Ok(())
 }
 
@@ -297,7 +297,7 @@ async fn set_auto_mode(
         println!("{}", "✓ Automatic mode switching disabled".yellow());
         println!("Use 'hive mode switch' to manually change modes.");
     }
-    
+
     Ok(())
 }
 
@@ -330,7 +330,7 @@ fn format_confidence_bar(confidence: f32) -> String {
     let width = 20;
     let filled = (confidence * width as f32) as usize;
     let bar = "█".repeat(filled) + &"░".repeat(width - filled);
-    
+
     let color = if confidence > 0.8 {
         bar.green()
     } else if confidence > 0.5 {
@@ -338,7 +338,7 @@ fn format_confidence_bar(confidence: f32) -> String {
     } else {
         bar.red()
     };
-    
+
     format!("[{}] {:.0}%", color, confidence * 100.0)
 }
 
@@ -369,7 +369,7 @@ fn format_duration(duration: std::time::Duration) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_parse_mode() {
         assert_eq!(parse_mode("planning").unwrap(), ModeType::Planning);
@@ -377,12 +377,12 @@ mod tests {
         assert_eq!(parse_mode("EXECUTION").unwrap(), ModeType::Execution);
         assert!(parse_mode("invalid").is_err());
     }
-    
+
     #[test]
     fn test_format_confidence_bar() {
         let bar = format_confidence_bar(0.85);
         assert!(bar.contains("85%"));
-        
+
         let bar = format_confidence_bar(0.3);
         assert!(bar.contains("30%"));
     }

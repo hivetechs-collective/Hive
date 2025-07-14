@@ -1,12 +1,12 @@
 //! Transformation history and undo/redo functionality
 
-use anyhow::{Result, anyhow};
-use std::path::{Path, PathBuf};
-use std::collections::VecDeque;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use crate::transformation::types::*;
 
@@ -83,7 +83,11 @@ impl TransformationHistory {
     }
 
     /// Record that a transformation was applied
-    pub async fn record_transaction(&self, transformation_id: &str, backups: Vec<FileBackup>) -> Result<String> {
+    pub async fn record_transaction(
+        &self,
+        transformation_id: &str,
+        backups: Vec<FileBackup>,
+    ) -> Result<String> {
         let transaction = Transaction {
             id: uuid::Uuid::new_v4().to_string(),
             transformation_id: transformation_id.to_string(),
@@ -119,10 +123,13 @@ impl TransformationHistory {
     /// Mark a transformation as applied
     pub async fn mark_applied(&self, transformation_id: &str, transaction_id: &str) -> Result<()> {
         let mut transformations = self.transformations.write().await;
-        if let Some(transformation) = transformations.iter_mut().find(|t| t.id == transformation_id) {
+        if let Some(transformation) = transformations
+            .iter_mut()
+            .find(|t| t.id == transformation_id)
+        {
             transformation.applied = true;
             transformation.transaction_id = Some(transaction_id.to_string());
-            
+
             // Update on disk
             self.save_transformation(transformation).await?;
         }
@@ -132,11 +139,13 @@ impl TransformationHistory {
     /// Get the last transaction
     pub async fn get_last_transaction(&self) -> Result<Transaction> {
         let undo_stack = self.undo_stack.read().await;
-        let last_id = undo_stack.last()
+        let last_id = undo_stack
+            .last()
             .ok_or_else(|| anyhow!("No transactions to undo"))?;
 
         let transactions = self.transactions.read().await;
-        transactions.iter()
+        transactions
+            .iter()
             .find(|t| &t.id == last_id)
             .cloned()
             .ok_or_else(|| anyhow!("Transaction not found"))
@@ -145,11 +154,13 @@ impl TransformationHistory {
     /// Get the last undone transaction
     pub async fn get_last_undone(&self) -> Result<Transaction> {
         let redo_stack = self.redo_stack.read().await;
-        let last_id = redo_stack.last()
+        let last_id = redo_stack
+            .last()
             .ok_or_else(|| anyhow!("No transactions to redo"))?;
 
         let transactions = self.transactions.read().await;
-        transactions.iter()
+        transactions
+            .iter()
             .find(|t| &t.id == last_id)
             .cloned()
             .ok_or_else(|| anyhow!("Transaction not found"))
@@ -200,21 +211,13 @@ impl TransformationHistory {
     /// Get transformation history
     pub async fn get_history(&self, limit: usize) -> Vec<Transformation> {
         let transformations = self.transformations.read().await;
-        transformations.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+        transformations.iter().rev().take(limit).cloned().collect()
     }
 
     /// Get transaction history
     pub async fn get_transaction_history(&self, limit: usize) -> Vec<Transaction> {
         let transactions = self.transactions.read().await;
-        transactions.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+        transactions.iter().rev().take(limit).cloned().collect()
     }
 
     /// Clear all history
@@ -240,7 +243,9 @@ impl TransformationHistory {
 
     /// Save transformation to disk
     async fn save_transformation(&self, transformation: &Transformation) -> Result<()> {
-        let path = self.storage_path.join(format!("transformation_{}.json", transformation.id));
+        let path = self
+            .storage_path
+            .join(format!("transformation_{}.json", transformation.id));
         let json = serde_json::to_string_pretty(transformation)?;
         tokio::fs::write(path, json).await?;
         Ok(())
@@ -248,7 +253,9 @@ impl TransformationHistory {
 
     /// Save transaction to disk
     async fn save_transaction(&self, transaction: &Transaction) -> Result<()> {
-        let path = self.storage_path.join(format!("transaction_{}.json", transaction.id));
+        let path = self
+            .storage_path
+            .join(format!("transaction_{}.json", transaction.id));
         let json = serde_json::to_string_pretty(transaction)?;
         tokio::fs::write(path, json).await?;
         Ok(())
@@ -286,7 +293,10 @@ impl TransformationHistory {
                 if let Ok(json) = std::fs::read_to_string(&path) {
                     if let Ok(transaction) = serde_json::from_str::<Transaction>(&json) {
                         futures::executor::block_on(async {
-                            self.transactions.write().await.push_back(transaction.clone());
+                            self.transactions
+                                .write()
+                                .await
+                                .push_back(transaction.clone());
                             if transaction.applied {
                                 self.undo_stack.write().await.push(transaction.id);
                             }

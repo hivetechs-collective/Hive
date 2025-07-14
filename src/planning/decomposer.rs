@@ -1,13 +1,13 @@
 //! Task Decomposition using AI
-//! 
+//!
 //! Intelligently breaks down complex tasks into manageable subtasks
 
-use crate::core::error::{HiveResult, HiveError};
 use crate::consensus::engine::ConsensusEngine;
+use crate::core::error::{HiveError, HiveResult};
 use crate::planning::types::*;
+use anyhow::anyhow;
 use serde_json::json;
 use uuid::Uuid;
-use anyhow::anyhow;
 
 /// AI-powered task decomposition engine
 pub struct TaskDecomposer {
@@ -37,17 +37,21 @@ impl TaskDecomposer {
         consensus_engine: &ConsensusEngine,
     ) -> HiveResult<Vec<Task>> {
         // First, use AI to understand the task and determine its type
-        let task_analysis = self.analyze_task(description, context, consensus_engine).await?;
-        
+        let task_analysis = self
+            .analyze_task(description, context, consensus_engine)
+            .await?;
+
         // Generate initial task breakdown using AI
-        let ai_tasks = self.generate_ai_tasks(description, &task_analysis, context, consensus_engine).await?;
-        
+        let ai_tasks = self
+            .generate_ai_tasks(description, &task_analysis, context, consensus_engine)
+            .await?;
+
         // Apply domain-specific patterns and validations
         let refined_tasks = self.refine_tasks(ai_tasks, &task_analysis, context)?;
-        
+
         // Ensure all critical subtasks are included
         let complete_tasks = self.ensure_completeness(refined_tasks, &task_analysis)?;
-        
+
         Ok(complete_tasks)
     }
 
@@ -89,9 +93,12 @@ Please analyze and return a JSON object with:
         );
 
         let result = consensus_engine.process(&prompt, None).await?;
-        let analysis: TaskAnalysis = serde_json::from_str(&result.result.ok_or_else(|| anyhow!("No analysis result"))?)
-            .map_err(|e| HiveError::Planning(format!("Failed to parse task analysis: {}", e)))?;
-        
+        let analysis: TaskAnalysis =
+            serde_json::from_str(&result.result.ok_or_else(|| anyhow!("No analysis result"))?)
+                .map_err(|e| {
+                    HiveError::Planning(format!("Failed to parse task analysis: {}", e))
+                })?;
+
         Ok(analysis)
     }
 
@@ -142,33 +149,44 @@ Guidelines:
             analysis.key_components.join(", "),
             context.user_preferences.detail_level,
             context.experience_level,
-            context.time_constraints.map(|d| format!("{} days", d.num_days())).unwrap_or("No deadline".to_string()),
+            context
+                .time_constraints
+                .map(|d| format!("{} days", d.num_days()))
+                .unwrap_or("No deadline".to_string()),
             analysis.task_type,
             context.experience_level
         );
 
         let result = consensus_engine.process(&prompt, None).await?;
-        let raw_tasks: Vec<RawTask> = serde_json::from_str(&result.result.ok_or_else(|| anyhow!("No decomposition result"))?)
-            .map_err(|e| HiveError::Planning(format!("Failed to parse tasks: {}", e)))?;
-        
+        let raw_tasks: Vec<RawTask> = serde_json::from_str(
+            &result
+                .result
+                .ok_or_else(|| anyhow!("No decomposition result"))?,
+        )
+        .map_err(|e| HiveError::Planning(format!("Failed to parse tasks: {}", e)))?;
+
         // Convert raw tasks to proper Task objects
-        let tasks = raw_tasks.into_iter().enumerate().map(|(index, raw)| {
-            let resources = self.determine_resources(&raw); // Call before moving fields
-            Task {
-                id: Uuid::new_v4().to_string(),
-                title: raw.title,
-                description: raw.description,
-                task_type: self.parse_task_type(&raw.task_type),
-                priority: self.parse_priority(&raw.priority),
-                estimated_duration: chrono::Duration::hours(raw.estimated_hours as i64),
-                dependencies: Vec::new(), // Will be resolved later
-                required_skills: raw.required_skills,
-                resources,
-                acceptance_criteria: raw.acceptance_criteria,
-                subtasks: Vec::new(),
-            }
-        }).collect();
-        
+        let tasks = raw_tasks
+            .into_iter()
+            .enumerate()
+            .map(|(index, raw)| {
+                let resources = self.determine_resources(&raw); // Call before moving fields
+                Task {
+                    id: Uuid::new_v4().to_string(),
+                    title: raw.title,
+                    description: raw.description,
+                    task_type: self.parse_task_type(&raw.task_type),
+                    priority: self.parse_priority(&raw.priority),
+                    estimated_duration: chrono::Duration::hours(raw.estimated_hours as i64),
+                    dependencies: Vec::new(), // Will be resolved later
+                    required_skills: raw.required_skills,
+                    resources,
+                    acceptance_criteria: raw.acceptance_criteria,
+                    subtasks: Vec::new(),
+                }
+            })
+            .collect();
+
         Ok(tasks)
     }
 
@@ -180,24 +198,29 @@ Guidelines:
         context: &PlanningContext,
     ) -> HiveResult<Vec<Task>> {
         // Apply templates based on task type
-        if let Some(template) = self.decomposition_templates.iter()
-            .find(|t| t.task_type == analysis.task_type) 
+        if let Some(template) = self
+            .decomposition_templates
+            .iter()
+            .find(|t| t.task_type == analysis.task_type)
         {
             // Ensure required subtasks are present
             for required in &template.required_subtasks {
-                if !tasks.iter().any(|t| t.title.to_lowercase().contains(&required.to_lowercase())) {
+                if !tasks
+                    .iter()
+                    .any(|t| t.title.to_lowercase().contains(&required.to_lowercase()))
+                {
                     // Add missing required task
                     tasks.push(self.create_required_task(required, &analysis.task_type)?);
                 }
             }
         }
-        
+
         // Adjust priorities based on dependencies
         self.adjust_priorities(&mut tasks)?;
-        
+
         // Optimize task ordering
         self.optimize_ordering(&mut tasks)?;
-        
+
         Ok(tasks)
     }
 
@@ -208,21 +231,25 @@ Guidelines:
         analysis: &TaskAnalysis,
     ) -> HiveResult<Vec<Task>> {
         // Always include testing if not present
-        if !tasks.iter().any(|t| t.task_type == TaskType::Testing) && analysis.task_type == TaskType::Implementation {
+        if !tasks.iter().any(|t| t.task_type == TaskType::Testing)
+            && analysis.task_type == TaskType::Implementation
+        {
             tasks.push(self.create_testing_task()?);
         }
-        
+
         // Always include documentation for complex tasks
-        if !tasks.iter().any(|t| t.task_type == TaskType::Documentation) && 
-           (analysis.complexity == Complexity::Complex || analysis.complexity == Complexity::VeryComplex) {
+        if !tasks.iter().any(|t| t.task_type == TaskType::Documentation)
+            && (analysis.complexity == Complexity::Complex
+                || analysis.complexity == Complexity::VeryComplex)
+        {
             tasks.push(self.create_documentation_task()?);
         }
-        
+
         // Add review task for critical components
         if !tasks.iter().any(|t| t.task_type == TaskType::Review) && tasks.len() > 3 {
             tasks.push(self.create_review_task()?);
         }
-        
+
         Ok(tasks)
     }
 
@@ -281,7 +308,7 @@ Guidelines:
 
     fn determine_resources(&self, raw_task: &RawTask) -> Vec<Resource> {
         let mut resources = Vec::new();
-        
+
         // Add human resources based on skills
         for skill in &raw_task.required_skills {
             resources.push(Resource {
@@ -291,7 +318,7 @@ Guidelines:
                 availability: ResourceAvailability::Available,
             });
         }
-        
+
         // Add tool resources if mentioned
         if raw_task.description.to_lowercase().contains("database") {
             resources.push(Resource {
@@ -301,7 +328,7 @@ Guidelines:
                 availability: ResourceAvailability::Available,
             });
         }
-        
+
         resources
     }
 
@@ -395,11 +422,9 @@ Guidelines:
 
     fn optimize_ordering(&self, tasks: &mut Vec<Task>) -> HiveResult<()> {
         // Sort by priority first, then by estimated duration (shorter tasks first)
-        tasks.sort_by(|a, b| {
-            match a.priority.cmp(&b.priority) {
-                std::cmp::Ordering::Equal => a.estimated_duration.cmp(&b.estimated_duration),
-                other => other,
-            }
+        tasks.sort_by(|a, b| match a.priority.cmp(&b.priority) {
+            std::cmp::Ordering::Equal => a.estimated_duration.cmp(&b.estimated_duration),
+            other => other,
         });
         Ok(())
     }
@@ -452,7 +477,10 @@ mod tests {
     #[test]
     fn test_parse_task_type() {
         let decomposer = TaskDecomposer::new();
-        assert_eq!(decomposer.parse_task_type("Implementation"), TaskType::Implementation);
+        assert_eq!(
+            decomposer.parse_task_type("Implementation"),
+            TaskType::Implementation
+        );
         assert_eq!(decomposer.parse_task_type("bug fix"), TaskType::BugFix);
     }
 

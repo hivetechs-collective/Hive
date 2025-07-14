@@ -74,7 +74,7 @@ pub async fn run_migrations(conn: &Connection) -> Result<()> {
 /// Load migrations from the migrations directory
 async fn load_migrations() -> Result<Vec<Migration>> {
     let migrations_dir = Path::new("migrations");
-    
+
     if !migrations_dir.exists() {
         debug!("Migrations directory not found, using embedded migrations");
         return Ok(get_embedded_migrations());
@@ -92,7 +92,7 @@ async fn load_migrations() -> Result<Vec<Migration>> {
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("");
-            
+
             // Extract version from filename (e.g., "001_initial_schema.sql" -> 1)
             let version: i32 = filename
                 .split('_')
@@ -190,7 +190,7 @@ fn get_embedded_migrations() -> Vec<Migration> {
 /// Apply a single migration
 fn apply_migration(conn: &Connection, migration: &Migration) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
-    
+
     // Filter out metadata comments and empty lines
     let clean_sql = migration.sql
         .lines()

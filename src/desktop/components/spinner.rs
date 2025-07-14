@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 #[component]
 pub fn LoadingSpinner() -> Element {
     rsx! {
-        div { 
+        div {
             class: "loading-spinner",
             div { class: "spinner-circle" }
         }

@@ -49,7 +49,7 @@ impl AccessibilityManager {
         let high_contrast_mode = Self::detect_high_contrast_preference();
         let reduced_motion = Self::detect_reduced_motion_preference();
         let keyboard_only = Self::detect_keyboard_only_preference();
-        
+
         Self {
             screen_reader_mode,
             high_contrast_mode,
@@ -105,7 +105,12 @@ impl AccessibilityManager {
     }
 
     /// Get screen reader friendly text for consensus progress
-    pub fn consensus_progress_description(&self, stage: &str, progress: u16, model: &str) -> String {
+    pub fn consensus_progress_description(
+        &self,
+        stage: &str,
+        progress: u16,
+        model: &str,
+    ) -> String {
         if self.screen_reader_mode {
             format!(
                 "Consensus stage {} at {}% progress using model {}",
@@ -129,7 +134,8 @@ impl AccessibilityManager {
              Press Escape to clear input or close dialogs."
         } else {
             "Use arrow keys for history, F1-F4 for panels, ? for help"
-        }.to_string()
+        }
+        .to_string()
     }
 
     /// Get accessible status line
@@ -142,8 +148,12 @@ impl AccessibilityManager {
                 focus
             )
         } else {
-            format!("Auto-accept: {} | Context: {}% | Focus: {}", 
-                if auto_accept { "on" } else { "off" }, context, focus)
+            format!(
+                "Auto-accept: {} | Context: {}% | Focus: {}",
+                if auto_accept { "on" } else { "off" },
+                context,
+                focus
+            )
         }
     }
 
@@ -151,7 +161,10 @@ impl AccessibilityManager {
     pub fn accessible_progress_bar(&self, progress: u16, total: u16) -> String {
         if self.screen_reader_mode {
             let percentage = (progress as f32 / total as f32 * 100.0) as u8;
-            format!("Progress: {} out of {} steps completed, {} percent", progress, total, percentage)
+            format!(
+                "Progress: {} out of {} steps completed, {} percent",
+                progress, total, percentage
+            )
         } else {
             format!("{}/{} ({}%)", progress, total, progress * 100 / total)
         }
@@ -162,7 +175,7 @@ impl AccessibilityManager {
         if self.screen_reader_mode {
             match color_name {
                 "red" => "error indication".to_string(),
-                "green" => "success indication".to_string(), 
+                "green" => "success indication".to_string(),
                 "yellow" => "warning or in progress indication".to_string(),
                 "blue" => "information indication".to_string(),
                 "cyan" => "accent or link indication".to_string(),
@@ -190,8 +203,7 @@ impl AccessibilityManager {
 
     fn detect_high_contrast_preference() -> bool {
         // Check for high contrast preference
-        env::var("HIGH_CONTRAST").is_ok() ||
-        env::var("HIVE_HIGH_CONTRAST").is_ok()
+        env::var("HIGH_CONTRAST").is_ok() || env::var("HIVE_HIGH_CONTRAST").is_ok()
     }
 
     fn detect_reduced_motion_preference() -> bool {
@@ -204,9 +216,9 @@ impl AccessibilityManager {
 
     fn detect_keyboard_only_preference() -> bool {
         // Check for keyboard-only navigation preference
-        env::var("KEYBOARD_ONLY").is_ok() ||
-        env::var("HIVE_KEYBOARD_ONLY").is_ok() ||
-        Self::detect_screen_reader() // Screen readers typically use keyboard
+        env::var("KEYBOARD_ONLY").is_ok()
+            || env::var("HIVE_KEYBOARD_ONLY").is_ok()
+            || Self::detect_screen_reader() // Screen readers typically use keyboard
     }
 }
 
@@ -277,13 +289,13 @@ mod tests {
     #[test]
     fn test_announcements() {
         let manager = AccessibilityManager::new();
-        
+
         let announcement = manager.create_announcement(
             "Test message",
             AnnouncementPriority::Medium,
             AccessibilityRegion::Messages,
         );
-        
+
         // Should create announcement if screen reader mode is enabled
         assert_eq!(announcement.is_some(), manager.is_screen_reader_mode());
     }
@@ -292,12 +304,12 @@ mod tests {
     fn test_accessible_descriptions() {
         let mut manager = AccessibilityManager::new();
         manager.enable_screen_reader_mode();
-        
+
         let progress_desc = manager.consensus_progress_description("Generator", 50, "claude-3");
         assert!(progress_desc.contains("Generator"));
         assert!(progress_desc.contains("50%"));
         assert!(progress_desc.contains("claude-3"));
-        
+
         let help = manager.get_accessible_help();
         assert!(help.contains("arrow keys"));
         assert!(help.contains("F1"));
@@ -307,9 +319,12 @@ mod tests {
     fn test_color_descriptions() {
         let mut manager = AccessibilityManager::new();
         manager.enable_screen_reader_mode();
-        
+
         assert_eq!(manager.describe_color("red"), "error indication");
         assert_eq!(manager.describe_color("green"), "success indication");
-        assert_eq!(manager.describe_color("yellow"), "warning or in progress indication");
+        assert_eq!(
+            manager.describe_color("yellow"),
+            "warning or in progress indication"
+        );
     }
 }

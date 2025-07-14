@@ -2,11 +2,13 @@
 // Clean removal of shell integration with backup preservation
 
 use anyhow::{Context, Result};
-use std::path::PathBuf;
 use std::fs::read_to_string;
+use std::path::PathBuf;
 
+use super::{
+    completions::ShellCompletions, hooks::ShellHooks, setup::ShellSetup, utils, ShellType,
+};
 use crate::core::config::Config;
-use super::{ShellType, utils, completions::ShellCompletions, setup::ShellSetup, hooks::ShellHooks};
 
 /// Shell uninstall manager for clean removal
 pub struct ShellUninstall {
@@ -22,20 +24,23 @@ impl ShellUninstall {
     /// Uninstall shell integration for all shells
     pub fn uninstall_all(&self, preserve_config: bool) -> Result<()> {
         println!("🗑️  Uninstalling Hive AI shell integration...");
-        
+
         // Detect installed shells
         let available_shells = self.detect_installed_shells()?;
-        
+
         if available_shells.is_empty() {
             println!("ℹ️  No shell integrations found to remove");
             return Ok(());
         }
 
-        println!("Found integrations for: {}", 
-                 available_shells.iter()
-                              .map(|s| s.as_str())
-                              .collect::<Vec<_>>()
-                              .join(", "));
+        println!(
+            "Found integrations for: {}",
+            available_shells
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         // Create backup before uninstalling
         if preserve_config {
@@ -45,7 +50,11 @@ impl ShellUninstall {
         // Uninstall from each shell
         for shell in &available_shells {
             if let Err(e) = self.uninstall_from_shell(*shell, preserve_config) {
-                eprintln!("Warning: Failed to uninstall from {}: {}", shell.as_str(), e);
+                eprintln!(
+                    "Warning: Failed to uninstall from {}: {}",
+                    shell.as_str(),
+                    e
+                );
             } else {
                 println!("✅ Removed {} integration", shell.as_str());
             }
@@ -60,7 +69,7 @@ impl ShellUninstall {
         }
 
         println!("\n🎉 Hive AI shell integration uninstalled successfully!");
-        
+
         if preserve_config {
             println!("📦 Configuration files preserved in ~/.hive/");
             println!("🔄 To restore integration later, run: hive shell install");
@@ -70,7 +79,7 @@ impl ShellUninstall {
         }
 
         self.print_post_uninstall_instructions(&available_shells)?;
-        
+
         Ok(())
     }
 
@@ -97,7 +106,7 @@ impl ShellUninstall {
     /// Detect shells that have Hive AI integration installed
     fn detect_installed_shells(&self) -> Result<Vec<ShellType>> {
         let mut installed_shells = Vec::new();
-        
+
         let shells_to_check = [
             ShellType::Bash,
             ShellType::Zsh,
@@ -127,9 +136,10 @@ impl ShellUninstall {
         if let Ok(config_file) = self.get_shell_config_file(shell) {
             if config_file.exists() {
                 let content = read_to_string(&config_file)?;
-                if content.contains("# Hive AI") || 
-                   content.contains("hive") ||
-                   content.contains("HIVE_") {
+                if content.contains("# Hive AI")
+                    || content.contains("hive")
+                    || content.contains("HIVE_")
+                {
                     return Ok(true);
                 }
             }
@@ -140,9 +150,8 @@ impl ShellUninstall {
 
     /// Get shell configuration file path
     fn get_shell_config_file(&self, shell: ShellType) -> Result<PathBuf> {
-        let home = std::env::var("HOME")
-            .context("HOME environment variable not found")?;
-        
+        let home = std::env::var("HOME").context("HOME environment variable not found")?;
+
         let config_file = match shell {
             ShellType::Bash => {
                 let bashrc = PathBuf::from(&home).join(".bashrc");
@@ -160,9 +169,15 @@ impl ShellUninstall {
             }
             ShellType::PowerShell => {
                 if cfg!(windows) {
-                    PathBuf::from(&home).join("Documents").join("PowerShell").join("Microsoft.PowerShell_profile.ps1")
+                    PathBuf::from(&home)
+                        .join("Documents")
+                        .join("PowerShell")
+                        .join("Microsoft.PowerShell_profile.ps1")
                 } else {
-                    PathBuf::from(&home).join(".config").join("powershell").join("Microsoft.PowerShell_profile.ps1")
+                    PathBuf::from(&home)
+                        .join(".config")
+                        .join("powershell")
+                        .join("Microsoft.PowerShell_profile.ps1")
                 }
             }
             ShellType::Elvish => PathBuf::from(&home).join(".elvish").join("rc.elv"),
@@ -177,27 +192,42 @@ impl ShellUninstall {
             .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?
             .join(".hive")
             .join("backups")
-            .join(format!("uninstall-{}", chrono::Utc::now().format("%Y%m%d-%H%M%S")));
+            .join(format!(
+                "uninstall-{}",
+                chrono::Utc::now().format("%Y%m%d-%H%M%S")
+            ));
 
         utils::create_directory_safe(&backup_dir)?;
 
         // Backup shell config files
-        let shells = [ShellType::Bash, ShellType::Zsh, ShellType::Fish, ShellType::PowerShell, ShellType::Elvish];
-        
+        let shells = [
+            ShellType::Bash,
+            ShellType::Zsh,
+            ShellType::Fish,
+            ShellType::PowerShell,
+            ShellType::Elvish,
+        ];
+
         for shell in &shells {
             if let Ok(config_file) = self.get_shell_config_file(*shell) {
                 if config_file.exists() {
                     let backup_file = backup_dir.join(format!("{}_config", shell.as_str()));
                     std::fs::copy(&config_file, &backup_file)
                         .with_context(|| format!("Failed to backup {} config", shell.as_str()))?;
-                    tracing::info!("Backed up {} config to {}", shell.as_str(), backup_file.display());
+                    tracing::info!(
+                        "Backed up {} config to {}",
+                        shell.as_str(),
+                        backup_file.display()
+                    );
                 }
             }
         }
 
         // Backup completion files
         let completions = ShellCompletions::new(self.config.clone());
-        if let Ok(completion_backup_dir) = utils::create_directory_safe(&backup_dir.join("completions")) {
+        if let Ok(completion_backup_dir) =
+            utils::create_directory_safe(&backup_dir.join("completions"))
+        {
             let _ = completions.generate_all_files(&backup_dir.join("completions"));
         }
 
@@ -208,7 +238,7 @@ impl ShellUninstall {
     /// Clean up completion files
     fn clean_completion_files(&self, shells: &[ShellType]) -> Result<()> {
         let completions = ShellCompletions::new(self.config.clone());
-        
+
         for shell in shells {
             if let Err(e) = completions.uninstall(*shell) {
                 tracing::warn!("Failed to remove {} completions: {}", shell.as_str(), e);
@@ -222,7 +252,8 @@ impl ShellUninstall {
     fn remove_binary(&self) -> Result<()> {
         // Only remove binary if it's in a location we would have installed to
         let binary_path = utils::get_binary_path()?;
-        let binary_dir = binary_path.parent()
+        let binary_dir = binary_path
+            .parent()
             .ok_or_else(|| anyhow::anyhow!("Could not determine binary directory"))?;
 
         // Safe directories we might have installed to
@@ -234,27 +265,31 @@ impl ShellUninstall {
         ];
 
         let binary_dir_str = binary_dir.to_string_lossy();
-        
+
         if safe_removal_dirs.iter().any(|&dir| binary_dir_str == dir) {
             // Ask for confirmation before removing binary
             println!("🗑️  Binary location: {}", binary_path.display());
             println!("❓ Remove Hive AI binary? (y/N): ");
-            
+
             use std::io::{self, Write};
             io::stdout().flush()?;
-            
+
             let mut input = String::new();
             io::stdin().read_line(&mut input)?;
-            
+
             if input.trim().to_lowercase() == "y" || input.trim().to_lowercase() == "yes" {
-                std::fs::remove_file(&binary_path)
-                    .with_context(|| format!("Failed to remove binary: {}", binary_path.display()))?;
+                std::fs::remove_file(&binary_path).with_context(|| {
+                    format!("Failed to remove binary: {}", binary_path.display())
+                })?;
                 println!("✅ Removed binary: {}", binary_path.display());
             } else {
                 println!("⏭️  Binary preserved at: {}", binary_path.display());
             }
         } else {
-            println!("⏭️  Binary preserved (custom installation location): {}", binary_path.display());
+            println!(
+                "⏭️  Binary preserved (custom installation location): {}",
+                binary_path.display()
+            );
         }
 
         Ok(())
@@ -265,34 +300,37 @@ impl ShellUninstall {
         println!("\n📋 Post-Uninstall Instructions:");
         println!("   1. Restart your terminal or source your shell configuration");
         println!("   2. Verify removal: which hive (should return nothing)");
-        
+
         if !shells.is_empty() {
             println!("\n🔄 To manually restore configurations:");
             for shell in shells {
                 if let Ok(config_file) = self.get_shell_config_file(*shell) {
-                    let backup_file = config_file.with_extension(
-                        format!("{}.hive-backup", 
-                               config_file.extension()
-                                         .and_then(|s| s.to_str())
-                                         .unwrap_or(""))
-                    );
-                    
+                    let backup_file = config_file.with_extension(format!(
+                        "{}.hive-backup",
+                        config_file
+                            .extension()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("")
+                    ));
+
                     if backup_file.exists() {
-                        println!("   {}: cp {} {}", 
-                                shell.as_str(),
-                                backup_file.display(),
-                                config_file.display());
+                        println!(
+                            "   {}: cp {} {}",
+                            shell.as_str(),
+                            backup_file.display(),
+                            config_file.display()
+                        );
                     }
                 }
             }
         }
-        
+
         println!("\n📦 Configuration preservation:");
         println!("   • User data preserved in ~/.hive/");
         println!("   • Conversation history maintained");
         println!("   • Trust settings preserved");
         println!("   • Analytics data maintained");
-        
+
         println!("\n♻️  Complete removal (if desired):");
         println!("   rm -rf ~/.hive/");
         println!("   # This will delete ALL Hive AI data");
@@ -303,14 +341,23 @@ impl ShellUninstall {
     /// Restore shell integration from backup
     pub fn restore_from_backup(&self, backup_dir: &PathBuf) -> Result<()> {
         if !backup_dir.exists() {
-            return Err(anyhow::anyhow!("Backup directory does not exist: {}", backup_dir.display()));
+            return Err(anyhow::anyhow!(
+                "Backup directory does not exist: {}",
+                backup_dir.display()
+            ));
         }
 
         println!("🔄 Restoring Hive AI shell integration from backup...");
-        
+
         // Restore shell config files
-        let shells = [ShellType::Bash, ShellType::Zsh, ShellType::Fish, ShellType::PowerShell, ShellType::Elvish];
-        
+        let shells = [
+            ShellType::Bash,
+            ShellType::Zsh,
+            ShellType::Fish,
+            ShellType::PowerShell,
+            ShellType::Elvish,
+        ];
+
         for shell in &shells {
             let backup_file = backup_dir.join(format!("{}_config", shell.as_str()));
             if backup_file.exists() {
@@ -319,10 +366,10 @@ impl ShellUninstall {
                     if config_file.exists() {
                         utils::backup_file(&config_file)?;
                     }
-                    
+
                     std::fs::copy(&backup_file, &config_file)
                         .with_context(|| format!("Failed to restore {} config", shell.as_str()))?;
-                    
+
                     println!("✅ Restored {} configuration", shell.as_str());
                 }
             }
@@ -345,16 +392,22 @@ impl ShellUninstall {
     /// Validate uninstallation completeness
     pub fn validate_uninstall(&self) -> Result<bool> {
         println!("🔍 Validating uninstallation...");
-        
+
         let mut issues = Vec::new();
-        
+
         // Check if hive command is still accessible
         if let Ok(_) = std::process::Command::new("hive").arg("--version").output() {
             issues.push("Hive binary is still accessible in PATH".to_string());
         }
 
         // Check for remaining completion files
-        let shells = [ShellType::Bash, ShellType::Zsh, ShellType::Fish, ShellType::PowerShell, ShellType::Elvish];
+        let shells = [
+            ShellType::Bash,
+            ShellType::Zsh,
+            ShellType::Fish,
+            ShellType::PowerShell,
+            ShellType::Elvish,
+        ];
         for shell in &shells {
             let completions = ShellCompletions::new(self.config.clone());
             if completions.is_installed(*shell).unwrap_or(false) {
@@ -365,7 +418,10 @@ impl ShellUninstall {
         // Check for remaining shell configuration
         for shell in &shells {
             if self.is_shell_integrated(*shell).unwrap_or(false) {
-                issues.push(format!("{} shell configuration still contains Hive AI references", shell.as_str()));
+                issues.push(format!(
+                    "{} shell configuration still contains Hive AI references",
+                    shell.as_str()
+                ));
             }
         }
 
@@ -387,19 +443,22 @@ impl ShellUninstall {
     pub fn generate_uninstall_report(&self) -> Result<String> {
         let shells = self.detect_installed_shells()?;
         let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
-        
-        let mut report = format!(r#"# Hive AI Shell Integration Uninstall Report
+
+        let mut report = format!(
+            r#"# Hive AI Shell Integration Uninstall Report
 Generated: {}
 
 ## Detected Integrations
-"#, timestamp);
+"#,
+            timestamp
+        );
 
         if shells.is_empty() {
             report.push_str("No shell integrations detected.\n");
         } else {
             for shell in &shells {
                 report.push_str(&format!("- {} integration found\n", shell.as_str()));
-                
+
                 // Add details about what will be removed
                 if let Ok(config_file) = self.get_shell_config_file(*shell) {
                     if config_file.exists() {
@@ -410,7 +469,7 @@ Generated: {}
         }
 
         report.push_str("\n## Files to be Modified/Removed\n");
-        
+
         // List completion directories
         for shell in &shells {
             let completions = ShellCompletions::new(self.config.clone());
@@ -426,14 +485,20 @@ Generated: {}
         for shell in &shells {
             if let Ok(config_file) = self.get_shell_config_file(*shell) {
                 if config_file.exists() {
-                    report.push_str(&format!("- Shell config: {} (Hive sections will be removed)\n", config_file.display()));
+                    report.push_str(&format!(
+                        "- Shell config: {} (Hive sections will be removed)\n",
+                        config_file.display()
+                    ));
                 }
             }
         }
 
         // Add binary information
         if let Ok(binary_path) = utils::get_binary_path() {
-            report.push_str(&format!("\n## Binary Location\n- {}\n", binary_path.display()));
+            report.push_str(&format!(
+                "\n## Binary Location\n- {}\n",
+                binary_path.display()
+            ));
         }
 
         report.push_str("\n## Preservation\n");
@@ -449,8 +514,8 @@ Generated: {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::env;
+    use tempfile::TempDir;
 
     #[test]
     fn test_detect_installed_shells() {
@@ -464,7 +529,7 @@ mod tests {
 
         let config = Config::default();
         let uninstall = ShellUninstall::new(config);
-        
+
         let shells = uninstall.detect_installed_shells().unwrap();
         assert!(shells.contains(&ShellType::Bash));
 
@@ -509,9 +574,9 @@ mod tests {
     fn test_generate_uninstall_report() {
         let config = Config::default();
         let uninstall = ShellUninstall::new(config);
-        
+
         let report = uninstall.generate_uninstall_report().unwrap();
-        
+
         assert!(report.contains("# Hive AI Shell Integration Uninstall Report"));
         assert!(report.contains("## Detected Integrations"));
         assert!(report.contains("## Files to be Modified/Removed"));

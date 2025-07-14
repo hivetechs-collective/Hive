@@ -1,14 +1,14 @@
 //! Repository Intelligence Integration for Planning Engine
-//! 
+//!
 //! Integrates planning with repository analysis for context-aware planning
 
-use crate::core::error::{HiveResult, HiveError};
+use crate::analysis::{types::AnalyzedFile, AnalysisEngine};
+use crate::core::error::{HiveError, HiveResult};
 use crate::core::semantic::SemanticIndex;
 use crate::planning::types::*;
-use crate::analysis::{AnalysisEngine, types::AnalyzedFile};
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
+use std::path::{Path, PathBuf};
 
 /// Repository context for planning
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,22 +169,22 @@ impl RepositoryIntelligence {
     pub async fn analyze_repository(&mut self, path: &Path) -> HiveResult<RepositoryContext> {
         // Initialize semantic index for the repository
         self.semantic_index = Some(SemanticIndex::new().await?);
-        
+
         // Gather project structure
         let project_structure = self.analyze_structure(path).await?;
-        
+
         // Calculate code metrics
         let code_metrics = self.calculate_metrics(path).await?;
-        
+
         // Analyze dependencies
         let dependencies = self.analyze_dependencies(path).await?;
-        
+
         // Assess quality indicators
         let quality_indicators = self.assess_quality(path).await?;
-        
+
         // Analyze team patterns
         let team_patterns = self.analyze_team_patterns(path).await?;
-        
+
         Ok(RepositoryContext {
             project_structure,
             code_metrics,
@@ -195,17 +195,21 @@ impl RepositoryIntelligence {
     }
 
     /// Get relevant context for a specific task
-    pub async fn get_task_context(&self, task: &Task, repository_context: &RepositoryContext) -> HiveResult<TaskContext> {
+    pub async fn get_task_context(
+        &self,
+        task: &Task,
+        repository_context: &RepositoryContext,
+    ) -> HiveResult<TaskContext> {
         let mut relevant_files: Vec<PathBuf> = Vec::new();
         let mut related_modules = Vec::new();
         let mut potential_impacts = Vec::new();
-        
+
         // Find files related to the task
         if let Some(ref index) = self.semantic_index {
             // Note: find_related_files method not implemented yet
             relevant_files = vec![];
         }
-        
+
         // Identify related modules
         for file in &relevant_files {
             if let Some(module) = self.find_module_for_file(file, repository_context) {
@@ -214,13 +218,13 @@ impl RepositoryIntelligence {
                 }
             }
         }
-        
+
         // Assess potential impacts
         potential_impacts = self.assess_task_impacts(task, &relevant_files, repository_context)?;
-        
+
         // Find existing patterns before moving relevant_files
         let existing_patterns = self.find_existing_patterns(&relevant_files)?;
-        
+
         Ok(TaskContext {
             relevant_files,
             related_modules,
@@ -237,22 +241,30 @@ impl RepositoryIntelligence {
         repository_context: &RepositoryContext,
     ) -> HiveResult<PlanningContext> {
         // Update technology stack from actual repository
-        context.technology_stack = repository_context.project_structure.languages
+        context.technology_stack = repository_context
+            .project_structure
+            .languages
             .keys()
             .cloned()
             .collect();
-        
+
         // Set existing codebase flag
         context.existing_codebase = true;
-        
+
         // Add repository path
-        context.repository_path = Some(repository_context.project_structure.root_path.to_string_lossy().to_string());
-        
+        context.repository_path = Some(
+            repository_context
+                .project_structure
+                .root_path
+                .to_string_lossy()
+                .to_string(),
+        );
+
         // Infer project type from structure
         if context.project_type == ProjectType::Other("Unknown".to_string()) {
             context.project_type = self.infer_project_type(repository_context)?;
         }
-        
+
         Ok(context)
     }
 
@@ -277,38 +289,41 @@ impl RepositoryIntelligence {
         // Categorize files and directories
         for file in files {
             let file_path = Path::new(&file.path);
-            
+
             // Detect source directories
-            if file_path.to_string_lossy().contains("src") || 
-               file_path.to_string_lossy().contains("lib") {
+            if file_path.to_string_lossy().contains("src")
+                || file_path.to_string_lossy().contains("lib")
+            {
                 if let Some(parent) = file_path.parent() {
                     if !structure.source_directories.contains(&parent.to_path_buf()) {
                         structure.source_directories.push(parent.to_path_buf());
                     }
                 }
             }
-            
+
             // Detect test directories
-            if file_path.to_string_lossy().contains("test") ||
-               file_path.to_string_lossy().contains("spec") {
+            if file_path.to_string_lossy().contains("test")
+                || file_path.to_string_lossy().contains("spec")
+            {
                 if let Some(parent) = file_path.parent() {
                     if !structure.test_directories.contains(&parent.to_path_buf()) {
                         structure.test_directories.push(parent.to_path_buf());
                     }
                 }
             }
-            
+
             // Detect documentation
-            if file_path.extension().and_then(|s| s.to_str()) == Some("md") ||
-               file_path.to_string_lossy().contains("docs") {
+            if file_path.extension().and_then(|s| s.to_str()) == Some("md")
+                || file_path.to_string_lossy().contains("docs")
+            {
                 structure.documentation_paths.push(file_path.to_path_buf());
             }
-            
+
             // Detect configuration files
             if self.is_config_file(file_path) {
                 structure.configuration_files.push(file_path.to_path_buf());
             }
-            
+
             // Update language statistics
             if let Some(lang) = self.detect_language(file_path) {
                 let stats = structure.languages.entry(lang).or_insert(LanguageStats {
@@ -333,13 +348,13 @@ impl RepositoryIntelligence {
     async fn calculate_metrics(&self, path: &Path) -> HiveResult<CodeMetrics> {
         // Note: scan_directory method not implemented yet
         let files: Vec<AnalyzedFile> = vec![];
-        
+
         let mut total_lines = 0;
         let mut code_lines = 0;
         let mut comment_lines = 0;
         let mut complexity_sum = 0.0;
         let mut file_count = 0;
-        
+
         for file in &files {
             total_lines += file.metrics.lines;
             code_lines += file.metrics.code_lines;
@@ -347,13 +362,13 @@ impl RepositoryIntelligence {
             complexity_sum += file.metrics.complexity as f32;
             file_count += 1;
         }
-        
+
         let complexity_score = if file_count > 0 {
             complexity_sum / file_count as f32
         } else {
             0.0
         };
-        
+
         // Analyze technical debt
         // TODO: Convert AnalyzedFile to FileInfo or implement analyze_technical_debt for AnalyzedFile
         let technical_debt = TechnicalDebt {
@@ -361,7 +376,7 @@ impl RepositoryIntelligence {
             hotspots: vec![],
             refactoring_candidates: vec![],
         };
-        
+
         Ok(CodeMetrics {
             total_lines,
             code_lines,
@@ -411,7 +426,7 @@ impl RepositoryIntelligence {
     fn analyze_technical_debt(&self, files: &[crate::core::FileInfo]) -> HiveResult<TechnicalDebt> {
         let mut hotspots = Vec::new();
         let mut refactoring_candidates = Vec::new();
-        
+
         for file in files {
             if let Some(metrics) = &file.metrics {
                 // High complexity files are hotspots
@@ -423,7 +438,7 @@ impl RepositoryIntelligence {
                         coupled_files: Vec::new(),
                     });
                 }
-                
+
                 // Large files are refactoring candidates
                 if metrics.lines_of_code > 500 {
                     refactoring_candidates.push(RefactoringCandidate {
@@ -435,9 +450,9 @@ impl RepositoryIntelligence {
                 }
             }
         }
-        
+
         let score = (hotspots.len() + refactoring_candidates.len()) as f32 / files.len() as f32;
-        
+
         Ok(TechnicalDebt {
             score,
             hotspots,
@@ -453,41 +468,50 @@ impl RepositoryIntelligence {
             .map(|s| s.to_string())
     }
 
-    fn assess_task_impacts(&self, task: &Task, files: &[PathBuf], context: &RepositoryContext) -> HiveResult<Vec<Impact>> {
+    fn assess_task_impacts(
+        &self,
+        task: &Task,
+        files: &[PathBuf],
+        context: &RepositoryContext,
+    ) -> HiveResult<Vec<Impact>> {
         let mut impacts = Vec::new();
-        
+
         // Check if task affects hotspots
         for hotspot in &context.code_metrics.technical_debt.hotspots {
             if files.contains(&hotspot.file_path) {
                 impacts.push(Impact {
-                    description: format!("Modifies high-complexity hotspot: {:?}", hotspot.file_path),
+                    description: format!(
+                        "Modifies high-complexity hotspot: {:?}",
+                        hotspot.file_path
+                    ),
                     severity: ImpactSeverity::High,
                     affected_areas: vec![hotspot.file_path.to_string_lossy().to_string()],
                 });
             }
         }
-        
+
         // Check if task affects core modules
         if task.task_type == TaskType::Refactoring || task.task_type == TaskType::Implementation {
             impacts.push(Impact {
                 description: "May affect dependent modules".to_string(),
                 severity: ImpactSeverity::Medium,
-                affected_areas: files.iter().map(|f| f.to_string_lossy().to_string()).collect(),
+                affected_areas: files
+                    .iter()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .collect(),
             });
         }
-        
+
         Ok(impacts)
     }
 
     fn find_existing_patterns(&self, files: &[PathBuf]) -> HiveResult<Vec<Pattern>> {
         // This would analyze code patterns in the files
-        Ok(vec![
-            Pattern {
-                name: "Error Handling".to_string(),
-                description: "Uses Result<T, E> pattern for error handling".to_string(),
-                examples: vec!["src/core/error.rs".to_string()],
-            }
-        ])
+        Ok(vec![Pattern {
+            name: "Error Handling".to_string(),
+            description: "Uses Result<T, E> pattern for error handling".to_string(),
+            examples: vec!["src/core/error.rs".to_string()],
+        }])
     }
 
     fn suggest_approach(&self, task: &Task, context: &RepositoryContext) -> HiveResult<String> {
@@ -501,39 +525,61 @@ impl RepositoryIntelligence {
             TaskType::BugFix => {
                 "Write a failing test first. Fix the issue, then verify all tests pass."
             }
-            _ => {
-                "Follow the project's established conventions and patterns."
-            }
+            _ => "Follow the project's established conventions and patterns.",
         };
-        
+
         Ok(suggestion.to_string())
     }
 
     fn infer_project_type(&self, context: &RepositoryContext) -> HiveResult<ProjectType> {
         // Simple heuristics based on languages and files
-        if context.project_structure.languages.contains_key("JavaScript") ||
-           context.project_structure.languages.contains_key("TypeScript") {
-            if context.project_structure.configuration_files.iter()
-                .any(|f| f.file_name().and_then(|n| n.to_str()) == Some("package.json")) {
+        if context
+            .project_structure
+            .languages
+            .contains_key("JavaScript")
+            || context
+                .project_structure
+                .languages
+                .contains_key("TypeScript")
+        {
+            if context
+                .project_structure
+                .configuration_files
+                .iter()
+                .any(|f| f.file_name().and_then(|n| n.to_str()) == Some("package.json"))
+            {
                 return Ok(ProjectType::WebApplication);
             }
         }
-        
+
         if context.project_structure.languages.contains_key("Rust") {
-            if context.project_structure.configuration_files.iter()
-                .any(|f| f.file_name().and_then(|n| n.to_str()) == Some("Cargo.toml")) {
+            if context
+                .project_structure
+                .configuration_files
+                .iter()
+                .any(|f| f.file_name().and_then(|n| n.to_str()) == Some("Cargo.toml"))
+            {
                 return Ok(ProjectType::Library);
             }
         }
-        
+
         Ok(ProjectType::Other("General".to_string()))
     }
 
     fn is_config_file(&self, path: &Path) -> bool {
-        let config_names = ["Cargo.toml", "package.json", "requirements.txt", 
-                           "Gemfile", "pom.xml", "build.gradle", ".env",
-                           "config.toml", "config.yaml", "config.json"];
-        
+        let config_names = [
+            "Cargo.toml",
+            "package.json",
+            "requirements.txt",
+            "Gemfile",
+            "pom.xml",
+            "build.gradle",
+            ".env",
+            "config.toml",
+            "config.yaml",
+            "config.json",
+        ];
+
         if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
             config_names.contains(&name)
         } else {
@@ -613,7 +659,7 @@ mod tests {
             semantic_index: None,
             analysis_engine: AnalysisEngine::new().unwrap(),
         };
-        
+
         assert!(intelligence.is_config_file(Path::new("Cargo.toml")));
         assert!(intelligence.is_config_file(Path::new("package.json")));
         assert!(!intelligence.is_config_file(Path::new("main.rs")));
@@ -625,10 +671,19 @@ mod tests {
             semantic_index: None,
             analysis_engine: AnalysisEngine::new().unwrap(),
         };
-        
-        assert_eq!(intelligence.detect_language(Path::new("main.rs")), Some("Rust".to_string()));
-        assert_eq!(intelligence.detect_language(Path::new("app.js")), Some("JavaScript".to_string()));
-        assert_eq!(intelligence.detect_language(Path::new("test.py")), Some("Python".to_string()));
+
+        assert_eq!(
+            intelligence.detect_language(Path::new("main.rs")),
+            Some("Rust".to_string())
+        );
+        assert_eq!(
+            intelligence.detect_language(Path::new("app.js")),
+            Some("JavaScript".to_string())
+        );
+        assert_eq!(
+            intelligence.detect_language(Path::new("test.py")),
+            Some("Python".to_string())
+        );
         assert_eq!(intelligence.detect_language(Path::new("README.md")), None);
     }
 }

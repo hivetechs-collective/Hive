@@ -70,8 +70,7 @@ impl AutoUpdater {
             .timeout(std::time::Duration::from_secs(30))
             .build()?;
 
-        let current_exe = env::current_exe()
-            .context("Failed to get current executable path")?;
+        let current_exe = env::current_exe().context("Failed to get current executable path")?;
 
         let backup_dir = current_exe
             .parent()
@@ -96,7 +95,7 @@ impl AutoUpdater {
     /// Check for available updates
     pub async fn check_for_updates(&self) -> Result<UpdateInfo> {
         let current_version = env!("CARGO_PKG_VERSION");
-        
+
         info!("Checking for updates (current: {})", current_version);
 
         let url = match self.config.update_channel {
@@ -105,7 +104,8 @@ impl AutoUpdater {
             UpdateChannel::Nightly => "https://api.hivetechs.com/releases/nightly",
         };
 
-        let response = self.client
+        let response = self
+            .client
             .get(url)
             .header("Accept", "application/json")
             .send()
@@ -113,14 +113,19 @@ impl AutoUpdater {
             .context("Failed to fetch release information")?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("Release API returned {}", response.status()));
+            return Err(anyhow::anyhow!(
+                "Release API returned {}",
+                response.status()
+            ));
         }
 
-        let release_info: ReleaseInfo = response.json().await
+        let release_info: ReleaseInfo = response
+            .json()
+            .await
             .context("Failed to parse release information")?;
 
-        let current_ver = semver::Version::parse(current_version)
-            .context("Failed to parse current version")?;
+        let current_ver =
+            semver::Version::parse(current_version).context("Failed to parse current version")?;
         let latest_ver = semver::Version::parse(&release_info.version)
             .context("Failed to parse latest version")?;
 
@@ -130,7 +135,11 @@ impl AutoUpdater {
             current_version: current_version.to_string(),
             latest_version: release_info.version.clone(),
             update_available,
-            release_info: if update_available { Some(release_info) } else { None },
+            release_info: if update_available {
+                Some(release_info)
+            } else {
+                None
+            },
         })
     }
 
@@ -148,7 +157,9 @@ impl AutoUpdater {
             return Ok(false);
         }
 
-        let release_info = update_info.release_info.as_ref()
+        let release_info = update_info
+            .release_info
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Missing release information"))?;
 
         // Only auto-install if configured or if it's a critical update
@@ -157,17 +168,24 @@ impl AutoUpdater {
             self.install_update(release_info).await?;
             Ok(true)
         } else {
-            info!("Update available: {} (auto-install disabled)", release_info.version);
+            info!(
+                "Update available: {} (auto-install disabled)",
+                release_info.version
+            );
             Ok(false)
         }
     }
 
     /// Install a specific update
     pub async fn install_update(&self, release_info: &ReleaseInfo) -> Result<()> {
-        info!("Installing Hive AI update to version {}", release_info.version);
+        info!(
+            "Installing Hive AI update to version {}",
+            release_info.version
+        );
 
         // Create backup directory
-        async_fs::create_dir_all(&self.backup_dir).await
+        async_fs::create_dir_all(&self.backup_dir)
+            .await
             .context("Failed to create backup directory")?;
 
         // Create backup of current binary
@@ -178,7 +196,8 @@ impl AutoUpdater {
         let temp_binary = self.download_binary(release_info).await?;
 
         // Verify checksum
-        self.verify_checksum(&temp_binary, &release_info.checksum).await?;
+        self.verify_checksum(&temp_binary, &release_info.checksum)
+            .await?;
 
         // Atomic replacement
         self.replace_binary(&temp_binary).await?;
@@ -186,7 +205,10 @@ impl AutoUpdater {
         // Clean up
         async_fs::remove_file(temp_binary).await.ok();
 
-        info!("✅ Successfully updated to version {}", release_info.version);
+        info!(
+            "✅ Successfully updated to version {}",
+            release_info.version
+        );
         info!("📝 Changelog: {}", release_info.changelog);
 
         Ok(())
@@ -195,28 +217,36 @@ impl AutoUpdater {
     /// Download binary from release URL
     async fn download_binary(&self, release_info: &ReleaseInfo) -> Result<PathBuf> {
         let platform_url = self.get_platform_download_url(&release_info.download_url)?;
-        
+
         info!("Downloading from: {}", platform_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&platform_url)
             .send()
             .await
             .context("Failed to download binary")?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("Download failed with status {}", response.status()));
+            return Err(anyhow::anyhow!(
+                "Download failed with status {}",
+                response.status()
+            ));
         }
 
-        let temp_path = self.current_exe
+        let temp_path = self
+            .current_exe
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join(format!("hive-update-{}", uuid::Uuid::new_v4()));
 
-        let bytes = response.bytes().await
+        let bytes = response
+            .bytes()
+            .await
             .context("Failed to read download response")?;
 
-        async_fs::write(&temp_path, bytes).await
+        async_fs::write(&temp_path, bytes)
+            .await
             .context("Failed to write downloaded binary")?;
 
         // Make executable on Unix systems
@@ -234,26 +264,25 @@ impl AutoUpdater {
     /// Get platform-specific download URL
     fn get_platform_download_url(&self, base_url: &str) -> Result<String> {
         let platform = match env::consts::OS {
-            "macos" => {
-                match env::consts::ARCH {
-                    "aarch64" => "macos-arm64",
-                    "x86_64" => "macos-x64",
-                    arch => return Err(anyhow::anyhow!("Unsupported macOS architecture: {}", arch)),
+            "macos" => match env::consts::ARCH {
+                "aarch64" => "macos-arm64",
+                "x86_64" => "macos-x64",
+                arch => return Err(anyhow::anyhow!("Unsupported macOS architecture: {}", arch)),
+            },
+            "linux" => match env::consts::ARCH {
+                "aarch64" => "linux-arm64",
+                "x86_64" => "linux-x64",
+                arch => return Err(anyhow::anyhow!("Unsupported Linux architecture: {}", arch)),
+            },
+            "windows" => match env::consts::ARCH {
+                "x86_64" => "windows-x64.exe",
+                arch => {
+                    return Err(anyhow::anyhow!(
+                        "Unsupported Windows architecture: {}",
+                        arch
+                    ))
                 }
-            }
-            "linux" => {
-                match env::consts::ARCH {
-                    "aarch64" => "linux-arm64",
-                    "x86_64" => "linux-x64",
-                    arch => return Err(anyhow::anyhow!("Unsupported Linux architecture: {}", arch)),
-                }
-            }
-            "windows" => {
-                match env::consts::ARCH {
-                    "x86_64" => "windows-x64.exe",
-                    arch => return Err(anyhow::anyhow!("Unsupported Windows architecture: {}", arch)),
-                }
-            }
+            },
             os => return Err(anyhow::anyhow!("Unsupported operating system: {}", os)),
         };
 
@@ -265,7 +294,8 @@ impl AutoUpdater {
     async fn verify_checksum(&self, binary_path: &Path, expected_checksum: &str) -> Result<()> {
         use sha2::{Digest, Sha256};
 
-        let contents = async_fs::read(binary_path).await
+        let contents = async_fs::read(binary_path)
+            .await
             .context("Failed to read binary for checksum verification")?;
 
         let mut hasher = Sha256::new();
@@ -274,8 +304,8 @@ impl AutoUpdater {
 
         if checksum != expected_checksum {
             return Err(anyhow::anyhow!(
-                "Checksum verification failed: expected {}, got {}", 
-                expected_checksum, 
+                "Checksum verification failed: expected {}, got {}",
+                expected_checksum,
                 checksum
             ));
         }
@@ -294,7 +324,8 @@ impl AutoUpdater {
 
         let backup_path = self.backup_dir.join(backup_name);
 
-        async_fs::copy(&self.current_exe, &backup_path).await
+        async_fs::copy(&self.current_exe, &backup_path)
+            .await
             .context("Failed to create backup")?;
 
         Ok(backup_path)
@@ -309,12 +340,14 @@ impl AutoUpdater {
             if old_backup.exists() {
                 async_fs::remove_file(&old_backup).await.ok();
             }
-            async_fs::rename(&self.current_exe, &old_backup).await
+            async_fs::rename(&self.current_exe, &old_backup)
+                .await
                 .context("Failed to backup current binary on Windows")?;
         }
 
         // Replace the binary
-        async_fs::rename(new_binary, &self.current_exe).await
+        async_fs::rename(new_binary, &self.current_exe)
+            .await
             .context("Failed to replace binary")?;
 
         Ok(())
@@ -338,7 +371,7 @@ impl AutoUpdater {
     pub async fn rollback(&self) -> Result<()> {
         // Find the most recent backup
         let mut backups = vec![];
-        
+
         if self.backup_dir.exists() {
             let mut entries = async_fs::read_dir(&self.backup_dir).await?;
             while let Some(entry) = entries.next_entry().await? {
@@ -363,14 +396,15 @@ impl AutoUpdater {
         backups.reverse();
 
         let latest_backup = &backups[0];
-        
+
         info!("Rolling back to: {}", latest_backup.display());
 
         // Create backup of current version
         self.create_backup().await?;
 
         // Replace with backup
-        async_fs::copy(latest_backup, &self.current_exe).await
+        async_fs::copy(latest_backup, &self.current_exe)
+            .await
             .context("Failed to restore from backup")?;
 
         info!("✅ Successfully rolled back to previous version");
@@ -386,7 +420,7 @@ impl AutoUpdater {
 
         let mut backups = vec![];
         let mut entries = async_fs::read_dir(&self.backup_dir).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             if let Some(name) = entry.file_name().to_str() {
                 if name.starts_with("hive-") {
@@ -438,7 +472,7 @@ mod tests {
         std::fs::write(&fake_exe, "fake binary").unwrap();
 
         let backup_dir = temp_dir.path().join("backups");
-        
+
         let updater = AutoUpdater {
             client: Client::new(),
             config: UpdateConfig::default(),
@@ -448,7 +482,7 @@ mod tests {
 
         let backup_path = updater.create_backup().await.unwrap();
         assert!(backup_path.exists());
-        
+
         let backup_content = std::fs::read_to_string(backup_path).unwrap();
         assert_eq!(backup_content, "fake binary");
     }
@@ -456,7 +490,7 @@ mod tests {
     #[tokio::test]
     async fn test_checksum_verification() {
         use sha2::{Digest, Sha256};
-        
+
         let temp_dir = TempDir::new().unwrap();
         let test_file = temp_dir.path().join("test");
         let content = b"test content";
@@ -474,9 +508,15 @@ mod tests {
         };
 
         // Should succeed with correct checksum
-        updater.verify_checksum(&test_file, &expected_checksum).await.unwrap();
+        updater
+            .verify_checksum(&test_file, &expected_checksum)
+            .await
+            .unwrap();
 
         // Should fail with incorrect checksum
-        assert!(updater.verify_checksum(&test_file, "wrong_checksum").await.is_err());
+        assert!(updater
+            .verify_checksum(&test_file, "wrong_checksum")
+            .await
+            .is_err());
     }
 }

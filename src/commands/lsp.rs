@@ -2,7 +2,7 @@
 //!
 //! Commands for managing the Language Server Protocol server
 
-use crate::core::{Result, HiveError};
+use crate::core::{HiveError, Result};
 use clap::Subcommand;
 
 /// LSP server commands
@@ -107,21 +107,23 @@ pub async fn generate_editor_config(editor: &str) -> Result<()> {
         "vscode" => {
             println!("📝 VS Code LSP Configuration");
             println!("Add Hive AI extension to VS Code");
-        },
+        }
         "neovim" | "nvim" => {
             println!("📝 Neovim LSP Configuration");
             println!("Configure Hive AI for Neovim");
-        },
+        }
         "emacs" => {
             println!("📝 Emacs LSP Configuration");
             println!("Configure Hive AI for Emacs");
-        },
+        }
         "sublime" => {
             println!("📝 Sublime Text LSP Configuration");
             println!("Configure Hive AI for Sublime Text");
-        },
+        }
         _ => {
-            return Err(HiveError::LspInitialization { message: format!("Unsupported editor: {}", editor) });
+            return Err(HiveError::LspInitialization {
+                message: format!("Unsupported editor: {}", editor),
+            });
         }
     }
     Ok(())

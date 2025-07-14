@@ -1,5 +1,5 @@
 //! Real-time Alerting System
-//! 
+//!
 //! Monitors metrics and triggers alerts based on configurable thresholds:
 //! - Cost overruns and budget alerts
 //! - Performance degradation warnings
@@ -7,12 +7,12 @@
 //! - Custom metric monitoring
 //! - Multi-channel notifications (email, webhook, etc.)
 
-use anyhow::{Result, Context};
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
+use anyhow::{Context, Result};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::{interval, Interval};
 
 /// Alert severity levels
@@ -237,7 +237,8 @@ impl AlertManager {
     /// Remove alert rule
     pub async fn remove_rule(&self, rule_id: &str) -> Result<()> {
         let mut rules = self.rules.write().await;
-        rules.remove(rule_id)
+        rules
+            .remove(rule_id)
             .ok_or_else(|| anyhow::anyhow!("Rule not found"))?;
         Ok(())
     }
@@ -251,7 +252,8 @@ impl AlertManager {
     /// Get active alerts
     pub async fn get_active_alerts(&self) -> Vec<Alert> {
         let alerts = self.alerts.read().await;
-        alerts.values()
+        alerts
+            .values()
             .filter(|a| a.status == AlertStatus::Active)
             .cloned()
             .collect()
@@ -266,9 +268,10 @@ impl AlertManager {
     /// Acknowledge alert
     pub async fn acknowledge_alert(&self, alert_id: &str) -> Result<()> {
         let mut alerts = self.alerts.write().await;
-        let alert = alerts.get_mut(alert_id)
+        let alert = alerts
+            .get_mut(alert_id)
             .ok_or_else(|| anyhow::anyhow!("Alert not found"))?;
-        
+
         alert.status = AlertStatus::Acknowledged;
         Ok(())
     }
@@ -276,9 +279,10 @@ impl AlertManager {
     /// Resolve alert
     pub async fn resolve_alert(&self, alert_id: &str) -> Result<()> {
         let mut alerts = self.alerts.write().await;
-        let alert = alerts.get_mut(alert_id)
+        let alert = alerts
+            .get_mut(alert_id)
             .ok_or_else(|| anyhow::anyhow!("Alert not found"))?;
-        
+
         alert.status = AlertStatus::Resolved;
         alert.resolved_at = Some(Utc::now());
         Ok(())
@@ -290,13 +294,14 @@ impl AlertManager {
         let now = Utc::now();
 
         let max_age = store.max_age; // Get max_age before the mutable borrow
-        
-        let series = store.metrics.entry(name.to_string()).or_insert_with(|| {
-            MetricTimeSeries {
+
+        let series = store
+            .metrics
+            .entry(name.to_string())
+            .or_insert_with(|| MetricTimeSeries {
                 values: Vec::new(),
                 last_updated: now,
-            }
-        });
+            });
 
         series.values.push((now, value));
         series.last_updated = now;
@@ -336,7 +341,7 @@ impl AlertManager {
 
                 // Check each rule
                 let rules_snapshot = rules.read().await.clone();
-                
+
                 for (rule_id, rule) in rules_snapshot {
                     if !rule.enabled {
                         continue;
@@ -368,7 +373,11 @@ impl AlertManager {
                             triggered_at: Utc::now(),
                             resolved_at: None,
                             status: AlertStatus::Active,
-                            metrics: Self::collect_alert_metrics(&rule, &*metric_store.read().await).await,
+                            metrics: Self::collect_alert_metrics(
+                                &rule,
+                                &*metric_store.read().await,
+                            )
+                            .await,
                             context: rule.metadata.clone(),
                         };
 
@@ -383,10 +392,12 @@ impl AlertManager {
                         drop(cooldowns_write);
 
                         // Send notification
-                        let _ = notification_sender.send(NotificationRequest {
-                            alert,
-                            channels: rule.channels.clone(),
-                        }).await;
+                        let _ = notification_sender
+                            .send(NotificationRequest {
+                                alert,
+                                channels: rule.channels.clone(),
+                            })
+                            .await;
                     }
                 }
             }
@@ -446,7 +457,9 @@ impl AlertManager {
 
     /// Evaluate alert rule
     async fn evaluate_rule(rule: &AlertRule, store: &MetricStore) -> bool {
-        let results: Vec<bool> = rule.conditions.iter()
+        let results: Vec<bool> = rule
+            .conditions
+            .iter()
             .map(|condition| Self::evaluate_condition(condition, store))
             .collect();
 
@@ -480,13 +493,16 @@ impl AlertManager {
     }
 
     /// Aggregate metric values
-    fn aggregate_values(values: &[(DateTime<Utc>, f64)], aggregation: &AggregationType, duration: Option<&Duration>) -> f64 {
+    fn aggregate_values(
+        values: &[(DateTime<Utc>, f64)],
+        aggregation: &AggregationType,
+        duration: Option<&Duration>,
+    ) -> f64 {
         let cutoff = duration.map(|d| Utc::now() - *d);
-        
-        let filtered_values: Vec<f64> = values.iter()
-            .filter(|(timestamp, _)| {
-                cutoff.map_or(true, |c| *timestamp > c)
-            })
+
+        let filtered_values: Vec<f64> = values
+            .iter()
+            .filter(|(timestamp, _)| cutoff.map_or(true, |c| *timestamp > c))
             .map(|(_, value)| *value)
             .collect();
 
@@ -495,10 +511,18 @@ impl AlertManager {
         }
 
         match aggregation {
-            AggregationType::Average => filtered_values.iter().sum::<f64>() / filtered_values.len() as f64,
+            AggregationType::Average => {
+                filtered_values.iter().sum::<f64>() / filtered_values.len() as f64
+            }
             AggregationType::Sum => filtered_values.iter().sum(),
-            AggregationType::Min => filtered_values.iter().cloned().fold(f64::INFINITY, f64::min),
-            AggregationType::Max => filtered_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            AggregationType::Min => filtered_values
+                .iter()
+                .cloned()
+                .fold(f64::INFINITY, f64::min),
+            AggregationType::Max => filtered_values
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max),
             AggregationType::Count => filtered_values.len() as f64,
             AggregationType::Rate => {
                 if values.len() < 2 {
@@ -530,7 +554,7 @@ impl AlertManager {
     /// Collect metrics for alert
     async fn collect_alert_metrics(rule: &AlertRule, store: &MetricStore) -> HashMap<String, f64> {
         let mut metrics = HashMap::new();
-        
+
         for condition in &rule.conditions {
             if let Some(series) = store.metrics.get(&condition.metric) {
                 if let Some((_, value)) = series.values.last() {
@@ -538,7 +562,7 @@ impl AlertManager {
                 }
             }
         }
-        
+
         metrics
     }
 
@@ -559,12 +583,21 @@ impl AlertManager {
             NotificationChannel::Console { format } => {
                 let message = match format.as_str() {
                     "json" => serde_json::to_string_pretty(alert)?,
-                    _ => format!("[{}] {} - {}", alert.severity.to_string().to_uppercase(), alert.title, alert.message),
+                    _ => format!(
+                        "[{}] {} - {}",
+                        alert.severity.to_string().to_uppercase(),
+                        alert.title,
+                        alert.message
+                    ),
                 };
                 println!("ALERT: {}", message);
                 Ok(())
             }
-            NotificationChannel::Webhook { url, headers, method } => {
+            NotificationChannel::Webhook {
+                url,
+                headers,
+                method,
+            } => {
                 let client = reqwest::Client::new();
                 let mut request = match method.as_str() {
                     "GET" => client.get(url),
@@ -580,10 +613,15 @@ impl AlertManager {
                 request.send().await?;
                 Ok(())
             }
-            NotificationChannel::Slack { webhook_url, channel, mention } => {
+            NotificationChannel::Slack {
+                webhook_url,
+                channel,
+                mention,
+            } => {
                 let client = reqwest::Client::new();
-                
-                let mut text = format!("*{}*: {}\n{}", 
+
+                let mut text = format!(
+                    "*{}*: {}\n{}",
                     alert.severity.to_string().to_uppercase(),
                     alert.title,
                     alert.message
@@ -604,11 +642,8 @@ impl AlertManager {
                     },
                 });
 
-                client.post(webhook_url)
-                    .json(&payload)
-                    .send()
-                    .await?;
-                
+                client.post(webhook_url).json(&payload).send().await?;
+
                 Ok(())
             }
             _ => Ok(()), // Other channels not implemented in this example
@@ -624,25 +659,22 @@ impl AlertManager {
             description: "Triggered when hourly cost exceeds threshold".to_string(),
             alert_type: AlertType::CostThreshold,
             severity: AlertSeverity::Warning,
-            conditions: vec![
-                AlertCondition {
-                    metric: "cost.hourly".to_string(),
-                    operator: ConditionOperator::GreaterThan,
-                    threshold: 100.0,
-                    duration: None,
-                    aggregation: None,
-                },
-            ],
+            conditions: vec![AlertCondition {
+                metric: "cost.hourly".to_string(),
+                operator: ConditionOperator::GreaterThan,
+                threshold: 100.0,
+                duration: None,
+                aggregation: None,
+            }],
             condition_logic: ConditionLogic::Any,
             cooldown: Duration::hours(1),
             enabled: true,
-            channels: vec![
-                NotificationChannel::Console {
-                    format: "text".to_string(),
-                },
-            ],
+            channels: vec![NotificationChannel::Console {
+                format: "text".to_string(),
+            }],
             metadata: HashMap::new(),
-        }).await?;
+        })
+        .await?;
 
         // Budget exceeded alert
         self.add_rule(AlertRule {
@@ -651,25 +683,22 @@ impl AlertManager {
             description: "Monthly budget has been exceeded".to_string(),
             alert_type: AlertType::BudgetExceeded,
             severity: AlertSeverity::Critical,
-            conditions: vec![
-                AlertCondition {
-                    metric: "cost.monthly.percentage".to_string(),
-                    operator: ConditionOperator::GreaterThan,
-                    threshold: 100.0,
-                    duration: None,
-                    aggregation: None,
-                },
-            ],
+            conditions: vec![AlertCondition {
+                metric: "cost.monthly.percentage".to_string(),
+                operator: ConditionOperator::GreaterThan,
+                threshold: 100.0,
+                duration: None,
+                aggregation: None,
+            }],
             condition_logic: ConditionLogic::Any,
             cooldown: Duration::days(1),
             enabled: true,
-            channels: vec![
-                NotificationChannel::Console {
-                    format: "text".to_string(),
-                },
-            ],
+            channels: vec![NotificationChannel::Console {
+                format: "text".to_string(),
+            }],
             metadata: HashMap::new(),
-        }).await?;
+        })
+        .await?;
 
         // Performance degradation alert
         self.add_rule(AlertRule {
@@ -678,25 +707,22 @@ impl AlertManager {
             description: "API latency exceeds acceptable threshold".to_string(),
             alert_type: AlertType::PerformanceDegradation,
             severity: AlertSeverity::Warning,
-            conditions: vec![
-                AlertCondition {
-                    metric: "performance.api.latency".to_string(),
-                    operator: ConditionOperator::GreaterThan,
-                    threshold: 1000.0, // 1 second
-                    duration: Some(Duration::minutes(5)),
-                    aggregation: Some(AggregationType::Average),
-                },
-            ],
+            conditions: vec![AlertCondition {
+                metric: "performance.api.latency".to_string(),
+                operator: ConditionOperator::GreaterThan,
+                threshold: 1000.0, // 1 second
+                duration: Some(Duration::minutes(5)),
+                aggregation: Some(AggregationType::Average),
+            }],
             condition_logic: ConditionLogic::Any,
             cooldown: Duration::minutes(15),
             enabled: true,
-            channels: vec![
-                NotificationChannel::Console {
-                    format: "text".to_string(),
-                },
-            ],
+            channels: vec![NotificationChannel::Console {
+                format: "text".to_string(),
+            }],
             metadata: HashMap::new(),
-        }).await?;
+        })
+        .await?;
 
         Ok(())
     }
@@ -795,13 +821,13 @@ mod tests {
     async fn test_alert_manager_creation() -> Result<()> {
         let config = AlertConfig::default();
         let manager = AlertManager::new(config).await?;
-        
+
         // Create default rules
         manager.create_default_rules().await?;
-        
+
         let rules = manager.get_rules().await;
         assert!(!rules.is_empty());
-        
+
         Ok(())
     }
 
@@ -809,15 +835,15 @@ mod tests {
     async fn test_metric_updates() -> Result<()> {
         let config = AlertConfig::default();
         let manager = AlertManager::new(config).await?;
-        
+
         // Update metrics
         manager.update_metric("test.metric", 100.0).await?;
         manager.update_metric("test.metric", 150.0).await?;
-        
+
         // Verify metrics are stored
         let store = manager.metric_store.read().await;
         assert!(store.metrics.contains_key("test.metric"));
-        
+
         Ok(())
     }
 
@@ -828,44 +854,42 @@ mod tests {
             ..Default::default()
         };
         let manager = AlertManager::new(config).await?;
-        
+
         // Add test rule
-        manager.add_rule(AlertRule {
-            id: "test_rule".to_string(),
-            name: "Test Rule".to_string(),
-            description: "Test alert rule".to_string(),
-            alert_type: AlertType::Custom,
-            severity: AlertSeverity::Info,
-            conditions: vec![
-                AlertCondition {
+        manager
+            .add_rule(AlertRule {
+                id: "test_rule".to_string(),
+                name: "Test Rule".to_string(),
+                description: "Test alert rule".to_string(),
+                alert_type: AlertType::Custom,
+                severity: AlertSeverity::Info,
+                conditions: vec![AlertCondition {
                     metric: "test.value".to_string(),
                     operator: ConditionOperator::GreaterThan,
                     threshold: 50.0,
                     duration: None,
                     aggregation: None,
-                },
-            ],
-            condition_logic: ConditionLogic::Any,
-            cooldown: Duration::seconds(1),
-            enabled: true,
-            channels: vec![
-                NotificationChannel::Console {
+                }],
+                condition_logic: ConditionLogic::Any,
+                cooldown: Duration::seconds(1),
+                enabled: true,
+                channels: vec![NotificationChannel::Console {
                     format: "text".to_string(),
-                },
-            ],
-            metadata: HashMap::new(),
-        }).await?;
-        
+                }],
+                metadata: HashMap::new(),
+            })
+            .await?;
+
         // Update metric to trigger alert
         manager.update_metric("test.value", 75.0).await?;
-        
+
         // Wait for check interval
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        
+
         // Check if alert was created
         let alerts = manager.get_active_alerts().await;
         assert!(!alerts.is_empty());
-        
+
         Ok(())
     }
 }

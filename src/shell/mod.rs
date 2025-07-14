@@ -5,12 +5,12 @@ use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 pub mod completions;
-pub mod setup;
 pub mod hooks;
+pub mod setup;
 pub mod uninstall;
 
 use crate::core::config::Config;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Shell types supported by Hive AI
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -83,7 +83,7 @@ impl ShellIntegration {
     /// Detect available shells on the system
     pub fn detect_shells(&self) -> Result<Vec<ShellType>> {
         let mut shells = Vec::new();
-        
+
         // Check for shell executables in PATH
         let shell_commands = [
             ("bash", ShellType::Bash),
@@ -119,7 +119,7 @@ impl ShellIntegration {
         let completions = self.get_completions();
         let setup = self.get_setup();
         let hooks = self.get_hooks();
-        
+
         Ok(ShellIntegrationStatus {
             shell,
             completions_installed: completions.is_installed(shell)?,
@@ -146,7 +146,7 @@ impl ShellIntegration {
                 }
                 ShellType::Elvish => ".elvish/rc.elv",
             };
-            
+
             let path = PathBuf::from(home).join(config_file);
             if path.exists() {
                 Some(path)
@@ -177,7 +177,10 @@ impl ShellIntegration {
 
     /// Install shell integration for a specific shell
     pub fn install_for_shell(&self, shell: ShellType, force: bool) -> Result<()> {
-        println!("Installing Hive AI shell integration for {}...", shell.as_str());
+        println!(
+            "Installing Hive AI shell integration for {}...",
+            shell.as_str()
+        );
 
         let completions = self.get_completions();
         let setup = self.get_setup();
@@ -204,17 +207,22 @@ impl ShellIntegration {
             hooks.install(shell)?;
             println!("✅ Installed hooks and aliases for {}", shell.as_str());
         } else {
-            println!("⏭️  Hooks and aliases already installed for {}", shell.as_str());
+            println!(
+                "⏭️  Hooks and aliases already installed for {}",
+                shell.as_str()
+            );
         }
 
         println!("🎉 Shell integration complete for {}!", shell.as_str());
-        println!("   Please restart your shell or run: source ~/.{}", 
-                 match shell {
-                     ShellType::Bash => "bashrc",
-                     ShellType::Zsh => "zshrc",
-                     ShellType::Fish => "config/fish/config.fish",
-                     _ => "profile",
-                 });
+        println!(
+            "   Please restart your shell or run: source ~/.{}",
+            match shell {
+                ShellType::Bash => "bashrc",
+                ShellType::Zsh => "zshrc",
+                ShellType::Fish => "config/fish/config.fish",
+                _ => "profile",
+            }
+        );
 
         Ok(())
     }
@@ -222,16 +230,19 @@ impl ShellIntegration {
     /// Install shell integration for all detected shells
     pub fn install_all(&self, force: bool) -> Result<()> {
         let shells = self.detect_shells()?;
-        
+
         if shells.is_empty() {
             return Err(anyhow::anyhow!("No supported shells detected"));
         }
 
-        println!("Detected shells: {}", 
-                 shells.iter()
-                       .map(|s| s.as_str())
-                       .collect::<Vec<_>>()
-                       .join(", "));
+        println!(
+            "Detected shells: {}",
+            shells
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         for shell in shells {
             if let Err(e) = self.install_for_shell(shell, force) {
@@ -301,8 +312,7 @@ pub mod utils {
 
     /// Get the binary path for Hive AI
     pub fn get_binary_path() -> Result<PathBuf> {
-        std::env::current_exe()
-            .context("Failed to get current executable path")
+        std::env::current_exe().context("Failed to get current executable path")
     }
 
     /// Check if running as administrator/root
@@ -313,7 +323,7 @@ pub mod utils {
             use std::os::unix::fs::MetadataExt;
             std::env::var("USER").map(|u| u == "root").unwrap_or(false)
         }
-        
+
         #[cfg(windows)]
         {
             // For Windows, we'd need to check if running as administrator
@@ -335,18 +345,16 @@ pub mod utils {
 
     /// Backup a file before modification
     pub fn backup_file(file_path: &PathBuf) -> Result<PathBuf> {
-        let backup_path = file_path.with_extension(
-            format!("{}.hive-backup", 
-                    file_path.extension()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or(""))
-        );
-        
+        let backup_path = file_path.with_extension(format!(
+            "{}.hive-backup",
+            file_path.extension().and_then(|s| s.to_str()).unwrap_or("")
+        ));
+
         if file_path.exists() {
             std::fs::copy(file_path, &backup_path)
                 .with_context(|| format!("Failed to backup file: {}", file_path.display()))?;
         }
-        
+
         Ok(backup_path)
     }
 
@@ -370,7 +378,10 @@ mod tests {
         assert_eq!(ShellType::from_string("bash"), Some(ShellType::Bash));
         assert_eq!(ShellType::from_string("zsh"), Some(ShellType::Zsh));
         assert_eq!(ShellType::from_string("fish"), Some(ShellType::Fish));
-        assert_eq!(ShellType::from_string("powershell"), Some(ShellType::PowerShell));
+        assert_eq!(
+            ShellType::from_string("powershell"),
+            Some(ShellType::PowerShell)
+        );
         assert_eq!(ShellType::from_string("invalid"), None);
     }
 
@@ -386,7 +397,7 @@ mod tests {
     fn test_utils_create_directory() {
         let temp_dir = TempDir::new().unwrap();
         let test_dir = temp_dir.path().join("test");
-        
+
         assert!(utils::create_directory_safe(&test_dir).is_ok());
         assert!(test_dir.exists());
     }

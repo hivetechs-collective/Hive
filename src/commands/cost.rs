@@ -7,12 +7,13 @@ use anyhow::Context;
 /// Estimate cost for a consensus query
 pub async fn estimate_cost(query: &str) -> Result<()> {
     // let db = Arc::new(Database::open_default().await?);
-    let engine = ConsensusEngine::new(None).await
+    let engine = ConsensusEngine::new(None)
+        .await
         .context("Failed to initialize consensus engine")?;
 
     // Get current profile
     let profile = engine.get_current_profile().await;
-    
+
     // TODO: Integrate with actual OpenRouter cost calculation
     // For now, show placeholder estimates
     println!("Cost Estimation for Query: \"{}\"", query);

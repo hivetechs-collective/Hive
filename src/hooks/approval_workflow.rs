@@ -1,10 +1,10 @@
 //! Approval Workflow System
-//! 
+//!
 //! Provides enterprise-grade approval workflows for consensus pipeline operations.
 //! Supports multi-level approvals, timeout handling, and notification systems.
 
-use super::{HookAuditLogger, AuditEvent, AuditEventType, registry::HookId};
-use anyhow::{Result, Context};
+use super::{registry::HookId, AuditEvent, AuditEventType, HookAuditLogger};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,19 +26,19 @@ pub struct ApprovalWorkflow {
 pub struct ApprovalWorkflowConfig {
     /// Default timeout for approvals in seconds
     pub default_timeout_seconds: u64,
-    
+
     /// Maximum number of concurrent pending approvals
     pub max_concurrent_approvals: usize,
-    
+
     /// Whether to require explicit approvals for all operations
     pub require_explicit_approval: bool,
-    
+
     /// Auto-approval settings
     pub auto_approval: AutoApprovalConfig,
-    
+
     /// Notification settings
     pub notifications: NotificationConfig,
-    
+
     /// Escalation settings
     pub escalation: EscalationConfig,
 }
@@ -47,16 +47,16 @@ pub struct ApprovalWorkflowConfig {
 pub struct AutoApprovalConfig {
     /// Enable auto-approval for certain request types
     pub enabled: bool,
-    
+
     /// Cost threshold below which auto-approval is allowed
     pub cost_threshold: f64,
-    
+
     /// Quality score threshold above which auto-approval is allowed
     pub quality_threshold: f64,
-    
+
     /// List of request types that can be auto-approved
     pub allowed_request_types: Vec<String>,
-    
+
     /// Maximum number of auto-approvals per hour
     pub rate_limit_per_hour: u32,
 }
@@ -65,16 +65,16 @@ pub struct AutoApprovalConfig {
 pub struct NotificationConfig {
     /// Enable notifications for approval requests
     pub enabled: bool,
-    
+
     /// Notification channels to use
     pub channels: Vec<NotificationChannel>,
-    
+
     /// Delay before sending notifications (seconds)
     pub initial_delay_seconds: u64,
-    
-    /// Interval for reminder notifications (seconds) 
+
+    /// Interval for reminder notifications (seconds)
     pub reminder_interval_seconds: u64,
-    
+
     /// Maximum number of reminders to send
     pub max_reminders: u32,
 }
@@ -83,13 +83,13 @@ pub struct NotificationConfig {
 pub struct EscalationConfig {
     /// Enable escalation for overdue approvals
     pub enabled: bool,
-    
+
     /// Time after which to escalate (seconds)
     pub escalation_timeout_seconds: u64,
-    
+
     /// Escalation levels and their timeouts
     pub escalation_levels: Vec<EscalationLevel>,
-    
+
     /// Whether to auto-approve after all escalations
     pub auto_approve_after_escalation: bool,
 }
@@ -104,10 +104,20 @@ pub struct EscalationLevel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NotificationChannel {
-    Email { recipients: Vec<String> },
-    Slack { webhook_url: String, channel: String },
-    Teams { webhook_url: String },
-    Discord { webhook_url: String, channel_id: String },
+    Email {
+        recipients: Vec<String>,
+    },
+    Slack {
+        webhook_url: String,
+        channel: String,
+    },
+    Teams {
+        webhook_url: String,
+    },
+    Discord {
+        webhook_url: String,
+        channel_id: String,
+    },
     Console,
     Log,
 }
@@ -233,7 +243,7 @@ impl NotificationHandler for ConsoleNotificationHandler {
         println!("---");
         Ok(())
     }
-    
+
     fn get_channel_type(&self) -> &'static str {
         "console"
     }
@@ -253,7 +263,7 @@ impl NotificationHandler for LogNotificationHandler {
         );
         Ok(())
     }
-    
+
     fn get_channel_type(&self) -> &'static str {
         "log"
     }
@@ -278,10 +288,7 @@ impl Default for AutoApprovalConfig {
             enabled: true,
             cost_threshold: 0.10, // $0.10
             quality_threshold: 0.8,
-            allowed_request_types: vec![
-                "cost_estimate".to_string(),
-                "quality_warning".to_string(),
-            ],
+            allowed_request_types: vec!["cost_estimate".to_string(), "quality_warning".to_string()],
             rate_limit_per_hour: 20,
         }
     }
@@ -338,25 +345,22 @@ impl ApprovalWorkflow {
             config: ApprovalWorkflowConfig::default(),
         }
     }
-    
+
     /// Create with custom configuration
     pub fn with_config(config: ApprovalWorkflowConfig) -> Self {
         let mut workflow = Self::new();
         workflow.config = config;
         workflow
     }
-    
+
     /// Set audit logger
     pub fn with_audit_logger(mut self, audit_logger: Arc<HookAuditLogger>) -> Self {
         self.audit_logger = Some(audit_logger);
         self
     }
-    
+
     /// Submit a new approval request
-    pub async fn submit_approval_request(
-        &self,
-        mut request: ApprovalRequest,
-    ) -> Result<String> {
+    pub async fn submit_approval_request(&self, mut request: ApprovalRequest) -> Result<String> {
         // Check if we're at the concurrent approval limit
         {
             let pending = self.pending_requests.read().await;
@@ -367,30 +371,31 @@ impl ApprovalWorkflow {
                 ));
             }
         }
-        
+
         // Apply approval rules to determine requirements
         self.apply_approval_rules(&mut request).await?;
-        
+
         // Check for auto-approval eligibility
         if self.can_auto_approve(&request).await? {
             return self.auto_approve_request(request).await;
         }
-        
+
         // Set expiration if not provided
         if request.expires_at.is_none() {
             request.expires_at = Some(
-                chrono::Utc::now() + chrono::Duration::seconds(self.config.default_timeout_seconds as i64)
+                chrono::Utc::now()
+                    + chrono::Duration::seconds(self.config.default_timeout_seconds as i64),
             );
         }
-        
+
         let request_id = request.id.clone();
-        
+
         // Store the pending request
         {
             let mut pending = self.pending_requests.write().await;
             pending.insert(request_id.clone(), request.clone());
         }
-        
+
         // Log the submission
         if let Some(audit_logger) = &self.audit_logger {
             let event = AuditEvent::new(AuditEventType::ApprovalRequested {
@@ -398,23 +403,27 @@ impl ApprovalWorkflow {
                 execution_id: request_id.clone(),
                 approvers: request.required_approvers.clone(),
             })
-            .with_context("details", format!("Approval request submitted: {}", request.description))
+            .with_context(
+                "details",
+                format!("Approval request submitted: {}", request.description),
+            )
             .with_context("result", "pending");
-            
+
             audit_logger.log_event(event).await?;
         }
-        
+
         // Send initial notification
         if self.config.notifications.enabled {
-            self.send_notification(&request, "New approval request submitted").await?;
+            self.send_notification(&request, "New approval request submitted")
+                .await?;
         }
-        
+
         // Start background monitoring for this request
         self.start_request_monitoring(request_id.clone()).await;
-        
+
         Ok(request_id)
     }
-    
+
     /// Process an approval decision
     pub async fn process_approval_decision(
         &self,
@@ -425,20 +434,23 @@ impl ApprovalWorkflow {
         metadata: Option<HashMap<String, serde_json::Value>>,
     ) -> Result<ApprovalProcessResult> {
         let mut pending = self.pending_requests.write().await;
-        let mut request = pending.get(request_id)
+        let mut request = pending
+            .get(request_id)
             .ok_or_else(|| anyhow::anyhow!("Approval request not found: {}", request_id))?
             .clone();
-        
+
         // Check if request has expired
         if let Some(expires_at) = request.expires_at {
             if chrono::Utc::now() > expires_at {
                 pending.remove(request_id);
                 drop(pending);
-                
-                return self.complete_request(request, ApprovalStatus::Expired).await;
+
+                return self
+                    .complete_request(request, ApprovalStatus::Expired)
+                    .await;
             }
         }
-        
+
         // Add the approval decision
         let approval_decision = ApprovalDecision {
             approver: approver.to_string(),
@@ -447,13 +459,13 @@ impl ApprovalWorkflow {
             timestamp: chrono::Utc::now(),
             metadata: metadata.unwrap_or_default(),
         };
-        
+
         request.received_approvals.push(approval_decision);
-        
+
         // Update the request in pending list
         pending.insert(request_id.to_string(), request.clone());
         drop(pending);
-        
+
         // Log the decision
         if let Some(audit_logger) = &self.audit_logger {
             let event = match decision {
@@ -473,12 +485,12 @@ impl ApprovalWorkflow {
                     approvers: vec![approver.to_string()],
                 },
             };
-            
-            let audit_event = AuditEvent::new(event)
-                .with_context("approval_decision", format!("{:?}", decision));
+
+            let audit_event =
+                AuditEvent::new(event).with_context("approval_decision", format!("{:?}", decision));
             audit_logger.log_event(audit_event).await?;
         }
-        
+
         // Check if we have a final decision
         match decision {
             ApprovalStatus::Rejected => {
@@ -486,8 +498,9 @@ impl ApprovalWorkflow {
                 let mut pending = self.pending_requests.write().await;
                 pending.remove(request_id);
                 drop(pending);
-                
-                self.complete_request(request, ApprovalStatus::Rejected).await
+
+                self.complete_request(request, ApprovalStatus::Rejected)
+                    .await
             }
             ApprovalStatus::Approved => {
                 // Check if we have all required approvals
@@ -495,8 +508,9 @@ impl ApprovalWorkflow {
                     let mut pending = self.pending_requests.write().await;
                     pending.remove(request_id);
                     drop(pending);
-                    
-                    self.complete_request(request, ApprovalStatus::Approved).await
+
+                    self.complete_request(request, ApprovalStatus::Approved)
+                        .await
                 } else {
                     // Still need more approvals
                     Ok(ApprovalProcessResult {
@@ -518,26 +532,27 @@ impl ApprovalWorkflow {
             }
         }
     }
-    
+
     /// Get all pending approval requests
     pub async fn get_pending_approvals(&self) -> Result<Vec<ApprovalRequest>> {
         let pending = self.pending_requests.read().await;
         Ok(pending.values().cloned().collect())
     }
-    
+
     /// Get a specific approval request by ID
     pub async fn get_approval_request(&self, request_id: &str) -> Result<Option<ApprovalRequest>> {
         let pending = self.pending_requests.read().await;
         Ok(pending.get(request_id).cloned())
     }
-    
+
     /// Cancel a pending approval request
     pub async fn cancel_approval_request(&self, request_id: &str, reason: &str) -> Result<()> {
         let mut pending = self.pending_requests.write().await;
-        let request = pending.remove(request_id)
+        let request = pending
+            .remove(request_id)
             .ok_or_else(|| anyhow::anyhow!("Approval request not found: {}", request_id))?;
         drop(pending);
-        
+
         // Log the cancellation
         if let Some(audit_logger) = &self.audit_logger {
             let event = AuditEventType::ExecutionDenied {
@@ -545,23 +560,23 @@ impl ApprovalWorkflow {
                 execution_id: request_id.to_string(),
                 reason: format!("Approval request cancelled: {}", reason),
             };
-            
+
             let audit_event = AuditEvent::new(event)
                 .with_context("cancelled_by", &request.requested_by)
                 .with_context("reason", reason);
             audit_logger.log_event(audit_event).await?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Add an approval rule
     pub async fn add_approval_rule(&self, rule: ApprovalRule) -> Result<()> {
         let mut rules = self.approval_rules.write().await;
         rules.push(rule);
         Ok(())
     }
-    
+
     /// Remove an approval rule
     pub async fn remove_approval_rule(&self, rule_id: &str) -> Result<bool> {
         let mut rules = self.approval_rules.write().await;
@@ -569,42 +584,48 @@ impl ApprovalWorkflow {
         rules.retain(|rule| rule.id != rule_id);
         Ok(rules.len() < initial_len)
     }
-    
+
     /// List all approval rules
     pub async fn list_approval_rules(&self) -> Result<Vec<ApprovalRule>> {
         let rules = self.approval_rules.read().await;
         Ok(rules.clone())
     }
-    
+
     /// Get approval statistics
     pub async fn get_approval_statistics(&self) -> Result<ApprovalStatistics> {
         let pending = self.pending_requests.read().await;
         let completed = self.completed_requests.read().await;
-        
+
         let total_pending = pending.len();
         let total_completed = completed.len();
-        
+
         let mut stats_by_type = HashMap::new();
         let mut stats_by_status = HashMap::new();
-        
+
         // Count pending by type
         for request in pending.values() {
-            *stats_by_type.entry(request.request_type.clone()).or_insert(0) += 1;
+            *stats_by_type
+                .entry(request.request_type.clone())
+                .or_insert(0) += 1;
         }
-        
+
         // Count completed by status
         for completed_approval in completed.values() {
-            *stats_by_status.entry(completed_approval.final_status.clone()).or_insert(0) += 1;
+            *stats_by_status
+                .entry(completed_approval.final_status.clone())
+                .or_insert(0) += 1;
         }
-        
+
         let avg_completion_time = if !completed.is_empty() {
-            completed.values()
+            completed
+                .values()
                 .map(|c| c.total_duration_seconds)
-                .sum::<u64>() as f64 / completed.len() as f64
+                .sum::<u64>() as f64
+                / completed.len() as f64
         } else {
             0.0
         };
-        
+
         Ok(ApprovalStatistics {
             total_pending,
             total_completed,
@@ -613,13 +634,13 @@ impl ApprovalWorkflow {
             average_completion_time_seconds: avg_completion_time,
         })
     }
-    
+
     /// Clean up expired requests
     pub async fn cleanup_expired_requests(&self) -> Result<Vec<String>> {
         let now = chrono::Utc::now();
         let mut pending = self.pending_requests.write().await;
         let mut expired_ids = Vec::new();
-        
+
         // Find expired requests
         let mut to_remove = Vec::new();
         for (id, request) in pending.iter() {
@@ -629,60 +650,68 @@ impl ApprovalWorkflow {
                 }
             }
         }
-        
+
         // Remove expired requests and complete them
         for (id, request) in to_remove {
             pending.remove(&id);
             expired_ids.push(id.clone());
-            
+
             // Complete the request as expired
             let mut completed = self.completed_requests.write().await;
             let duration = (now - request.created_at).num_seconds() as u64;
-            
-            completed.insert(id, CompletedApproval {
-                request,
-                final_status: ApprovalStatus::Expired,
-                completed_at: now,
-                total_duration_seconds: duration,
-                escalation_count: 0,
-                notification_count: 0,
-            });
+
+            completed.insert(
+                id,
+                CompletedApproval {
+                    request,
+                    final_status: ApprovalStatus::Expired,
+                    completed_at: now,
+                    total_duration_seconds: duration,
+                    escalation_count: 0,
+                    notification_count: 0,
+                },
+            );
         }
-        
+
         Ok(expired_ids)
     }
-    
+
     // Private helper methods
-    
+
     /// Apply approval rules to determine requirements
     async fn apply_approval_rules(&self, request: &mut ApprovalRequest) -> Result<()> {
         let rules = self.approval_rules.read().await;
-        
+
         for rule in rules.iter() {
             if self.rule_matches_request(rule, request)? {
                 // Apply rule requirements
-                request.required_approvers.extend(rule.required_approvers.clone());
-                
+                request
+                    .required_approvers
+                    .extend(rule.required_approvers.clone());
+
                 if rule.priority > request.priority {
                     request.priority = rule.priority.clone();
                 }
-                
+
                 if let Some(timeout) = rule.timeout_seconds {
-                    if request.expires_at.is_none() || 
-                       request.expires_at.unwrap() > chrono::Utc::now() + chrono::Duration::seconds(timeout as i64) {
-                        request.expires_at = Some(chrono::Utc::now() + chrono::Duration::seconds(timeout as i64));
+                    if request.expires_at.is_none()
+                        || request.expires_at.unwrap()
+                            > chrono::Utc::now() + chrono::Duration::seconds(timeout as i64)
+                    {
+                        request.expires_at =
+                            Some(chrono::Utc::now() + chrono::Duration::seconds(timeout as i64));
                     }
                 }
             }
         }
-        
+
         // Remove duplicates from required approvers
         request.required_approvers.sort();
         request.required_approvers.dedup();
-        
+
         Ok(())
     }
-    
+
     /// Check if a rule matches a request
     fn rule_matches_request(&self, rule: &ApprovalRule, request: &ApprovalRequest) -> Result<bool> {
         for condition in &rule.conditions {
@@ -692,65 +721,85 @@ impl ApprovalWorkflow {
         }
         Ok(true)
     }
-    
+
     /// Evaluate a single condition
-    fn evaluate_condition(&self, condition: &ApprovalCondition, request: &ApprovalRequest) -> Result<bool> {
+    fn evaluate_condition(
+        &self,
+        condition: &ApprovalCondition,
+        request: &ApprovalRequest,
+    ) -> Result<bool> {
         let actual_value = self.get_field_value(&condition.field, request)?;
-        
+
         match condition.operator {
             ConditionOperator::Equals => Ok(actual_value == condition.value),
             ConditionOperator::NotEquals => Ok(actual_value != condition.value),
             ConditionOperator::GreaterThan => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), condition.value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), condition.value.as_f64())
+                {
                     Ok(actual > expected)
                 } else {
                     Ok(false)
                 }
             }
             ConditionOperator::LessThan => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), condition.value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), condition.value.as_f64())
+                {
                     Ok(actual < expected)
                 } else {
                     Ok(false)
                 }
             }
             ConditionOperator::GreaterThanOrEqual => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), condition.value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), condition.value.as_f64())
+                {
                     Ok(actual >= expected)
                 } else {
                     Ok(false)
                 }
             }
             ConditionOperator::LessThanOrEqual => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_f64(), condition.value.as_f64()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_f64(), condition.value.as_f64())
+                {
                     Ok(actual <= expected)
                 } else {
                     Ok(false)
                 }
             }
             ConditionOperator::Contains => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_str(), condition.value.as_str()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_str(), condition.value.as_str())
+                {
                     Ok(actual.contains(expected))
                 } else {
                     Ok(false)
                 }
             }
             ConditionOperator::StartsWith => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_str(), condition.value.as_str()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_str(), condition.value.as_str())
+                {
                     Ok(actual.starts_with(expected))
                 } else {
                     Ok(false)
                 }
             }
             ConditionOperator::EndsWith => {
-                if let (Some(actual), Some(expected)) = (actual_value.as_str(), condition.value.as_str()) {
+                if let (Some(actual), Some(expected)) =
+                    (actual_value.as_str(), condition.value.as_str())
+                {
                     Ok(actual.ends_with(expected))
                 } else {
                     Ok(false)
                 }
             }
             ConditionOperator::Matches => {
-                if let (Some(actual), Some(pattern)) = (actual_value.as_str(), condition.value.as_str()) {
+                if let (Some(actual), Some(pattern)) =
+                    (actual_value.as_str(), condition.value.as_str())
+                {
                     match regex::Regex::new(pattern) {
                         Ok(re) => Ok(re.is_match(actual)),
                         Err(_) => Ok(false),
@@ -761,7 +810,7 @@ impl ApprovalWorkflow {
             }
         }
     }
-    
+
     /// Get field value from request
     fn get_field_value(&self, field: &str, request: &ApprovalRequest) -> Result<serde_json::Value> {
         match field {
@@ -779,37 +828,46 @@ impl ApprovalWorkflow {
             }
         }
     }
-    
+
     /// Check if request can be auto-approved
     async fn can_auto_approve(&self, request: &ApprovalRequest) -> Result<bool> {
         if !self.config.auto_approval.enabled {
             return Ok(false);
         }
-        
+
         // Check if request type is allowed for auto-approval
-        if !self.config.auto_approval.allowed_request_types.contains(&request.request_type) {
+        if !self
+            .config
+            .auto_approval
+            .allowed_request_types
+            .contains(&request.request_type)
+        {
             return Ok(false);
         }
-        
+
         // Check cost threshold
         if let Some(cost) = request.metadata.get("cost").and_then(|v| v.as_f64()) {
             if cost > self.config.auto_approval.cost_threshold {
                 return Ok(false);
             }
         }
-        
+
         // Check quality threshold
-        if let Some(quality) = request.metadata.get("quality_score").and_then(|v| v.as_f64()) {
+        if let Some(quality) = request
+            .metadata
+            .get("quality_score")
+            .and_then(|v| v.as_f64())
+        {
             if quality < self.config.auto_approval.quality_threshold {
                 return Ok(false);
             }
         }
-        
+
         // TODO: Check rate limiting
-        
+
         Ok(true)
     }
-    
+
     /// Auto-approve a request
     async fn auto_approve_request(&self, mut request: ApprovalRequest) -> Result<String> {
         let decision = ApprovalDecision {
@@ -819,26 +877,29 @@ impl ApprovalWorkflow {
             timestamp: chrono::Utc::now(),
             metadata: HashMap::new(),
         };
-        
+
         request.received_approvals.push(decision);
         let request_id = request.id.clone();
-        
+
         // Complete the request immediately
         let now = chrono::Utc::now();
         let duration = (now - request.created_at).num_seconds() as u64;
-        
+
         let hook_id = request.hook_id.clone();
-        
+
         let mut completed = self.completed_requests.write().await;
-        completed.insert(request_id.clone(), CompletedApproval {
-            request,
-            final_status: ApprovalStatus::AutoApproved,
-            completed_at: now,
-            total_duration_seconds: duration,
-            escalation_count: 0,
-            notification_count: 0,
-        });
-        
+        completed.insert(
+            request_id.clone(),
+            CompletedApproval {
+                request,
+                final_status: ApprovalStatus::AutoApproved,
+                completed_at: now,
+                total_duration_seconds: duration,
+                escalation_count: 0,
+                notification_count: 0,
+            },
+        );
+
         // Log the auto-approval
         if let Some(audit_logger) = &self.audit_logger {
             let event = AuditEventType::ApprovalGranted {
@@ -846,54 +907,63 @@ impl ApprovalWorkflow {
                 execution_id: request_id.clone(),
                 approver: "system".to_string(),
             };
-            
+
             let audit_event = AuditEvent::new(event)
                 .with_context("auto_approved", true)
                 .with_context("duration_ms", duration);
             audit_logger.log_event(audit_event).await?;
         }
-        
+
         Ok(request_id)
     }
-    
+
     /// Check if request has sufficient approvals
     async fn has_sufficient_approvals(&self, request: &ApprovalRequest) -> Result<bool> {
         if request.required_approvers.is_empty() {
             // If no specific approvers required, any approval is sufficient
-            return Ok(request.received_approvals.iter().any(|a| a.decision == ApprovalStatus::Approved));
+            return Ok(request
+                .received_approvals
+                .iter()
+                .any(|a| a.decision == ApprovalStatus::Approved));
         }
-        
+
         // Check if all required approvers have approved
-        let approved_by: Vec<&String> = request.received_approvals
+        let approved_by: Vec<&String> = request
+            .received_approvals
             .iter()
             .filter(|a| a.decision == ApprovalStatus::Approved)
             .map(|a| &a.approver)
             .collect();
-        
-        Ok(request.required_approvers.iter().all(|required| approved_by.contains(&required)))
+
+        Ok(request
+            .required_approvers
+            .iter()
+            .all(|required| approved_by.contains(&required)))
     }
-    
+
     /// Get remaining approvers needed
     async fn get_remaining_approvers(&self, request: &ApprovalRequest) -> Result<Vec<String>> {
         if request.required_approvers.is_empty() {
             return Ok(Vec::new());
         }
-        
-        let approved_by: Vec<&String> = request.received_approvals
+
+        let approved_by: Vec<&String> = request
+            .received_approvals
             .iter()
             .filter(|a| a.decision == ApprovalStatus::Approved)
             .map(|a| &a.approver)
             .collect();
-        
-        let remaining: Vec<String> = request.required_approvers
+
+        let remaining: Vec<String> = request
+            .required_approvers
             .iter()
             .filter(|required| !approved_by.contains(required))
             .cloned()
             .collect();
-        
+
         Ok(remaining)
     }
-    
+
     /// Complete a request with final status
     async fn complete_request(
         &self,
@@ -902,19 +972,23 @@ impl ApprovalWorkflow {
     ) -> Result<ApprovalProcessResult> {
         let now = chrono::Utc::now();
         let duration = (now - request.created_at).num_seconds() as u64;
-        let approved = final_status == ApprovalStatus::Approved || final_status == ApprovalStatus::AutoApproved;
-        
+        let approved = final_status == ApprovalStatus::Approved
+            || final_status == ApprovalStatus::AutoApproved;
+
         // Store completed request
         let mut completed = self.completed_requests.write().await;
-        completed.insert(request.id.clone(), CompletedApproval {
-            request: request.clone(),
-            final_status: final_status.clone(),
-            completed_at: now,
-            total_duration_seconds: duration,
-            escalation_count: request.current_escalation_level,
-            notification_count: request.notification_count,
-        });
-        
+        completed.insert(
+            request.id.clone(),
+            CompletedApproval {
+                request: request.clone(),
+                final_status: final_status.clone(),
+                completed_at: now,
+                total_duration_seconds: duration,
+                escalation_count: request.current_escalation_level,
+                notification_count: request.notification_count,
+            },
+        );
+
         // Log completion
         if let Some(audit_logger) = &self.audit_logger {
             let event = match final_status {
@@ -935,13 +1009,13 @@ impl ApprovalWorkflow {
                     duration_ms: duration * 1000,
                 },
             };
-            
+
             let audit_event = AuditEvent::new(event)
                 .with_context("approval_status", format!("{:?}", final_status))
                 .with_context("duration_seconds", duration);
             audit_logger.log_event(audit_event).await?;
         }
-        
+
         Ok(ApprovalProcessResult {
             final_status: final_status.clone(),
             approved,
@@ -949,27 +1023,34 @@ impl ApprovalWorkflow {
             remaining_approvers: Vec::new(),
         })
     }
-    
+
     /// Send notification for a request
     async fn send_notification(&self, request: &ApprovalRequest, message: &str) -> Result<()> {
         let handlers = self.notification_handlers.read().await;
-        
+
         for handler in handlers.iter() {
             if let Err(e) = handler.send_notification(request, message) {
-                tracing::warn!("Failed to send notification via {}: {}", handler.get_channel_type(), e);
+                tracing::warn!(
+                    "Failed to send notification via {}: {}",
+                    handler.get_channel_type(),
+                    e
+                );
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Start monitoring a request for timeouts and escalations
     async fn start_request_monitoring(&self, request_id: String) {
         let workflow = self.clone();
         tokio::spawn(async move {
             // Initial delay before first notification
-            tokio::time::sleep(tokio::time::Duration::from_secs(workflow.config.notifications.initial_delay_seconds)).await;
-            
+            tokio::time::sleep(tokio::time::Duration::from_secs(
+                workflow.config.notifications.initial_delay_seconds,
+            ))
+            .await;
+
             let mut reminder_count = 0;
             loop {
                 // Check if request still exists and needs monitoring
@@ -977,21 +1058,34 @@ impl ApprovalWorkflow {
                     let pending = workflow.pending_requests.read().await;
                     pending.contains_key(&request_id)
                 };
-                
+
                 if !needs_monitoring {
                     break;
                 }
-                
+
                 // Send reminder if configured
-                if workflow.config.notifications.enabled && reminder_count < workflow.config.notifications.max_reminders {
+                if workflow.config.notifications.enabled
+                    && reminder_count < workflow.config.notifications.max_reminders
+                {
                     if let Ok(Some(request)) = workflow.get_approval_request(&request_id).await {
-                        let _ = workflow.send_notification(&request, &format!("Reminder {}: Approval still required", reminder_count + 1)).await;
+                        let _ = workflow
+                            .send_notification(
+                                &request,
+                                &format!(
+                                    "Reminder {}: Approval still required",
+                                    reminder_count + 1
+                                ),
+                            )
+                            .await;
                         reminder_count += 1;
                     }
                 }
-                
+
                 // Wait for next reminder interval
-                tokio::time::sleep(tokio::time::Duration::from_secs(workflow.config.notifications.reminder_interval_seconds)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs(
+                    workflow.config.notifications.reminder_interval_seconds,
+                ))
+                .await;
             }
         });
     }
@@ -1033,7 +1127,7 @@ pub struct ApprovalStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_approval_workflow_creation() {
         let workflow = ApprovalWorkflow::new();
@@ -1041,11 +1135,11 @@ mod tests {
         assert_eq!(stats.total_pending, 0);
         assert_eq!(stats.total_completed, 0);
     }
-    
+
     #[tokio::test]
     async fn test_approval_request_submission() {
         let workflow = ApprovalWorkflow::new();
-        
+
         let request = ApprovalRequest {
             id: Uuid::new_v4().to_string(),
             hook_id: HookId::new(),
@@ -1062,27 +1156,33 @@ mod tests {
             notification_count: 0,
             last_notification_at: None,
         };
-        
+
         let request_id = workflow.submit_approval_request(request).await.unwrap();
         assert!(!request_id.is_empty());
-        
+
         let stats = workflow.get_approval_statistics().await.unwrap();
         assert_eq!(stats.total_pending, 1);
     }
-    
+
     #[tokio::test]
     async fn test_auto_approval() {
         let mut config = ApprovalWorkflowConfig::default();
         config.auto_approval.enabled = true;
         config.auto_approval.cost_threshold = 1.0;
         config.auto_approval.allowed_request_types = vec!["test".to_string()];
-        
+
         let workflow = ApprovalWorkflow::with_config(config);
-        
+
         let mut metadata = HashMap::new();
-        metadata.insert("cost".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.5).unwrap()));
-        metadata.insert("quality_score".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.9).unwrap()));
-        
+        metadata.insert(
+            "cost".to_string(),
+            serde_json::Value::Number(serde_json::Number::from_f64(0.5).unwrap()),
+        );
+        metadata.insert(
+            "quality_score".to_string(),
+            serde_json::Value::Number(serde_json::Number::from_f64(0.9).unwrap()),
+        );
+
         let request = ApprovalRequest {
             id: Uuid::new_v4().to_string(),
             hook_id: HookId::new(),
@@ -1099,9 +1199,9 @@ mod tests {
             notification_count: 0,
             last_notification_at: None,
         };
-        
+
         let request_id = workflow.submit_approval_request(request).await.unwrap();
-        
+
         // Should be auto-approved, so no pending requests
         let stats = workflow.get_approval_statistics().await.unwrap();
         assert_eq!(stats.total_pending, 0);

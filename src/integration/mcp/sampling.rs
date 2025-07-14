@@ -2,14 +2,14 @@
 //!
 //! Handles sampling requests and progress tracking for AI model operations
 
-use anyhow::{Result, anyhow};
-use serde::{Serialize, Deserialize};
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
+use tracing::{debug, error, info};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use tracing::{info, debug, error};
 
 /// Sampling request manager
 pub struct SamplingManager {
@@ -152,7 +152,7 @@ impl SamplingManager {
 
         // Generate session ID
         let session_id = Uuid::new_v4().to_string();
-        
+
         // Create progress channel
         let (progress_tx, progress_rx) = mpsc::unbounded_channel();
 
@@ -199,11 +199,7 @@ impl SamplingManager {
     }
 
     /// Update sample progress
-    pub async fn update_progress(
-        &self,
-        session_id: &str,
-        progress: SampleProgress,
-    ) -> Result<()> {
+    pub async fn update_progress(&self, session_id: &str, progress: SampleProgress) -> Result<()> {
         // Update session
         {
             let mut active_samples = self.active_samples.write().await;
@@ -229,23 +225,21 @@ impl SamplingManager {
     }
 
     /// Complete sample with result
-    pub async fn complete_sample(
-        &self,
-        session_id: &str,
-        result: SampleResult,
-    ) -> Result<()> {
+    pub async fn complete_sample(&self, session_id: &str, result: SampleResult) -> Result<()> {
         {
             let mut active_samples = self.active_samples.write().await;
             if let Some(session) = active_samples.get_mut(session_id) {
                 session.status = SampleStatus::Completed;
                 session.result = Some(result);
                 session.updated_at = Utc::now();
-                
+
                 // Send final progress update
                 let final_progress = SampleProgress {
                     stage: "Completed".to_string(),
                     percentage: 100.0,
-                    tokens_generated: session.result.as_ref()
+                    tokens_generated: session
+                        .result
+                        .as_ref()
                         .map(|r| r.usage.completion_tokens)
                         .unwrap_or(0),
                     estimated_completion: Some(Utc::now()),
@@ -271,11 +265,7 @@ impl SamplingManager {
     }
 
     /// Fail sample with error
-    pub async fn fail_sample(
-        &self,
-        session_id: &str,
-        error: String,
-    ) -> Result<()> {
+    pub async fn fail_sample(&self, session_id: &str, error: String) -> Result<()> {
         {
             let mut active_samples = self.active_samples.write().await;
             if let Some(session) = active_samples.get_mut(session_id) {
@@ -358,21 +348,21 @@ impl SamplingManager {
     /// Clean up completed sessions
     pub async fn cleanup_completed(&self) -> Result<usize> {
         let mut cleaned_count = 0;
-        
+
         {
             let mut active_samples = self.active_samples.write().await;
             let mut progress_senders = self.progress_senders.write().await;
-            
+
             let session_ids: Vec<String> = active_samples.keys().cloned().collect();
-            
+
             for session_id in session_ids {
                 if let Some(session) = active_samples.get(&session_id) {
                     // Clean up sessions that are completed, failed, or cancelled for more than 1 hour
                     let should_cleanup = matches!(
-                        session.status, 
+                        session.status,
                         SampleStatus::Completed | SampleStatus::Failed | SampleStatus::Cancelled
                     ) && (Utc::now() - session.updated_at).num_hours() >= 1;
-                    
+
                     if should_cleanup {
                         active_samples.remove(&session_id);
                         progress_senders.remove(&session_id);
@@ -392,7 +382,7 @@ impl SamplingManager {
     /// Get sampling statistics
     pub async fn get_statistics(&self) -> SamplingStatistics {
         let active_samples = self.active_samples.read().await;
-        
+
         let mut stats = SamplingStatistics {
             total_sessions: active_samples.len(),
             queued: 0,
@@ -430,11 +420,13 @@ impl SamplingManager {
 
         // Calculate averages
         if !processing_times.is_empty() {
-            stats.average_processing_time_ms = processing_times.iter().sum::<f64>() / processing_times.len() as f64;
+            stats.average_processing_time_ms =
+                processing_times.iter().sum::<f64>() / processing_times.len() as f64;
         }
 
         if !tokens_per_second_values.is_empty() {
-            stats.tokens_per_second_avg = tokens_per_second_values.iter().sum::<f32>() / tokens_per_second_values.len() as f32;
+            stats.tokens_per_second_avg = tokens_per_second_values.iter().sum::<f32>()
+                / tokens_per_second_values.len() as f32;
         }
 
         stats
@@ -459,7 +451,7 @@ impl Default for SamplingConfig {
     fn default() -> Self {
         Self {
             max_concurrent_samples: 10,
-            default_timeout_seconds: 300, // 5 minutes
+            default_timeout_seconds: 300,     // 5 minutes
             progress_update_interval_ms: 500, // 0.5 seconds
             enable_streaming: true,
             max_tokens: Some(4096),
@@ -495,7 +487,8 @@ pub fn create_consensus_progress(
         percentage,
         tokens_generated,
         estimated_completion: if percentage > 0.0 {
-            let remaining_time = (100.0 - percentage) / percentage * metrics.processing_time_ms as f32;
+            let remaining_time =
+                (100.0 - percentage) / percentage * metrics.processing_time_ms as f32;
             Some(Utc::now() + chrono::Duration::milliseconds(remaining_time as i64))
         } else {
             None

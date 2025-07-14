@@ -5,14 +5,14 @@
 use super::protocol::{McpMessage, McpMessageContent, McpNotification, ToolContent};
 use crate::consensus::streaming::ConsensusEvent;
 use crate::consensus::types::Stage;
-use anyhow::{Result, anyhow};
-use tokio::sync::mpsc;
-use tokio_stream::StreamExt;
+use anyhow::{anyhow, Result};
 use futures::stream::Stream;
+use serde_json::json;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tracing::{info, error, debug};
-use serde_json::json;
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
+use tracing::{debug, error, info};
 
 /// Streaming handler for MCP responses
 pub struct StreamingHandler {
@@ -41,7 +41,7 @@ impl StreamingHandler {
                 ConsensusEvent::StageStarted { stage, model } => {
                     current_stage = stage.clone();
                     stage_buffer.clear();
-                    
+
                     // Send stage start notification
                     self.send_progress_notification(
                         &format!("Stage started: {:?}", stage),
@@ -49,13 +49,14 @@ impl StreamingHandler {
                         Some(json!({
                             "stage": format!("{:?}", stage),
                             "status": "started"
-                        }))
-                    ).await?;
+                        })),
+                    )
+                    .await?;
                 }
                 ConsensusEvent::Token { chunk, .. } => {
                     buffer.push_str(&chunk);
                     stage_buffer.push_str(&chunk);
-                    
+
                     // Send token update every 50 characters for better UX
                     if buffer.len() % 50 == 0 {
                         self.send_content_notification(
@@ -64,8 +65,9 @@ impl StreamingHandler {
                             Some(json!({
                                 "stage": format!("{:?}", current_stage),
                                 "partial": true
-                            }))
-                        ).await?;
+                            })),
+                        )
+                        .await?;
                     }
                 }
                 ConsensusEvent::StageCompleted { stage, result } => {
@@ -77,8 +79,9 @@ impl StreamingHandler {
                             "stage": format!("{:?}", stage),
                             "status": "completed",
                             "result": result
-                        }))
-                    ).await?;
+                        })),
+                    )
+                    .await?;
                 }
                 ConsensusEvent::FinalResponse { content } => {
                     // Send final response
@@ -87,18 +90,19 @@ impl StreamingHandler {
                         request_id.clone(),
                         Some(json!({
                             "final": true
-                        }))
-                    ).await?;
+                        })),
+                    )
+                    .await?;
                 }
                 ConsensusEvent::Error { stage, error } => {
                     error!("Stream error: {}", error);
-                    self.send_error_notification(
-                        &error,
-                        request_id.clone()
-                    ).await?;
+                    self.send_error_notification(&error, request_id.clone())
+                        .await?;
                     return Err(anyhow!("Stream error: {}", error));
                 }
-                ConsensusEvent::Progress { stage, percentage, .. } => {
+                ConsensusEvent::Progress {
+                    stage, percentage, ..
+                } => {
                     // Send progress update
                     self.send_progress_notification(
                         &format!("Progress: {:?} - {:.0}%", stage, percentage * 100.0),
@@ -106,8 +110,9 @@ impl StreamingHandler {
                         Some(json!({
                             "stage": format!("{:?}", stage),
                             "percentage": percentage
-                        }))
-                    ).await?;
+                        })),
+                    )
+                    .await?;
                 }
                 ConsensusEvent::Completed => {
                     // Pipeline completed
@@ -116,8 +121,9 @@ impl StreamingHandler {
                         request_id.clone(),
                         Some(json!({
                             "status": "completed"
-                        }))
-                    ).await?;
+                        })),
+                    )
+                    .await?;
                 }
             }
         }
@@ -188,7 +194,9 @@ impl StreamingHandler {
             content: McpMessageContent::Notification(notification),
         };
 
-        self.sender.send(message).await
+        self.sender
+            .send(message)
+            .await
             .map_err(|e| anyhow!("Failed to send notification: {}", e))?;
 
         Ok(())
@@ -243,7 +251,7 @@ impl WebSocketHandler {
     pub fn new() -> (Self, mpsc::Receiver<McpMessage>, mpsc::Sender<McpMessage>) {
         let (client_sender, server_receiver) = mpsc::channel(100);
         let (server_sender, client_receiver) = mpsc::channel(100);
-        
+
         (
             Self {
                 sender: server_sender.clone(),
@@ -292,8 +300,8 @@ impl Default for EnhancedStreaming {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio_stream::wrappers::ReceiverStream;
     use futures::StreamExt;
+    use tokio_stream::wrappers::ReceiverStream;
 
     #[tokio::test]
     async fn test_streaming_handler() {
@@ -301,11 +309,10 @@ mod tests {
         let handler = StreamingHandler::new(sender);
 
         // Send test notification
-        handler.send_progress_notification(
-            "Test progress",
-            Some(json!(123)),
-            None
-        ).await.unwrap();
+        handler
+            .send_progress_notification("Test progress", Some(json!(123)), None)
+            .await
+            .unwrap();
 
         // Verify notification received
         let message = receiver.recv().await.unwrap();
@@ -320,17 +327,20 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_response() {
         let (response, sender) = StreamingToolResponse::new();
-        
+
         // Send test content
-        sender.send(ToolContent::Text { 
-            text: "Test content".to_string() 
-        }).await.unwrap();
+        sender
+            .send(ToolContent::Text {
+                text: "Test content".to_string(),
+            })
+            .await
+            .unwrap();
         drop(sender);
 
         // Collect stream
         let mut stream = response.into_stream();
         let items: Vec<_> = stream.collect().await;
-        
+
         assert_eq!(items.len(), 1);
         match &items[0] {
             ToolContent::Text { text } => {

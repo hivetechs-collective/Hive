@@ -6,13 +6,14 @@
 //! - File type icons
 //! - Search and filtering
 
+use crate::tui::themes::Theme;
 use anyhow::Result;
-use crossterm::event::{KeyEvent, KeyCode};
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     backend::Backend,
     layout::Rect,
-    style::{Color, Style, Modifier},
-    text::{Span, Line},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState},
     Frame,
 };
@@ -20,7 +21,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use crate::tui::themes::Theme;
 
 /// File explorer panel state
 pub struct ExplorerPanel {
@@ -89,10 +89,10 @@ impl ExplorerPanel {
             filter: String::new(),
             expanded_dirs: Vec::new(),
         };
-        
+
         panel.refresh_entries().await?;
         panel.list_state.select(Some(0));
-        
+
         Ok(panel)
     }
 
@@ -105,69 +105,74 @@ impl ExplorerPanel {
     }
 
     /// Load directory tree recursively
-    fn load_directory_tree<'a>(&'a mut self, dir: &'a Path, indent_level: usize) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + 'a>> {
+    fn load_directory_tree<'a>(
+        &'a mut self,
+        dir: &'a Path,
+        indent_level: usize,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + 'a>> {
         Box::pin(async move {
-        let mut entries = Vec::new();
-        
-        if let Ok(dir_entries) = fs::read_dir(dir) {
-            for entry in dir_entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    
-                    // Skip hidden files if not showing them
-                    if !self.show_hidden && name.starts_with('.') {
-                        continue;
+            let mut entries = Vec::new();
+
+            if let Ok(dir_entries) = fs::read_dir(dir) {
+                for entry in dir_entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        let name = entry.file_name().to_string_lossy().to_string();
+
+                        // Skip hidden files if not showing them
+                        if !self.show_hidden && name.starts_with('.') {
+                            continue;
+                        }
+
+                        // Apply filter if set
+                        if !self.filter.is_empty()
+                            && !name.to_lowercase().contains(&self.filter.to_lowercase())
+                        {
+                            continue;
+                        }
+
+                        let entry_type = if path.is_dir() {
+                            EntryType::Directory
+                        } else if path.is_symlink() {
+                            EntryType::Symlink
+                        } else {
+                            EntryType::File
+                        };
+
+                        let git_status = self.get_git_status(&path).await;
+                        let is_expanded = self.expanded_dirs.contains(&path);
+
+                        entries.push(ExplorerEntry {
+                            name,
+                            path: path.clone(),
+                            entry_type,
+                            git_status,
+                            indent_level,
+                            is_expanded,
+                        });
                     }
-                    
-                    // Apply filter if set
-                    if !self.filter.is_empty() && !name.to_lowercase().contains(&self.filter.to_lowercase()) {
-                        continue;
-                    }
-                    
-                    let entry_type = if path.is_dir() {
-                        EntryType::Directory
-                    } else if path.is_symlink() {
-                        EntryType::Symlink
-                    } else {
-                        EntryType::File
-                    };
-                    
-                    let git_status = self.get_git_status(&path).await;
-                    let is_expanded = self.expanded_dirs.contains(&path);
-                    
-                    entries.push(ExplorerEntry {
-                        name,
-                        path: path.clone(),
-                        entry_type,
-                        git_status,
-                        indent_level,
-                        is_expanded,
-                    });
                 }
             }
-        }
-        
-        // Sort entries: directories first, then files
-        entries.sort_by(|a, b| {
-            match (&a.entry_type, &b.entry_type) {
+
+            // Sort entries: directories first, then files
+            entries.sort_by(|a, b| match (&a.entry_type, &b.entry_type) {
                 (EntryType::Directory, EntryType::File) => std::cmp::Ordering::Less,
                 (EntryType::File, EntryType::Directory) => std::cmp::Ordering::Greater,
                 _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            });
+
+            // Add entries to main list
+            for entry in entries {
+                self.entries.push(entry.clone());
+
+                // If directory is expanded, load its contents
+                if entry.entry_type == EntryType::Directory && entry.is_expanded {
+                    self.load_directory_tree(&entry.path, indent_level + 1)
+                        .await?;
+                }
             }
-        });
-        
-        // Add entries to main list
-        for entry in entries {
-            self.entries.push(entry.clone());
-            
-            // If directory is expanded, load its contents
-            if entry.entry_type == EntryType::Directory && entry.is_expanded {
-                self.load_directory_tree(&entry.path, indent_level + 1).await?;
-            }
-        }
-        
-        Ok(())
+
+            Ok(())
         })
     }
 
@@ -179,13 +184,7 @@ impl ExplorerPanel {
     }
 
     /// Render the explorer panel
-    pub fn render(
-        &mut self,
-        frame: &mut Frame,
-        area: Rect,
-        theme: &Theme,
-        is_active: bool,
-    ) {
+    pub fn render(&mut self, frame: &mut Frame, area: Rect, theme: &Theme, is_active: bool) {
         let items: Vec<ListItem> = self
             .entries
             .iter()
@@ -212,10 +211,6 @@ impl ExplorerPanel {
 
         frame.render_stateful_widget(list, area, &mut self.list_state);
     }
-
-
-
-
 
     /// Handle key events for explorer panel
     pub async fn handle_key_event(&mut self, key: KeyEvent, _theme: &Theme) -> Result<bool> {
@@ -271,7 +266,7 @@ impl ExplorerPanel {
             }
             _ => {}
         }
-        
+
         Ok(false)
     }
 
@@ -325,7 +320,7 @@ impl ExplorerPanel {
     pub fn filter(&self) -> &str {
         &self.filter
     }
-    
+
     /// Set root directory
     pub async fn set_root(&mut self, path: PathBuf) -> Result<()> {
         self.current_dir = path;
@@ -333,7 +328,7 @@ impl ExplorerPanel {
         self.list_state.select(Some(0));
         Ok(())
     }
-    
+
     /// Clear root directory (close folder)
     pub async fn clear_root(&mut self) -> Result<()> {
         self.current_dir = std::env::current_dir()?;
@@ -350,12 +345,10 @@ fn create_list_item<'a>(entry: &'a ExplorerEntry, theme: &'a Theme) -> ListItem<
     let icon = get_entry_icon(entry);
     let git_indicator = get_git_indicator(&entry.git_status);
     let name_style = get_entry_style(entry, theme);
-    
+
     let content = format!("{}{} {}{}", indent, icon, entry.name, git_indicator);
-    
-    ListItem::new(Line::from(vec![
-        Span::styled(content, name_style)
-    ]))
+
+    ListItem::new(Line::from(vec![Span::styled(content, name_style)]))
 }
 
 /// Get icon for entry type
@@ -406,19 +399,23 @@ fn get_git_indicator(status: &GitStatus) -> &'static str {
 /// Get style for entry based on type and status
 fn get_entry_style(entry: &ExplorerEntry, theme: &Theme) -> Style {
     let mut style = theme.text_style();
-    
+
     match entry.entry_type {
         EntryType::Directory => {
-            style = style.fg(theme.directory_color()).add_modifier(Modifier::BOLD);
+            style = style
+                .fg(theme.directory_color())
+                .add_modifier(Modifier::BOLD);
         }
         EntryType::File => {
             style = style.fg(theme.file_color());
         }
         EntryType::Symlink => {
-            style = style.fg(theme.symlink_color()).add_modifier(Modifier::ITALIC);
+            style = style
+                .fg(theme.symlink_color())
+                .add_modifier(Modifier::ITALIC);
         }
     }
-    
+
     // Apply Git status styling
     match entry.git_status {
         GitStatus::Modified => style = style.fg(Color::Yellow),
@@ -427,6 +424,6 @@ fn get_entry_style(entry: &ExplorerEntry, theme: &Theme) -> Style {
         GitStatus::Untracked => style = style.fg(Color::Cyan),
         _ => {}
     }
-    
+
     style
 }

@@ -1,15 +1,15 @@
 // Consensus pipeline stages
 // Each stage implements specific logic matching TypeScript behavior
 
+pub mod curator;
 pub mod generator;
 pub mod refiner;
 pub mod validator;
-pub mod curator;
 
-pub use generator::GeneratorStage;
-pub use refiner::RefinerStage; 
-pub use validator::ValidatorStage;
 pub use curator::CuratorStage;
+pub use generator::GeneratorStage;
+pub use refiner::RefinerStage;
+pub use validator::ValidatorStage;
 
 use crate::consensus::types::{Message, Stage};
 use anyhow::Result;

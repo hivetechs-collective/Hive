@@ -1,11 +1,11 @@
 //! Event Dispatcher - Advanced event routing and processing with priority queues
 
-use std::sync::Arc;
-use std::collections::{HashMap, BinaryHeap};
-use tokio::sync::{RwLock, Mutex, mpsc};
-use anyhow::{Result, anyhow};
+use super::{EventHandler, EventType, HookEvent, HookPriority};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use super::{HookEvent, EventType, EventHandler, HookPriority};
+use std::collections::{BinaryHeap, HashMap};
+use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex, RwLock};
 
 /// Event dispatcher configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,7 +108,7 @@ impl RateLimiter {
             last_refill: chrono::Utc::now(),
         }
     }
-    
+
     fn try_consume(&mut self) -> bool {
         self.refill();
         if self.tokens > 0 {
@@ -118,7 +118,7 @@ impl RateLimiter {
             false
         }
     }
-    
+
     fn refill(&mut self) {
         let now = chrono::Utc::now();
         let elapsed = now.signed_duration_since(self.last_refill);
@@ -153,27 +153,27 @@ impl EventDispatcher {
             shutdown_tx: None,
         }
     }
-    
+
     /// Start the dispatcher workers
     pub async fn start(&mut self) -> Result<()> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         self.shutdown_tx = Some(shutdown_tx);
-        
+
         // Create default queue
         let mut queues = self.queues.write().await;
         queues.insert(
             "default".to_string(),
-            Arc::new(Mutex::new(BinaryHeap::new()))
+            Arc::new(Mutex::new(BinaryHeap::new())),
         );
         drop(queues);
-        
+
         // Spawn worker threads
         for i in 0..self.config.worker_threads {
             let queues = self.queues.clone();
             let event_handler = self.event_handler.clone();
             let stats = self.stats.clone();
             let config = self.config.clone();
-            
+
             tokio::spawn(async move {
                 loop {
                     // Process events from all queues
@@ -181,13 +181,13 @@ impl EventDispatcher {
                         let queues = queues.read().await;
                         queues.keys().cloned().collect()
                     };
-                    
+
                     for queue_name in queue_names {
                         if let Some(queue) = queues.read().await.get(&queue_name) {
                             let events = {
                                 let mut q = queue.lock().await;
                                 let mut batch = Vec::new();
-                                
+
                                 // Collect batch of events
                                 while batch.len() < config.batch_size && !q.is_empty() {
                                     if let Some(event) = q.pop() {
@@ -200,22 +200,25 @@ impl EventDispatcher {
                                         }
                                     }
                                 }
-                                
+
                                 batch
                             };
-                            
+
                             // Process batch
                             for prioritized_event in events {
                                 let start = std::time::Instant::now();
-                                
-                                if let Err(e) = event_handler.handle_event(prioritized_event.event).await {
+
+                                if let Err(e) =
+                                    event_handler.handle_event(prioritized_event.event).await
+                                {
                                     tracing::error!("Worker {} failed to process event: {}", i, e);
                                 } else {
                                     let mut stats = stats.write().await;
                                     stats.events_processed += 1;
-                                    
+
                                     let duration = start.elapsed().as_secs_f64();
-                                    stats.processing_times
+                                    stats
+                                        .processing_times
                                         .entry(queue_name.clone())
                                         .and_modify(|t| *t = (*t + duration) / 2.0)
                                         .or_insert(duration);
@@ -223,15 +226,18 @@ impl EventDispatcher {
                             }
                         }
                     }
-                    
-                    tokio::time::sleep(tokio::time::Duration::from_millis(config.processing_interval_ms)).await;
+
+                    tokio::time::sleep(tokio::time::Duration::from_millis(
+                        config.processing_interval_ms,
+                    ))
+                    .await;
                 }
             });
         }
-        
+
         Ok(())
     }
-    
+
     /// Stop the dispatcher
     pub async fn stop(&mut self) -> Result<()> {
         if let Some(tx) = self.shutdown_tx.take() {
@@ -239,108 +245,113 @@ impl EventDispatcher {
         }
         Ok(())
     }
-    
+
     /// Dispatch an event
     pub async fn dispatch(&self, event: HookEvent) -> Result<()> {
         let mut stats = self.stats.write().await;
         stats.events_received += 1;
         drop(stats);
-        
+
         // Determine routing
         let (queue_name, priority) = self.route_event(&event).await?;
-        
+
         // Check rate limit
         if !self.check_rate_limit(&event).await? {
             let mut stats = self.stats.write().await;
             stats.events_dropped += 1;
             return Err(anyhow!("Rate limit exceeded for event type"));
         }
-        
+
         // Get or create queue
         let queue = {
             let mut queues = self.queues.write().await;
-            queues.entry(queue_name.clone())
+            queues
+                .entry(queue_name.clone())
                 .or_insert_with(|| Arc::new(Mutex::new(BinaryHeap::new())))
                 .clone()
         };
-        
+
         // Add to queue
         let mut q = queue.lock().await;
-        
+
         // Check queue size
         if q.len() >= self.config.max_queue_size {
             let mut stats = self.stats.write().await;
             stats.events_dropped += 1;
             return Err(anyhow!("Queue {} is full", queue_name));
         }
-        
+
         let prioritized_event = PrioritizedEvent {
             event,
             priority,
             timestamp: chrono::Utc::now(),
-            ttl: chrono::Utc::now() + chrono::Duration::seconds(self.config.event_ttl_seconds as i64),
+            ttl: chrono::Utc::now()
+                + chrono::Duration::seconds(self.config.event_ttl_seconds as i64),
             queue_name: queue_name.clone(),
         };
-        
+
         q.push(prioritized_event);
-        
+
         // Update stats
         let mut stats = self.stats.write().await;
         stats.queue_sizes.insert(queue_name, q.len());
-        
+
         Ok(())
     }
-    
+
     /// Route event based on rules
     async fn route_event(&self, event: &HookEvent) -> Result<(String, HookPriority)> {
         let rules = self.routing_rules.read().await;
-        
+
         for rule in rules.iter() {
             if rule.event_types.contains(&event.event_type) {
-                let queue = rule.target_queue.clone().unwrap_or_else(|| "default".to_string());
+                let queue = rule
+                    .target_queue
+                    .clone()
+                    .unwrap_or_else(|| "default".to_string());
                 let priority = rule.priority_override.unwrap_or(HookPriority::Normal);
                 return Ok((queue, priority));
             }
         }
-        
+
         // Default routing
         Ok(("default".to_string(), HookPriority::Normal))
     }
-    
+
     /// Check rate limit for event
     async fn check_rate_limit(&self, event: &HookEvent) -> Result<bool> {
         let rules = self.routing_rules.read().await;
-        
+
         for rule in rules.iter() {
             if rule.event_types.contains(&event.event_type) {
                 if let Some(limit) = rule.rate_limit {
                     let key = format!("{:?}", event.event_type);
                     let mut limiters = self.rate_limiters.write().await;
-                    
+
                     let limiter = limiters
                         .entry(key)
                         .or_insert_with(|| RateLimiter::new(limit));
-                    
+
                     return Ok(limiter.try_consume());
                 }
             }
         }
-        
+
         Ok(true)
     }
-    
+
     /// Add a routing rule
     pub async fn add_routing_rule(&self, rule: RoutingRule) -> Result<()> {
         let mut rules = self.routing_rules.write().await;
         rules.push(rule);
         Ok(())
     }
-    
+
     /// Get dispatcher statistics
     pub async fn get_stats(&self) -> DispatcherStats {
         self.stats.read().await.clone()
     }
-    
+
     /// Clear all queues
     pub async fn clear_queues(&self) -> Result<()> {
         let queues = self.queues.read().await;
@@ -348,10 +359,10 @@ impl EventDispatcher {
             let mut q = queue.lock().await;
             q.clear();
         }
-        
+
         let mut stats = self.stats.write().await;
         stats.queue_sizes.clear();
-        
+
         Ok(())
     }
 }
@@ -359,7 +370,7 @@ impl EventDispatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_event_dispatcher() {
         // Test will be implemented

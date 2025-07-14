@@ -18,7 +18,8 @@ pub async fn run_benchmarks() -> Result<()> {
 
     // Consensus engine initialization
     let consensus_start = Instant::now();
-    let engine = crate::consensus::ConsensusEngine::new(None).await
+    let engine = crate::consensus::ConsensusEngine::new(None)
+        .await
         .context("Failed to initialize consensus engine")?;
     let consensus_time = consensus_start.elapsed();
     println!(" Consensus engine initialization: {:?}", consensus_time);
@@ -45,7 +46,7 @@ pub async fn run_benchmarks() -> Result<()> {
 fn get_memory_usage() -> f64 {
     // Simple approximation - in production would use proper memory profiling
     use std::fs;
-    
+
     if let Ok(status) = fs::read_to_string("/proc/self/status") {
         for line in status.lines() {
             if line.starts_with("VmRSS:") {
@@ -57,7 +58,7 @@ fn get_memory_usage() -> f64 {
             }
         }
     }
-    
+
     // Fallback estimate
     25.0
 }

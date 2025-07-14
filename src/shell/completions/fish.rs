@@ -248,28 +248,28 @@ complete -c hive -n "__fish_seen_subcommand_from status" -l health -d "Run compr
 # Context-aware suggestions based on current directory
 function __fish_hive_suggest_based_on_context
     set -l context_suggestions
-    
+
     # Check for various project types and suggest relevant commands
     if test -f Cargo.toml
         echo -e "analyze\t🦀 Analyze this Rust project"
         echo -e "ask 'How can I optimize this Rust code?'\t💡 Get Rust-specific optimization suggestions"
     end
-    
+
     if test -f package.json
         echo -e "analyze\t📦 Analyze this Node.js/JavaScript project"
         echo -e "ask 'Review this JavaScript code for security issues'\t🔒 Security analysis"
     end
-    
+
     if test -f requirements.txt -o -f pyproject.toml
         echo -e "analyze\t🐍 Analyze this Python project"
         echo -e "ask 'Suggest Python best practices for this code'\t✨ Python improvements"
     end
-    
+
     if test -f go.mod
         echo -e "analyze\t🐹 Analyze this Go project"
         echo -e "ask 'How can I improve Go code performance?'\t⚡ Go optimization"
     end
-    
+
     if test -d .git
         echo -e "trust check .\t🔍 Check git repository trust status"
         echo -e "ask 'Analyze git history for patterns'\t📊 Git analysis"
@@ -284,7 +284,7 @@ function __fish_hive_analyze_directories
             echo $dir
         end
     end
-    
+
     # Include git repositories
     find . -maxdepth 2 -name ".git" -type d | sed 's|/\.git$||' | sed 's|^\./||'
 end
@@ -364,30 +364,30 @@ end
 
 function hive_context_detect -d "🔍 Detect and display project context"
     set -l context ""
-    
+
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1
         set context "git"
     end
-    
+
     if test -f Cargo.toml
         set context "$context rust"
     end
-    
+
     if test -f package.json
         set context "$context javascript"
     end
-    
+
     if test -f requirements.txt -o -f pyproject.toml
         set context "$context python"
     end
-    
+
     if test -f go.mod
         set context "$context go"
     end
-    
+
     if test -n "$context"
         echo "🔍 Detected context: $context"
-        
+
         # Provide context-specific suggestions
         switch $context
             case "*rust*"
@@ -434,19 +434,19 @@ mod tests {
     #[test]
     fn test_fish_completions_generation() {
         let completions = generate_fish_completions();
-        
+
         // Basic structure checks
         assert!(completions.contains("# Fish completion for Hive AI"));
         assert!(completions.contains("complete -c hive -f"));
-        
+
         // Check for main commands with emojis
         assert!(completions.contains("🔍 Analyze and understand"));
         assert!(completions.contains("🤖 Ask the AI consensus"));
-        
+
         // Check for subcommands
         assert!(completions.contains("__fish_seen_subcommand_from analyze"));
         assert!(completions.contains("__fish_seen_subcommand_from memory"));
-        
+
         // Check for Fish-specific features
         assert!(completions.contains("abbr -a ha"));
         assert!(completions.contains("function hive_quick_ask"));
@@ -456,12 +456,12 @@ mod tests {
     #[test]
     fn test_fish_completions_context_awareness() {
         let completions = generate_fish_completions();
-        
+
         // Should contain context detection
         assert!(completions.contains("__fish_hive_suggest_based_on_context"));
         assert!(completions.contains("test -f Cargo.toml"));
         assert!(completions.contains("test -f package.json"));
-        
+
         // Should contain smart file completion
         assert!(completions.contains("__fish_hive_improve_files"));
         assert!(completions.contains("__fish_hive_analyze_directories"));
@@ -470,7 +470,7 @@ mod tests {
     #[test]
     fn test_fish_completions_abbreviations() {
         let completions = generate_fish_completions();
-        
+
         // Check for abbreviations
         assert!(completions.contains("abbr -a ha 'hive analyze'"));
         assert!(completions.contains("abbr -a hq 'hive ask'"));

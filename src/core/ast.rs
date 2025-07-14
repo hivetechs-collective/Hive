@@ -3,14 +3,14 @@
 //! This module provides a unified AST parsing interface that supports
 //! multiple programming languages using tree-sitter parsers.
 
+use anyhow::anyhow;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Arc;
-use anyhow::anyhow;
-use serde::{Serialize, Deserialize};
 
 use crate::{
-    core::{Language, error::Result},
     cache::{self, CacheCategory, CacheKey},
+    core::{error::Result, Language},
 };
 
 // Re-exports are handled through the struct/enum definitions themselves
@@ -70,10 +70,10 @@ pub struct NodeMetadata {
 pub trait LanguageParser: Send + Sync {
     /// Parse source code into AST
     fn parse(&self, source: &str) -> Result<AstNode>;
-    
+
     /// Get language name
     fn language(&self) -> Language;
-    
+
     /// Extract symbols from AST
     fn extract_symbols(&self, ast: &AstNode) -> Vec<Symbol>;
 }
@@ -216,7 +216,11 @@ impl LanguageParser for GenericParser {
         Ok(AstNode {
             node_type: "source_file".to_string(),
             name: None,
-            start_pos: Position { line: 0, column: 0, offset: 0 },
+            start_pos: Position {
+                line: 0,
+                column: 0,
+                offset: 0,
+            },
             end_pos: Position {
                 line: source.lines().count().saturating_sub(1),
                 column: source.lines().last().map(|l| l.len()).unwrap_or(0),
@@ -233,11 +237,11 @@ impl LanguageParser for GenericParser {
             },
         })
     }
-    
+
     fn language(&self) -> Language {
         self.language
     }
-    
+
     fn extract_symbols(&self, _ast: &AstNode) -> Vec<Symbol> {
         // Placeholder implementation
         vec![]
@@ -248,7 +252,7 @@ impl AstEngine {
     /// Create a new AST engine
     pub fn new() -> Self {
         let mut parsers = std::collections::HashMap::new();
-        
+
         // Register parsers for each language
         for lang in &[
             Language::Rust,
@@ -262,17 +266,17 @@ impl AstEngine {
         ] {
             parsers.insert(
                 *lang,
-                Arc::new(GenericParser { language: *lang }) as Arc<dyn LanguageParser>
+                Arc::new(GenericParser { language: *lang }) as Arc<dyn LanguageParser>,
             );
         }
-        
+
         Self { parsers }
     }
-    
+
     /// Parse a file into an AST
     pub async fn parse_file(&self, path: &Path, content: &str) -> Result<ParseResult> {
         let language = crate::core::detect_language(path);
-        
+
         // Check cache first
         let cache_key = CacheKey::ast(path);
         if let Some(cached) = cache::get(&cache_key, CacheCategory::Ast).await {
@@ -281,30 +285,32 @@ impl AstEngine {
                 return Ok(result);
             }
         }
-        
+
         // Parse the file
         let result = self.parse_content(content, language).await?;
-        
+
         // Cache the result
         if let Ok(serialized) = serde_json::to_vec(&result) {
             let _ = cache::put(cache_key, serialized, CacheCategory::Ast).await;
         }
-        
+
         Ok(result)
     }
-    
+
     /// Parse content with a specific language
     pub async fn parse_content(&self, content: &str, language: Language) -> Result<ParseResult> {
-        let parser = self.parsers.get(&language)
+        let parser = self
+            .parsers
+            .get(&language)
             .ok_or_else(|| anyhow!("No parser available for {:?}", language))?;
-        
+
         let ast = parser.parse(content)?;
         let symbols = parser.extract_symbols(&ast);
-        
+
         // Extract additional information
         let imports = self.extract_imports(&ast, language);
         let metrics = self.calculate_metrics(&ast, content);
-        
+
         Ok(ParseResult {
             ast,
             symbols,
@@ -313,19 +319,19 @@ impl AstEngine {
             metrics,
         })
     }
-    
+
     /// Extract import statements from AST
     fn extract_imports(&self, _ast: &AstNode, _language: Language) -> Vec<ImportInfo> {
         // Placeholder implementation
         vec![]
     }
-    
+
     /// Calculate code metrics from AST
     fn calculate_metrics(&self, ast: &AstNode, content: &str) -> CodeMetrics {
         let lines: Vec<&str> = content.lines().collect();
         let mut code_lines = 0;
         let mut comment_lines = 0;
-        
+
         for line in &lines {
             let trimmed = line.trim();
             if trimmed.is_empty() {
@@ -337,7 +343,7 @@ impl AstEngine {
                 code_lines += 1;
             }
         }
-        
+
         CodeMetrics {
             lines_of_code: code_lines,
             comment_lines,
@@ -347,63 +353,77 @@ impl AstEngine {
             max_nesting: self.calculate_max_nesting(ast, 0),
         }
     }
-    
+
     /// Calculate cyclomatic complexity
     fn calculate_complexity(&self, ast: &AstNode) -> u32 {
         let mut complexity = 1;
-        
+
         // Add complexity for control flow nodes
-        if matches!(ast.node_type.as_str(), "if_statement" | "while_statement" | "for_statement" | "match_expression" | "case_statement") {
+        if matches!(
+            ast.node_type.as_str(),
+            "if_statement"
+                | "while_statement"
+                | "for_statement"
+                | "match_expression"
+                | "case_statement"
+        ) {
             complexity += 1;
         }
-        
+
         for child in &ast.children {
             complexity += self.calculate_complexity(child);
         }
-        
+
         complexity
     }
-    
+
     /// Count nodes of a specific type
     fn count_nodes(&self, ast: &AstNode, node_type: &str) -> usize {
         let mut count = 0;
-        
+
         if ast.node_type.contains(node_type) {
             count += 1;
         }
-        
+
         for child in &ast.children {
             count += self.count_nodes(child, node_type);
         }
-        
+
         count
     }
-    
+
     /// Calculate maximum nesting depth
     fn calculate_max_nesting(&self, ast: &AstNode, current_depth: u32) -> u32 {
         let mut max_depth = current_depth;
-        
+
         for child in &ast.children {
             let child_depth = self.calculate_max_nesting(child, current_depth + 1);
             max_depth = max_depth.max(child_depth);
         }
-        
+
         max_depth
     }
-    
+
     /// Find symbol at a specific position
-    pub fn find_symbol_at<'a>(&self, result: &'a ParseResult, line: usize, column: usize) -> Option<&'a Symbol> {
-        result.symbols.iter().find(|s| {
-            s.location.line == line && 
-            s.location.column <= column
-        })
+    pub fn find_symbol_at<'a>(
+        &self,
+        result: &'a ParseResult,
+        line: usize,
+        column: usize,
+    ) -> Option<&'a Symbol> {
+        result
+            .symbols
+            .iter()
+            .find(|s| s.location.line == line && s.location.column <= column)
     }
-    
+
     /// Get all symbols of a specific kind
-    pub fn get_symbols_by_kind<'a>(&self, result: &'a ParseResult, kind: SymbolKind) -> Vec<&'a Symbol> {
-        result.symbols.iter()
-            .filter(|s| s.kind == kind)
-            .collect()
+    pub fn get_symbols_by_kind<'a>(
+        &self,
+        result: &'a ParseResult,
+        kind: SymbolKind,
+    ) -> Vec<&'a Symbol> {
+        result.symbols.iter().filter(|s| s.kind == kind).collect()
     }
 }
 
@@ -416,7 +436,7 @@ impl Default for AstEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_ast_engine() -> Result<()> {
         let engine = AstEngine::new();
@@ -425,21 +445,29 @@ fn main() {
     println!("Hello, world!");
 }
 "#;
-        
+
         let result = engine.parse_content(content, Language::Rust).await?;
         assert_eq!(result.metrics.lines_of_code, 3);
-        
+
         Ok(())
     }
-    
+
     #[test]
     fn test_code_metrics() {
         let engine = AstEngine::new();
         let ast = AstNode {
             node_type: "function".to_string(),
             name: Some("test".to_string()),
-            start_pos: Position { line: 0, column: 0, offset: 0 },
-            end_pos: Position { line: 5, column: 0, offset: 100 },
+            start_pos: Position {
+                line: 0,
+                column: 0,
+                offset: 0,
+            },
+            end_pos: Position {
+                line: 5,
+                column: 0,
+                offset: 100,
+            },
             children: vec![],
             metadata: NodeMetadata {
                 is_definition: true,
@@ -450,7 +478,7 @@ fn main() {
                 complexity: 1,
             },
         };
-        
+
         let count = engine.count_nodes(&ast, "function");
         assert_eq!(count, 1);
     }
