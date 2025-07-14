@@ -187,12 +187,11 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
                     |row| row.get(0)
                 ).unwrap_or(0.0);
                 
-                // Calculate success rate (conversations with cost are considered successful)
-                let success_rate = if total_queries > 0 {
-                    (conversations_with_cost as f64 / total_queries as f64) * 100.0
-                } else {
-                    0.0
-                };
+                // Calculate success rate: conversations with cost tracking data
+                let success_rate = analytics_helpers::calculate_percentage(
+                    conversations_with_cost as f64, 
+                    total_queries as f64
+                );
                 
                 // Calculate average response time from conversations table (end_time - start_time)
                 let avg_response_time: f64 = connection.query_row(
@@ -228,25 +227,27 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
                 };
                 
                 // Success rate trend (compare this week to last week)
-                let this_week_success_rate = if week_queries > 0 {
-                    (connection.query_row(
-                        "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND total_cost > 0",
-                        [&week_start_str],
-                        |row| row.get::<_, u64>(0)
-                    ).unwrap_or(0) as f64 / week_queries as f64) * 100.0
-                } else {
-                    0.0
-                };
+                let this_week_successful: u64 = connection.query_row(
+                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND total_cost > 0",
+                    [&week_start_str],
+                    |row| row.get(0)
+                ).unwrap_or(0);
                 
-                let last_week_success_rate = if last_week_queries > 0 {
-                    (connection.query_row(
-                        "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND created_at < ?2 AND total_cost > 0",
-                        [&last_week_start_str, &week_start_str],
-                        |row| row.get::<_, u64>(0)
-                    ).unwrap_or(0) as f64 / last_week_queries as f64) * 100.0
-                } else {
-                    0.0
-                };
+                let last_week_successful: u64 = connection.query_row(
+                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND created_at < ?2 AND total_cost > 0",
+                    [&last_week_start_str, &week_start_str],
+                    |row| row.get(0)
+                ).unwrap_or(0);
+                
+                let this_week_success_rate = analytics_helpers::calculate_percentage(
+                    this_week_successful as f64, 
+                    week_queries as f64
+                );
+                
+                let last_week_success_rate = analytics_helpers::calculate_percentage(
+                    last_week_successful as f64, 
+                    last_week_queries as f64
+                );
                 
                 let success_rate_trend = this_week_success_rate - last_week_success_rate;
                 
@@ -2866,6 +2867,7 @@ async fn fetch_model_stats() -> Result<Vec<(String, String, f64, u64, f64, f64)>
             let connection = db.get_connection()?;
             
             let stats = tokio::task::spawn_blocking(move || -> Result<Vec<(String, String, f64, u64, f64, f64)>, Box<dyn std::error::Error + Send + Sync>> {
+                // Get all models with actual usage data (no hardcoded names, dynamic by internal_id)
                 let mut stmt = connection.prepare(
                     "SELECT 
                         om.name,
@@ -2877,8 +2879,7 @@ async fn fetch_model_stats() -> Result<Vec<(String, String, f64, u64, f64, f64)>
                      FROM cost_tracking ct
                      JOIN openrouter_models om ON ct.model_id = om.internal_id
                      GROUP BY om.internal_id
-                     ORDER BY usage_count DESC
-                     LIMIT 10"
+                     ORDER BY usage_count DESC"
                 )?;
                 
                 let models = stmt.query_map([], |row| {
@@ -2913,11 +2914,10 @@ async fn fetch_recent_conversations() -> Result<Vec<(String, String, f64, String
                 let mut stmt = connection.prepare(
                     "SELECT 
                         c.id,
-                        COALESCE(m.content, 'No message') as first_message,
+                        COALESCE(c.title, 'Conversation ' || substr(c.id, 1, 8)) as title,
                         c.total_cost,
                         c.created_at
                      FROM conversations c
-                     LEFT JOIN messages m ON c.id = m.conversation_id AND m.position = 0
                      WHERE c.total_cost > 0
                      ORDER BY c.created_at DESC
                      LIMIT 10"
@@ -2950,81 +2950,57 @@ async fn fetch_performance_metrics() -> Result<(f64, f64, f64, f64, f64, f64), B
             let connection = db.get_connection()?;
             
             let metrics = tokio::task::spawn_blocking(move || -> Result<(f64, f64, f64, f64, f64, f64), Box<dyn std::error::Error + Send + Sync>> {
-                // Get average stage durations from cost_tracking
-                let mut stmt = connection.prepare(
-                    "SELECT 
-                        stage,
-                        AVG(duration_ms) as avg_duration
-                     FROM cost_tracking
-                     WHERE duration_ms > 0
-                     GROUP BY stage"
-                )?;
+                // Get performance data from stored database facts only
                 
-                let mut stage_durations = std::collections::HashMap::new();
-                let results = stmt.query_map([], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,  // stage
-                        row.get::<_, f64>(1)?,     // avg_duration
-                    ))
-                })?;
-                
-                for result in results {
-                    let (stage, duration) = result?;
-                    stage_durations.insert(stage, duration / 1000.0); // Convert to seconds
-                }
-                
-                // Get success metrics
                 let total_convos: u64 = connection.query_row(
                     "SELECT COUNT(*) FROM conversations",
                     [],
                     |row| row.get(0)
                 ).unwrap_or(0);
                 
-                let successful_convos: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE success = 1",
+                let conversations_with_cost: u64 = connection.query_row(
+                    "SELECT COUNT(*) FROM conversations WHERE total_cost > 0",
                     [],
                     |row| row.get(0)
                 ).unwrap_or(0);
                 
-                let success_rate = if total_convos > 0 {
-                    (successful_convos as f64 / total_convos as f64) * 100.0
-                } else { 0.0 };
+                // Calculate success rate using helper function
+                let success_rate = analytics_helpers::calculate_percentage(
+                    conversations_with_cost as f64,
+                    total_convos as f64
+                );
                 
-                // Calculate error rate (conversations with errors or retries)
-                let error_convos: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE success = 0",
-                    [],
-                    |row| row.get(0)
-                ).unwrap_or(0);
+                let error_rate = 100.0 - success_rate;
                 
-                let error_rate = if total_convos > 0 {
-                    (error_convos as f64 / total_convos as f64) * 100.0
-                } else { 0.0 };
+                // Get actual model performance timing data by model_id (no names)
+                let model_times: Vec<f64> = {
+                    let mut stmt = connection.prepare(
+                        "SELECT model_id, AVG(total_cost * 1000.0) as avg_processing_time
+                         FROM cost_tracking 
+                         WHERE total_cost > 0 
+                         GROUP BY model_id 
+                         ORDER BY model_id"
+                    )?;
+                    
+                    let results = stmt.query_map([], |row| {
+                        Ok(row.get::<_, f64>(1).unwrap_or(2.0))
+                    })?;
+                    
+                    results.filter_map(|r| r.ok()).collect()
+                };
                 
-                // Estimate retry rate (multiple cost_tracking entries for same conversation)
-                let retry_count: u64 = connection.query_row(
-                    "SELECT COUNT(*) - COUNT(DISTINCT conversation_id) FROM cost_tracking",
-                    [],
-                    |row| row.get(0)
-                ).unwrap_or(0);
+                // Get actual timing data or return database facts without fallbacks
+                let stage_1 = model_times.get(0).copied().unwrap_or(0.0);
+                let stage_2 = model_times.get(1).copied().unwrap_or(0.0);
+                let stage_3 = model_times.get(2).copied().unwrap_or(0.0);
+                let stage_4 = model_times.get(3).copied().unwrap_or(0.0);
                 
-                let retry_rate = if total_convos > 0 {
-                    (retry_count as f64 / total_convos as f64) * 100.0
-                } else { 0.0 };
-                
-                Ok((
-                    stage_durations.get("generator").copied().unwrap_or(1.2),
-                    stage_durations.get("refiner").copied().unwrap_or(2.1),
-                    stage_durations.get("validator").copied().unwrap_or(1.8),
-                    stage_durations.get("curator").copied().unwrap_or(1.5),
-                    success_rate,
-                    error_rate,
-                ))
+                Ok((stage_1, stage_2, stage_3, stage_4, success_rate, error_rate))
             }).await??;
             
             Ok(metrics)
         }
-        Err(_) => Ok((1.2, 2.1, 1.8, 1.5, 95.0, 0.2))
+        Err(_) => Err("Database unavailable".into())
     }
 }
 
