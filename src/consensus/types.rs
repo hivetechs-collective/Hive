@@ -91,6 +91,10 @@ pub struct TokenUsage {
 pub struct StageAnalytics {
     pub duration: f64,
     pub cost: f64,
+    #[serde(rename = "inputCost")]
+    pub input_cost: f64,
+    #[serde(rename = "outputCost")]
+    pub output_cost: f64,
     pub provider: String,
     #[serde(rename = "modelInternalId")]
     pub model_internal_id: String,

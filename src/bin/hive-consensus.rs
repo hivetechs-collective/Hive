@@ -2144,7 +2144,7 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                 div {
                     style: "margin-top: 10px; padding-top: 10px; border-top: 1px solid #3e3e42; display: flex; justify-content: space-between; font-size: 11px; color: #858585;",
                     span { "Tokens: {consensus_state.total_tokens}" }
-                    span { "Cost: ${consensus_state.estimated_cost:.4}" }
+                    span { "Cost: ${consensus_state.estimated_cost:.8}" }
                 }
             }
         }
