@@ -1,0 +1,231 @@
+name: Build Release Binaries
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-macos:
+    name: Build macOS Universal Binary
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      
+      - name: Build Intel binary
+        run: cargo build --bin hive-consensus --release --target x86_64-apple-darwin
+      
+      - name: Build Apple Silicon binary
+        run: cargo build --bin hive-consensus --release --target aarch64-apple-darwin
+      
+      - name: Create universal binary
+        run: |
+          mkdir -p dist
+          lipo -create \
+            target/x86_64-apple-darwin/release/hive-consensus \
+            target/aarch64-apple-darwin/release/hive-consensus \
+            -output dist/hive-macos-universal
+          chmod +x dist/hive-macos-universal
+          
+      - name: Create macOS app bundle
+        run: |
+          ./scripts/package-macos.sh
+          mv dist/Hive.app dist/Hive-macOS.app
+          
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-binaries
+          path: |
+            dist/hive-macos-universal
+            dist/Hive-macOS.app
+
+  build-windows:
+    name: Build Windows Binary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      
+      - name: Build Windows binary
+        run: cargo build --bin hive-consensus --release
+      
+      - name: Prepare Windows artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/release/hive-consensus.exe dist/hive-windows-x64.exe
+          
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: dist/hive-windows-x64.exe
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+      
+      - name: Build Linux binary
+        run: cargo build --bin hive-consensus --release
+      
+      - name: Prepare Linux artifact
+        run: |
+          mkdir -p dist
+          cp target/release/hive-consensus dist/hive-linux-x64
+          chmod +x dist/hive-linux-x64
+          
+      - name: Create AppImage
+        run: |
+          # Download appimagetool
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+          
+          # Create AppDir structure
+          mkdir -p Hive.AppDir/usr/bin
+          mkdir -p Hive.AppDir/usr/share/applications
+          mkdir -p Hive.AppDir/usr/share/icons/hicolor/256x256/apps
+          
+          # Copy binary
+          cp dist/hive-linux-x64 Hive.AppDir/usr/bin/hive
+          
+          # Create desktop file
+          cat > Hive.AppDir/usr/share/applications/hive.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Hive IDE
+          Exec=hive
+          Icon=hive
+          Type=Application
+          Categories=Development;IDE;
+          Comment=AI-powered development environment
+          EOF
+          
+          # Create AppRun
+          cat > Hive.AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/hive" "$@"
+          EOF
+          chmod +x Hive.AppDir/AppRun
+          
+          # Create AppImage
+          ./appimagetool-x86_64.AppImage Hive.AppDir dist/Hive-linux-x64.AppImage
+          
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: |
+            dist/hive-linux-x64
+            dist/Hive-linux-x64.AppImage
+
+  create-release:
+    name: Create Release and Upload to R2
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          
+          # Copy macOS files
+          cp artifacts/macos-binaries/hive-macos-universal release/
+          cp -r artifacts/macos-binaries/Hive-macOS.app release/
+          
+          # Copy Windows file
+          cp artifacts/windows-binary/hive-windows-x64.exe release/
+          
+          # Copy Linux files
+          cp artifacts/linux-binaries/hive-linux-x64 release/
+          cp artifacts/linux-binaries/Hive-linux-x64.AppImage release/
+          
+          # Generate checksums
+          cd release
+          sha256sum * > checksums.sha256
+          cd ..
+          
+      - name: Install Wrangler
+        run: npm install -g wrangler
+        
+      - name: Upload to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          # Upload to stable channel
+          wrangler r2 object put hivetechs-releases/stable/hive-macos-universal --file=release/hive-macos-universal
+          wrangler r2 object put hivetechs-releases/stable/hive-windows-x64.exe --file=release/hive-windows-x64.exe
+          wrangler r2 object put hivetechs-releases/stable/hive-linux-x64 --file=release/hive-linux-x64
+          wrangler r2 object put hivetechs-releases/stable/Hive-linux-x64.AppImage --file=release/Hive-linux-x64.AppImage
+          wrangler r2 object put hivetechs-releases/stable/checksums.sha256 --file=release/checksums.sha256
+          
+          # If this is a tag, also create a versioned release
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            wrangler r2 object put hivetechs-releases/releases/$VERSION/hive-macos-universal --file=release/hive-macos-universal
+            wrangler r2 object put hivetechs-releases/releases/$VERSION/hive-windows-x64.exe --file=release/hive-windows-x64.exe
+            wrangler r2 object put hivetechs-releases/releases/$VERSION/hive-linux-x64 --file=release/hive-linux-x64
+            wrangler r2 object put hivetechs-releases/releases/$VERSION/Hive-linux-x64.AppImage --file=release/Hive-linux-x64.AppImage
+            wrangler r2 object put hivetechs-releases/releases/$VERSION/checksums.sha256 --file=release/checksums.sha256
+          fi
+          
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/hive-macos-universal
+            release/hive-windows-x64.exe
+            release/hive-linux-x64
+            release/Hive-linux-x64.AppImage
+            release/checksums.sha256
+          body: |
+            ## Hive IDE Release
+            
+            ### Installation
+            
+            **macOS**: Download `hive-macos-universal` and run from terminal
+            **Windows**: Download `hive-windows-x64.exe` and run
+            **Linux**: Download `hive-linux-x64` or `Hive-linux-x64.AppImage`
+            
+            ### Requirements
+            - License key from hivetechs.io
+            - OpenRouter API key
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
