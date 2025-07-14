@@ -618,22 +618,20 @@ impl ConsensusPipeline {
             analytics: Some(StageAnalytics {
                 duration: stage_start.elapsed().as_secs_f64(),
                 cost: response.analytics.cost,
+                input_cost: response.analytics.input_cost,
+                output_cost: response.analytics.output_cost,
                 provider: response.analytics.provider,
                 model_internal_id: response.analytics.model_internal_id,
                 quality_score: response.analytics.quality_score,
                 error_count: response.analytics.error_count,
-                fallback_used: false,
-                rate_limit_hit: false,
-                retry_count: 0,
+                fallback_used: response.analytics.fallback_used,
+                rate_limit_hit: response.analytics.rate_limit_hit,
+                retry_count: response.analytics.retry_count,
                 start_time: Utc::now()
                     - chrono::Duration::seconds(stage_start.elapsed().as_secs() as i64),
                 end_time: Utc::now(),
                 memory_usage: None,
-                features: crate::consensus::types::AnalyticsFeatures {
-                    streaming: self.config.enable_streaming,
-                    routing_variant: "balanced".to_string(),
-                    optimization_applied: Some(true),
-                },
+                features: response.analytics.features,
             }),
         };
 
@@ -728,17 +726,58 @@ impl ConsensusPipeline {
                     // Just update the final content
                     tracker.content = response_content.clone();
 
+                    // For streaming, we need to estimate tokens since we don't get usage from API
+                    let estimated_prompt_tokens = messages.iter()
+                        .map(|m| m.content.len() / 4) // Rough estimate: 1 token = 4 chars
+                        .sum::<usize>() as u32;
+                    let estimated_completion_tokens = (response_content.len() / 4) as u32;
+                    
+                    // Calculate cost using database pricing
+                    let cost_result = if let Some(db) = &self.database {
+                        db.calculate_model_cost(model, estimated_prompt_tokens, estimated_completion_tokens).await
+                    } else {
+                        Ok(0.0)
+                    };
+                    
+                    let (total_cost, input_cost, output_cost) = match cost_result {
+                        Ok(cost) => {
+                            // Calculate component costs
+                            let input_cost = if let Some(db) = &self.database {
+                                db.calculate_model_cost(model, estimated_prompt_tokens, 0).await.unwrap_or(0.0)
+                            } else {
+                                0.0
+                            };
+                            let output_cost = if let Some(db) = &self.database {
+                                db.calculate_model_cost(model, 0, estimated_completion_tokens).await.unwrap_or(0.0)
+                            } else {
+                                0.0
+                            };
+                            (cost, input_cost, output_cost)
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to calculate cost for {}: {}", model, e);
+                            (0.0, 0.0, 0.0)
+                        }
+                    };
+                    
+                    tracing::info!(
+                        "💰 Streaming response - Model: {}, Estimated tokens: {} input, {} output, Cost: ${:.8}",
+                        model, estimated_prompt_tokens, estimated_completion_tokens, total_cost
+                    );
+
                     Ok(ModelResponse {
                         model: model.to_string(),
                         content: response_content,
                         usage: TokenUsage {
-                            prompt_tokens: 0,
-                            completion_tokens: 0,
-                            total_tokens: 0,
+                            prompt_tokens: estimated_prompt_tokens,
+                            completion_tokens: estimated_completion_tokens,
+                            total_tokens: estimated_prompt_tokens + estimated_completion_tokens,
                         },
                         analytics: StageAnalytics {
                             duration: 0.0,
-                            cost: 0.0,
+                            cost: total_cost,
+                            input_cost,
+                            output_cost,
                             provider: "openrouter".to_string(),
                             model_internal_id: model.to_string(),
                             quality_score: 1.0,
@@ -779,41 +818,52 @@ impl ConsensusPipeline {
                         total_tokens: u.total_tokens,
                     });
 
-                    // Calculate cost using real database pricing (matches TypeScript implementation)
-                    let cost = if let Some(ref usage) = usage {
+                    // Calculate cost using real database pricing - NO FALLBACKS
+                    let (cost, input_cost, output_cost) = if let Some(ref usage) = usage {
                         if let Some(ref db) = self.database {
-                            match db.calculate_model_cost(
-                                model,
-                                usage.prompt_tokens,
-                                usage.completion_tokens,
-                            ).await {
-                                Ok(calculated_cost) => {
-                                    tracing::info!(
-                                        "💰 Calculated cost for {}: ${:.6} ({} input + {} output tokens)",
-                                        model,
-                                        calculated_cost,
-                                        usage.prompt_tokens,
-                                        usage.completion_tokens
-                                    );
-                                    calculated_cost
-                                },
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "Failed to calculate model cost for {}: {} - using fallback",
-                                        model,
-                                        e
-                                    );
-                                    // Fallback to rough estimate
-                                    usage.prompt_tokens as f64 * 0.000001 + usage.completion_tokens as f64 * 0.000002
-                                }
+                        tracing::info!(
+                            "💰 Calculating cost for model: {} (prompt: {}, completion: {})",
+                            model,
+                            usage.prompt_tokens,
+                            usage.completion_tokens
+                        );
+                        
+                        match db.calculate_model_cost(
+                            model,
+                            usage.prompt_tokens,
+                            usage.completion_tokens,
+                        ).await {
+                            Ok(calculated_cost) => {
+                                // Also calculate component costs
+                                let input_cost = db.calculate_model_cost(model, usage.prompt_tokens, 0).await.unwrap_or(0.0);
+                                let output_cost = db.calculate_model_cost(model, 0, usage.completion_tokens).await.unwrap_or(0.0);
+                                
+                                tracing::info!(
+                                    "💰 Database cost calculation: ${:.8} for {} ({} input + {} output tokens)",
+                                    calculated_cost,
+                                    model,
+                                    usage.prompt_tokens,
+                                    usage.completion_tokens
+                                );
+                                (calculated_cost, input_cost, output_cost)
+                            },
+                            Err(e) => {
+                                tracing::error!(
+                                    "💰 ERROR: Failed to calculate model cost for {}: {}",
+                                    model,
+                                    e
+                                );
+                                // Return error instead of fallback
+                                return Err(anyhow::anyhow!("Cost calculation failed: {}", e));
                             }
+                        }
                         } else {
-                            tracing::warn!("No database available for cost calculation - using fallback");
-                            // Fallback to rough estimate
-                            usage.prompt_tokens as f64 * 0.000001 + usage.completion_tokens as f64 * 0.000002
+                            tracing::error!("💰 ERROR: No database available for cost calculation");
+                            return Err(anyhow::anyhow!("Cannot calculate cost without database"));
                         }
                     } else {
-                        0.0
+                        tracing::error!("💰 ERROR: No usage data available for cost calculation");
+                        return Err(anyhow::anyhow!("Cannot calculate cost without usage data"));
                     };
 
                     Ok(ModelResponse {
@@ -827,6 +877,8 @@ impl ConsensusPipeline {
                         analytics: StageAnalytics {
                             duration: 0.0,
                             cost,
+                            input_cost,
+                            output_cost,
                             provider: "openrouter".to_string(),
                             model_internal_id: model.to_string(),
                             quality_score: 1.0,
@@ -890,6 +942,8 @@ impl ConsensusPipeline {
                         analytics: StageAnalytics {
                             duration: 0.0,
                             cost: 0.0,
+                            input_cost: 0.0,
+                            output_cost: 0.0,
                             provider: "fallback".to_string(),
                             model_internal_id: "0".to_string(),
                             quality_score: 0.0,
@@ -978,6 +1032,22 @@ impl ConsensusPipeline {
 
             // 1. Store conversation record
             tracing::debug!("Storing conversation record with ID: {}", conversation_id);
+            
+            // Calculate total tokens
+            let total_input_tokens: u32 = stage_results
+                .iter()
+                .map(|s| s.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0))
+                .sum();
+            let total_output_tokens: u32 = stage_results
+                .iter()
+                .map(|s| s.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0))
+                .sum();
+                
+            tracing::info!(
+                "💰 Storing conversation - Total cost: ${:.8}, Input tokens: {}, Output tokens: {}",
+                total_cost, total_input_tokens, total_output_tokens
+            );
+            
             let rows_affected = tx.execute(
                 "INSERT OR REPLACE INTO conversations (
                     id, user_id, consensus_profile_id, total_cost,
@@ -989,14 +1059,8 @@ impl ConsensusPipeline {
                     None::<String>, // user_id is optional, like TypeScript version
                     profile_id,     // Use the actual profile ID from the pipeline
                     total_cost,
-                    stage_results
-                        .iter()
-                        .map(|s| s.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0))
-                        .sum::<u32>(),
-                    stage_results
-                        .iter()
-                        .map(|s| s.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0))
-                        .sum::<u32>(),
+                    total_input_tokens,
+                    total_output_tokens,
                     &now,    // start_time
                     &now,    // end_time
                     1i32,    // success (true)
@@ -1015,9 +1079,10 @@ impl ConsensusPipeline {
                 // Store user message (question) - only for first stage
                 if stage_result.stage_name == "generator" {
                     tx.execute(
-                        "INSERT INTO messages (
-                            id, conversation_id, role, content, stage, model_used, timestamp
-                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        "INSERT INTO conversation_messages (
+                            id, conversation_id, role, content, stage, model_name, 
+                            sequence_number, created_at
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                         params![
                             uuid::Uuid::new_v4().to_string(),
                             conversation_id,
@@ -1025,16 +1090,35 @@ impl ConsensusPipeline {
                             question,
                             None::<String>, // User message has no stage
                             None::<String>, // User message has no model
+                            0i32,           // First message in sequence
                             &now
                         ],
                     )?;
                 }
 
                 // Store assistant message for each stage
+                let sequence_number = match stage_result.stage_name.as_str() {
+                    "generator" => 1,
+                    "refiner" => 2,
+                    "validator" => 3,
+                    "curator" => 4,
+                    _ => 5,
+                };
+                
+                let stage_cost = stage_result.analytics.as_ref().map(|a| a.cost).unwrap_or(0.0);
+                let input_tokens = stage_result.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0) as i32;
+                let output_tokens = stage_result.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0) as i32;
+                
+                tracing::debug!(
+                    "💰 Storing stage {} message - Cost: ${:.8}, Input: {}, Output: {}",
+                    stage_result.stage_name, stage_cost, input_tokens, output_tokens
+                );
+                
                 tx.execute(
-                    "INSERT INTO messages (
-                        id, conversation_id, role, content, stage, model_used, timestamp
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    "INSERT INTO conversation_messages (
+                        id, conversation_id, role, content, stage, model_name,
+                        cost, tokens_input, tokens_output, sequence_number, created_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                     params![
                         uuid::Uuid::new_v4().to_string(),
                         conversation_id,
@@ -1042,12 +1126,58 @@ impl ConsensusPipeline {
                         stage_result.answer,
                         stage_result.stage_name,
                         stage_result.model,
-                        stage_result.timestamp.to_rfc3339()
+                        stage_cost,
+                        input_tokens,
+                        output_tokens,
+                        sequence_number,
+                        &now
                     ],
                 )?;
             }
 
-            // 3. Store in knowledge_conversations (extended format matching TypeScript)
+            // 3. Store cost tracking records for each stage
+            for stage_result in &stage_results {
+                if let Some(analytics) = &stage_result.analytics {
+                    let input_tokens = stage_result.usage.as_ref().map(|u| u.prompt_tokens).unwrap_or(0) as i32;
+                    let output_tokens = stage_result.usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0) as i32;
+                    
+                    // Get model internal_id from openrouter_models table
+                    let model_id: Option<i32> = tx.query_row(
+                        "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
+                        params![&stage_result.model],
+                        |row| row.get(0),
+                    ).optional()?;
+                    
+                    if let Some(model_id) = model_id {
+                        tx.execute(
+                            "INSERT INTO cost_tracking (
+                                user_id, conversation_id, model_id, 
+                                tokens_input, tokens_output,
+                                cost_input, cost_output, total_cost,
+                                created_at
+                            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                            params![
+                                None::<String>, // user_id (optional)
+                                conversation_id,
+                                model_id,
+                                input_tokens,
+                                output_tokens,
+                                analytics.input_cost,
+                                analytics.output_cost,
+                                analytics.cost,
+                                &now
+                            ],
+                        )?;
+                        
+                        tracing::debug!(
+                            "💰 Cost tracking record added for {} - Total: ${:.8}",
+                            stage_result.model, analytics.cost
+                        );
+                    }
+                }
+            }
+            
+            // 4. Store in knowledge_conversations (extended format matching TypeScript)
             tx.execute(
                 "INSERT OR REPLACE INTO knowledge_conversations (
                     id, conversation_id, question, final_answer, source_of_truth,

@@ -171,18 +171,9 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
                 result.model
             );
             analytics.cost
-        } else if let Some(usage) = &result.usage {
-            tracing::warn!(
-                "⚠️ No analytics cost data, using fallback calculation for {} tokens on model {}",
-                usage.total_tokens,
-                result.model
-            );
-            // Fallback calculation (should rarely be used now)
-            let tokens = usage.total_tokens as f64;
-            tokens * 0.000001 // Very rough fallback estimate
         } else {
-            tracing::warn!("⚠️ No usage or analytics data available for cost calculation");
-            0.0
+            tracing::error!("💰 ERROR: No analytics cost data available for stage result");
+            0.0 // This should not happen in normal operation
         };
 
         let _ = self.event_sender.send(ConsensusUIEvent::StageCompleted {
@@ -319,18 +310,9 @@ impl StreamingCallbacks for DualChannelCallbacks {
                 result.model
             );
             analytics.cost
-        } else if let Some(usage) = &result.usage {
-            tracing::warn!(
-                "⚠️ No analytics cost data, using fallback calculation for {} tokens on model {}",
-                usage.total_tokens,
-                result.model
-            );
-            // Fallback calculation (should rarely be used now)
-            let tokens = usage.total_tokens as f64;
-            tokens * 0.000001 // Very rough fallback estimate
         } else {
-            tracing::warn!("⚠️ No usage or analytics data available for cost calculation");
-            0.0
+            tracing::error!("💰 ERROR: No analytics cost data available for stage result");
+            0.0 // This should not happen in normal operation
         };
 
         let event = ConsensusUIEvent::StageCompleted {

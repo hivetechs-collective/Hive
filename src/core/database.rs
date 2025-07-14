@@ -405,16 +405,15 @@ impl DatabaseManager {
         let (internal_id, openrouter_id, pricing_input, pricing_output) = match model_data {
             Some(data) => data,
             None => {
-                tracing::warn!("⚠️ Model not found: {} - using fallback pricing", model_openrouter_id);
-                // Return fallback cost calculation
-                let fallback_input_cost = prompt_tokens as f64 * 0.000001; // $1 per 1M tokens fallback
-                let fallback_output_cost = completion_tokens as f64 * 0.000002; // $2 per 1M tokens fallback
-                return Ok(fallback_input_cost + fallback_output_cost);
+                return Err(anyhow::anyhow!(
+                    "Model not found in database: {}. Please update model data.",
+                    model_openrouter_id
+                ));
             }
         };
 
         tracing::info!(
-            "💰 Found model: {} (internal_id: {}, pricing_input: {}, pricing_output: {})",
+            "💰 Found model: {} (internal_id: {}, pricing_input: {:.10e}, pricing_output: {:.10e})",
             openrouter_id,
             internal_id,
             pricing_input,
@@ -428,10 +427,22 @@ impl DatabaseManager {
         let total_cost = input_cost + output_cost;
 
         tracing::info!(
-            "💰 Cost calculation: input=${:.6}, output=${:.6}, total=${:.6}",
+            "💰 Cost calculation details: {} prompt tokens * {:.10e} = ${:.10}",
+            prompt_tokens,
+            pricing_input,
+            input_cost
+        );
+        tracing::info!(
+            "💰 Cost calculation details: {} completion tokens * {:.10e} = ${:.10}",
+            completion_tokens,
+            pricing_output,
+            output_cost
+        );
+        tracing::info!(
+            "💰 Total cost: ${:.10} (input: ${:.10} + output: ${:.10})",
+            total_cost,
             input_cost,
-            output_cost,
-            total_cost
+            output_cost
         );
 
         Ok(total_cost)
