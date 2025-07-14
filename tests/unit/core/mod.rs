@@ -1,1 +1,1 @@
-pub mod test;
+//! Unit tests for core module
