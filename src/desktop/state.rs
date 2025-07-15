@@ -3,6 +3,28 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use dioxus::prelude::*;
+
+/// Global profile state - single source of truth
+#[derive(Clone, Debug, PartialEq)]
+pub enum ProfileState {
+    Loading,
+    Loaded(ActiveProfileData),
+    Error(String),
+}
+
+/// Active profile data from database
+#[derive(Clone, Debug, PartialEq)]
+pub struct ActiveProfileData {
+    pub name: String,
+    pub generator_model: String,
+    pub refiner_model: String,
+    pub validator_model: String,
+    pub curator_model: String,
+}
+
+/// Global signal for profile state
+pub static ACTIVE_PROFILE_STATE: GlobalSignal<ProfileState> = Signal::global(|| ProfileState::Loading);
 
 /// Main application state
 #[derive(Clone, Debug, PartialEq)]
@@ -435,6 +457,7 @@ pub struct ConsensusState {
     pub total_tokens: usize,
     pub estimated_cost: f64,
     pub streaming_content: String,
+    pub active_profile_name: String,
 }
 
 impl ConsensusState {
@@ -453,6 +476,7 @@ impl ConsensusState {
             total_tokens: 0,
             estimated_cost: 0.0,
             streaming_content: String::new(),
+            active_profile_name: "No profile".to_string(),
         }
     }
 

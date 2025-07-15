@@ -259,19 +259,15 @@ impl TemplateMaintenanceManager {
         let conn = self.db.get_connection()?;
         let mut validations = HashMap::new();
 
-        // Get all profiles - they now store OpenRouter IDs directly
+        // Get all profiles - they now store OpenRouter IDs directly  
         let profiles = {
             let mut stmt = conn.prepare(
-                "SELECT cp.id, cp.name,
-                        gm.openrouter_id,
-                        rm.openrouter_id,
-                        vm.openrouter_id,
-                        cm.openrouter_id
-                 FROM consensus_profiles cp
-                 JOIN openrouter_models gm ON cp.generator_model_id = gm.internal_id
-                 JOIN openrouter_models rm ON cp.refiner_model_id = rm.internal_id
-                 JOIN openrouter_models vm ON cp.validator_model_id = vm.internal_id
-                 JOIN openrouter_models cm ON cp.curator_model_id = cm.internal_id",
+                "SELECT cp.id, cp.profile_name,
+                        cp.generator_model,
+                        cp.refiner_model,
+                        cp.validator_model,
+                        cp.curator_model
+                 FROM consensus_profiles cp",
             )?;
 
             let profile_rows = stmt.query_map([], |row| {

@@ -18,6 +18,7 @@ pub mod menu_bar;
 pub mod model_browser;
 pub mod simple_db;
 pub mod state;
+pub mod profile_service;
 pub mod styles;
 
 pub use app::App;

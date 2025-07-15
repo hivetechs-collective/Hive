@@ -296,11 +296,8 @@ fn ChatInput() -> Element {
     let mut input_text = use_signal(String::new);
     let mut is_composing = use_signal(|| false);
     let api_keys_version = use_context::<Signal<u32>>();
-    let profile_change_version = try_use_context::<Signal<u32>>().unwrap_or_else(|| use_signal(|| 0u32));
-    
-    // Use a combined version that changes when either API keys or profile changes
-    let combined_version = *api_keys_version.read() + *profile_change_version.read() * 1000;
-    let consensus_manager = use_consensus_with_version(combined_version);
+    // Since the consensus engine now always loads from database, we only need API keys version
+    let consensus_manager = use_consensus_with_version(*api_keys_version.read());
     let mut show_onboarding = use_context::<Signal<bool>>();
 
     let on_send_click = {

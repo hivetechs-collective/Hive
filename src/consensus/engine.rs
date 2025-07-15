@@ -170,7 +170,20 @@ impl ConsensusEngine {
 
         let config = self.config.read().await.clone();
 
-        let profile = self.current_profile.read().await.clone();
+        // Always load the active profile from database to ensure we use the latest selection
+        let profile = match Self::load_active_profile_from_db().await {
+            Ok(p) => {
+                tracing::info!("Loaded active profile from database: {}", p.profile_name);
+                // Update the cached profile
+                *self.current_profile.write().await = p.clone();
+                p
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load active profile from database: {}, using cached profile", e);
+                self.current_profile.read().await.clone()
+            }
+        };
+        
         let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone());
 
         // Set database if available
@@ -197,7 +210,31 @@ impl ConsensusEngine {
     ) -> Result<ConsensusResult> {
         let config = self.config.read().await.clone();
 
-        let profile = self.current_profile.read().await.clone();
+        // Always load the active profile from database to ensure we use the latest selection
+        let profile = match Self::load_active_profile_from_db().await {
+            Ok(p) => {
+                tracing::info!("✅ Loaded active profile from database: {}", p.profile_name);
+                // Update the cached profile
+                *self.current_profile.write().await = p.clone();
+                
+                // Send profile info to UI callbacks
+                let _ = callbacks.on_profile_loaded(&p.profile_name, &vec![
+                    p.generator_model.clone(),
+                    p.refiner_model.clone(),
+                    p.validator_model.clone(),
+                    p.curator_model.clone(),
+                ]);
+                
+                p
+            }
+            Err(e) => {
+                tracing::error!("❌ Failed to load active profile from database: {}, using cached profile", e);
+                let cached = self.current_profile.read().await.clone();
+                tracing::warn!("📋 Using cached profile: {}", cached.profile_name);
+                cached
+            }
+        };
+        
         let mut pipeline = ConsensusPipeline::new(config, profile, self.openrouter_api_key.clone())
             .with_callbacks(callbacks);
 
@@ -365,10 +402,55 @@ impl ConsensusEngine {
             is_active: true,
         })
     }
+    
+    /// Load the active profile from database
+    async fn load_active_profile_from_db() -> Result<ConsensusProfile> {
+        use crate::core::database::get_database;
+        use rusqlite::OptionalExtension;
+        
+        let db = get_database().await?;
+        let conn = db.get_connection()?;
+        
+        // Get the active profile ID from consensus_settings
+        let active_profile_id: Option<String> = conn.query_row(
+            "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+            [],
+            |row| row.get(0)
+        ).optional()?;
+        
+        let profile_id = active_profile_id
+            .ok_or_else(|| anyhow::anyhow!("No active profile configured"))?;
+            
+        // Get the profile by ID
+        let profile_name: String = conn.query_row(
+            "SELECT profile_name FROM consensus_profiles WHERE id = ?1",
+            rusqlite::params![profile_id],
+            |row| row.get(0)
+        )?;
+        
+        Self::load_profile_by_name(&profile_name).await
+    }
 
     /// Get current profile
     pub async fn get_current_profile(&self) -> ConsensusProfile {
         self.current_profile.read().await.clone()
+    }
+    
+    /// Clear cached profile to force reload from database on next use
+    pub async fn clear_cached_profile(&self) {
+        tracing::info!("🧹 Clearing cached profile to force database reload on next consensus");
+        // Reset to a default/empty profile that will force a database load
+        let empty_profile = ConsensusProfile {
+            id: String::new(),
+            profile_name: String::new(),
+            generator_model: String::new(),
+            refiner_model: String::new(),
+            validator_model: String::new(),
+            curator_model: String::new(),
+            created_at: Utc::now(),
+            is_active: false,
+        };
+        *self.current_profile.write().await = empty_profile;
     }
 
     /// Update configuration

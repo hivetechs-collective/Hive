@@ -794,7 +794,7 @@ mod markdown {
         html_output
     }
 }
-use hive_ai::desktop::state::{AppState, ConsensusState};
+use hive_ai::desktop::state::{AppState, ConsensusState, StageInfo};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -950,6 +950,27 @@ fn App() -> Element {
                     // Trigger consensus manager recreation since we have keys
                     *api_keys_version.write() += 1;
                     tracing::info!("API keys loaded from database - triggering consensus reload");
+                    
+                    // Now load the active profile into consensus state
+                    let mut app_state_for_profile = app_state.clone();
+                    spawn(async move {
+                        tracing::info!("🚀 Loading active profile for UI after API keys loaded");
+                        match load_active_profile_from_db().await {
+                            Ok(profile) => {
+                                tracing::info!("✅ Loaded active profile: {}", profile.profile_name);
+                                app_state_for_profile.write().consensus.active_profile_name = profile.profile_name.clone();
+                                app_state_for_profile.write().consensus.stages = vec![
+                                    StageInfo::new("Generator", &profile.generator_model),
+                                    StageInfo::new("Refiner", &profile.refiner_model),
+                                    StageInfo::new("Validator", &profile.validator_model),
+                                    StageInfo::new("Curator", &profile.curator_model),
+                                ];
+                            }
+                            Err(e) => {
+                                tracing::error!("❌ Failed to load active profile on startup: {}", e);
+                            }
+                        }
+                    });
                 }
             }
         });
@@ -1923,10 +1944,8 @@ fn App() -> Element {
                     }
 
                     // Consensus progress display (always visible at the top)
-                    if app_state.read().consensus.is_running {
-                        ConsensusProgressDisplay {
-                            consensus_state: app_state.read().consensus.clone()
-                        }
+                    ConsensusProgressDisplay {
+                        consensus_state: app_state.read().consensus.clone()
                     }
 
                     // Response display area (Claude Code style)
@@ -2155,10 +2174,35 @@ fn App() -> Element {
                 hive_key: hive_key.clone(),
                 on_profile_change: Some(EventHandler::new({
                     let mut api_keys_version = api_keys_version.clone();
+                    let mut app_state_for_profile = app_state.clone();
                     move |_| {
                         // Increment api_keys_version to trigger consensus reload
                         *api_keys_version.write() += 1;
-                        tracing::info!("Profile changed - incrementing api_keys_version to trigger consensus reload");
+                        tracing::info!("🔄 Profile changed callback triggered - incrementing api_keys_version to trigger consensus reload");
+                        
+                        // Also update the UI consensus state
+                        spawn({
+                            let mut app_state_clone = app_state_for_profile.clone();
+                            async move {
+                                tracing::info!("🔄 Profile change callback - loading new profile from database");
+                                match load_active_profile_from_db().await {
+                                    Ok(profile) => {
+                                        tracing::info!("✅ Profile change - updating UI with new profile: {}", profile.profile_name);
+                                        app_state_clone.write().consensus.active_profile_name = profile.profile_name.clone();
+                                        app_state_clone.write().consensus.stages = vec![
+                                            StageInfo::new("Generator", &profile.generator_model),
+                                            StageInfo::new("Refiner", &profile.refiner_model),
+                                            StageInfo::new("Validator", &profile.validator_model),
+                                            StageInfo::new("Curator", &profile.curator_model),
+                                        ];
+                                        tracing::info!("✅ UI consensus state updated with profile: {}", profile.profile_name);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("❌ Failed to load profile after change: {}", e);
+                                    }
+                                }
+                            }
+                        });
                     }
                 })),
             }
@@ -2325,6 +2369,19 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
     rsx! {
         div {
             style: "padding: 10px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
+            
+            // Header with profile name and title
+            div {
+                style: "margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #3e3e42;",
+                div {
+                    style: "color: #FFC107; font-size: 13px; font-weight: 600; margin-bottom: 2px;",
+                    "🧠 HiveTechs Consensus"
+                }
+                div {
+                    style: "color: #cccccc; font-size: 11px;",
+                    "Profile: {consensus_state.active_profile_name}"
+                }
+            }
 
             // Show all 4 stages
             for (_idx, stage) in consensus_state.stages.iter().enumerate() {
@@ -3257,4 +3314,50 @@ fn RealTimeActivity(analytics_data: Signal<AnalyticsData>) -> Element {
             }
         }
     }
+}
+
+/// Load the active profile from database for UI updates
+async fn load_active_profile_from_db() -> anyhow::Result<ActiveProfile> {
+    use hive_ai::core::database::get_database;
+    use rusqlite::OptionalExtension;
+
+    let db = get_database().await?;
+    let conn = db.get_connection()?;
+
+    // Get the active profile ID from consensus_settings
+    let active_profile_id: Option<String> = conn.query_row(
+        "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+        [],
+        |row| row.get(0)
+    ).optional()?;
+
+    let profile_id = active_profile_id
+        .ok_or_else(|| anyhow::anyhow!("No active profile configured"))?;
+
+    // Get the profile by ID
+    let profile = conn.query_row(
+        "SELECT profile_name, generator_model, refiner_model, validator_model, curator_model FROM consensus_profiles WHERE id = ?1",
+        rusqlite::params![profile_id],
+        |row| {
+            Ok(ActiveProfile {
+                profile_name: row.get(0)?,
+                generator_model: row.get(1)?,
+                refiner_model: row.get(2)?,
+                validator_model: row.get(3)?,
+                curator_model: row.get(4)?,
+            })
+        }
+    )?;
+
+    Ok(profile)
+}
+
+/// Profile information for UI updates
+#[derive(Debug, Clone)]
+struct ActiveProfile {
+    profile_name: String,
+    generator_model: String,
+    refiner_model: String,
+    validator_model: String,
+    curator_model: String,
 }

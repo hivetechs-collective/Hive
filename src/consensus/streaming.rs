@@ -39,6 +39,11 @@ pub enum ConsensusEvent {
 
 /// Callbacks for streaming consensus
 pub trait StreamingCallbacks: Send + Sync {
+    /// Called when profile is loaded
+    fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> Result<()> {
+        Ok(())
+    }
+    
     /// Called when a stage starts
     fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
         Ok(())

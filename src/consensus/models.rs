@@ -455,15 +455,16 @@ impl ModelManager {
                 r#"
                 INSERT INTO model_rankings (
                     model_internal_id, ranking_source, rank_position,
-                    score, category, last_updated
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                    relative_score, period_start, period_end, collected_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 "#,
                 rusqlite::params![
                     internal_id,
                     "openrouter_programming_weekly",
                     (rank + 1) as u32,
                     score,
-                    "programming",
+                    Utc::now().to_rfc3339(),
+                    Utc::now().to_rfc3339(),
                     Utc::now().to_rfc3339(),
                 ],
             )?;
@@ -475,15 +476,16 @@ impl ModelManager {
                 r#"
                 INSERT INTO model_rankings (
                     model_internal_id, ranking_source, rank_position,
-                    score, category, last_updated
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                    relative_score, period_start, period_end, collected_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 "#,
                 rusqlite::params![
                     internal_id,
                     "cost_efficiency",
                     (rank + 1) as u32,
                     score,
-                    "cost",
+                    Utc::now().to_rfc3339(),
+                    Utc::now().to_rfc3339(),
                     Utc::now().to_rfc3339(),
                 ],
             )?;
@@ -495,15 +497,16 @@ impl ModelManager {
                 r#"
                 INSERT INTO model_rankings (
                     model_internal_id, ranking_source, rank_position,
-                    score, category, last_updated
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                    relative_score, period_start, period_end, collected_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 "#,
                 rusqlite::params![
                     internal_id,
                     "performance",
                     (rank + 1) as u32,
                     score,
-                    "performance",
+                    Utc::now().to_rfc3339(),
+                    Utc::now().to_rfc3339(),
                     Utc::now().to_rfc3339(),
                 ],
             )?;
