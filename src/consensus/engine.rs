@@ -535,7 +535,13 @@ impl ConsensusEngine {
                         is_active: true,
                     })
                 },
-            )?;
+            ).map_err(|e| {
+                // If profile not found, this is a critical error
+                anyhow!(
+                    "Profile with ID '{}' not found in database. The consensus_settings table has an invalid active_profile_id. Please select a valid profile in Settings.",
+                    profile_id
+                )
+            })?;
 
             Ok(row)
         }).await??;
