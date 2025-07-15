@@ -528,6 +528,7 @@ pub struct StageInfo {
     pub model: String,
     pub status: StageStatus,
     pub progress: u8,
+    pub error_message: Option<String>,
 }
 
 impl StageInfo {
@@ -537,6 +538,7 @@ impl StageInfo {
             model: model.to_string(),
             status: StageStatus::Waiting,
             progress: 0,
+            error_message: None,
         }
     }
 }

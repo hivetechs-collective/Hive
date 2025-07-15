@@ -2430,6 +2430,16 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                             ),
                         }
                     }
+                    // Error message display
+                    if let Some(error_msg) = &stage.error_message {
+                        div {
+                            style: "margin-top: 4px; padding: 4px 8px; background: #3d1f1f; border: 1px solid #5d2f2f; border-radius: 4px;",
+                            span {
+                                style: "color: #ff9999; font-size: 11px; line-height: 1.4;",
+                                "{error_msg}"
+                            }
+                        }
+                    }
                 }
             }
 
