@@ -473,7 +473,7 @@ pub async fn process_consensus_events(
                     tracing::info!("Consensus completed - triggered analytics refresh");
                 }
             }
-            ConsensusUIEvent::StageError { stage, error: _ } => {
+            ConsensusUIEvent::StageError { stage, error } => {
                 let mut state = app_state.write();
 
                 let stage_index = match stage {
@@ -485,6 +485,20 @@ pub async fn process_consensus_events(
 
                 if let Some(stage_info) = state.consensus.stages.get_mut(stage_index) {
                     stage_info.status = StageStatus::Error;
+                    
+                    // Parse error message to provide helpful guidance
+                    let error_msg = if error.contains("429") || error.contains("rate-limited") {
+                        format!("Model {} is temporarily rate-limited. Please try again later or choose a different model.", stage_info.model)
+                    } else if error.contains("500") || error.contains("internal server error") {
+                        format!("Model {} is experiencing server issues. Please choose a different model.", stage_info.model)
+                    } else if error.contains("timeout") {
+                        format!("Model {} timed out. Please try again or choose a faster model.", stage_info.model)
+                    } else {
+                        format!("Model {} encountered an error: {}. If this persists, please choose a different model.", stage_info.model, error)
+                    };
+                    
+                    stage_info.error_message = Some(error_msg);
+                    tracing::error!("Stage {} error: {}", stage_info.name, error);
                 }
             }
             ConsensusUIEvent::TokenUpdate { count, cost } => {
