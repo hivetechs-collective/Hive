@@ -1,58 +1,61 @@
-//! Consensus Progress Component
+//! Consensus Progress Component - Always Visible Profile Panel
 
 use crate::desktop::{
     components::*,
-    state::{
-        AppState, ConsensusProgress as ConsensusProgressState, ConsensusStage, StageInfo,
-        StageStatus,
-    },
+    state::{ActiveProfileData, ProfileState, ACTIVE_PROFILE_STATE},
 };
 use dioxus::prelude::*;
 
-/// Consensus Progress Component - Shows 4-stage pipeline
+/// Consensus Progress Component - Shows profile and 4-stage pipeline
 #[component]
 pub fn ConsensusProgress() -> Element {
-    let app_state = use_context::<Signal<AppState>>();
-    let state = app_state.read();
-
-    if !state.consensus.is_active {
-        return rsx! { div {} };
-    }
-
+    tracing::info!("🔍 ConsensusProgress component rendering");
+    
+    // Use the global profile state - this will automatically re-render when state changes
+    let profile_state = use_signal(|| {
+        let state = ACTIVE_PROFILE_STATE();
+        tracing::info!("🔍 Reading profile state: {:?}", state);
+        state
+    });
+    
     rsx! {
         div {
-            class: "consensus-progress-overlay",
+            class: "consensus-progress-overlay always-visible",
 
             div {
                 class: "consensus-progress",
 
-                // Header
+                // Header with profile name
                 div {
                     class: "consensus-header",
-                    "🧠 4-Stage Consensus Pipeline"
+                    div {
+                        class: "consensus-title",
+                        "🧠 HiveTechs Consensus"
+                    }
+                    div {
+                        class: "consensus-profile-name",
+                        {render_profile_name(&profile_state)}
+                    }
                 }
 
-                // Progress Stages
+                // Model stages
                 div {
                     class: "consensus-stages",
-
-                    for (i, stage_info) in state.consensus.stages.iter().enumerate() {
-                        ConsensusStageItem {
-                            stage_info: stage_info.clone(),
-                            is_active: state.consensus.current_stage.as_ref()
-                                .map(|current| stage_matches_index(current, i))
-                                .unwrap_or(false),
-                            progress: get_stage_progress(&state.consensus.progress, i),
-                        }
-                    }
+                    {render_model_stages(&profile_state)}
                 }
 
-                // Overall Progress
+                // Stats (tokens and cost - placeholder for now)
                 div {
-                    class: "overall-progress",
-                    ProgressBar {
-                        progress: calculate_overall_progress(&state.consensus.progress),
-                        label: "Overall Progress".to_string(),
+                    class: "consensus-stats",
+                    div {
+                        class: "stat-item",
+                        span { class: "stat-label", "Tokens:" }
+                        span { class: "stat-value", "0" }
+                    }
+                    div {
+                        class: "stat-item",
+                        span { class: "stat-label", "Cost:" }
+                        span { class: "stat-value", "$0.00" }
                     }
                 }
             }
@@ -60,81 +63,57 @@ pub fn ConsensusProgress() -> Element {
     }
 }
 
-/// Individual consensus stage component
-#[component]
-fn ConsensusStageItem(stage_info: StageInfo, is_active: bool, progress: u8) -> Element {
-    let status_class = match stage_info.status {
-        StageStatus::Waiting => "waiting",
-        StageStatus::Running => "running",
-        StageStatus::Completed => "completed",
-        StageStatus::Error => "error",
-    };
-
-    let stage_class = format!(
-        "stage {status_class} {}",
-        if is_active { "active" } else { "" }
-    );
-
-    rsx! {
-        div {
-            class: "{stage_class}",
-
-            div {
-                class: "stage-header",
-                span {
-                    class: "stage-name",
-                    "{stage_info.name}"
-                }
-
-                span {
-                    class: "stage-status-icon",
-                    {match stage_info.status {
-                        StageStatus::Waiting => "⏳",
-                        StageStatus::Running => "⚡",
-                        StageStatus::Completed => "✅",
-                        StageStatus::Error => "❌",
-                    }}
-                }
-            }
-
-            div {
-                class: "stage-model",
-                "{stage_info.model}"
-            }
-
-            div {
-                class: "stage-progress-container",
-                ProgressBar {
-                    progress: progress,
-                    label: "".to_string(),
-                }
-            }
-        }
+/// Render profile name based on current state
+fn render_profile_name(profile_state: &Signal<ProfileState>) -> String {
+    let state = profile_state.read();
+    match &*state {
+        ProfileState::Loading => "Loading...".to_string(),
+        ProfileState::Loaded(profile) => format!("Profile: {}", profile.name),
+        ProfileState::Error(err) => format!("Error: {}", err),
     }
 }
 
-// Helper functions
-fn stage_matches_index(stage: &ConsensusStage, index: usize) -> bool {
-    match (stage, index) {
-        (ConsensusStage::Generator, 0) => true,
-        (ConsensusStage::Refiner, 1) => true,
-        (ConsensusStage::Validator, 2) => true,
-        (ConsensusStage::Curator, 3) => true,
-        _ => false,
+/// Render model stages based on current state
+fn render_model_stages(profile_state: &Signal<ProfileState>) -> Element {
+    let state = profile_state.read();
+    
+    match &*state {
+        ProfileState::Loading => rsx! {
+            div { class: "loading-stages", "Loading models..." }
+        },
+        ProfileState::Loaded(profile) => rsx! {
+            div { class: "stage", 
+                div { class: "stage-name", "Generator" }
+                div { class: "stage-model", "{profile.generator_model}" }
+                div { class: "stage-progress", 
+                    div { class: "progress-bar", style: "width: 0%" }
+                }
+            }
+            div { class: "stage", 
+                div { class: "stage-name", "Refiner" }
+                div { class: "stage-model", "{profile.refiner_model}" }
+                div { class: "stage-progress", 
+                    div { class: "progress-bar", style: "width: 0%" }
+                }
+            }
+            div { class: "stage", 
+                div { class: "stage-name", "Validator" }
+                div { class: "stage-model", "{profile.validator_model}" }
+                div { class: "stage-progress", 
+                    div { class: "progress-bar", style: "width: 0%" }
+                }
+            }
+            div { class: "stage", 
+                div { class: "stage-name", "Curator" }
+                div { class: "stage-model", "{profile.curator_model}" }
+                div { class: "stage-progress", 
+                    div { class: "progress-bar", style: "width: 0%" }
+                }
+            }
+        },
+        ProfileState::Error(err) => rsx! {
+            div { class: "error-stages", "Failed to load: {err}" }
+        },
     }
 }
 
-fn get_stage_progress(progress: &ConsensusProgressState, stage_index: usize) -> u8 {
-    match stage_index {
-        0 => progress.generator,
-        1 => progress.refiner,
-        2 => progress.validator,
-        3 => progress.curator,
-        _ => 0,
-    }
-}
-
-fn calculate_overall_progress(progress: &ConsensusProgressState) -> u8 {
-    let total = progress.generator + progress.refiner + progress.validator + progress.curator;
-    (total / 4).min(100)
-}

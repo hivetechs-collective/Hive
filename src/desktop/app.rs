@@ -8,7 +8,8 @@ use crate::desktop::{
     dialogs::{AboutDialog, CommandPalette, OnboardingDialog, SettingsDialog},
     events::{EventDispatcher, KeyboardEventUtils},
     file_explorer::FileExplorer,
-    state::{AppState, ConnectionStatus},
+    profile_service::ProfileService,
+    state::{AppState, ConnectionStatus, StageInfo},
     styles::get_global_styles,
 };
 use dioxus::events::{KeyboardEvent, MouseEvent};
@@ -19,7 +20,7 @@ use dioxus::prelude::*;
 #[component]
 pub fn App() -> Element {
     // Initialize application state
-    let app_state = use_signal(|| AppState::new());
+    let mut app_state = use_signal(|| AppState::new());
 
     // Initialize event dispatcher
     let event_dispatcher = use_signal(|| EventDispatcher::new());
@@ -106,6 +107,28 @@ pub fn App() -> Element {
                     }
                 }
             }
+            
+            // Load initial profile into consensus state on app startup
+            tracing::info!("🚀 Loading initial profile into consensus state");
+            let mut app_state_for_startup = app_state.clone();
+            spawn(async move {
+                if let Ok(initial_profile) = load_active_profile_from_db().await {
+                    tracing::info!("✅ App startup - loaded initial profile: {}", initial_profile.profile_name);
+                    
+                    // Update the consensus state with initial profile info
+                    app_state_for_startup.write().consensus.active_profile_name = initial_profile.profile_name.clone();
+                    app_state_for_startup.write().consensus.stages = vec![
+                        StageInfo::new("Generator", &initial_profile.generator_model),
+                        StageInfo::new("Refiner", &initial_profile.refiner_model),
+                        StageInfo::new("Validator", &initial_profile.validator_model),
+                        StageInfo::new("Curator", &initial_profile.curator_model),
+                    ];
+                    
+                    tracing::info!("✅ App startup consensus state initialized with profile: {}", initial_profile.profile_name);
+                } else {
+                    tracing::error!("❌ Failed to load initial profile on app startup");
+                }
+            });
         });
     });
 
@@ -187,10 +210,34 @@ pub fn App() -> Element {
     // Create profile change callback to reload consensus engine
     let on_profile_change = {
         let mut profile_change_version = profile_change_version.clone();
+        let mut app_state_clone = app_state.clone();
         EventHandler::new(move |_| {
             // Increment version to trigger consensus reload
             *profile_change_version.write() += 1;
             tracing::info!("Profile changed, triggering consensus engine reload");
+            
+            // Force reload the consensus engine with new profile
+            let mut app_state_for_task = app_state_clone.clone();
+            spawn(async move {
+                // Load the new active profile from database and update the consensus state
+                tracing::info!("🔄 Profile change callback - loading new profile from database");
+                if let Ok(new_profile) = load_active_profile_from_db().await {
+                    tracing::info!("✅ Profile change - loaded new profile: {}", new_profile.profile_name);
+                    
+                    // Update the consensus state with new profile info
+                    app_state_for_task.write().consensus.active_profile_name = new_profile.profile_name.clone();
+                    app_state_for_task.write().consensus.stages = vec![
+                        StageInfo::new("Generator", &new_profile.generator_model),
+                        StageInfo::new("Refiner", &new_profile.refiner_model),
+                        StageInfo::new("Validator", &new_profile.validator_model),
+                        StageInfo::new("Curator", &new_profile.curator_model),
+                    ];
+                    
+                    tracing::info!("✅ Updated consensus state with new profile: {}", new_profile.profile_name);
+                } else {
+                    tracing::error!("❌ Failed to load new profile after profile change");
+                }
+            });
         })
     };
 
@@ -299,7 +346,7 @@ pub fn App() -> Element {
                 // Right Panel - Chat Interface
                 ChatInterface {}
 
-                // Consensus Progress (overlay when active)
+                // Consensus Progress (always visible)
                 ConsensusProgress {}
             }
 
@@ -599,6 +646,52 @@ fn get_usage_color(state: &AppState) -> &'static str {
     }
 }
 
+/// Load the active profile from database for UI updates
+async fn load_active_profile_from_db() -> anyhow::Result<ActiveProfile> {
+    use crate::core::database::get_database;
+    use rusqlite::OptionalExtension;
+
+    let db = get_database().await?;
+    let conn = db.get_connection()?;
+
+    // Get the active profile ID from consensus_settings
+    let active_profile_id: Option<String> = conn.query_row(
+        "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+        [],
+        |row| row.get(0)
+    ).optional()?;
+
+    let profile_id = active_profile_id
+        .ok_or_else(|| anyhow::anyhow!("No active profile configured"))?;
+
+    // Get the profile by ID
+    let profile = conn.query_row(
+        "SELECT profile_name, generator_model, refiner_model, validator_model, curator_model FROM consensus_profiles WHERE id = ?1",
+        rusqlite::params![profile_id],
+        |row| {
+            Ok(ActiveProfile {
+                profile_name: row.get(0)?,
+                generator_model: row.get(1)?,
+                refiner_model: row.get(2)?,
+                validator_model: row.get(3)?,
+                curator_model: row.get(4)?,
+            })
+        }
+    )?;
+
+    Ok(profile)
+}
+
+/// Profile information for UI updates
+#[derive(Debug, Clone)]
+struct ActiveProfile {
+    profile_name: String,
+    generator_model: String,
+    refiner_model: String,
+    validator_model: String,
+    curator_model: String,
+}
+
 /// Get usage emoji based on percentage used
 fn get_usage_emoji(state: &AppState) -> &'static str {
     let percentage = if state.daily_conversations_limit > 0 {
@@ -617,3 +710,4 @@ fn get_usage_emoji(state: &AppState) -> &'static str {
         "🟢"
     }
 }
+

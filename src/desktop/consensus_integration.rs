@@ -19,6 +19,10 @@ use tokio::sync::{mpsc, Mutex};
 /// Events sent from callbacks to UI
 #[derive(Debug, Clone)]
 pub enum ConsensusUIEvent {
+    ProfileLoaded {
+        profile_name: String,
+        models: Vec<String>,
+    },
     StageStarted {
         stage: ConsensusStage,
         model: String,
@@ -69,6 +73,18 @@ pub struct DualChannelCallbacks {
 }
 
 impl StreamingCallbacks for DesktopStreamingCallbacks {
+    fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> Result<()> {
+        tracing::info!("🎯 Profile loaded callback: {} with models {:?}", profile_name, models);
+        
+        // Send profile loaded event to update UI
+        let _ = self.event_sender.send(ConsensusUIEvent::ProfileLoaded {
+            profile_name: profile_name.to_string(),
+            models: models.to_vec(),
+        });
+        
+        Ok(())
+    }
+    
     fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
         let consensus_stage = match stage {
             Stage::Generator => ConsensusStage::Generator,
@@ -205,6 +221,21 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
 }
 
 impl StreamingCallbacks for DualChannelCallbacks {
+    fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> Result<()> {
+        tracing::info!("🎯 DualChannel profile loaded callback: {} with models {:?}", profile_name, models);
+        
+        let event = ConsensusUIEvent::ProfileLoaded {
+            profile_name: profile_name.to_string(),
+            models: models.to_vec(),
+        };
+        
+        // Send to both channels
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
+        
+        Ok(())
+    }
+    
     fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
         let consensus_stage = match stage {
             Stage::Generator => ConsensusStage::Generator,
@@ -358,6 +389,17 @@ pub async fn process_consensus_events(
 ) {
     while let Some(event) = event_receiver.recv().await {
         match event {
+            ConsensusUIEvent::ProfileLoaded { profile_name, models } => {
+                tracing::info!("🎯 UI received ProfileLoaded event: {} with models {:?}", profile_name, models);
+                let mut state = app_state.write();
+                state.consensus.active_profile_name = profile_name;
+                state.consensus.stages = vec![
+                    StageInfo::new("Generator", &models[0]),
+                    StageInfo::new("Refiner", &models[1]),
+                    StageInfo::new("Validator", &models[2]),
+                    StageInfo::new("Curator", &models[3]),
+                ];
+            }
             ConsensusUIEvent::StageStarted { stage, model } => {
                 let mut state = app_state.write();
                 state.consensus.current_stage = Some(stage.clone());
@@ -388,7 +430,15 @@ pub async fn process_consensus_events(
 
                 if let Some(stage_info) = state.consensus.stages.get_mut(stage_index) {
                     stage_info.status = StageStatus::Running;
-                    stage_info.model = model;
+                    stage_info.model = model.clone();
+                }
+                
+                // Update all stages when Generator starts (first stage)
+                // This ensures the UI shows the correct models from the loaded profile
+                if matches!(stage, ConsensusStage::Generator) {
+                    tracing::info!("First stage started, updating all stage models in UI");
+                    // The profile name should reflect what's actually being used
+                    // The engine has already loaded the active profile from database
                 }
             }
             ConsensusUIEvent::StageProgress {
@@ -509,12 +559,11 @@ impl DesktopConsensusManager {
             ));
         }
 
-        // Always reload the active profile before processing to ensure we use the latest selection
-        if let Err(e) = self.reload_active_profile().await {
-            tracing::warn!("Failed to reload active profile before processing: {}", e);
-        }
-
+        // The consensus engine will automatically load the active profile from database
+        // when processing the query, so we don't need to reload it here
+        
         // Get current profile from consensus engine to update UI with actual models
+        // This will be the cached profile, but the engine will update it when processing
         let profile = {
             let engine = self.engine.lock().await;
             engine.get_current_profile().await
@@ -526,12 +575,14 @@ impl DesktopConsensusManager {
             state.consensus.start_consensus();
             
             // Update stages with actual models from the profile
+            // The engine will load the latest profile from DB and update these during processing
             state.consensus.stages = vec![
                 StageInfo::new("Generator", &profile.generator_model),
                 StageInfo::new("Refiner", &profile.refiner_model),
                 StageInfo::new("Validator", &profile.validator_model),
                 StageInfo::new("Curator", &profile.curator_model),
             ];
+            state.consensus.active_profile_name = profile.profile_name.clone();
         }
 
         // Create two channels - one for streaming events to return, one for internal processing
@@ -583,6 +634,13 @@ impl DesktopConsensusManager {
 
         // Complete consensus in UI after the task completes
         self.app_state.write().consensus.complete_consensus();
+        
+        // Clear cached profile to force reload from database on next query
+        // This ensures profile changes are picked up immediately
+        {
+            let engine = self.engine.lock().await;
+            engine.clear_cached_profile().await;
+        }
 
         Ok((result, rx_stream))
     }
@@ -652,14 +710,14 @@ pub fn use_consensus() -> Option<DesktopConsensusManager> {
 }
 
 /// Hook to use consensus with version tracking for re-initialization
-pub fn use_consensus_with_version(combined_version: u32) -> Option<DesktopConsensusManager> {
+pub fn use_consensus_with_version(api_keys_version: u32) -> Option<DesktopConsensusManager> {
     let app_state = use_context::<Signal<AppState>>();
 
     let resource = use_resource(move || async move {
-        // Version is used to force re-evaluation when API keys or profile change
-        let _version = combined_version;
+        // Version is used to force re-evaluation when API keys change
+        let _version = api_keys_version;
         
-        tracing::info!("Creating consensus manager with combined version: {}", combined_version);
+        tracing::info!("Creating consensus manager with API keys version: {}", api_keys_version);
 
         // First check if we have valid API keys
         match ApiKeyManager::has_valid_keys().await {
@@ -668,14 +726,7 @@ pub fn use_consensus_with_version(combined_version: u32) -> Option<DesktopConsen
                 match DesktopConsensusManager::new(app_state).await {
                     Ok(manager) => {
                         tracing::info!("Successfully created consensus manager with API keys");
-                        
-                        // Always reload the active profile to ensure we have the latest
-                        if let Err(e) = manager.reload_active_profile().await {
-                            tracing::error!("Failed to reload active profile: {}", e);
-                        } else {
-                            tracing::info!("Loaded active profile in new consensus manager");
-                        }
-                        
+                        // No need to reload profile here - the engine will always load from DB
                         Some(manager)
                     }
                     Err(e) => {

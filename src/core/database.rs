@@ -1084,7 +1084,6 @@ impl KnowledgeConversation {
 pub struct ConsensusProfile {
     pub id: String,
     pub profile_name: String,
-    pub pipeline_profile_id: Option<String>,
     pub generator_model: String,
     pub refiner_model: String,
     pub validator_model: String,
@@ -1108,7 +1107,6 @@ impl ConsensusProfile {
         let profile = ConsensusProfile {
             id: generate_id(),
             profile_name,
-            pipeline_profile_id: None,
             generator_model,
             refiner_model,
             validator_model,
@@ -1119,13 +1117,12 @@ impl ConsensusProfile {
 
         conn.execute(
             "INSERT INTO consensus_profiles (
-                id, profile_name, pipeline_profile_id, generator_model, refiner_model,
+                id, profile_name, generator_model, refiner_model,
                 validator_model, curator_model, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 &profile.id,
                 &profile.profile_name,
-                &profile.pipeline_profile_id,
                 &profile.generator_model,
                 &profile.refiner_model,
                 &profile.validator_model,
@@ -1145,7 +1142,7 @@ impl ConsensusProfile {
 
         let profile = conn
             .query_row(
-                "SELECT id, profile_name, pipeline_profile_id, generator_model, refiner_model,
+                "SELECT id, profile_name, generator_model, refiner_model,
                         validator_model, curator_model, created_at, updated_at
                  FROM consensus_profiles WHERE profile_name = ?1",
                 params![name],
@@ -1153,13 +1150,12 @@ impl ConsensusProfile {
                     Ok(ConsensusProfile {
                         id: row.get(0)?,
                         profile_name: row.get(1)?,
-                        pipeline_profile_id: row.get(2)?,
-                        generator_model: row.get(3)?,
-                        refiner_model: row.get(4)?,
-                        validator_model: row.get(5)?,
-                        curator_model: row.get(6)?,
-                        created_at: row.get(7)?,
-                        updated_at: row.get(8)?,
+                        generator_model: row.get(2)?,
+                        refiner_model: row.get(3)?,
+                        validator_model: row.get(4)?,
+                        curator_model: row.get(5)?,
+                        created_at: row.get(6)?,
+                        updated_at: row.get(7)?,
                     })
                 },
             )
@@ -1174,7 +1170,7 @@ impl ConsensusProfile {
         let conn = db.get_connection()?;
 
         let mut stmt = conn.prepare(
-            "SELECT id, profile_name, pipeline_profile_id, generator_model, refiner_model,
+            "SELECT id, profile_name, generator_model, refiner_model,
                     validator_model, curator_model, created_at, updated_at
              FROM consensus_profiles
              ORDER BY profile_name ASC",
@@ -1185,13 +1181,12 @@ impl ConsensusProfile {
                 Ok(ConsensusProfile {
                     id: row.get(0)?,
                     profile_name: row.get(1)?,
-                    pipeline_profile_id: row.get(2)?,
-                    generator_model: row.get(3)?,
-                    refiner_model: row.get(4)?,
-                    validator_model: row.get(5)?,
-                    curator_model: row.get(6)?,
-                    created_at: row.get(7)?,
-                    updated_at: row.get(8)?,
+                    generator_model: row.get(2)?,
+                    refiner_model: row.get(3)?,
+                    validator_model: row.get(4)?,
+                    curator_model: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

@@ -1153,6 +1153,156 @@ button:focus,
 .breadcrumb-item:last-child {
     color: var(--vscode-editor-foreground);
 }
+
+/* Consensus Progress Panel - Always Visible */
+.consensus-progress-overlay {
+    position: fixed;
+    top: 30px;
+    right: 20px;
+    width: 350px;
+    z-index: 1000;
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+.consensus-progress-overlay.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+.consensus-progress-overlay.always-visible {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+    pointer-events: auto !important;
+    display: block !important;
+    visibility: visible !important;
+}
+
+.consensus-progress {
+    background: var(--vscode-sideBar-background);
+    border: 1px solid var(--vscode-sideBar-border);
+    border-radius: 6px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(10px);
+}
+
+.consensus-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.consensus-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--vscode-editor-foreground);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.consensus-profile-name {
+    font-size: 12px;
+    color: var(--vscode-tab-inactiveForeground);
+    font-weight: 500;
+}
+
+.consensus-stages {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.stage {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.stage.active {
+    border-color: var(--vscode-inputOption-activeBorder);
+    background: var(--vscode-editor-lineHighlightBackground);
+}
+
+.stage.completed {
+    border-color: #388a34;
+    background: rgba(56, 138, 52, 0.1);
+}
+
+.stage.error {
+    border-color: #f48771;
+    background: rgba(244, 135, 113, 0.1);
+}
+
+.stage-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.stage-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--vscode-editor-foreground);
+}
+
+.stage-status-icon {
+    font-size: 14px;
+}
+
+.stage-model {
+    font-size: 11px;
+    color: var(--vscode-tab-inactiveForeground);
+    font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Consolas', monospace;
+}
+
+.stage-progress-container {
+    margin-top: 4px;
+}
+
+.overall-progress {
+    margin-bottom: 16px;
+}
+
+.consensus-stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding-top: 8px;
+    border-top: 1px solid var(--vscode-sideBar-border);
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--vscode-tab-inactiveForeground);
+    font-weight: 500;
+}
+
+.stat-value {
+    font-size: 12px;
+    color: var(--vscode-editor-foreground);
+    font-weight: 600;
+    font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Consolas', monospace;
+}
 "#
 }
 

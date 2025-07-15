@@ -823,8 +823,14 @@ pub fn SettingsDialog(
 
                                 // Update selected profile as default if changed
                                 if !selected_profile_id.is_empty() {
-                                    if let Err(e) = update_default_profile(&selected_profile_id).await {
-                                        tracing::error!("Failed to update default profile: {}", e);
+                                    tracing::info!("🔄 Saving profile selection: {}", selected_profile_id);
+                                    match update_default_profile(&selected_profile_id).await {
+                                        Ok(()) => {
+                                            tracing::info!("✅ Successfully updated default profile to: {}", selected_profile_id);
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("❌ Failed to update default profile: {}", e);
+                                        }
                                     }
                                 }
 
@@ -1746,12 +1752,22 @@ async fn update_default_profile(profile_id: &str) -> anyhow::Result<()> {
     let db = DatabaseManager::new(db_config).await?;
     let conn = db.get_connection()?;
 
+    // Start a transaction to ensure atomic update
+    let tx = conn.unchecked_transaction()?;
+    
     // Update consensus_settings with the new active profile ID
-    conn.execute(
+    tx.execute(
         "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
         rusqlite::params![profile_id],
     )?;
-    tracing::info!("Updated default profile to: {}", profile_id);
+    
+    // Commit the transaction
+    tx.commit()?;
+    
+    // Force a WAL checkpoint to ensure changes are visible immediately to all connections
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    
+    tracing::info!("✅ Updated default profile to: {} and forced WAL checkpoint", profile_id);
 
     Ok(())
 }
