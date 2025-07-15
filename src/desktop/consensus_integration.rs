@@ -509,6 +509,11 @@ impl DesktopConsensusManager {
             ));
         }
 
+        // Always reload the active profile before processing to ensure we use the latest selection
+        if let Err(e) = self.reload_active_profile().await {
+            tracing::warn!("Failed to reload active profile before processing: {}", e);
+        }
+
         // Get current profile from consensus engine to update UI with actual models
         let profile = {
             let engine = self.engine.lock().await;
@@ -619,7 +624,20 @@ impl DesktopConsensusManager {
             let engine = self.engine.lock().await;
             engine.set_profile(&profile_name).await?;
             
-            tracing::info!("Reloaded active profile: {}", profile_name);
+            // Get the updated profile to update UI
+            let profile = engine.get_current_profile().await;
+            drop(engine); // Release the lock before updating UI
+            
+            // Update UI stages with the new profile models
+            let mut app_state = self.app_state;
+            app_state.write().consensus.stages = vec![
+                StageInfo::new("Generator", &profile.generator_model),
+                StageInfo::new("Refiner", &profile.refiner_model),
+                StageInfo::new("Validator", &profile.validator_model),
+                StageInfo::new("Curator", &profile.curator_model),
+            ];
+            
+            tracing::info!("Reloaded active profile: {} and updated UI", profile_name);
         } else {
             tracing::warn!("No active profile found in consensus_settings");
         }
@@ -634,14 +652,14 @@ pub fn use_consensus() -> Option<DesktopConsensusManager> {
 }
 
 /// Hook to use consensus with version tracking for re-initialization
-pub fn use_consensus_with_version(api_keys_version: u32) -> Option<DesktopConsensusManager> {
+pub fn use_consensus_with_version(combined_version: u32) -> Option<DesktopConsensusManager> {
     let app_state = use_context::<Signal<AppState>>();
-    let profile_change_version = use_context::<Signal<u32>>();
 
     let resource = use_resource(move || async move {
-        // Versions are used to force re-evaluation when API keys or profile change
-        let _api_version = api_keys_version;
-        let profile_version = *profile_change_version.read();
+        // Version is used to force re-evaluation when API keys or profile change
+        let _version = combined_version;
+        
+        tracing::info!("Creating consensus manager with combined version: {}", combined_version);
 
         // First check if we have valid API keys
         match ApiKeyManager::has_valid_keys().await {
@@ -651,13 +669,11 @@ pub fn use_consensus_with_version(api_keys_version: u32) -> Option<DesktopConsen
                     Ok(manager) => {
                         tracing::info!("Successfully created consensus manager with API keys");
                         
-                        // If profile has changed (version > 0), reload the active profile
-                        if profile_version > 0 {
-                            if let Err(e) = manager.reload_active_profile().await {
-                                tracing::error!("Failed to reload active profile: {}", e);
-                            } else {
-                                tracing::info!("Reloaded active profile after profile change");
-                            }
+                        // Always reload the active profile to ensure we have the latest
+                        if let Err(e) = manager.reload_active_profile().await {
+                            tracing::error!("Failed to reload active profile: {}", e);
+                        } else {
+                            tracing::info!("Loaded active profile in new consensus manager");
                         }
                         
                         Some(manager)
