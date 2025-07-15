@@ -33,6 +33,9 @@ pub fn App() -> Element {
 
     // Track when API keys have been updated to force consensus re-initialization
     let api_keys_version = use_signal(|| 0u32);
+    
+    // Track when profile changes to force consensus engine reload
+    let profile_change_version = use_signal(|| 0u32);
 
     // API key states - initialize with values from database if available
     let mut openrouter_key = use_signal(|| {
@@ -181,6 +184,16 @@ pub fn App() -> Element {
         });
     });
 
+    // Create profile change callback to reload consensus engine
+    let on_profile_change = {
+        let mut profile_change_version = profile_change_version.clone();
+        EventHandler::new(move |_| {
+            // Increment version to trigger consensus reload
+            *profile_change_version.write() += 1;
+            tracing::info!("Profile changed, triggering consensus engine reload");
+        })
+    };
+
     // Provide state to all child components
     use_context_provider(move || app_state);
     use_context_provider(|| event_dispatcher);
@@ -189,6 +202,7 @@ pub fn App() -> Element {
     use_context_provider(|| show_command_palette.clone());
     use_context_provider(|| show_onboarding.clone());
     use_context_provider(|| api_keys_version.clone());
+    use_context_provider(|| profile_change_version.clone());
 
     // Global keyboard shortcuts
     let on_global_keydown = move |evt: KeyboardEvent| {
@@ -299,7 +313,7 @@ pub fn App() -> Element {
                 hive_key,
                 current_step: onboarding_current_step,
                 api_keys_version,
-                on_profile_change: None  // Desktop app doesn't need profile change callback
+                on_profile_change: Some(on_profile_change.clone())
             }
 
             if *show_settings.read() {
@@ -307,7 +321,7 @@ pub fn App() -> Element {
                     show_settings,
                     openrouter_key,
                     hive_key,
-                    on_profile_change: None  // Desktop app doesn't need profile change callback
+                    on_profile_change: Some(on_profile_change.clone())
                 }
             }
 
