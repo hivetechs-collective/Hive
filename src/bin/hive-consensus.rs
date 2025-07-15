@@ -848,6 +848,15 @@ fn App() -> Element {
     let mut current_dir =
         use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
     let mut file_content = use_signal(String::new);
+    
+    // Tab management
+    let mut open_tabs = use_signal(|| vec!["__welcome__".to_string()]);
+    let mut active_tab = use_signal(|| "__welcome__".to_string());
+    let mut tab_contents = use_signal(|| {
+        let mut contents = HashMap::new();
+        contents.insert("__welcome__".to_string(), String::new());
+        contents
+    });
 
     // Dialog state
     let mut show_about_dialog = use_signal(|| false);
@@ -1480,19 +1489,33 @@ fn App() -> Element {
                 spawn({
                     let mut selected_file = selected_file.clone();
                     let mut file_content = file_content.clone();
+                    let mut open_tabs = open_tabs.clone();
+                    let mut active_tab = active_tab.clone();
+                    let mut tab_contents = tab_contents.clone();
 
                     async move {
                         if let Some(file) = rfd::AsyncFileDialog::new().pick_file().await {
                             let path_string = file.path().to_string_lossy().to_string();
+                            
+                            // Add to open tabs if not already open
+                            if !open_tabs.read().contains(&path_string) {
+                                open_tabs.write().push(path_string.clone());
+                            }
+                            
+                            // Set as active tab
+                            *active_tab.write() = path_string.clone();
                             *selected_file.write() = Some(path_string.clone());
 
                             match file_system::read_file_content(file.path()).await {
                                 Ok(content) => {
+                                    tab_contents.write().insert(path_string, content.clone());
                                     *file_content.write() = content;
                                 }
                                 Err(e) => {
                                     eprintln!("Error reading file: {}", e);
-                                    *file_content.write() = format!("// Error reading file: {}", e);
+                                    let error_content = format!("// Error reading file: {}", e);
+                                    tab_contents.write().insert(path_string, error_content.clone());
+                                    *file_content.write() = error_content;
                                 }
                             }
                         }
@@ -1786,6 +1809,9 @@ fn App() -> Element {
                             file_tree: file_tree.clone(),
                             current_dir: current_dir.clone(),
                             file_content: file_content.clone(),
+                            open_tabs: open_tabs.clone(),
+                            active_tab: active_tab.clone(),
+                            tab_contents: tab_contents.clone(),
                         }
                     }
 
@@ -1810,7 +1836,17 @@ fn App() -> Element {
                     }
                     div {
                         class: "sidebar-item",
-                        onclick: move |_| *current_view.write() = "analytics".to_string(),
+                        onclick: move |_| {
+                            // Add analytics to tabs if not already open
+                            if !open_tabs.read().contains(&"__analytics__".to_string()) {
+                                open_tabs.write().push("__analytics__".to_string());
+                            }
+                            
+                            // Set as active tab
+                            *active_tab.write() = "__analytics__".to_string();
+                            *selected_file.write() = Some("__analytics__".to_string());
+                            *current_view.write() = "analytics".to_string();
+                        },
                         style: "cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
                         span { style: "color: #007BFF;", "📊" }
                         "Analytics"
@@ -1838,45 +1874,101 @@ fn App() -> Element {
                     // Editor tabs
                     div {
                         class: "editor-tabs",
-                        {
-                            selected_file.read().as_ref().map(|file_path| {
-                                let display_name = if file_path == "__welcome__" {
-                                    "Welcome".to_string()
-                                } else {
-                                    let path = PathBuf::from(file_path);
-                                    path.file_name()
-                                        .and_then(|n| n.to_str())
-                                        .unwrap_or(file_path)
-                                        .to_string()
-                                };
-                                rsx! {
-                                    div {
-                                        class: "editor-tab active",
-                                        "{display_name}"
+                        // Render all open tabs
+                        for tab in open_tabs.read().iter() {
+                            let tab_clone = tab.clone();
+                            let is_active = *active_tab.read() == *tab;
+                            let display_name = if tab == "__welcome__" {
+                                "Welcome".to_string()
+                            } else if tab == "__analytics__" {
+                                "Analytics".to_string()
+                            } else {
+                                let path = PathBuf::from(tab);
+                                path.file_name()
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or(tab)
+                                    .to_string()
+                            };
+                            
+                            div {
+                                class: if is_active { "editor-tab active" } else { "editor-tab" },
+                                onclick: move |_| {
+                                    *active_tab.write() = tab_clone.clone();
+                                    *selected_file.write() = Some(tab_clone.clone());
+                                    
+                                    // Update current view based on tab type
+                                    if tab_clone == "__analytics__" {
+                                        *current_view.write() = "analytics".to_string();
+                                    } else {
+                                        *current_view.write() = "code".to_string();
+                                        // Update file_content from tab_contents
+                                        if let Some(content) = tab_contents.read().get(&tab_clone) {
+                                            *file_content.write() = content.clone();
+                                        }
+                                    }
+                                },
+                                "{display_name}"
+                                
+                                // Close button
+                                if tab != "__welcome__" {
+                                    span {
+                                        style: "margin-left: 8px; cursor: pointer; color: #858585; font-size: 16px;",
+                                        onclick: move |e| {
+                                            e.stop_propagation();
+                                            
+                                            // Remove from open tabs
+                                            open_tabs.write().retain(|t| t != &tab_clone);
+                                            
+                                            // If this was the active tab, switch to another
+                                            if *active_tab.read() == tab_clone {
+                                                if let Some(first_tab) = open_tabs.read().first() {
+                                                    *active_tab.write() = first_tab.clone();
+                                                    *selected_file.write() = Some(first_tab.clone());
+                                                    
+                                                    if first_tab == "__analytics__" {
+                                                        *current_view.write() = "analytics".to_string();
+                                                    } else {
+                                                        *current_view.write() = "code".to_string();
+                                                        if let Some(content) = tab_contents.read().get(first_tab) {
+                                                            *file_content.write() = content.clone();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Remove content from tab_contents
+                                            tab_contents.write().remove(&tab_clone);
+                                        },
+                                        "×"
                                     }
                                 }
-                            })
+                            }
                         }
                     }
 
                     // Editor content
                     div {
                         class: "editor-content",
-                        if *current_view.read() == "analytics" {
+                        if *active_tab.read() == "__analytics__" {
                             // Show analytics view
                             AnalyticsView { analytics_data: analytics_data.clone() }
-                        } else if let Some(file) = selected_file.read().as_ref() {
-                            if file == "__welcome__" && *show_welcome_dialog.read() {
-                                // Show welcome tab in editor area
-                                WelcomeTab {
-                                    show_welcome: show_welcome_dialog.clone(),
-                                    on_action: handle_welcome_action,
-                                }
-                            } else {
-                                // Show file content
+                        } else if *active_tab.read() == "__welcome__" && *show_welcome_dialog.read() {
+                            // Show welcome tab in editor area
+                            WelcomeTab {
+                                show_welcome: show_welcome_dialog.clone(),
+                                on_action: handle_welcome_action,
+                            }
+                        } else if !active_tab.read().is_empty() && *active_tab.read() != "__welcome__" {
+                            // Show file content for the active tab
+                            if let Some(content) = tab_contents.read().get(&*active_tab.read()) {
                                 pre {
                                     style: "margin: 0; white-space: pre-wrap; word-wrap: break-word;",
-                                    "{file_content.read()}"
+                                    "{content}"
+                                }
+                            } else {
+                                div {
+                                    style: "padding: 20px; color: #858585;",
+                                    "Loading file content..."
                                 }
                             }
                         } else {
@@ -2272,6 +2364,9 @@ fn FileTreeItem(
     file_tree: Signal<Vec<FileItem>>,
     current_dir: Signal<PathBuf>,
     file_content: Signal<String>,
+    open_tabs: Signal<Vec<String>>,
+    active_tab: Signal<String>,
+    tab_contents: Signal<HashMap<String, String>>,
 ) -> Element {
     let file_path = file.path.clone();
     let file_name = file.name.clone();
@@ -2322,23 +2417,36 @@ fn FileTreeItem(
                     // Just log for now
                     println!("Directory expanded/collapsed");
                 } else {
-                    // Select file
+                    // Select file and open in tab
                     println!("File clicked: {}", file_path.display());
                     let path_string = file_path.to_string_lossy().to_string();
+                    
+                    // Add to open tabs if not already open
+                    if !open_tabs.read().contains(&path_string) {
+                        open_tabs.write().push(path_string.clone());
+                    }
+                    
+                    // Set as active tab
+                    *active_tab.write() = path_string.clone();
                     *selected_file.write() = Some(path_string.clone());
 
                     // Load file content immediately
+                    let mut tab_contents = tab_contents.clone();
                     let mut file_content = file_content.clone();
                     let file_path = file_path.clone();
+                    let path_string_for_spawn = path_string.clone();
                     spawn(async move {
                         match file_system::read_file_content(&file_path).await {
                             Ok(content) => {
                                 println!("File content loaded immediately, {} bytes", content.len());
+                                tab_contents.write().insert(path_string_for_spawn, content.clone());
                                 *file_content.write() = content;
                             }
                             Err(e) => {
                                 println!("Error reading file immediately: {}", e);
-                                *file_content.write() = format!("// Error reading file: {}", e);
+                                let error_content = format!("// Error reading file: {}", e);
+                                tab_contents.write().insert(path_string_for_spawn, error_content.clone());
+                                *file_content.write() = error_content;
                             }
                         }
                     });
@@ -2358,6 +2466,9 @@ fn FileTreeItem(
                     file_tree: file_tree.clone(),
                     current_dir: current_dir.clone(),
                     file_content: file_content.clone(),
+                    open_tabs: open_tabs.clone(),
+                    active_tab: active_tab.clone(),
+                    tab_contents: tab_contents.clone(),
                 }
             }
         }
