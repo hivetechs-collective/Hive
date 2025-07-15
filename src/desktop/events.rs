@@ -97,9 +97,9 @@ impl MouseEventUtils {
     }
 
     /// Check if right mouse button was clicked
-    pub fn is_right_click(_evt: &MouseEvent) -> bool {
-        // TODO: Implement proper right click detection
-        false
+    pub fn is_right_click(evt: &MouseEvent) -> bool {
+        // Right click is button 2 in web events
+        evt.data.trigger_button() == Some(dioxus::html::input_data::MouseButton::Secondary)
     }
 
     /// Check if middle mouse button was clicked
