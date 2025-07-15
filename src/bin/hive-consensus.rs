@@ -773,7 +773,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 use hive_ai::desktop::assets::get_logo_html;
-use hive_ai::desktop::consensus_integration::use_consensus_with_version;
+use hive_ai::desktop::consensus_integration::{use_consensus_with_version, DesktopConsensusManager};
 use hive_ai::desktop::dialogs::{
     AboutDialog, CommandPalette, NoUpdatesDialog, OnboardingDialog, SettingsDialog,
     UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, WelcomeTab,
@@ -828,8 +828,15 @@ fn App() -> Element {
         hive_key: None,
     });
 
-    // Get consensus manager
-    let consensus_manager = use_consensus_with_version(*api_keys_version.read());
+    // Get consensus manager - use a signal to store it
+    let mut consensus_manager = use_signal(|| None::<DesktopConsensusManager>);
+    
+    // Watch for api_keys_version changes and recreate consensus manager
+    use_effect(move || {
+        let version = *api_keys_version.read();
+        tracing::info!("API keys version changed to {}, recreating consensus manager", version);
+        *consensus_manager.write() = use_consensus_with_version(version);
+    });
 
     // State management
     let mut current_response = use_signal(String::new); // Final response
@@ -889,7 +896,7 @@ fn App() -> Element {
             "".to_string(),
         )
     }); // version, date, download_url, changelog_url
-    let mut update_error_message = use_signal(String::new);
+    let update_error_message = use_signal(String::new);
 
     // Subscription state
     let subscription_display = use_signal(|| String::from("Loading..."));
@@ -920,6 +927,9 @@ fn App() -> Element {
     use_effect(move || {
         let mut show_onboarding_dialog = show_onboarding_dialog.clone();
         let mut openrouter_key = openrouter_key.clone();
+        let mut api_keys_version = api_keys_version.clone();
+        let mut api_config = api_config.clone();
+        let mut hive_key = hive_key.clone();
         spawn(async move {
             use hive_ai::core::api_keys::ApiKeyManager;
 
@@ -936,6 +946,10 @@ fn App() -> Element {
                     if let Some(key) = config.hive_key {
                         *hive_key.write() = key;
                     }
+                    
+                    // Trigger consensus manager recreation since we have keys
+                    *api_keys_version.write() += 1;
+                    tracing::info!("API keys loaded from database - triggering consensus reload");
                 }
             }
         });
@@ -944,7 +958,7 @@ fn App() -> Element {
     // Watch for license key changes and refresh subscription immediately
     use_effect({
         let hive_key = hive_key.clone();
-        let subscription_display = subscription_display.clone();
+        let mut subscription_display = subscription_display.clone();
         let mut show_upgrade_dialog = show_upgrade_dialog.clone();
         let mut error_shown = error_shown.clone();
         let mut app_state = app_state.clone();
@@ -2015,7 +2029,7 @@ fn App() -> Element {
                                         *is_processing.write() = true;
 
                                         // Use consensus engine if available
-                                        if let Some(mut consensus) = consensus_manager.clone() {
+                                        if let Some(mut consensus) = consensus_manager.read().clone() {
                                             let mut current_response = current_response.clone();
                                             let mut is_processing = is_processing.clone();
                                             let mut app_state = app_state.clone();
@@ -2066,11 +2080,22 @@ fn App() -> Element {
                                             });
                                         } else {
                                             // Show error if consensus engine not initialized
-                                            *current_response.write() = "<div class='error'>⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.</div>".to_string();
+                                            *current_response.write() = "<div class='error'>⚠️ Consensus engine not initialized. This usually means no profile is configured. Click Settings to configure a profile.</div>".to_string();
                                             *is_processing.write() = false;
 
-                                            // Show onboarding dialog
-                                            *show_onboarding_dialog.write() = true;
+                                            // Check what's actually missing
+                                            spawn(async move {
+                                                use hive_ai::core::api_keys::ApiKeyManager;
+                                                
+                                                let has_api_key = ApiKeyManager::has_valid_keys().await.unwrap_or(false);
+                                                if !has_api_key {
+                                                    // Show onboarding for API key
+                                                    *show_onboarding_dialog.write() = true;
+                                                } else {
+                                                    // API key exists but no profile - show settings
+                                                    *show_settings_dialog.write() = true;
+                                                }
+                                            });
                                         }
                                     }
                                 }
@@ -2128,6 +2153,14 @@ fn App() -> Element {
                 show_settings: show_settings_dialog.clone(),
                 openrouter_key: openrouter_key.clone(),
                 hive_key: hive_key.clone(),
+                on_profile_change: Some(EventHandler::new({
+                    let mut api_keys_version = api_keys_version.clone();
+                    move |_| {
+                        // Increment api_keys_version to trigger consensus reload
+                        *api_keys_version.write() += 1;
+                        tracing::info!("Profile changed - incrementing api_keys_version to trigger consensus reload");
+                    }
+                })),
             }
         }
 
@@ -2138,6 +2171,14 @@ fn App() -> Element {
                 hive_key: hive_key.clone(),
                 current_step: onboarding_current_step.clone(),
                 api_keys_version: api_keys_version.clone(),
+                on_profile_change: Some(EventHandler::new({
+                    let mut api_keys_version = api_keys_version.clone();
+                    move |_| {
+                        // Increment api_keys_version to trigger consensus reload
+                        *api_keys_version.write() += 1;
+                        tracing::info!("Profile changed in onboarding - incrementing api_keys_version to trigger consensus reload");
+                    }
+                })),
             }
         }
 

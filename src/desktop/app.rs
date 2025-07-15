@@ -299,13 +299,15 @@ pub fn App() -> Element {
                 hive_key,
                 current_step: onboarding_current_step,
                 api_keys_version,
+                on_profile_change: None  // Desktop app doesn't need profile change callback
             }
 
             if *show_settings.read() {
                 SettingsDialog {
                     show_settings,
                     openrouter_key,
-                    hive_key
+                    hive_key,
+                    on_profile_change: None  // Desktop app doesn't need profile change callback
                 }
             }
 

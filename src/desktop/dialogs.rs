@@ -4,6 +4,7 @@ use crate::desktop::state::AppState;
 use anyhow;
 use chrono::Timelike;
 use dioxus::prelude::*;
+use rusqlite::OptionalExtension;
 
 /// Information about a consensus profile
 #[derive(Debug, Clone, PartialEq)]
@@ -327,6 +328,7 @@ pub fn SettingsDialog(
     show_settings: Signal<bool>,
     openrouter_key: Signal<String>,
     hive_key: Signal<String>,
+    on_profile_change: Option<EventHandler<()>>,
 ) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
@@ -600,6 +602,7 @@ pub fn SettingsDialog(
                                         for profile in profiles.read().iter() {
                                             ProfileDetailCard {
                                                 profile: profile.clone(),
+                                                on_profile_change: on_profile_change.clone(),
                                                 on_edit: {
                                                     let mut editing_profile_id = editing_profile_id.clone();
                                                     let mut profiles = profiles.clone();
@@ -816,6 +819,11 @@ pub fn SettingsDialog(
                                 if success {
                                     // Success - close dialog
                                     *show_settings.write() = false;
+                                    
+                                    // Trigger consensus engine reload since API keys may have changed
+                                    if let Some(callback) = on_profile_change {
+                                        callback.call(());
+                                    }
                                 } else {
                                     // Show error
                                     *validation_error.write() = Some(error_msg);
@@ -1313,6 +1321,10 @@ pub fn SettingsDialog(
                                                     if let Ok(loaded_profiles) = load_existing_profiles().await {
                                                         *profiles.write() = loaded_profiles;
                                                     }
+                                                    // Trigger consensus engine reload
+                                                    if let Some(callback) = on_profile_change {
+                                                        callback.call(());
+                                                    }
                                                 }
                                                 Err(e) => {
                                                     tracing::error!("❌ Failed to create profile: {}", e);
@@ -1407,6 +1419,7 @@ fn ProfileDetailCard(
     on_edit: EventHandler<i64>,
     on_delete: EventHandler<i64>,
     on_reload_profiles: EventHandler<()>,
+    on_profile_change: Option<EventHandler<()>>,
     is_editing: bool,
 ) -> Element {
     let mut generator_model = use_signal(|| profile.generator_model.clone().unwrap_or_default());
@@ -1492,12 +1505,17 @@ fn ProfileDetailCard(
                                 onclick: move |_| {
                                     let profile_id = profile.id;
                                     let reload_callback = on_reload_profiles.clone();
+                                    let profile_change_callback = on_profile_change.clone();
                                     spawn(async move {
                                         if let Err(e) = set_default_profile(profile_id).await {
                                             tracing::error!("Failed to set default profile: {}", e);
                                         } else {
                                             tracing::info!("Set profile {} as default", profile_id);
                                             reload_callback.call(());
+                                            // Trigger consensus engine reload
+                                            if let Some(callback) = profile_change_callback {
+                                                callback.call(());
+                                            }
                                         }
                                     });
                                 },
@@ -1733,6 +1751,7 @@ pub fn OnboardingDialog(
     mut hive_key: Signal<String>,
     mut current_step: Signal<i32>,
     mut api_keys_version: Signal<u32>,
+    on_profile_change: Option<EventHandler<()>>,
 ) -> Element {
     let mut is_validating = use_signal(|| false);
     let mut validation_error = use_signal(|| None::<String>);
@@ -2519,6 +2538,11 @@ pub fn OnboardingDialog(
                                                                         *profiles_created.write() = created;
                                                                         *show_profile_success.write() = true;
                                                                         *selected_profile.write() = name_for_spawn;
+                                                                        
+                                                                        // Trigger consensus engine reload
+                                                                        if let Some(callback) = on_profile_change {
+                                                                            callback.call(());
+                                                                        }
 
                                                                         // Reload profiles
                                                                         if let Ok(profiles) = load_existing_profiles().await {
@@ -2806,9 +2830,9 @@ pub fn OnboardingDialog(
                                     return;
                                 }
 
-                                // Simple validation - just check it starts with sk-or-v1-
-                                if !or_key.starts_with("sk-or-v1-") {
-                                    *validation_error.write() = Some("Invalid key format. OpenRouter keys start with 'sk-or-v1-'".to_string());
+                                // Simple validation - check it starts with sk-or-v1- or sk-or-
+                                if !or_key.starts_with("sk-or-v1-") && !or_key.starts_with("sk-or-") {
+                                    *validation_error.write() = Some("Invalid key format. OpenRouter keys start with 'sk-or-v1-' or 'sk-or-'".to_string());
                                     return;
                                 }
 
@@ -2873,6 +2897,11 @@ pub fn OnboardingDialog(
                                                 *profiles_created.write() = created;
                                                 *show_profile_success.write() = true;
                                                 *selected_profile.write() = name_for_spawn;
+                                                
+                                                // Trigger consensus engine reload
+                                                if let Some(callback) = on_profile_change {
+                                                    callback.call(());
+                                                }
 
                                                 // Reload profiles
                                                 if let Ok(profiles) = load_existing_profiles().await {
@@ -2895,6 +2924,7 @@ pub fn OnboardingDialog(
                                         let mut selected_profile = selected_profile.clone();
                                         let existing_profiles = existing_profiles.clone();
                                         let mut show_profile_success = show_profile_success.clone();
+                                        let profile_change_callback = on_profile_change.clone();
 
                                         spawn(async move {
                                             if let Err(e) = set_default_profile(profile_id).await {
@@ -2906,6 +2936,10 @@ pub fn OnboardingDialog(
                                                     *selected_profile.write() = profile.name.clone();
                                                 }
                                                 *show_profile_success.write() = true;
+                                                // Trigger consensus engine reload
+                                                if let Some(callback) = profile_change_callback {
+                                                    callback.call(());
+                                                }
                                             }
                                         });
                                     }
@@ -3398,6 +3432,22 @@ async fn create_custom_profile(profile_name: &str) -> anyhow::Result<()> {
         profile_id
     );
 
+    // Check if there's currently an active profile in consensus_settings
+    let active_profile: Option<String> = conn.query_row(
+        "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+        [],
+        |row| row.get(0)
+    ).optional().map_err(|e| anyhow::anyhow!("Failed to query consensus_settings: {}", e))?;
+
+    // If no active profile is set, set this new profile as active
+    if active_profile.is_none() {
+        conn.execute(
+            "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
+            rusqlite::params![&profile_id],
+        )?;
+        tracing::info!("Set new profile '{}' as active since no profile was previously active", profile_name);
+    }
+
     Ok(())
 }
 
@@ -3470,6 +3520,22 @@ async fn create_custom_profile_with_models(
         validator_model,
         curator_model
     );
+
+    // Check if there's currently an active profile in consensus_settings
+    let active_profile: Option<String> = conn.query_row(
+        "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+        [],
+        |row| row.get(0)
+    ).optional().map_err(|e| anyhow::anyhow!("Failed to query consensus_settings: {}", e))?;
+
+    // If no active profile is set, set this new profile as active
+    if active_profile.is_none() {
+        conn.execute(
+            "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
+            rusqlite::params![&profile_id],
+        )?;
+        tracing::info!("Set new profile '{}' as active since no profile was previously active", profile_name);
+    }
 
     Ok(())
 }

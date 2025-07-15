@@ -24,8 +24,9 @@ pub struct ApiKeyManager;
 impl ApiKeyManager {
     /// Validate OpenRouter API key format
     pub fn validate_format(api_key: &str) -> Result<()> {
-        if !api_key.starts_with("sk-or-") {
-            return Err(anyhow!("OpenRouter API key must start with 'sk-or-'"));
+        // OpenRouter keys can start with sk-or-v1- or sk-or-
+        if !api_key.starts_with("sk-or-v1-") && !api_key.starts_with("sk-or-") {
+            return Err(anyhow!("OpenRouter API key must start with 'sk-or-v1-' or 'sk-or-'"));
         }
 
         if api_key.len() <= 10 {
@@ -296,7 +297,9 @@ mod tests {
     #[test]
     fn test_validate_format() {
         assert!(ApiKeyManager::validate_format("sk-or-abcd1234567890").is_ok());
+        assert!(ApiKeyManager::validate_format("sk-or-v1-abcd1234567890").is_ok());
         assert!(ApiKeyManager::validate_format("sk-or-123").is_err()); // Too short
+        assert!(ApiKeyManager::validate_format("sk-or-v1-123").is_err()); // Too short
         assert!(ApiKeyManager::validate_format("sk-invalid").is_err()); // Wrong prefix
         assert!(ApiKeyManager::validate_format("").is_err()); // Empty
     }
