@@ -10,6 +10,7 @@ use rusqlite::OptionalExtension;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProfileInfo {
     pub id: i64,
+    pub string_id: String,  // The actual ID from the database
     pub name: String,
     pub is_default: bool,
     pub created_at: String,
@@ -381,8 +382,8 @@ pub fn SettingsDialog(
                     let default_profile_id = loaded_profiles
                         .iter()
                         .find(|p| p.is_default)
-                        .map(|p| p.id.to_string())
-                        .or_else(|| loaded_profiles.first().map(|p| p.id.to_string()))
+                        .map(|p| p.string_id.clone())
+                        .or_else(|| loaded_profiles.first().map(|p| p.string_id.clone()))
                         .unwrap_or_default();
 
                     *selected_profile.write() = default_profile_id;
@@ -583,9 +584,9 @@ pub fn SettingsDialog(
                                         class: "profile-grid",
                                         for profile in profiles.read().iter() {
                                             DatabaseProfileOption {
-                                                profile_id: profile.id.to_string(),
+                                                profile_id: profile.string_id.clone(),
                                                 name: profile.name.clone(),
-                                                is_selected: *selected_profile.read() == profile.id.to_string(),
+                                                is_selected: *selected_profile.read() == profile.string_id,
                                                 is_default: profile.is_default,
                                                 on_select: move |id: String| {
                                                     *selected_profile.write() = id;
@@ -652,7 +653,7 @@ pub fn SettingsDialog(
 
                                 // Show current selection info
                                 if !*show_profile_details.read() && !selected_profile.read().is_empty() {
-                                    if let Some(current) = profiles.read().iter().find(|p| p.id.to_string() == *selected_profile.read()) {
+                                    if let Some(current) = profiles.read().iter().find(|p| p.string_id == *selected_profile.read()) {
                                         div {
                                             style: "margin-top: 15px; padding: 10px; background: #1e1e1e; border-radius: 6px; font-size: 13px;",
                                             p {
@@ -1503,11 +1504,11 @@ fn ProfileDetailCard(
                                 class: "icon-button",
                                 style: "padding: 4px 8px; background: #1a5a1a; border: none; border-radius: 4px; color: #4ade80; cursor: pointer; font-size: 12px;",
                                 onclick: move |_| {
-                                    let profile_id = profile.id;
+                                    let profile_id = profile.string_id.clone();
                                     let reload_callback = on_reload_profiles.clone();
                                     let profile_change_callback = on_profile_change.clone();
                                     spawn(async move {
-                                        if let Err(e) = set_default_profile(profile_id).await {
+                                        if let Err(e) = set_default_profile(&profile_id).await {
                                             tracing::error!("Failed to set default profile: {}", e);
                                         } else {
                                             tracing::info!("Set profile {} as default", profile_id);
@@ -1725,19 +1726,13 @@ async fn update_default_profile(profile_id: &str) -> anyhow::Result<()> {
     };
 
     let db = DatabaseManager::new(db_config).await?;
-    let mut conn = db.get_connection()?;
-    let tx = conn.transaction()?;
+    let conn = db.get_connection()?;
 
-    // First, unset all profiles as default
-    tx.execute("UPDATE consensus_profiles SET is_default = 0", [])?;
-
-    // Then set the selected profile as default
-    tx.execute(
-        "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
+    // Update consensus_settings with the new active profile ID
+    conn.execute(
+        "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
         rusqlite::params![profile_id],
     )?;
-
-    tx.commit()?;
     tracing::info!("Updated default profile to: {}", profile_id);
 
     Ok(())
@@ -2920,14 +2915,21 @@ pub fn OnboardingDialog(
                                 } else if mode == "existing" && existing_id.is_some() {
                                     // Set existing profile as default
                                     if let Some(profile_id) = existing_id {
-                                        tracing::info!("Setting existing profile {} as default", profile_id);
+                                        // Get the string ID from the profile
+                                        let profile_string_id = existing_profiles.read()
+                                            .iter()
+                                            .find(|p| p.id == profile_id)
+                                            .map(|p| p.string_id.clone())
+                                            .unwrap_or_default();
+                                        
+                                        tracing::info!("Setting existing profile {} (string_id: {}) as default", profile_id, profile_string_id);
                                         let mut selected_profile = selected_profile.clone();
                                         let existing_profiles = existing_profiles.clone();
                                         let mut show_profile_success = show_profile_success.clone();
                                         let profile_change_callback = on_profile_change.clone();
 
                                         spawn(async move {
-                                            if let Err(e) = set_default_profile(profile_id).await {
+                                            if let Err(e) = set_default_profile(&profile_string_id).await {
                                                 tracing::error!("Failed to set default profile: {}", e);
                                             } else {
                                                 tracing::info!("Default profile set successfully");
@@ -3225,8 +3227,9 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
 
             Ok(ProfileInfo {
                 id,
+                string_id: id_str,  // Store the actual string ID
                 name: row.get(1)?,
-                is_default: false, // Will set first one as default below
+                is_default: false, // Will be set based on consensus_settings below
                 created_at: row.get(3)?,
                 generator_model: row.get(4)?,
                 refiner_model: row.get(5)?,
@@ -3237,8 +3240,20 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
         .filter_map(Result::ok)
         .collect();
 
-    // Set first profile as default
-    if let Some(first) = profiles_vec.first_mut() {
+    // Get the actual active profile from consensus_settings
+    let active_profile_id: Option<String> = conn.query_row(
+        "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+        [],
+        |row| row.get(0)
+    ).optional().map_err(|e| anyhow::anyhow!("Failed to query active profile: {}", e))?;
+
+    // Mark the active profile as default
+    if let Some(active_id) = active_profile_id {
+        for profile in &mut profiles_vec {
+            profile.is_default = profile.string_id == active_id;
+        }
+    } else if let Some(first) = profiles_vec.first_mut() {
+        // No active profile set, mark first as default
         first.is_default = true;
     }
 
@@ -3319,7 +3334,7 @@ async fn create_profile_from_template(template_id: &str, profile_name: &str) -> 
 }
 
 /// Set a profile as default
-async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
+async fn set_default_profile(profile_id: &str) -> anyhow::Result<()> {
     use crate::core::config::get_hive_config_dir;
     use crate::core::database::DatabaseManager;
 
