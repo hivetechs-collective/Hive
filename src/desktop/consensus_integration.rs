@@ -12,6 +12,7 @@ use crate::core::api_keys::ApiKeyManager;
 use crate::desktop::state::{AppState, ConsensusStage, StageInfo, StageStatus};
 use anyhow::Result;
 use dioxus::prelude::*;
+use rusqlite::OptionalExtension;
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
@@ -591,6 +592,40 @@ impl DesktopConsensusManager {
     pub fn engine(&self) -> Arc<Mutex<ConsensusEngine>> {
         self.engine.clone()
     }
+
+    /// Reload the active profile from the database
+    pub async fn reload_active_profile(&self) -> Result<()> {
+        use crate::core::database::get_database;
+        
+        // Get the active profile ID from consensus_settings
+        let db = get_database().await?;
+        let conn = db.get_connection()?;
+        
+        let active_profile_id: Option<String> = conn.query_row(
+            "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+            [],
+            |row| row.get(0)
+        ).optional()?;
+        
+        if let Some(profile_id) = active_profile_id {
+            // Get the profile name
+            let profile_name: String = conn.query_row(
+                "SELECT profile_name FROM consensus_profiles WHERE id = ?1",
+                rusqlite::params![profile_id],
+                |row| row.get(0)
+            )?;
+            
+            // Set the profile in the consensus engine
+            let engine = self.engine.lock().await;
+            engine.set_profile(&profile_name).await?;
+            
+            tracing::info!("Reloaded active profile: {}", profile_name);
+        } else {
+            tracing::warn!("No active profile found in consensus_settings");
+        }
+        
+        Ok(())
+    }
 }
 
 /// Hook to use consensus in components
@@ -601,10 +636,12 @@ pub fn use_consensus() -> Option<DesktopConsensusManager> {
 /// Hook to use consensus with version tracking for re-initialization
 pub fn use_consensus_with_version(api_keys_version: u32) -> Option<DesktopConsensusManager> {
     let app_state = use_context::<Signal<AppState>>();
+    let profile_change_version = use_context::<Signal<u32>>();
 
     let resource = use_resource(move || async move {
-        // Version is used to force re-evaluation when API keys change
-        let _version = api_keys_version;
+        // Versions are used to force re-evaluation when API keys or profile change
+        let _api_version = api_keys_version;
+        let profile_version = *profile_change_version.read();
 
         // First check if we have valid API keys
         match ApiKeyManager::has_valid_keys().await {
@@ -613,6 +650,16 @@ pub fn use_consensus_with_version(api_keys_version: u32) -> Option<DesktopConsen
                 match DesktopConsensusManager::new(app_state).await {
                     Ok(manager) => {
                         tracing::info!("Successfully created consensus manager with API keys");
+                        
+                        // If profile has changed (version > 0), reload the active profile
+                        if profile_version > 0 {
+                            if let Err(e) = manager.reload_active_profile().await {
+                                tracing::error!("Failed to reload active profile: {}", e);
+                            } else {
+                                tracing::info!("Reloaded active profile after profile change");
+                            }
+                        }
+                        
                         Some(manager)
                     }
                     Err(e) => {

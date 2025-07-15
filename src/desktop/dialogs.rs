@@ -628,9 +628,20 @@ pub fn SettingsDialog(
                                                         }
                                                     }
                                                 },
-                                                on_delete: move |profile_id: i64| {
-                                                    tracing::info!("Delete profile {} clicked", profile_id);
-                                                    // TODO: Implement delete with confirmation
+                                                on_delete: {
+                                                    let profiles = profiles.clone();
+                                                    let profiles_loading = profiles_loading.clone();
+                                                    let on_profile_change = on_profile_change.clone();
+                                                    move |(profile_id, profile_string_id): (i64, String)| {
+                                                        tracing::info!("Delete profile {} (string_id: {}) clicked", profile_id, profile_string_id);
+                                                        handle_profile_delete(
+                                                            profile_id,
+                                                            profile_string_id,
+                                                            profiles.clone(),
+                                                            profiles_loading.clone(),
+                                                            on_profile_change.clone(),
+                                                        );
+                                                    }
                                                 },
                                                 on_reload_profiles: {
                                                     let mut profiles = profiles.clone();
@@ -1418,7 +1429,7 @@ fn DatabaseProfileOption(
 fn ProfileDetailCard(
     profile: ProfileInfo,
     on_edit: EventHandler<i64>,
-    on_delete: EventHandler<i64>,
+    on_delete: EventHandler<(i64, String)>,
     on_reload_profiles: EventHandler<()>,
     on_profile_change: Option<EventHandler<()>>,
     is_editing: bool,
@@ -1498,15 +1509,19 @@ fn ProfileDetailCard(
                     }
 
                     // Profile activation controls
-                    if !is_editing {
-                        if !profile.is_default {
-                            button {
-                                class: "icon-button",
-                                style: "padding: 4px 8px; background: #1a5a1a; border: none; border-radius: 4px; color: #4ade80; cursor: pointer; font-size: 12px;",
-                                onclick: move |_| {
-                                    let profile_id = profile.string_id.clone();
-                                    let reload_callback = on_reload_profiles.clone();
-                                    let profile_change_callback = on_profile_change.clone();
+                    if !is_editing && !profile.is_default {
+                        // Set Default button
+                        button {
+                            class: "icon-button",
+                            style: "padding: 4px 8px; background: #1a5a1a; border: none; border-radius: 4px; color: #4ade80; cursor: pointer; font-size: 12px;",
+                            onclick: {
+                                let profile_string_id = profile.string_id.clone();
+                                let reload_callback = on_reload_profiles.clone();
+                                let profile_change_callback = on_profile_change.clone();
+                                move |_| {
+                                    let profile_id = profile_string_id.clone();
+                                    let reload_callback = reload_callback.clone();
+                                    let profile_change_callback = profile_change_callback.clone();
                                     spawn(async move {
                                         if let Err(e) = set_default_profile(&profile_id).await {
                                             tracing::error!("Failed to set default profile: {}", e);
@@ -1519,18 +1534,21 @@ fn ProfileDetailCard(
                                             }
                                         }
                                     });
-                                },
-                                "⭐ Set Default"
-                            }
+                                }
+                            },
+                            "⭐ Set Default"
                         }
 
-                        if !profile.is_default {
-                            button {
-                                class: "icon-button",
-                                style: "padding: 4px 8px; background: #5a1e1e; border: none; border-radius: 4px; color: #ff6b6b; cursor: pointer; font-size: 12px;",
-                                onclick: move |_| on_delete.call(profile.id),
-                                "🗑️ Delete"
-                            }
+                        // Delete button
+                        button {
+                            class: "icon-button",
+                            style: "padding: 4px 8px; background: #5a1e1e; border: none; border-radius: 4px; color: #ff6b6b; cursor: pointer; font-size: 12px;",
+                            onclick: {
+                                let profile_id = profile.id;
+                                let profile_string_id = profile.string_id.clone();
+                                move |_| on_delete.call((profile_id, profile_string_id.clone()))
+                            },
+                            "🗑️ Delete"
                         }
                     }
                 }
@@ -3360,6 +3378,110 @@ async fn set_default_profile(profile_id: &str) -> anyhow::Result<()> {
         [profile_id.to_string()]
     )?;
 
+    Ok(())
+}
+
+/// Helper function to handle profile deletion with confirmation
+fn handle_profile_delete(
+    profile_id: i64,
+    profile_string_id: String,
+    mut profiles: Signal<Vec<ProfileInfo>>,
+    mut profiles_loading: Signal<bool>,
+    on_profile_change: Option<EventHandler<()>>,
+) {
+    spawn(async move {
+        // Show confirmation dialog
+        let confirmed = rfd::AsyncMessageDialog::new()
+            .set_title("Delete Profile")
+            .set_description("Are you sure you want to delete this profile? This action cannot be undone.")
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show()
+            .await;
+        
+        if confirmed == rfd::MessageDialogResult::Yes {
+            match delete_profile(profile_id, &profile_string_id).await {
+                Ok(_) => {
+                    tracing::info!("Profile {} deleted successfully", profile_id);
+                    // Reload profiles
+                    *profiles_loading.write() = true;
+                    if let Ok(loaded_profiles) = load_existing_profiles().await {
+                        *profiles.write() = loaded_profiles;
+                    }
+                    *profiles_loading.write() = false;
+                    
+                    // Trigger profile change callback to reload consensus engine
+                    if let Some(callback) = on_profile_change {
+                        callback.call(());
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to delete profile: {}", e);
+                    rfd::AsyncMessageDialog::new()
+                        .set_title("Delete Failed")
+                        .set_description(&format!("Failed to delete profile: {}", e))
+                        .set_buttons(rfd::MessageButtons::Ok)
+                        .show()
+                        .await;
+                }
+            }
+        }
+    });
+}
+
+/// Delete a consensus profile from the database
+async fn delete_profile(profile_id: i64, profile_string_id: &str) -> anyhow::Result<()> {
+    use crate::core::config::get_hive_config_dir;
+    use rusqlite::Connection;
+
+    let db_path = get_hive_config_dir().join("hive-ai.db");
+    let conn = Connection::open(db_path)?;
+
+    // First check if this is the last profile
+    let profile_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM consensus_profiles",
+        [],
+        |row| row.get(0)
+    )?;
+
+    if profile_count <= 1 {
+        return Err(anyhow::anyhow!("Cannot delete the last profile. At least one profile must exist."));
+    }
+
+    // Check if this is the active profile
+    let active_profile_id: Option<String> = conn.query_row(
+        "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+        [],
+        |row| row.get(0)
+    ).optional()?;
+
+    // Delete the profile using the string ID
+    let deleted = conn.execute(
+        "DELETE FROM consensus_profiles WHERE id = ?1",
+        rusqlite::params![profile_string_id],
+    )?;
+
+    if deleted == 0 {
+        return Err(anyhow::anyhow!("Profile not found"));
+    }
+
+    // If we deleted the active profile, set a new one as active
+    if active_profile_id.as_deref() == Some(profile_string_id) {
+        // Get the first available profile to set as active
+        let new_active_id: String = conn.query_row(
+            "SELECT id FROM consensus_profiles ORDER BY created_at ASC LIMIT 1",
+            [],
+            |row| row.get(0)
+        )?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
+            rusqlite::params![new_active_id],
+        )?;
+        
+        tracing::info!("Deleted active profile, set {} as new active profile", new_active_id);
+    }
+
+    tracing::info!("Successfully deleted profile {} (string_id: {})", profile_id, profile_string_id);
     Ok(())
 }
 
