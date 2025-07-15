@@ -2827,11 +2827,11 @@ fn FileTreeItem(
                     let current = expanded_dirs.read().get(&file_path_for_click).copied().unwrap_or(false);
                     expanded_dirs.write().insert(file_path_for_click.clone(), !current);
 
-                    // Trigger reload by changing a dummy state
-                    // This will cause the coroutine to re-run
-                    // (In a real app, we'd use a proper reload trigger)
-                    // Just log for now
-                    println!("Directory expanded/collapsed");
+                    // Set the directory as selected
+                    let path_string = file_path_for_click.to_string_lossy().to_string();
+                    *selected_file.write() = Some(path_string);
+                    
+                    println!("Directory selected: {}", file_path_for_click.display());
                 } else {
                     // Select file and open in tab
                     println!("File clicked: {}", file_path_for_click.display());
