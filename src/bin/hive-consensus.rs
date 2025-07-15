@@ -1875,74 +1875,80 @@ fn App() -> Element {
                     div {
                         class: "editor-tabs",
                         // Render all open tabs
-                        for tab in open_tabs.read().iter() {
-                            let tab_clone = tab.clone();
-                            let is_active = *active_tab.read() == *tab;
-                            let display_name = if tab == "__welcome__" {
-                                "Welcome".to_string()
-                            } else if tab == "__analytics__" {
-                                "Analytics".to_string()
-                            } else {
-                                let path = PathBuf::from(tab);
-                                path.file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or(tab)
-                                    .to_string()
-                            };
-                            
-                            div {
-                                class: if is_active { "editor-tab active" } else { "editor-tab" },
-                                onclick: move |_| {
-                                    *active_tab.write() = tab_clone.clone();
-                                    *selected_file.write() = Some(tab_clone.clone());
-                                    
-                                    // Update current view based on tab type
-                                    if tab_clone == "__analytics__" {
-                                        *current_view.write() = "analytics".to_string();
-                                    } else {
-                                        *current_view.write() = "code".to_string();
-                                        // Update file_content from tab_contents
-                                        if let Some(content) = tab_contents.read().get(&tab_clone) {
-                                            *file_content.write() = content.clone();
-                                        }
-                                    }
-                                },
-                                "{display_name}"
+                        {
+                            open_tabs.read().iter().map(|tab| {
+                                let tab_str = tab.clone();
+                                let tab_for_click = tab.clone();
+                                let tab_for_close = tab.clone();
+                                let is_active = *active_tab.read() == *tab;
+                                let display_name = if tab == "__welcome__" {
+                                    "Welcome".to_string()
+                                } else if tab == "__analytics__" {
+                                    "Analytics".to_string()
+                                } else {
+                                    let path = PathBuf::from(tab);
+                                    path.file_name()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or(tab)
+                                        .to_string()
+                                };
                                 
-                                // Close button
-                                if tab != "__welcome__" {
-                                    span {
-                                        style: "margin-left: 8px; cursor: pointer; color: #858585; font-size: 16px;",
-                                        onclick: move |e| {
-                                            e.stop_propagation();
+                                rsx! {
+                                    div {
+                                        class: if is_active { "editor-tab active" } else { "editor-tab" },
+                                        onclick: move |_| {
+                                            *active_tab.write() = tab_for_click.clone();
+                                            *selected_file.write() = Some(tab_for_click.clone());
                                             
-                                            // Remove from open tabs
-                                            open_tabs.write().retain(|t| t != &tab_clone);
-                                            
-                                            // If this was the active tab, switch to another
-                                            if *active_tab.read() == tab_clone {
-                                                if let Some(first_tab) = open_tabs.read().first() {
-                                                    *active_tab.write() = first_tab.clone();
-                                                    *selected_file.write() = Some(first_tab.clone());
-                                                    
-                                                    if first_tab == "__analytics__" {
-                                                        *current_view.write() = "analytics".to_string();
-                                                    } else {
-                                                        *current_view.write() = "code".to_string();
-                                                        if let Some(content) = tab_contents.read().get(first_tab) {
-                                                            *file_content.write() = content.clone();
-                                                        }
-                                                    }
+                                            // Update current view based on tab type
+                                            if tab_for_click == "__analytics__" {
+                                                *current_view.write() = "analytics".to_string();
+                                            } else {
+                                                *current_view.write() = "code".to_string();
+                                                // Update file_content from tab_contents
+                                                if let Some(content) = tab_contents.read().get(&tab_for_click) {
+                                                    *file_content.write() = content.clone();
                                                 }
                                             }
-                                            
-                                            // Remove content from tab_contents
-                                            tab_contents.write().remove(&tab_clone);
                                         },
-                                        "×"
+                                        "{display_name}"
+                                        
+                                        // Close button
+                                        if tab_str != "__welcome__" {
+                                            span {
+                                                style: "margin-left: 8px; cursor: pointer; color: #858585; font-size: 16px;",
+                                                onclick: move |e| {
+                                                    e.stop_propagation();
+                                                    
+                                                    // Remove from open tabs
+                                                    open_tabs.write().retain(|t| t != &tab_for_close);
+                                                    
+                                                    // If this was the active tab, switch to another
+                                                    if *active_tab.read() == tab_for_close {
+                                                        if let Some(first_tab) = open_tabs.read().first() {
+                                                            *active_tab.write() = first_tab.clone();
+                                                            *selected_file.write() = Some(first_tab.clone());
+                                                            
+                                                            if first_tab == "__analytics__" {
+                                                                *current_view.write() = "analytics".to_string();
+                                                            } else {
+                                                                *current_view.write() = "code".to_string();
+                                                                if let Some(content) = tab_contents.read().get(first_tab) {
+                                                                    *file_content.write() = content.clone();
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Remove content from tab_contents
+                                                    tab_contents.write().remove(&tab_for_close);
+                                                },
+                                                "×"
+                                            }
+                                        }
                                     }
                                 }
-                            }
+                            })
                         }
                     }
 
