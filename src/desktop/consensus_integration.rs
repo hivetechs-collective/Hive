@@ -9,7 +9,7 @@ use crate::consensus::{
     types::Stage,
 };
 use crate::core::api_keys::ApiKeyManager;
-use crate::desktop::state::{AppState, ConsensusStage, StageStatus};
+use crate::desktop::state::{AppState, ConsensusStage, StageInfo, StageStatus};
 use anyhow::Result;
 use dioxus::prelude::*;
 use std::sync::Arc;
@@ -508,8 +508,25 @@ impl DesktopConsensusManager {
             ));
         }
 
-        // Start consensus in UI
-        self.app_state.write().consensus.start_consensus();
+        // Get current profile from consensus engine to update UI with actual models
+        let profile = {
+            let engine = self.engine.lock().await;
+            engine.get_current_profile().await
+        };
+        
+        // Start consensus in UI with actual profile models
+        {
+            let mut state = self.app_state.write();
+            state.consensus.start_consensus();
+            
+            // Update stages with actual models from the profile
+            state.consensus.stages = vec![
+                StageInfo::new("Generator", &profile.generator_model),
+                StageInfo::new("Refiner", &profile.refiner_model),
+                StageInfo::new("Validator", &profile.validator_model),
+                StageInfo::new("Curator", &profile.curator_model),
+            ];
+        }
 
         // Create two channels - one for streaming events to return, one for internal processing
         let (tx_stream, rx_stream) = mpsc::unbounded_channel();
