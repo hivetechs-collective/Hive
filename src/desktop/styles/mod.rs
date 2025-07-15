@@ -1303,6 +1303,101 @@ button:focus,
     font-weight: 600;
     font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Consolas', monospace;
 }
+
+/* ===== Context Menu ===== */
+.context-menu {
+    position: fixed;
+    background: var(--vscode-menu-background);
+    border: 1px solid var(--vscode-menu-border);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    padding: 4px 0;
+    min-width: 180px;
+    z-index: 1000;
+    font-size: 13px;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 12px;
+    cursor: pointer;
+    color: var(--vscode-menu-foreground);
+    transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover {
+    background: var(--vscode-menu-selectionBackground);
+    color: var(--vscode-menu-selectionForeground);
+}
+
+.context-menu-item.disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.context-menu-item.disabled:hover {
+    background: transparent;
+    color: var(--vscode-menu-foreground);
+}
+
+.context-menu-separator {
+    height: 1px;
+    background: var(--vscode-menu-separatorBackground);
+    margin: 4px 0;
+}
+
+/* ===== Explorer Toolbar ===== */
+.explorer-toolbar-btn {
+    background: transparent;
+    border: none;
+    color: #cccccc;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    height: 22px;
+    transition: background-color 0.1s ease;
+}
+
+.explorer-toolbar-btn:hover {
+    background: #2a2d2e !important;
+}
+
+.explorer-toolbar-btn:active {
+    background: #094771 !important;
+}
+
+/* ===== File Tree Items ===== */
+.file-tree-item {
+    display: flex;
+    align-items: center;
+    height: 22px;
+    line-height: 22px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    color: #cccccc;
+    background-color: transparent;
+    position: relative;
+}
+
+.file-tree-item:hover {
+    background-color: #2a2d2e;
+}
+
+.file-tree-item.selected {
+    background-color: #094771;
+    color: #ffffff;
+}
+
+.file-tree-item.selected:hover {
+    background-color: #094771;
+}
 "#
 }
 

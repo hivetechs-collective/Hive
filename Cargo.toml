@@ -61,6 +61,9 @@ dioxus-sdk = "0.6"
 # Native file dialogs
 rfd = "0.15"
 
+# Clipboard access
+arboard = "3.2"
+
 # Browser opening
 webbrowser = "1.0"
 

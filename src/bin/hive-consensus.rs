@@ -779,7 +779,11 @@ use hive_ai::desktop::dialogs::{
     UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, WelcomeTab,
     DIALOG_STYLES,
 };
+use hive_ai::desktop::context_menu::{
+    ContextMenu, ContextMenuAction, ContextMenuState, FileNameDialog, ConfirmDialog,
+};
 use hive_ai::desktop::file_system;
+use hive_ai::desktop::file_operations;
 use hive_ai::desktop::menu_bar::{MenuAction, MenuBar};
 use hive_ai::desktop::state::{FileItem, FileType};
 
@@ -866,6 +870,14 @@ fn App() -> Element {
     let mut show_onboarding_dialog = use_signal(|| false);
     let show_upgrade_dialog = use_signal(|| false);
     let onboarding_current_step = use_signal(|| 1); // Persist onboarding step
+    
+    // Context menu and file operation dialogs
+    let mut context_menu_state = use_signal(|| ContextMenuState::default());
+    let mut show_new_file_dialog = use_signal(|| false);
+    let mut show_new_folder_dialog = use_signal(|| false);
+    let mut show_rename_dialog = use_signal(|| false);
+    let mut show_delete_confirm = use_signal(|| false);
+    let mut dialog_target_path = use_signal(|| None::<PathBuf>);
 
     // View state
     let mut current_view = use_signal(|| "code".to_string()); // "code" or "analytics"
@@ -910,6 +922,50 @@ fn App() -> Element {
     // Subscription state
     let subscription_display = use_signal(|| String::from("Loading..."));
     let error_shown = use_signal(|| false);
+
+    // Helper function to reload file tree
+    let reload_file_tree = {
+        let current_dir = current_dir.clone();
+        let expanded_dirs = expanded_dirs.clone();
+        let file_tree = file_tree.clone();
+        move || {
+            let current_dir = current_dir.clone();
+            let expanded_dirs = expanded_dirs.clone();
+            let mut file_tree = file_tree.clone();
+            spawn(async move {
+                let current_dir_path = current_dir.read().clone();
+                let expanded_map = expanded_dirs.read().clone();
+                
+                let root_name = current_dir_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Root")
+                    .to_string();
+
+                match file_system::load_directory_tree(&current_dir_path, &expanded_map, false).await {
+                    Ok(files) => {
+                        let root_item = FileItem {
+                            path: current_dir_path.clone(),
+                            name: root_name,
+                            is_directory: true,
+                            is_expanded: true,
+                            children: files,
+                            file_type: FileType::Directory,
+                            git_status: None,
+                            size: None,
+                            modified: None,
+                        };
+
+                        file_tree.write().clear();
+                        file_tree.write().push(root_item);
+                    }
+                    Err(e) => {
+                        eprintln!("Error reloading directory: {}", e);
+                    }
+                }
+            });
+        }
+    };
 
     // Also load the api config on mount
     use_effect({
@@ -1794,9 +1850,75 @@ fn App() -> Element {
                     }
 
                     div {
-                        class: "sidebar-section-title",
-                        style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px;",
-                        "EXPLORER"
+                        class: "explorer-header",
+                        style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;",
+                        
+                        div {
+                            class: "sidebar-section-title",
+                            style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px; margin: 0;",
+                            "EXPLORER"
+                        }
+                        
+                        div {
+                            class: "explorer-toolbar",
+                            style: "display: flex; gap: 2px; margin-left: auto;",
+                            
+                            // New File Button - VS Code style with text and icon
+                            button {
+                                class: "explorer-toolbar-btn new-file-btn",
+                                style: "background: transparent; border: none; color: #cccccc; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; height: 22px; transition: background-color 0.1s ease;",
+                                title: "New File (Ctrl+N)",
+                                // Hover effects are handled by CSS now
+                                onclick: move |_| {
+                                    // Determine target path: selected folder or current directory
+                                    let target = if let Some(selected) = selected_file.read().as_ref() {
+                                        let selected_path = std::path::Path::new(selected);
+                                        if selected_path.is_dir() {
+                                            selected_path.to_path_buf()
+                                        } else if let Some(parent) = selected_path.parent() {
+                                            parent.to_path_buf()
+                                        } else {
+                                            current_dir.read().clone()
+                                        }
+                                    } else {
+                                        current_dir.read().clone()
+                                    };
+                                    
+                                    *show_new_file_dialog.write() = true;
+                                    *dialog_target_path.write() = Some(target);
+                                },
+                                span { style: "font-size: 14px;", "📄" }
+                                span { "New File" }
+                            }
+                            
+                            // New Folder Button - VS Code style with text and icon
+                            button {
+                                class: "explorer-toolbar-btn new-folder-btn",
+                                style: "background: transparent; border: none; color: #cccccc; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; height: 22px; margin-left: 4px; transition: background-color 0.1s ease;",
+                                title: "New Folder (Ctrl+Shift+N)",
+                                // Hover effects are handled by CSS now
+                                onclick: move |_| {
+                                    // Determine target path: selected folder or current directory
+                                    let target = if let Some(selected) = selected_file.read().as_ref() {
+                                        let selected_path = std::path::Path::new(selected);
+                                        if selected_path.is_dir() {
+                                            selected_path.to_path_buf()
+                                        } else if let Some(parent) = selected_path.parent() {
+                                            parent.to_path_buf()
+                                        } else {
+                                            current_dir.read().clone()
+                                        }
+                                    } else {
+                                        current_dir.read().clone()
+                                    };
+                                    
+                                    *show_new_folder_dialog.write() = true;
+                                    *dialog_target_path.write() = Some(target);
+                                },
+                                span { style: "font-size: 14px;", "📁" }
+                                span { "New Folder" }
+                            }
+                        }
                     }
 
                     // File tree
@@ -1812,6 +1934,7 @@ fn App() -> Element {
                             open_tabs: open_tabs.clone(),
                             active_tab: active_tab.clone(),
                             tab_contents: tab_contents.clone(),
+                            context_menu_state: context_menu_state.clone(),
                         }
                     }
 
@@ -2358,6 +2481,274 @@ fn App() -> Element {
                 error_message: update_error_message.read().clone(),
             }
         }
+
+        // Context menu
+        ContextMenu {
+            state: context_menu_state.clone(),
+            on_action: EventHandler::new({
+                let mut context_menu_state = context_menu_state.clone();
+                let mut show_new_file_dialog = show_new_file_dialog.clone();
+                let mut show_new_folder_dialog = show_new_folder_dialog.clone();
+                let mut show_rename_dialog = show_rename_dialog.clone();
+                let mut show_delete_confirm = show_delete_confirm.clone();
+                let mut dialog_target_path = dialog_target_path.clone();
+                let current_dir = current_dir.clone();
+                let mut file_tree = file_tree.clone();
+                move |(action, path): (ContextMenuAction, PathBuf)| {
+                    *dialog_target_path.write() = Some(path.clone());
+                    match action {
+                        ContextMenuAction::NewFile => {
+                            *show_new_file_dialog.write() = true;
+                        }
+                        ContextMenuAction::NewFolder => {
+                            *show_new_folder_dialog.write() = true;
+                        }
+                        ContextMenuAction::Rename => {
+                            *show_rename_dialog.write() = true;
+                        }
+                        ContextMenuAction::Delete => {
+                            *show_delete_confirm.write() = true;
+                        }
+                        ContextMenuAction::Cut => {
+                            context_menu_state.write().set_clipboard(path, true);
+                        }
+                        ContextMenuAction::Copy => {
+                            context_menu_state.write().set_clipboard(path, false);
+                        }
+                        ContextMenuAction::Paste => {
+                            let clipboard_info = context_menu_state.read().clipboard.clone();
+                            if let Some(clipboard) = clipboard_info {
+                                let src = clipboard.path.clone();
+                                let is_cut = clipboard.is_cut;
+                                let dst_dir = if path.is_dir() { path } else { path.parent().unwrap_or(&path).to_path_buf() };
+                                let dst = dst_dir.join(src.file_name().unwrap_or_default());
+                                
+                                spawn(async move {
+                                    let result = if is_cut {
+                                        file_operations::move_item(&src, &dst).await
+                                    } else {
+                                        file_operations::copy_item(&src, &dst).await
+                                    };
+                                    
+                                    if let Err(e) = result {
+                                        tracing::error!("Failed to paste item: {}", e);
+                                    }
+                                    
+                                    // TODO: Refresh file tree
+                                });
+                                
+                                if is_cut {
+                                    context_menu_state.write().clear_clipboard();
+                                }
+                            }
+                        }
+                        ContextMenuAction::Duplicate => {
+                            spawn(async move {
+                                if let Err(e) = file_operations::duplicate_item(&path).await {
+                                    tracing::error!("Failed to duplicate item: {}", e);
+                                }
+                                // TODO: Refresh file tree
+                            });
+                        }
+                        ContextMenuAction::CopyPath => {
+                            if let Err(e) = file_operations::copy_path_to_clipboard(&path) {
+                                tracing::error!("Failed to copy path to clipboard: {}", e);
+                            }
+                        }
+                        ContextMenuAction::OpenInTerminal => {
+                            if let Err(e) = file_operations::open_in_terminal(&path) {
+                                tracing::error!("Failed to open terminal: {}", e);
+                            }
+                        }
+                        ContextMenuAction::RevealInFinder => {
+                            if let Err(e) = file_operations::reveal_in_finder(&path) {
+                                tracing::error!("Failed to reveal in finder: {}", e);
+                            }
+                        }
+                    }
+                }
+            }),
+        }
+
+        // File operation dialogs
+        FileNameDialog {
+            visible: *show_new_file_dialog.read(),
+            title: format!("New File in {}", 
+                dialog_target_path.read().as_ref()
+                    .map(|p| p.file_name().and_then(|n| n.to_str()).unwrap_or("folder"))
+                    .unwrap_or("current directory")
+            ),
+            initial_value: "".to_string(), // Always start with empty field
+            on_confirm: EventHandler::new({
+                let mut show_new_file_dialog = show_new_file_dialog.clone();
+                let dialog_target_path = dialog_target_path.clone();
+                let current_dir = current_dir.clone();
+                let mut file_tree = file_tree.clone();
+                let reload_fn = reload_file_tree.clone();
+                move |filename: String| {
+                    // Validate filename is not empty
+                    let filename = filename.trim();
+                    if filename.is_empty() {
+                        return; // Don't close dialog if filename is empty
+                    }
+                    
+                    *show_new_file_dialog.write() = false;
+                    
+                    if let Some(target_path) = dialog_target_path.read().as_ref() {
+                        let parent_dir = if target_path.is_dir() { 
+                            target_path.clone() 
+                        } else { 
+                            target_path.parent().unwrap_or(&current_dir.read()).to_path_buf() 
+                        };
+                        let file_path = parent_dir.join(&filename);
+                        
+                        spawn(async move {
+                            let extension = file_path.extension()
+                                .and_then(|ext| ext.to_str())
+                                .unwrap_or("");
+                            let template = file_operations::get_file_template(extension);
+                            
+                            if let Err(e) = file_operations::create_file(&file_path, Some(template)).await {
+                                tracing::error!("Failed to create file: {}", e);
+                            }
+                            
+                            // Refresh file tree to show the new file
+                            reload_fn();
+                        });
+                    }
+                }
+            }),
+            on_cancel: EventHandler::new({
+                let mut show_new_file_dialog = show_new_file_dialog.clone();
+                move |_| {
+                    *show_new_file_dialog.write() = false;
+                }
+            }),
+        }
+
+        FileNameDialog {
+            visible: *show_new_folder_dialog.read(),
+            title: format!("New Folder in {}", 
+                dialog_target_path.read().as_ref()
+                    .map(|p| p.file_name().and_then(|n| n.to_str()).unwrap_or("folder"))
+                    .unwrap_or("current directory")
+            ),
+            initial_value: "".to_string(), // Always start with empty field
+            on_confirm: EventHandler::new({
+                let mut show_new_folder_dialog = show_new_folder_dialog.clone();
+                let dialog_target_path = dialog_target_path.clone();
+                let current_dir = current_dir.clone();
+                let reload_fn = reload_file_tree.clone();
+                move |foldername: String| {
+                    // Validate foldername is not empty
+                    let foldername = foldername.trim();
+                    if foldername.is_empty() {
+                        return; // Don't close dialog if foldername is empty
+                    }
+                    
+                    *show_new_folder_dialog.write() = false;
+                    
+                    if let Some(target_path) = dialog_target_path.read().as_ref() {
+                        let parent_dir = if target_path.is_dir() { 
+                            target_path.clone() 
+                        } else { 
+                            target_path.parent().unwrap_or(&current_dir.read()).to_path_buf() 
+                        };
+                        let folder_path = parent_dir.join(&foldername);
+                        
+                        spawn(async move {
+                            if let Err(e) = file_operations::create_folder(&folder_path).await {
+                                tracing::error!("Failed to create folder: {}", e);
+                            }
+                            
+                            // Refresh file tree to show the new folder
+                            reload_fn();
+                        });
+                    }
+                }
+            }),
+            on_cancel: EventHandler::new({
+                let mut show_new_folder_dialog = show_new_folder_dialog.clone();
+                move |_| {
+                    *show_new_folder_dialog.write() = false;
+                }
+            }),
+        }
+
+        FileNameDialog {
+            visible: *show_rename_dialog.read(),
+            title: "Rename".to_string(),
+            initial_value: {
+                dialog_target_path.read().as_ref()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string()
+            },
+            on_confirm: EventHandler::new({
+                let mut show_rename_dialog = show_rename_dialog.clone();
+                let dialog_target_path = dialog_target_path.clone();
+                move |new_name| {
+                    *show_rename_dialog.write() = false;
+                    
+                    if let Some(old_path) = dialog_target_path.read().as_ref() {
+                        let new_path = old_path.parent().unwrap_or(old_path).join(&new_name);
+                        let old_path = old_path.clone();
+                        
+                        spawn(async move {
+                            if let Err(e) = file_operations::rename_item(&old_path, &new_path).await {
+                                tracing::error!("Failed to rename item: {}", e);
+                            }
+                            
+                            // TODO: Refresh file tree and update open tabs
+                        });
+                    }
+                }
+            }),
+            on_cancel: EventHandler::new({
+                let mut show_rename_dialog = show_rename_dialog.clone();
+                move |_| {
+                    *show_rename_dialog.write() = false;
+                }
+            }),
+        }
+
+        ConfirmDialog {
+            visible: *show_delete_confirm.read(),
+            title: "Delete Item".to_string(),
+            message: format!("Are you sure you want to delete '{}'? This action cannot be undone.",
+                dialog_target_path.read().as_ref()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("this item")
+            ),
+            confirm_text: "Delete".to_string(),
+            danger: true,
+            on_confirm: EventHandler::new({
+                let mut show_delete_confirm = show_delete_confirm.clone();
+                let dialog_target_path = dialog_target_path.clone();
+                move |_| {
+                    *show_delete_confirm.write() = false;
+                    
+                    if let Some(path) = dialog_target_path.read().as_ref() {
+                        let path = path.clone();
+                        spawn(async move {
+                            if let Err(e) = file_operations::delete_item(&path).await {
+                                tracing::error!("Failed to delete item: {}", e);
+                            }
+                            
+                            // TODO: Refresh file tree and close any open tabs for deleted files
+                        });
+                    }
+                }
+            }),
+            on_cancel: EventHandler::new({
+                let mut show_delete_confirm = show_delete_confirm.clone();
+                move |_| {
+                    *show_delete_confirm.write() = false;
+                }
+            }),
+        }
     }
 }
 
@@ -2373,8 +2764,11 @@ fn FileTreeItem(
     open_tabs: Signal<Vec<String>>,
     active_tab: Signal<String>,
     tab_contents: Signal<HashMap<String, String>>,
+    context_menu_state: Signal<ContextMenuState>,
 ) -> Element {
     let file_path = file.path.clone();
+    let file_path_for_context = file_path.clone(); // Clone for context menu
+    let file_path_for_click = file_path.clone(); // Clone for click handler
     let file_name = file.name.clone();
     let is_dir = file.is_directory;
 
@@ -2409,13 +2803,29 @@ fn FileTreeItem(
 
     rsx! {
         div {
-            class: if is_selected { "sidebar-item active" } else { "sidebar-item" },
-            style: "padding-left: {indent + 20}px;",
+            class: if is_selected { "file-tree-item selected" } else { "file-tree-item" },
+            style: format!("padding-left: {}px; display: flex; align-items: center; height: 22px; line-height: 22px; cursor: pointer; user-select: none; font-size: 13px; color: {}; background-color: {}; position: relative;", 
+                indent + 8,
+                if is_selected { "#ffffff" } else { "#cccccc" },
+                if is_selected { "#094771" } else { "transparent" }
+            ),
+            oncontextmenu: move |e| {
+                e.prevent_default();
+                // Use client coordinates with small adjustment to avoid hiding under cursor
+                let coords = e.client_coordinates();
+                context_menu_state.write().show(
+                    (coords.x + 10.0) as i32, // Small offset to the right of cursor
+                    (coords.y + 5.0) as i32,  // Small offset below cursor
+                    file_path_for_context.clone(),
+                    is_dir
+                );
+            },
+            // Hover effects are handled by CSS
             onclick: move |_| {
                 if is_dir {
                     // Toggle expansion
-                    let current = expanded_dirs.read().get(&file_path).copied().unwrap_or(false);
-                    expanded_dirs.write().insert(file_path.clone(), !current);
+                    let current = expanded_dirs.read().get(&file_path_for_click).copied().unwrap_or(false);
+                    expanded_dirs.write().insert(file_path_for_click.clone(), !current);
 
                     // Trigger reload by changing a dummy state
                     // This will cause the coroutine to re-run
@@ -2424,8 +2834,8 @@ fn FileTreeItem(
                     println!("Directory expanded/collapsed");
                 } else {
                     // Select file and open in tab
-                    println!("File clicked: {}", file_path.display());
-                    let path_string = file_path.to_string_lossy().to_string();
+                    println!("File clicked: {}", file_path_for_click.display());
+                    let path_string = file_path_for_click.to_string_lossy().to_string();
                     
                     // Add to open tabs if not already open
                     if !open_tabs.read().contains(&path_string) {
@@ -2439,7 +2849,7 @@ fn FileTreeItem(
                     // Load file content immediately
                     let mut tab_contents = tab_contents.clone();
                     let mut file_content = file_content.clone();
-                    let file_path = file_path.clone();
+                    let file_path = file_path_for_click.clone();
                     let path_string_for_spawn = path_string.clone();
                     spawn(async move {
                         match file_system::read_file_content(&file_path).await {
@@ -2458,7 +2868,39 @@ fn FileTreeItem(
                     });
                 }
             },
-            "{icon} {file_name}"
+            
+            // Chevron for directories
+            if is_dir {
+                span {
+                    style: "width: 20px; height: 22px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; color: #8a8a8a;",
+                    if is_expanded { "▾" } else { "▸" }
+                }
+            } else {
+                span {
+                    style: "width: 20px; display: inline-block; flex-shrink: 0;",
+                    ""
+                }
+            }
+            
+            // Icon and name container
+            span {
+                style: "display: flex; align-items: center; gap: 5px; flex: 1; overflow: hidden;",
+                
+                // File/folder icon
+                span { 
+                    style: "font-size: 16px; display: flex; align-items: center; flex-shrink: 0;", 
+                    "{icon}" 
+                }
+                
+                // File/folder name
+                span { 
+                    style: format!("white-space: nowrap; overflow: hidden; text-overflow: ellipsis; {}",
+                        if is_dir { "font-weight: 500;" } else { "" }
+                    ),
+                    title: "{file_name}",
+                    "{file_name}" 
+                }
+            }
         }
 
         // Render children if expanded
@@ -2475,6 +2917,7 @@ fn FileTreeItem(
                     open_tabs: open_tabs.clone(),
                     active_tab: active_tab.clone(),
                     tab_contents: tab_contents.clone(),
+                    context_menu_state: context_menu_state.clone(),
                 }
             }
         }
