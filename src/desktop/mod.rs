@@ -28,6 +28,7 @@ pub mod status_bar_enhanced;
 pub mod profile_service;
 pub mod styles;
 pub mod welcome_enhanced;
+pub mod code_editor;
 
 pub use app::App;
 

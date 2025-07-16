@@ -847,6 +847,8 @@ use hive_ai::desktop::file_system;
 use hive_ai::desktop::file_operations;
 use hive_ai::desktop::menu_bar::{MenuAction, MenuBar};
 use hive_ai::desktop::state::{FileItem, FileType};
+use hive_ai::desktop::code_editor::editor::CodeEditorComponent;
+use hive_ai::desktop::code_editor::renderer::EDITOR_STYLES;
 
 // Simple markdown to HTML converter
 mod markdown {
@@ -1886,6 +1888,7 @@ fn App() -> Element {
         // Inject VS Code-style CSS and dialog styles
         style { "{DESKTOP_STYLES}" }
         style { "{DIALOG_STYLES}" }
+        style { "{EDITOR_STYLES}" }
 
         div {
             class: "app-container",
@@ -2273,11 +2276,34 @@ fn App() -> Element {
                                 on_action: handle_welcome_action,
                             }
                         } else if !active_tab.read().is_empty() && *active_tab.read() != "__welcome__" {
-                            // Show file content for the active tab
+                            // Show file content for the active tab with VS Code-style editor
                             if let Some(content) = tab_contents.read().get(&*active_tab.read()) {
-                                pre {
-                                    style: "margin: 0; white-space: pre-wrap; word-wrap: break-word;",
-                                    "{content}"
+                                CodeEditorComponent {
+                                    file_path: active_tab.read().clone(),
+                                    initial_content: content.clone(),
+                                    on_change: {
+                                        let tab_contents = tab_contents.clone();
+                                        let active_tab = active_tab.clone();
+                                        move |new_content: String| {
+                                            // Update the tab content when user edits
+                                            let active_tab_path = active_tab.read().clone();
+                                            tab_contents.write().insert(active_tab_path.clone(), new_content.clone());
+                                            
+                                            // Mark the file as modified in the UI
+                                            // This will be handled by git integration showing changes
+                                            tracing::debug!("File content updated: {}", active_tab_path);
+                                        }
+                                    },
+                                    on_save: move |file_path: String, content: String| {
+                                        // Save the file to disk
+                                        spawn(async move {
+                                            if let Err(e) = tokio::fs::write(&file_path, content).await {
+                                                tracing::error!("Failed to save file {}: {}", file_path, e);
+                                            } else {
+                                                tracing::info!("File saved: {}", file_path);
+                                            }
+                                        });
+                                    },
                                 }
                             } else {
                                 div {
