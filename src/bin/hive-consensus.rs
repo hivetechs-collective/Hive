@@ -2282,7 +2282,7 @@ fn App() -> Element {
                                     file_path: active_tab.read().clone(),
                                     initial_content: content.clone(),
                                     on_change: {
-                                        let tab_contents = tab_contents.clone();
+                                        let mut tab_contents = tab_contents.clone();
                                         let active_tab = active_tab.clone();
                                         move |new_content: String| {
                                             // Update the tab content when user edits
@@ -2294,7 +2294,7 @@ fn App() -> Element {
                                             tracing::debug!("File content updated: {}", active_tab_path);
                                         }
                                     },
-                                    on_save: move |file_path: String, content: String| {
+                                    on_save: move |(file_path, content): (String, String)| {
                                         // Save the file to disk
                                         spawn(async move {
                                             if let Err(e) = tokio::fs::write(&file_path, content).await {

@@ -5,7 +5,7 @@
 use tree_sitter::{Language, Parser, Query, QueryCursor, Node};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HighlightStyle {
     pub color: String,
     pub bold: bool,
@@ -13,7 +13,7 @@ pub struct HighlightStyle {
     pub underline: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Theme {
     pub name: String,
     pub background: String,
@@ -99,7 +99,7 @@ impl Theme {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct HighlightedSpan {
     pub start: usize,
     pub end: usize,
@@ -155,7 +155,7 @@ impl SyntaxHighlighter {
                 // For now, we'll do simple keyword highlighting
                 // In a real implementation, we'd use proper tree-sitter queries
                 let root = tree.root_node();
-                self.highlight_node(&root, code, &mut spans);
+                self.highlight_node(root, code, &mut spans);
             }
         }
         

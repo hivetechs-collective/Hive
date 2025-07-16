@@ -15,7 +15,7 @@ pub struct CompletionState {
     pub position: CompletionPosition,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompletionPosition {
     pub line: usize,
     pub column: usize,
@@ -46,12 +46,11 @@ pub fn CompletionPopup(
     on_select: EventHandler<CompletionItem>,
     on_cancel: EventHandler<()>,
 ) -> Element {
-    let completion_state = state.read();
-    
-    if !completion_state.visible || completion_state.items.is_empty() {
+    if !state.read().visible || state.read().items.is_empty() {
         return rsx! { div {} };
     }
     
+    let position = state.read().position.clone();
     let popup_style = format!(
         r#"
         position: absolute;
@@ -68,8 +67,8 @@ pub fn CompletionPopup(
         font-family: 'JetBrains Mono', monospace;
         font-size: 13px;
         "#,
-        completion_state.position.x,
-        completion_state.position.y + 20.0 // Position below cursor
+        position.x,
+        position.y + 20.0 // Position below cursor
     );
     
     rsx! {
@@ -91,7 +90,8 @@ pub fn CompletionPopup(
                         }
                     }
                     Key::Enter => {
-                        if let Some(item) = completion_state.items.get(completion_state.selected_index) {
+                        let selected_index = state.read().selected_index;
+                        if let Some(item) = state.read().items.get(selected_index) {
                             on_select.call(item.clone());
                         }
                     }
@@ -103,12 +103,25 @@ pub fn CompletionPopup(
             },
             
             // Completion items
-            for (index, item) in completion_state.items.iter().enumerate() {
-                CompletionItemComponent {
-                    item: item.clone(),
-                    is_selected: index == completion_state.selected_index,
-                    on_click: move |_| {
-                        on_select.call(item.clone());
+            {
+                let items = state.read().items.clone();
+                let selected_index = state.read().selected_index;
+                rsx! {
+                    for (index, item) in items.iter().enumerate() {
+                        {
+                            let item_clone = item.clone();
+                            let is_selected = index == selected_index;
+                            let on_select_clone = on_select.clone();
+                            rsx! {
+                                CompletionItemComponent {
+                                    item: item_clone.clone(),
+                                    is_selected: is_selected,
+                                    on_click: move |_| {
+                                        on_select_clone.call(item_clone.clone());
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

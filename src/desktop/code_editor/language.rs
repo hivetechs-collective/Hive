@@ -266,7 +266,7 @@ impl LanguageService {
 }
 
 /// Represents a completion suggestion with AI enhancement
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AIEnhancedCompletion {
     pub base_completion: CompletionItem,
     pub ai_confidence: f32,

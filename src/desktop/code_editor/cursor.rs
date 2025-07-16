@@ -5,7 +5,7 @@
 use std::cmp::{max, min};
 use std::ops::Range;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
@@ -145,6 +145,62 @@ impl Cursor {
         // For now, just remove duplicates
         self.secondary.sort_by_key(|s| (s.start().line, s.start().column));
         self.secondary.dedup_by(|a, b| a.start() == b.start() && a.end() == b.end());
+    }
+    
+    /// Move cursor left
+    pub fn move_left(&mut self, buffer: &super::buffer::TextBuffer) {
+        let pos = self.primary.active;
+        if pos.column > 0 {
+            self.primary.active.column -= 1;
+            self.primary.anchor = self.primary.active;
+        } else if pos.line > 0 {
+            // Move to end of previous line
+            self.primary.active.line -= 1;
+            if let Some(line) = buffer.line(self.primary.active.line) {
+                self.primary.active.column = line.len_chars();
+            }
+            self.primary.anchor = self.primary.active;
+        }
+    }
+    
+    /// Move cursor right
+    pub fn move_right(&mut self, buffer: &super::buffer::TextBuffer) {
+        let pos = self.primary.active;
+        if let Some(line) = buffer.line(pos.line) {
+            if pos.column < line.len_chars() {
+                self.primary.active.column += 1;
+                self.primary.anchor = self.primary.active;
+            } else if pos.line < buffer.len_lines() - 1 {
+                // Move to start of next line
+                self.primary.active.line += 1;
+                self.primary.active.column = 0;
+                self.primary.anchor = self.primary.active;
+            }
+        }
+    }
+    
+    /// Move cursor up
+    pub fn move_up(&mut self, buffer: &super::buffer::TextBuffer) {
+        if self.primary.active.line > 0 {
+            self.primary.active.line -= 1;
+            // Clamp column to line length
+            if let Some(line) = buffer.line(self.primary.active.line) {
+                self.primary.active.column = self.primary.active.column.min(line.len_chars());
+            }
+            self.primary.anchor = self.primary.active;
+        }
+    }
+    
+    /// Move cursor down
+    pub fn move_down(&mut self, buffer: &super::buffer::TextBuffer) {
+        if self.primary.active.line < buffer.len_lines() - 1 {
+            self.primary.active.line += 1;
+            // Clamp column to line length
+            if let Some(line) = buffer.line(self.primary.active.line) {
+                self.primary.active.column = self.primary.active.column.min(line.len_chars());
+            }
+            self.primary.anchor = self.primary.active;
+        }
     }
 }
 
