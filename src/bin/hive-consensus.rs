@@ -925,6 +925,9 @@ fn App() -> Element {
         contents
     });
     
+    // Cursor position tracking for status bar
+    let mut cursor_position = use_signal(|| (1, 1)); // (line, column)
+    
     // Tab overflow management
     let mut tab_scroll_offset = use_signal(|| 0usize);
     let max_visible_tabs = 6; // Maximum number of tabs to display before scrolling
@@ -2304,6 +2307,13 @@ fn App() -> Element {
                                             }
                                         });
                                     },
+                                    on_cursor_change: {
+                                        let mut cursor_position = cursor_position.clone();
+                                        move |(line, col): (usize, usize)| {
+                                            *cursor_position.write() = (line, col);
+                                            tracing::debug!("Cursor position updated: Ln {}, Col {}", line, col);
+                                        }
+                                    },
                                 }
                             } else {
                                 div {
@@ -2312,6 +2322,13 @@ fn App() -> Element {
                                 }
                             }
                         } else {
+                            // Reset cursor position for non-code views
+                            {
+                                let (line, col) = *cursor_position.read();
+                                if line != 1 || col != 1 {
+                                    *cursor_position.write() = (1, 1);
+                                }
+                            }
                             div {
                                 class: "welcome-message",
                                 "Select a file from the explorer to view its contents"
@@ -2577,7 +2594,10 @@ fn App() -> Element {
                 div {
                     class: "status-right",
                     style: "color: #000; font-weight: 600;",
-                    "Ln 1, Col 1",
+                    {
+                        let (line, col) = *cursor_position.read();
+                        format!("Ln {}, Col {}", line, col)
+                    },
                     span { style: "color: #000;", " • " },
                     "UTF-8",
                     span { style: "color: #000;", " • " },
