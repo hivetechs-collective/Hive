@@ -20,7 +20,7 @@ pub struct WelcomeState {
     pub walkthroughs_completed: Vec<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RecentProject {
     pub name: String,
     pub path: String,

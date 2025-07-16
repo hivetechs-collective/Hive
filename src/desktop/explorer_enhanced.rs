@@ -18,7 +18,7 @@ pub enum FileDecoration {
 }
 
 /// File tree node with decorations
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FileNode {
     pub path: PathBuf,
     pub name: String,
@@ -82,7 +82,7 @@ pub fn EnhancedExplorer(
                         button {
                             class: "action-button",
                             title: "New File... (Ctrl+Alt+N)",
-                            onclick: move |_| {
+                            onclick: move |_: dioxus::events::MouseEvent| {
                                 // Trigger new file action
                             },
                             span { class: "codicon codicon-new-file" }
@@ -91,7 +91,7 @@ pub fn EnhancedExplorer(
                         button {
                             class: "action-button",
                             title: "New Folder...",
-                            onclick: move |_| {
+                            onclick: move |_: dioxus::events::MouseEvent| {
                                 // Trigger new folder action
                             },
                             span { class: "codicon codicon-new-folder" }
@@ -100,7 +100,7 @@ pub fn EnhancedExplorer(
                         button {
                             class: "action-button",
                             title: "Refresh Explorer",
-                            onclick: move |_| {
+                            onclick: move |_: dioxus::events::MouseEvent| {
                                 // Trigger refresh
                             },
                             span { class: "codicon codicon-refresh" }
@@ -109,7 +109,7 @@ pub fn EnhancedExplorer(
                         button {
                             class: "action-button",
                             title: "Collapse All",
-                            onclick: move |_| {
+                            onclick: move |_: dioxus::events::MouseEvent| {
                                 // Collapse all folders
                             },
                             span { class: "codicon codicon-collapse-all" }
@@ -125,7 +125,7 @@ pub fn EnhancedExplorer(
                         class: "search-input",
                         placeholder: "Search files by name",
                         value: "{explorer_state.search_query}",
-                        oninput: move |e| {
+                        oninput: move |e: dioxus::events::FormEvent| {
                             state.write().search_query = e.value();
                         },
                     }
@@ -133,7 +133,7 @@ pub fn EnhancedExplorer(
                     if !explorer_state.search_query.is_empty() {
                         button {
                             class: "search-clear",
-                            onclick: move |_| {
+                            onclick: move |_: dioxus::events::MouseEvent| {
                                 state.write().search_query.clear();
                             },
                             span { class: "codicon codicon-close" }
@@ -221,13 +221,13 @@ fn FileTreeNode(
     // Build decoration indicators
     let decorations = node.decorations.iter().map(|d| {
         match d {
-            FileDecoration::GitModified => ("M", "git-decoration-modified"),
-            FileDecoration::GitAdded => ("A", "git-decoration-added"),
-            FileDecoration::GitDeleted => ("D", "git-decoration-deleted"),
-            FileDecoration::GitUntracked => ("U", "git-decoration-untracked"),
-            FileDecoration::GitIgnored => ("", "git-decoration-ignored"),
-            FileDecoration::Error(count) => (&format!("{}", count), "problems-decoration-error"),
-            FileDecoration::Warning(count) => (&format!("{}", count), "problems-decoration-warning"),
+            FileDecoration::GitModified => ("M".to_string(), "git-decoration-modified"),
+            FileDecoration::GitAdded => ("A".to_string(), "git-decoration-added"),
+            FileDecoration::GitDeleted => ("D".to_string(), "git-decoration-deleted"),
+            FileDecoration::GitUntracked => ("U".to_string(), "git-decoration-untracked"),
+            FileDecoration::GitIgnored => ("".to_string(), "git-decoration-ignored"),
+            FileDecoration::Error(count) => (format!("{}", count), "problems-decoration-error"),
+            FileDecoration::Warning(count) => (format!("{}", count), "problems-decoration-warning"),
         }
     }).collect::<Vec<_>>();
     
@@ -243,23 +243,24 @@ fn FileTreeNode(
                 class: "file-node-content",
                 onclick: {
                     let path = node.path.clone();
-                    move |e| {
+                    move |e: dioxus::events::MouseEvent| {
                         e.stop_propagation();
                         on_select.call(path.clone());
                     }
                 },
                 ondoubleclick: {
                     let path = node.path.clone();
-                    move |e| {
+                    let is_dir = node.is_directory;
+                    move |e: dioxus::events::MouseEvent| {
                         e.stop_propagation();
-                        if !node.is_directory {
+                        if !is_dir {
                             on_open.call(path.clone());
                         }
                     }
                 },
                 oncontextmenu: {
                     let path = node.path.clone();
-                    move |e| {
+                    move |e: dioxus::events::MouseEvent| {
                         e.prevent_default();
                         e.stop_propagation();
                         let coords = e.client_coordinates();
@@ -272,11 +273,14 @@ fn FileTreeNode(
                     span {
                         class: "tree-chevron codicon codicon-chevron-right",
                         class: if is_expanded { "expanded" } else { "" },
-                        onclick: move |e| {
-                            e.stop_propagation();
-                            // Toggle expansion
-                            let mut explorer = state.write();
-                            explorer.expanded_folders.insert(node.path.clone(), !is_expanded);
+                        onclick: {
+                            let path = node.path.clone();
+                            move |e: dioxus::events::MouseEvent| {
+                                e.stop_propagation();
+                                // Toggle expansion
+                                let mut explorer = state.write();
+                                explorer.expanded_folders.insert(path.clone(), !is_expanded);
+                            }
                         },
                     }
                 }
@@ -292,10 +296,10 @@ fn FileTreeNode(
                         class: "rename-input",
                         value: "{node.name}",
                         autofocus: true,
-                        onblur: move |_| {
+                        onblur: move |_: dioxus::events::FocusEvent| {
                             // Complete rename
                         },
-                        onkeydown: move |e| {
+                        onkeydown: move |e: dioxus::events::KeyboardEvent| {
                             match e.key() {
                                 dioxus::events::Key::Enter => {
                                     // Complete rename

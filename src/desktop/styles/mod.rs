@@ -468,12 +468,128 @@ input[type="radio"] {
 }
 
 /* ===== File Explorer Specific ===== */
+.file-explorer {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #0E1414 0%, #181E21 100%);
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--hive-yellow-dark);
+}
+
+.explorer-header {
+    padding: 12px 16px;
+    background: rgba(255, 193, 7, 0.05);
+    border-bottom: 1px solid var(--hive-yellow-dark);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.explorer-header h3 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--hive-yellow);
+    margin: 0;
+}
+
 .file-tree {
     font-family: 'Inter', sans-serif;
     font-size: 13px;
     user-select: none;
+    overflow-y: auto;
+    flex: 1;
+    padding: 8px 0;
 }
 
+.file-item {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    position: relative;
+}
+
+.file-item:hover {
+    background: linear-gradient(90deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 193, 7, 0.05) 100%);
+}
+
+.file-item.selected {
+    background: linear-gradient(90deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 193, 7, 0.1) 100%);
+    border-left: 3px solid var(--hive-yellow);
+}
+
+.file-item .expand-icon {
+    color: var(--hive-yellow-dark);
+    transition: transform 0.2s ease;
+}
+
+.file-item:hover .expand-icon {
+    color: var(--hive-yellow);
+}
+
+.file-icon {
+    margin-right: 6px;
+    flex-shrink: 0;
+    color: var(--hive-yellow-light);
+}
+
+.file-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #cccccc;
+}
+
+.file-item:hover .file-name {
+    color: #ffffff;
+}
+
+.file-item.selected .file-name {
+    color: var(--hive-yellow);
+    font-weight: 500;
+}
+
+.git-status {
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.8;
+}
+
+.file-children {
+    position: relative;
+}
+
+.file-children::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 193, 7, 0.2);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Git status colors with HiveTechs accent */
+.file-item[data-git-status="modified"] .git-status { color: #e2c08d; }
+.file-item[data-git-status="added"] .git-status { color: #73c991; }
+.file-item[data-git-status="deleted"] .git-status { color: #f48771; }
+.file-item[data-git-status="untracked"] .git-status { color: #75beff; }
+.file-item[data-git-status="renamed"] .git-status { color: var(--hive-yellow); }
+
+/* Tree item compatibility */
 .tree-item {
     display: flex;
     align-items: center;

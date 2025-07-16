@@ -135,7 +135,7 @@ impl TuiStreamingCallbacks {
 }
 
 impl StreamingCallbacks for TuiStreamingCallbacks {
-    fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
+    fn on_stage_start(&self, stage: Stage, model: &str) -> Result<(), anyhow::Error> {
         let pipeline_stage = self.convert_stage(stage);
         let event = TuiConsensusEvent::StageStarted {
             stage: pipeline_stage,
@@ -164,7 +164,7 @@ impl StreamingCallbacks for TuiStreamingCallbacks {
         Ok(())
     }
 
-    fn on_stage_chunk(&self, stage: Stage, chunk: &str, _total_content: &str) -> Result<()> {
+    fn on_stage_chunk(&self, stage: Stage, chunk: &str, _total_content: &str) -> Result<(), anyhow::Error> {
         let pipeline_stage = self.convert_stage(stage);
         let event = TuiConsensusEvent::TokenReceived {
             stage: pipeline_stage,
@@ -188,7 +188,7 @@ impl StreamingCallbacks for TuiStreamingCallbacks {
         Ok(())
     }
 
-    fn on_stage_progress(&self, stage: Stage, progress: ProgressInfo) -> Result<()> {
+    fn on_stage_progress(&self, stage: Stage, progress: ProgressInfo) -> Result<(), anyhow::Error> {
         let pipeline_stage = self.convert_stage(stage);
         let progress_percent = progress.percentage.min(100.0) as u8;
 
@@ -218,7 +218,7 @@ impl StreamingCallbacks for TuiStreamingCallbacks {
         Ok(())
     }
 
-    fn on_stage_complete(&self, stage: Stage, result: &StageResult) -> Result<()> {
+    fn on_stage_complete(&self, stage: Stage, result: &StageResult) -> Result<(), anyhow::Error> {
         let pipeline_stage = self.convert_stage(stage);
         let stage_duration = if let Ok(start_time) = self.stage_start_time.try_read() {
             start_time.elapsed()
@@ -258,7 +258,7 @@ impl StreamingCallbacks for TuiStreamingCallbacks {
         Ok(())
     }
 
-    fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
+    fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<(), anyhow::Error> {
         let pipeline_stage = self.convert_stage(stage);
         let event = TuiConsensusEvent::ErrorOccurred {
             stage: pipeline_stage,

@@ -104,9 +104,14 @@ fn FileTreeItem(file: FileItem) -> Element {
     let file_path_drop = file.path.clone();
     let is_directory = file.is_directory;
 
+    // Calculate indentation based on depth
+    let indent_width = file.depth * 20; // 20px per level
+    let indent_style = format!("padding-left: {}px;", indent_width);
+
     rsx! {
         div {
             class: "{class_name}",
+            style: "{indent_style}",
             draggable: true,
             "data-git-status": git_status_class.unwrap_or(""),
             onclick: move |evt: MouseEvent| {
@@ -143,8 +148,26 @@ fn FileTreeItem(file: FileItem) -> Element {
                 }
             },
 
+            // Expand/collapse chevron for directories
+            if file.is_directory {
+                span {
+                    class: "expand-icon",
+                    style: "display: inline-block; width: 16px; margin-right: 4px; text-align: center; cursor: pointer;",
+                    i {
+                        class: if file.is_expanded { "fa-solid fa-chevron-down" } else { "fa-solid fa-chevron-right" },
+                        style: "font-size: 10px; color: #858585;"
+                    }
+                }
+            } else {
+                // Empty space for alignment when not a directory
+                span {
+                    style: "display: inline-block; width: 20px;"
+                }
+            }
+
             span {
                 class: "file-icon",
+                style: "margin-right: 6px;",
                 i {
                     class: if file.is_directory {
                         crate::desktop::styles::get_folder_icon(file.is_expanded)

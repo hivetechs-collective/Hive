@@ -714,6 +714,67 @@ const DESKTOP_STYLES: &str = r#"
         border-left: 3px solid #FFC107;
         padding-left: 17px;
     }
+    
+    /* Fixed Action Panel Styles */
+    .fixed-action-panel {
+        backdrop-filter: blur(15px);
+        -webkit-backdrop-filter: blur(15px);
+    }
+    
+    .action-btn:hover {
+        background: rgba(255, 193, 7, 0.2) !important;
+        border-color: rgba(255, 193, 7, 0.5) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(255, 193, 7, 0.2);
+    }
+    
+    .action-btn:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(255, 193, 7, 0.1);
+    }
+    
+    /* Tab Scroll Button Styles */
+    .tab-scroll-btn:hover {
+        background: rgba(255, 193, 7, 0.2) !important;
+        border-color: rgba(255, 193, 7, 0.5) !important;
+        transform: scale(1.1);
+        box-shadow: 0 2px 6px rgba(255, 193, 7, 0.3);
+    }
+    
+    .tab-scroll-btn:active {
+        transform: scale(0.95);
+    }
+    
+    /* Enhanced Tab Container Styles */
+    .editor-tabs-container {
+        position: relative;
+    }
+    
+    .editor-tabs-scroll {
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+    }
+    
+    .editor-tabs-scroll::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Opera */
+    }
+    
+    /* Enhanced Tab Styles */
+    .editor-tab {
+        border-radius: 4px 4px 0 0;
+        margin: 0 1px;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+    
+    .editor-tab:hover span:last-child {
+        background: rgba(255, 255, 255, 0.1);
+        color: #fff;
+    }
+    
+    .editor-tab.active {
+        border-bottom: 2px solid #FFC107;
+    }
 "#;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -780,10 +841,7 @@ use hive_ai::desktop::dialogs::{
     DIALOG_STYLES,
 };
 use hive_ai::desktop::context_menu::{
-    FileNameDialog, ConfirmDialog,
-};
-use hive_ai::desktop::context_menu_vscode::{
-    VSCodeContextMenu, VSCodeContextMenuState, FileExplorerContext, build_context_menu_items,
+    ContextMenu, ContextMenuAction, ContextMenuState, FileNameDialog, ConfirmDialog,
 };
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::file_operations;
@@ -864,6 +922,31 @@ fn App() -> Element {
         contents.insert("__welcome__".to_string(), String::new());
         contents
     });
+    
+    // Tab overflow management
+    let mut tab_scroll_offset = use_signal(|| 0usize);
+    let max_visible_tabs = 6; // Maximum number of tabs to display before scrolling
+    
+    // Function to ensure active tab is visible
+    let mut ensure_active_tab_visible = {
+        let mut tab_scroll_offset = tab_scroll_offset.clone();
+        move |active_tab: &str, open_tabs: &[String]| {
+            if let Some(active_index) = open_tabs.iter().position(|tab| tab == active_tab) {
+                let current_offset = tab_scroll_offset.read().clone();
+                let visible_start = current_offset;
+                let visible_end = current_offset + max_visible_tabs;
+                
+                // If active tab is before visible range, scroll left
+                if active_index < visible_start {
+                    *tab_scroll_offset.write() = active_index;
+                }
+                // If active tab is after visible range, scroll right
+                else if active_index >= visible_end {
+                    *tab_scroll_offset.write() = active_index.saturating_sub(max_visible_tabs - 1);
+                }
+            }
+        }
+    };
 
     // Dialog state
     let mut show_about_dialog = use_signal(|| false);
@@ -875,7 +958,7 @@ fn App() -> Element {
     let onboarding_current_step = use_signal(|| 1); // Persist onboarding step
     
     // Context menu and file operation dialogs
-    let mut context_menu_state = use_signal(|| VSCodeContextMenuState::default());
+    let mut context_menu_state = use_signal(|| ContextMenuState::default());
     let mut show_new_file_dialog = use_signal(|| false);
     let mut show_new_folder_dialog = use_signal(|| false);
     let mut show_rename_dialog = use_signal(|| false);
@@ -957,6 +1040,7 @@ fn App() -> Element {
                             git_status: None,
                             size: None,
                             modified: None,
+                            depth: 0,
                         };
 
                         file_tree.write().clear();
@@ -1426,6 +1510,7 @@ fn App() -> Element {
                         git_status: None,
                         size: None,
                         modified: None,
+                        depth: 0,
                     };
 
                     file_tree.write().clear();
@@ -1528,6 +1613,7 @@ fn App() -> Element {
                                         git_status: None,
                                         size: None,
                                         modified: None,
+                                        depth: 0,
                                     };
 
                                     file_tree.write().clear();
@@ -1768,6 +1854,7 @@ fn App() -> Element {
                                             git_status: None,
                                             size: None,
                                             modified: None,
+                                            depth: 0,
                                         };
 
                                         file_tree.write().clear();
@@ -1815,7 +1902,7 @@ fn App() -> Element {
                 // Sidebar (left)
                 div {
                     class: "sidebar",
-                    style: "background: #0E1414; border-right: 1px solid #2D3336; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);",
+                    style: "background: #0E1414; border-right: 1px solid #2D3336; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; height: 100%;",
 
                     // Logo section at the top
                     div {
@@ -1852,143 +1939,175 @@ fn App() -> Element {
                         }
                     }
 
+                    // Scrollable file tree container
                     div {
-                        class: "explorer-header",
-                        style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;",
+                        class: "file-tree-container",
+                        style: "flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 10px;",
                         
                         div {
-                            class: "sidebar-section-title",
-                            style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px; margin: 0;",
-                            "EXPLORER"
+                            class: "explorer-header",
+                            style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-top: 10px;",
+                            
+                            div {
+                                class: "sidebar-section-title",
+                                style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px; margin: 0;",
+                                "EXPLORER"
+                            }
+                            
+                            div {
+                                class: "explorer-toolbar",
+                                style: "display: flex; gap: 2px; margin-left: auto;",
+                                
+                                // New File Button - VS Code style with text and icon
+                                button {
+                                    class: "explorer-toolbar-btn new-file-btn",
+                                    style: "background: transparent; border: none; color: #cccccc; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; height: 22px; transition: background-color 0.1s ease;",
+                                    title: "New File (Ctrl+N)",
+                                    // Hover effects are handled by CSS now
+                                    onclick: move |_| {
+                                        // Determine target path: selected folder or current directory
+                                        let target = if let Some(selected) = selected_file.read().as_ref() {
+                                            let selected_path = std::path::Path::new(selected);
+                                            if selected_path.is_dir() {
+                                                selected_path.to_path_buf()
+                                            } else if let Some(parent) = selected_path.parent() {
+                                                parent.to_path_buf()
+                                            } else {
+                                                current_dir.read().clone()
+                                            }
+                                        } else {
+                                            current_dir.read().clone()
+                                        };
+                                        
+                                        *show_new_file_dialog.write() = true;
+                                        *dialog_target_path.write() = Some(target);
+                                    },
+                                    span { style: "font-size: 14px;", "📄" }
+                                    span { "New File" }
+                                }
+                                
+                                // New Folder Button - VS Code style with text and icon
+                                button {
+                                    class: "explorer-toolbar-btn new-folder-btn",
+                                    style: "background: transparent; border: none; color: #cccccc; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; height: 22px; margin-left: 4px; transition: background-color 0.1s ease;",
+                                    title: "New Folder (Ctrl+Shift+N)",
+                                    // Hover effects are handled by CSS now
+                                    onclick: move |_| {
+                                        // Determine target path: selected folder or current directory
+                                        let target = if let Some(selected) = selected_file.read().as_ref() {
+                                            let selected_path = std::path::Path::new(selected);
+                                            if selected_path.is_dir() {
+                                                selected_path.to_path_buf()
+                                            } else if let Some(parent) = selected_path.parent() {
+                                                parent.to_path_buf()
+                                            } else {
+                                                current_dir.read().clone()
+                                            }
+                                        } else {
+                                            current_dir.read().clone()
+                                        };
+                                        
+                                        *show_new_folder_dialog.write() = true;
+                                        *dialog_target_path.write() = Some(target);
+                                    },
+                                    span { style: "font-size: 14px;", "📁" }
+                                    span { "New Folder" }
+                                }
+                            }
+                        }
+
+                        // File tree
+                        for file in file_tree.read().iter() {
+                            FileTreeItem {
+                                file: file.clone(),
+                                level: 0,
+                                selected_file: selected_file.clone(),
+                                expanded_dirs: expanded_dirs.clone(),
+                                file_tree: file_tree.clone(),
+                                current_dir: current_dir.clone(),
+                                file_content: file_content.clone(),
+                                open_tabs: open_tabs.clone(),
+                                active_tab: active_tab.clone(),
+                                tab_contents: tab_contents.clone(),
+                                context_menu_state: context_menu_state.clone(),
+                            }
+                        }
+
+                        if file_tree.read().is_empty() {
+                            div {
+                                class: "sidebar-item",
+                                style: "color: #858585; font-style: italic;",
+                                "No files in directory"
+                            }
+                        }
+                    }
+
+                    // Bottom action panel (integrated into sidebar)
+                    div {
+                        class: "sidebar-action-panel",
+                        style: "background: linear-gradient(135deg, #0E1414 0%, #181E21 100%); border-top: 1px solid #FFC107; padding: 12px; box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);",
+                        
+                        div {
+                            class: "action-panel-title",
+                            style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 11px; margin-bottom: 8px; text-align: center;",
+                            "QUICK ACTIONS"
                         }
                         
                         div {
-                            class: "explorer-toolbar",
-                            style: "display: flex; gap: 2px; margin-left: auto;",
+                            class: "action-buttons",
+                            style: "display: grid; grid-template-columns: 1fr 1fr; gap: 6px;",
                             
-                            // New File Button - VS Code style with text and icon
+                            // Search button
                             button {
-                                class: "explorer-toolbar-btn new-file-btn",
-                                style: "background: transparent; border: none; color: #cccccc; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; height: 22px; transition: background-color 0.1s ease;",
-                                title: "New File (Ctrl+N)",
-                                // Hover effects are handled by CSS now
+                                class: "action-btn",
+                                style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
                                 onclick: move |_| {
-                                    // Determine target path: selected folder or current directory
-                                    let target = if let Some(selected) = selected_file.read().as_ref() {
-                                        let selected_path = std::path::Path::new(selected);
-                                        if selected_path.is_dir() {
-                                            selected_path.to_path_buf()
-                                        } else if let Some(parent) = selected_path.parent() {
-                                            parent.to_path_buf()
-                                        } else {
-                                            current_dir.read().clone()
-                                        }
-                                    } else {
-                                        current_dir.read().clone()
-                                    };
-                                    
-                                    *show_new_file_dialog.write() = true;
-                                    *dialog_target_path.write() = Some(target);
+                                    // TODO: Implement search functionality
+                                    tracing::info!("Search functionality not yet implemented");
                                 },
-                                span { style: "font-size: 14px;", "📄" }
-                                span { "New File" }
+                                span { style: "font-size: 14px;", "🔍" }
+                                span { "Search" }
                             }
                             
-                            // New Folder Button - VS Code style with text and icon
+                            // Analytics button
                             button {
-                                class: "explorer-toolbar-btn new-folder-btn",
-                                style: "background: transparent; border: none; color: #cccccc; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; height: 22px; margin-left: 4px; transition: background-color 0.1s ease;",
-                                title: "New Folder (Ctrl+Shift+N)",
-                                // Hover effects are handled by CSS now
+                                class: "action-btn",
+                                style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
                                 onclick: move |_| {
-                                    // Determine target path: selected folder or current directory
-                                    let target = if let Some(selected) = selected_file.read().as_ref() {
-                                        let selected_path = std::path::Path::new(selected);
-                                        if selected_path.is_dir() {
-                                            selected_path.to_path_buf()
-                                        } else if let Some(parent) = selected_path.parent() {
-                                            parent.to_path_buf()
-                                        } else {
-                                            current_dir.read().clone()
-                                        }
-                                    } else {
-                                        current_dir.read().clone()
-                                    };
-                                    
-                                    *show_new_folder_dialog.write() = true;
-                                    *dialog_target_path.write() = Some(target);
+                                    *active_tab.write() = "__analytics__".to_string();
+                                    *current_view.write() = "analytics".to_string();
+                                    if !open_tabs.read().contains(&"__analytics__".to_string()) {
+                                        open_tabs.write().push("__analytics__".to_string());
+                                    }
+                                    ensure_active_tab_visible("__analytics__", &open_tabs.read());
                                 },
-                                span { style: "font-size: 14px;", "📁" }
-                                span { "New Folder" }
-                            }
-                        }
-                    }
-
-                    // File tree
-                    for file in file_tree.read().iter() {
-                        FileTreeItem {
-                            file: file.clone(),
-                            level: 0,
-                            selected_file: selected_file.clone(),
-                            expanded_dirs: expanded_dirs.clone(),
-                            file_tree: file_tree.clone(),
-                            current_dir: current_dir.clone(),
-                            file_content: file_content.clone(),
-                            open_tabs: open_tabs.clone(),
-                            active_tab: active_tab.clone(),
-                            tab_contents: tab_contents.clone(),
-                            context_menu_state: context_menu_state.clone(),
-                        }
-                    }
-
-                    if file_tree.read().is_empty() {
-                        div {
-                            class: "sidebar-item",
-                            style: "color: #858585; font-style: italic;",
-                            "No files in directory"
-                        }
-                    }
-
-                    div {
-                        class: "sidebar-section-title",
-                        style: "margin-top: 20px; background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px;",
-                        "ACTIONS"
-                    }
-                    div {
-                        class: "sidebar-item",
-                        style: "transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
-                        span { style: "color: #FFC107;", "🔍" }
-                        "Search"
-                    }
-                    div {
-                        class: "sidebar-item",
-                        onclick: move |_| {
-                            // Add analytics to tabs if not already open
-                            if !open_tabs.read().contains(&"__analytics__".to_string()) {
-                                open_tabs.write().push("__analytics__".to_string());
+                                span { style: "font-size: 14px;", "📊" }
+                                span { "Analytics" }
                             }
                             
-                            // Set as active tab
-                            *active_tab.write() = "__analytics__".to_string();
-                            *selected_file.write() = Some("__analytics__".to_string());
-                            *current_view.write() = "analytics".to_string();
-                        },
-                        style: "cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
-                        span { style: "color: #007BFF;", "📊" }
-                        "Analytics"
-                    }
-                    div {
-                        class: "sidebar-item",
-                        style: "transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
-                        span { style: "color: #8A2BE2;", "🧠" }
-                        "Memory"
-                    }
-                    div {
-                        class: "sidebar-item",
-                        onclick: move |_| *show_settings_dialog.write() = true,
-                        style: "cursor: pointer; transition: all 0.3s ease; display: flex; align-items: center; gap: 10px;",
-                        span { style: "color: #28A745;", "⚙️" }
-                        "Settings"
+                            // Memory button
+                            button {
+                                class: "action-btn",
+                                style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
+                                onclick: move |_| {
+                                    // TODO: Implement memory view
+                                    tracing::info!("Memory view not yet implemented");
+                                },
+                                span { style: "font-size: 14px;", "🧠" }
+                                span { "Memory" }
+                            }
+                            
+                            // Settings button
+                            button {
+                                class: "action-btn",
+                                style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
+                                onclick: move |_| {
+                                    *show_settings_dialog.write() = true;
+                                },
+                                span { style: "font-size: 14px;", "⚙️" }
+                                span { "Settings" }
+                            }
+                        }
                     }
                 }
 
@@ -1997,84 +2116,147 @@ fn App() -> Element {
                     class: "editor-container",
                     style: "background: #0E1414; position: relative;",
 
-                    // Editor tabs
+                    // Enhanced editor tabs with overflow scrolling
                     div {
-                        class: "editor-tabs",
-                        // Render all open tabs
+                        class: "editor-tabs-container",
+                        style: "display: flex; align-items: center; height: 35px; background: #2d2d30; border-bottom: 1px solid #3e3e42;",
+                        
+                        // Left arrow button (only show if we can scroll left)
+                        if tab_scroll_offset.read().clone() > 0 {
+                            button {
+                                class: "tab-scroll-btn tab-scroll-left",
+                                style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #FFC107; width: 30px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; margin: 2px; border-radius: 3px; font-weight: bold;",
+                                onclick: move |_| {
+                                    let current_offset = tab_scroll_offset.read().clone();
+                                    if current_offset > 0 {
+                                        *tab_scroll_offset.write() = current_offset - 1;
+                                    }
+                                },
+                                "‹"
+                            }
+                        }
+                        
+                        // Tab container with overflow hidden
                         {
-                            open_tabs.read().iter().map(|tab| {
-                                let tab_str = tab.clone();
-                                let tab_for_click = tab.clone();
-                                let tab_for_close = tab.clone();
-                                let is_active = *active_tab.read() == *tab;
-                                let display_name = if tab == "__welcome__" {
-                                    "Welcome".to_string()
-                                } else if tab == "__analytics__" {
-                                    "Analytics".to_string()
-                                } else {
-                                    let path = PathBuf::from(tab);
-                                    path.file_name()
-                                        .and_then(|n| n.to_str())
-                                        .unwrap_or(tab)
-                                        .to_string()
-                                };
-                                
-                                rsx! {
-                                    div {
-                                        class: if is_active { "editor-tab active" } else { "editor-tab" },
-                                        onclick: move |_| {
-                                            *active_tab.write() = tab_for_click.clone();
-                                            *selected_file.write() = Some(tab_for_click.clone());
-                                            
-                                            // Update current view based on tab type
-                                            if tab_for_click == "__analytics__" {
-                                                *current_view.write() = "analytics".to_string();
+                            // Collect visible tabs outside of RSX to avoid borrowing issues
+                            let visible_tabs: Vec<String> = open_tabs.read()
+                                .iter()
+                                .skip(tab_scroll_offset.read().clone())
+                                .take(max_visible_tabs)
+                                .cloned()
+                                .collect();
+                            
+                            rsx! {
+                                div {
+                                    class: "editor-tabs-scroll",
+                                    style: "flex: 1; display: flex; align-items: center; overflow: hidden; max-width: calc(100vw - 450px);", // Reserve space for right panels and arrows
+                                    
+                                    // Render visible tabs
+                                    for tab in visible_tabs {
+                                        {
+                                            let tab_str = tab.clone();
+                                            let tab_for_click = tab.clone();
+                                            let tab_for_close = tab.clone();
+                                            let is_active = *active_tab.read() == tab;
+                                            let display_name = if tab == "__welcome__" {
+                                                "Welcome".to_string()
+                                            } else if tab == "__analytics__" {
+                                                "Analytics".to_string()
                                             } else {
-                                                *current_view.write() = "code".to_string();
-                                                // Update file_content from tab_contents
-                                                if let Some(content) = tab_contents.read().get(&tab_for_click) {
-                                                    *file_content.write() = content.clone();
-                                                }
-                                            }
-                                        },
-                                        "{display_name}"
-                                        
-                                        // Close button
-                                        if tab_str != "__welcome__" {
-                                            span {
-                                                style: "margin-left: 8px; cursor: pointer; color: #858585; font-size: 16px;",
-                                                onclick: move |e| {
-                                                    e.stop_propagation();
-                                                    
-                                                    // Remove from open tabs
-                                                    open_tabs.write().retain(|t| t != &tab_for_close);
-                                                    
-                                                    // If this was the active tab, switch to another
-                                                    if *active_tab.read() == tab_for_close {
-                                                        if let Some(first_tab) = open_tabs.read().first() {
-                                                            *active_tab.write() = first_tab.clone();
-                                                            *selected_file.write() = Some(first_tab.clone());
-                                                            
-                                                            if first_tab == "__analytics__" {
-                                                                *current_view.write() = "analytics".to_string();
-                                                            } else {
-                                                                *current_view.write() = "code".to_string();
-                                                                if let Some(content) = tab_contents.read().get(first_tab) {
-                                                                    *file_content.write() = content.clone();
-                                                                }
+                                                let path = PathBuf::from(&tab);
+                                                path.file_name()
+                                                    .and_then(|n| n.to_str())
+                                                    .unwrap_or(&tab)
+                                                    .to_string()
+                                            };
+                                            
+                                            rsx! {
+                                                div {
+                                                    class: if is_active { "editor-tab active" } else { "editor-tab" },
+                                                    style: "min-width: 120px; max-width: 180px; flex-shrink: 0;", // Fixed tab width for consistency
+                                                    onclick: move |_| {
+                                                        *active_tab.write() = tab_for_click.clone();
+                                                        *selected_file.write() = Some(tab_for_click.clone());
+                                                        
+                                                        // Update current view based on tab type
+                                                        if tab_for_click == "__analytics__" {
+                                                            *current_view.write() = "analytics".to_string();
+                                                        } else {
+                                                            *current_view.write() = "code".to_string();
+                                                            // Update file_content from tab_contents
+                                                            if let Some(content) = tab_contents.read().get(&tab_for_click) {
+                                                                *file_content.write() = content.clone();
                                                             }
                                                         }
+                                                    },
+                                                    
+                                                    span {
+                                                        style: "overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; padding-right: 4px;",
+                                                        "{display_name}"
                                                     }
                                                     
-                                                    // Remove content from tab_contents
-                                                    tab_contents.write().remove(&tab_for_close);
-                                                },
-                                                "×"
+                                                    // Close button
+                                                    if tab_str != "__welcome__" {
+                                                        span {
+                                                            style: "margin-left: 4px; cursor: pointer; color: #858585; font-size: 16px; flex-shrink: 0; padding: 2px; border-radius: 2px; transition: all 0.1s ease;",
+                                                            onclick: move |e| {
+                                                                e.stop_propagation();
+                                                                
+                                                                // Remove from open tabs
+                                                                open_tabs.write().retain(|t| t != &tab_for_close);
+                                                                
+                                                                // Adjust scroll offset if necessary
+                                                                let new_tab_count = open_tabs.read().len();
+                                                                let current_offset = tab_scroll_offset.read().clone();
+                                                                if current_offset > 0 && current_offset >= new_tab_count {
+                                                                    *tab_scroll_offset.write() = new_tab_count.saturating_sub(max_visible_tabs);
+                                                                }
+                                                                
+                                                                // If this was the active tab, switch to another
+                                                                if *active_tab.read() == tab_for_close {
+                                                                    if let Some(first_tab) = open_tabs.read().first() {
+                                                                        *active_tab.write() = first_tab.clone();
+                                                                        *selected_file.write() = Some(first_tab.clone());
+                                                                        
+                                                                        if first_tab == "__analytics__" {
+                                                                            *current_view.write() = "analytics".to_string();
+                                                                        } else {
+                                                                            *current_view.write() = "code".to_string();
+                                                                            if let Some(content) = tab_contents.read().get(first_tab) {
+                                                                                *file_content.write() = content.clone();
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                                
+                                                                // Remove from tab_contents
+                                                                tab_contents.write().remove(&tab_for_close);
+                                                            },
+                                                            "×"
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            })
+                            }
+                        }
+                        
+                        // Right arrow button (only show if there are more tabs to the right)
+                        if open_tabs.read().len() > tab_scroll_offset.read().clone() + max_visible_tabs {
+                            button {
+                                class: "tab-scroll-btn tab-scroll-right",
+                                style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #FFC107; width: 30px; height: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; margin: 2px; border-radius: 3px; font-weight: bold;",
+                                onclick: move |_| {
+                                    let current_offset = tab_scroll_offset.read().clone();
+                                    let total_tabs = open_tabs.read().len();
+                                    if current_offset + max_visible_tabs < total_tabs {
+                                        *tab_scroll_offset.write() = current_offset + 1;
+                                    }
+                                },
+                                "›"
+                            }
                         }
                     }
 
@@ -2378,6 +2560,7 @@ fn App() -> Element {
             }
         }
 
+
         // Render dialogs
         if *show_about_dialog.read() {
             AboutDialog {
@@ -2485,8 +2668,8 @@ fn App() -> Element {
             }
         }
 
-        // VS Code-style context menu
-        VSCodeContextMenu {
+        // Context menu
+        ContextMenu {
             state: context_menu_state.clone(),
             on_action: EventHandler::new({
                 let mut context_menu_state = context_menu_state.clone();
@@ -2497,102 +2680,75 @@ fn App() -> Element {
                 let mut dialog_target_path = dialog_target_path.clone();
                 let current_dir = current_dir.clone();
                 let mut file_tree = file_tree.clone();
-                move |action_id: String| {
-                    // Get context and path outside of the match to avoid borrowing issues
-                    let ctx_opt = context_menu_state.read().context.clone();
-                    if let Some(ctx) = ctx_opt {
-                        let path = ctx.path.clone();
-                        *dialog_target_path.write() = Some(path.clone());
-                        
-                        match action_id.as_str() {
-                            "explorer.newFile" => {
-                                *show_new_file_dialog.write() = true;
-                            }
-                            "explorer.newFolder" => {
-                                *show_new_folder_dialog.write() = true;
-                            }
-                            "explorer.rename" => {
-                                *show_rename_dialog.write() = true;
-                            }
-                            "explorer.delete" => {
-                                *show_delete_confirm.write() = true;
-                            }
-                            "explorer.cut" => {
-                                context_menu_state.write().set_clipboard(path, true);
-                            }
-                            "explorer.copy" => {
-                                context_menu_state.write().set_clipboard(path, false);
-                            }
-                            "explorer.paste" => {
-                                // First get clipboard info and check if it's a cut operation
-                                let (clipboard_opt, should_clear) = {
-                                    let state = context_menu_state.read();
-                                    let clipboard = state.clipboard.clone();
-                                    let should_clear = clipboard.as_ref().map(|c| c.is_cut).unwrap_or(false);
-                                    (clipboard, should_clear)
-                                };
+                move |(action, path): (ContextMenuAction, PathBuf)| {
+                    *dialog_target_path.write() = Some(path.clone());
+                    match action {
+                        ContextMenuAction::NewFile => {
+                            *show_new_file_dialog.write() = true;
+                        }
+                        ContextMenuAction::NewFolder => {
+                            *show_new_folder_dialog.write() = true;
+                        }
+                        ContextMenuAction::Rename => {
+                            *show_rename_dialog.write() = true;
+                        }
+                        ContextMenuAction::Delete => {
+                            *show_delete_confirm.write() = true;
+                        }
+                        ContextMenuAction::Cut => {
+                            context_menu_state.write().set_clipboard(path, true);
+                        }
+                        ContextMenuAction::Copy => {
+                            context_menu_state.write().set_clipboard(path, false);
+                        }
+                        ContextMenuAction::Paste => {
+                            let clipboard_info = context_menu_state.read().clipboard.clone();
+                            if let Some(clipboard) = clipboard_info {
+                                let src = clipboard.path.clone();
+                                let is_cut = clipboard.is_cut;
+                                let dst_dir = if path.is_dir() { path } else { path.parent().unwrap_or(&path).to_path_buf() };
+                                let dst = dst_dir.join(src.file_name().unwrap_or_default());
                                 
-                                if let Some(clipboard) = clipboard_opt {
-                                    let src = clipboard.path.clone();
-                                    let is_cut = clipboard.is_cut;
-                                    let dst_dir = if path.is_dir() { path } else { path.parent().unwrap_or(&path).to_path_buf() };
-                                    let dst = dst_dir.join(src.file_name().unwrap_or_default());
+                                spawn(async move {
+                                    let result = if is_cut {
+                                        file_operations::move_item(&src, &dst).await
+                                    } else {
+                                        file_operations::copy_item(&src, &dst).await
+                                    };
                                     
-                                    spawn(async move {
-                                        let result = if is_cut {
-                                            file_operations::move_item(&src, &dst).await
-                                        } else {
-                                            file_operations::copy_item(&src, &dst).await
-                                        };
-                                        
-                                        if let Err(e) = result {
-                                            tracing::error!("Failed to paste item: {}", e);
-                                        }
-                                        
-                                        // TODO: Refresh file tree
-                                    });
-                                    
-                                    if should_clear {
-                                        context_menu_state.write().clear_clipboard();
+                                    if let Err(e) = result {
+                                        tracing::error!("Failed to paste item: {}", e);
                                     }
+                                    
+                                    // TODO: Refresh file tree
+                                });
+                                
+                                if is_cut {
+                                    context_menu_state.write().clear_clipboard();
                                 }
                             }
-                            "explorer.copyPath" => {
-                                if let Err(e) = file_operations::copy_path_to_clipboard(&path) {
-                                    tracing::error!("Failed to copy path to clipboard: {}", e);
+                        }
+                        ContextMenuAction::Duplicate => {
+                            spawn(async move {
+                                if let Err(e) = file_operations::duplicate_item(&path).await {
+                                    tracing::error!("Failed to duplicate item: {}", e);
                                 }
+                                // TODO: Refresh file tree
+                            });
+                        }
+                        ContextMenuAction::CopyPath => {
+                            if let Err(e) = file_operations::copy_path_to_clipboard(&path) {
+                                tracing::error!("Failed to copy path to clipboard: {}", e);
                             }
-                            "explorer.copyRelativePath" => {
-                                // Copy relative path
-                                let relative = path.strip_prefix(&*current_dir.read()).unwrap_or(&path);
-                                if let Err(e) = file_operations::copy_path_to_clipboard(&relative.to_path_buf()) {
-                                    tracing::error!("Failed to copy relative path to clipboard: {}", e);
-                                }
+                        }
+                        ContextMenuAction::OpenInTerminal => {
+                            if let Err(e) = file_operations::open_in_terminal(&path) {
+                                tracing::error!("Failed to open terminal: {}", e);
                             }
-                            "explorer.openInIntegratedTerminal" => {
-                                if let Err(e) = file_operations::open_in_terminal(&path) {
-                                    tracing::error!("Failed to open terminal: {}", e);
-                                }
-                            }
-                            "explorer.revealInFinder" | "explorer.revealInExplorer" | "explorer.openContainingFolder" => {
-                                if let Err(e) = file_operations::reveal_in_finder(&path) {
-                                    tracing::error!("Failed to reveal in finder: {}", e);
-                                }
-                            }
-                            "explorer.findInFolder" => {
-                                tracing::info!("Find in folder: {}", path.display());
-                                // TODO: Implement search in folder
-                            }
-                            "explorer.openToSide" => {
-                                tracing::info!("Open to side: {}", path.display());
-                                // TODO: Implement split editor
-                            }
-                            "explorer.compareSelected" => {
-                                tracing::info!("Compare selected: {}", path.display());
-                                // TODO: Implement file comparison
-                            }
-                            _ => {
-                                tracing::warn!("Unknown action: {}", action_id);
+                        }
+                        ContextMenuAction::RevealInFinder => {
+                            if let Err(e) = file_operations::reveal_in_finder(&path) {
+                                tracing::error!("Failed to reveal in finder: {}", e);
                             }
                         }
                     }
@@ -2794,7 +2950,7 @@ fn FileTreeItem(
     open_tabs: Signal<Vec<String>>,
     active_tab: Signal<String>,
     tab_contents: Signal<HashMap<String, String>>,
-    context_menu_state: Signal<VSCodeContextMenuState>,
+    context_menu_state: Signal<ContextMenuState>,
 ) -> Element {
     let file_path = file.path.clone();
     let file_path_for_context = file_path.clone(); // Clone for context menu
@@ -2843,20 +2999,11 @@ fn FileTreeItem(
                 e.prevent_default();
                 // Use client coordinates with small adjustment to avoid hiding under cursor
                 let coords = e.client_coordinates();
-                let context = FileExplorerContext {
-                    path: file_path_for_context.clone(),
-                    is_directory: is_dir,
-                    is_readonly: false, // TODO: Check actual file permissions
-                    is_root: file_path_for_context.parent().is_none(),
-                    has_selection: true,
-                    multiple_selection: false,
-                    clipboard_has_files: context_menu_state.read().context.is_some(),
-                    is_git_repository: false, // TODO: Check if in git repo
-                };
                 context_menu_state.write().show(
                     (coords.x + 10.0) as i32, // Small offset to the right of cursor
                     (coords.y + 5.0) as i32,  // Small offset below cursor
-                    context
+                    file_path_for_context.clone(),
+                    is_dir
                 );
             },
             // Hover effects are handled by CSS
@@ -2866,11 +3013,11 @@ fn FileTreeItem(
                     let current = expanded_dirs.read().get(&file_path_for_click).copied().unwrap_or(false);
                     expanded_dirs.write().insert(file_path_for_click.clone(), !current);
 
-                    // Set the directory as selected
-                    let path_string = file_path_for_click.to_string_lossy().to_string();
-                    *selected_file.write() = Some(path_string);
-                    
-                    println!("Directory selected: {}", file_path_for_click.display());
+                    // Trigger reload by changing a dummy state
+                    // This will cause the coroutine to re-run
+                    // (In a real app, we'd use a proper reload trigger)
+                    // Just log for now
+                    println!("Directory expanded/collapsed");
                 } else {
                     // Select file and open in tab
                     println!("File clicked: {}", file_path_for_click.display());
