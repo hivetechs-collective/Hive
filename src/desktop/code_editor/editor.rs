@@ -9,6 +9,7 @@ use super::{
 };
 use dioxus::prelude::*;
 use dioxus::document::eval;
+use dioxus::events::MouseEvent;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -19,6 +20,7 @@ pub fn CodeEditorComponent(
     initial_content: String,
     on_change: EventHandler<String>,
     on_save: EventHandler<(String, String)>,
+    on_cursor_change: EventHandler<(usize, usize)>,
 ) -> Element {
     // Extract language from file extension
     let path = PathBuf::from(&file_path);
@@ -52,6 +54,12 @@ pub fn CodeEditorComponent(
         });
     });
     
+    // Emit cursor position changes
+    use_effect(move || {
+        let pos = cursor.read().primary.active;
+        on_cursor_change.call((pos.line + 1, pos.column + 1));
+    });
+    
     // Get the appropriate style based on focus state
     let editor_style = get_editor_style(*is_focused.read());
     
@@ -68,8 +76,15 @@ pub fn CodeEditorComponent(
                 *is_focused.write() = false;
                 tracing::debug!("Editor blurred");
             },
-            onclick: move |_| {
+            onclick: move |evt: MouseEvent| {
                 focus_editor();
+                handle_editor_click(
+                    evt,
+                    &mut cursor,
+                    &buffer,
+                    *scroll_offset.read(),
+                    &on_cursor_change,
+                );
             },
             onkeydown: move |evt: KeyboardEvent| {
                 handle_keyboard_event(
@@ -80,6 +95,7 @@ pub fn CodeEditorComponent(
                     &on_change,
                     &on_save,
                     &file_path,
+                    &on_cursor_change,
                 );
             },
             
@@ -181,6 +197,7 @@ fn handle_keyboard_event(
     on_change: &EventHandler<String>,
     on_save: &EventHandler<(String, String)>,
     file_path: &str,
+    on_cursor_change: &EventHandler<(usize, usize)>,
 ) {
     tracing::debug!("Key pressed: {:?}", evt.key());
     
@@ -201,15 +218,23 @@ fn handle_keyboard_event(
         // Basic cursor movement
         (false, Key::ArrowLeft) => {
             cursor.with_mut(|c| c.move_left(&buffer.read()));
+            let pos = cursor.read().primary.active;
+            on_cursor_change.call((pos.line + 1, pos.column + 1));
         }
         (false, Key::ArrowRight) => {
             cursor.with_mut(|c| c.move_right(&buffer.read()));
+            let pos = cursor.read().primary.active;
+            on_cursor_change.call((pos.line + 1, pos.column + 1));
         }
         (false, Key::ArrowUp) => {
             cursor.with_mut(|c| c.move_up(&buffer.read()));
+            let pos = cursor.read().primary.active;
+            on_cursor_change.call((pos.line + 1, pos.column + 1));
         }
         (false, Key::ArrowDown) => {
             cursor.with_mut(|c| c.move_down(&buffer.read()));
+            let pos = cursor.read().primary.active;
+            on_cursor_change.call((pos.line + 1, pos.column + 1));
         }
         // Text input
         (false, Key::Character(ch)) => {
@@ -257,6 +282,59 @@ fn handle_keyboard_event(
             // Don't prevent default for unhandled keys
             evt.stop_propagation();
         }
+    }
+}
+
+/// Handle mouse click events to position cursor
+fn handle_editor_click(
+    evt: MouseEvent,
+    cursor: &mut Signal<Cursor>,
+    buffer: &Signal<TextBuffer>,
+    scroll_offset: usize,
+    on_cursor_change: &EventHandler<(usize, usize)>,
+) {
+    // Get click coordinates relative to the editor
+    let client_x = evt.client_coordinates().x;
+    let client_y = evt.client_coordinates().y;
+    
+    // Constants for layout calculation
+    let line_height = 21.0; // pixels per line
+    let char_width = 8.4; // average character width in pixels
+    let gutter_width = 70.0; // line numbers gutter width
+    let content_padding = 10.0; // padding in content area
+    
+    // Calculate which line was clicked (accounting for scroll)
+    let relative_y = client_y - 60.0; // Adjust for editor top offset
+    let line_index = (relative_y / line_height) as usize + scroll_offset;
+    
+    // Calculate column position
+    let relative_x = client_x - gutter_width - content_padding;
+    let column = (relative_x / char_width).max(0.0) as usize;
+    
+    // Get the actual line to clamp column to line length
+    let buffer_read = buffer.read();
+    if line_index < buffer_read.len_lines() {
+        let line_len = if let Some(line) = buffer_read.line(line_index) {
+            line.len_chars()
+        } else {
+            0
+        };
+        
+        // Update cursor position
+        cursor.with_mut(|c| {
+            c.primary.active.line = line_index;
+            c.primary.active.column = column.min(line_len);
+            c.primary.anchor = c.primary.active;
+        });
+        
+        tracing::debug!(
+            "Cursor moved to line: {}, col: {}", 
+            line_index + 1, 
+            column + 1
+        );
+        
+        // Emit cursor position change
+        on_cursor_change.call((line_index + 1, column + 1));
     }
 }
 
