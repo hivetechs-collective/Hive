@@ -12,6 +12,7 @@ use dioxus::document::eval;
 use dioxus::events::MouseEvent;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 /// Main code editor component
 #[component]
@@ -39,6 +40,10 @@ pub fn CodeEditorComponent(
     // Track visible lines for rendering
     let mut scroll_offset = use_signal(|| 0usize);
     let visible_lines = 30; // Number of visible lines in editor
+    
+    // Track click state for double-click detection
+    let mut last_click_time = use_signal(|| std::time::Instant::now());
+    let mut last_click_pos = use_signal(|| (0, 0));
     
     // Auto-focus the editor when mounted
     use_effect(move || {
@@ -76,16 +81,6 @@ pub fn CodeEditorComponent(
                 *is_focused.write() = false;
                 tracing::debug!("Editor blurred");
             },
-            onclick: move |evt: MouseEvent| {
-                focus_editor();
-                handle_editor_click(
-                    evt,
-                    &mut cursor,
-                    &buffer,
-                    *scroll_offset.read(),
-                    &on_cursor_change,
-                );
-            },
             onkeydown: move |evt: KeyboardEvent| {
                 handle_keyboard_event(
                     evt,
@@ -115,6 +110,19 @@ pub fn CodeEditorComponent(
                 div {
                     class: "code-content",
                     style: "flex: 1; padding: 10px; overflow-x: auto; position: relative;",
+                    onclick: move |evt: MouseEvent| {
+                        tracing::info!("CONTENT AREA CLICKED!");
+                        focus_editor();
+                        handle_content_click(
+                            evt,
+                            &mut cursor,
+                            &buffer,
+                            *scroll_offset.read(),
+                            &on_cursor_change,
+                            &mut last_click_time,
+                            &mut last_click_pos,
+                        );
+                    },
                     
                     // Render visible lines with syntax highlighting
                     for line_idx in *scroll_offset.read()..(*scroll_offset.read() + visible_lines).min(buffer.read().len_lines()) {
@@ -239,14 +247,35 @@ fn handle_keyboard_event(
         // Text input
         (false, Key::Character(ch)) => {
             tracing::debug!("Inserting character: {}", ch);
-            let edit = TextEdit::Insert {
-                position: cursor.read().primary.active,
-                text: ch.to_string(),
-            };
-            buffer.write().apply_edit(edit);
-            cursor.with_mut(|c| c.move_right(&buffer.read()));
+            let selection = cursor.read().primary.clone();
+            
+            if !selection.is_empty() {
+                // Replace selected text
+                let start = selection.start();
+                let end = selection.end();
+                let edit = TextEdit::Replace {
+                    range: start..end,
+                    text: ch.to_string(),
+                };
+                buffer.write().apply_edit(edit);
+                cursor.with_mut(|c| {
+                    c.primary.active = Position::new(start.line, start.column + 1);
+                    c.primary.anchor = c.primary.active;
+                });
+            } else {
+                // Insert at cursor
+                let edit = TextEdit::Insert {
+                    position: cursor.read().primary.active,
+                    text: ch.to_string(),
+                };
+                buffer.write().apply_edit(edit);
+                cursor.with_mut(|c| c.move_right(&buffer.read()));
+            }
+            
             *has_changes.write() = true;
             on_change.call(buffer.read().to_string());
+            let pos = cursor.read().primary.active;
+            on_cursor_change.call((pos.line + 1, pos.column + 1));
         }
         // Enter key
         (false, Key::Enter) => {
@@ -265,17 +294,92 @@ fn handle_keyboard_event(
         }
         // Backspace
         (false, Key::Backspace) => {
-            let pos = cursor.read().primary.active;
-            if pos.column > 0 || pos.line > 0 {
-                tracing::debug!("Deleting character");
-                cursor.with_mut(|c| c.move_left(&buffer.read()));
-                let new_pos = cursor.read().primary.active;
+            let selection = cursor.read().primary.clone();
+            if !selection.is_empty() {
+                // Delete selected text
+                tracing::debug!("Deleting selection");
+                let start = selection.start();
+                let end = selection.end();
                 let edit = TextEdit::Delete {
-                    range: new_pos..pos,
+                    range: start..end,
                 };
                 buffer.write().apply_edit(edit);
+                cursor.with_mut(|c| {
+                    c.primary.active = start;
+                    c.primary.anchor = start;
+                });
                 *has_changes.write() = true;
                 on_change.call(buffer.read().to_string());
+                let pos = cursor.read().primary.active;
+                on_cursor_change.call((pos.line + 1, pos.column + 1));
+            } else {
+                // Delete single character
+                let pos = cursor.read().primary.active;
+                if pos.column > 0 || pos.line > 0 {
+                    tracing::debug!("Deleting character");
+                    cursor.with_mut(|c| c.move_left(&buffer.read()));
+                    let new_pos = cursor.read().primary.active;
+                    let edit = TextEdit::Delete {
+                        range: new_pos..pos,
+                    };
+                    buffer.write().apply_edit(edit);
+                    *has_changes.write() = true;
+                    on_change.call(buffer.read().to_string());
+                    on_cursor_change.call((new_pos.line + 1, new_pos.column + 1));
+                }
+            }
+        }
+        // Delete key
+        (false, Key::Delete) => {
+            let selection = cursor.read().primary.clone();
+            if !selection.is_empty() {
+                // Delete selected text
+                tracing::debug!("Deleting selection");
+                let start = selection.start();
+                let end = selection.end();
+                let edit = TextEdit::Delete {
+                    range: start..end,
+                };
+                buffer.write().apply_edit(edit);
+                cursor.with_mut(|c| {
+                    c.primary.active = start;
+                    c.primary.anchor = start;
+                });
+                *has_changes.write() = true;
+                on_change.call(buffer.read().to_string());
+                let pos = cursor.read().primary.active;
+                on_cursor_change.call((pos.line + 1, pos.column + 1));
+            } else {
+                // Delete character at cursor
+                let pos = cursor.read().primary.active;
+                let (num_lines, line_len) = {
+                    let buffer_read = buffer.read();
+                    let num_lines = buffer_read.len_lines();
+                    let line_len = buffer_read.line(pos.line)
+                        .map(|l| l.len_chars())
+                        .unwrap_or(0);
+                    (num_lines, line_len)
+                };
+                
+                if pos.line < num_lines {
+                    if pos.column < line_len || pos.line < num_lines - 1 {
+                        let mut end_pos = pos;
+                        if pos.column < line_len {
+                            end_pos.column += 1;
+                        } else {
+                            // At end of line, delete newline
+                            end_pos.line += 1;
+                            end_pos.column = 0;
+                        }
+                        
+                        let edit = TextEdit::Delete {
+                            range: pos..end_pos,
+                        };
+                        buffer.write().apply_edit(edit);
+                        *has_changes.write() = true;
+                        on_change.call(buffer.read().to_string());
+                    }
+                }
             }
         }
         _ => {
@@ -285,57 +389,181 @@ fn handle_keyboard_event(
     }
 }
 
-/// Handle mouse click events to position cursor
-fn handle_editor_click(
+/// Handle mouse click events on the content area
+fn handle_content_click(
     evt: MouseEvent,
     cursor: &mut Signal<Cursor>,
     buffer: &Signal<TextBuffer>,
     scroll_offset: usize,
     on_cursor_change: &EventHandler<(usize, usize)>,
+    last_click_time: &mut Signal<Instant>,
+    last_click_pos: &mut Signal<(usize, usize)>,
 ) {
-    // Get click coordinates relative to the editor
-    let client_x = evt.client_coordinates().x;
-    let client_y = evt.client_coordinates().y;
+    // Now coordinates are relative to the content div itself!
+    let content_x = evt.element_coordinates().x;
+    let content_y = evt.element_coordinates().y;
+    
+    tracing::info!(
+        "CONTENT CLICK: raw coords ({:.2}, {:.2})",
+        content_x, content_y
+    );
     
     // Constants for layout calculation
-    let line_height = 21.0; // pixels per line
-    let char_width = 8.4; // average character width in pixels
-    let gutter_width = 70.0; // line numbers gutter width
-    let content_padding = 10.0; // padding in content area
+    let line_height = 21.0; // pixels per line (matches CSS line-height)
     
-    // Calculate which line was clicked (accounting for scroll)
-    let relative_y = client_y - 60.0; // Adjust for editor top offset
-    let line_index = (relative_y / line_height) as usize + scroll_offset;
+    // Font metrics for JetBrains Mono 14px - VS Code style calculation
+    // VS Code uses "typicalHalfwidthCharacterWidth" which for monospace is ~0.6 * font_size
+    let font_size = 14.0;
+    let char_width = font_size * 0.6; // 8.4px for JetBrains Mono 14px
     
-    // Calculate column position
-    let relative_x = client_x - gutter_width - content_padding;
-    let column = (relative_x / char_width).max(0.0) as usize;
+    // The content div has padding: 10px, so we need to account for that
+    let text_x = content_x - 10.0;
+    let text_y = content_y - 10.0;
+    
+    // Calculate line index (VS Code approach)
+    let line_index = if text_y < 0.0 {
+        scroll_offset
+    } else {
+        let clicked_line_float = text_y / line_height;
+        let clicked_line = clicked_line_float.floor() as usize;
+        tracing::info!(
+            "LINE CALC: text_y={:.2}, line_height={:.2}, clicked_line_float={:.2}, clicked_line={}, scroll_offset={}",
+            text_y, line_height, clicked_line_float, clicked_line, scroll_offset
+        );
+        clicked_line.saturating_add(scroll_offset)
+    };
+    
+    // Calculate column index (VS Code approach)
+    // VS Code: chars = Math.round(mouseContentHorizontalOffset / typicalHalfwidthCharacterWidth)
+    let column = if text_x < 0.0 {
+        0
+    } else {
+        let chars = (text_x / char_width).round() as usize;
+        chars
+    };
+    
+    tracing::info!(
+        "POSITION CALC: text_coords=({:.2}, {:.2}), line_height={:.2}, char_width={:.2}, calculated_line={}, calculated_col={}",
+        text_x, text_y, line_height, char_width, line_index, column
+    );
     
     // Get the actual line to clamp column to line length
     let buffer_read = buffer.read();
     if line_index < buffer_read.len_lines() {
-        let line_len = if let Some(line) = buffer_read.line(line_index) {
-            line.len_chars()
+        let line_content = if let Some(line) = buffer_read.line(line_index) {
+            line.to_string()
         } else {
-            0
+            String::new()
         };
+        let line_len = line_content.len();
         
-        // Update cursor position
-        cursor.with_mut(|c| {
-            c.primary.active.line = line_index;
-            c.primary.active.column = column.min(line_len);
-            c.primary.anchor = c.primary.active;
-        });
+        // Check for double-click
+        let now = Instant::now();
+        let time_since_last = now.duration_since(*last_click_time.read());
+        let (last_line, last_col) = *last_click_pos.read();
+        let is_double_click = time_since_last < Duration::from_millis(500) 
+            && last_line == line_index 
+            && (last_col as i32 - column as i32).abs() <= 2;
         
-        tracing::debug!(
-            "Cursor moved to line: {}, col: {}", 
-            line_index + 1, 
-            column + 1
-        );
+        // Update last click info
+        *last_click_time.write() = now;
+        *last_click_pos.write() = (line_index, column);
+        
+        if is_double_click && !line_content.is_empty() {
+            // Double-click: select word at position
+            let clamped_column = column.min(line_len.saturating_sub(1));
+            if let Some((word_start, word_end)) = find_word_boundaries(&line_content, clamped_column) {
+                cursor.with_mut(|c| {
+                    // Set selection range
+                    c.primary.anchor.line = line_index;
+                    c.primary.anchor.column = word_start;
+                    c.primary.active.line = line_index;
+                    c.primary.active.column = word_end;
+                });
+                
+                tracing::debug!(
+                    "Word selected: line {}, cols {}-{}, word: '{}'", 
+                    line_index + 1, 
+                    word_start + 1,
+                    word_end + 1,
+                    &line_content[word_start..word_end]
+                );
+            }
+        } else {
+            // Single click: position cursor precisely
+            let final_column = column.min(line_len);
+            cursor.with_mut(|c| {
+                c.primary.active.line = line_index;
+                c.primary.active.column = final_column;
+                c.primary.anchor = c.primary.active;
+            });
+            
+            tracing::info!(
+                "CURSOR SET: line {} -> {}, col {} -> {} (line_len={})", 
+                cursor.read().primary.active.line + 1,
+                line_index + 1,
+                cursor.read().primary.active.column + 1,
+                final_column + 1,
+                line_len
+            );
+        }
         
         // Emit cursor position change
-        on_cursor_change.call((line_index + 1, column + 1));
+        let final_pos = cursor.read().primary.active;
+        on_cursor_change.call((final_pos.line + 1, final_pos.column + 1));
     }
+}
+
+/// Find word boundaries at a given position in a line
+fn find_word_boundaries(line: &str, position: usize) -> Option<(usize, usize)> {
+    if line.is_empty() || position >= line.len() {
+        return None;
+    }
+    
+    let chars: Vec<char> = line.chars().collect();
+    let pos = position.min(chars.len().saturating_sub(1));
+    
+    // Check if we're on a word character
+    if !is_word_char(chars[pos]) {
+        // If not on a word char, try to find adjacent word
+        // Look left
+        if pos > 0 && is_word_char(chars[pos - 1]) {
+            return find_word_at_position(&chars, pos - 1);
+        }
+        // Look right
+        if pos + 1 < chars.len() && is_word_char(chars[pos + 1]) {
+            return find_word_at_position(&chars, pos + 1);
+        }
+        return None;
+    }
+    
+    find_word_at_position(&chars, pos)
+}
+
+/// Find the start and end of a word containing the given position
+fn find_word_at_position(chars: &[char], position: usize) -> Option<(usize, usize)> {
+    if !is_word_char(chars[position]) {
+        return None;
+    }
+    
+    // Find word start
+    let mut start = position;
+    while start > 0 && is_word_char(chars[start - 1]) {
+        start -= 1;
+    }
+    
+    // Find word end
+    let mut end = position;
+    while end < chars.len() && is_word_char(chars[end]) {
+        end += 1;
+    }
+    
+    Some((start, end))
+}
+
+/// Determine if a character is part of a word
+fn is_word_char(ch: char) -> bool {
+    ch.is_alphanumeric() || ch == '_' || ch == '$'
 }
 
 /// Line numbers gutter component
@@ -437,19 +665,54 @@ fn RenderLine(
     
     let line_style = "height: 21px; line-height: 21px; white-space: pre; font-family: inherit; position: relative;";
     
+    // Check if this line has selection
+    let selection = cursor.read().primary.clone();
+    let has_selection = !selection.is_empty() && 
+        line_idx >= selection.start().line && 
+        line_idx <= selection.end().line;
+    
     rsx! {
         div {
             class: "code-line",
             style: "{line_style}",
             
+            // Render selection background if applicable
+            if has_selection {
+                {
+                    let start_col = if line_idx == selection.start().line {
+                        selection.start().column
+                    } else {
+                        0
+                    };
+                    let end_col = if line_idx == selection.end().line {
+                        selection.end().column
+                    } else {
+                        line_content.len()
+                    };
+                    
+                    rsx! {
+                        div {
+                            style: format!(
+                                "position: absolute; left: {}px; width: {}px; height: 21px; background: rgba(255, 193, 7, 0.3); z-index: 0;",
+                                start_col as f32 * 8.4,
+                                (end_col - start_col) as f32 * 8.4
+                            ),
+                        }
+                    }
+                }
+            }
+            
             // Render highlighted spans
-            {render_highlighted_spans(&line_content, &highlights)}
+            div {
+                style: "position: relative; z-index: 1;",
+                {render_highlighted_spans(&line_content, &highlights)}
+            }
             
             // Render cursor if on this line
-            if cursor.read().primary.active.line == line_idx {
+            if cursor.read().primary.active.line == line_idx && selection.is_empty() {
                 div {
                     style: format!(
-                        "position: absolute; left: {}px; top: 0; width: 2px; height: 21px; background: #FFC107; animation: blink 1s infinite;",
+                        "position: absolute; left: {}px; top: 0; width: 2px; height: 21px; background: #FFC107; animation: blink 1s infinite; z-index: 2;",
                         cursor.read().primary.active.column as f32 * 8.4
                     ),
                 }
