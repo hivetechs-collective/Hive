@@ -12,7 +12,7 @@ pub mod renderer;
 pub mod git_integration;
 pub mod completion;
 
-pub use editor::{CodeEditor, EditorConfig};
+pub use editor::CodeEditorComponent;
 pub use buffer::TextBuffer;
 pub use cursor::{Cursor, Selection};
 pub use highlighting::SyntaxHighlighter;

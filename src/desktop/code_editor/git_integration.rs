@@ -42,7 +42,7 @@ impl GitIntegration {
                         if let Ok(diff) = repo.diff_tree_to_index(Some(&tree), Some(&index), None) {
                             let mut additions = HashSet::new();
                             let mut deletions = HashSet::new();
-                            let mut modifications = HashSet::new();
+                            let modifications = HashSet::<usize>::new();
                             
                             // Process diff
                             let _ = diff.foreach(
@@ -201,7 +201,7 @@ impl GitIntegration {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InlineDecoration {
     pub line: usize,
     pub start_col: usize,

@@ -8,6 +8,7 @@ use super::{
     highlighting::{SyntaxHighlighter, Theme, HighlightedSpan, get_language_from_extension},
 };
 use dioxus::prelude::*;
+use dioxus::document::eval;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -27,99 +28,59 @@ pub fn CodeEditorComponent(
     let language_id = get_language_from_extension(extension).unwrap_or("text");
     
     // Initialize state
-    let mut buffer = use_signal(|| TextBuffer::new_with_content(&initial_content));
+    let mut buffer = use_signal(|| TextBuffer::from_text(&initial_content));
     let mut cursor = use_signal(|| Cursor::new());
     let mut syntax_highlighter = use_signal(|| SyntaxHighlighter::new());
     let mut has_changes = use_signal(|| false);
+    let mut is_focused = use_signal(|| false);
     
     // Track visible lines for rendering
     let mut scroll_offset = use_signal(|| 0usize);
     let visible_lines = 30; // Number of visible lines in editor
     
-    let editor_style = r#"
-        width: 100%;
-        height: 100%;
-        background: #0E1414;
-        color: #FFFFFF;
-        font-family: 'JetBrains Mono', 'Consolas', monospace;
-        font-size: 14px;
-        line-height: 21px;
-        overflow: hidden;
-        position: relative;
-    "#;
+    // Auto-focus the editor when mounted
+    use_effect(move || {
+        spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let eval = eval(r#"
+                const editor = document.querySelector('.code-editor');
+                if (editor) {
+                    editor.focus();
+                }
+            "#);
+            let _ = eval.await;
+        });
+    });
+    
+    // Get the appropriate style based on focus state
+    let editor_style = get_editor_style(*is_focused.read());
     
     rsx! {
         div {
             class: "code-editor",
             style: "{editor_style}",
             tabindex: "0",
-            
-            // Keyboard event handling
+            onfocus: move |_| {
+                *is_focused.write() = true;
+                tracing::debug!("Editor focused");
+            },
+            onblur: move |_| {
+                *is_focused.write() = false;
+                tracing::debug!("Editor blurred");
+            },
+            onclick: move |_| {
+                focus_editor();
+            },
             onkeydown: move |evt: KeyboardEvent| {
-                let key = evt.key();
-                let ctrl = evt.modifiers().ctrl();
-                let shift = evt.modifiers().shift();
-                
-                match (ctrl, key) {
-                    // Save file
-                    (true, Key::Character('s')) => {
-                        evt.prevent_default();
-                        let content = buffer.read().to_string();
-                        on_save.call((file_path.clone(), content));
-                        *has_changes.write() = false;
-                    }
-                    // Basic cursor movement
-                    (false, Key::ArrowLeft) => {
-                        cursor.write().move_left(&buffer.read());
-                    }
-                    (false, Key::ArrowRight) => {
-                        cursor.write().move_right(&buffer.read());
-                    }
-                    (false, Key::ArrowUp) => {
-                        cursor.write().move_up(&buffer.read());
-                    }
-                    (false, Key::ArrowDown) => {
-                        cursor.write().move_down(&buffer.read());
-                    }
-                    // Text input
-                    (false, Key::Character(ch)) => {
-                        let edit = TextEdit::Insert {
-                            position: cursor.read().primary.active,
-                            text: ch.to_string(),
-                        };
-                        buffer.write().apply_edit(edit);
-                        cursor.write().move_right(&buffer.read());
-                        *has_changes.write() = true;
-                        on_change.call(buffer.read().to_string());
-                    }
-                    // Enter key
-                    (false, Key::Enter) => {
-                        let edit = TextEdit::Insert {
-                            position: cursor.read().primary.active,
-                            text: "\n".to_string(),
-                        };
-                        buffer.write().apply_edit(edit);
-                        cursor.write().move_down(&buffer.read());
-                        cursor.write().primary.active.column = 0;
-                        *has_changes.write() = true;
-                        on_change.call(buffer.read().to_string());
-                    }
-                    // Backspace
-                    (false, Key::Backspace) => {
-                        let pos = cursor.read().primary.active;
-                        if pos.column > 0 || pos.line > 0 {
-                            cursor.write().move_left(&buffer.read());
-                            let new_pos = cursor.read().primary.active;
-                            let edit = TextEdit::Delete {
-                                range: new_pos..pos,
-                            };
-                            buffer.write().apply_edit(edit);
-                            *has_changes.write() = true;
-                            on_change.call(buffer.read().to_string());
-                        }
-                    }
-                    _ => {}
-                }
+                handle_keyboard_event(
+                    evt,
+                    &mut buffer,
+                    &mut cursor,
+                    &mut has_changes,
+                    &on_change,
+                    &on_save,
+                    &file_path,
+                );
             },
             
             // Editor content area
@@ -128,16 +89,10 @@ pub fn CodeEditorComponent(
                 style: "display: flex; height: 100%;",
                 
                 // Line numbers gutter
-                div {
-                    class: "line-numbers",
-                    style: "background: #181E21; border-right: 1px solid #2D3336; padding: 10px; min-width: 50px; text-align: right; color: #858585; user-select: none;",
-                    
-                    for line_num in (scroll_offset.read() + 1)..=(scroll_offset.read() + visible_lines).min(buffer.read().len_lines()) {
-                        div {
-                            style: "height: 21px; line-height: 21px;",
-                            "{line_num}"
-                        }
-                    }
+                LineNumbersGutter {
+                    scroll_offset: *scroll_offset.read(),
+                    visible_lines: visible_lines,
+                    total_lines: buffer.read().len_lines(),
                 }
                 
                 // Code content area
@@ -146,7 +101,7 @@ pub fn CodeEditorComponent(
                     style: "flex: 1; padding: 10px; overflow-x: auto; position: relative;",
                     
                     // Render visible lines with syntax highlighting
-                    for line_idx in *scroll_offset.read()..(scroll_offset.read() + visible_lines).min(buffer.read().len_lines()) {
+                    for line_idx in *scroll_offset.read()..(*scroll_offset.read() + visible_lines).min(buffer.read().len_lines()) {
                         RenderLine {
                             buffer: buffer.clone(),
                             highlighter: syntax_highlighter.clone(),
@@ -159,30 +114,225 @@ pub fn CodeEditorComponent(
             }
             
             // Status bar
-            div {
-                class: "editor-status-bar",
-                style: "position: absolute; bottom: 0; left: 0; right: 0; height: 22px; background: #181E21; border-top: 1px solid #2D3336; display: flex; align-items: center; padding: 0 10px; font-size: 12px; color: #858585;",
-                
-                // Language indicator
-                span {
-                    style: "margin-right: 20px;",
-                    "{language_id}"
+            StatusBar {
+                file_path: file_path.clone(),
+                language_id: language_id.to_string(),
+                cursor_position: cursor.read().primary.active,
+                has_changes: *has_changes.read(),
+            }
+        }
+    }
+}
+
+/// Get editor style based on focus state
+fn get_editor_style(is_focused: bool) -> &'static str {
+    if is_focused {
+        r#"
+            width: 100%;
+            height: 100%;
+            background: #0E1414;
+            color: #FFFFFF;
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 21px;
+            overflow: hidden;
+            position: relative;
+            outline: none;
+            border: 2px solid #FFC107;
+            transition: border-color 0.2s ease;
+        "#
+    } else {
+        r#"
+            width: 100%;
+            height: 100%;
+            background: #0E1414;
+            color: #FFFFFF;
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-size: 14px;
+            line-height: 21px;
+            overflow: hidden;
+            position: relative;
+            outline: none;
+            border: 2px solid transparent;
+            transition: border-color 0.2s ease;
+        "#
+    }
+}
+
+/// Focus the editor element
+fn focus_editor() {
+    let eval = eval(r#"
+        const editor = document.querySelector('.code-editor');
+        if (editor) {
+            editor.focus();
+        }
+    "#);
+    spawn(async move {
+        let _ = eval.await;
+    });
+}
+
+/// Handle keyboard events
+fn handle_keyboard_event(
+    evt: KeyboardEvent,
+    buffer: &mut Signal<TextBuffer>,
+    cursor: &mut Signal<Cursor>,
+    has_changes: &mut Signal<bool>,
+    on_change: &EventHandler<String>,
+    on_save: &EventHandler<(String, String)>,
+    file_path: &str,
+) {
+    tracing::debug!("Key pressed: {:?}", evt.key());
+    
+    let key = evt.key();
+    let ctrl = evt.modifiers().ctrl();
+    
+    // Prevent default for all handled keys
+    evt.prevent_default();
+    
+    match (ctrl, key) {
+        // Save file
+        (true, Key::Character(s)) if s == "s" => {
+            tracing::info!("Saving file");
+            let content = buffer.read().to_string();
+            on_save.call((file_path.to_string(), content));
+            *has_changes.write() = false;
+        }
+        // Basic cursor movement
+        (false, Key::ArrowLeft) => {
+            cursor.with_mut(|c| c.move_left(&buffer.read()));
+        }
+        (false, Key::ArrowRight) => {
+            cursor.with_mut(|c| c.move_right(&buffer.read()));
+        }
+        (false, Key::ArrowUp) => {
+            cursor.with_mut(|c| c.move_up(&buffer.read()));
+        }
+        (false, Key::ArrowDown) => {
+            cursor.with_mut(|c| c.move_down(&buffer.read()));
+        }
+        // Text input
+        (false, Key::Character(ch)) => {
+            tracing::debug!("Inserting character: {}", ch);
+            let edit = TextEdit::Insert {
+                position: cursor.read().primary.active,
+                text: ch.to_string(),
+            };
+            buffer.write().apply_edit(edit);
+            cursor.with_mut(|c| c.move_right(&buffer.read()));
+            *has_changes.write() = true;
+            on_change.call(buffer.read().to_string());
+        }
+        // Enter key
+        (false, Key::Enter) => {
+            tracing::debug!("Inserting newline");
+            let edit = TextEdit::Insert {
+                position: cursor.read().primary.active,
+                text: "\n".to_string(),
+            };
+            buffer.write().apply_edit(edit);
+            cursor.with_mut(|c| {
+                c.move_down(&buffer.read());
+                c.primary.active.column = 0;
+            });
+            *has_changes.write() = true;
+            on_change.call(buffer.read().to_string());
+        }
+        // Backspace
+        (false, Key::Backspace) => {
+            let pos = cursor.read().primary.active;
+            if pos.column > 0 || pos.line > 0 {
+                tracing::debug!("Deleting character");
+                cursor.with_mut(|c| c.move_left(&buffer.read()));
+                let new_pos = cursor.read().primary.active;
+                let edit = TextEdit::Delete {
+                    range: new_pos..pos,
+                };
+                buffer.write().apply_edit(edit);
+                *has_changes.write() = true;
+                on_change.call(buffer.read().to_string());
+            }
+        }
+        _ => {
+            // Don't prevent default for unhandled keys
+            evt.stop_propagation();
+        }
+    }
+}
+
+/// Line numbers gutter component
+#[component]
+fn LineNumbersGutter(scroll_offset: usize, visible_lines: usize, total_lines: usize) -> Element {
+    let gutter_style = r#"
+        background: #181E21;
+        border-right: 1px solid #2D3336;
+        padding: 10px;
+        min-width: 50px;
+        text-align: right;
+        color: #858585;
+        user-select: none;
+    "#;
+    
+    rsx! {
+        div {
+            class: "line-numbers",
+            style: "{gutter_style}",
+            
+            for line_num in (scroll_offset + 1)..=(scroll_offset + visible_lines).min(total_lines) {
+                div {
+                    style: "height: 21px; line-height: 21px;",
+                    "{line_num}"
                 }
-                
-                // Cursor position
+            }
+        }
+    }
+}
+
+/// Status bar component
+#[component]
+fn StatusBar(
+    file_path: String,
+    language_id: String,
+    cursor_position: Position,
+    has_changes: bool,
+) -> Element {
+    let status_bar_style = r#"
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 22px;
+        background: #181E21;
+        border-top: 1px solid #2D3336;
+        display: flex;
+        align-items: center;
+        padding: 0 10px;
+        font-size: 12px;
+        color: #858585;
+    "#;
+    
+    rsx! {
+        div {
+            class: "editor-status-bar",
+            style: "{status_bar_style}",
+            
+            // Language indicator
+            span {
+                style: "margin-right: 20px;",
+                "{language_id}"
+            }
+            
+            // Cursor position
+            span {
+                style: "margin-right: 20px;",
+                {format!("Ln {}, Col {}", cursor_position.line + 1, cursor_position.column + 1)}
+            }
+            
+            // Modified indicator
+            if has_changes {
                 span {
-                    style: "margin-right: 20px;",
-                    "Ln {}, Col {}",
-                    cursor.read().primary.active.line + 1,
-                    cursor.read().primary.active.column + 1
-                }
-                
-                // Modified indicator
-                if *has_changes.read() {
-                    span {
-                        style: "color: #FFC107;",
-                        "● Modified"
-                    }
+                    style: "color: #FFC107;",
+                    "● Modified"
                 }
             }
         }
@@ -215,24 +365,7 @@ fn RenderLine(
             style: "{line_style}",
             
             // Render highlighted spans
-            for span in highlights {
-                if let Some(style) = &span.style {
-                    span {
-                        style: format!(
-                            "color: {}; font-weight: {}; font-style: {}; text-decoration: {};",
-                            style.color,
-                            if style.bold { "bold" } else { "normal" },
-                            if style.italic { "italic" } else { "normal" },
-                            if style.underline { "underline" } else { "none" }
-                        ),
-                        "{&line_content[span.start..span.end.min(line_content.len())]}"
-                    }
-                } else {
-                    span {
-                        "{&line_content[span.start..span.end.min(line_content.len())]}"
-                    }
-                }
-            }
+            {render_highlighted_spans(&line_content, &highlights)}
             
             // Render cursor if on this line
             if cursor.read().primary.active.line == line_idx {
@@ -241,6 +374,30 @@ fn RenderLine(
                         "position: absolute; left: {}px; top: 0; width: 2px; height: 21px; background: #FFC107; animation: blink 1s infinite;",
                         cursor.read().primary.active.column as f32 * 8.4
                     ),
+                }
+            }
+        }
+    }
+}
+
+/// Helper function to render highlighted spans
+fn render_highlighted_spans(line_content: &str, highlights: &[HighlightedSpan]) -> Element {
+    rsx! {
+        for span in highlights {
+            if let Some(style) = &span.style {
+                span {
+                    style: format!(
+                        "color: {}; font-weight: {}; font-style: {}; text-decoration: {};",
+                        style.color,
+                        if style.bold { "bold" } else { "normal" },
+                        if style.italic { "italic" } else { "normal" },
+                        if style.underline { "underline" } else { "none" }
+                    ),
+                    "{&line_content[span.start..span.end.min(line_content.len())]}"
+                }
+            } else {
+                span {
+                    "{&line_content[span.start..span.end.min(line_content.len())]}"
                 }
             }
         }

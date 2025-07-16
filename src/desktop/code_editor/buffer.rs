@@ -4,6 +4,7 @@
 
 use ropey::{Rope, RopeSlice};
 use std::ops::Range;
+use super::cursor::Position;
 
 #[derive(Debug, Clone)]
 pub struct TextBuffer {
@@ -21,9 +22,10 @@ pub struct TextBuffer {
 }
 
 #[derive(Debug, Clone)]
-pub struct TextEdit {
-    pub range: Range<usize>,
-    pub text: String,
+pub enum TextEdit {
+    Insert { position: Position, text: String },
+    Delete { range: Range<Position> },
+    Replace { range: Range<Position>, text: String },
 }
 
 impl TextBuffer {
@@ -95,13 +97,47 @@ impl TextBuffer {
     
     /// Apply a text edit
     pub fn apply_edit(&mut self, edit: TextEdit) {
-        self.replace(edit.range, &edit.text);
+        match edit {
+            TextEdit::Insert { position, text } => {
+                if let Some(char_idx) = self.line_col_to_char(position.line, position.column) {
+                    self.insert(char_idx, &text);
+                }
+            }
+            TextEdit::Delete { range } => {
+                if let (Some(start), Some(end)) = (
+                    self.line_col_to_char(range.start.line, range.start.column),
+                    self.line_col_to_char(range.end.line, range.end.column),
+                ) {
+                    self.remove(start..end);
+                }
+            }
+            TextEdit::Replace { range, text } => {
+                if let (Some(start), Some(end)) = (
+                    self.line_col_to_char(range.start.line, range.start.column),
+                    self.line_col_to_char(range.end.line, range.end.column),
+                ) {
+                    self.replace(start..end, &text);
+                }
+            }
+        }
     }
     
     /// Apply multiple edits (sorted by range start, descending)
     pub fn apply_edits(&mut self, mut edits: Vec<TextEdit>) {
         // Sort edits by start position in descending order to avoid offset issues
-        edits.sort_by_key(|edit| std::cmp::Reverse(edit.range.start));
+        edits.sort_by(|a, b| {
+            let a_pos = match a {
+                TextEdit::Insert { position, .. } => position,
+                TextEdit::Delete { range, .. } => &range.start,
+                TextEdit::Replace { range, .. } => &range.start,
+            };
+            let b_pos = match b {
+                TextEdit::Insert { position, .. } => position,
+                TextEdit::Delete { range, .. } => &range.start,
+                TextEdit::Replace { range, .. } => &range.start,
+            };
+            b_pos.cmp(a_pos)
+        });
         
         for edit in edits {
             self.apply_edit(edit);
