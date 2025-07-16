@@ -152,9 +152,9 @@ pub fn Splitter(
     min_size: f32,
     max_size: f32,
 ) -> Element {
-    let is_dragging = use_signal(|| false);
-    let start_pos = use_signal(|| 0.0);
-    let start_size = use_signal(|| 0.0);
+    let mut is_dragging = use_signal(|| false);
+    let mut start_pos = use_signal(|| 0.0);
+    let mut start_size = use_signal(|| 0.0);
     
     let splitter_class = match direction {
         SplitterDirection::Vertical => "splitter vertical",
@@ -202,7 +202,7 @@ pub fn Splitter(
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SplitterDirection {
     Vertical,
     Horizontal,

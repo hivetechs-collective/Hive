@@ -17,7 +17,7 @@ pub fn load_directory_tree<'a>(
     expanded_dirs: &'a HashMap<PathBuf, bool>,
     show_hidden: bool,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileItem>>> + Send + 'a>> {
-    Box::pin(async move { load_directory_tree_inner(root, expanded_dirs, show_hidden).await })
+    Box::pin(async move { load_directory_tree_inner(root, expanded_dirs, show_hidden, 0).await })
 }
 
 /// Inner recursive function for loading directory tree
@@ -25,6 +25,7 @@ fn load_directory_tree_inner<'a>(
     root: &'a Path,
     expanded_dirs: &'a HashMap<PathBuf, bool>,
     show_hidden: bool,
+    depth: usize,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileItem>>> + Send + 'a>> {
     Box::pin(async move {
         let mut entries = Vec::new();
@@ -60,7 +61,7 @@ fn load_directory_tree_inner<'a>(
 
             // Load children if directory is expanded
             let children = if is_directory && is_expanded {
-                load_directory_tree_inner(&path, expanded_dirs, show_hidden)
+                load_directory_tree_inner(&path, expanded_dirs, show_hidden, depth + 1)
                     .await
                     .unwrap_or_default()
             } else {
@@ -81,6 +82,7 @@ fn load_directory_tree_inner<'a>(
                     None
                 },
                 modified,
+                depth,
             });
         }
 

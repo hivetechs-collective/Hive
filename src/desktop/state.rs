@@ -247,6 +247,7 @@ pub struct FileItem {
     pub git_status: Option<GitFileStatus>,
     pub size: Option<u64>,
     pub modified: Option<chrono::DateTime<chrono::Utc>>,
+    pub depth: usize,  // NEW: Track nesting depth for proper indentation
 }
 
 impl PartialEq for FileItem {
@@ -259,6 +260,7 @@ impl PartialEq for FileItem {
             && self.file_type == other.file_type
             && self.git_status == other.git_status
             && self.size == other.size
+            && self.depth == other.depth
             && match (&self.modified, &other.modified) {
                 (Some(a), Some(b)) => a.timestamp() == b.timestamp(),
                 (None, None) => true,

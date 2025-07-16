@@ -12,7 +12,6 @@ pub enum StatusBarAlignment {
 }
 
 /// Status bar item with priority and content
-#[derive(Clone, Debug)]
 pub struct StatusBarItem {
     pub id: String,
     pub text: String,
@@ -20,9 +19,47 @@ pub struct StatusBarItem {
     pub icon: Option<String>,
     pub alignment: StatusBarAlignment,
     pub priority: i32, // Higher priority items appear first
-    pub on_click: Option<fn()>,
+    pub on_click: Option<Box<dyn Fn() + 'static>>,
     pub background_color: Option<String>,
     pub foreground_color: Option<String>,
+}
+
+impl std::fmt::Debug for StatusBarItem {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StatusBarItem")
+            .field("id", &self.id)
+            .field("text", &self.text)
+            .field("tooltip", &self.tooltip)
+            .field("icon", &self.icon)
+            .field("alignment", &self.alignment)
+            .field("priority", &self.priority)
+            .field("on_click", &self.on_click.is_some())
+            .field("background_color", &self.background_color)
+            .field("foreground_color", &self.foreground_color)
+            .finish()
+    }
+}
+
+impl PartialEq for StatusBarItem {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Clone for StatusBarItem {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            text: self.text.clone(),
+            tooltip: self.tooltip.clone(),
+            icon: self.icon.clone(),
+            alignment: self.alignment.clone(),
+            priority: self.priority,
+            on_click: None, // Cannot clone closures, so we reset this
+            background_color: self.background_color.clone(),
+            foreground_color: self.foreground_color.clone(),
+        }
+    }
 }
 
 /// Status bar state
@@ -275,7 +312,7 @@ fn StatusBarItemComponent(
         div {
             class: "{item_class}",
             style: "{style_str}",
-            title: item.tooltip.as_ref().unwrap_or(&item.text),
+            title: "{item.tooltip.as_ref().unwrap_or(&item.text)}",
             onclick: move |_| {
                 if has_click_handler {
                     on_click.call(());
