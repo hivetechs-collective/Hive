@@ -21,12 +21,36 @@ pub fn get_global_styles() -> String {
 /* Dialog styles */
 {dialog_styles}
 
+/* Activity Bar styles */
+{activity_bar_styles}
+
+/* Enhanced Explorer styles */
+{explorer_styles}
+
+/* Enhanced Status Bar styles */
+{status_bar_styles}
+
+/* VS Code Context Menu styles */
+{vscode_menu_styles}
+
+/* Welcome/Getting Started styles */
+{welcome_styles}
+
+/* Enhanced Layout styles */
+{layout_styles}
+
 /* HiveTechs Brand Theme */
 {hivetechs_theme}"#,
         base_styles = get_base_styles(),
         platform_fonts = get_platform_fonts(),
         platform_adjustments = theme::platform_adjustments(),
         dialog_styles = crate::desktop::dialogs::DIALOG_STYLES,
+        activity_bar_styles = crate::desktop::activity_bar::ACTIVITY_BAR_STYLES,
+        explorer_styles = crate::desktop::explorer_enhanced::EXPLORER_STYLES,
+        status_bar_styles = crate::desktop::status_bar_enhanced::STATUS_BAR_STYLES,
+        vscode_menu_styles = get_vscode_menu_styles(),
+        welcome_styles = crate::desktop::welcome_enhanced::WELCOME_STYLES,
+        layout_styles = crate::desktop::layout_enhanced::LAYOUT_STYLES,
         hivetechs_theme = hivetechs_theme::get_hivetechs_theme()
     )
 }
@@ -1398,6 +1422,153 @@ button:focus,
 .file-tree-item.selected:hover {
     background-color: #094771;
 }
+
+/* ===== VS Code Monaco Menu Styles ===== */
+.vscode-menu-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+}
+
+.monaco-menu {
+    position: absolute;
+    background-color: var(--vscode-menu-background, #3c3c3c);
+    color: var(--vscode-menu-foreground, #cccccc);
+    border: 1px solid var(--vscode-menu-border, #555555);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border-radius: 5px;
+    font-size: 13px;
+    line-height: 22px;
+    z-index: 1000;
+    animation: menuFadeIn 0.1s ease-out;
+}
+
+@keyframes menuFadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.monaco-action-bar.vertical {
+    padding: 4px 0;
+}
+
+.monaco-action-bar .actions-container {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.monaco-action-bar .action-item {
+    display: block;
+    position: relative;
+}
+
+.monaco-action-bar .action-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    height: 24px;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    position: relative;
+    white-space: nowrap;
+    transition: background-color 0.1s ease;
+}
+
+.monaco-action-bar .action-menu-item.focused,
+.monaco-action-bar .action-menu-item:hover {
+    background-color: var(--vscode-menu-selectionBackground, #094771);
+    color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.monaco-action-bar .action-menu-item.disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.monaco-action-bar .action-menu-item.disabled:hover {
+    background-color: transparent;
+    color: inherit;
+}
+
+.monaco-action-bar .action-label {
+    flex: 1;
+    margin-right: 8px;
+}
+
+.monaco-action-bar .keybinding {
+    margin-left: auto;
+    opacity: 0.7;
+    font-size: 11px;
+    padding-left: 16px;
+}
+
+.monaco-action-bar .submenu-indicator {
+    position: absolute;
+    right: 8px;
+    font-size: 10px;
+}
+
+.monaco-action-bar-separator {
+    height: 1px;
+    background-color: var(--vscode-menu-separatorBackground, #606060);
+    margin: 4px 0;
+}
+
+/* Monaco Submenu */
+.monaco-submenu {
+    position: absolute;
+    background-color: var(--vscode-menu-background, #3c3c3c);
+    color: var(--vscode-menu-foreground, #cccccc);
+    border: 1px solid var(--vscode-menu-border, #555555);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border-radius: 5px;
+    z-index: 1001;
+    animation: submenuFadeIn 0.1s ease-out;
+}
+
+@keyframes submenuFadeIn {
+    from { opacity: 0; transform: translateX(-5px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Codicon support for menu icons */
+.codicon {
+    font-family: codicon;
+    display: inline-block;
+    font-style: normal;
+    font-weight: normal;
+    font-size: 14px;
+    line-height: 1;
+    text-decoration: none;
+    text-rendering: auto;
+    text-align: center;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Common codicon definitions */
+.codicon-new-file:before { content: '\ea7f' }
+.codicon-new-folder:before { content: '\ea80' }
+.codicon-edit:before { content: '\ea73' }
+.codicon-trash:before { content: '\ea81' }
+.codicon-copy:before { content: '\eae1' }
+.codicon-cut:before { content: '\eae2' }
+.codicon-paste:before { content: '\eae3' }
+.codicon-search:before { content: '\ea6d' }
+.codicon-diff:before { content: '\ea93' }
+.codicon-split-horizontal:before { content: '\eb57' }
+.codicon-terminal:before { content: '\ea85' }
+.codicon-folder-opened:before { content: '\eab4' }
+.codicon-chevron-right:before { content: '\eb60' }
+.codicon-check:before { content: '\eab2' }
 "#
 }
 
@@ -1513,6 +1684,153 @@ pub fn get_file_icon(extension: &str) -> &'static str {
         // Default
         _ => "fa-solid fa-file",
     }
+}
+
+/// Get VS Code menu styles
+fn get_vscode_menu_styles() -> &'static str {
+    r#"
+/* VS Code Menu Backdrop */
+.vscode-menu-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 999;
+}
+
+/* Monaco Menu Styles */
+.monaco-menu {
+    position: absolute;
+    background-color: var(--vscode-menu-background, #3c3c3c);
+    color: var(--vscode-menu-foreground, #cccccc);
+    border: 1px solid var(--vscode-menu-border, #555555);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border-radius: 5px;
+    font-size: 13px;
+    line-height: 22px;
+    z-index: 1000;
+    animation: menuFadeIn 0.1s ease-out;
+}
+
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.monaco-action-bar.vertical {
+    padding: 4px 0;
+}
+
+.monaco-action-bar .actions-container {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.monaco-action-bar .action-item {
+    position: relative;
+}
+
+.monaco-action-bar .action-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 0 26px;
+    height: 22px;
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+}
+
+.monaco-action-bar .action-menu-item:hover:not(.disabled) {
+    background-color: var(--vscode-menu-selectionBackground, #094771);
+    color: var(--vscode-menu-selectionForeground, #ffffff);
+}
+
+.monaco-action-bar .action-menu-item.focused {
+    background-color: var(--vscode-menu-selectionBackground, #094771);
+    color: var(--vscode-menu-selectionForeground, #ffffff);
+    outline: 1px solid var(--hivetechs-yellow, #FFC107);
+    outline-offset: -1px;
+}
+
+.monaco-action-bar .action-menu-item.disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.monaco-action-bar .action-label {
+    flex: 1;
+    margin-right: 20px;
+}
+
+.monaco-action-bar .keybinding {
+    margin-left: auto;
+    opacity: 0.7;
+    font-size: 11px;
+}
+
+.monaco-action-bar-separator {
+    height: 1px;
+    background-color: var(--vscode-menu-separatorBackground, #606060);
+    margin: 4px 0;
+}
+
+/* Submenu support */
+.monaco-submenu {
+    position: absolute;
+    background-color: var(--vscode-menu-background, #3c3c3c);
+    border: 1px solid var(--vscode-menu-border, #555555);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    border-radius: 5px;
+    animation: submenuFadeIn 0.1s ease-out;
+}
+
+@keyframes submenuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.submenu-indicator {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* Checkbox menu items */
+.monaco-action-bar .action-menu-item[role="menuitemcheckbox"] .codicon-check {
+    visibility: hidden;
+}
+
+.monaco-action-bar .action-menu-item[role="menuitemcheckbox"][aria-checked="true"] .codicon-check {
+    visibility: visible;
+}
+
+/* Icons in menu items */
+.monaco-action-bar .codicon {
+    font-size: 16px;
+    line-height: 22px;
+}
+
+.monaco-action-bar .action-menu-item .codicon:first-child {
+    margin-right: 8px;
+}
+"#
 }
 
 /// Additional theme variants

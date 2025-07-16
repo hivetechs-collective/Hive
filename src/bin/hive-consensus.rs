@@ -780,7 +780,10 @@ use hive_ai::desktop::dialogs::{
     DIALOG_STYLES,
 };
 use hive_ai::desktop::context_menu::{
-    ContextMenu, ContextMenuAction, ContextMenuState, FileNameDialog, ConfirmDialog,
+    FileNameDialog, ConfirmDialog,
+};
+use hive_ai::desktop::context_menu_vscode::{
+    VSCodeContextMenu, VSCodeContextMenuState, FileExplorerContext, build_context_menu_items,
 };
 use hive_ai::desktop::file_system;
 use hive_ai::desktop::file_operations;
@@ -872,7 +875,7 @@ fn App() -> Element {
     let onboarding_current_step = use_signal(|| 1); // Persist onboarding step
     
     // Context menu and file operation dialogs
-    let mut context_menu_state = use_signal(|| ContextMenuState::default());
+    let mut context_menu_state = use_signal(|| VSCodeContextMenuState::default());
     let mut show_new_file_dialog = use_signal(|| false);
     let mut show_new_folder_dialog = use_signal(|| false);
     let mut show_rename_dialog = use_signal(|| false);
@@ -2482,8 +2485,8 @@ fn App() -> Element {
             }
         }
 
-        // Context menu
-        ContextMenu {
+        // VS Code-style context menu
+        VSCodeContextMenu {
             state: context_menu_state.clone(),
             on_action: EventHandler::new({
                 let mut context_menu_state = context_menu_state.clone();
@@ -2494,75 +2497,102 @@ fn App() -> Element {
                 let mut dialog_target_path = dialog_target_path.clone();
                 let current_dir = current_dir.clone();
                 let mut file_tree = file_tree.clone();
-                move |(action, path): (ContextMenuAction, PathBuf)| {
-                    *dialog_target_path.write() = Some(path.clone());
-                    match action {
-                        ContextMenuAction::NewFile => {
-                            *show_new_file_dialog.write() = true;
-                        }
-                        ContextMenuAction::NewFolder => {
-                            *show_new_folder_dialog.write() = true;
-                        }
-                        ContextMenuAction::Rename => {
-                            *show_rename_dialog.write() = true;
-                        }
-                        ContextMenuAction::Delete => {
-                            *show_delete_confirm.write() = true;
-                        }
-                        ContextMenuAction::Cut => {
-                            context_menu_state.write().set_clipboard(path, true);
-                        }
-                        ContextMenuAction::Copy => {
-                            context_menu_state.write().set_clipboard(path, false);
-                        }
-                        ContextMenuAction::Paste => {
-                            let clipboard_info = context_menu_state.read().clipboard.clone();
-                            if let Some(clipboard) = clipboard_info {
-                                let src = clipboard.path.clone();
-                                let is_cut = clipboard.is_cut;
-                                let dst_dir = if path.is_dir() { path } else { path.parent().unwrap_or(&path).to_path_buf() };
-                                let dst = dst_dir.join(src.file_name().unwrap_or_default());
+                move |action_id: String| {
+                    // Get context and path outside of the match to avoid borrowing issues
+                    let ctx_opt = context_menu_state.read().context.clone();
+                    if let Some(ctx) = ctx_opt {
+                        let path = ctx.path.clone();
+                        *dialog_target_path.write() = Some(path.clone());
+                        
+                        match action_id.as_str() {
+                            "explorer.newFile" => {
+                                *show_new_file_dialog.write() = true;
+                            }
+                            "explorer.newFolder" => {
+                                *show_new_folder_dialog.write() = true;
+                            }
+                            "explorer.rename" => {
+                                *show_rename_dialog.write() = true;
+                            }
+                            "explorer.delete" => {
+                                *show_delete_confirm.write() = true;
+                            }
+                            "explorer.cut" => {
+                                context_menu_state.write().set_clipboard(path, true);
+                            }
+                            "explorer.copy" => {
+                                context_menu_state.write().set_clipboard(path, false);
+                            }
+                            "explorer.paste" => {
+                                // First get clipboard info and check if it's a cut operation
+                                let (clipboard_opt, should_clear) = {
+                                    let state = context_menu_state.read();
+                                    let clipboard = state.clipboard.clone();
+                                    let should_clear = clipboard.as_ref().map(|c| c.is_cut).unwrap_or(false);
+                                    (clipboard, should_clear)
+                                };
                                 
-                                spawn(async move {
-                                    let result = if is_cut {
-                                        file_operations::move_item(&src, &dst).await
-                                    } else {
-                                        file_operations::copy_item(&src, &dst).await
-                                    };
+                                if let Some(clipboard) = clipboard_opt {
+                                    let src = clipboard.path.clone();
+                                    let is_cut = clipboard.is_cut;
+                                    let dst_dir = if path.is_dir() { path } else { path.parent().unwrap_or(&path).to_path_buf() };
+                                    let dst = dst_dir.join(src.file_name().unwrap_or_default());
                                     
-                                    if let Err(e) = result {
-                                        tracing::error!("Failed to paste item: {}", e);
+                                    spawn(async move {
+                                        let result = if is_cut {
+                                            file_operations::move_item(&src, &dst).await
+                                        } else {
+                                            file_operations::copy_item(&src, &dst).await
+                                        };
+                                        
+                                        if let Err(e) = result {
+                                            tracing::error!("Failed to paste item: {}", e);
+                                        }
+                                        
+                                        // TODO: Refresh file tree
+                                    });
+                                    
+                                    if should_clear {
+                                        context_menu_state.write().clear_clipboard();
                                     }
-                                    
-                                    // TODO: Refresh file tree
-                                });
-                                
-                                if is_cut {
-                                    context_menu_state.write().clear_clipboard();
                                 }
                             }
-                        }
-                        ContextMenuAction::Duplicate => {
-                            spawn(async move {
-                                if let Err(e) = file_operations::duplicate_item(&path).await {
-                                    tracing::error!("Failed to duplicate item: {}", e);
+                            "explorer.copyPath" => {
+                                if let Err(e) = file_operations::copy_path_to_clipboard(&path) {
+                                    tracing::error!("Failed to copy path to clipboard: {}", e);
                                 }
-                                // TODO: Refresh file tree
-                            });
-                        }
-                        ContextMenuAction::CopyPath => {
-                            if let Err(e) = file_operations::copy_path_to_clipboard(&path) {
-                                tracing::error!("Failed to copy path to clipboard: {}", e);
                             }
-                        }
-                        ContextMenuAction::OpenInTerminal => {
-                            if let Err(e) = file_operations::open_in_terminal(&path) {
-                                tracing::error!("Failed to open terminal: {}", e);
+                            "explorer.copyRelativePath" => {
+                                // Copy relative path
+                                let relative = path.strip_prefix(&*current_dir.read()).unwrap_or(&path);
+                                if let Err(e) = file_operations::copy_path_to_clipboard(&relative.to_path_buf()) {
+                                    tracing::error!("Failed to copy relative path to clipboard: {}", e);
+                                }
                             }
-                        }
-                        ContextMenuAction::RevealInFinder => {
-                            if let Err(e) = file_operations::reveal_in_finder(&path) {
-                                tracing::error!("Failed to reveal in finder: {}", e);
+                            "explorer.openInIntegratedTerminal" => {
+                                if let Err(e) = file_operations::open_in_terminal(&path) {
+                                    tracing::error!("Failed to open terminal: {}", e);
+                                }
+                            }
+                            "explorer.revealInFinder" | "explorer.revealInExplorer" | "explorer.openContainingFolder" => {
+                                if let Err(e) = file_operations::reveal_in_finder(&path) {
+                                    tracing::error!("Failed to reveal in finder: {}", e);
+                                }
+                            }
+                            "explorer.findInFolder" => {
+                                tracing::info!("Find in folder: {}", path.display());
+                                // TODO: Implement search in folder
+                            }
+                            "explorer.openToSide" => {
+                                tracing::info!("Open to side: {}", path.display());
+                                // TODO: Implement split editor
+                            }
+                            "explorer.compareSelected" => {
+                                tracing::info!("Compare selected: {}", path.display());
+                                // TODO: Implement file comparison
+                            }
+                            _ => {
+                                tracing::warn!("Unknown action: {}", action_id);
                             }
                         }
                     }
@@ -2764,7 +2794,7 @@ fn FileTreeItem(
     open_tabs: Signal<Vec<String>>,
     active_tab: Signal<String>,
     tab_contents: Signal<HashMap<String, String>>,
-    context_menu_state: Signal<ContextMenuState>,
+    context_menu_state: Signal<VSCodeContextMenuState>,
 ) -> Element {
     let file_path = file.path.clone();
     let file_path_for_context = file_path.clone(); // Clone for context menu
@@ -2813,11 +2843,20 @@ fn FileTreeItem(
                 e.prevent_default();
                 // Use client coordinates with small adjustment to avoid hiding under cursor
                 let coords = e.client_coordinates();
+                let context = FileExplorerContext {
+                    path: file_path_for_context.clone(),
+                    is_directory: is_dir,
+                    is_readonly: false, // TODO: Check actual file permissions
+                    is_root: file_path_for_context.parent().is_none(),
+                    has_selection: true,
+                    multiple_selection: false,
+                    clipboard_has_files: context_menu_state.read().context.is_some(),
+                    is_git_repository: false, // TODO: Check if in git repo
+                };
                 context_menu_state.write().show(
                     (coords.x + 10.0) as i32, // Small offset to the right of cursor
                     (coords.y + 5.0) as i32,  // Small offset below cursor
-                    file_path_for_context.clone(),
-                    is_dir
+                    context
                 );
             },
             // Hover effects are handled by CSS
