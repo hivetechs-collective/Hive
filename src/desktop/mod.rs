@@ -2,6 +2,7 @@
 //!
 //! 100% Rust implementation providing professional development experience
 
+pub mod activity_bar;
 pub mod app;
 pub mod assets;
 pub mod chat;
@@ -9,19 +10,24 @@ pub mod components;
 pub mod consensus;
 pub mod consensus_integration;
 pub mod context_menu;
+pub mod context_menu_vscode;
 pub mod dialogs;
 pub mod events;
+pub mod explorer_enhanced;
 pub mod file_explorer;
 pub mod file_operations;
 pub mod file_system;
 pub mod layout;
+pub mod layout_enhanced;
 pub mod logo_svg;
 pub mod menu_bar;
 pub mod model_browser;
 pub mod simple_db;
 pub mod state;
+pub mod status_bar_enhanced;
 pub mod profile_service;
 pub mod styles;
+pub mod welcome_enhanced;
 
 pub use app::App;
 
