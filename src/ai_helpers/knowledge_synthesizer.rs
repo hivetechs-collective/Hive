@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::ai_helpers::{Insight, InsightType, Pattern, PatternType, QualityReport, IndexedKnowledge};
+use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
 
 /// Configuration for Knowledge Synthesizer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +45,9 @@ impl Default for SynthesizerConfig {
 /// Knowledge Synthesizer using local LLMs
 pub struct KnowledgeSynthesizer {
     config: SynthesizerConfig,
+    
+    /// Python model service
+    python_service: Arc<PythonModelService>,
     
     /// Synthesis history
     synthesis_history: Arc<RwLock<SynthesisHistory>>,
@@ -91,7 +95,7 @@ struct SynthesisMetrics {
 
 impl KnowledgeSynthesizer {
     /// Create a new Knowledge Synthesizer
-    pub async fn new() -> Result<Self> {
+    pub async fn new(python_service: Arc<PythonModelService>) -> Result<Self> {
         let config = SynthesizerConfig::default();
         let synthesis_history = Arc::new(RwLock::new(SynthesisHistory::default()));
         let synthesis_cache = Arc::new(RwLock::new(lru::LruCache::new(
@@ -100,6 +104,7 @@ impl KnowledgeSynthesizer {
         
         Ok(Self {
             config,
+            python_service,
             synthesis_history,
             synthesis_cache,
         })
@@ -370,19 +375,30 @@ impl KnowledgeSynthesizer {
             return Ok("Insufficient facts for meaningful summary".to_string());
         }
         
-        // TODO: Use local LLM to generate actual summary
-        // For now, create a simple summary
+        // Prepare facts for LLM
+        let facts_text = facts.iter()
+            .take(10) // Limit to prevent context overflow
+            .map(|f| format!("- {}", f.content))
+            .collect::<Vec<_>>()
+            .join("\n");
         
-        let summary = format!(
-            "Summary of {} recent facts:\n\n\
-             Key themes identified across the knowledge base include various concepts \
-             and their relationships. The accumulated knowledge shows patterns of \
-             evolution and increasing sophistication in understanding.\n\n\
-             Total facts analyzed: {}\n\
-             Synthesis confidence: High",
-            facts.len(),
-            facts.len()
+        let prompt = format!(
+            "Please provide a comprehensive summary of the following knowledge facts. \
+             Focus on key themes, relationships, and insights. \
+             Limit the summary to {} words.\n\nFacts:\n{}\n\nSummary:",
+            max_length / 6, // Rough words estimate
+            facts_text
         );
+        
+        // Use local LLM to generate summary
+        let summary = self.python_service
+            .generate_text(
+                &self.config.synthesis_model,
+                &prompt,
+                max_length,
+                self.config.temperature,
+            )
+            .await?;
         
         Ok(summary)
     }

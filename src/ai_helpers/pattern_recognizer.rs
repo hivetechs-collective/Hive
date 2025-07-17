@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::ai_helpers::{Pattern, PatternType, IndexedKnowledge};
+use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
 
 /// Configuration for Pattern Recognizer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +42,9 @@ impl Default for PatternConfig {
 /// Pattern Recognizer using UniXcoder
 pub struct PatternRecognizer {
     config: PatternConfig,
+    
+    /// Python model service
+    python_service: Arc<PythonModelService>,
     
     /// Tracked patterns with their metadata
     pattern_store: Arc<RwLock<PatternStore>>,
@@ -93,7 +97,7 @@ enum EvolutionType {
 
 impl PatternRecognizer {
     /// Create a new Pattern Recognizer
-    pub async fn new() -> Result<Self> {
+    pub async fn new(python_service: Arc<PythonModelService>) -> Result<Self> {
         let config = PatternConfig::default();
         let pattern_store = Arc::new(RwLock::new(PatternStore::default()));
         let detection_cache = Arc::new(RwLock::new(lru::LruCache::new(
@@ -102,6 +106,7 @@ impl PatternRecognizer {
         
         Ok(Self {
             config,
+            python_service,
             pattern_store,
             detection_cache,
         })
@@ -159,13 +164,36 @@ impl PatternRecognizer {
         &self,
         indexed: &IndexedKnowledge,
     ) -> Result<Option<Pattern>> {
-        // TODO: Implement with UniXcoder similarity detection
-        // For now, return placeholder
-        
         let store = self.pattern_store.read().await;
         
-        // Check if this content is similar to existing patterns
-        // Using embedding similarity would be ideal here
+        // Get embeddings for comparison
+        let embeddings = self.python_service
+            .generate_embeddings(&self.config.pattern_model, vec![indexed.content.clone()])
+            .await?;
+        
+        let current_embedding = embeddings.into_iter().next()
+            .context("No embedding returned")?;
+        
+        // Compare with existing patterns using cosine similarity
+        for tracked in store.patterns.values() {
+            // Generate embedding for the pattern
+            let pattern_embeddings = self.python_service
+                .generate_embeddings(&self.config.pattern_model, vec![tracked.pattern.description.clone()])
+                .await?;
+            
+            if let Some(pattern_embedding) = pattern_embeddings.into_iter().next() {
+                let similarity = self.cosine_similarity(&current_embedding, &pattern_embedding);
+                
+                if similarity > self.config.min_confidence {
+                    return Ok(Some(Pattern {
+                        pattern_type: PatternType::Recurring,
+                        description: format!("Similar to: {}", tracked.pattern.description),
+                        confidence: similarity,
+                        examples: vec![indexed.content.clone()],
+                    }));
+                }
+            }
+        }
         
         Ok(None)
     }
@@ -348,6 +376,23 @@ impl PatternRecognizer {
             .take(limit)
             .map(|p| p.pattern.description.clone())
             .collect()
+    }
+    
+    /// Calculate cosine similarity between two embeddings
+    fn cosine_similarity(&self, a: &[f32], b: &[f32]) -> f64 {
+        if a.len() != b.len() {
+            return 0.0;
+        }
+        
+        let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+        
+        if norm_a == 0.0 || norm_b == 0.0 {
+            0.0
+        } else {
+            (dot_product / (norm_a * norm_b)) as f64
+        }
     }
 }
 

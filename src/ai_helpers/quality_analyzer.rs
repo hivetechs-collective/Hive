@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::ai_helpers::{QualityReport, QualityIssue, Severity, IndexedKnowledge};
+use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
 
 /// Configuration for Quality Analyzer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +43,9 @@ impl Default for QualityConfig {
 /// Quality Analyzer using CodeT5+
 pub struct QualityAnalyzer {
     config: QualityConfig,
+    
+    /// Python model service
+    python_service: Arc<PythonModelService>,
     
     /// Historical quality metrics
     quality_history: Arc<RwLock<QualityHistory>>,
@@ -81,7 +85,7 @@ enum TrendType {
 
 impl QualityAnalyzer {
     /// Create a new Quality Analyzer
-    pub async fn new() -> Result<Self> {
+    pub async fn new(python_service: Arc<PythonModelService>) -> Result<Self> {
         let config = QualityConfig::default();
         let quality_history = Arc::new(RwLock::new(QualityHistory::default()));
         let analysis_cache = Arc::new(RwLock::new(lru::LruCache::new(
@@ -90,6 +94,7 @@ impl QualityAnalyzer {
         
         Ok(Self {
             config,
+            python_service,
             quality_history,
             analysis_cache,
         })
@@ -151,13 +156,22 @@ impl QualityAnalyzer {
         indexed: &IndexedKnowledge,
         raw_output: &str,
     ) -> Result<f64> {
-        // TODO: Implement with CodeT5+ embedding comparison
-        // Check for contradictions with existing facts
+        // Use AI model to analyze consistency
+        let analysis_result = self.python_service
+            .analyze_code(
+                &self.config.analysis_model,
+                raw_output,
+                "consistency"
+            )
+            .await?;
         
-        // Placeholder logic
-        let mut score: f64 = 1.0;
+        // Extract consistency score from analysis
+        let mut score = analysis_result
+            .get("consistency_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.85);
         
-        // Check for contradiction indicators
+        // Additional heuristic checks
         if raw_output.contains("however") || raw_output.contains("actually") {
             score -= 0.1;
         }
@@ -165,11 +179,11 @@ impl QualityAnalyzer {
         // Check metadata consistency
         if let Some(source) = indexed.metadata.get("source_question") {
             if !raw_output.to_lowercase().contains(&source.as_str().unwrap_or("").to_lowercase()) {
-                score -= 0.05; // Slight penalty if not addressing the question
+                score -= 0.05;
             }
         }
         
-        Ok(score.max(0.0))
+        Ok(score.max(0.0).min(1.0))
     }
     
     /// Analyze completeness of the response
@@ -205,19 +219,29 @@ impl QualityAnalyzer {
         indexed: &IndexedKnowledge,
         raw_output: &str,
     ) -> Result<f64> {
-        // TODO: Implement fact-checking with external knowledge
-        // For now, check for accuracy indicators
+        // Use AI model to analyze accuracy
+        let analysis_result = self.python_service
+            .analyze_code(
+                &self.config.analysis_model,
+                raw_output,
+                "accuracy"
+            )
+            .await?;
         
-        let mut score: f64 = 0.9; // Start with high accuracy assumption
+        // Extract accuracy score from analysis
+        let mut score = analysis_result
+            .get("accuracy_score")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.9);
         
-        // Check for uncertainty markers
+        // Additional checks for uncertainty markers
         if raw_output.contains("might") || raw_output.contains("possibly") {
-            score -= 0.1; // Uncertain statements
+            score -= 0.1;
         }
         
-        // Check for specific, verifiable claims
+        // Boost for specific claims
         if raw_output.contains("specifically") || raw_output.contains("exactly") {
-            score += 0.05; // Specific claims
+            score += 0.05;
         }
         
         Ok(score.min(1.0).max(0.0))

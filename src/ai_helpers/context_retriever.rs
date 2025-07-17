@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 
 use crate::ai_helpers::{ChromaVectorStore, StageContext, Pattern, Insight};
 use crate::consensus::types::Stage;
+use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
 
 /// Configuration for Context Retriever
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,13 +44,19 @@ pub struct ContextRetriever {
     config: RetrieverConfig,
     vector_store: Arc<ChromaVectorStore>,
     
+    /// Python model service
+    python_service: Arc<PythonModelService>,
+    
     /// Cache of recent retrievals
     retrieval_cache: Arc<RwLock<lru::LruCache<String, StageContext>>>,
 }
 
 impl ContextRetriever {
     /// Create a new Context Retriever
-    pub async fn new(vector_store: Arc<ChromaVectorStore>) -> Result<Self> {
+    pub async fn new(
+        vector_store: Arc<ChromaVectorStore>,
+        python_service: Arc<PythonModelService>,
+    ) -> Result<Self> {
         let config = RetrieverConfig::default();
         let retrieval_cache = Arc::new(RwLock::new(lru::LruCache::new(
             std::num::NonZeroUsize::new(100).unwrap()
@@ -58,6 +65,7 @@ impl ContextRetriever {
         Ok(Self {
             config,
             vector_store,
+            python_service,
             retrieval_cache,
         })
     }

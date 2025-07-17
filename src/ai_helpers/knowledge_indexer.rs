@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::ai_helpers::{IndexedKnowledge, ChromaVectorStore};
+use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
 
 /// Configuration for the Knowledge Indexer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,23 +43,20 @@ pub struct KnowledgeIndexer {
     config: IndexerConfig,
     vector_store: Arc<ChromaVectorStore>,
     
-    /// Python process for running the model
-    /// We'll use PyO3 or a subprocess to run the actual model
-    model_process: Arc<RwLock<Option<ModelProcess>>>,
+    /// Python model service for embeddings
+    python_service: Arc<PythonModelService>,
     
     /// Cache of recent embeddings
     embedding_cache: Arc<RwLock<lru::LruCache<String, Vec<f32>>>>,
 }
 
-/// Represents a running model process
-struct ModelProcess {
-    // This would be implemented to manage the Python process
-    // running UniXcoder or CodeT5+
-}
 
 impl KnowledgeIndexer {
     /// Create a new Knowledge Indexer
-    pub async fn new(vector_store: Arc<ChromaVectorStore>) -> Result<Self> {
+    pub async fn new(
+        vector_store: Arc<ChromaVectorStore>,
+        python_service: Arc<PythonModelService>,
+    ) -> Result<Self> {
         let config = IndexerConfig::default();
         let embedding_cache = Arc::new(RwLock::new(lru::LruCache::new(
             std::num::NonZeroUsize::new(1000).unwrap()
@@ -67,20 +65,11 @@ impl KnowledgeIndexer {
         Ok(Self {
             config,
             vector_store,
-            model_process: Arc::new(RwLock::new(None)),
+            python_service,
             embedding_cache,
         })
     }
     
-    /// Initialize the model process
-    pub async fn initialize(&self) -> Result<()> {
-        tracing::info!("Initializing Knowledge Indexer with model: {}", self.config.embedding_model);
-        
-        // TODO: Start Python process with UniXcoder/CodeT5+
-        // For now, we'll use a placeholder
-        
-        Ok(())
-    }
     
     /// Index a Curator output
     pub async fn index_output(
@@ -127,15 +116,13 @@ impl KnowledgeIndexer {
     
     /// Generate embedding for text
     async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        // TODO: Implement actual model call
-        // For now, return a placeholder embedding
+        // Use the actual model through Python service
+        let embeddings = self.python_service
+            .generate_embeddings(&self.config.embedding_model, vec![text.to_string()])
+            .await?;
         
-        // This would call the Python process running UniXcoder
-        // and get back a 768-dimensional embedding vector
-        
-        // Placeholder: return random embedding
-        let embedding: Vec<f32> = (0..768).map(|i| (i as f32 * 0.001) % 1.0).collect();
-        Ok(embedding)
+        embeddings.into_iter().next()
+            .context("No embedding returned from model")
     }
     
     /// Create metadata for indexed knowledge

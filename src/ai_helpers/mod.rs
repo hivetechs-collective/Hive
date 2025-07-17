@@ -13,6 +13,8 @@ pub mod vector_store;
 pub mod parallel_processor;
 pub mod model_downloader;
 pub mod monitoring;
+pub mod python_models;
+pub mod chroma_store;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -28,6 +30,8 @@ pub use vector_store::ChromaVectorStore;
 pub use parallel_processor::{ParallelProcessor, ParallelConfig};
 pub use model_downloader::{ModelDownloader, DownloaderConfig, ModelInfo, DownloadEvent};
 pub use monitoring::{PerformanceMonitor, MonitoringConfig, OperationType, PerformanceStats};
+pub use python_models::{PythonModelService, PythonModelConfig};
+pub use chroma_store::{ChromaVectorStore as RealChromaVectorStore, ChromaConfig};
 
 /// Processed knowledge from AI helpers
 #[derive(Debug, Clone)]
@@ -142,6 +146,9 @@ pub struct AIHelperEcosystem {
     /// Chroma for vector storage
     pub vector_store: Arc<ChromaVectorStore>,
     
+    /// Python model service
+    python_service: Arc<PythonModelService>,
+    
     /// Parallel processor for performance
     parallel_processor: ParallelProcessor,
     
@@ -170,15 +177,31 @@ impl AIHelperEcosystem {
         // First, ensure all required models are downloaded
         Self::ensure_models_available().await?;
         
+        // Initialize Python model service
+        let python_config = PythonModelConfig::default();
+        let python_service = Arc::new(PythonModelService::new(python_config).await?);
+        
         // Initialize vector store
         let vector_store = Arc::new(ChromaVectorStore::new().await?);
         
-        // Initialize helpers
-        let knowledge_indexer = Arc::new(KnowledgeIndexer::new(vector_store.clone()).await?);
-        let context_retriever = Arc::new(ContextRetriever::new(vector_store.clone()).await?);
-        let pattern_recognizer = Arc::new(PatternRecognizer::new().await?);
-        let quality_analyzer = Arc::new(QualityAnalyzer::new().await?);
-        let knowledge_synthesizer = Arc::new(KnowledgeSynthesizer::new().await?);
+        // Initialize helpers with Python service
+        let knowledge_indexer = Arc::new(KnowledgeIndexer::new(
+            vector_store.clone(),
+            python_service.clone(),
+        ).await?);
+        let context_retriever = Arc::new(ContextRetriever::new(
+            vector_store.clone(),
+            python_service.clone(),
+        ).await?);
+        let pattern_recognizer = Arc::new(PatternRecognizer::new(
+            python_service.clone(),
+        ).await?);
+        let quality_analyzer = Arc::new(QualityAnalyzer::new(
+            python_service.clone(),
+        ).await?);
+        let knowledge_synthesizer = Arc::new(KnowledgeSynthesizer::new(
+            python_service.clone(),
+        ).await?);
         
         let state = Arc::new(RwLock::new(HelperState {
             total_facts: 0,
@@ -199,6 +222,7 @@ impl AIHelperEcosystem {
             quality_analyzer,
             knowledge_synthesizer,
             vector_store,
+            python_service,
             parallel_processor,
             performance_monitor,
             state,
