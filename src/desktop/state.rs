@@ -155,6 +155,7 @@ impl AppState {
 pub struct ProjectInfo {
     pub name: String,
     pub path: PathBuf,
+    pub root_path: PathBuf, // Add root_path for repository context
     pub language: Option<String>,
     pub git_status: GitStatus,
     pub git_branch: Option<String>,
@@ -186,7 +187,8 @@ impl ProjectInfo {
 
         Ok(Self {
             name,
-            path,
+            path: path.clone(),
+            root_path: path, // Use the same path as root_path for now
             language,
             git_status,
             git_branch,

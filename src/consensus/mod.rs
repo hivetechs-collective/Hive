@@ -7,6 +7,7 @@ pub mod models;
 pub mod openrouter;
 pub mod pipeline;
 pub mod profiles;
+pub mod repository_context;
 pub mod stages;
 pub mod streaming;
 pub mod temporal;
@@ -15,6 +16,7 @@ pub mod types;
 
 pub use engine::ConsensusEngine;
 pub use pipeline::ConsensusPipeline;
+pub use repository_context::{RepositoryContext, RepositoryContextManager};
 pub use streaming::{
     ChannelStreamingCallbacks, ConsensusEvent, ConsensusResponseResult, ConsensusStage,
     StreamingCallbacks, StreamingResponse,
