@@ -138,7 +138,12 @@ impl VerifiedContextBuilder {
         question: &str,
         stage: Stage,
     ) -> Result<String> {
-        // Use the AI helpers but ensure they have repository facts
+        // First ensure AI helpers have latest repository facts
+        if let Err(e) = ai_helpers.update_repository_facts(self.repository_facts.clone()).await {
+            tracing::warn!("Failed to update AI helpers with repository facts: {}", e);
+        }
+        
+        // Use the AI helpers with repository-enhanced context
         match ai_helpers.prepare_stage_context(question, stage, 2048).await {
             Ok(stage_context) => {
                 // Format the StageContext into a string

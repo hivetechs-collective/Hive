@@ -412,6 +412,25 @@ impl AIHelperEcosystem {
         Ok(processed)
     }
     
+    /// Update repository facts for enhanced context preparation
+    pub async fn update_repository_facts(&self, facts: Option<crate::consensus::verification::RepositoryFacts>) -> Result<()> {
+        tracing::info!("Updating AI helper ecosystem with repository facts");
+        
+        // Update context retriever with repository facts
+        self.context_retriever.update_repository_facts(facts.clone()).await?;
+        
+        // Future: could also update other helpers like pattern recognizer and quality analyzer
+        // to be repository-aware
+        
+        if facts.is_some() {
+            tracing::info!("✅ AI helpers now have repository awareness for enhanced context");
+        } else {
+            tracing::warn!("Repository facts cleared from AI helpers");
+        }
+        
+        Ok(())
+    }
+    
     /// Get system statistics
     pub async fn get_stats(&self) -> HelperStats {
         let state = self.state.read().await;

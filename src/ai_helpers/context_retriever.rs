@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 
 use crate::ai_helpers::{ChromaVectorStore, StageContext, Pattern, Insight};
 use crate::consensus::types::Stage;
+use crate::consensus::verification::RepositoryFacts;
 use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
 
 /// Configuration for Context Retriever
@@ -49,6 +50,9 @@ pub struct ContextRetriever {
     
     /// Cache of recent retrievals
     retrieval_cache: Arc<RwLock<lru::LruCache<String, StageContext>>>,
+    
+    /// Repository facts for enhanced context
+    repository_facts: Arc<RwLock<Option<RepositoryFacts>>>,
 }
 
 impl ContextRetriever {
@@ -67,7 +71,49 @@ impl ContextRetriever {
             vector_store,
             python_service,
             retrieval_cache,
+            repository_facts: Arc::new(RwLock::new(None)),
         })
+    }
+    
+    /// Update repository facts for enhanced context preparation
+    pub async fn update_repository_facts(&self, facts: Option<RepositoryFacts>) -> Result<()> {
+        let mut repo_facts = self.repository_facts.write().await;
+        *repo_facts = facts.clone();
+        
+        if let Some(ref facts) = facts {
+            tracing::info!(
+                "Repository facts updated: {} v{} ({} deps, {} modules)", 
+                facts.name, facts.version, facts.dependency_count, facts.module_count
+            );
+        } else {
+            tracing::warn!("Repository facts cleared - context may be less accurate");
+        }
+        
+        // Clear cache since context will be different with new facts
+        self.retrieval_cache.write().await.clear();
+        
+        Ok(())
+    }
+    
+    /// Get repository-enhanced facts for context
+    async fn get_repository_enhanced_facts(&self, base_facts: Vec<String>) -> Vec<String> {
+        let mut enhanced_facts = base_facts;
+        
+        if let Some(ref facts) = *self.repository_facts.read().await {
+            enhanced_facts.insert(0, format!(
+                "Repository Context: {} v{} ({} dependencies, {} modules, {} files, {} LOC)",
+                facts.name, facts.version, facts.dependency_count, 
+                facts.module_count, facts.total_files, facts.lines_of_code
+            ));
+            
+            if facts.is_enterprise {
+                enhanced_facts.insert(1, "This is an enterprise-grade project with complex architecture".to_string());
+            } else {
+                enhanced_facts.insert(1, "This is a standard project with straightforward structure".to_string());
+            }
+        }
+        
+        enhanced_facts
     }
     
     /// Get context optimized for Generator stage
@@ -85,7 +131,8 @@ impl ContextRetriever {
         }
         
         // Generator needs broad context and examples
-        let relevant_facts = self.retrieve_broad_context(question, context_limit).await?;
+        let base_facts = self.retrieve_broad_context(question, context_limit).await?;
+        let relevant_facts = self.get_repository_enhanced_facts(base_facts).await;
         let patterns = self.find_relevant_patterns(question).await?;
         let insights = self.get_relevant_insights(question).await?;
         
@@ -115,7 +162,8 @@ impl ContextRetriever {
         tracing::debug!("Preparing Refiner context for: {}", question);
         
         // Refiner needs high-quality examples and improvement patterns
-        let relevant_facts = self.retrieve_quality_examples(question, context_limit).await?;
+        let base_facts = self.retrieve_quality_examples(question, context_limit).await?;
+        let relevant_facts = self.get_repository_enhanced_facts(base_facts).await;
         let patterns = self.find_improvement_patterns(question).await?;
         let insights = self.get_quality_insights(question).await?;
         
@@ -140,7 +188,8 @@ impl ContextRetriever {
         tracing::debug!("Preparing Validator context for: {}", question);
         
         // Validator needs contradictions, edge cases, and verification patterns
-        let relevant_facts = self.retrieve_edge_cases(question, context_limit).await?;
+        let base_facts = self.retrieve_edge_cases(question, context_limit).await?;
+        let relevant_facts = self.get_repository_enhanced_facts(base_facts).await;
         let patterns = self.find_contradiction_patterns(question).await?;
         let insights = self.get_validation_insights(question).await?;
         
@@ -165,7 +214,8 @@ impl ContextRetriever {
         tracing::debug!("Preparing Curator context for: {}", question);
         
         // Curator needs synthesis opportunities and authoritative examples
-        let relevant_facts = self.retrieve_synthesis_context(question, context_limit).await?;
+        let base_facts = self.retrieve_synthesis_context(question, context_limit).await?;
+        let relevant_facts = self.get_repository_enhanced_facts(base_facts).await;
         let patterns = self.find_synthesis_patterns(question).await?;
         let insights = self.get_synthesis_insights(question).await?;
         
