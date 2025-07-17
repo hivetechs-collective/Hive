@@ -586,10 +586,23 @@ impl ConsensusPipeline {
         // Build messages for this stage
         let messages = if stage == Stage::Generator && self.should_use_file_reading(question, context) {
             // Use enhanced generator with file reading for repository analysis
+            tracing::info!("Using enhanced generator with file reading");
             self.build_enhanced_generator_messages(question, previous_answer, context).await?
         } else {
             handler.build_messages(question, previous_answer, context)?
         };
+        
+        // Debug log the messages being sent to the AI
+        if stage == Stage::Generator {
+            for (idx, msg) in messages.iter().enumerate() {
+                let preview = if msg.content.len() > 200 {
+                    format!("{}...", &msg.content[..200])
+                } else {
+                    msg.content.clone()
+                };
+                tracing::debug!("Message {} ({}): {}", idx, msg.role, preview);
+            }
+        }
 
         // Create progress tracker
         let mut tracker = ProgressTracker::new(stage, self.callbacks.clone());
@@ -1667,48 +1680,28 @@ impl ConsensusPipeline {
         previous_answer: Option<&str>,
         context: Option<&str>,
     ) -> Result<Vec<crate::consensus::types::Message>> {
-        use crate::consensus::stages::enhanced_generator::EnhancedGeneratorStage;
-        use crate::consensus::stages::ConsensusStage;
+        use crate::consensus::stages::file_aware_generator::{FileAwareGeneratorStage, build_file_aware_messages};
 
-        let enhanced_generator = EnhancedGeneratorStage::new();
+        let file_aware_generator = FileAwareGeneratorStage::new();
         
         // Get repository context if available
         if let Some(repo_ctx_manager) = &self.repository_context {
             let repo_context = repo_ctx_manager.get_context().await;
             
-            // Generate file-based analysis
-            let file_analysis = enhanced_generator.generate_with_files(question, Some(&repo_context)).await?;
+            // Build messages with actual file contents
+            let messages = build_file_aware_messages(
+                &file_aware_generator,
+                question,
+                Some(&repo_context),
+                context
+            ).await?;
             
-            // Build messages with enhanced context
-            let mut enhanced_context = String::new();
+            tracing::info!("Built file-aware messages with {} messages", messages.len());
             
-            // Add original context
-            if let Some(ctx) = context {
-                enhanced_context.push_str(ctx);
-                enhanced_context.push_str("\n\n");
-            }
-            
-            // Add file analysis
-            if !file_analysis.is_empty() {
-                enhanced_context.push_str("## File-Based Repository Analysis\n\n");
-                enhanced_context.push_str(&file_analysis);
-                tracing::info!("Added file-based analysis to generator context");
-                
-                // Debug log the first 500 chars of file analysis
-                let preview = if file_analysis.len() > 500 {
-                    format!("{}...", &file_analysis[..500])
-                } else {
-                    file_analysis.clone()
-                };
-                tracing::debug!("File analysis preview: {}", preview);
-            } else {
-                tracing::warn!("File analysis is empty - no files were read!");
-            }
-            
-            // Build messages with enhanced context
-            enhanced_generator.build_messages(question, previous_answer, Some(&enhanced_context))
+            Ok(messages)
         } else {
             // Fallback to regular generator
+            tracing::warn!("No repository context available, falling back to regular generator");
             let generator = crate::consensus::stages::GeneratorStage::new();
             generator.build_messages(question, previous_answer, context)
         }
