@@ -12,6 +12,7 @@ pub mod knowledge_synthesizer;
 pub mod vector_store;
 pub mod parallel_processor;
 pub mod model_downloader;
+pub mod monitoring;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -26,6 +27,7 @@ pub use knowledge_synthesizer::KnowledgeSynthesizer;
 pub use vector_store::ChromaVectorStore;
 pub use parallel_processor::{ParallelProcessor, ParallelConfig};
 pub use model_downloader::{ModelDownloader, DownloaderConfig, ModelInfo, DownloadEvent};
+pub use monitoring::{PerformanceMonitor, MonitoringConfig, OperationType, PerformanceStats};
 
 /// Processed knowledge from AI helpers
 #[derive(Debug, Clone)]
@@ -143,6 +145,9 @@ pub struct AIHelperEcosystem {
     /// Parallel processor for performance
     parallel_processor: ParallelProcessor,
     
+    /// Performance monitor
+    performance_monitor: Arc<PerformanceMonitor>,
+    
     /// Shared state
     state: Arc<RwLock<HelperState>>,
 }
@@ -184,6 +189,9 @@ impl AIHelperEcosystem {
         // Create parallel processor with default config
         let parallel_processor = ParallelProcessor::new(ParallelConfig::default());
         
+        // Create performance monitor
+        let performance_monitor = Arc::new(PerformanceMonitor::new(MonitoringConfig::default()));
+        
         Ok(Self {
             knowledge_indexer,
             context_retriever,
@@ -192,6 +200,7 @@ impl AIHelperEcosystem {
             knowledge_synthesizer,
             vector_store,
             parallel_processor,
+            performance_monitor,
             state,
         })
     }
@@ -220,42 +229,87 @@ impl AIHelperEcosystem {
         source_question: &str,
         conversation_id: &str,
     ) -> Result<ProcessedKnowledge> {
-        let start = std::time::Instant::now();
+        // Start monitoring the overall operation
+        let op_id = self.performance_monitor
+            .start_operation(OperationType::ParallelProcessing, "AIHelperEcosystem")
+            .await;
         
-        // 1. Index the new knowledge
-        let indexed = self.knowledge_indexer
-            .index_output(curator_output, source_question, conversation_id)
-            .await?;
+        let result = async {
+            let start = std::time::Instant::now();
+            
+            // 1. Index the new knowledge (with monitoring)
+            let index_op_id = self.performance_monitor
+                .start_operation(OperationType::IndexKnowledge, "KnowledgeIndexer")
+                .await;
+            
+            let indexed = match self.knowledge_indexer
+                .index_output(curator_output, source_question, conversation_id)
+                .await
+            {
+                Ok(indexed) => {
+                    self.performance_monitor.complete_operation(
+                        &index_op_id, true, None, serde_json::json!({})
+                    ).await?;
+                    indexed
+                }
+                Err(e) => {
+                    self.performance_monitor.complete_operation(
+                        &index_op_id, false, Some(e.to_string()), serde_json::json!({})
+                    ).await?;
+                    return Err(e);
+                }
+            };
+            
+            // 2. Process patterns, quality, and insights in parallel
+            let parallel_result = self.parallel_processor
+                .process_parallel(
+                    &indexed,
+                    curator_output,
+                    self.pattern_recognizer.clone(),
+                    self.quality_analyzer.clone(),
+                    self.knowledge_synthesizer.clone(),
+                )
+                .await?;
+            
+            // Update state
+            let mut state = self.state.write().await;
+            state.total_facts += 1;
+            state.total_patterns += parallel_result.patterns.len();
+            state.last_processing_time = Some(start.elapsed());
+            
+            tracing::info!(
+                "Processed curator output in {:?} with {:.2}x parallel speedup",
+                parallel_result.processing_time,
+                parallel_result.parallel_speedup
+            );
+            
+            Ok(ProcessedKnowledge {
+                indexed,
+                patterns: parallel_result.patterns,
+                quality: parallel_result.quality,
+                insights: parallel_result.insights,
+            })
+        }.await;
         
-        // 2. Process patterns, quality, and insights in parallel
-        let parallel_result = self.parallel_processor
-            .process_parallel(
-                &indexed,
-                curator_output,
-                self.pattern_recognizer.clone(),
-                self.quality_analyzer.clone(),
-                self.knowledge_synthesizer.clone(),
-            )
-            .await?;
+        // Complete monitoring
+        match &result {
+            Ok(_) => {
+                self.performance_monitor.complete_operation(
+                    &op_id, true, None, 
+                    serde_json::json!({
+                        "source_length": curator_output.len(),
+                        "conversation_id": conversation_id
+                    })
+                ).await?;
+            }
+            Err(e) => {
+                self.performance_monitor.complete_operation(
+                    &op_id, false, Some(e.to_string()), serde_json::json!({})
+                ).await?;
+            }
+        }
         
-        // Update state
-        let mut state = self.state.write().await;
-        state.total_facts += 1;
-        state.total_patterns += parallel_result.patterns.len();
-        state.last_processing_time = Some(start.elapsed());
-        
-        tracing::info!(
-            "Processed curator output in {:?} with {:.2}x parallel speedup",
-            parallel_result.processing_time,
-            parallel_result.parallel_speedup
-        );
-        
-        Ok(ProcessedKnowledge {
-            indexed,
-            patterns: parallel_result.patterns,
-            quality: parallel_result.quality,
-            insights: parallel_result.insights,
-        })
+        result
     }
     
     /// Prepare context for a consensus stage
@@ -338,6 +392,7 @@ impl AIHelperEcosystem {
     pub async fn get_stats(&self) -> HelperStats {
         let state = self.state.read().await;
         let parallel_stats = self.parallel_processor.get_stats().await;
+        let perf_stats = self.performance_monitor.get_stats().await;
         
         HelperStats {
             total_facts: state.total_facts,
@@ -347,6 +402,7 @@ impl AIHelperEcosystem {
             parallel_speedup: parallel_stats.parallel_speedup,
             tasks_completed: parallel_stats.tasks_completed,
             tasks_failed: parallel_stats.tasks_failed,
+            performance_stats: Some(perf_stats),
         }
     }
 }
@@ -361,6 +417,7 @@ pub struct HelperStats {
     pub parallel_speedup: f64,
     pub tasks_completed: usize,
     pub tasks_failed: usize,
+    pub performance_stats: Option<PerformanceStats>,
 }
 
 #[cfg(test)]
