@@ -2,6 +2,7 @@
 // Manages flow from Generator → Refiner → Validator → Curator
 
 use crate::consensus::repository_context::RepositoryContextManager;
+use crate::consensus::verified_context_builder::VerifiedContextBuilder;
 use crate::consensus::stages::{
     ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage,
 };
@@ -37,6 +38,7 @@ pub struct ConsensusPipeline {
     temporal_provider: TemporalContextProvider,
     repository_context: Option<Arc<RepositoryContextManager>>,
     codebase_intelligence: Option<Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>>,
+    verified_context_builder: VerifiedContextBuilder,
     stages: Vec<Box<dyn ConsensusStage>>,
     callbacks: Arc<dyn StreamingCallbacks>,
     // hooks_system: Option<Arc<HooksSystem>>,
@@ -81,6 +83,7 @@ impl ConsensusPipeline {
             temporal_provider: TemporalContextProvider::default(),
             repository_context: None, // Will be set when needed
             codebase_intelligence: None, // Will be set when needed
+            verified_context_builder: VerifiedContextBuilder::new(),
             stages: vec![
                 Box::new(GeneratorStage::new()),
                 Box::new(RefinerStage::new()),
@@ -117,6 +120,15 @@ impl ConsensusPipeline {
     pub fn with_repository_context(mut self, repository_context: Arc<RepositoryContextManager>) -> Self {
         self.repository_context = Some(repository_context);
         self
+    }
+    
+    /// Initialize repository verification for anti-hallucination
+    pub async fn with_repository_verification(mut self, repo_path: std::path::PathBuf) -> Result<Self> {
+        self.verified_context_builder
+            .with_repository_verification(repo_path)
+            .await?;
+        tracing::info!("Repository verification initialized for consensus pipeline");
+        Ok(self)
     }
     
     /// Set the codebase intelligence for this pipeline
@@ -298,19 +310,11 @@ impl ConsensusPipeline {
             tracing::info!("No memory context found (this is normal for first conversation)");
         }
 
-        // Build full context including semantic, temporal, memory, and codebase intelligence
-        let full_context = self
-            .build_full_context(context, temporal_context, memory_context, question, self.codebase_intelligence.clone())
-            .await?;
-        
-        // Log the context being passed to stages
-        if let Some(ref ctx) = full_context {
-            tracing::info!("Full context length: {} chars", ctx.len());
-            if ctx.contains("CRITICAL REPOSITORY CONTEXT") {
-                tracing::info!("✅ Repository context is included in pipeline");
-            } else {
-                tracing::warn!("⚠️ Repository context is missing from pipeline!");
-            }
+        // Check if repository verification is available
+        if !self.verified_context_builder.has_verification() {
+            tracing::warn!("⚠️ No repository verification available - consensus may produce hallucinations!");
+        } else {
+            tracing::info!("✅ Repository verification is active - anti-hallucination system enabled");
         }
 
         let mut previous_answer: Option<String> = None;
@@ -323,20 +327,24 @@ impl ConsensusPipeline {
             // Use model directly from profile - the maintenance system ensures these are always valid
             let model = self.profile.get_model_for_stage(stage).to_string();
 
-            // Prepare stage-specific context with AI helpers
-            let ai_helper_context = if let Some(ref ai_helpers) = self.ai_helpers {
-                match ai_helpers.prepare_stage_context(question, stage, 2048).await {
-                    Ok(context) => {
-                        tracing::info!("AI helpers prepared context for {} stage", stage.display_name());
-                        Some(context)
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to prepare AI helper context for {} stage: {}", stage.display_name(), e);
-                        None
-                    }
+            // Build verified context for this specific stage (includes mandatory verification)
+            let verified_stage_context = match self.verified_context_builder.build_verified_stage_context(
+                stage,
+                question,
+                context.clone(),
+                temporal_context.clone(),
+                memory_context.clone(),
+                self.repository_context.clone(),
+                self.ai_helpers.clone(),
+            ).await {
+                Ok(context) => {
+                    tracing::info!("Built verified context for {} stage: {} chars", stage.display_name(), context.len());
+                    Some(context)
                 }
-            } else {
-                None
+                Err(e) => {
+                    tracing::error!("Failed to build verified context for {} stage: {}", stage.display_name(), e);
+                    return Err(e);
+                }
             };
 
             // Execute pre-stage hooks with enterprise integration
@@ -398,10 +406,8 @@ impl ConsensusPipeline {
             // Notify stage start
             self.callbacks.on_stage_start(stage, &model)?;
 
-            // Run the stage
-            // Provide full context (including repository context) to all stages
-            // This ensures all stages are aware of the current repository
-            let stage_context = full_context.as_deref();
+            // Run the stage with verified context (includes mandatory repository verification)
+            let stage_context = verified_stage_context.as_deref();
 
             let stage_result = self
                 .run_single_stage(
