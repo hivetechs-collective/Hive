@@ -4,6 +4,7 @@
 use crate::consensus::models::ModelManager;
 use crate::consensus::pipeline::ConsensusPipeline;
 use crate::consensus::profiles::{ExpertProfileManager, TemplateFilter, TemplatePreferences};
+use crate::consensus::repository_context::RepositoryContextManager;
 use crate::consensus::streaming::{
     ChannelStreamingCallbacks, ConsensusResponseResult, ConsensusStage, StreamingCallbacks,
     StreamingResponse,
@@ -35,6 +36,7 @@ pub struct ConsensusEngine {
     profile_manager: Arc<ExpertProfileManager>,
     model_manager: Option<Arc<ModelManager>>,
     temporal_provider: Arc<TemporalContextProvider>,
+    repository_context: Arc<RwLock<Option<Arc<RepositoryContextManager>>>>,
     conversation_gateway: Arc<ConversationGateway>,
     usage_tracker: Arc<RwLock<UsageTracker>>,
     license_key: Option<String>,
@@ -141,11 +143,19 @@ impl ConsensusEngine {
             profile_manager,
             model_manager,
             temporal_provider: Arc::new(TemporalContextProvider::default()),
+            repository_context: Arc::new(RwLock::new(None)),
             conversation_gateway,
             usage_tracker,
             license_key,
             last_auth_remaining: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Set the repository context manager for this engine
+    pub async fn set_repository_context(&mut self, repository_context: Arc<RepositoryContextManager>) -> Result<()> {
+        let mut repo_ctx = self.repository_context.write().await;
+        *repo_ctx = Some(repository_context);
+        Ok(())
     }
 
     /// Process a query through the consensus pipeline
@@ -189,6 +199,11 @@ impl ConsensusEngine {
         // Set database if available
         if let Some(ref db) = self.database {
             pipeline = pipeline.with_database(db.clone());
+        }
+
+        // Set repository context if available
+        if let Some(repo_ctx) = self.repository_context.read().await.as_ref() {
+            pipeline = pipeline.with_repository_context(repo_ctx.clone());
         }
 
         // Run the consensus pipeline (D1 auth and verification happens inside)
@@ -241,6 +256,11 @@ impl ConsensusEngine {
         // Set database if available
         if let Some(ref db) = self.database {
             pipeline = pipeline.with_database(db.clone());
+        }
+
+        // Set repository context if available
+        if let Some(repo_ctx) = self.repository_context.read().await.as_ref() {
+            pipeline = pipeline.with_repository_context(repo_ctx.clone());
         }
 
         pipeline

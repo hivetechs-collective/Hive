@@ -1,6 +1,7 @@
 // Consensus Pipeline - Orchestrates the 4-stage consensus process
 // Manages flow from Generator → Refiner → Validator → Curator
 
+use crate::consensus::repository_context::RepositoryContextManager;
 use crate::consensus::stages::{
     ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage,
 };
@@ -35,6 +36,7 @@ pub struct ConsensusPipeline {
     config: ConsensusConfig,
     profile: ConsensusProfile,
     temporal_provider: TemporalContextProvider,
+    repository_context: Option<Arc<RepositoryContextManager>>,
     stages: Vec<Box<dyn ConsensusStage>>,
     callbacks: Arc<dyn StreamingCallbacks>,
     // hooks_system: Option<Arc<HooksSystem>>,
@@ -76,6 +78,7 @@ impl ConsensusPipeline {
             config,
             profile,
             temporal_provider: TemporalContextProvider::default(),
+            repository_context: None, // Will be set when needed
             stages: vec![
                 Box::new(GeneratorStage::new()),
                 Box::new(RefinerStage::new()),
@@ -104,6 +107,12 @@ impl ConsensusPipeline {
         self.database = Some(database.clone());
         // Initialize usage tracker with unified database
         self.usage_tracker = Some(Arc::new(UsageTracker::new(database)));
+        self
+    }
+
+    /// Set the repository context manager for this pipeline
+    pub fn with_repository_context(mut self, repository_context: Arc<RepositoryContextManager>) -> Self {
+        self.repository_context = Some(repository_context);
         self
     }
 
@@ -652,6 +661,14 @@ impl ConsensusPipeline {
         if let Some(memory) = memory_context {
             if !memory.is_empty() {
                 contexts.push(memory); // Already formatted with headers
+            }
+        }
+
+        // Add repository context (current codebase understanding)
+        if let Some(repo_ctx) = &self.repository_context {
+            let repo_context_info = repo_ctx.get_context_for_prompts().await;
+            if !repo_context_info.is_empty() {
+                contexts.push(format!("## Repository Context\n{}", repo_context_info));
             }
         }
 

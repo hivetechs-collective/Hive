@@ -5,6 +5,7 @@
 
 use crate::consensus::{
     engine::ConsensusEngine,
+    repository_context::RepositoryContextManager,
     streaming::{ProgressInfo, StreamingCallbacks},
     types::Stage,
 };
@@ -537,6 +538,7 @@ pub async fn process_consensus_events(
 #[derive(Clone)]
 pub struct DesktopConsensusManager {
     engine: Arc<Mutex<ConsensusEngine>>,
+    repository_context: Arc<RepositoryContextManager>,
     app_state: Signal<AppState>,
 }
 
@@ -547,11 +549,18 @@ impl DesktopConsensusManager {
         use crate::core::database::get_database;
         let db = get_database().await?;
 
+        // Create repository context manager
+        let repository_context = Arc::new(RepositoryContextManager::new().await?);
+
         // Create engine without checking keys - we'll check when processing
-        let engine = ConsensusEngine::new(Some(db)).await?;
+        let mut engine = ConsensusEngine::new(Some(db)).await?;
+        
+        // Connect repository context to engine
+        engine.set_repository_context(repository_context.clone()).await?;
 
         Ok(Self {
             engine: Arc::new(Mutex::new(engine)),
+            repository_context,
             app_state,
         })
     }
@@ -559,6 +568,13 @@ impl DesktopConsensusManager {
     /// Check if the consensus manager has valid API keys
     pub async fn has_valid_keys(&self) -> bool {
         ApiKeyManager::has_valid_keys().await.unwrap_or(false)
+    }
+
+    /// Update repository context from current IDE state
+    pub async fn update_repository_context(&self) -> Result<()> {
+        let app_state = self.app_state.read();
+        self.repository_context.update_from_ide_state(&app_state).await?;
+        Ok(())
     }
 
     /// Process a query with UI updates and streaming
