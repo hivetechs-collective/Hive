@@ -8,7 +8,6 @@ use super::{
     highlighting::{SyntaxHighlighter, Theme, HighlightedSpan, get_language_from_extension},
 };
 use dioxus::prelude::*;
-use dioxus::document::eval;
 use dioxus::events::MouseEvent;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -45,19 +44,7 @@ pub fn CodeEditorComponent(
     let mut last_click_time = use_signal(|| std::time::Instant::now());
     let mut last_click_pos = use_signal(|| (0, 0));
     
-    // Auto-focus the editor when mounted
-    use_effect(move || {
-        spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            let eval = eval(r#"
-                const editor = document.querySelector('.code-editor');
-                if (editor) {
-                    editor.focus();
-                }
-            "#);
-            let _ = eval.await;
-        });
-    });
+    // Auto-focus the editor when mounted (Dioxus desktop handles focus automatically)
     
     // Emit cursor position changes
     use_effect(move || {
@@ -106,32 +93,38 @@ pub fn CodeEditorComponent(
                     total_lines: buffer.read().len_lines(),
                 }
                 
-                // Code content area
+                // Code content area with VS Code-style positioning
                 div {
                     class: "code-content",
-                    style: "flex: 1; padding: 10px; overflow-x: auto; position: relative;",
-                    onclick: move |evt: MouseEvent| {
-                        tracing::info!("CONTENT AREA CLICKED!");
-                        focus_editor();
-                        handle_content_click(
-                            evt,
-                            &mut cursor,
-                            &buffer,
-                            *scroll_offset.read(),
-                            &on_cursor_change,
-                            &mut last_click_time,
-                            &mut last_click_pos,
-                        );
-                    },
+                    style: "flex: 1; padding: 10px; overflow-x: auto; position: relative; font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 21px;",
                     
-                    // Render visible lines with syntax highlighting
-                    for line_idx in *scroll_offset.read()..(*scroll_offset.read() + visible_lines).min(buffer.read().len_lines()) {
-                        RenderLine {
-                            buffer: buffer.clone(),
-                            highlighter: syntax_highlighter.clone(),
-                            line_idx,
-                            language_id: language_id.to_string(),
-                            cursor: cursor.clone(),
+                    // Lines container with VS Code absolute positioning and click handling
+                    div {
+                        class: "lines-content",
+                        style: format!("position: absolute; top: 0; left: 0; right: 0; height: {}px;", 
+                               buffer.read().len_lines() * 21),
+                        onclick: move |evt: MouseEvent| {
+                            tracing::info!("LINES CONTENT CLICKED!");
+                            handle_lines_content_click(
+                                evt,
+                                &mut cursor,
+                                &buffer,
+                                *scroll_offset.read(),
+                                &on_cursor_change,
+                                &mut last_click_time,
+                                &mut last_click_pos,
+                            );
+                        },
+                        
+                        // Render visible lines with syntax highlighting
+                        for line_idx in *scroll_offset.read()..(*scroll_offset.read() + visible_lines).min(buffer.read().len_lines()) {
+                            RenderLine {
+                                buffer: buffer.clone(),
+                                highlighter: syntax_highlighter.clone(),
+                                line_idx,
+                                language_id: language_id.to_string(),
+                                cursor: cursor.clone(),
+                            }
                         }
                     }
                 }
@@ -183,18 +176,6 @@ fn get_editor_style(is_focused: bool) -> &'static str {
     }
 }
 
-/// Focus the editor element
-fn focus_editor() {
-    let eval = eval(r#"
-        const editor = document.querySelector('.code-editor');
-        if (editor) {
-            editor.focus();
-        }
-    "#);
-    spawn(async move {
-        let _ = eval.await;
-    });
-}
 
 /// Handle keyboard events
 fn handle_keyboard_event(
@@ -389,6 +370,150 @@ fn handle_keyboard_event(
     }
 }
 
+/// Handle mouse click events on the lines-content area (direct line positioning)
+fn handle_lines_content_click(
+    evt: MouseEvent,
+    cursor: &mut Signal<Cursor>,
+    buffer: &Signal<TextBuffer>,
+    scroll_offset: usize,
+    on_cursor_change: &EventHandler<(usize, usize)>,
+    last_click_time: &mut Signal<Instant>,
+    last_click_pos: &mut Signal<(usize, usize)>,
+) {
+    // When clicking on lines-content, element coordinates are relative to lines-content
+    // which has position: absolute; top: 0; left: 0; within the content area
+    // No padding adjustment needed since we're directly on the lines container
+    let lines_x = evt.element_coordinates().x;
+    let lines_y = evt.element_coordinates().y;
+    
+    // Get ALL coordinate types from the event for debugging
+    let client_x = evt.client_coordinates().x;
+    let client_y = evt.client_coordinates().y;
+    let page_x = evt.page_coordinates().x;
+    let page_y = evt.page_coordinates().y;
+    let screen_x = evt.screen_coordinates().x;
+    let screen_y = evt.screen_coordinates().y;
+    
+    tracing::info!(
+        "🎯 CLICK DEBUG - element: ({:.1}, {:.1}), client: ({:.1}, {:.1}), page: ({:.1}, {:.1}), screen: ({:.1}, {:.1})",
+        lines_x, lines_y, client_x, client_y, page_x, page_y, screen_x, screen_y
+    );
+    
+    // Constants
+    let line_height = 21.0;
+    let char_width = 8.4;
+    
+    // Test multiple coordinate systems to see which gives correct results
+    let line_from_element = (lines_y / line_height).floor() as usize;
+    let line_from_client = (client_y / line_height).floor() as usize;
+    let line_from_page = (page_y / line_height).floor() as usize;
+    
+    tracing::info!(
+        "📊 LINE CALCULATIONS - element→{}, client→{}, page→{} (expecting line based on visual click)",
+        line_from_element, line_from_client, line_from_page
+    );
+    
+    // Let's also see what the current line positions should be
+    let buffer_read = buffer.read();
+    let total_lines = buffer_read.len_lines();
+    tracing::info!(
+        "📝 FILE INFO - total_lines: {}, line_height: {}px, expected_heights: [0, 21, 42, 63, 84...]",
+        total_lines, line_height
+    );
+    
+    // Now that lines have pointer-events: none, clicks should go to lines-content
+    // and give us the correct Y coordinates for line calculation
+    let line_index = if lines_y < 0.0 {
+        0
+    } else {
+        (lines_y / line_height).floor() as usize
+    };
+    
+    tracing::info!(
+        "📍 DIRECT CALC: lines_y={:.1} / line_height={:.1} = {:.2} -> line_index={}",
+        lines_y, line_height, lines_y / line_height, line_index
+    );
+    
+    let column = if lines_x < 0.0 {
+        0
+    } else {
+        let calculated_col = (lines_x / char_width).round() as usize;
+        tracing::info!("LINES COL CALC: lines_x={:.2} / char_width={:.2} = {:.2} -> column={}", 
+                      lines_x, char_width, lines_x / char_width, calculated_col);
+        calculated_col
+    };
+    
+    tracing::info!(
+        "LINES FINAL: line_index={}, column={} (1-based: line={}, col={})",
+        line_index, column, line_index + 1, column + 1
+    );
+    
+    // Get the actual line to clamp column to line length
+    let buffer_read = buffer.read();
+    if line_index < buffer_read.len_lines() {
+        let line_content = if let Some(line) = buffer_read.line(line_index) {
+            line.to_string()
+        } else {
+            String::new()
+        };
+        let line_len = line_content.len();
+        
+        // Check for double-click
+        let now = Instant::now();
+        let time_since_last = now.duration_since(*last_click_time.read());
+        let (last_line, last_col) = *last_click_pos.read();
+        let is_double_click = time_since_last < Duration::from_millis(500) 
+            && last_line == line_index 
+            && (last_col as i32 - column as i32).abs() <= 2;
+        
+        // Update last click info
+        *last_click_time.write() = now;
+        *last_click_pos.write() = (line_index, column);
+        
+        if is_double_click && !line_content.is_empty() {
+            // Double-click: select word at position
+            let clamped_column = column.min(line_len.saturating_sub(1));
+            if let Some((word_start, word_end)) = find_word_boundaries(&line_content, clamped_column) {
+                cursor.with_mut(|c| {
+                    c.primary.anchor.line = line_index;
+                    c.primary.anchor.column = word_start;
+                    c.primary.active.line = line_index;
+                    c.primary.active.column = word_end;
+                });
+                
+                tracing::debug!(
+                    "Word selected: line {}, cols {}-{}, word: '{}'", 
+                    line_index + 1, 
+                    word_start + 1,
+                    word_end + 1,
+                    &line_content[word_start..word_end]
+                );
+            }
+        } else {
+            // Single click: position cursor precisely
+            let final_column = column.min(line_len);
+            cursor.with_mut(|c| {
+                c.primary.active.line = line_index;
+                c.primary.active.column = final_column;
+                c.primary.anchor = c.primary.active;
+            });
+            
+            tracing::info!(
+                "LINES CURSOR SET: line {} -> {}, col {} -> {} (line_len={})", 
+                cursor.read().primary.active.line + 1,
+                line_index + 1,
+                cursor.read().primary.active.column + 1,
+                final_column + 1,
+                line_len
+            );
+        }
+        
+        // Emit cursor position change
+        let final_pos = cursor.read().primary.active;
+        on_cursor_change.call((final_pos.line + 1, final_pos.column + 1));
+    }
+}
+
 /// Handle mouse click events on the content area
 fn handle_content_click(
     evt: MouseEvent,
@@ -399,52 +524,58 @@ fn handle_content_click(
     last_click_time: &mut Signal<Instant>,
     last_click_pos: &mut Signal<(usize, usize)>,
 ) {
-    // Now coordinates are relative to the content div itself!
-    let content_x = evt.element_coordinates().x;
-    let content_y = evt.element_coordinates().y;
+    // Pure Rust coordinate calculation for Dioxus desktop
+    // Use element coordinates which are relative to the clicked element
+    let element_x = evt.element_coordinates().x;
+    let element_y = evt.element_coordinates().y;
     
     tracing::info!(
-        "CONTENT CLICK: raw coords ({:.2}, {:.2})",
-        content_x, content_y
+        "DIOXUS CLICK: element coordinates ({:.2}, {:.2})",
+        element_x, element_y
     );
     
-    // Constants for layout calculation
-    let line_height = 21.0; // pixels per line (matches CSS line-height)
+    // Constants matching our CSS styling
+    let line_height = 21.0; // pixels per line (matches CSS line-height: 21px)
+    let char_width = 8.4;   // pixels per character (JetBrains Mono 14px)
+    let content_padding = 10.0; // content area padding
     
-    // Font metrics for JetBrains Mono 14px - VS Code style calculation
-    // VS Code uses "typicalHalfwidthCharacterWidth" which for monospace is ~0.6 * font_size
-    let font_size = 14.0;
-    let char_width = font_size * 0.6; // 8.4px for JetBrains Mono 14px
+    // Account for coordinate system:
+    // - content area has padding: 10px
+    // - lines-content is positioned absolute at top: 0, left: 0 within content
+    // - each line is positioned at top: line_idx * 21px within lines-content
+    // So element_y is relative to content area, we need to account for padding only
+    let text_x = element_x - content_padding;
+    let text_y = element_y - content_padding;
     
-    // The content div has padding: 10px, so we need to account for that
-    let text_x = content_x - 10.0;
-    let text_y = content_y - 10.0;
+    tracing::info!(
+        "TEXT COORDS: element({:.2}, {:.2}) -> text({:.2}, {:.2})", 
+        element_x, element_y, text_x, text_y
+    );
     
-    // Calculate line index (VS Code approach)
+    // Calculate line index using the absolute positioning approach
+    // Since each line is positioned at top: line_idx * 21px
     let line_index = if text_y < 0.0 {
-        scroll_offset
+        0
     } else {
-        let clicked_line_float = text_y / line_height;
-        let clicked_line = clicked_line_float.floor() as usize;
-        tracing::info!(
-            "LINE CALC: text_y={:.2}, line_height={:.2}, clicked_line_float={:.2}, clicked_line={}, scroll_offset={}",
-            text_y, line_height, clicked_line_float, clicked_line, scroll_offset
-        );
-        clicked_line.saturating_add(scroll_offset)
+        let calculated_line = (text_y / line_height).floor() as usize;
+        tracing::info!("LINE CALC: text_y={:.2} / line_height={:.2} = {:.2} -> line_index={}", 
+                      text_y, line_height, text_y / line_height, calculated_line);
+        calculated_line
     };
     
-    // Calculate column index (VS Code approach)
-    // VS Code: chars = Math.round(mouseContentHorizontalOffset / typicalHalfwidthCharacterWidth)
+    // Calculate column index
     let column = if text_x < 0.0 {
         0
     } else {
-        let chars = (text_x / char_width).round() as usize;
-        chars
+        let calculated_col = (text_x / char_width).round() as usize;
+        tracing::info!("COL CALC: text_x={:.2} / char_width={:.2} = {:.2} -> column={}", 
+                      text_x, char_width, text_x / char_width, calculated_col);
+        calculated_col
     };
     
     tracing::info!(
-        "POSITION CALC: text_coords=({:.2}, {:.2}), line_height={:.2}, char_width={:.2}, calculated_line={}, calculated_col={}",
-        text_x, text_y, line_height, char_width, line_index, column
+        "FINAL POSITION: line_index={}, column={} (1-based: line={}, col={})",
+        line_index, column, line_index + 1, column + 1
     );
     
     // Get the actual line to clamp column to line length
@@ -506,6 +637,8 @@ fn handle_content_click(
                 final_column + 1,
                 line_len
             );
+            
+            // Cursor position set successfully
         }
         
         // Emit cursor position change
@@ -663,7 +796,13 @@ fn RenderLine(
     // Get syntax highlights
     let highlights = highlighter.write().highlight(&line_content, &language_id);
     
-    let line_style = "height: 21px; line-height: 21px; white-space: pre; font-family: inherit; position: relative;";
+    // VS Code approach: absolute positioning for precise line placement
+    // CRITICAL: Each line must be positioned at exactly line_idx * 21px
+    let line_top = line_idx * 21; // Line 0 at 0px, line 1 at 21px, line 2 at 42px, etc.
+    let line_style = format!(
+        "position: absolute; top: {}px; left: 0; right: 0; height: 21px; line-height: 21px; white-space: pre; font-family: inherit; pointer-events: none;",
+        line_top
+    );
     
     // Check if this line has selection
     let selection = cursor.read().primary.clone();
