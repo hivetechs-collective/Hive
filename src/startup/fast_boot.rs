@@ -380,8 +380,8 @@ mod tests {
         assert!(cached_load < first_load / 2);
     }
 
-    #[test]
-    fn test_precompiled_regex() {
+    #[tokio::test]
+    async fn test_precompiled_regex() {
         let cache = regex_optimization::PrecompiledRegexCache::new();
 
         let file_regex = cache.get("file_extension").unwrap();

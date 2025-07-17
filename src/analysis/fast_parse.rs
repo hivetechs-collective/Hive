@@ -833,8 +833,8 @@ mod tests {
         assert_eq!(count, 3);
     }
 
-    #[test]
-    fn test_simd_pattern_search() {
+    #[tokio::test]
+    async fn test_simd_pattern_search() {
         let config = FastParseConfig::default();
         let parser = FastFileParser::new(config);
 
