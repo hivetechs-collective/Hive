@@ -651,12 +651,12 @@ impl ConsensusPipeline {
 
         // Build messages for this stage
         let messages = match stage {
-            Stage::Generator if self.should_use_file_reading(question, context) => {
+            Stage::Generator if self.should_use_file_reading(question, context).await => {
                 // Use enhanced generator with file reading for repository analysis
                 tracing::info!("Using enhanced generator with file reading");
                 self.build_enhanced_generator_messages(question, previous_answer, context).await?
             }
-            Stage::Curator if self.should_use_file_reading(question, context) => {
+            Stage::Curator if self.should_use_file_reading(question, context).await => {
                 // Use enhanced curator with file reading and writing capabilities
                 tracing::info!("Using enhanced curator with file operations");
                 self.build_enhanced_curator_messages(question, previous_answer, context).await?
@@ -1729,12 +1729,9 @@ impl ConsensusPipeline {
     }
 
     /// Check if we should use file reading for this question
-    fn should_use_file_reading(&self, question: &str, context: Option<&str>) -> bool {
-        // Check if we have repository context
-        if self.repository_context.is_none() {
-            tracing::debug!("No repository context available, not using file reading");
-            return false;
-        }
+    async fn should_use_file_reading(&self, question: &str, context: Option<&str>) -> bool {
+        // Store repository availability for reuse
+        let has_repository = self.repository_context.is_some();
 
         // NEW APPROACH: If codebase has been indexed with @codebase, ALWAYS search it
         // The AI will determine relevance based on what it finds
@@ -1745,11 +1742,36 @@ impl ConsensusPipeline {
             }
         }
         
-        // If repository is open but no @codebase index yet, use basic file reading
-        // for obvious code-related questions
+        // Use AI-powered context analysis for intelligent decision making
+        if let Some(ai_helpers) = &self.ai_helpers {
+            if let Ok(context_retriever) = ai_helpers.get_context_retriever().await {
+                match context_retriever.should_use_repository_context(question, has_repository).await {
+                    Ok(should_use) => {
+                        if should_use {
+                            tracing::info!("🤖 AI analysis: Using repository context for: '{}'", question);
+                        } else {
+                            tracing::info!("🤖 AI analysis: Skipping repository context for general question: '{}'", question);
+                        }
+                        return should_use;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to get AI context analysis: {}, falling back to heuristics", e);
+                    }
+                }
+            }
+        }
+        
+        // Fallback to original logic if AI helpers aren't available
+        if !has_repository {
+            tracing::debug!("No repository context available, not using file reading");
+            return false;
+        }
+        
+        // If repository is open but no AI analysis available, use basic file reading
+        // for obvious code-related questions (fallback)
         if let Some(ctx) = context {
             if ctx.contains("CRITICAL REPOSITORY CONTEXT") || ctx.contains("Repository Path:") {
-                tracing::info!("📂 Repository context available, checking if question needs file reading");
+                tracing::info!("📂 Repository context available, using fallback heuristics");
                 
                 // Only use basic file reading for explicit code questions when no index exists
                 let question_lower = question.to_lowercase();
@@ -1757,10 +1779,13 @@ impl ConsensusPipeline {
                     || question_lower.contains("codebase")
                     || question_lower.contains("code")
                     || question_lower.contains("file")
-                    || question_lower.contains("implement");
+                    || question_lower.contains("implement")
+                    || question_lower.contains("this")
+                    || question_lower.contains("here")
+                    || question_lower.contains("@codebase");
                     
                 if explicitly_about_code {
-                    tracing::info!("📚 Using basic file reading (no @codebase index available)");
+                    tracing::info!("📚 Using basic file reading (fallback heuristics)");
                     return true;
                 }
             }

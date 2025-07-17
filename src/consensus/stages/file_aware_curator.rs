@@ -14,7 +14,9 @@ use tokio::fs;
 use crate::consensus::file_operations::{FileReader, SecurityPolicy, FileContent};
 use crate::consensus::repository_context::RepositoryContext;
 use crate::consensus::stages::ConsensusStage;
+use crate::consensus::stages::repository_scanner::{RepositoryScanner, FileInfo, FilePriority};
 use crate::consensus::types::{Message, Stage};
+
 
 /// File modification operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -414,7 +416,7 @@ impl FileAwareCuratorStage {
         }
     }
 
-    /// Read repository files for context
+    /// Read repository files for context with comprehensive directory scanning
     async fn read_repository_context(&self, repo_context: &RepositoryContext) -> Result<String> {
         let mut context = String::new();
         
@@ -422,37 +424,62 @@ impl FileAwareCuratorStage {
             context.push_str("# CURRENT REPOSITORY CONTEXT\n\n");
             context.push_str(&format!("Repository: {}\n\n", root_path.display()));
 
-            // Read key files for understanding the project structure
-            let key_files = vec![
-                "Cargo.toml", "package.json", "README.md", "src/main.rs", "src/lib.rs"
-            ];
+            // First, scan and categorize all files in the repository
+            let discovered_files = RepositoryScanner::scan_repository_files(root_path).await?;
+            
+            context.push_str(&format!("## Repository Structure ({} files)\n\n", discovered_files.len()));
 
-            for file_name in key_files {
-                let file_path = root_path.join(file_name);
+            // Read files in priority order for maximum context value
+            let prioritized_files = RepositoryScanner::prioritize_files_for_reading(&discovered_files);
+            let mut files_read = 0;
+            let max_files = 25; // Limit to prevent context overflow
+            let max_context_chars = 50000; // ~12k tokens
+            
+            for file_info in prioritized_files.iter().take(max_files) {
+                if context.len() > max_context_chars {
+                    context.push_str(&format!("\n... ({} more files truncated for context limits)\n\n", 
+                        prioritized_files.len() - files_read));
+                    break;
+                }
                 
-                if let Ok(true) = self.file_reader.path_exists(&file_path).await {
-                    match self.file_reader.read_file(&file_path).await {
-                        Ok(content) => {
-                            context.push_str(&format!("## File: {}\n", file_name));
-                            context.push_str(&format!("```{}\n", content.language.as_deref().unwrap_or("")));
-                            
-                            // Show first 50 lines for context
-                            let lines: Vec<&str> = content.content.lines().collect();
-                            if lines.len() <= 50 {
-                                context.push_str(&content.content);
-                            } else {
-                                context.push_str(&lines[..50].join("\n"));
-                                context.push_str(&format!("\n... ({} more lines)", lines.len() - 50));
+                match self.file_reader.read_file(&file_info.path).await {
+                    Ok(content) => {
+                        let relative_path = file_info.path.strip_prefix(root_path)
+                            .unwrap_or(&file_info.path);
+                        
+                        context.push_str(&format!("## File: {}\n", relative_path.display()));
+                        context.push_str(&format!("```{}\n", content.language.as_deref().unwrap_or("")));
+                        
+                        // Smart content summarization based on file size
+                        let lines: Vec<&str> = content.content.lines().collect();
+                        if lines.len() <= 100 {
+                            // Small files: show complete content
+                            context.push_str(&content.content);
+                        } else if file_info.priority == FilePriority::Critical {
+                            // Critical files: show more content
+                            context.push_str(&lines[..150.min(lines.len())].join("\n"));
+                            if lines.len() > 150 {
+                                context.push_str(&format!("\n... ({} more lines)", lines.len() - 150));
                             }
-                            
-                            context.push_str("\n```\n\n");
+                        } else {
+                            // Other files: show first 75 lines
+                            context.push_str(&lines[..75.min(lines.len())].join("\n"));
+                            if lines.len() > 75 {
+                                context.push_str(&format!("\n... ({} more lines)", lines.len() - 75));
+                            }
                         }
-                        Err(e) => {
-                            warn!("Failed to read {}: {}", file_name, e);
-                        }
+                        
+                        context.push_str("\n```\n\n");
+                        files_read += 1;
+                    }
+                    Err(e) => {
+                        warn!("Failed to read {}: {}", file_info.path.display(), e);
                     }
                 }
             }
+            
+            // Add summary of repository structure
+            RepositoryScanner::add_repository_summary(&mut context, &discovered_files);
         }
 
         Ok(context)
