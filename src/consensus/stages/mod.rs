@@ -3,6 +3,7 @@
 
 pub mod curator;
 pub mod enhanced_generator;
+pub mod file_aware_generator;
 pub mod generator;
 pub mod refiner;
 pub mod validator;

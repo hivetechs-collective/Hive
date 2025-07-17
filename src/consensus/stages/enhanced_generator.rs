@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use anyhow::Result;
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, warn};
 
 use crate::consensus::file_operations::{FileReader, SecurityPolicy};
 use crate::consensus::repository_context::RepositoryContext;
@@ -155,9 +155,22 @@ impl EnhancedGeneratorStage {
             // Filter out non-existent files
             let mut existing_files = Vec::new();
             for file in key_files {
-                if self.file_reader.path_exists(&file).await? {
-                    existing_files.push(file);
+                match self.file_reader.path_exists(&file).await {
+                    Ok(true) => {
+                        info!("File exists: {}", file.display());
+                        existing_files.push(file);
+                    },
+                    Ok(false) => {
+                        warn!("File does not exist: {}", file.display());
+                    },
+                    Err(e) => {
+                        warn!("Error checking file existence for {}: {}", file.display(), e);
+                    }
                 }
+            }
+
+            if existing_files.is_empty() {
+                warn!("No key files found in repository!");
             }
 
             key_files = existing_files;
@@ -288,8 +301,13 @@ impl EnhancedGeneratorStage {
             if repo_context.root_path.is_some() {
                 info!("Analyzing repository with file reading for generator stage");
                 let analysis = self.analyze_repository_with_files(repo_context, question).await?;
+                info!("Generated {} bytes of file analysis", analysis.len());
                 enhanced_context.push_str(&analysis);
+            } else {
+                warn!("Repository context has no root path!");
             }
+        } else {
+            warn!("No repository context provided to generate_with_files");
         }
 
         Ok(enhanced_context)

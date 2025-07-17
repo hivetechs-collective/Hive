@@ -101,13 +101,14 @@ impl CuratorStage {
         let mut structured = String::new();
 
         // Check if this is repository context
-        if context.contains("CRITICAL REPOSITORY CONTEXT") {
+        if context.contains("CRITICAL REPOSITORY CONTEXT") || context.contains("ACTUAL FILE CONTENTS") {
             structured.push_str("⚠️ CRITICAL CURATION REQUIREMENT:\n");
-            structured.push_str("All previous stages analyzed a SPECIFIC repository. In your final curation:\n");
+            structured.push_str("All previous stages analyzed a SPECIFIC repository with ACTUAL FILE CONTENTS. In your final curation:\n");
             structured.push_str("1. MAINTAIN focus on the SAME repository throughout your answer\n");
             structured.push_str("2. DO NOT introduce information from other projects\n");
             structured.push_str("3. ENSURE your final answer accurately describes THIS repository\n");
-            structured.push_str("4. Create an authoritative answer about THIS specific codebase\n\n");
+            structured.push_str("4. Use ONLY the actual code and files shown - NO GENERIC EXAMPLES\n");
+            structured.push_str("5. Create an authoritative answer about THIS specific codebase\n\n");
         }
 
         // Check if this is memory context (authoritative knowledge from previous curator)
