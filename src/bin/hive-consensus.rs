@@ -912,8 +912,7 @@ fn App() -> Element {
     let mut selected_file = use_signal(|| Some("__welcome__".to_string()));
     let mut file_tree = use_signal(|| Vec::<FileItem>::new());
     let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
-    let mut current_dir =
-        use_signal(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let mut current_dir = use_signal(|| None::<PathBuf>);
     let mut file_content = use_signal(String::new);
     
     // Tab management
@@ -1024,13 +1023,14 @@ fn App() -> Element {
             let expanded_dirs = expanded_dirs.clone();
             let mut file_tree = file_tree.clone();
             spawn(async move {
-                let current_dir_path = current_dir.read().clone();
-                let expanded_map = expanded_dirs.read().clone();
-                
-                let root_name = current_dir_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("Root")
+                let current_dir_opt = current_dir.read().clone();
+                if let Some(current_dir_path) = current_dir_opt {
+                    let expanded_map = expanded_dirs.read().clone();
+                    
+                    let root_name = current_dir_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("Root")
                     .to_string();
 
                 match file_system::load_directory_tree(&current_dir_path, &expanded_map, false).await {
@@ -1054,6 +1054,7 @@ fn App() -> Element {
                     Err(e) => {
                         eprintln!("Error reloading directory: {}", e);
                     }
+                }
                 }
             });
         }
@@ -1491,10 +1492,11 @@ fn App() -> Element {
     // Load initial directory
     {
         let mut file_tree = file_tree.clone();
-        let current_dir_path = current_dir.read().clone();
-        let expanded_map = expanded_dirs.read().clone();
+        if let Some(current_dir_path) = current_dir.read().clone() {
+            let expanded_map = expanded_dirs.read().clone();
+            let mut app_state_for_project = app_state.clone();
 
-        spawn(async move {
+            spawn(async move {
             // Create root folder item
             let root_name = current_dir_path
                 .file_name()
@@ -1507,7 +1509,7 @@ fn App() -> Element {
                     // Create root folder item with children
                     let root_item = FileItem {
                         path: current_dir_path.clone(),
-                        name: root_name,
+                        name: root_name.clone(),
                         is_directory: true,
                         is_expanded: true, // Root is expanded by default
                         children: files,
@@ -1520,12 +1522,27 @@ fn App() -> Element {
 
                     file_tree.write().clear();
                     file_tree.write().push(root_item);
+                    
+                    // Update AppState with current project information for repository context
+                    let project_info = hive_ai::desktop::state::ProjectInfo {
+                        name: root_name,
+                        path: current_dir_path.clone(),
+                        root_path: current_dir_path.clone(),
+                        language: None, // Will be detected by repository analyzer
+                        git_status: hive_ai::desktop::state::GitStatus::NotRepository,
+                        git_branch: None,
+                        file_count: 0, // Will be updated later
+                    };
+                    
+                    app_state_for_project.write().current_project = Some(project_info);
+                    tracing::info!("Initialized current_project with root path: {}", current_dir_path.display());
                 }
                 Err(e) => {
                     eprintln!("Error loading directory: {}", e);
                 }
             }
-        });
+            });
+        }
     }
 
     // File selection is handled directly in the onclick handler
@@ -1576,13 +1593,16 @@ fn App() -> Element {
 
                     async move {
                         let current_path = current_dir.read().clone();
-                        if let Some(folder) = rfd::AsyncFileDialog::new()
-                            .set_directory(&current_path)
-                            .pick_folder()
-                            .await
+                        let dialog = rfd::AsyncFileDialog::new();
+                        let dialog = if let Some(path) = current_path {
+                            dialog.set_directory(&path)
+                        } else {
+                            dialog
+                        };
+                        if let Some(folder) = dialog.pick_folder().await
                         {
                             // Update current directory
-                            *current_dir.write() = folder.path().to_path_buf();
+                            *current_dir.write() = Some(folder.path().to_path_buf());
 
                             // Clear selected file and content
                             *selected_file.write() = None;
@@ -1610,7 +1630,7 @@ fn App() -> Element {
                                     // Create root folder item with children
                                     let root_item = FileItem {
                                         path: folder.path().to_path_buf(),
-                                        name: root_name,
+                                        name: root_name.clone(),
                                         is_directory: true,
                                         is_expanded: true, // Root is expanded by default
                                         children: files,
@@ -1623,6 +1643,20 @@ fn App() -> Element {
 
                                     file_tree.write().clear();
                                     file_tree.write().push(root_item);
+                                    
+                                    // Update AppState with current project information for repository context
+                                    let project_info = hive_ai::desktop::state::ProjectInfo {
+                                        name: root_name.clone(),
+                                        path: folder.path().to_path_buf(),
+                                        root_path: folder.path().to_path_buf(),
+                                        language: None, // Will be detected by repository analyzer
+                                        git_status: hive_ai::desktop::state::GitStatus::NotRepository,
+                                        git_branch: None,
+                                        file_count: 0, // Will be updated later
+                                    };
+                                    
+                                    app_state.write().current_project = Some(project_info);
+                                    tracing::info!("Updated current_project with root path: {}", folder.path().display());
                                 }
                                 Err(e) => {
                                     eprintln!("Error loading directory: {}", e);
@@ -1714,10 +1748,12 @@ fn App() -> Element {
             }
             MenuAction::CloseFolder => {
                 // Clear the current folder
-                *current_dir.write() = std::env::current_dir().unwrap_or_default();
+                *current_dir.write() = None;
                 file_tree.write().clear();
-                *selected_file.write() = None;
+                *selected_file.write() = Some("__welcome__".to_string());
                 *file_content.write() = String::new();
+                // Also clear the app state's current project
+                app_state.write().current_project = None;
             }
             MenuAction::CommandPalette => {
                 *show_command_palette.write() = true;
@@ -1817,13 +1853,16 @@ fn App() -> Element {
 
                         async move {
                             let current_path = current_dir.read().clone();
-                            if let Some(folder) = rfd::AsyncFileDialog::new()
-                                .set_directory(&current_path)
-                                .pick_folder()
-                                .await
+                            let dialog = rfd::AsyncFileDialog::new();
+                            let dialog = if let Some(path) = current_path {
+                                dialog.set_directory(&path)
+                            } else {
+                                dialog
+                            };
+                            if let Some(folder) = dialog.pick_folder().await
                             {
                                 // Update current directory
-                                *current_dir.write() = folder.path().to_path_buf();
+                                *current_dir.write() = Some(folder.path().to_path_buf());
 
                                 // Clear selected file and content
                                 *selected_file.write() = None;
@@ -1851,7 +1890,7 @@ fn App() -> Element {
                                         // Create root folder item with children
                                         let root_item = FileItem {
                                             path: folder.path().to_path_buf(),
-                                            name: root_name,
+                                            name: root_name.clone(),
                                             is_directory: true,
                                             is_expanded: true, // Root is expanded by default
                                             children: files,
@@ -1864,6 +1903,20 @@ fn App() -> Element {
 
                                         file_tree.write().clear();
                                         file_tree.write().push(root_item);
+                                        
+                                        // Update AppState with current project information for repository context
+                                        let project_info = hive_ai::desktop::state::ProjectInfo {
+                                            name: root_name.clone(),
+                                            path: folder.path().to_path_buf(),
+                                            root_path: folder.path().to_path_buf(),
+                                            language: None, // Will be detected by repository analyzer
+                                            git_status: hive_ai::desktop::state::GitStatus::NotRepository,
+                                            git_branch: None,
+                                            file_count: 0, // Will be updated later
+                                        };
+                                        
+                                        app_state.write().current_project = Some(project_info);
+                                        tracing::info!("Updated current_project with root path: {}", folder.path().display());
                                     }
                                     Err(e) => {
                                         eprintln!("Error loading directory: {}", e);
@@ -1885,6 +1938,13 @@ fn App() -> Element {
                 }
             }
         }
+    };
+
+    // Compute display value for current directory
+    let current_dir_display = if let Some(dir) = current_dir.read().as_ref() {
+        dir.display().to_string()
+    } else {
+        "No folder open".to_string()
     };
 
     rsx! {
@@ -1940,8 +2000,8 @@ fn App() -> Element {
                         div {
                             class: "current-path",
                             style: "color: #9CA3AF; font-size: 11px;",
-                            title: "{current_dir.read().display()}",
-                            "{current_dir.read().display()}"
+                            title: "{current_dir_display}",
+                            "{current_dir_display}"
                         }
                     }
 
@@ -1979,10 +2039,10 @@ fn App() -> Element {
                                             } else if let Some(parent) = selected_path.parent() {
                                                 parent.to_path_buf()
                                             } else {
-                                                current_dir.read().clone()
+                                                current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                                             }
                                         } else {
-                                            current_dir.read().clone()
+                                            current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                                         };
                                         
                                         *show_new_file_dialog.write() = true;
@@ -2007,10 +2067,10 @@ fn App() -> Element {
                                             } else if let Some(parent) = selected_path.parent() {
                                                 parent.to_path_buf()
                                             } else {
-                                                current_dir.read().clone()
+                                                current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                                             }
                                         } else {
-                                            current_dir.read().clone()
+                                            current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                                         };
                                         
                                         *show_new_folder_dialog.write() = true;
@@ -2829,8 +2889,10 @@ fn App() -> Element {
                     if let Some(target_path) = dialog_target_path.read().as_ref() {
                         let parent_dir = if target_path.is_dir() { 
                             target_path.clone() 
-                        } else { 
-                            target_path.parent().unwrap_or(&current_dir.read()).to_path_buf() 
+                        } else if let Some(parent) = target_path.parent() {
+                            parent.to_path_buf()
+                        } else {
+                            current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                         };
                         let file_path = parent_dir.join(&filename);
                         
@@ -2883,8 +2945,10 @@ fn App() -> Element {
                     if let Some(target_path) = dialog_target_path.read().as_ref() {
                         let parent_dir = if target_path.is_dir() { 
                             target_path.clone() 
-                        } else { 
-                            target_path.parent().unwrap_or(&current_dir.read()).to_path_buf() 
+                        } else if let Some(parent) = target_path.parent() {
+                            parent.to_path_buf()
+                        } else {
+                            current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                         };
                         let folder_path = parent_dir.join(&foldername);
                         
@@ -2991,7 +3055,7 @@ fn FileTreeItem(
     selected_file: Signal<Option<String>>,
     expanded_dirs: Signal<HashMap<PathBuf, bool>>,
     file_tree: Signal<Vec<FileItem>>,
-    current_dir: Signal<PathBuf>,
+    current_dir: Signal<Option<PathBuf>>,
     file_content: Signal<String>,
     open_tabs: Signal<Vec<String>>,
     active_tab: Signal<String>,

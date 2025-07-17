@@ -91,6 +91,16 @@ impl ValidatorStage {
     pub fn structure_validation_context(&self, context: &str, question: &str) -> String {
         let mut structured = String::new();
 
+        // Check if this is repository context
+        if context.contains("CRITICAL REPOSITORY CONTEXT") {
+            structured.push_str("⚠️ CRITICAL VALIDATION REQUIREMENT:\n");
+            structured.push_str("The previous stages analyzed a SPECIFIC repository. During validation:\n");
+            structured.push_str("1. VALIDATE information against the SAME repository mentioned in the context\n");
+            structured.push_str("2. DO NOT validate against assumptions from other projects\n");
+            structured.push_str("3. ENSURE all file paths, code references, and features match THIS repository\n");
+            structured.push_str("4. FLAG any information that doesn't match the actual repository structure\n\n");
+        }
+
         // Check if this is memory context (authoritative knowledge from curator)
         if context.contains("## Memory Context") || context.contains("## Recent Context") {
             structured.push_str("🧠 AUTHORITATIVE MEMORY CONTEXT:\n");
@@ -116,9 +126,11 @@ impl ValidatorStage {
             structured.push_str("- Validate new information aligns with established facts\n");
         }
 
-        if context.contains("symbols:") || context.contains("dependencies:") {
+        if context.contains("symbols:") || context.contains("dependencies:") || context.contains("Repository Path:") {
             structured.push_str("- Verify code suggestions match actual repository structure\n");
             structured.push_str("- Check that referenced symbols and imports are valid\n");
+            structured.push_str("- VALIDATE that all technical details match the actual repository\n");
+            structured.push_str("- DO NOT accept generic assumptions about the codebase\n");
         }
 
         if context.contains("TEMPORAL CONTEXT") {

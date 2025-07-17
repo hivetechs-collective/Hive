@@ -573,7 +573,27 @@ impl DesktopConsensusManager {
     /// Update repository context from current IDE state
     pub async fn update_repository_context(&self) -> Result<()> {
         let app_state = self.app_state.read();
+        tracing::info!("Updating repository context from IDE state...");
+        
+        if let Some(project_info) = &app_state.current_project {
+            tracing::info!("Current project: {} at {}", project_info.name, project_info.root_path.display());
+        } else {
+            tracing::warn!("No current project in IDE state");
+        }
+        
+        if let Some(selected_file) = &app_state.file_explorer.selected_file {
+            tracing::info!("Selected file: {}", selected_file.display());
+        } else {
+            tracing::info!("No file selected in file explorer");
+        }
+        
         self.repository_context.update_from_ide_state(&app_state).await?;
+        
+        // Log the context after update
+        let context = self.repository_context.get_context().await;
+        tracing::info!("Repository context after update - Root: {:?}, Active file: {:?}", 
+                      context.root_path, context.active_file);
+        
         Ok(())
     }
 
@@ -587,6 +607,11 @@ impl DesktopConsensusManager {
             return Err(anyhow::anyhow!(
                 "No valid OpenRouter API key configured. Please configure in Settings."
             ));
+        }
+
+        // Update repository context from current IDE state before processing
+        if let Err(e) = self.update_repository_context().await {
+            tracing::warn!("Failed to update repository context: {}", e);
         }
 
         // The consensus engine will automatically load the active profile from database

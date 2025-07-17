@@ -287,6 +287,16 @@ impl ConsensusPipeline {
         let full_context = self
             .build_full_context(context, temporal_context, memory_context)
             .await?;
+        
+        // Log the context being passed to stages
+        if let Some(ref ctx) = full_context {
+            tracing::info!("Full context length: {} chars", ctx.len());
+            if ctx.contains("CRITICAL REPOSITORY CONTEXT") {
+                tracing::info!("✅ Repository context is included in pipeline");
+            } else {
+                tracing::warn!("⚠️ Repository context is missing from pipeline!");
+            }
+        }
 
         let mut previous_answer: Option<String> = None;
         let mut stage_results = Vec::new();
@@ -358,11 +368,9 @@ impl ConsensusPipeline {
             self.callbacks.on_stage_start(stage, &model)?;
 
             // Run the stage
-            // Only provide memory context to Generator stage (first stage)
-            let stage_context = match stage {
-                Stage::Generator => full_context.as_deref(),
-                _ => None, // Other stages don't get memory context directly
-            };
+            // Provide full context (including repository context) to all stages
+            // This ensures all stages are aware of the current repository
+            let stage_context = full_context.as_deref();
 
             let stage_result = self
                 .run_single_stage(
@@ -667,9 +675,15 @@ impl ConsensusPipeline {
         // Add repository context (current codebase understanding)
         if let Some(repo_ctx) = &self.repository_context {
             let repo_context_info = repo_ctx.get_context_for_prompts().await;
+            tracing::info!("Repository context info: '{}'", repo_context_info);
             if !repo_context_info.is_empty() {
                 contexts.push(format!("## Repository Context\n{}", repo_context_info));
+                tracing::info!("Added repository context to pipeline");
+            } else {
+                tracing::warn!("Repository context is empty - no project information available");
             }
+        } else {
+            tracing::warn!("No repository context manager available in pipeline");
         }
 
         if let Some(temporal) = temporal_context {

@@ -100,6 +100,16 @@ impl CuratorStage {
     pub fn structure_curation_context(&self, context: &str, question: &str) -> String {
         let mut structured = String::new();
 
+        // Check if this is repository context
+        if context.contains("CRITICAL REPOSITORY CONTEXT") {
+            structured.push_str("⚠️ CRITICAL CURATION REQUIREMENT:\n");
+            structured.push_str("All previous stages analyzed a SPECIFIC repository. In your final curation:\n");
+            structured.push_str("1. MAINTAIN focus on the SAME repository throughout your answer\n");
+            structured.push_str("2. DO NOT introduce information from other projects\n");
+            structured.push_str("3. ENSURE your final answer accurately describes THIS repository\n");
+            structured.push_str("4. Create an authoritative answer about THIS specific codebase\n\n");
+        }
+
         // Check if this is memory context (authoritative knowledge from previous curator)
         if context.contains("## Memory Context") || context.contains("## Recent Context") {
             structured.push_str("🧠 AUTHORITATIVE MEMORY CONTEXT:\n");
@@ -129,8 +139,10 @@ impl CuratorStage {
             );
         }
 
-        if context.contains("symbols:") || context.contains("dependencies:") {
+        if context.contains("symbols:") || context.contains("dependencies:") || context.contains("Repository Path:") {
             structured.push_str("- Reference repository context with clear technical guidance\n");
+            structured.push_str("- Ensure all technical details match the actual repository\n");
+            structured.push_str("- Create an authoritative article about THIS codebase for future reference\n");
         }
 
         if context.contains("TEMPORAL CONTEXT") {

@@ -34,12 +34,8 @@ pub struct RepositoryContext {
     /// Git repository information
     pub git_info: Option<GitRepoInfo>,
     
-    /// Project type and language breakdown
+    /// Project type
     pub project_type: ProjectType,
-    pub language_breakdown: HashMap<String, f64>,
-    
-    /// Key files identified in the project
-    pub important_files: Vec<ImportantFile>,
     
     /// Last update timestamp
     pub last_updated: std::time::SystemTime,
@@ -80,23 +76,6 @@ pub enum ProjectType {
     Mixed,
 }
 
-/// Important files in the project
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ImportantFile {
-    pub path: PathBuf,
-    pub file_type: ImportantFileType,
-    pub description: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ImportantFileType {
-    ConfigFile,    // Cargo.toml, package.json, etc.
-    EntryPoint,    // main.rs, index.ts, etc.
-    Documentation, // README.md, CHANGELOG.md, etc.
-    BuildScript,   // build.rs, webpack.config.js, etc.
-    Schema,        // database schemas, API specs, etc.
-}
-
 /// Repository Context Manager
 /// Integrates with IDE state to provide repository awareness to consensus
 pub struct RepositoryContextManager {
@@ -131,8 +110,6 @@ impl RepositoryContextManager {
             analysis: None,
             git_info: None,
             project_type: ProjectType::Unknown,
-            language_breakdown: HashMap::new(),
-            important_files: Vec::new(),
             last_updated: std::time::SystemTime::now(),
         }));
         
@@ -233,8 +210,6 @@ impl RepositoryContextManager {
                         let mut ctx = context.write().await;
                         ctx.analysis = Some(analysis);
                         ctx.project_type = detect_project_type(&root_path_owned);
-                        ctx.language_breakdown = analyze_language_breakdown(&root_path_owned).await;
-                        ctx.important_files = identify_important_files(&root_path_owned).await;
                         ctx.git_info = analyze_git_info(&root_path_owned).await;
                         ctx.last_updated = std::time::SystemTime::now();
                     }
@@ -255,31 +230,137 @@ impl RepositoryContextManager {
         self.context.read().await.analysis.clone()
     }
     
+    /// Detect key files in the repository
+    async fn detect_key_files(&self, root_path: &Path) -> Vec<String> {
+        let mut key_files = Vec::new();
+        
+        // Check for various project files
+        let files_to_check = [
+            "Cargo.toml", "package.json", "pyproject.toml", "go.mod", 
+            "pom.xml", "build.gradle", "CMakeLists.txt", "Makefile",
+            ".gitignore", "README.md", "LICENSE", "Dockerfile",
+            "requirements.txt", "setup.py", "tsconfig.json", "webpack.config.js"
+        ];
+        
+        for file in &files_to_check {
+            if root_path.join(file).exists() {
+                key_files.push(file.to_string());
+            }
+        }
+        
+        // Check for source directories
+        let dirs_to_check = ["src", "lib", "test", "tests", "spec", "docs"];
+        for dir in &dirs_to_check {
+            if root_path.join(dir).is_dir() {
+                key_files.push(format!("{}/", dir));
+            }
+        }
+        
+        key_files
+    }
+    
+    /// Detect the build system based on project files
+    async fn detect_build_system(&self, root_path: &Path) -> Option<String> {
+        if root_path.join("Cargo.toml").exists() {
+            Some("Cargo (Rust)".to_string())
+        } else if root_path.join("package.json").exists() {
+            Some("npm/yarn (JavaScript/TypeScript)".to_string())
+        } else if root_path.join("requirements.txt").exists() || root_path.join("pyproject.toml").exists() {
+            Some("pip/poetry (Python)".to_string())
+        } else if root_path.join("go.mod").exists() {
+            Some("go mod (Go)".to_string())
+        } else if root_path.join("pom.xml").exists() {
+            Some("Maven (Java)".to_string())
+        } else if root_path.join("build.gradle").exists() {
+            Some("Gradle (Java/Kotlin)".to_string())
+        } else if root_path.join("CMakeLists.txt").exists() {
+            Some("CMake (C/C++)".to_string())
+        } else if root_path.join("Makefile").exists() {
+            Some("Make".to_string())
+        } else {
+            None
+        }
+    }
+    
     /// Get context information for prompts
     pub async fn get_context_for_prompts(&self) -> String {
         let context = self.context.read().await;
         
         let mut prompt_context = String::new();
         
+        // Add strong instructions that will persist through all stages
+        prompt_context.push_str("## 🎯 CRITICAL REPOSITORY CONTEXT - MAINTAIN FOCUS\n\n");
+        prompt_context.push_str("⚠️ IMPORTANT: You are analyzing a SPECIFIC repository. ALL responses must relate to THIS repository.\n");
+        prompt_context.push_str("DO NOT make assumptions about other projects. Base your analysis ONLY on the following context:\n\n");
+        
         if let Some(root_path) = &context.root_path {
-            prompt_context.push_str(&format!("Repository: {}\n", root_path.display()));
+            prompt_context.push_str(&format!("📁 Repository Path: {}\n", root_path.display()));
+            
+            // Extract repository name from path
+            if let Some(repo_name) = root_path.file_name() {
+                prompt_context.push_str(&format!("📋 Repository Name: {}\n", repo_name.to_string_lossy()));
+            }
+        }
+        
+        // Always include project type, even without full analysis
+        prompt_context.push_str(&format!("🔧 Project Type: {:?}\n", context.project_type));
+        
+        // Check for key Rust project indicators
+        if context.root_path.as_ref().map(|p| p.join("Cargo.toml").exists()).unwrap_or(false) {
+            prompt_context.push_str("\n⚡ CRITICAL: This is a RUST project with Cargo.toml!\n");
+            prompt_context.push_str("DO NOT describe it as Node.js, JavaScript, or any other language.\n");
+            prompt_context.push_str("Key files: Cargo.toml, src/main.rs, src/lib.rs\n");
+        }
+        
+        if let Some(analysis) = &context.analysis {
+            prompt_context.push_str(&format!("🏗️ Architecture: {:?}\n", analysis.architecture.primary_pattern));
+            
+            // Add quality metrics
+            prompt_context.push_str(&format!("\n📊 Quality Score: {:.1}/10\n", analysis.quality.overall_score));
+            
+            // Add architecture info
+            if !analysis.architecture.detected_patterns.is_empty() {
+                prompt_context.push_str("\n🏗️ Architecture Patterns:\n");
+                for pattern in &analysis.architecture.detected_patterns {
+                    prompt_context.push_str(&format!("  - {:?}\n", pattern));
+                }
+            }
+            
+            // Add project-specific details based on detected files
+            if let Some(root_path) = &context.root_path {
+                prompt_context.push_str("\n📝 PROJECT DETAILS:\n");
+                
+                // List actual files found in the project
+                let key_files = self.detect_key_files(root_path).await;
+                if !key_files.is_empty() {
+                    prompt_context.push_str("Key files detected:\n");
+                    for file in &key_files {
+                        prompt_context.push_str(&format!("  - {}\n", file));
+                    }
+                }
+                
+                // Add build system info
+                if let Some(build_system) = self.detect_build_system(root_path).await {
+                    prompt_context.push_str(&format!("Build System: {}\n", build_system));
+                }
+                
+                prompt_context.push_str("\nIMPORTANT: Base your analysis ONLY on the actual files and structure found in THIS repository.\n");
+            }
         }
         
         if let Some(active_file) = &context.active_file {
-            prompt_context.push_str(&format!("Active file: {}\n", active_file.display()));
+            prompt_context.push_str(&format!("\n✏️ Currently Editing: {}\n", active_file.display()));
         }
         
         if !context.open_files.is_empty() {
-            prompt_context.push_str("Open files:\n");
+            prompt_context.push_str("\n📂 Open Files:\n");
             for file in &context.open_files {
                 prompt_context.push_str(&format!("  - {}\n", file.path.display()));
             }
         }
         
-        if let Some(analysis) = &context.analysis {
-            prompt_context.push_str(&format!("Project type: {:?}\n", context.project_type));
-            prompt_context.push_str(&format!("Architecture: {:?}\n", analysis.architecture.primary_pattern));
-        }
+        prompt_context.push_str("\n⚡ CONSENSUS INSTRUCTION: When analyzing or discussing code, ALWAYS refer to THIS specific repository.\n");
+        prompt_context.push_str("Do NOT invent or assume files/features that don't exist in this repository.\n");
         
         prompt_context
     }
@@ -345,90 +426,6 @@ fn detect_project_type(root_path: &Path) -> ProjectType {
     ProjectType::Unknown
 }
 
-/// Analyze language breakdown in the repository
-async fn analyze_language_breakdown(root_path: &Path) -> HashMap<String, f64> {
-    // TODO: Implement actual language analysis
-    // For now, return a simple breakdown based on project type
-    let mut breakdown = HashMap::new();
-    
-    let project_type = detect_project_type(root_path);
-    match project_type {
-        ProjectType::Rust => {
-            breakdown.insert("rust".to_string(), 0.85);
-            breakdown.insert("toml".to_string(), 0.15);
-        }
-        ProjectType::TypeScript => {
-            breakdown.insert("typescript".to_string(), 0.80);
-            breakdown.insert("json".to_string(), 0.20);
-        }
-        _ => {
-            breakdown.insert("unknown".to_string(), 1.0);
-        }
-    }
-    
-    breakdown
-}
-
-/// Identify important files in the project
-async fn identify_important_files(root_path: &Path) -> Vec<ImportantFile> {
-    let mut important_files = Vec::new();
-    
-    // Config files
-    for (filename, description) in [
-        ("Cargo.toml", "Rust package manifest"),
-        ("package.json", "Node.js package manifest"),
-        ("pyproject.toml", "Python project configuration"),
-        ("go.mod", "Go module definition"),
-        ("pom.xml", "Maven project configuration"),
-    ] {
-        let path = root_path.join(filename);
-        if path.exists() {
-            important_files.push(ImportantFile {
-                path,
-                file_type: ImportantFileType::ConfigFile,
-                description: description.to_string(),
-            });
-        }
-    }
-    
-    // Entry points
-    for (filename, description) in [
-        ("src/main.rs", "Rust main entry point"),
-        ("src/lib.rs", "Rust library entry point"),
-        ("index.ts", "TypeScript entry point"),
-        ("main.py", "Python main module"),
-        ("main.go", "Go main package"),
-    ] {
-        let path = root_path.join(filename);
-        if path.exists() {
-            important_files.push(ImportantFile {
-                path,
-                file_type: ImportantFileType::EntryPoint,
-                description: description.to_string(),
-            });
-        }
-    }
-    
-    // Documentation
-    for (filename, description) in [
-        ("README.md", "Project documentation"),
-        ("CHANGELOG.md", "Change log"),
-        ("LICENSE", "License file"),
-        ("docs", "Documentation directory"),
-    ] {
-        let path = root_path.join(filename);
-        if path.exists() {
-            important_files.push(ImportantFile {
-                path,
-                file_type: ImportantFileType::Documentation,
-                description: description.to_string(),
-            });
-        }
-    }
-    
-    important_files
-}
-
 /// Analyze Git repository information
 async fn analyze_git_info(root_path: &Path) -> Option<GitRepoInfo> {
     let git_dir = root_path.join(".git");
@@ -456,8 +453,6 @@ impl Default for RepositoryContext {
             analysis: None,
             git_info: None,
             project_type: ProjectType::Unknown,
-            language_breakdown: HashMap::new(),
-            important_files: Vec::new(),
             last_updated: std::time::SystemTime::now(),
         }
     }
