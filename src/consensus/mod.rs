@@ -13,6 +13,7 @@ pub mod stages;
 pub mod streaming;
 pub mod temporal;
 pub mod types;
+pub mod codebase_intelligence;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use engine::ConsensusEngine;

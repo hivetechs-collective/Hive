@@ -37,6 +37,7 @@ pub struct ConsensusPipeline {
     profile: ConsensusProfile,
     temporal_provider: TemporalContextProvider,
     repository_context: Option<Arc<RepositoryContextManager>>,
+    codebase_intelligence: Option<Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>>,
     stages: Vec<Box<dyn ConsensusStage>>,
     callbacks: Arc<dyn StreamingCallbacks>,
     // hooks_system: Option<Arc<HooksSystem>>,
@@ -79,6 +80,7 @@ impl ConsensusPipeline {
             profile,
             temporal_provider: TemporalContextProvider::default(),
             repository_context: None, // Will be set when needed
+            codebase_intelligence: None, // Will be set when needed
             stages: vec![
                 Box::new(GeneratorStage::new()),
                 Box::new(RefinerStage::new()),
@@ -113,6 +115,12 @@ impl ConsensusPipeline {
     /// Set the repository context manager for this pipeline
     pub fn with_repository_context(mut self, repository_context: Arc<RepositoryContextManager>) -> Self {
         self.repository_context = Some(repository_context);
+        self
+    }
+    
+    /// Set the codebase intelligence for this pipeline
+    pub fn with_codebase_intelligence(mut self, codebase_intelligence: Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>) -> Self {
+        self.codebase_intelligence = Some(codebase_intelligence);
         self
     }
 
@@ -283,9 +291,9 @@ impl ConsensusPipeline {
             tracing::info!("No memory context found (this is normal for first conversation)");
         }
 
-        // Build full context including semantic, temporal, and memory
+        // Build full context including semantic, temporal, memory, and codebase intelligence
         let full_context = self
-            .build_full_context(context, temporal_context, memory_context)
+            .build_full_context(context, temporal_context, memory_context, question, self.codebase_intelligence.clone())
             .await?;
         
         // Log the context being passed to stages
@@ -673,12 +681,14 @@ impl ConsensusPipeline {
         Ok(stage_result)
     }
 
-    /// Build full context combining semantic, temporal, and memory
+    /// Build full context combining semantic, temporal, memory, and codebase intelligence
     async fn build_full_context(
         &self,
         semantic_context: Option<String>,
         temporal_context: Option<crate::consensus::temporal::TemporalContext>,
         memory_context: Option<String>,
+        question: &str,
+        codebase_intelligence: Option<Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>>,
     ) -> Result<Option<String>> {
         let mut contexts = Vec::new();
 
@@ -687,6 +697,24 @@ impl ConsensusPipeline {
         if let Some(memory) = memory_context {
             if !memory.is_empty() {
                 contexts.push(memory); // Already formatted with headers
+            }
+        }
+
+        // NEW: Add semantic codebase search results if available
+        if let Some(intelligence) = codebase_intelligence {
+            if intelligence.has_analysis().await {
+                tracing::info!("🔍 Searching indexed codebase for: '{}'", question);
+                match intelligence.get_context_for_question(question).await {
+                    Ok(codebase_context) => {
+                        if !codebase_context.is_empty() {
+                            contexts.push(format!("## 🔍 SEMANTIC CODEBASE SEARCH RESULTS\n{}", codebase_context));
+                            tracing::info!("Added semantic search results to context");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to search codebase: {}", e);
+                    }
+                }
             }
         }
 
@@ -1642,96 +1670,38 @@ impl ConsensusPipeline {
             return false;
         }
 
-        // CLAUDE CODE BEHAVIOR: When a repository is open, we should ALWAYS be ready to help
-        // with code-related questions. The key insight is that users don't always explicitly
-        // mention "repository" or "codebase" - they just ask about things in their code.
-        
-        // Check if context already has repository info (from previous stages)
+        // NEW APPROACH: If codebase has been indexed with @codebase, ALWAYS search it
+        // The AI will determine relevance based on what it finds
         if let Some(ctx) = context {
-            if ctx.contains("CRITICAL REPOSITORY CONTEXT") || ctx.contains("Repository Path:") {
-                tracing::info!("Context contains repository info, using file reading");
+            if ctx.contains("SEMANTIC CODEBASE SEARCH RESULTS") {
+                tracing::info!("🧠 Using indexed codebase knowledge for: '{}'", question);
                 return true;
             }
         }
-
-        // INTELLIGENT DETECTION: Instead of keyword matching, we should understand intent
-        // Questions that likely relate to the open codebase:
-        let question_lower = question.to_lowercase();
         
-        // 1. Questions about capabilities, features, or understanding
-        // Examples: "what can X do?", "how does Y work?", "explain Z"
-        let asking_about_functionality = question_lower.contains("what")
-            || question_lower.contains("how")
-            || question_lower.contains("explain")
-            || question_lower.contains("tell me")
-            || question_lower.contains("show me")
-            || question_lower.contains("describe")
-            || question_lower.contains("understand");
-            
-        // 2. Questions about finding or discovering things
-        // Examples: "find the X", "where is Y", "discover capabilities"
-        let searching_for_something = question_lower.contains("find")
-            || question_lower.contains("where")
-            || question_lower.contains("search")
-            || question_lower.contains("look")
-            || question_lower.contains("discover")
-            || question_lower.contains("locate");
-            
-        // 3. Questions with technical terms that likely refer to code
-        // Examples: "the authentication system", "database connections", "API endpoints"
-        let contains_technical_terms = question_lower.contains("system")
-            || question_lower.contains("function")
-            || question_lower.contains("module")
-            || question_lower.contains("class")
-            || question_lower.contains("method")
-            || question_lower.contains("api")
-            || question_lower.contains("endpoint")
-            || question_lower.contains("component")
-            || question_lower.contains("service")
-            || question_lower.contains("implementation");
-            
-        // 4. Questions about specific code artifacts by name
-        // The AI will use the actual terms in the question to search
-        let mentions_specific_artifact = 
-            // Check if question contains words that are likely code identifiers
-            // (contains underscores, CamelCase, or technical naming patterns)
-            question.split_whitespace().any(|word| {
-                word.contains('_') || // snake_case
-                word.contains("::") || // Rust paths
-                word.chars().filter(|c| c.is_uppercase()).count() > 1 || // CamelCase
-                word.ends_with("()") || // function calls
-                word.starts_with('.') || // method calls
-                word.contains('/') // file paths
-            });
-            
-        // 5. Questions explicitly about code/repository (fallback)
-        let explicitly_about_code = question_lower.contains("repository")
-            || question_lower.contains("codebase")
-            || question_lower.contains("project")
-            || question_lower.contains("code")
-            || question_lower.contains("file")
-            || question_lower.contains("source");
-            
-        // DEFAULT TO TRUE when repository is open and question seems code-related
-        // This matches Claude Code behavior - be helpful by default
-        let should_read = asking_about_functionality
-            || searching_for_something
-            || contains_technical_terms
-            || mentions_specific_artifact
-            || explicitly_about_code
-            || question_lower.len() < 50; // Short questions often assume context
-            
-        if should_read {
-            tracing::info!("📚 Enabling file reading for: '{}'", question);
-            tracing::debug!("Triggers: functionality={}, search={}, technical={}, artifact={}, explicit={}",
-                asking_about_functionality, searching_for_something, 
-                contains_technical_terms, mentions_specific_artifact, explicitly_about_code);
-        } else {
-            // Only skip file reading for clearly non-code questions
-            tracing::info!("⏭️ Skipping file reading for non-code question: '{}'", question);
+        // If repository is open but no @codebase index yet, use basic file reading
+        // for obvious code-related questions
+        if let Some(ctx) = context {
+            if ctx.contains("CRITICAL REPOSITORY CONTEXT") || ctx.contains("Repository Path:") {
+                tracing::info!("📂 Repository context available, checking if question needs file reading");
+                
+                // Only use basic file reading for explicit code questions when no index exists
+                let question_lower = question.to_lowercase();
+                let explicitly_about_code = question_lower.contains("repository")
+                    || question_lower.contains("codebase")
+                    || question_lower.contains("code")
+                    || question_lower.contains("file")
+                    || question_lower.contains("implement");
+                    
+                if explicitly_about_code {
+                    tracing::info!("📚 Using basic file reading (no @codebase index available)");
+                    return true;
+                }
+            }
         }
         
-        should_read
+        tracing::debug!("⏭️ Not using file reading for: '{}'", question);
+        false
     }
 
     /// Build enhanced generator messages with file reading
