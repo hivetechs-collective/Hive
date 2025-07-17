@@ -10,6 +10,8 @@ pub mod pattern_recognizer;
 pub mod quality_analyzer;
 pub mod knowledge_synthesizer;
 pub mod vector_store;
+pub mod parallel_processor;
+pub mod model_downloader;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -22,6 +24,8 @@ pub use pattern_recognizer::PatternRecognizer;
 pub use quality_analyzer::QualityAnalyzer;
 pub use knowledge_synthesizer::KnowledgeSynthesizer;
 pub use vector_store::ChromaVectorStore;
+pub use parallel_processor::{ParallelProcessor, ParallelConfig};
+pub use model_downloader::{ModelDownloader, DownloaderConfig, ModelInfo, DownloadEvent};
 
 /// Processed knowledge from AI helpers
 #[derive(Debug, Clone)]
@@ -136,6 +140,9 @@ pub struct AIHelperEcosystem {
     /// Chroma for vector storage
     pub vector_store: Arc<ChromaVectorStore>,
     
+    /// Parallel processor for performance
+    parallel_processor: ParallelProcessor,
+    
     /// Shared state
     state: Arc<RwLock<HelperState>>,
 }
@@ -155,6 +162,9 @@ struct HelperState {
 impl AIHelperEcosystem {
     /// Create a new AI Helper Ecosystem
     pub async fn new(database: Arc<crate::core::database::DatabaseManager>) -> Result<Self> {
+        // First, ensure all required models are downloaded
+        Self::ensure_models_available().await?;
+        
         // Initialize vector store
         let vector_store = Arc::new(ChromaVectorStore::new().await?);
         
@@ -171,6 +181,9 @@ impl AIHelperEcosystem {
             last_processing_time: None,
         }));
         
+        // Create parallel processor with default config
+        let parallel_processor = ParallelProcessor::new(ParallelConfig::default());
+        
         Ok(Self {
             knowledge_indexer,
             context_retriever,
@@ -178,8 +191,26 @@ impl AIHelperEcosystem {
             quality_analyzer,
             knowledge_synthesizer,
             vector_store,
+            parallel_processor,
             state,
         })
+    }
+    
+    /// Ensure all required models are available
+    async fn ensure_models_available() -> Result<()> {
+        let downloader = ModelDownloader::new(DownloaderConfig::default()).await?;
+        let missing = downloader.check_missing_models().await;
+        
+        if !missing.is_empty() {
+            tracing::info!("First-time setup: downloading {} AI helper models", missing.len());
+            tracing::info!("This may take a while depending on your internet connection...");
+            
+            downloader.initialize_models().await?;
+            
+            tracing::info!("✓ All AI helper models downloaded successfully");
+        }
+        
+        Ok(())
     }
     
     /// Process Curator output through all helpers
@@ -196,32 +227,34 @@ impl AIHelperEcosystem {
             .index_output(curator_output, source_question, conversation_id)
             .await?;
         
-        // 2. Find patterns with existing knowledge
-        let patterns = self.pattern_recognizer
-            .analyze_patterns(&indexed)
-            .await?;
-        
-        // 3. Check quality and consistency
-        let quality = self.quality_analyzer
-            .evaluate_quality(&indexed, curator_output)
-            .await?;
-        
-        // 4. Synthesize new insights
-        let insights = self.knowledge_synthesizer
-            .generate_insights(&indexed, &patterns, &quality)
+        // 2. Process patterns, quality, and insights in parallel
+        let parallel_result = self.parallel_processor
+            .process_parallel(
+                &indexed,
+                curator_output,
+                self.pattern_recognizer.clone(),
+                self.quality_analyzer.clone(),
+                self.knowledge_synthesizer.clone(),
+            )
             .await?;
         
         // Update state
         let mut state = self.state.write().await;
         state.total_facts += 1;
-        state.total_patterns += patterns.len();
+        state.total_patterns += parallel_result.patterns.len();
         state.last_processing_time = Some(start.elapsed());
+        
+        tracing::info!(
+            "Processed curator output in {:?} with {:.2}x parallel speedup",
+            parallel_result.processing_time,
+            parallel_result.parallel_speedup
+        );
         
         Ok(ProcessedKnowledge {
             indexed,
-            patterns,
-            quality,
-            insights,
+            patterns: parallel_result.patterns,
+            quality: parallel_result.quality,
+            insights: parallel_result.insights,
         })
     }
     
@@ -263,14 +296,57 @@ impl AIHelperEcosystem {
         }
     }
     
+    /// Process multiple curator outputs in batch
+    pub async fn process_batch(
+        &self,
+        outputs: Vec<(String, String, String)>, // (curator_output, source_question, conversation_id)
+    ) -> Result<Vec<ProcessedKnowledge>> {
+        tracing::info!("Processing batch of {} curator outputs", outputs.len());
+        
+        let batch_results = self.parallel_processor
+            .process_batch(
+                outputs,
+                self.knowledge_indexer.clone(),
+                self.pattern_recognizer.clone(),
+                self.quality_analyzer.clone(),
+                self.knowledge_synthesizer.clone(),
+            )
+            .await?;
+        
+        // Convert to ProcessedKnowledge format
+        let processed: Vec<ProcessedKnowledge> = batch_results
+            .into_iter()
+            .map(|(indexed, result)| ProcessedKnowledge {
+                indexed,
+                patterns: result.patterns,
+                quality: result.quality,
+                insights: result.insights,
+            })
+            .collect();
+        
+        // Update state
+        let mut state = self.state.write().await;
+        state.total_facts += processed.len();
+        for p in &processed {
+            state.total_patterns += p.patterns.len();
+        }
+        
+        Ok(processed)
+    }
+    
     /// Get system statistics
     pub async fn get_stats(&self) -> HelperStats {
         let state = self.state.read().await;
+        let parallel_stats = self.parallel_processor.get_stats().await;
+        
         HelperStats {
             total_facts: state.total_facts,
             total_patterns: state.total_patterns,
             last_processing_time: state.last_processing_time,
             vector_store_size: self.vector_store.get_size().await.unwrap_or(0),
+            parallel_speedup: parallel_stats.parallel_speedup,
+            tasks_completed: parallel_stats.tasks_completed,
+            tasks_failed: parallel_stats.tasks_failed,
         }
     }
 }
@@ -282,6 +358,9 @@ pub struct HelperStats {
     pub total_patterns: usize,
     pub last_processing_time: Option<std::time::Duration>,
     pub vector_store_size: usize,
+    pub parallel_speedup: f64,
+    pub tasks_completed: usize,
+    pub tasks_failed: usize,
 }
 
 #[cfg(test)]
