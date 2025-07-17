@@ -43,21 +43,27 @@ impl EnhancedGeneratorStage {
             analysis.push_str(&format!("### Repository: {}\n", root_path.display()));
             analysis.push_str(&format!("Project Type: {:?}\n\n", context.project_type));
 
+            info!("Analyzing repository at: {}", root_path.display());
+
             // Read key files to understand the project
             let key_files = self.identify_key_files_to_read(context, question).await?;
+            info!("Identified {} key files to read", key_files.len());
             
             if !key_files.is_empty() {
                 analysis.push_str("### Key Files Analyzed:\n\n");
                 
                 for file_path in key_files.iter().take(10) {
+                    info!("Attempting to read file: {}", file_path.display());
                     match self.file_reader.read_file(file_path).await {
                         Ok(content) => {
+                            info!("Successfully read file: {} ({} bytes)", file_path.display(), content.size_bytes);
                             analysis.push_str(&format!("#### File: {}\n", file_path.display()));
                             analysis.push_str(&format!("Language: {}\n", content.language.as_deref().unwrap_or("unknown")));
                             analysis.push_str(&format!("Size: {} bytes, {} lines\n\n", content.size_bytes, content.lines));
                             
                             // Include relevant excerpts based on the question
                             if let Some(excerpt) = self.extract_relevant_excerpt(&content.content, question) {
+                                analysis.push_str("**Actual code from this file:**\n");
                                 analysis.push_str("```");
                                 if let Some(lang) = &content.language {
                                     analysis.push_str(lang);
@@ -65,6 +71,7 @@ impl EnhancedGeneratorStage {
                                 analysis.push_str("\n");
                                 analysis.push_str(&excerpt);
                                 analysis.push_str("\n```\n\n");
+                                analysis.push_str("☝️ This is REAL CODE from the repository - use it in your analysis!\n\n");
                             }
                         }
                         Err(e) => {

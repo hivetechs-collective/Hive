@@ -1625,19 +1625,21 @@ impl ConsensusPipeline {
     fn should_use_file_reading(&self, question: &str, context: Option<&str>) -> bool {
         // Check if we have repository context
         if self.repository_context.is_none() {
+            tracing::debug!("No repository context available, not using file reading");
             return false;
         }
 
         // Check if context mentions repository
         if let Some(ctx) = context {
             if ctx.contains("CRITICAL REPOSITORY CONTEXT") || ctx.contains("Repository Path:") {
+                tracing::info!("Context contains repository info, using file reading");
                 return true;
             }
         }
 
         // Check if question is asking about the codebase
         let question_lower = question.to_lowercase();
-        question_lower.contains("repository")
+        let should_read = question_lower.contains("repository")
             || question_lower.contains("codebase")
             || question_lower.contains("project")
             || question_lower.contains("examine")
@@ -1646,6 +1648,16 @@ impl ConsensusPipeline {
             || question_lower.contains("code")
             || question_lower.contains("implementation")
             || question_lower.contains("structure")
+            || question_lower.contains("this")  // "tell me about this repository"
+            || question_lower.contains("current"); // "current repository"
+            
+        if should_read {
+            tracing::info!("Question '{}' triggers file reading", question);
+        } else {
+            tracing::debug!("Question '{}' does not trigger file reading", question);
+        }
+        
+        should_read
     }
 
     /// Build enhanced generator messages with file reading
@@ -1681,6 +1693,16 @@ impl ConsensusPipeline {
                 enhanced_context.push_str("## File-Based Repository Analysis\n\n");
                 enhanced_context.push_str(&file_analysis);
                 tracing::info!("Added file-based analysis to generator context");
+                
+                // Debug log the first 500 chars of file analysis
+                let preview = if file_analysis.len() > 500 {
+                    format!("{}...", &file_analysis[..500])
+                } else {
+                    file_analysis.clone()
+                };
+                tracing::debug!("File analysis preview: {}", preview);
+            } else {
+                tracing::warn!("File analysis is empty - no files were read!");
             }
             
             // Build messages with enhanced context
