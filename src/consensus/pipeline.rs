@@ -9,6 +9,7 @@ use crate::consensus::streaming::{
     ConsoleCallbacks, ProgressInfo, ProgressTracker, StreamingCallbacks,
 };
 use crate::consensus::temporal::TemporalContextProvider;
+use crate::ai_helpers::AIHelperEcosystem;
 #[cfg(test)]
 use crate::consensus::types::ConsensusProfile;
 use crate::consensus::types::{
@@ -47,6 +48,7 @@ pub struct ConsensusPipeline {
     database: Option<Arc<DatabaseManager>>,
     api_key: Option<String>,
     usage_tracker: Option<Arc<UsageTracker>>,
+    ai_helpers: Option<Arc<AIHelperEcosystem>>,
 }
 
 impl ConsensusPipeline {
@@ -95,6 +97,7 @@ impl ConsensusPipeline {
             database: None, // Will be set later when needed
             api_key,
             usage_tracker: None, // Will be set when database is provided
+            ai_helpers: None, // Will be set when database is provided
         }
     }
 
@@ -121,6 +124,12 @@ impl ConsensusPipeline {
     /// Set the codebase intelligence for this pipeline
     pub fn with_codebase_intelligence(mut self, codebase_intelligence: Arc<crate::consensus::codebase_intelligence::CodebaseIntelligence>) -> Self {
         self.codebase_intelligence = Some(codebase_intelligence);
+        self
+    }
+
+    /// Set the AI helpers for this pipeline
+    pub fn with_ai_helpers(mut self, ai_helpers: Arc<AIHelperEcosystem>) -> Self {
+        self.ai_helpers = Some(ai_helpers);
         self
     }
 
@@ -316,6 +325,22 @@ impl ConsensusPipeline {
             // Use model directly from profile - the maintenance system ensures these are always valid
             let model = self.profile.get_model_for_stage(stage).to_string();
 
+            // Prepare stage-specific context with AI helpers
+            let ai_helper_context = if let Some(ref ai_helpers) = self.ai_helpers {
+                match ai_helpers.prepare_stage_context(question, stage, 2048).await {
+                    Ok(context) => {
+                        tracing::info!("AI helpers prepared context for {} stage", stage.display_name());
+                        Some(context)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to prepare AI helper context for {} stage: {}", stage.display_name(), e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
             // Execute pre-stage hooks with enterprise integration
             // if let Some(integration) = &self.consensus_integration {
             //     // Estimate stage cost
@@ -482,6 +507,33 @@ impl ConsensusPipeline {
         // The final answer is from the Curator stage
         let final_answer = previous_answer
             .unwrap_or_else(|| "Error: No response generated from consensus pipeline".to_string());
+
+        // Process Curator output through AI helpers
+        if let Some(ref ai_helpers) = self.ai_helpers {
+            match ai_helpers.process_curator_output(&final_answer, question, &conversation_id).await {
+                Ok(processed_knowledge) => {
+                    tracing::info!(
+                        "AI helpers processed Curator output: {} patterns found, quality score: {:.2}",
+                        processed_knowledge.patterns.len(),
+                        processed_knowledge.quality.overall_score
+                    );
+                    
+                    // Log any quality issues
+                    for issue in &processed_knowledge.quality.issues {
+                        tracing::warn!("Quality issue: {} - {}", issue.issue_type, issue.description);
+                    }
+                    
+                    // Log discovered insights
+                    for insight in &processed_knowledge.insights {
+                        tracing::info!("Insight ({:?}): {}", insight.insight_type, insight.content);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to process Curator output with AI helpers: {}", e);
+                    // Continue without helper processing
+                }
+            }
+        }
 
         let result = ConsensusResult {
             success: true,

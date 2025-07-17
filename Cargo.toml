@@ -128,6 +128,7 @@ sha2 = "0.10"
 flate2 = "1.0"
 hmac = "0.12"
 hex = "0.4"
+blake3 = "1.5"
 
 # System utilities
 libc = "0.2"
