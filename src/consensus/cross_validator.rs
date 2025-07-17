@@ -56,6 +56,52 @@ pub enum RecommendedAction {
     AcceptWithWarning,        // Proceed but flag issues
 }
 
+/// Semantic claim extracted from stage output
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SemanticClaim {
+    pub claim_type: SemanticClaimType,
+    pub value: String,
+    pub confidence: f64,
+    pub evidence: String,
+}
+
+/// Types of semantic claims
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SemanticClaimType {
+    DependencyCount,
+    Complexity,
+    Technology,
+    Maturity,
+    Version,
+    Architecture,
+}
+
+/// Semantic contradiction detected between stages
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SemanticContradiction {
+    pub contradiction_type: ContradictionType,
+    pub severity: ContradictionSeverity,
+    pub description: String,
+    pub evidence: Vec<String>,
+    pub confidence: f64,
+}
+
+/// Types of contradictions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ContradictionType {
+    Logical,    // Directly contradictory statements
+    Temporal,   // Timeline or maturity inconsistencies
+    Scale,      // Number relationships that don't make sense
+}
+
+/// Severity of semantic contradictions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ContradictionSeverity {
+    Critical,   // Fundamental disagreement
+    Major,      // Significant inconsistency
+    Minor,      // Small discrepancy
+}
+
 /// Cross-validator that verifies agreement between consensus stages
 pub struct CrossValidator {
     stage_outputs: HashMap<Stage, StageOutput>,
@@ -324,6 +370,298 @@ impl CrossValidator {
         let agreement_score = 1.0 - (total_severity_score / max_possible_score);
         
         Ok(agreement_score.max(0.0))
+    }
+    
+    /// Advanced contradiction detection using semantic analysis
+    pub fn detect_semantic_contradictions(&self) -> Result<Vec<SemanticContradiction>> {
+        let mut contradictions = Vec::new();
+        
+        // Extract semantic claims from each stage
+        let stage_claims = self.extract_semantic_claims()?;
+        
+        // Check for logical contradictions
+        for logical_contradiction in self.find_logical_contradictions(&stage_claims)? {
+            contradictions.push(logical_contradiction);
+        }
+        
+        // Check for temporal contradictions
+        for temporal_contradiction in self.find_temporal_contradictions(&stage_claims)? {
+            contradictions.push(temporal_contradiction);
+        }
+        
+        // Check for scale contradictions (numbers that don't make sense together)
+        for scale_contradiction in self.find_scale_contradictions(&stage_claims)? {
+            contradictions.push(scale_contradiction);
+        }
+        
+        Ok(contradictions)
+    }
+    
+    /// Extract semantic claims from stage outputs
+    fn extract_semantic_claims(&self) -> Result<HashMap<Stage, Vec<SemanticClaim>>> {
+        let mut claims_map = HashMap::new();
+        
+        for (stage, output) in &self.stage_outputs {
+            let mut claims = Vec::new();
+            
+            // Extract explicit claims using patterns
+            claims.extend(self.extract_explicit_claims(&output.content)?);
+            
+            // Extract implicit claims using inference
+            claims.extend(self.extract_implicit_claims(&output.content)?);
+            
+            claims_map.insert(*stage, claims);
+        }
+        
+        Ok(claims_map)
+    }
+    
+    /// Extract explicit claims like "This project has X dependencies"
+    fn extract_explicit_claims(&self, content: &str) -> Result<Vec<SemanticClaim>> {
+        let mut claims = Vec::new();
+        
+        // Pattern for explicit dependency claims
+        if let Some(captures) = regex::Regex::new(r"(?i)(?:has|contains|includes)\s+(\d+)\s+dependencies")
+            .unwrap()
+            .captures(content) 
+        {
+            if let Ok(count) = captures[1].parse::<usize>() {
+                claims.push(SemanticClaim {
+                    claim_type: SemanticClaimType::DependencyCount,
+                    value: count.to_string(),
+                    confidence: 0.9,
+                    evidence: captures[0].to_string(),
+                });
+            }
+        }
+        
+        // Pattern for complexity claims
+        if content.to_lowercase().contains("enterprise") && content.to_lowercase().contains("complex") {
+            claims.push(SemanticClaim {
+                claim_type: SemanticClaimType::Complexity,
+                value: "high".to_string(),
+                confidence: 0.8,
+                evidence: "Contains 'enterprise' and 'complex' keywords".to_string(),
+            });
+        } else if content.to_lowercase().contains("simple") || content.to_lowercase().contains("minimal") {
+            claims.push(SemanticClaim {
+                claim_type: SemanticClaimType::Complexity,
+                value: "low".to_string(),
+                confidence: 0.8,
+                evidence: "Contains 'simple' or 'minimal' keywords".to_string(),
+            });
+        }
+        
+        // Pattern for technology stack claims
+        if content.to_lowercase().contains("rust") {
+            claims.push(SemanticClaim {
+                claim_type: SemanticClaimType::Technology,
+                value: "rust".to_string(),
+                confidence: 0.95,
+                evidence: "Mentions Rust programming language".to_string(),
+            });
+        }
+        
+        Ok(claims)
+    }
+    
+    /// Extract implicit claims through inference
+    fn extract_implicit_claims(&self, content: &str) -> Result<Vec<SemanticClaim>> {
+        let mut claims = Vec::new();
+        
+        // Infer complexity from description length and technical terms
+        let technical_terms = ["async", "parallel", "concurrent", "distributed", "microservice", "architecture"];
+        let tech_term_count = technical_terms.iter()
+            .filter(|&term| content.to_lowercase().contains(term))
+            .count();
+        
+        if tech_term_count >= 3 {
+            claims.push(SemanticClaim {
+                claim_type: SemanticClaimType::Complexity,
+                value: "high".to_string(),
+                confidence: 0.6,
+                evidence: format!("Contains {} technical terms indicating complexity", tech_term_count),
+            });
+        }
+        
+        // Infer maturity from version patterns
+        if let Some(captures) = regex::Regex::new(r"v?(\d+)\.(\d+)\.(\d+)")
+            .unwrap()
+            .captures(content) 
+        {
+            if let (Ok(major), Ok(minor), Ok(patch)) = (
+                captures[1].parse::<usize>(),
+                captures[2].parse::<usize>(),
+                captures[3].parse::<usize>()
+            ) {
+                let maturity = if major >= 2 || (major >= 1 && minor >= 5) {
+                    "mature"
+                } else if major >= 1 || (major == 0 && minor >= 5) {
+                    "stable"
+                } else {
+                    "early"
+                };
+                
+                claims.push(SemanticClaim {
+                    claim_type: SemanticClaimType::Maturity,
+                    value: maturity.to_string(),
+                    confidence: 0.7,
+                    evidence: format!("Version {}.{}.{} indicates {} maturity", major, minor, patch, maturity),
+                });
+            }
+        }
+        
+        Ok(claims)
+    }
+    
+    /// Find logical contradictions between claims
+    fn find_logical_contradictions(&self, stage_claims: &HashMap<Stage, Vec<SemanticClaim>>) -> Result<Vec<SemanticContradiction>> {
+        let mut contradictions = Vec::new();
+        
+        // Check for complexity contradictions
+        let complexity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+            .flat_map(|(stage, claims)| {
+                claims.iter()
+                    .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Complexity))
+                    .map(move |claim| (*stage, claim))
+            })
+            .collect();
+        
+        if complexity_claims.len() >= 2 {
+            for i in 0..complexity_claims.len() {
+                for j in i+1..complexity_claims.len() {
+                    let (stage1, claim1) = &complexity_claims[i];
+                    let (stage2, claim2) = &complexity_claims[j];
+                    
+                    if claim1.value != claim2.value {
+                        let severity = if (claim1.value == "high" && claim2.value == "low") ||
+                                         (claim1.value == "low" && claim2.value == "high") {
+                            ContradictionSeverity::Critical
+                        } else {
+                            ContradictionSeverity::Major
+                        };
+                        
+                        contradictions.push(SemanticContradiction {
+                            contradiction_type: ContradictionType::Logical,
+                            severity,
+                            description: format!(
+                                "Complexity contradiction: {:?} claims '{}' but {:?} claims '{}'",
+                                stage1, claim1.value, stage2, claim2.value
+                            ),
+                            evidence: vec![claim1.evidence.clone(), claim2.evidence.clone()],
+                            confidence: (claim1.confidence + claim2.confidence) / 2.0,
+                        });
+                    }
+                }
+            }
+        }
+        
+        Ok(contradictions)
+    }
+    
+    /// Find temporal contradictions (timeline issues)
+    fn find_temporal_contradictions(&self, stage_claims: &HashMap<Stage, Vec<SemanticClaim>>) -> Result<Vec<SemanticContradiction>> {
+        let mut contradictions = Vec::new();
+        
+        // Check for maturity vs version contradictions
+        let maturity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+            .flat_map(|(stage, claims)| {
+                claims.iter()
+                    .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Maturity))
+                    .map(move |claim| (*stage, claim))
+            })
+            .collect();
+            
+        let version_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+            .flat_map(|(stage, claims)| {
+                claims.iter()
+                    .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Version))
+                    .map(move |claim| (*stage, claim))
+            })
+            .collect();
+        
+        // Check if maturity and version claims are consistent
+        for (mat_stage, mat_claim) in &maturity_claims {
+            for (ver_stage, ver_claim) in &version_claims {
+                if let Ok(version) = semver::Version::parse(&ver_claim.value) {
+                    let expected_maturity = if version.major >= 2 {
+                        "mature"
+                    } else if version.major >= 1 {
+                        "stable"
+                    } else {
+                        "early"
+                    };
+                    
+                    if mat_claim.value != expected_maturity {
+                        contradictions.push(SemanticContradiction {
+                            contradiction_type: ContradictionType::Temporal,
+                            severity: ContradictionSeverity::Major,
+                            description: format!(
+                                "Temporal contradiction: {:?} claims maturity '{}' but version {} from {:?} suggests '{}'",
+                                mat_stage, mat_claim.value, version, ver_stage, expected_maturity
+                            ),
+                            evidence: vec![mat_claim.evidence.clone(), ver_claim.evidence.clone()],
+                            confidence: (mat_claim.confidence + ver_claim.confidence) / 2.0,
+                        });
+                    }
+                }
+            }
+        }
+        
+        Ok(contradictions)
+    }
+    
+    /// Find scale contradictions (numbers that don't make sense together)
+    fn find_scale_contradictions(&self, stage_claims: &HashMap<Stage, Vec<SemanticClaim>>) -> Result<Vec<SemanticContradiction>> {
+        let mut contradictions = Vec::new();
+        
+        // Check dependency count vs complexity claims
+        let dep_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+            .flat_map(|(stage, claims)| {
+                claims.iter()
+                    .filter(|claim| matches!(claim.claim_type, SemanticClaimType::DependencyCount))
+                    .map(move |claim| (*stage, claim))
+            })
+            .collect();
+            
+        let complexity_claims: Vec<(Stage, &SemanticClaim)> = stage_claims.iter()
+            .flat_map(|(stage, claims)| {
+                claims.iter()
+                    .filter(|claim| matches!(claim.claim_type, SemanticClaimType::Complexity))
+                    .map(move |claim| (*stage, claim))
+            })
+            .collect();
+        
+        for (dep_stage, dep_claim) in &dep_claims {
+            if let Ok(dep_count) = dep_claim.value.parse::<usize>() {
+                for (comp_stage, comp_claim) in &complexity_claims {
+                    let expected_complexity = if dep_count > 50 {
+                        "high"
+                    } else if dep_count > 20 {
+                        "medium"
+                    } else {
+                        "low"
+                    };
+                    
+                    if comp_claim.value != expected_complexity && 
+                       !((comp_claim.value == "medium" && expected_complexity == "high") || 
+                         (comp_claim.value == "high" && expected_complexity == "medium")) {
+                        contradictions.push(SemanticContradiction {
+                            contradiction_type: ContradictionType::Scale,
+                            severity: ContradictionSeverity::Major,
+                            description: format!(
+                                "Scale contradiction: {} dependencies from {:?} suggests {} complexity, but {:?} claims '{}'",
+                                dep_count, dep_stage, expected_complexity, comp_stage, comp_claim.value
+                            ),
+                            evidence: vec![dep_claim.evidence.clone(), comp_claim.evidence.clone()],
+                            confidence: (dep_claim.confidence + comp_claim.confidence) / 2.0,
+                        });
+                    }
+                }
+            }
+        }
+        
+        Ok(contradictions)
     }
 }
 
