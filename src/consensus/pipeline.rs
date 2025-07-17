@@ -1642,7 +1642,11 @@ impl ConsensusPipeline {
             return false;
         }
 
-        // Check if context mentions repository
+        // CLAUDE CODE BEHAVIOR: When a repository is open, we should ALWAYS be ready to help
+        // with code-related questions. The key insight is that users don't always explicitly
+        // mention "repository" or "codebase" - they just ask about things in their code.
+        
+        // Check if context already has repository info (from previous stages)
         if let Some(ctx) = context {
             if ctx.contains("CRITICAL REPOSITORY CONTEXT") || ctx.contains("Repository Path:") {
                 tracing::info!("Context contains repository info, using file reading");
@@ -1650,24 +1654,81 @@ impl ConsensusPipeline {
             }
         }
 
-        // Check if question is asking about the codebase
+        // INTELLIGENT DETECTION: Instead of keyword matching, we should understand intent
+        // Questions that likely relate to the open codebase:
         let question_lower = question.to_lowercase();
-        let should_read = question_lower.contains("repository")
+        
+        // 1. Questions about capabilities, features, or understanding
+        // Examples: "what can X do?", "how does Y work?", "explain Z"
+        let asking_about_functionality = question_lower.contains("what")
+            || question_lower.contains("how")
+            || question_lower.contains("explain")
+            || question_lower.contains("tell me")
+            || question_lower.contains("show me")
+            || question_lower.contains("describe")
+            || question_lower.contains("understand");
+            
+        // 2. Questions about finding or discovering things
+        // Examples: "find the X", "where is Y", "discover capabilities"
+        let searching_for_something = question_lower.contains("find")
+            || question_lower.contains("where")
+            || question_lower.contains("search")
+            || question_lower.contains("look")
+            || question_lower.contains("discover")
+            || question_lower.contains("locate");
+            
+        // 3. Questions with technical terms that likely refer to code
+        // Examples: "the authentication system", "database connections", "API endpoints"
+        let contains_technical_terms = question_lower.contains("system")
+            || question_lower.contains("function")
+            || question_lower.contains("module")
+            || question_lower.contains("class")
+            || question_lower.contains("method")
+            || question_lower.contains("api")
+            || question_lower.contains("endpoint")
+            || question_lower.contains("component")
+            || question_lower.contains("service")
+            || question_lower.contains("implementation");
+            
+        // 4. Questions about specific code artifacts by name
+        // The AI will use the actual terms in the question to search
+        let mentions_specific_artifact = 
+            // Check if question contains words that are likely code identifiers
+            // (contains underscores, CamelCase, or technical naming patterns)
+            question.split_whitespace().any(|word| {
+                word.contains('_') || // snake_case
+                word.contains("::") || // Rust paths
+                word.chars().filter(|c| c.is_uppercase()).count() > 1 || // CamelCase
+                word.ends_with("()") || // function calls
+                word.starts_with('.') || // method calls
+                word.contains('/') // file paths
+            });
+            
+        // 5. Questions explicitly about code/repository (fallback)
+        let explicitly_about_code = question_lower.contains("repository")
             || question_lower.contains("codebase")
             || question_lower.contains("project")
-            || question_lower.contains("examine")
-            || question_lower.contains("analyze")
-            || question_lower.contains("file")
             || question_lower.contains("code")
-            || question_lower.contains("implementation")
-            || question_lower.contains("structure")
-            || question_lower.contains("this")  // "tell me about this repository"
-            || question_lower.contains("current"); // "current repository"
+            || question_lower.contains("file")
+            || question_lower.contains("source");
+            
+        // DEFAULT TO TRUE when repository is open and question seems code-related
+        // This matches Claude Code behavior - be helpful by default
+        let should_read = asking_about_functionality
+            || searching_for_something
+            || contains_technical_terms
+            || mentions_specific_artifact
+            || explicitly_about_code
+            || question_lower.len() < 50; // Short questions often assume context
             
         if should_read {
-            tracing::info!("Question '{}' triggers file reading", question);
+            tracing::info!("📚 Enabling file reading for: '{}'", question);
+            tracing::debug!("Triggers: functionality={}, search={}, technical={}, artifact={}, explicit={}",
+                asking_about_functionality, searching_for_something, 
+                contains_technical_terms, mentions_specific_artifact, explicitly_about_code);
         } else {
-            tracing::debug!("Question '{}' does not trigger file reading", question);
+            // Only skip file reading for clearly non-code questions
+            tracing::info!("⏭️ Skipping file reading for non-code question: '{}'", question);
         }
         
         should_read
