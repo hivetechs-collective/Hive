@@ -7,11 +7,29 @@ use std::sync::Arc;
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use uuid;
 
 use crate::ai_helpers::{ChromaVectorStore, StageContext, Pattern, Insight};
 use crate::consensus::types::Stage;
 use crate::consensus::verification::RepositoryFacts;
 use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
+
+/// Decision about whether to use repository context
+#[derive(Debug, Clone)]
+pub struct ContextDecision {
+    pub should_use_repo: bool,
+    pub confidence: f64,
+    pub category: String,
+    pub reasoning: String,
+}
+
+/// Analysis result from AI model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuestionAnalysis {
+    pub category: String,
+    pub confidence: f64,
+    pub reasoning: String,
+}
 
 /// Configuration for Context Retriever
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,6 +338,146 @@ impl ContextRetriever {
     /// Get synthesis insights
     async fn get_synthesis_insights(&self, question: &str) -> Result<Vec<Insight>> {
         Ok(vec![])
+    }
+    
+    /// Analyze question to determine if repository context should be used
+    /// This uses GraphCodeBERT to understand the semantic content of the question
+    pub async fn should_use_repository_context(
+        &self,
+        question: &str,
+        has_open_repository: bool,
+    ) -> Result<bool> {
+        // If no repository is open, never use repository context
+        if !has_open_repository {
+            tracing::info!("No repository open, skipping repository context");
+            return Ok(false);
+        }
+
+        // Use GraphCodeBERT to analyze the question semantically
+        let context_decision = self.analyze_question_context(question).await?;
+        
+        tracing::debug!(
+            "Repository context decision for '{}': {} (confidence: {:.2})",
+            question, context_decision.should_use_repo, context_decision.confidence
+        );
+        
+        Ok(context_decision.should_use_repo)
+    }
+    
+    /// Analyze question using GraphCodeBERT to determine context needs
+    async fn analyze_question_context(&self, question: &str) -> Result<ContextDecision> {
+        let request_id = uuid::Uuid::new_v4().to_string();
+        let request = ModelRequest::Analyze {
+            model: "microsoft/graphcodebert-base".to_string(),
+            code: question.to_string(), // Using 'code' field for the question text
+            task: "classify_question_context".to_string(),
+            request_id,
+        };
+
+        match self.python_service.send_request(request).await {
+            Ok(response) => {
+                self.parse_context_decision(&response, question)
+            }
+            Err(e) => {
+                tracing::warn!("Failed to analyze question context with AI model: {}, falling back to heuristics", e);
+                Ok(self.fallback_context_analysis(question))
+            }
+        }
+    }
+    
+    /// Parse the AI model response into a context decision
+    fn parse_context_decision(&self, response: &ModelResponse, question: &str) -> Result<ContextDecision> {
+        if let Some(result) = &response.result {
+            if let Ok(analysis) = serde_json::from_value::<QuestionAnalysis>(result.clone()) {
+                let should_use_repo = match analysis.category.as_str() {
+                    "repository_specific" => true,
+                    "general_programming" => {
+                        // For general programming, only use repo context if high confidence
+                        // and the question might benefit from examples
+                        analysis.confidence > 0.8 && (
+                            analysis.reasoning.contains("example") ||
+                            analysis.reasoning.contains("implement") ||
+                            analysis.reasoning.contains("how to")
+                        )
+                    }
+                    _ => false,
+                };
+                
+                return Ok(ContextDecision {
+                    should_use_repo,
+                    confidence: analysis.confidence,
+                    category: analysis.category,
+                    reasoning: analysis.reasoning,
+                });
+            }
+        }
+        
+        // If parsing failed, fall back to heuristics
+        tracing::warn!("Failed to parse AI context analysis, using fallback");
+        Ok(self.fallback_context_analysis(question))
+    }
+    
+    /// Fallback heuristic analysis when AI model is unavailable
+    fn fallback_context_analysis(&self, question: &str) -> ContextDecision {
+        let question_lower = question.to_lowercase();
+        
+        // Repository-specific indicators
+        let repo_keywords = [
+            "this code", "this project", "this repo", "this repository",
+            "this file", "this function", "this class", "this method",
+            "my code", "my project", "my repo", "my repository", 
+            "our code", "our project", "our repo", "our repository",
+            "current code", "current project", "current repo", "current repository",
+            "@codebase", "in this", "here", "this implementation",
+            "analyze this", "review this", "check this", "fix this",
+            "update this", "modify this", "change this", "improve this",
+            "the code", "the project", "the repo", "the repository",
+        ];
+        
+        // General programming indicators
+        let general_keywords = [
+            "difference between", "compare", "versus", "vs", "or",
+            "what is", "how does", "explain", "when to use", 
+            "best practice", "which is better", "pros and cons",
+            "advantages", "disadvantages", "tell me about",
+            "angular", "vue", "react", "svelte", "ember",
+            "python", "rust", "javascript", "typescript", "java",
+            "design pattern", "algorithm", "data structure",
+            "performance", "optimization", "security",
+        ];
+        
+        let repo_score = repo_keywords.iter()
+            .filter(|keyword| question_lower.contains(*keyword))
+            .count();
+            
+        let general_score = general_keywords.iter()
+            .filter(|keyword| question_lower.contains(*keyword))
+            .count();
+        
+        let should_use_repo = if repo_score > 0 && repo_score >= general_score {
+            true
+        } else if general_score > repo_score {
+            false
+        } else {
+            // Ambiguous case - default to false for general questions
+            false
+        };
+        
+        let confidence = if repo_score > 0 || general_score > 0 {
+            0.7 // Medium confidence for heuristic matching
+        } else {
+            0.5 // Low confidence for unclear questions
+        };
+        
+        ContextDecision {
+            should_use_repo,
+            confidence,
+            category: if should_use_repo { "repository_specific" } else { "general_programming" }.to_string(),
+            reasoning: format!(
+                "Heuristic analysis: repo_keywords={}, general_keywords={}", 
+                repo_score, general_score
+            ),
+        }
     }
 }
 

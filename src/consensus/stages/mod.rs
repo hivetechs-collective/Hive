@@ -8,6 +8,7 @@ pub mod file_aware_curator;
 pub mod generator;
 pub mod refiner;
 pub mod validator;
+pub mod repository_scanner;
 
 pub use curator::CuratorStage;
 pub use file_aware_curator::FileAwareCuratorStage;
