@@ -14,6 +14,9 @@ pub mod streaming;
 pub mod temporal;
 pub mod types;
 pub mod codebase_intelligence;
+pub mod verification;
+pub mod fact_checker;
+pub mod cross_validator;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use engine::ConsensusEngine;
@@ -28,6 +31,9 @@ pub use types::{
     ConsensusConfig, ConsensusProfile, ConsensusRequest, ConsensusResponse, ConsensusResult,
     ResponseMetadata, Stage,
 };
+pub use verification::{RepositoryFacts, RepositoryVerifier, build_stage_context};
+pub use fact_checker::{FactChecker, ValidationResult, Contradiction, RecommendedAction};
+pub use cross_validator::{CrossValidator, ConsensusHealth, StageDiscrepancy, ConsensusReport};
 
 // Re-export commonly used items
 pub use models::{DynamicModelSelector, ModelInfo, ModelManager};
