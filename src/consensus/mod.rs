@@ -34,7 +34,7 @@ pub use types::{
 };
 pub use verification::{RepositoryFacts, RepositoryVerifier, build_stage_context};
 pub use fact_checker::{FactChecker, ValidationResult, Contradiction, RecommendedAction};
-pub use cross_validator::{CrossValidator, ConsensusHealth, StageDiscrepancy, ConsensusReport};
+pub use cross_validator::{CrossValidator, ConsensusHealth, StageDiscrepancy, ConsensusReport, SemanticContradiction, ContradictionType, ContradictionSeverity};
 pub use verified_context_builder::VerifiedContextBuilder;
 
 // Re-export commonly used items
