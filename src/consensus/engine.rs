@@ -17,6 +17,7 @@ use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusRequest, ConsensusResult, ContextInjectionStrategy,
     ResponseMetadata, RetryPolicy,
 };
+use crate::ai_helpers::AIHelperEcosystem;
 use crate::core::api_keys::ApiKeyManager;
 use crate::core::config;
 use crate::core::config::get_hive_config_dir;
@@ -45,6 +46,7 @@ pub struct ConsensusEngine {
     usage_tracker: Arc<RwLock<UsageTracker>>,
     license_key: Option<String>,
     last_auth_remaining: Arc<RwLock<Option<u32>>>, // Store last D1 remaining count
+    ai_helpers: Arc<RwLock<Option<Arc<AIHelperEcosystem>>>>, // AI Helper Ecosystem
 }
 
 impl ConsensusEngine {
@@ -146,6 +148,22 @@ impl ConsensusEngine {
             None
         };
 
+        // Initialize AI helpers if database is available
+        let ai_helpers = if let Some(ref db) = database {
+            match AIHelperEcosystem::new(db.clone()).await {
+                Ok(helpers) => {
+                    tracing::info!("AI Helper Ecosystem initialized successfully");
+                    Some(Arc::new(helpers))
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize AI helpers: {}. Continuing without helpers.", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             database,
             current_profile: Arc::new(RwLock::new(profile)),
@@ -160,6 +178,7 @@ impl ConsensusEngine {
             usage_tracker,
             license_key,
             last_auth_remaining: Arc::new(RwLock::new(None)),
+            ai_helpers: Arc::new(RwLock::new(ai_helpers)),
         })
     }
 
@@ -228,6 +247,11 @@ impl ConsensusEngine {
             pipeline = pipeline.with_repository_context(repo_ctx.clone());
         }
 
+        // Set AI helpers if available
+        if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
+            pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
+        }
+
         // Set codebase intelligence if available
         if let Some(ci) = self.codebase_intelligence.read().await.as_ref() {
             pipeline = pipeline.with_codebase_intelligence(ci.clone());
@@ -270,9 +294,13 @@ impl ConsensusEngine {
                             StreamingResponse::Complete { response } => {
                                 // Return a special consensus result for @codebase
                                 return Ok(ConsensusResult {
+                                    success: true,
                                     result: Some(response.content),
+                                    error: None,
                                     stages: vec![],
-                                    total_time: response.metadata.duration_ms,
+                                    conversation_id: uuid::Uuid::new_v4().to_string(),
+                                    total_duration: response.metadata.duration_ms as f64,
+                                    total_cost: response.metadata.cost,
                                 });
                             }
                             StreamingResponse::Error { error, .. } => {
@@ -284,9 +312,13 @@ impl ConsensusEngine {
                     
                     // If we got here without a Complete response, return what we collected
                     return Ok(ConsensusResult {
+                        success: true,
                         result: Some(content),
+                        error: None,
                         stages: vec![],
-                        total_time: 0,
+                        conversation_id: String::new(),
+                        total_duration: 0.0,
+                        total_cost: 0.0,
                     });
                 }
                 Err(e) => {
@@ -333,6 +365,11 @@ impl ConsensusEngine {
         // Set repository context if available
         if let Some(repo_ctx) = self.repository_context.read().await.as_ref() {
             pipeline = pipeline.with_repository_context(repo_ctx.clone());
+        }
+
+        // Set AI helpers if available
+        if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
+            pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
 
         // Set codebase intelligence if available

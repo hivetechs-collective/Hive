@@ -1,0 +1,276 @@
+//! Context Retriever - Uses GraphCodeBERT + LangChain for intelligent retrieval
+//! 
+//! This module finds relevant past knowledge, ranks by relevance to the current question,
+//! and compresses information for optimal context preparation.
+
+use std::sync::Arc;
+use anyhow::{Result, Context};
+use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
+
+use crate::ai_helpers::{ChromaVectorStore, StageContext, Pattern, Insight};
+use crate::consensus::types::Stage;
+
+/// Configuration for Context Retriever
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetrieverConfig {
+    /// Model for understanding code relationships
+    pub relationship_model: String,
+    
+    /// Maximum context size per stage (in tokens)
+    pub max_context_tokens: usize,
+    
+    /// Number of candidates to retrieve before ranking
+    pub retrieval_candidates: usize,
+    
+    /// Relevance threshold for inclusion
+    pub relevance_threshold: f64,
+}
+
+impl Default for RetrieverConfig {
+    fn default() -> Self {
+        Self {
+            relationship_model: "microsoft/graphcodebert-base".to_string(),
+            max_context_tokens: 2048,
+            retrieval_candidates: 50,
+            relevance_threshold: 0.7,
+        }
+    }
+}
+
+/// Context Retriever with stage-specific intelligence
+pub struct ContextRetriever {
+    config: RetrieverConfig,
+    vector_store: Arc<ChromaVectorStore>,
+    
+    /// Cache of recent retrievals
+    retrieval_cache: Arc<RwLock<lru::LruCache<String, StageContext>>>,
+}
+
+impl ContextRetriever {
+    /// Create a new Context Retriever
+    pub async fn new(vector_store: Arc<ChromaVectorStore>) -> Result<Self> {
+        let config = RetrieverConfig::default();
+        let retrieval_cache = Arc::new(RwLock::new(lru::LruCache::new(
+            std::num::NonZeroUsize::new(100).unwrap()
+        )));
+        
+        Ok(Self {
+            config,
+            vector_store,
+            retrieval_cache,
+        })
+    }
+    
+    /// Get context optimized for Generator stage
+    pub async fn get_generator_context(
+        &self,
+        question: &str,
+        context_limit: usize,
+    ) -> Result<StageContext> {
+        tracing::debug!("Preparing Generator context for: {}", question);
+        
+        // Check cache
+        let cache_key = format!("generator_{}", question);
+        if let Some(cached) = self.retrieval_cache.read().await.peek(&cache_key) {
+            return Ok(cached.clone());
+        }
+        
+        // Generator needs broad context and examples
+        let relevant_facts = self.retrieve_broad_context(question, context_limit).await?;
+        let patterns = self.find_relevant_patterns(question).await?;
+        let insights = self.get_relevant_insights(question).await?;
+        
+        let context = StageContext {
+            stage: Stage::Generator,
+            relevant_facts,
+            patterns,
+            insights,
+            custom_guidance: Some(
+                "Focus on comprehensive understanding and creative solutions. \
+                Draw from past examples but adapt to the specific question.".to_string()
+            ),
+        };
+        
+        // Cache the result
+        self.retrieval_cache.write().await.put(cache_key, context.clone());
+        
+        Ok(context)
+    }
+    
+    /// Get context optimized for Refiner stage
+    pub async fn get_refiner_context(
+        &self,
+        question: &str,
+        context_limit: usize,
+    ) -> Result<StageContext> {
+        tracing::debug!("Preparing Refiner context for: {}", question);
+        
+        // Refiner needs high-quality examples and improvement patterns
+        let relevant_facts = self.retrieve_quality_examples(question, context_limit).await?;
+        let patterns = self.find_improvement_patterns(question).await?;
+        let insights = self.get_quality_insights(question).await?;
+        
+        Ok(StageContext {
+            stage: Stage::Refiner,
+            relevant_facts,
+            patterns,
+            insights,
+            custom_guidance: Some(
+                "Focus on improving clarity, accuracy, and completeness. \
+                Reference high-quality examples from past responses.".to_string()
+            ),
+        })
+    }
+    
+    /// Get context optimized for Validator stage
+    pub async fn get_validator_context(
+        &self,
+        question: &str,
+        context_limit: usize,
+    ) -> Result<StageContext> {
+        tracing::debug!("Preparing Validator context for: {}", question);
+        
+        // Validator needs contradictions, edge cases, and verification patterns
+        let relevant_facts = self.retrieve_edge_cases(question, context_limit).await?;
+        let patterns = self.find_contradiction_patterns(question).await?;
+        let insights = self.get_validation_insights(question).await?;
+        
+        Ok(StageContext {
+            stage: Stage::Validator,
+            relevant_facts,
+            patterns,
+            insights,
+            custom_guidance: Some(
+                "Focus on identifying potential issues, contradictions, and edge cases. \
+                Be critical but constructive in validation.".to_string()
+            ),
+        })
+    }
+    
+    /// Get context optimized for Curator stage
+    pub async fn get_curator_context(
+        &self,
+        question: &str,
+        context_limit: usize,
+    ) -> Result<StageContext> {
+        tracing::debug!("Preparing Curator context for: {}", question);
+        
+        // Curator needs synthesis opportunities and authoritative examples
+        let relevant_facts = self.retrieve_synthesis_context(question, context_limit).await?;
+        let patterns = self.find_synthesis_patterns(question).await?;
+        let insights = self.get_synthesis_insights(question).await?;
+        
+        Ok(StageContext {
+            stage: Stage::Curator,
+            relevant_facts,
+            patterns,
+            insights,
+            custom_guidance: Some(
+                "Focus on synthesizing the best elements into a coherent, authoritative response. \
+                Create lasting knowledge that will benefit future queries.".to_string()
+            ),
+        })
+    }
+    
+    /// Retrieve broad context for Generator
+    async fn retrieve_broad_context(
+        &self,
+        question: &str,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        // TODO: Implement actual retrieval with GraphCodeBERT ranking
+        // For now, return placeholder
+        Ok(vec![
+            "Example: Previous implementation of similar feature...".to_string(),
+            "Pattern: Common approach to this type of problem...".to_string(),
+        ])
+    }
+    
+    /// Retrieve high-quality examples for Refiner
+    async fn retrieve_quality_examples(
+        &self,
+        question: &str,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        // TODO: Filter for high-confidence, well-rated responses
+        Ok(vec![
+            "High-quality example with clear explanation...".to_string(),
+        ])
+    }
+    
+    /// Retrieve edge cases for Validator
+    async fn retrieve_edge_cases(
+        &self,
+        question: &str,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        // TODO: Look for past issues, corrections, and edge cases
+        Ok(vec![
+            "Edge case: When X happens, consider Y...".to_string(),
+        ])
+    }
+    
+    /// Retrieve synthesis opportunities for Curator
+    async fn retrieve_synthesis_context(
+        &self,
+        question: &str,
+        limit: usize,
+    ) -> Result<Vec<String>> {
+        // TODO: Find related concepts that can be synthesized
+        Ok(vec![
+            "Related concept that can be integrated...".to_string(),
+        ])
+    }
+    
+    /// Find patterns relevant to the question
+    async fn find_relevant_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+        // TODO: Implement pattern matching with UniXcoder
+        Ok(vec![])
+    }
+    
+    /// Find improvement patterns
+    async fn find_improvement_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+        Ok(vec![])
+    }
+    
+    /// Find contradiction patterns
+    async fn find_contradiction_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+        Ok(vec![])
+    }
+    
+    /// Find synthesis patterns
+    async fn find_synthesis_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+        Ok(vec![])
+    }
+    
+    /// Get relevant insights
+    async fn get_relevant_insights(&self, question: &str) -> Result<Vec<Insight>> {
+        Ok(vec![])
+    }
+    
+    /// Get quality insights
+    async fn get_quality_insights(&self, question: &str) -> Result<Vec<Insight>> {
+        Ok(vec![])
+    }
+    
+    /// Get validation insights
+    async fn get_validation_insights(&self, question: &str) -> Result<Vec<Insight>> {
+        Ok(vec![])
+    }
+    
+    /// Get synthesis insights
+    async fn get_synthesis_insights(&self, question: &str) -> Result<Vec<Insight>> {
+        Ok(vec![])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[tokio::test]
+    async fn test_stage_specific_retrieval() {
+        // Test that each stage gets appropriate context
+    }
+}

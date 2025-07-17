@@ -7,6 +7,7 @@
 #![recursion_limit = "1024"]
 
 // Full module list - ALL MODULES ENABLED
+pub mod ai_helpers;
 pub mod analysis;
 pub mod analytics;
 pub mod cache;

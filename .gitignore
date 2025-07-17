@@ -53,3 +53,6 @@ coverage/
 # Backup files
 *.bak
 *.backup
+
+# External AI helper repositories
+external/ai_helpers/
