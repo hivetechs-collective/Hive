@@ -250,6 +250,51 @@ impl ConsensusEngine {
         callbacks: Arc<dyn StreamingCallbacks>,
         user_id: Option<String>,
     ) -> Result<ConsensusResult> {
+        // Check if this is a @codebase command
+        if CodebaseIntelligence::is_codebase_command(query) {
+            tracing::info!("🔍 Detected @codebase command: {}", query);
+            
+            // Handle @codebase command with a special consensus result
+            let (sender, mut receiver) = mpsc::unbounded_channel();
+            
+            // Handle the codebase command
+            match self.handle_codebase_command(query, sender).await {
+                Ok(_) => {
+                    // Collect all the streaming responses into a single result
+                    let mut content = String::new();
+                    while let Some(response) = receiver.recv().await {
+                        match response {
+                            StreamingResponse::TokenReceived { token } => {
+                                content.push_str(&token);
+                            }
+                            StreamingResponse::Complete { response } => {
+                                // Return a special consensus result for @codebase
+                                return Ok(ConsensusResult {
+                                    result: Some(response.content),
+                                    stages: vec![],
+                                    total_time: response.metadata.duration_ms,
+                                });
+                            }
+                            StreamingResponse::Error { error, .. } => {
+                                return Err(anyhow!("@codebase command failed: {}", error));
+                            }
+                            _ => {}
+                        }
+                    }
+                    
+                    // If we got here without a Complete response, return what we collected
+                    return Ok(ConsensusResult {
+                        result: Some(content),
+                        stages: vec![],
+                        total_time: 0,
+                    });
+                }
+                Err(e) => {
+                    return Err(anyhow!("Failed to process @codebase command: {}", e));
+                }
+            }
+        }
+        
         let config = self.config.read().await.clone();
 
         // Always load the active profile from database to ensure we use the latest selection
@@ -555,9 +600,12 @@ impl ConsensusEngine {
         sender: mpsc::UnboundedSender<StreamingResponse>,
     ) -> Result<()> {
         let command = CodebaseIntelligence::parse_command(query);
+        tracing::info!("🎯 Parsed command: {:?}", command);
         
         // Get codebase intelligence instance
         let ci_lock = self.codebase_intelligence.read().await;
+        tracing::info!("🧠 CodebaseIntelligence available: {}", ci_lock.is_some());
+        
         let ci = ci_lock.as_ref()
             .ok_or_else(|| anyhow!("Codebase intelligence not initialized"))?;
         
