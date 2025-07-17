@@ -366,17 +366,15 @@ impl ContextRetriever {
     
     /// Analyze question using GraphCodeBERT to determine context needs
     async fn analyze_question_context(&self, question: &str) -> Result<ContextDecision> {
-        let request_id = uuid::Uuid::new_v4().to_string();
-        let request = ModelRequest::Analyze {
-            model: "microsoft/graphcodebert-base".to_string(),
-            code: question.to_string(), // Using 'code' field for the question text
-            task: "classify_question_context".to_string(),
-            request_id,
-        };
-
-        match self.python_service.send_request(request).await {
-            Ok(response) => {
-                self.parse_context_decision(&response, question)
+        let model = "microsoft/graphcodebert-base";
+        
+        match self.python_service.analyze_code(
+            model,
+            question,
+            "classify_question_context"
+        ).await {
+            Ok(result) => {
+                self.parse_context_decision_from_value(&result, question)
             }
             Err(e) => {
                 tracing::warn!("Failed to analyze question context with AI model: {}, falling back to heuristics", e);
@@ -385,31 +383,29 @@ impl ContextRetriever {
         }
     }
     
-    /// Parse the AI model response into a context decision
-    fn parse_context_decision(&self, response: &ModelResponse, question: &str) -> Result<ContextDecision> {
-        if let Some(result) = &response.result {
-            if let Ok(analysis) = serde_json::from_value::<QuestionAnalysis>(result.clone()) {
-                let should_use_repo = match analysis.category.as_str() {
-                    "repository_specific" => true,
-                    "general_programming" => {
-                        // For general programming, only use repo context if high confidence
-                        // and the question might benefit from examples
-                        analysis.confidence > 0.8 && (
-                            analysis.reasoning.contains("example") ||
-                            analysis.reasoning.contains("implement") ||
-                            analysis.reasoning.contains("how to")
-                        )
-                    }
-                    _ => false,
-                };
-                
-                return Ok(ContextDecision {
-                    should_use_repo,
-                    confidence: analysis.confidence,
-                    category: analysis.category,
-                    reasoning: analysis.reasoning,
-                });
-            }
+    /// Parse the AI model response from a Value into a context decision
+    fn parse_context_decision_from_value(&self, result: &serde_json::Value, question: &str) -> Result<ContextDecision> {
+        if let Ok(analysis) = serde_json::from_value::<QuestionAnalysis>(result.clone()) {
+            let should_use_repo = match analysis.category.as_str() {
+                "repository_specific" => true,
+                "general_programming" => {
+                    // For general programming, only use repo context if high confidence
+                    // and the question might benefit from examples
+                    analysis.confidence > 0.8 && (
+                        analysis.reasoning.contains("example") ||
+                        analysis.reasoning.contains("implement") ||
+                        analysis.reasoning.contains("how to")
+                    )
+                }
+                _ => false,
+            };
+            
+            return Ok(ContextDecision {
+                should_use_repo,
+                confidence: analysis.confidence,
+                category: analysis.category,
+                reasoning: analysis.reasoning,
+            });
         }
         
         // If parsing failed, fall back to heuristics
