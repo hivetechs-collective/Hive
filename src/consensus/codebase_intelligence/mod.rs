@@ -4,6 +4,7 @@
 //! Creates searchable knowledge base accessible to all consensus stages.
 
 pub mod scanner;
+pub mod semantic_search;
 pub mod extractor;
 pub mod analyzer;
 pub mod storage;
