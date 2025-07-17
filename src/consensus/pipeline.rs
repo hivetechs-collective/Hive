@@ -1744,19 +1744,18 @@ impl ConsensusPipeline {
         
         // Use AI-powered context analysis for intelligent decision making
         if let Some(ai_helpers) = &self.ai_helpers {
-            if let Ok(context_retriever) = ai_helpers.get_context_retriever().await {
-                match context_retriever.should_use_repository_context(question, has_repository).await {
-                    Ok(should_use) => {
-                        if should_use {
-                            tracing::info!("🤖 AI analysis: Using repository context for: '{}'", question);
-                        } else {
-                            tracing::info!("🤖 AI analysis: Skipping repository context for general question: '{}'", question);
-                        }
-                        return should_use;
+            let context_retriever = &ai_helpers.context_retriever;
+            match context_retriever.should_use_repository_context(question, has_repository).await {
+                Ok(should_use) => {
+                    if should_use {
+                        tracing::info!("🤖 AI analysis: Using repository context for: '{}'", question);
+                    } else {
+                        tracing::info!("🤖 AI analysis: Skipping repository context for general question: '{}'", question);
                     }
-                    Err(e) => {
-                        tracing::warn!("Failed to get AI context analysis: {}, falling back to heuristics", e);
-                    }
+                    return should_use;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to get AI context analysis: {}, falling back to heuristics", e);
                 }
             }
         }
