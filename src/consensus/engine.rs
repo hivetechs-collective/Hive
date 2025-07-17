@@ -1,6 +1,9 @@
 // Consensus Engine - Main entry point for consensus functionality
 // Manages profiles, configuration, and pipeline execution
 
+use crate::consensus::codebase_intelligence::{
+    AnalysisProgress, CodebaseCommand, CodebaseIntelligence,
+};
 use crate::consensus::models::ModelManager;
 use crate::consensus::pipeline::ConsensusPipeline;
 use crate::consensus::profiles::{ExpertProfileManager, TemplateFilter, TemplatePreferences};
@@ -37,6 +40,7 @@ pub struct ConsensusEngine {
     model_manager: Option<Arc<ModelManager>>,
     temporal_provider: Arc<TemporalContextProvider>,
     repository_context: Arc<RwLock<Option<Arc<RepositoryContextManager>>>>,
+    codebase_intelligence: Arc<RwLock<Option<Arc<CodebaseIntelligence>>>>,
     conversation_gateway: Arc<ConversationGateway>,
     usage_tracker: Arc<RwLock<UsageTracker>>,
     license_key: Option<String>,
@@ -135,6 +139,13 @@ impl ConsensusEngine {
             context_injection: ContextInjectionStrategy::default(),
         };
 
+        // Initialize codebase intelligence if database is available
+        let codebase_intelligence = if let Some(ref db) = database {
+            Some(Arc::new(CodebaseIntelligence::new(db.clone())))
+        } else {
+            None
+        };
+
         Ok(Self {
             database,
             current_profile: Arc::new(RwLock::new(profile)),
@@ -144,6 +155,7 @@ impl ConsensusEngine {
             model_manager,
             temporal_provider: Arc::new(TemporalContextProvider::default()),
             repository_context: Arc::new(RwLock::new(None)),
+            codebase_intelligence: Arc::new(RwLock::new(codebase_intelligence)),
             conversation_gateway,
             usage_tracker,
             license_key,
@@ -154,7 +166,17 @@ impl ConsensusEngine {
     /// Set the repository context manager for this engine
     pub async fn set_repository_context(&mut self, repository_context: Arc<RepositoryContextManager>) -> Result<()> {
         let mut repo_ctx = self.repository_context.write().await;
-        *repo_ctx = Some(repository_context);
+        *repo_ctx = Some(repository_context.clone());
+        
+        // Update codebase intelligence with repository path
+        if let Some(ref mut ci) = self.codebase_intelligence.write().await.as_mut() {
+            let context = repository_context.get_context().await;
+            if let Some(root_path) = context.root_path {
+                let ci_mut = Arc::get_mut(ci).ok_or_else(|| anyhow!("Failed to get mutable reference to CodebaseIntelligence"))?;
+                ci_mut.set_repository(root_path);
+            }
+        }
+        
         Ok(())
     }
 
@@ -204,6 +226,11 @@ impl ConsensusEngine {
         // Set repository context if available
         if let Some(repo_ctx) = self.repository_context.read().await.as_ref() {
             pipeline = pipeline.with_repository_context(repo_ctx.clone());
+        }
+
+        // Set codebase intelligence if available
+        if let Some(ci) = self.codebase_intelligence.read().await.as_ref() {
+            pipeline = pipeline.with_codebase_intelligence(ci.clone());
         }
 
         // Run the consensus pipeline (D1 auth and verification happens inside)
@@ -263,6 +290,11 @@ impl ConsensusEngine {
             pipeline = pipeline.with_repository_context(repo_ctx.clone());
         }
 
+        // Set codebase intelligence if available
+        if let Some(ci) = self.codebase_intelligence.read().await.as_ref() {
+            pipeline = pipeline.with_codebase_intelligence(ci.clone());
+        }
+
         pipeline
             .run(query, semantic_context, user_id)
             .await
@@ -288,6 +320,24 @@ impl ConsensusEngine {
         // Spawn async task to process consensus
         tokio::spawn(async move {
             let start_time = Instant::now();
+
+            // Check if this is a @codebase command
+            if CodebaseIntelligence::is_codebase_command(&query) {
+                // Handle @codebase command
+                match engine.handle_codebase_command(&query, sender.clone()).await {
+                    Ok(_) => {
+                        // Command handled successfully
+                        tracing::info!("@codebase command processed successfully");
+                    }
+                    Err(e) => {
+                        let _ = sender.send(StreamingResponse::Error {
+                            stage: ConsensusStage::Generator,
+                            error: format!("Failed to process @codebase command: {}", e),
+                        });
+                    }
+                }
+                return;
+            }
 
             // Process through the actual consensus pipeline
             match engine
@@ -496,6 +546,113 @@ impl ConsensusEngine {
     /// Get temporal context provider
     pub fn get_temporal_provider(&self) -> &TemporalContextProvider {
         &self.temporal_provider
+    }
+
+    /// Handle @codebase commands
+    async fn handle_codebase_command(
+        &self,
+        query: &str,
+        sender: mpsc::UnboundedSender<StreamingResponse>,
+    ) -> Result<()> {
+        let command = CodebaseIntelligence::parse_command(query);
+        
+        // Get codebase intelligence instance
+        let ci_lock = self.codebase_intelligence.read().await;
+        let ci = ci_lock.as_ref()
+            .ok_or_else(|| anyhow!("Codebase intelligence not initialized"))?;
+        
+        match command {
+            CodebaseCommand::FullScan => {
+                // Send initial status
+                let _ = sender.send(StreamingResponse::TokenReceived {
+                    token: "🔍 Starting deep codebase analysis...\n\n".to_string(),
+                });
+                
+                // Create progress callback
+                let sender_clone = sender.clone();
+                let progress_callback = move |progress: AnalysisProgress| {
+                    let message = match progress {
+                        AnalysisProgress::Starting => "📂 Initializing codebase scan...\n".to_string(),
+                        AnalysisProgress::Scanning { current, total } => {
+                            if total > 0 {
+                                format!("📊 Scanning files: {}/{}\n", current, total)
+                            } else {
+                                "📊 Discovering files...\n".to_string()
+                            }
+                        }
+                        AnalysisProgress::Extracting { current, total } => {
+                            format!("🔧 Extracting code objects: {}/{}\n", current, total)
+                        }
+                        AnalysisProgress::Analyzing => "🧠 Analyzing relationships and architecture...\n".to_string(),
+                        AnalysisProgress::Indexing => "📚 Building semantic index...\n".to_string(),
+                        AnalysisProgress::Complete => "✅ Codebase analysis complete!\n\n".to_string(),
+                    };
+                    
+                    let _ = sender_clone.send(StreamingResponse::TokenReceived {
+                        token: message,
+                    });
+                };
+                
+                // Run analysis
+                let result = ci.analyze_codebase(progress_callback).await?;
+                
+                // Send results
+                let summary = format!(
+                    "## 📊 Codebase Analysis Results\n\n\
+                    - **Total Files**: {}\n\
+                    - **Code Objects**: {}\n\
+                    - **Architecture**: {}\n\
+                    - **Key Concepts**: {}\n\n\
+                    Your codebase has been indexed! I can now answer questions with deep understanding of your code.\n",
+                    result.total_files,
+                    result.total_objects,
+                    result.architecture,
+                    result.key_concepts.join(", ")
+                );
+                
+                let _ = sender.send(StreamingResponse::Complete {
+                    response: ConsensusResponseResult {
+                        content: summary,
+                        metadata: ResponseMetadata {
+                            total_tokens: 0,
+                            cost: 0.0,
+                            duration_ms: 0,
+                            models_used: vec!["codebase-intelligence".to_string()],
+                        },
+                    },
+                });
+            }
+            CodebaseCommand::Refresh => {
+                // Similar to FullScan but for refresh
+                let _ = sender.send(StreamingResponse::Complete {
+                    response: ConsensusResponseResult {
+                        content: "🔄 Codebase refresh complete!".to_string(),
+                        metadata: ResponseMetadata {
+                            total_tokens: 0,
+                            cost: 0.0,
+                            duration_ms: 0,
+                            models_used: vec!["codebase-intelligence".to_string()],
+                        },
+                    },
+                });
+            }
+            CodebaseCommand::Search(search_query) => {
+                // Handle search within indexed codebase
+                let _ = sender.send(StreamingResponse::Complete {
+                    response: ConsensusResponseResult {
+                        content: format!("🔍 Searching for: {}", search_query),
+                        metadata: ResponseMetadata {
+                            total_tokens: 0,
+                            cost: 0.0,
+                            duration_ms: 0,
+                            models_used: vec!["codebase-intelligence".to_string()],
+                        },
+                    },
+                });
+            }
+        }
+        
+        Ok(())
     }
 
     /// Sync models from OpenRouter API

@@ -346,3 +346,46 @@ impl FileWriter {
 6. **Implement Phase 1.3 (UI Widget)** 
 
 This plan addresses all the critical issues discovered in testing and provides a clear path to achieving Claude Code-style functionality in Hive.
+
+## 🚨 CRITICAL ISSUES DISCOVERED (2025-07-17)
+
+### 1. @codebase Command Not Triggering
+- The @codebase command is designed but NOT wired up in consensus engine
+- No actual deep scanning or indexing is happening when user types @codebase
+- Need to detect @codebase in ConsensusEngine::process_streaming() and trigger CodebaseIntelligence::analyze_codebase()
+
+### 2. Refiner Stage Not Actually Refining
+- Refiner is providing commentary about what COULD be improved
+- It should actually REFINE the content and output an enhanced version
+- Example: When Generator outputs basic analysis, Refiner should enhance it with deeper insights, not just say "could add more detail"
+- Other stages need the refined output, not just suggestions
+
+### 3. Semantic Search Not Connected
+- Designed semantic search system but it's not being used
+- After @codebase indexes the repo, ALL questions should search that index
+- Currently using basic file reading instead of intelligent semantic search
+- Need to:
+  - Extract search terms from EVERY question
+  - Search indexed codebase
+  - Pass results to all stages in context
+
+### 4. Stages Not Accessing Indexed Data  
+- Created codebase_intelligence module but stages can't access it
+- Need to pass CodebaseIntelligence instance through pipeline
+- All 4 stages should have access to semantic indexed data
+- Key integration point: ConsensusPipeline::build_full_context() needs to call CodebaseIntelligence::get_context_for_question()
+
+### 5. Current Implementation Status
+- ✅ File reading works (FileAwareGeneratorStage)
+- ✅ Anti-hallucination works (Validator catches fake code)
+- ❌ @codebase command detection missing
+- ❌ Deep scanning not implemented
+- ❌ Semantic search not integrated
+- ❌ Refiner not refining content
+
+### Implementation Plan:
+1. Wire up @codebase in ConsensusEngine::process_streaming()
+2. Implement actual AST parsing in ObjectExtractor
+3. Fix Refiner to output refined content
+4. Connect semantic search to all stages
+5. Store indexed data in SQLite tables
