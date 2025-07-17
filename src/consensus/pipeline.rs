@@ -5,6 +5,8 @@ use crate::consensus::repository_context::RepositoryContextManager;
 use crate::consensus::verified_context_builder::VerifiedContextBuilder;
 use crate::consensus::stages::{
     ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage,
+    file_aware_generator::FileAwareGeneratorStage,
+    file_aware_curator::FileAwareCuratorStage,
 };
 use crate::consensus::streaming::{
     ConsoleCallbacks, ProgressInfo, ProgressTracker, StreamingCallbacks,
@@ -85,10 +87,10 @@ impl ConsensusPipeline {
             codebase_intelligence: None, // Will be set when needed
             verified_context_builder: VerifiedContextBuilder::new(),
             stages: vec![
-                Box::new(GeneratorStage::new()),
+                Box::new(FileAwareGeneratorStage::new()),
                 Box::new(RefinerStage::new()),
                 Box::new(ValidatorStage::new()),
-                Box::new(CuratorStage::new()),
+                Box::new(FileAwareCuratorStage::new()),
             ],
             callbacks,
             // hooks_system: None,
@@ -648,12 +650,20 @@ impl ConsensusPipeline {
         let stage_id = Uuid::new_v4().to_string();
 
         // Build messages for this stage
-        let messages = if stage == Stage::Generator && self.should_use_file_reading(question, context) {
-            // Use enhanced generator with file reading for repository analysis
-            tracing::info!("Using enhanced generator with file reading");
-            self.build_enhanced_generator_messages(question, previous_answer, context).await?
-        } else {
-            handler.build_messages(question, previous_answer, context)?
+        let messages = match stage {
+            Stage::Generator if self.should_use_file_reading(question, context) => {
+                // Use enhanced generator with file reading for repository analysis
+                tracing::info!("Using enhanced generator with file reading");
+                self.build_enhanced_generator_messages(question, previous_answer, context).await?
+            }
+            Stage::Curator if self.should_use_file_reading(question, context) => {
+                // Use enhanced curator with file reading and writing capabilities
+                tracing::info!("Using enhanced curator with file operations");
+                self.build_enhanced_curator_messages(question, previous_answer, context).await?
+            }
+            _ => {
+                handler.build_messages(question, previous_answer, context)?
+            }
         };
         
         // Debug log the messages being sent to the AI
@@ -1791,6 +1801,41 @@ impl ConsensusPipeline {
             tracing::warn!("No repository context available, falling back to regular generator");
             let generator = crate::consensus::stages::GeneratorStage::new();
             generator.build_messages(question, previous_answer, context)
+        }
+    }
+
+    /// Build enhanced curator messages with file reading and writing capabilities
+    async fn build_enhanced_curator_messages(
+        &self,
+        question: &str,
+        previous_answer: Option<&str>,
+        context: Option<&str>,
+    ) -> Result<Vec<crate::consensus::types::Message>> {
+        use crate::consensus::stages::file_aware_curator::{FileAwareCuratorStage, build_file_aware_curator_messages};
+
+        let file_aware_curator = FileAwareCuratorStage::new();
+        
+        // Get repository context if available
+        if let Some(repo_ctx_manager) = &self.repository_context {
+            let repo_context = repo_ctx_manager.get_context().await;
+            
+            // Build messages with actual file contents
+            let messages = build_file_aware_curator_messages(
+                &file_aware_curator,
+                question,
+                previous_answer,
+                Some(&repo_context),
+                context
+            ).await?;
+            
+            tracing::info!("Built file-aware curator messages with {} messages", messages.len());
+            
+            Ok(messages)
+        } else {
+            // Fallback to regular curator
+            tracing::warn!("No repository context available, falling back to regular curator");
+            let curator = crate::consensus::stages::CuratorStage::new();
+            curator.build_messages(question, previous_answer, context)
         }
     }
 }
