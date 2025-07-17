@@ -4,11 +4,13 @@
 pub mod curator;
 pub mod enhanced_generator;
 pub mod file_aware_generator;
+pub mod file_aware_curator;
 pub mod generator;
 pub mod refiner;
 pub mod validator;
 
 pub use curator::CuratorStage;
+pub use file_aware_curator::FileAwareCuratorStage;
 pub use generator::GeneratorStage;
 pub use refiner::RefinerStage;
 pub use validator::ValidatorStage;
