@@ -38,12 +38,24 @@ impl Default for PythonModelConfig {
             .join("hive")
             .join("models");
         
+        // Try to use virtual environment Python first
+        let python_path = if let Ok(current_dir) = std::env::current_dir() {
+            let venv_python = current_dir.join("venv").join("bin").join("python3");
+            if venv_python.exists() {
+                venv_python.to_string_lossy().to_string()
+            } else {
+                "python3".to_string()
+            }
+        } else {
+            "python3".to_string()
+        };
+        
         Self {
-            python_path: "python3".to_string(),
+            python_path,
             service_script: models_dir.join("model_service.py").to_string_lossy().to_string(),
             model_cache_dir: models_dir.join("cache").to_string_lossy().to_string(),
             max_concurrent_requests: 4,
-            request_timeout: std::time::Duration::from_secs(30),
+            request_timeout: std::time::Duration::from_secs(300), // 5 minutes for model downloads
         }
     }
 }

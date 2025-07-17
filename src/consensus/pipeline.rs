@@ -10,8 +10,6 @@ use crate::consensus::streaming::{
 };
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::ai_helpers::AIHelperEcosystem;
-#[cfg(test)]
-use crate::consensus::types::ConsensusProfile;
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
     TokenUsage,

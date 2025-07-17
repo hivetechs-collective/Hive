@@ -439,8 +439,8 @@ mod tests {
         assert_eq!(cache.len().await, 1);
     }
 
-    #[test]
-    fn test_simd_string_compare() {
+    #[tokio::test]
+    async fn test_simd_string_compare() {
         let a = b"hello world test string";
         let b = b"hello world test string";
         let c = b"hello world different";

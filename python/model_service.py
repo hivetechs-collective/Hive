@@ -40,8 +40,8 @@ except ImportError as e:
 
 class ModelService:
     def __init__(self, model_cache_dir: str):
-        self.model_cache_dir = model_cache_dir
-        os.makedirs(model_cache_dir, exist_ok=True)
+        self.model_cache_dir = os.path.expanduser(model_cache_dir)
+        os.makedirs(self.model_cache_dir, exist_ok=True)
         
         # Model registry
         self.models = {}
@@ -72,21 +72,27 @@ class ModelService:
         model_name = "microsoft/codebert-base"
         self.logger.info(f"Loading {model_name}...")
         
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_name,
-            cache_dir=self.model_cache_dir
-        )
-        model = AutoModel.from_pretrained(
-            model_name,
-            cache_dir=self.model_cache_dir
-        )
-        
-        if torch.cuda.is_available():
-            model = model.cuda()
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_name,
+                cache_dir=self.model_cache_dir
+            )
+            model = AutoModel.from_pretrained(
+                model_name,
+                cache_dir=self.model_cache_dir
+            )
             
-        self.models[model_name] = model
-        self.tokenizers[model_name] = tokenizer
-        self.logger.info(f"Loaded {model_name}")
+            if torch.cuda.is_available():
+                model = model.cuda()
+                
+            self.models[model_name] = model
+            self.tokenizers[model_name] = tokenizer
+            self.logger.info(f"Loaded {model_name}")
+        except Exception as e:
+            self.logger.error(f"Failed to load {model_name}: {e}")
+            # Fall back to sentence transformer
+            self._load_sentence_transformer()
+            self.models[model_name] = self.models["sentence-transformers/all-MiniLM-L6-v2"]
         
     def _load_codet5_embedding(self):
         """Load CodeT5+ for embeddings"""
@@ -182,7 +188,8 @@ class ModelService:
             # Use sentence transformers directly
             model = self.models[model_name]
             embeddings = model.encode(texts, convert_to_tensor=True)
-            if torch.cuda.is_available():
+            # Move to CPU for numpy conversion (handles CUDA, MPS, etc.)
+            if hasattr(embeddings, 'cpu'):
                 embeddings = embeddings.cpu()
             return embeddings.numpy().tolist()
         else:
