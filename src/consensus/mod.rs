@@ -2,6 +2,7 @@
 // Preserves exact behavior from TypeScript version with Rust performance
 
 pub mod engine;
+pub mod file_operations;
 pub mod maintenance;
 pub mod models;
 pub mod openrouter;

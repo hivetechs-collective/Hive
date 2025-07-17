@@ -584,7 +584,12 @@ impl ConsensusPipeline {
         let stage_id = Uuid::new_v4().to_string();
 
         // Build messages for this stage
-        let messages = handler.build_messages(question, previous_answer, context)?;
+        let messages = if stage == Stage::Generator && self.should_use_file_reading(question, context) {
+            // Use enhanced generator with file reading for repository analysis
+            self.build_enhanced_generator_messages(question, previous_answer, context).await?
+        } else {
+            handler.build_messages(question, previous_answer, context)?
+        };
 
         // Create progress tracker
         let mut tracker = ProgressTracker::new(stage, self.callbacks.clone());
@@ -1614,6 +1619,77 @@ impl ConsensusPipeline {
         }).await??;
 
         Ok(results)
+    }
+
+    /// Check if we should use file reading for this question
+    fn should_use_file_reading(&self, question: &str, context: Option<&str>) -> bool {
+        // Check if we have repository context
+        if self.repository_context.is_none() {
+            return false;
+        }
+
+        // Check if context mentions repository
+        if let Some(ctx) = context {
+            if ctx.contains("CRITICAL REPOSITORY CONTEXT") || ctx.contains("Repository Path:") {
+                return true;
+            }
+        }
+
+        // Check if question is asking about the codebase
+        let question_lower = question.to_lowercase();
+        question_lower.contains("repository")
+            || question_lower.contains("codebase")
+            || question_lower.contains("project")
+            || question_lower.contains("examine")
+            || question_lower.contains("analyze")
+            || question_lower.contains("file")
+            || question_lower.contains("code")
+            || question_lower.contains("implementation")
+            || question_lower.contains("structure")
+    }
+
+    /// Build enhanced generator messages with file reading
+    async fn build_enhanced_generator_messages(
+        &self,
+        question: &str,
+        previous_answer: Option<&str>,
+        context: Option<&str>,
+    ) -> Result<Vec<crate::consensus::types::Message>> {
+        use crate::consensus::stages::enhanced_generator::EnhancedGeneratorStage;
+        use crate::consensus::stages::ConsensusStage;
+
+        let enhanced_generator = EnhancedGeneratorStage::new();
+        
+        // Get repository context if available
+        if let Some(repo_ctx_manager) = &self.repository_context {
+            let repo_context = repo_ctx_manager.get_context().await;
+            
+            // Generate file-based analysis
+            let file_analysis = enhanced_generator.generate_with_files(question, Some(&repo_context)).await?;
+            
+            // Build messages with enhanced context
+            let mut enhanced_context = String::new();
+            
+            // Add original context
+            if let Some(ctx) = context {
+                enhanced_context.push_str(ctx);
+                enhanced_context.push_str("\n\n");
+            }
+            
+            // Add file analysis
+            if !file_analysis.is_empty() {
+                enhanced_context.push_str("## File-Based Repository Analysis\n\n");
+                enhanced_context.push_str(&file_analysis);
+                tracing::info!("Added file-based analysis to generator context");
+            }
+            
+            // Build messages with enhanced context
+            enhanced_generator.build_messages(question, previous_answer, Some(&enhanced_context))
+        } else {
+            // Fallback to regular generator
+            let generator = crate::consensus::stages::GeneratorStage::new();
+            generator.build_messages(question, previous_answer, context)
+        }
     }
 }
 
