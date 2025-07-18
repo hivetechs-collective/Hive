@@ -1,7 +1,6 @@
 //! Chat Interface Component - Claude Code Style
 
 use crate::desktop::{
-    components::*,
     consensus_integration::{use_consensus_with_version, DesktopConsensusManager},
     events::KeyboardEventUtils,
     state::*,
@@ -233,6 +232,7 @@ fn process_message(
 
     // Start consensus processing
     app_state.write().consensus.start_consensus();
+    tracing::info!("🚀 Consensus started - is_running should be true");
 
     // Clear input
     input_text.set(String::new());
