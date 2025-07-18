@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 use anyhow::Result;
-use tracing::{info, warn};
+use tracing::info;
 use tokio::fs;
 
 /// File priority for reading order
@@ -33,7 +33,7 @@ impl RepositoryScanner {
     /// Scan repository files recursively with intelligent filtering
     pub async fn scan_repository_files(root_path: &Path) -> Result<Vec<FileInfo>> {
         let mut files = Vec::new();
-        Self::scan_directory_recursive(root_path, root_path, &mut files, 0).await?;
+        Self::scan_directory_iterative(root_path, &mut files).await?;
         
         // Sort by priority and relevance
         files.sort_by(|a, b| {
@@ -47,49 +47,48 @@ impl RepositoryScanner {
         Ok(files)
     }
     
-    /// Recursively scan directory with depth limiting
-    async fn scan_directory_recursive(
-        current_path: &Path,
-        root_path: &Path,
-        files: &mut Vec<FileInfo>,
-        depth: u32,
-    ) -> Result<()> {
-        // Prevent infinite recursion and skip very deep directories
-        if depth > 8 {
-            return Ok(());
-        }
+    /// Iteratively scan directory to avoid recursion issues
+    async fn scan_directory_iterative(root_path: &Path, files: &mut Vec<FileInfo>) -> Result<()> {
+        let mut dirs_to_scan = vec![(root_path.to_path_buf(), 0u32)];
         
-        let mut entries = match fs::read_dir(current_path).await {
-            Ok(entries) => entries,
-            Err(_) => return Ok(()), // Skip directories we can't read
-        };
-        
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            let file_name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
-            
-            // Skip hidden files and directories (except .gitignore, .env files)
-            if file_name.starts_with('.') && !Self::is_important_dotfile(file_name) {
+        while let Some((current_path, depth)) = dirs_to_scan.pop() {
+            // Prevent infinite recursion and skip very deep directories
+            if depth > 8 {
                 continue;
             }
             
-            // Skip common build/cache directories
-            if Self::should_skip_directory(file_name) {
-                continue;
-            }
+            let mut entries = match fs::read_dir(&current_path).await {
+                Ok(entries) => entries,
+                Err(_) => continue, // Skip directories we can't read
+            };
             
-            if path.is_dir() {
-                // Recursively scan subdirectories
-                Self::scan_directory_recursive(&path, root_path, files, depth + 1).await?;
-            } else if Self::is_source_file(&path) {
-                let priority = Self::determine_file_priority(&path, root_path);
-                files.push(FileInfo {
-                    path,
-                    priority,
-                    size: entry.metadata().await.map(|m| m.len()).unwrap_or(0),
-                });
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                let file_name = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                
+                // Skip hidden files and directories (except .gitignore, .env files)
+                if file_name.starts_with('.') && !Self::is_important_dotfile(file_name) {
+                    continue;
+                }
+                
+                // Skip common build/cache directories
+                if Self::should_skip_directory(file_name) {
+                    continue;
+                }
+                
+                if path.is_dir() {
+                    // Add subdirectory to scan queue
+                    dirs_to_scan.push((path, depth + 1));
+                } else if Self::is_source_file(&path) {
+                    let priority = Self::determine_file_priority(&path, root_path);
+                    files.push(FileInfo {
+                        path,
+                        priority,
+                        size: entry.metadata().await.map(|m| m.len()).unwrap_or(0),
+                    });
+                }
             }
         }
         

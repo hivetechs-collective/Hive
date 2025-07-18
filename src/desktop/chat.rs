@@ -377,24 +377,62 @@ fn ChatInput() -> Element {
                     spellcheck: "false",
                 }
 
-                button {
-                    class: if input_text.read().trim().is_empty() { "send-btn disabled" } else { "send-btn" },
-                    onclick: on_send_click,
-                    disabled: input_text.read().trim().is_empty(),
-                    svg {
-                        width: "20",
-                        height: "20",
-                        view_box: "0 0 24 24",
-                        fill: "none",
-                        stroke: "currentColor",
-                        stroke_width: "2",
-                        stroke_linecap: "round",
-                        stroke_linejoin: "round",
-                        path {
-                            d: "M22 2L11 13"
+                // Show Cancel button when consensus is running, otherwise show Send button
+                if app_state.read().consensus.is_running {
+                    button {
+                        class: "cancel-btn",
+                        onclick: {
+                            let consensus_manager = consensus_manager.clone();
+                            move |_| {
+                                if let Some(ref mut manager) = consensus_manager.as_ref() {
+                                    let mut manager_clone = manager.clone();
+                                    spawn(async move {
+                                        if let Err(e) = manager_clone.cancel_consensus("User cancelled").await {
+                                            tracing::warn!("Failed to cancel consensus: {}", e);
+                                        }
+                                    });
+                                }
+                            }
+                        },
+                        svg {
+                            width: "20",
+                            height: "20",
+                            view_box: "0 0 24 24",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "2",
+                            stroke_linecap: "round",
+                            stroke_linejoin: "round",
+                            rect {
+                                x: "6",
+                                y: "6",
+                                width: "12",
+                                height: "12",
+                                rx: "2"
+                            }
                         }
-                        path {
-                            d: "M22 2L15 22L11 13L2 9L22 2Z"
+                        "Cancel"
+                    }
+                } else {
+                    button {
+                        class: if input_text.read().trim().is_empty() { "send-btn disabled" } else { "send-btn" },
+                        onclick: on_send_click,
+                        disabled: input_text.read().trim().is_empty(),
+                        svg {
+                            width: "20",
+                            height: "20",
+                            view_box: "0 0 24 24",
+                            fill: "none",
+                            stroke: "currentColor",
+                            stroke_width: "2",
+                            stroke_linecap: "round",
+                            stroke_linejoin: "round",
+                            path {
+                                d: "M22 2L11 13"
+                            }
+                            path {
+                                d: "M22 2L15 22L11 13L2 9L22 2Z"
+                            }
                         }
                     }
                 }
