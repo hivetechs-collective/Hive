@@ -2521,28 +2521,54 @@ fn App() -> Element {
                         }
                     }
 
-                    // Cancel button - displayed when consensus is running
+                    // Cancel button - displayed when consensus is running (subtle design)
                     if *is_processing.read() {
                         div {
-                            style: "display: flex; justify-content: center; padding: 12px; background: rgba(215, 58, 73, 0.1); border-top: 1px solid rgba(215, 58, 73, 0.3);",
+                            style: "display: flex; justify-content: flex-end; padding: 4px 8px; background: transparent;",
                             
                             button {
-                                style: "background: #d73a49; border: none; color: white; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2);",
+                                style: "background: #2D3336; border: 1px solid #3A4144; color: #8B9094; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; opacity: 0.7;",
+                                onmouseover: move |evt| {
+                                    if let Ok(eval) = evt.target().map(|t| 
+                                        t.set_attribute("style", "background: #3A4144; border: 1px solid #4A5154; color: #A8B0B4; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; opacity: 1;")
+                                    ) {
+                                        let _ = eval;
+                                    }
+                                },
+                                onmouseout: move |evt| {
+                                    if let Ok(eval) = evt.target().map(|t| 
+                                        t.set_attribute("style", "background: #2D3336; border: 1px solid #3A4144; color: #8B9094; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; opacity: 0.7;")
+                                    ) {
+                                        let _ = eval;
+                                    }
+                                },
                                 onclick: {
                                     let consensus_manager = consensus_manager.clone();
+                                    let mut is_processing = is_processing.clone();
+                                    let mut app_state = app_state.clone();
+                                    let mut current_response = current_response.clone();
                                     move |_| {
                                         tracing::info!("🛑 Cancel button clicked!");
                                         if let Some(mut manager) = consensus_manager.read().clone() {
                                             spawn(async move {
-                                                if let Err(e) = manager.cancel_consensus("User cancelled from UI").await {
-                                                    tracing::warn!("Failed to cancel consensus: {}", e);
+                                                match manager.cancel_consensus("User cancelled from UI").await {
+                                                    Ok(_) => {
+                                                        tracing::info!("✅ Consensus cancelled successfully");
+                                                        // Update UI state
+                                                        app_state.write().consensus.complete_consensus();
+                                                        *is_processing.write() = false;
+                                                        *current_response.write() = "<div style='color: #8B9094; font-style: italic;'>Consensus cancelled by user.</div>".to_string();
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::warn!("Failed to cancel consensus: {}", e);
+                                                    }
                                                 }
                                             });
                                         }
                                     }
                                 },
-                                span { style: "font-size: 16px;", "✕" }
-                                span { "Cancel Consensus" }
+                                span { style: "font-size: 10px; opacity: 0.8;", "×" }
+                                span { "Cancel" }
                             }
                         }
                     }
