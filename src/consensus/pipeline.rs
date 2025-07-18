@@ -1742,20 +1742,24 @@ impl ConsensusPipeline {
             }
         }
         
-        // Use AI-powered context analysis for intelligent decision making
+        // Use multi-stage AI intelligence for sophisticated context analysis
         if let Some(ai_helpers) = &self.ai_helpers {
-            let context_retriever = &ai_helpers.context_retriever;
-            match context_retriever.should_use_repository_context(question, has_repository).await {
-                Ok(should_use) => {
-                    if should_use {
-                        tracing::info!("🤖 AI analysis: Using repository context for: '{}'", question);
+            let orchestrator = &ai_helpers.intelligent_orchestrator;
+            match orchestrator.make_intelligent_context_decision(question, has_repository).await {
+                Ok(decision) => {
+                    if decision.should_use_repo {
+                        tracing::info!("🧠 Multi-AI analysis: Using repository context for: '{}' (category: {:?}, confidence: {:.2})", 
+                            question, decision.primary_category, decision.confidence);
+                        tracing::debug!("🔍 AI reasoning: {}", decision.reasoning);
                     } else {
-                        tracing::info!("🤖 AI analysis: Skipping repository context for general question: '{}'", question);
+                        tracing::info!("🧠 Multi-AI analysis: Using general knowledge for: '{}' (category: {:?}, confidence: {:.2})", 
+                            question, decision.primary_category, decision.confidence);
+                        tracing::debug!("🔍 AI reasoning: {}", decision.reasoning);
                     }
-                    return should_use;
+                    return decision.should_use_repo;
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to get AI context analysis: {}, falling back to heuristics", e);
+                    tracing::warn!("Failed to get intelligent AI context analysis: {}, falling back to heuristics", e);
                 }
             }
         }

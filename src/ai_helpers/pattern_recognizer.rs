@@ -349,6 +349,28 @@ impl PatternRecognizer {
         });
     }
     
+    /// Analyze code patterns in text for question classification
+    pub async fn analyze_code_patterns(&self, text: &str, task: &str) -> Result<Vec<Pattern>> {
+        // Create a simple indexed knowledge for pattern analysis
+        let indexed = IndexedKnowledge {
+            id: format!("temp_{}", chrono::Utc::now().timestamp()),
+            content: text.to_string(),
+            embedding: vec![], // Empty embedding for temporary analysis
+            metadata: serde_json::Value::Object(serde_json::Map::new()),
+        };
+        
+        // Use existing pattern analysis but filter for code-specific patterns
+        let all_patterns = self.analyze_patterns(&indexed).await?;
+        
+        // Filter patterns relevant to code analysis
+        let code_patterns = all_patterns.into_iter()
+            .filter(|p| matches!(p.pattern_type, 
+                PatternType::Recurring | PatternType::Evolution | PatternType::Relationship))
+            .collect();
+        
+        Ok(code_patterns)
+    }
+
     /// Get pattern statistics
     pub async fn get_stats(&self) -> PatternStats {
         let store = self.pattern_store.read().await;

@@ -15,6 +15,7 @@ pub mod model_downloader;
 pub mod monitoring;
 pub mod python_models;
 pub mod chroma_store;
+pub mod intelligent_context_orchestrator;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -24,7 +25,7 @@ use tokio::sync::RwLock;
 pub use knowledge_indexer::KnowledgeIndexer;
 pub use context_retriever::ContextRetriever;
 pub use pattern_recognizer::PatternRecognizer;
-pub use quality_analyzer::QualityAnalyzer;
+pub use quality_analyzer::{QualityAnalyzer, QualityMetrics};
 pub use knowledge_synthesizer::KnowledgeSynthesizer;
 pub use vector_store::ChromaVectorStore;
 pub use parallel_processor::{ParallelProcessor, ParallelConfig};
@@ -32,6 +33,7 @@ pub use model_downloader::{ModelDownloader, DownloaderConfig, ModelInfo, Downloa
 pub use monitoring::{PerformanceMonitor, MonitoringConfig, OperationType, PerformanceStats};
 pub use python_models::{PythonModelService, PythonModelConfig};
 pub use chroma_store::{ChromaVectorStore as RealChromaVectorStore, ChromaConfig};
+pub use intelligent_context_orchestrator::{IntelligentContextOrchestrator, IntelligentContextDecision, QuestionCategory};
 
 /// Processed knowledge from AI helpers
 #[derive(Debug, Clone)]
@@ -143,6 +145,9 @@ pub struct AIHelperEcosystem {
     /// Local LLM for synthesis
     pub knowledge_synthesizer: Arc<KnowledgeSynthesizer>,
     
+    /// Intelligent Context Orchestrator coordinating all AI helpers
+    pub intelligent_orchestrator: Arc<IntelligentContextOrchestrator>,
+    
     /// Chroma for vector storage
     pub vector_store: Arc<ChromaVectorStore>,
     
@@ -203,6 +208,14 @@ impl AIHelperEcosystem {
             python_service.clone(),
         ).await?);
         
+        // Create intelligent context orchestrator coordinating all AI helpers
+        let intelligent_orchestrator = Arc::new(IntelligentContextOrchestrator::new(
+            context_retriever.clone(),
+            pattern_recognizer.clone(),
+            quality_analyzer.clone(),
+            knowledge_synthesizer.clone(),
+        ));
+        
         let state = Arc::new(RwLock::new(HelperState {
             total_facts: 0,
             total_patterns: 0,
@@ -221,6 +234,7 @@ impl AIHelperEcosystem {
             pattern_recognizer,
             quality_analyzer,
             knowledge_synthesizer,
+            intelligent_orchestrator,
             vector_store,
             python_service,
             parallel_processor,
