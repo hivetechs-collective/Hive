@@ -27,7 +27,7 @@ use crate::consensus::openrouter::{
 use crate::core::database::DatabaseManager;
 use crate::core::usage_tracker::UsageTracker;
 use crate::subscription::conversation_gateway::ConversationGateway;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 use std::sync::Arc;
@@ -534,6 +534,12 @@ impl ConsensusPipeline {
             //             }
 
             stage_results.push(stage_result);
+            
+            // Check for cancellation AFTER stage completes to prevent next stage from starting
+            if cancellation_token.is_cancelled() {
+                tracing::info!("Consensus cancelled after {} stage - stopping pipeline", stage.display_name());
+                return Err(anyhow!("Consensus was cancelled by user"));
+            }
         }
 
         // The final answer is from the Curator stage
