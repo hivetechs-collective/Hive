@@ -666,6 +666,17 @@ const DESKTOP_STYLES: &str = r#"
         50% { box-shadow: 0 0 30px rgba(255, 193, 7, 0.5); }
     }
 
+    @keyframes cancelPulse {
+        0%, 100% { 
+            opacity: 0.7;
+            transform: scale(1);
+        }
+        50% { 
+            opacity: 1;
+            transform: scale(1.05);
+        }
+    }
+
     /* Progress animations */
     .consensus-stage-running {
         animation: pulse 2s ease-in-out infinite;
@@ -2521,27 +2532,15 @@ fn App() -> Element {
                         }
                     }
 
-                    // Cancel button - displayed when consensus is running (subtle design)
-                    if *is_processing.read() {
-                        div {
-                            style: "display: flex; justify-content: flex-end; padding: 4px 8px; background: transparent;",
-                            
+                    // Input box at the bottom (Claude Code style)
+                    div {
+                        class: "input-container",
+                        style: "background: #181E21; border-top: 1px solid #2D3336; backdrop-filter: blur(10px); position: relative;",
+                        
+                        // Cancel button - displayed when consensus is running (on the left side)
+                        if *is_processing.read() {
                             button {
-                                style: "background: #2D3336; border: 1px solid #3A4144; color: #8B9094; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; opacity: 0.7;",
-                                onmouseover: move |evt| {
-                                    if let Ok(eval) = evt.target().map(|t| 
-                                        t.set_attribute("style", "background: #3A4144; border: 1px solid #4A5154; color: #A8B0B4; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; opacity: 1;")
-                                    ) {
-                                        let _ = eval;
-                                    }
-                                },
-                                onmouseout: move |evt| {
-                                    if let Ok(eval) = evt.target().map(|t| 
-                                        t.set_attribute("style", "background: #2D3336; border: 1px solid #3A4144; color: #8B9094; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; opacity: 0.7;")
-                                    ) {
-                                        let _ = eval;
-                                    }
-                                },
+                                style: "position: absolute; left: 12px; top: 12px; background: #2D3336; border: 1px solid #3A4144; color: #FFFFFF; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; z-index: 10; animation: cancelPulse 2s ease-in-out infinite;",
                                 onclick: {
                                     let consensus_manager = consensus_manager.clone();
                                     let mut is_processing = is_processing.clone();
@@ -2549,15 +2548,18 @@ fn App() -> Element {
                                     let mut current_response = current_response.clone();
                                     move |_| {
                                         tracing::info!("🛑 Cancel button clicked!");
+                                        
                                         if let Some(mut manager) = consensus_manager.read().clone() {
                                             spawn(async move {
                                                 match manager.cancel_consensus("User cancelled from UI").await {
                                                     Ok(_) => {
                                                         tracing::info!("✅ Consensus cancelled successfully");
-                                                        // Update UI state
+                                                        // Clear all consensus state and responses
                                                         app_state.write().consensus.complete_consensus();
+                                                        app_state.write().consensus.streaming_content.clear();
+                                                        app_state.write().consensus.current_stage = None;
                                                         *is_processing.write() = false;
-                                                        *current_response.write() = "<div style='color: #8B9094; font-style: italic;'>Consensus cancelled by user.</div>".to_string();
+                                                        *current_response.write() = String::new(); // Clear response completely
                                                     }
                                                     Err(e) => {
                                                         tracing::warn!("Failed to cancel consensus: {}", e);
@@ -2568,18 +2570,17 @@ fn App() -> Element {
                                     }
                                 },
                                 span { style: "font-size: 10px; opacity: 0.8;", "×" }
-                                span { "Cancel" }
+                                span { "Cancel Consensus" }
                             }
                         }
-                    }
-
-                    // Input box at the bottom (Claude Code style)
-                    div {
-                        class: "input-container",
-                        style: "background: #181E21; border-top: 1px solid #2D3336; backdrop-filter: blur(10px);",
+                        
                         textarea {
                             class: "query-input",
-                            style: "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF;",
+                            style: if *is_processing.read() { 
+                                "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF; padding-left: 80px;"
+                            } else { 
+                                "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF;" 
+                            },
                             value: "{input_value.read()}",
                             placeholder: "Ask Hive anything...",
                             disabled: *is_processing.read(),

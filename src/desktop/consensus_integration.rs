@@ -538,8 +538,16 @@ pub async fn process_consensus_events(
             ConsensusUIEvent::Cancelled { reason } => {
                 // Handle consensus cancellation
                 let mut state = app_state.write();
+                
+                // Clear all stage progress and streaming content
+                state.consensus.streaming_content.clear();
+                state.consensus.current_stage = None;
+                state.consensus.is_running = false;
+                state.consensus.is_active = false;
+                
+                // Reset all stage states by calling complete_consensus which resets everything
                 state.consensus.complete_consensus();
-                state.consensus.streaming_content.push_str(&format!("\n\n⚠️ Consensus cancelled: {}\n", reason));
+                
                 tracing::info!("Consensus cancelled in UI: {}", reason);
             }
             ConsensusUIEvent::Completed => {
@@ -724,19 +732,39 @@ impl DesktopConsensusManager {
         });
 
         // Wait for result
-        let result = handle.await??;
+        match handle.await? {
+            Ok(result) => {
+                // Only send completion event if consensus completed successfully
+                let _ = internal_sender_for_completion.send(ConsensusUIEvent::Completed);
+                
+                // Clear cached profile to force reload from database on next query
+                // This ensures profile changes are picked up immediately
+                {
+                    let engine = self.engine.lock().await;
+                    engine.clear_cached_profile().await;
+                }
 
-        // Send completion event to UI
-        let _ = internal_sender_for_completion.send(ConsensusUIEvent::Completed);
-        
-        // Clear cached profile to force reload from database on next query
-        // This ensures profile changes are picked up immediately
-        {
-            let engine = self.engine.lock().await;
-            engine.clear_cached_profile().await;
+                Ok((result, rx_stream))
+            }
+            Err(e) => {
+                // Check if this is a cancellation error
+                let error_string = e.to_string();
+                if error_string.contains("cancelled") || error_string.contains("Cancelled") {
+                    // Send Cancelled event to update UI
+                    let _ = internal_sender_for_completion.send(ConsensusUIEvent::Cancelled {
+                        reason: "User cancelled".to_string(),
+                    });
+                    
+                    tracing::info!("Consensus was cancelled");
+                    
+                    // Return empty result for cancelled consensus
+                    Ok(("".to_string(), rx_stream))
+                } else {
+                    // For other errors, propagate them
+                    Err(e)
+                }
+            }
         }
-
-        Ok((result, rx_stream))
     }
 
     /// Process a query with UI updates
@@ -752,7 +780,8 @@ impl DesktopConsensusManager {
             token.cancel(CancellationReason::UserRequested);
             tracing::info!("Consensus cancelled by user: {}", reason);
             
-            // UI state will be updated by the Cancelled event handler
+            // Clear the token since consensus is cancelled
+            *token_guard = None;
             
             Ok(())
         } else {

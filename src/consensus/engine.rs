@@ -452,12 +452,42 @@ impl ConsensusEngine {
 
         // Regular consensus processing with cancellation support
         let config = self.config.read().await.clone();
-        let profile = self.current_profile.read().await.clone();
+        
+        // Always load the active profile from database to ensure we use the latest selection
+        let profile = match Self::load_active_profile_from_db().await {
+            Ok(p) => {
+                tracing::info!("✅ Loaded active profile from database: {}", p.profile_name);
+                // Update the cached profile
+                *self.current_profile.write().await = p.clone();
+                
+                // Send profile info to UI callbacks
+                let _ = callbacks.on_profile_loaded(&p.profile_name, &vec![
+                    p.generator_model.clone(),
+                    p.refiner_model.clone(),
+                    p.validator_model.clone(),
+                    p.curator_model.clone(),
+                ]);
+                
+                p
+            }
+            Err(e) => {
+                tracing::error!("❌ Failed to load active profile from database: {}, using cached profile", e);
+                let cached = self.current_profile.read().await.clone();
+                tracing::warn!("📋 Using cached profile: {}", cached.profile_name);
+                cached
+            }
+        };
+        
         let api_key = self.openrouter_api_key.clone();
         
         // Create pipeline with callbacks and cancellation
         let mut pipeline = ConsensusPipeline::new(config, profile, api_key)
             .with_callbacks(callbacks);
+
+        // Set database if available
+        if let Some(ref db) = self.database {
+            pipeline = pipeline.with_database(db.clone());
+        }
 
         // Set repository context if available
         if let Some(repo_ctx) = self.repository_context.read().await.as_ref() {
