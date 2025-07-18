@@ -3,6 +3,7 @@
 
 use crate::consensus::repository_context::RepositoryContextManager;
 use crate::consensus::verified_context_builder::VerifiedContextBuilder;
+use crate::consensus::cancellation::{CancellationToken, CancellationReason, CancellationChecker};
 use crate::consensus::stages::{
     ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage,
     file_aware_generator::FileAwareGeneratorStage,
@@ -164,6 +165,27 @@ impl ConsensusPipeline {
         context: Option<String>,
         user_id: Option<String>,
     ) -> Result<ConsensusResult> {
+        let cancellation_token = CancellationToken::new();
+        self.run_with_cancellation(question, context, user_id, cancellation_token).await
+    }
+
+    /// Run the full consensus pipeline with cancellation support
+    pub async fn run_with_cancellation(
+        &self,
+        question: &str,
+        context: Option<String>,
+        user_id: Option<String>,
+        cancellation_token: CancellationToken,
+    ) -> Result<ConsensusResult> {
+        // Create cancellation checker for periodic checks
+        let mut cancellation_checker = CancellationChecker::new(
+            cancellation_token.clone(),
+            std::time::Duration::from_millis(500)
+        );
+
+        // Check for cancellation before starting
+        cancellation_token.throw_if_cancelled()?;
+
         // TODO: Re-enable usage tracking when database is unified
         // Check usage limits before running consensus
         // if let (Some(user_id), Some(usage_tracker)) = (user_id.as_ref(), &self.usage_tracker) {
@@ -324,6 +346,9 @@ impl ConsensusPipeline {
 
         // Run through all 4 stages
         for (i, stage_handler) in self.stages.iter().enumerate() {
+            // Check for cancellation before each stage
+            cancellation_checker.check_if_due()?;
+            
             let stage = stage_handler.stage();
 
             // Use model directly from profile - the maintenance system ensures these are always valid
@@ -420,6 +445,7 @@ impl ConsensusPipeline {
                     stage_context,
                     &conversation_id,
                     &model,
+                    &cancellation_token,
                 )
                 .await
                 .with_context(|| format!("Failed to run {} stage", stage.display_name()))?;
@@ -645,24 +671,39 @@ impl ConsensusPipeline {
         context: Option<&str>,
         conversation_id: &str,
         model: &str,
+        cancellation_token: &CancellationToken,
     ) -> Result<StageResult> {
+        // Check for cancellation at start of stage
+        cancellation_token.throw_if_cancelled()?;
+        
         let stage_start = Instant::now();
         let stage_id = Uuid::new_v4().to_string();
 
-        // Build messages for this stage
+        // Get intelligent context decision for this stage
+        let intelligent_context_decision = self.get_intelligent_context_decision_for_stage(question, context, stage).await;
+        
+        // Build messages for this stage using intelligent context decision
         let messages = match stage {
-            Stage::Generator if self.should_use_file_reading(question, context).await => {
+            Stage::Generator if intelligent_context_decision.should_use_repo => {
                 // Use enhanced generator with file reading for repository analysis
-                tracing::info!("Using enhanced generator with file reading");
+                tracing::info!("🧠 {} stage: Using repository context (AI decision: {:?}, confidence: {:.2})", 
+                    stage.display_name(), intelligent_context_decision.primary_category, intelligent_context_decision.confidence);
                 self.build_enhanced_generator_messages(question, previous_answer, context).await?
             }
-            Stage::Curator if self.should_use_file_reading(question, context).await => {
+            Stage::Curator if intelligent_context_decision.should_use_repo => {
                 // Use enhanced curator with file reading and writing capabilities
-                tracing::info!("Using enhanced curator with file operations");
+                tracing::info!("🧠 {} stage: Using repository context (AI decision: {:?}, confidence: {:.2})", 
+                    stage.display_name(), intelligent_context_decision.primary_category, intelligent_context_decision.confidence);
                 self.build_enhanced_curator_messages(question, previous_answer, context).await?
             }
             _ => {
-                handler.build_messages(question, previous_answer, context)?
+                // For all stages: build context-aware messages with intelligent guidance
+                tracing::info!("🧠 {} stage: Using {} context (AI decision: {:?}, confidence: {:.2})", 
+                    stage.display_name(), 
+                    if intelligent_context_decision.should_use_repo { "repository" } else { "general knowledge" },
+                    intelligent_context_decision.primary_category, 
+                    intelligent_context_decision.confidence);
+                self.build_stage_messages_with_intelligent_context(stage, handler, question, previous_answer, context, &intelligent_context_decision).await?
             }
         };
         
@@ -683,7 +724,7 @@ impl ConsensusPipeline {
 
         // Call model with retry logic for fallback models
         let mut response = self
-            .call_model(model, &messages, &mut tracker)
+            .call_model(model, &messages, &mut tracker, cancellation_token)
             .await
             .with_context(|| {
                 format!(
@@ -700,7 +741,7 @@ impl ConsensusPipeline {
 
             // Call with replacement model
             response = self
-                .call_model(replacement_model, &messages, &mut tracker)
+                .call_model(replacement_model, &messages, &mut tracker, cancellation_token)
                 .await
                 .with_context(|| {
                     format!(
@@ -822,7 +863,11 @@ impl ConsensusPipeline {
         model: &str,
         messages: &[crate::consensus::types::Message],
         tracker: &mut ProgressTracker,
+        cancellation_token: &CancellationToken,
     ) -> Result<ModelResponse> {
+        // Check for cancellation before making API call
+        cancellation_token.throw_if_cancelled()?;
+        
         // Check if OpenRouter client is available
         let openrouter_client = self.openrouter_client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("OpenRouter client not initialized. Please set OPENROUTER_API_KEY environment variable."))?;
@@ -1865,6 +1910,171 @@ impl ConsensusPipeline {
             let curator = crate::consensus::stages::CuratorStage::new();
             curator.build_messages(question, previous_answer, context)
         }
+    }
+
+    /// Get intelligent context decision for a specific stage
+    async fn get_intelligent_context_decision_for_stage(
+        &self,
+        question: &str,
+        context: Option<&str>,
+        stage: Stage,
+    ) -> crate::ai_helpers::IntelligentContextDecision {
+        let has_repository = self.repository_context.is_some();
+        
+        // Check for indexed codebase first (always use if available)
+        if let Some(ctx) = context {
+            if ctx.contains("SEMANTIC CODEBASE SEARCH RESULTS") {
+                tracing::info!("🧠 {} stage: Using indexed codebase knowledge for: '{}'", stage.display_name(), question);
+                return crate::ai_helpers::IntelligentContextDecision {
+                    should_use_repo: true,
+                    confidence: 1.0,
+                    primary_category: crate::ai_helpers::QuestionCategory::RepositorySpecific,
+                    secondary_categories: vec![],
+                    reasoning: "Indexed codebase knowledge available".to_string(),
+                    validation_score: 1.0,
+                    pattern_analysis: crate::ai_helpers::intelligent_context_orchestrator::PatternAnalysis {
+                        detected_patterns: vec!["indexed_codebase".to_string()],
+                        code_indicators: 1.0,
+                        repo_indicators: 1.0,
+                        general_indicators: 0.0,
+                        academic_indicators: 0.0,
+                    },
+                    quality_assessment: crate::ai_helpers::intelligent_context_orchestrator::QualityAssessment {
+                        context_appropriateness: 1.0,
+                        contamination_risk: 0.0,
+                        clarity_score: 1.0,
+                        complexity_level: 0.5,
+                    },
+                };
+            }
+        }
+
+        // Use intelligent orchestrator for sophisticated context analysis
+        if let Some(ai_helpers) = &self.ai_helpers {
+            let orchestrator = &ai_helpers.intelligent_orchestrator;
+            match orchestrator.make_intelligent_context_decision(question, has_repository).await {
+                Ok(decision) => {
+                    tracing::debug!("🧠 {} stage: AI context decision - category: {:?}, confidence: {:.2}, use_repo: {}", 
+                        stage.display_name(), decision.primary_category, decision.confidence, decision.should_use_repo);
+                    return decision;
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to get intelligent AI context analysis for {} stage: {}, falling back to heuristics", stage.display_name(), e);
+                }
+            }
+        }
+
+        // Fallback: basic context decision if AI helpers aren't available
+        let should_use_repo = if !has_repository {
+            false
+        } else {
+            // Use simple heuristics as fallback
+            let question_lower = question.to_lowercase();
+            question_lower.contains("this") || question_lower.contains("code") || question_lower.contains("repository")
+        };
+
+        crate::ai_helpers::IntelligentContextDecision {
+            should_use_repo,
+            confidence: 0.5,
+            primary_category: if should_use_repo { 
+                crate::ai_helpers::QuestionCategory::RepositorySpecific 
+            } else { 
+                crate::ai_helpers::QuestionCategory::GeneralKnowledge 
+            },
+            secondary_categories: vec![],
+            reasoning: "Fallback heuristic analysis".to_string(),
+            validation_score: 0.5,
+            pattern_analysis: crate::ai_helpers::intelligent_context_orchestrator::PatternAnalysis {
+                detected_patterns: vec!["heuristic_fallback".to_string()],
+                code_indicators: if should_use_repo { 0.7 } else { 0.2 },
+                repo_indicators: if should_use_repo { 0.8 } else { 0.1 },
+                general_indicators: if should_use_repo { 0.2 } else { 0.8 },
+                academic_indicators: 0.0,
+            },
+            quality_assessment: crate::ai_helpers::intelligent_context_orchestrator::QualityAssessment {
+                context_appropriateness: 0.7,
+                contamination_risk: 0.3,
+                clarity_score: 0.6,
+                complexity_level: 0.5,
+            },
+        }
+    }
+
+    /// Build stage messages with intelligent context guidance
+    async fn build_stage_messages_with_intelligent_context(
+        &self,
+        stage: Stage,
+        handler: &dyn ConsensusStage,
+        question: &str,
+        previous_answer: Option<&str>,
+        context: Option<&str>,
+        intelligent_decision: &crate::ai_helpers::IntelligentContextDecision,
+    ) -> Result<Vec<crate::consensus::types::Message>> {
+        use crate::consensus::types::Message;
+
+        // Get the base messages from the stage handler
+        let mut messages = handler.build_messages(question, previous_answer, context)?;
+
+        // Enhance system message with intelligent context guidance
+        if let Some(system_message) = messages.iter_mut().find(|m| m.role == "system") {
+            let context_guidance = match intelligent_decision.primary_category {
+                crate::ai_helpers::QuestionCategory::RepositorySpecific => {
+                    if intelligent_decision.should_use_repo {
+                        format!("\n\n🧠 INTELLIGENT CONTEXT GUIDANCE:\n\
+                            This question is repository-specific (confidence: {:.2}). Focus on the current codebase and use repository context.\n\
+                            Reasoning: {}\n\
+                            Stay focused on repository analysis and avoid general knowledge contamination.",
+                            intelligent_decision.confidence, intelligent_decision.reasoning)
+                    } else {
+                        format!("\n\n🧠 INTELLIGENT CONTEXT GUIDANCE:\n\
+                            This appears repository-specific but no repository context is available (confidence: {:.2}).\n\
+                            Reasoning: {}\n\
+                            Provide general guidance that could apply to similar codebases.",
+                            intelligent_decision.confidence, intelligent_decision.reasoning)
+                    }
+                }
+                crate::ai_helpers::QuestionCategory::GeneralProgramming => {
+                    format!("\n\n🧠 INTELLIGENT CONTEXT GUIDANCE:\n\
+                        This is a general programming question (confidence: {:.2}). Focus on programming concepts and best practices.\n\
+                        Reasoning: {}\n\
+                        Avoid repository-specific details and provide broadly applicable guidance.",
+                        intelligent_decision.confidence, intelligent_decision.reasoning)
+                }
+                crate::ai_helpers::QuestionCategory::AcademicKnowledge => {
+                    format!("\n\n🧠 INTELLIGENT CONTEXT GUIDANCE:\n\
+                        This is an academic/scientific question (confidence: {:.2}). Focus on theoretical knowledge and scientific concepts.\n\
+                        Reasoning: {}\n\
+                        Avoid programming or repository contamination. Stay in the academic domain.",
+                        intelligent_decision.confidence, intelligent_decision.reasoning)
+                }
+                crate::ai_helpers::QuestionCategory::GeneralKnowledge => {
+                    format!("\n\n🧠 INTELLIGENT CONTEXT GUIDANCE:\n\
+                        This is a general knowledge question (confidence: {:.2}). Focus on factual information and broad concepts.\n\
+                        Reasoning: {}\n\
+                        Avoid technical programming details or repository-specific information.",
+                        intelligent_decision.confidence, intelligent_decision.reasoning)
+                }
+                crate::ai_helpers::QuestionCategory::ComputerScience => {
+                    format!("\n\n🧠 INTELLIGENT CONTEXT GUIDANCE:\n\
+                        This is a computer science theory question (confidence: {:.2}). Focus on algorithms, data structures, and CS concepts.\n\
+                        Reasoning: {}\n\
+                        Provide theoretical CS knowledge without repository-specific implementation details.",
+                        intelligent_decision.confidence, intelligent_decision.reasoning)
+                }
+                _ => {
+                    format!("\n\n🧠 INTELLIGENT CONTEXT GUIDANCE:\n\
+                        Question category: {:?} (confidence: {:.2}). Contamination risk: {:.2}\n\
+                        Reasoning: {}\n\
+                        Focus appropriately on the identified domain to avoid context contamination.",
+                        intelligent_decision.primary_category, intelligent_decision.confidence, 
+                        intelligent_decision.quality_assessment.contamination_risk, intelligent_decision.reasoning)
+                }
+            };
+
+            system_message.content.push_str(&context_guidance);
+        }
+
+        Ok(messages)
     }
 }
 

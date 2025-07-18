@@ -8,6 +8,7 @@ use crate::consensus::{
     repository_context::RepositoryContextManager,
     streaming::{ProgressInfo, StreamingCallbacks},
     types::Stage,
+    cancellation::{CancellationToken, CancellationReason},
 };
 use crate::core::api_keys::ApiKeyManager;
 use crate::desktop::state::{AppState, ConsensusStage, StageInfo, StageStatus};
@@ -54,6 +55,9 @@ pub enum ConsensusUIEvent {
         total_remaining: u32,
     }, // New event for D1 auth info
     AnalyticsRefresh, // New event for analytics refresh after consensus completion
+    Cancelled { // New event for cancellation
+        reason: String,
+    },
 }
 
 /// Desktop streaming callbacks that send events to UI
@@ -530,6 +534,13 @@ pub async fn process_consensus_events(
                 state.analytics_refresh_trigger += 1;
                 tracing::info!("Analytics refresh triggered - new data available");
             }
+            ConsensusUIEvent::Cancelled { reason } => {
+                // Handle consensus cancellation
+                let mut state = app_state.write();
+                state.consensus.complete_consensus();
+                state.consensus.streaming_content.push_str(&format!("\n\n⚠️ Consensus cancelled: {}\n", reason));
+                tracing::info!("Consensus cancelled in UI: {}", reason);
+            }
         }
     }
 }
@@ -540,6 +551,7 @@ pub struct DesktopConsensusManager {
     engine: Arc<Mutex<ConsensusEngine>>,
     repository_context: Arc<RepositoryContextManager>,
     app_state: Signal<AppState>,
+    current_cancellation_token: Arc<Mutex<Option<CancellationToken>>>,
 }
 
 impl DesktopConsensusManager {
@@ -562,6 +574,7 @@ impl DesktopConsensusManager {
             engine: Arc::new(Mutex::new(engine)),
             repository_context,
             app_state,
+            current_cancellation_token: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -656,16 +669,29 @@ impl DesktopConsensusManager {
             internal_sender: tx_internal,
         });
 
+        // Create cancellation token for this consensus operation
+        let cancellation_token = CancellationToken::new();
+        
+        // Store the cancellation token so it can be cancelled
+        {
+            let mut token_guard = self.current_cancellation_token.lock().await;
+            *token_guard = Some(cancellation_token.clone());
+        }
+
         // Clone what we need for the async task
         let engine = self.engine.clone();
         let query = query.to_string();
         let callbacks_clone = callbacks.clone();
+        let cancellation_token_clone = cancellation_token.clone();
 
         // Get user_id from app state
         let user_id = self.app_state.read().user_id.clone();
 
         // Clone app state for D1 info update
         let app_state_d1 = self.app_state.clone();
+        
+        // Clone cancellation token manager to clear it when done
+        let token_manager = self.current_cancellation_token.clone();
 
         // Spawn the consensus processing
         let handle = tokio::spawn(async move {
@@ -675,8 +701,14 @@ impl DesktopConsensusManager {
             // No need to check here as it would be outdated by the time consensus completes
 
             let result = engine
-                .process_with_callbacks(&query, None, callbacks_clone, user_id)
+                .process_with_callbacks_and_cancellation(&query, None, callbacks_clone, user_id, cancellation_token_clone)
                 .await;
+
+            // Clear the cancellation token when done
+            {
+                let mut token_guard = token_manager.lock().await;
+                *token_guard = None;
+            }
 
             result.map(|r| {
                 r.result
@@ -704,6 +736,31 @@ impl DesktopConsensusManager {
     pub async fn process_query(&mut self, query: &str) -> Result<String> {
         let (result, _rx) = self.process_query_streaming(query).await?;
         Ok(result)
+    }
+
+    /// Cancel the currently running consensus
+    pub async fn cancel_consensus(&mut self, reason: &str) -> Result<()> {
+        let mut token_guard = self.current_cancellation_token.lock().await;
+        if let Some(token) = token_guard.as_ref() {
+            token.cancel(CancellationReason::UserRequested);
+            tracing::info!("Consensus cancelled by user: {}", reason);
+            
+            // Update UI state
+            {
+                let mut state = self.app_state.write();
+                state.consensus.complete_consensus();
+            }
+            
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("No consensus operation is currently running"))
+        }
+    }
+
+    /// Check if consensus is currently running and can be cancelled
+    pub async fn can_cancel(&self) -> bool {
+        let token_guard = self.current_cancellation_token.lock().await;
+        token_guard.is_some()
     }
 
     /// Get the consensus engine for direct access

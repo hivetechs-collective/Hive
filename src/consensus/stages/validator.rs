@@ -24,10 +24,14 @@ impl ConsensusStage for ValidatorStage {
     ) -> Result<Vec<Message>> {
         let refined_response = previous_answer.unwrap_or("No response to validate");
 
+        // Use intelligent context type if available, otherwise analyze content
+        let content_type = self.extract_intelligent_context_type(context)
+            .unwrap_or_else(|| self.analyze_content_type(refined_response));
+
         let mut messages = vec![Message {
             role: "system".to_string(),
             content: self
-                .build_validation_system_prompt(question, refined_response)
+                .build_enhanced_validation_system_prompt(question, refined_response, content_type)
                 .to_string(),
         }];
 
@@ -45,13 +49,15 @@ impl ConsensusStage for ValidatorStage {
             });
         }
 
-        // Perform automated checks first
-        let validation_report = self.perform_automated_validation(refined_response);
-        if !validation_report.is_empty() {
-            messages.push(Message {
-                role: "system".to_string(),
-                content: format!("AUTOMATED VALIDATION REPORT:\n{}", validation_report),
-            });
+        // Perform automated checks first (but skip for academic/general knowledge questions)
+        if !matches!(content_type, "academic" | "general_knowledge" | "computer_science") {
+            let validation_report = self.perform_automated_validation(refined_response);
+            if !validation_report.is_empty() {
+                messages.push(Message {
+                    role: "system".to_string(),
+                    content: format!("AUTOMATED VALIDATION REPORT:\n{}", validation_report),
+                });
+            }
         }
 
         // Add the question and refined response to validate
@@ -61,7 +67,7 @@ impl ConsensusStage for ValidatorStage {
                 "ORIGINAL QUESTION:\n{}\n\nEnhanced analysis from Refiner:\n{}\n\nVALIDATION TASKS:\n{}",
                 question,
                 refined_response,
-                self.get_validation_tasks_for_content(refined_response)
+                self.get_validation_tasks_for_content_type(content_type)
             ),
         });
 
@@ -74,10 +80,9 @@ impl ValidatorStage {
         Self
     }
 
-    /// Build enhanced system prompt for validation
-    pub fn build_validation_system_prompt(&self, question: &str, response: &str) -> String {
+    /// Build enhanced system prompt for validation with intelligent context awareness
+    pub fn build_enhanced_validation_system_prompt(&self, question: &str, response: &str, content_type: &str) -> String {
         let base_prompt = StagePrompts::validator_system();
-        let content_type = self.analyze_content_type(response);
 
         format!(
             "{}\n\nVALIDATION FOCUS: This is a {} response. Apply specialized validation appropriate for this content type.\n\nVALIDATION OBJECTIVES:\n{}",
@@ -85,6 +90,33 @@ impl ValidatorStage {
             content_type,
             self.get_validation_objectives_for_type(content_type)
         )
+    }
+    
+    /// Build enhanced system prompt for validation (legacy method for compatibility)
+    pub fn build_validation_system_prompt(&self, question: &str, response: &str) -> String {
+        let content_type = self.analyze_content_type(response);
+        self.build_enhanced_validation_system_prompt(question, response, content_type)
+    }
+    
+    /// Extract intelligent context guidance from system messages
+    fn extract_intelligent_context_type(&self, context: Option<&str>) -> Option<&'static str> {
+        if let Some(ctx) = context {
+            if ctx.contains("This is an academic/scientific question") {
+                Some("academic")
+            } else if ctx.contains("This is a general knowledge question") {
+                Some("general_knowledge")
+            } else if ctx.contains("This is a general programming question") {
+                Some("programming")
+            } else if ctx.contains("This question is repository-specific") {
+                Some("repository")
+            } else if ctx.contains("This is a computer science theory question") {
+                Some("computer_science")
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     /// Structure context specifically for validation
@@ -175,6 +207,54 @@ impl ValidatorStage {
         let content_type = self.analyze_content_type(response);
 
         match content_type {
+            "academic" => {
+                "1. Verify scientific accuracy and theoretical concepts\n2. Check mathematical formulations and equations\n3. Validate examples against established scientific principles\n4. Ensure proper academic terminology is used correctly\n5. Check for misconceptions or oversimplifications\n6. Verify that pseudocode/examples support theoretical concepts without code validation\n7. Ensure no contamination from programming or repository contexts"
+            }
+            "general_knowledge" => {
+                "1. Verify factual accuracy of all general information\n2. Check for balanced and unbiased presentation\n3. Validate examples are appropriate and correct\n4. Ensure information is current and relevant\n5. Check for potential misconceptions\n6. Verify accessibility for general audience\n7. Ensure no technical or repository contamination"
+            }
+            "programming" => {
+                "1. Verify programming concepts and best practices\n2. Check code examples for general applicability\n3. Validate security considerations in code\n4. Ensure examples are language-appropriate\n5. Check for proper error handling patterns\n6. Verify concepts apply broadly, not to specific projects\n7. Avoid repository-specific assumptions"
+            }
+            "repository" => {
+                "1. Verify information matches the specific repository\n2. Check file paths and references are accurate\n3. Validate code suggestions align with project structure\n4. Ensure recommendations fit project architecture\n5. Cross-reference with actual repository contents\n6. Verify dependencies and imports are valid\n7. Check project-specific conventions are followed"
+            }
+            "computer_science" => {
+                "1. Verify algorithmic and complexity analysis accuracy\n2. Check theoretical concepts and mathematical proofs\n3. Validate data structure explanations\n4. Ensure computational theory is correctly presented\n5. Check for proper CS terminology usage\n6. Verify examples support theoretical understanding\n7. Avoid implementation-specific contamination"
+            }
+            "code" => {
+                "1. Verify code syntax and functionality\n2. Check for security vulnerabilities\n3. Validate best practices and patterns\n4. Ensure error handling is present\n5. Verify documentation and comments\n6. Check for performance considerations"
+            }
+            "explanation" => {
+                "1. Verify factual accuracy of all statements\n2. Check logical flow and reasoning\n3. Ensure examples are correct and relevant\n4. Validate that all concepts are properly explained\n5. Check for potential misconceptions\n6. Ensure accessibility and clarity"
+            }
+            "analysis" => {
+                "1. Verify data accuracy and sources\n2. Check reasoning and logical consistency\n3. Validate conclusions against evidence\n4. Ensure multiple perspectives are considered\n5. Check for bias or incomplete analysis\n6. Verify actionability of recommendations"
+            }
+            _ => {
+                "1. Verify all factual claims\n2. Check for completeness and accuracy\n3. Ensure clarity and consistency\n4. Validate helpfulness and relevance\n5. Check for potential issues or errors\n6. Ensure appropriate tone and formatting"
+            }
+        }.to_string()
+    }
+    
+    /// Get validation tasks for a specific content type (intelligent context aware)
+    pub fn get_validation_tasks_for_content_type(&self, content_type: &str) -> String {
+        match content_type {
+            "academic" => {
+                "1. Verify scientific accuracy and theoretical concepts\n2. Check mathematical formulations and equations\n3. Validate examples against established scientific principles\n4. Ensure proper academic terminology is used correctly\n5. Check for misconceptions or oversimplifications\n6. Verify that pseudocode/examples support theoretical concepts without code validation\n7. Ensure no contamination from programming or repository contexts"
+            }
+            "general_knowledge" => {
+                "1. Verify factual accuracy of all general information\n2. Check for balanced and unbiased presentation\n3. Validate examples are appropriate and correct\n4. Ensure information is current and relevant\n5. Check for potential misconceptions\n6. Verify accessibility for general audience\n7. Ensure no technical or repository contamination"
+            }
+            "programming" => {
+                "1. Verify programming concepts and best practices\n2. Check code examples for general applicability\n3. Validate security considerations in code\n4. Ensure examples are language-appropriate\n5. Check for proper error handling patterns\n6. Verify concepts apply broadly, not to specific projects\n7. Avoid repository-specific assumptions"
+            }
+            "repository" => {
+                "1. Verify information matches the specific repository\n2. Check file paths and references are accurate\n3. Validate code suggestions align with project structure\n4. Ensure recommendations fit project architecture\n5. Cross-reference with actual repository contents\n6. Verify dependencies and imports are valid\n7. Check project-specific conventions are followed"
+            }
+            "computer_science" => {
+                "1. Verify algorithmic and complexity analysis accuracy\n2. Check theoretical concepts and mathematical proofs\n3. Validate data structure explanations\n4. Ensure computational theory is correctly presented\n5. Check for proper CS terminology usage\n6. Verify examples support theoretical understanding\n7. Avoid implementation-specific contamination"
+            }
             "code" => {
                 "1. Verify code syntax and functionality\n2. Check for security vulnerabilities\n3. Validate best practices and patterns\n4. Ensure error handling is present\n5. Verify documentation and comments\n6. Check for performance considerations"
             }
@@ -190,8 +270,25 @@ impl ValidatorStage {
         }.to_string()
     }
 
-    /// Analyze content type for targeted validation
+    /// Analyze content type for targeted validation using intelligent context guidance
     fn analyze_content_type(&self, response: &str) -> &'static str {
+        // First check if we have intelligent context guidance in the response
+        if response.contains("🧠 INTELLIGENT CONTEXT GUIDANCE:") {
+            // Extract the intelligent context decision from the system message
+            if response.contains("This is an academic/scientific question") {
+                return "academic";
+            } else if response.contains("This is a general knowledge question") {
+                return "general_knowledge";
+            } else if response.contains("This is a general programming question") {
+                return "programming";
+            } else if response.contains("This question is repository-specific") {
+                return "repository";
+            } else if response.contains("This is a computer science theory question") {
+                return "computer_science";
+            }
+        }
+        
+        // Fallback to content-based analysis only if no intelligent guidance
         if response.contains("```") || response.contains("function") || response.contains("class ")
         {
             "code"
@@ -213,6 +310,21 @@ impl ValidatorStage {
     /// Get validation objectives for different content types
     fn get_validation_objectives_for_type(&self, content_type: &str) -> &'static str {
         match content_type {
+            "academic" => {
+                "- Verify scientific accuracy and theoretical concepts\n- Check mathematical formulations and equations\n- Validate examples against established scientific principles\n- Ensure proper citation of scientific concepts\n- Avoid contamination from programming or repository contexts\n- Focus on academic rigor and theoretical understanding"
+            }
+            "general_knowledge" => {
+                "- Verify factual accuracy of general information\n- Check for balanced and unbiased presentation\n- Validate examples are appropriate and correct\n- Ensure information is current and relevant\n- Avoid technical programming or repository contamination\n- Focus on broad educational value"
+            }
+            "programming" => {
+                "- Verify programming concepts and best practices\n- Check code examples for correctness\n- Validate general applicability across projects\n- Ensure security considerations are addressed\n- Avoid repository-specific assumptions\n- Focus on widely applicable programming knowledge"
+            }
+            "repository" => {
+                "- Verify information matches the specific repository context\n- Check code suggestions align with project structure\n- Validate file paths and references are accurate\n- Ensure recommendations fit the project's architecture\n- Cross-reference with actual repository contents\n- Focus on project-specific accuracy"
+            }
+            "computer_science" => {
+                "- Verify algorithmic and theoretical accuracy\n- Check complexity analysis and mathematical proofs\n- Validate data structure explanations\n- Ensure theoretical concepts are correctly presented\n- Avoid implementation-specific details\n- Focus on computer science theory and principles"
+            }
             "code" => {
                 "- Ensure code compiles and runs correctly\n- Verify security best practices\n- Check for proper error handling\n- Validate performance considerations\n- Ensure code follows project conventions"
             }

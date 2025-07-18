@@ -383,6 +383,103 @@ impl ConsensusEngine {
             .context("Failed to run consensus pipeline with callbacks")
     }
 
+    /// Process a query with callbacks and cancellation support
+    pub async fn process_with_callbacks_and_cancellation(
+        &self,
+        query: &str,
+        semantic_context: Option<String>,
+        callbacks: Arc<dyn StreamingCallbacks>,
+        user_id: Option<String>,
+        cancellation_token: crate::consensus::cancellation::CancellationToken,
+    ) -> Result<ConsensusResult> {
+        // Check if this is a @codebase command
+        if CodebaseIntelligence::is_codebase_command(query) {
+            tracing::info!("🔍 Detected @codebase command: {}", query);
+            
+            // Handle @codebase command with a special consensus result
+            let (sender, mut receiver) = mpsc::unbounded_channel();
+            
+            // Handle the codebase command
+            match self.handle_codebase_command(query, sender).await {
+                Ok(_) => {
+                    // Collect all the streaming responses into a single result
+                    let mut content = String::new();
+                    while let Some(response) = receiver.recv().await {
+                        // Check for cancellation
+                        if cancellation_token.is_cancelled() {
+                            return Err(anyhow!("@codebase command was cancelled"));
+                        }
+                        
+                        match response {
+                            StreamingResponse::TokenReceived { token } => {
+                                content.push_str(&token);
+                            }
+                            StreamingResponse::Complete { response } => {
+                                // Return a special consensus result for @codebase
+                                return Ok(ConsensusResult {
+                                    success: true,
+                                    result: Some(response.content),
+                                    error: None,
+                                    stages: vec![],
+                                    conversation_id: uuid::Uuid::new_v4().to_string(),
+                                    total_duration: response.metadata.duration_ms as f64,
+                                    total_cost: response.metadata.cost,
+                                });
+                            }
+                            StreamingResponse::Error { error, .. } => {
+                                return Err(anyhow!("@codebase command failed: {}", error));
+                            }
+                            _ => {}
+                        }
+                    }
+                    
+                    // If we got here without a Complete response, return what we collected
+                    return Ok(ConsensusResult {
+                        success: true,
+                        result: Some(content),
+                        error: None,
+                        stages: vec![],
+                        conversation_id: String::new(),
+                        total_duration: 0.0,
+                        total_cost: 0.0,
+                    });
+                }
+                Err(e) => {
+                    return Err(anyhow!("@codebase command failed: {}", e));
+                }
+            }
+        }
+
+        // Regular consensus processing with cancellation support
+        let config = self.config.read().await.clone();
+        let profile = self.current_profile.read().await.clone();
+        let api_key = self.openrouter_api_key.clone();
+        
+        // Create pipeline with callbacks and cancellation
+        let mut pipeline = ConsensusPipeline::new(config, profile, api_key)
+            .with_callbacks(callbacks);
+
+        // Set repository context if available
+        if let Some(repo_ctx) = self.repository_context.read().await.as_ref() {
+            pipeline = pipeline.with_repository_context(repo_ctx.clone());
+        }
+
+        // Set AI helpers if available
+        if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
+            pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
+        }
+
+        // Set codebase intelligence if available
+        if let Some(ci) = self.codebase_intelligence.read().await.as_ref() {
+            pipeline = pipeline.with_codebase_intelligence(ci.clone());
+        }
+
+        pipeline
+            .run_with_cancellation(query, semantic_context, user_id, cancellation_token)
+            .await
+            .context("Failed to run consensus pipeline with callbacks and cancellation")
+    }
+
     /// Process with streaming responses for TUI integration
     pub async fn process_with_streaming(
         &self,

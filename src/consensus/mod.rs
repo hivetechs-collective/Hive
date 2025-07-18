@@ -1,6 +1,7 @@
 // Consensus Engine Module - 4-Stage Pipeline Implementation
 // Preserves exact behavior from TypeScript version with Rust performance
 
+pub mod cancellation;
 pub mod engine;
 pub mod file_operations;
 pub mod maintenance;
@@ -20,6 +21,7 @@ pub mod cross_validator;
 pub mod verified_context_builder;
 // pub mod optimize; // TODO: Fix profile field usage
 
+pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
 pub use engine::ConsensusEngine;
 pub use pipeline::ConsensusPipeline;
 pub use repository_context::{RepositoryContext, RepositoryContextManager};
