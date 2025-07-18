@@ -208,6 +208,14 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
     }
 
     fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
+        let error_str = error.to_string();
+        
+        // Don't send error event for cancellations - they're expected
+        if error_str.contains("cancelled") || error_str.contains("Cancelled") {
+            tracing::info!("Stage {:?} cancelled by user", stage);
+            return Ok(());
+        }
+        
         let consensus_stage = match stage {
             Stage::Generator => ConsensusStage::Generator,
             Stage::Refiner => ConsensusStage::Refiner,
@@ -366,6 +374,14 @@ impl StreamingCallbacks for DualChannelCallbacks {
     }
 
     fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
+        let error_str = error.to_string();
+        
+        // Don't send error event for cancellations - they're expected
+        if error_str.contains("cancelled") || error_str.contains("Cancelled") {
+            tracing::info!("Stage {:?} cancelled by user", stage);
+            return Ok(());
+        }
+        
         let consensus_stage = match stage {
             Stage::Generator => ConsensusStage::Generator,
             Stage::Refiner => ConsensusStage::Refiner,
