@@ -757,6 +757,13 @@ impl DesktopConsensusManager {
                     
                     tracing::info!("Consensus was cancelled");
                     
+                    // Clear cached profile to do a full reset
+                    {
+                        let engine = self.engine.lock().await;
+                        engine.clear_cached_profile().await;
+                        tracing::info!("Cleared cached profile after cancellation for full reset");
+                    }
+                    
                     // Return empty result for cancelled consensus
                     Ok(("".to_string(), rx_stream))
                 } else {
