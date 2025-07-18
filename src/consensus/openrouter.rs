@@ -160,6 +160,7 @@ impl OpenRouterClient {
         &self,
         mut request: OpenRouterRequest,
         callbacks: Option<Box<dyn StreamingCallbacks>>,
+        cancellation_token: Option<&crate::consensus::cancellation::CancellationToken>,
     ) -> Result<String> {
         request.stream = Some(true);
 
@@ -198,6 +199,17 @@ impl OpenRouterClient {
 
         // Process streaming response
         while let Some(chunk) = response.chunk().await.context("Failed to read chunk")? {
+            // Check for cancellation before processing each chunk
+            if let Some(token) = cancellation_token {
+                if token.is_cancelled() {
+                    tracing::info!("🛑 Streaming cancelled - stopping chunk processing");
+                    if let Some(cb) = &callbacks {
+                        cb.on_error(&anyhow::anyhow!("Streaming cancelled by user"));
+                    }
+                    return Err(anyhow::anyhow!("Streaming cancelled by user"));
+                }
+            }
+            
             let chunk_str = String::from_utf8_lossy(&chunk);
 
             // Parse Server-Sent Events format

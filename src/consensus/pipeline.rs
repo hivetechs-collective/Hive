@@ -912,7 +912,7 @@ impl ConsensusPipeline {
             }) as Box<dyn OpenRouterStreamingCallbacks>;
 
             match openrouter_client
-                .chat_completion_stream(request, Some(callbacks))
+                .chat_completion_stream(request, Some(callbacks), Some(cancellation_token))
                 .await
             {
                 Ok(response_content) => {
