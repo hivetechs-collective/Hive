@@ -365,7 +365,7 @@ impl ContextRetriever {
     }
     
     /// Analyze question using GraphCodeBERT to determine context needs
-    async fn analyze_question_context(&self, question: &str) -> Result<ContextDecision> {
+    pub async fn analyze_question_context(&self, question: &str) -> Result<ContextDecision> {
         let model = "microsoft/graphcodebert-base";
         
         match self.python_service.analyze_code(

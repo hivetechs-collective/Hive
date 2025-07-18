@@ -399,6 +399,27 @@ impl QualityAnalyzer {
         });
     }
     
+    /// Analyze text quality for context validation
+    pub async fn analyze_text_quality(&self, text: &str, task: &str) -> Result<QualityMetrics> {
+        // Create simple indexed knowledge for quality analysis
+        let indexed = IndexedKnowledge {
+            id: format!("temp_quality_{}", chrono::Utc::now().timestamp()),
+            content: text.to_string(),
+            embedding: vec![],
+            metadata: serde_json::Value::Object(serde_json::Map::new()),
+        };
+        
+        // Use existing quality evaluation
+        let quality_report = self.evaluate_quality(&indexed, task).await?;
+        
+        // Convert to QualityMetrics format
+        Ok(QualityMetrics {
+            overall_score: quality_report.overall_score,
+            clarity: quality_report.consistency_score, // Use consistency as clarity proxy
+            complexity: quality_report.completeness_score, // Use completeness as complexity proxy
+        })
+    }
+
     /// Get quality statistics
     pub async fn get_stats(&self) -> QualityStats {
         let history = self.quality_history.read().await;
@@ -415,6 +436,24 @@ impl QualityAnalyzer {
             average_score,
             common_issues: history.issue_frequencies.clone(),
             current_trend: history.trends.last().map(|t| format!("{:?}", t.trend_type)),
+        }
+    }
+}
+
+/// Quality metrics for context validation
+#[derive(Debug, Clone)]
+pub struct QualityMetrics {
+    pub overall_score: f64,
+    pub clarity: f64,
+    pub complexity: f64,
+}
+
+impl Default for QualityMetrics {
+    fn default() -> Self {
+        Self {
+            overall_score: 0.5,
+            clarity: 0.5,
+            complexity: 0.5,
         }
     }
 }
