@@ -2521,6 +2521,32 @@ fn App() -> Element {
                         }
                     }
 
+                    // Cancel button - displayed when consensus is running
+                    if *is_processing.read() {
+                        div {
+                            style: "display: flex; justify-content: center; padding: 12px; background: rgba(215, 58, 73, 0.1); border-top: 1px solid rgba(215, 58, 73, 0.3);",
+                            
+                            button {
+                                style: "background: #d73a49; border: none; color: white; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2);",
+                                onclick: {
+                                    let consensus_manager = consensus_manager.clone();
+                                    move |_| {
+                                        tracing::info!("🛑 Cancel button clicked!");
+                                        if let Some(mut manager) = consensus_manager.read().clone() {
+                                            spawn(async move {
+                                                if let Err(e) = manager.cancel_consensus("User cancelled from UI").await {
+                                                    tracing::warn!("Failed to cancel consensus: {}", e);
+                                                }
+                                            });
+                                        }
+                                    }
+                                },
+                                span { style: "font-size: 16px;", "✕" }
+                                span { "Cancel Consensus" }
+                            }
+                        }
+                    }
+
                     // Input box at the bottom (Claude Code style)
                     div {
                         class: "input-container",
