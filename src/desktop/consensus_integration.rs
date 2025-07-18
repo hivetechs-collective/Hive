@@ -58,6 +58,7 @@ pub enum ConsensusUIEvent {
     Cancelled { // New event for cancellation
         reason: String,
     },
+    Completed, // Event when consensus completes successfully
 }
 
 /// Desktop streaming callbacks that send events to UI
@@ -541,6 +542,12 @@ pub async fn process_consensus_events(
                 state.consensus.streaming_content.push_str(&format!("\n\n⚠️ Consensus cancelled: {}\n", reason));
                 tracing::info!("Consensus cancelled in UI: {}", reason);
             }
+            ConsensusUIEvent::Completed => {
+                // Handle consensus completion
+                let mut state = app_state.write();
+                state.consensus.complete_consensus();
+                tracing::info!("✅ Consensus completed successfully");
+            }
         }
     }
 }
@@ -657,6 +664,9 @@ impl DesktopConsensusManager {
         let (tx_stream, rx_stream) = mpsc::unbounded_channel();
         let (tx_internal, rx_internal) = mpsc::unbounded_channel();
 
+        // Clone internal sender for completion event before moving it
+        let internal_sender_for_completion = tx_internal.clone();
+
         // Spawn task to process events internally
         let app_state_events = self.app_state.clone();
         dioxus::prelude::spawn(async move {
@@ -686,9 +696,6 @@ impl DesktopConsensusManager {
 
         // Get user_id from app state
         let user_id = self.app_state.read().user_id.clone();
-
-        // Clone app state for D1 info update
-        let app_state_d1 = self.app_state.clone();
         
         // Clone cancellation token manager to clear it when done
         let token_manager = self.current_cancellation_token.clone();
@@ -719,8 +726,8 @@ impl DesktopConsensusManager {
         // Wait for result
         let result = handle.await??;
 
-        // Complete consensus in UI after the task completes
-        self.app_state.write().consensus.complete_consensus();
+        // Send completion event to UI
+        let _ = internal_sender_for_completion.send(ConsensusUIEvent::Completed);
         
         // Clear cached profile to force reload from database on next query
         // This ensures profile changes are picked up immediately
@@ -745,11 +752,7 @@ impl DesktopConsensusManager {
             token.cancel(CancellationReason::UserRequested);
             tracing::info!("Consensus cancelled by user: {}", reason);
             
-            // Update UI state
-            {
-                let mut state = self.app_state.write();
-                state.consensus.complete_consensus();
-            }
+            // UI state will be updated by the Cancelled event handler
             
             Ok(())
         } else {
