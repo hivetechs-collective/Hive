@@ -2631,26 +2631,36 @@ fn App() -> Element {
                                                         let error_msg = e.to_string();
                                                         let full_error_chain = format!("{:?}", e);
 
-                                                        // Debug: Log the full error to understand the structure
-                                                        tracing::error!("Full error: {}", error_msg);
-                                                        tracing::error!("Error chain: {}", full_error_chain);
-
-                                                        // Check for subscription limit errors at any level of the error chain
-                                                        if error_msg.contains("Daily conversation limit reached") ||
-                                                           error_msg.contains("no credits available") ||
-                                                           error_msg.contains("Authentication failed") ||
-                                                           error_msg.contains("Failed to authorize with D1") ||
-                                                           full_error_chain.contains("Daily conversation limit reached") ||
-                                                           full_error_chain.contains("no credits available") ||
-                                                           full_error_chain.contains("Authentication failed") ||
-                                                           full_error_chain.contains("Failed to authorize with D1") {
-                                                            // Show upgrade dialog for subscription limit errors
-                                                            tracing::info!("Detected subscription limit error, showing upgrade dialog");
-                                                            *show_upgrade_dialog.write() = true;
+                                                        // Check if this is a cancellation error
+                                                        if error_msg.contains("cancelled") || 
+                                                           error_msg.contains("Cancelled") ||
+                                                           full_error_chain.contains("cancelled") ||
+                                                           full_error_chain.contains("Cancelled") {
+                                                            // Don't show error for cancellation - it's expected behavior
+                                                            tracing::info!("Consensus was cancelled by user");
                                                             *current_response.write() = String::new(); // Clear response area
                                                         } else {
-                                                            // Show technical errors normally
-                                                            *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);
+                                                            // Debug: Log the full error to understand the structure
+                                                            tracing::error!("Full error: {}", error_msg);
+                                                            tracing::error!("Error chain: {}", full_error_chain);
+
+                                                            // Check for subscription limit errors at any level of the error chain
+                                                            if error_msg.contains("Daily conversation limit reached") ||
+                                                               error_msg.contains("no credits available") ||
+                                                               error_msg.contains("Authentication failed") ||
+                                                               error_msg.contains("Failed to authorize with D1") ||
+                                                               full_error_chain.contains("Daily conversation limit reached") ||
+                                                               full_error_chain.contains("no credits available") ||
+                                                               full_error_chain.contains("Authentication failed") ||
+                                                               full_error_chain.contains("Failed to authorize with D1") {
+                                                                // Show upgrade dialog for subscription limit errors
+                                                                tracing::info!("Detected subscription limit error, showing upgrade dialog");
+                                                                *show_upgrade_dialog.write() = true;
+                                                                *current_response.write() = String::new(); // Clear response area
+                                                            } else {
+                                                                // Show technical errors normally
+                                                                *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);
+                                                            }
                                                         }
                                                     }
                                                 }
