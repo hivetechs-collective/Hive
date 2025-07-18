@@ -19,6 +19,7 @@ pub mod verification;
 pub mod fact_checker;
 pub mod cross_validator;
 pub mod verified_context_builder;
+pub mod operation_intelligence;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -38,6 +39,7 @@ pub use verification::{RepositoryFacts, RepositoryVerifier, build_stage_context}
 pub use fact_checker::{FactChecker, ValidationResult, Contradiction, RecommendedAction};
 pub use cross_validator::{CrossValidator, ConsensusHealth, StageDiscrepancy, ConsensusReport, SemanticContradiction, ContradictionType, ContradictionSeverity};
 pub use verified_context_builder::VerifiedContextBuilder;
+pub use operation_intelligence::{OperationIntelligenceCoordinator, OperationAnalysis, ActionRecommendation, OperationStatistics};
 
 // Re-export commonly used items
 pub use models::{DynamicModelSelector, ModelInfo, ModelManager};
