@@ -492,6 +492,7 @@ impl ConsensusState {
         self.total_tokens = 0;
         self.estimated_cost = 0.0;
         self.streaming_content.clear();
+        tracing::info!("🚀 ConsensusState::start_consensus() - is_running set to true");
     }
 
     pub fn update_progress(&mut self, stage: ConsensusStage, progress: u8) {
@@ -507,6 +508,7 @@ impl ConsensusState {
         self.is_active = false;
         self.is_running = false;
         self.current_stage = None;
+        tracing::info!("🛑 ConsensusState::complete_consensus() - is_running set to false");
     }
 
     pub fn add_tokens(&mut self, tokens: usize, cost: f64) {

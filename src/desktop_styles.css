@@ -421,29 +421,6 @@ body {
     cursor: not-allowed;
 }
 
-.cancel-btn {
-    padding: 10px 20px;
-    background: #d73a49;
-    border: none;
-    border-radius: 4px;
-    color: white;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    outline: none;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.cancel-btn:hover {
-    background: #cb2431;
-}
-
-.cancel-btn:active {
-    background: #b52d3a;
-}
-
 /* Right Panel */
 .right-panel {
     width: 280px;

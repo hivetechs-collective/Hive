@@ -13,6 +13,8 @@ use dioxus::prelude::*;
 pub fn ChatInterface() -> Element {
     let app_state = use_context::<Signal<AppState>>();
     let state = app_state.read();
+    let api_keys_version = use_context::<Signal<u32>>();
+    let consensus_manager = use_consensus_with_version(*api_keys_version.read());
 
     rsx! {
         div {
@@ -26,6 +28,36 @@ pub fn ChatInterface() -> Element {
                 } else {
                     for message in &state.chat.messages {
                         ChatMessageItem { message: message.clone() }
+                    }
+                }
+            }
+
+            // Cancel button area - placed between messages and input
+            if state.consensus.is_running {
+                div {
+                    style: "display: flex; justify-content: center; padding: 12px; background: rgba(215, 58, 73, 0.05); border-top: 1px solid rgba(215, 58, 73, 0.2); border-bottom: 1px solid rgba(215, 58, 73, 0.2);",
+                    
+                    button {
+                        style: "background: #d73a49; border: none; color: white; padding: 10px 24px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2);",
+                        onmouseover: move |_| {
+                            tracing::info!("🔥 Cancel button hovered!");
+                        },
+                        onclick: {
+                            let consensus_manager = consensus_manager.clone();
+                            move |_| {
+                                tracing::info!("🛑 Cancel button clicked from ChatInterface!");
+                                if let Some(ref mut manager) = consensus_manager.as_ref() {
+                                    let mut manager_clone = manager.clone();
+                                    spawn(async move {
+                                        if let Err(e) = manager_clone.cancel_consensus("User cancelled from chat interface").await {
+                                            tracing::warn!("Failed to cancel consensus: {}", e);
+                                        }
+                                    });
+                                }
+                            }
+                        },
+                        span { style: "font-size: 16px;", "✕" }
+                        span { "Cancel Consensus Run" }
                     }
                 }
             }
@@ -280,11 +312,11 @@ fn process_message(
                     {
                         show_onboarding_clone.set(true);
                     }
+                    
+                    // Complete consensus on error
+                    app_state_consensus.write().consensus.complete_consensus();
                 }
             }
-
-            // Complete consensus
-            app_state_consensus.write().consensus.complete_consensus();
         });
     }
 }
@@ -354,6 +386,12 @@ fn ChatInput() -> Element {
         }
     };
 
+    // Read consensus state to trigger reactivity
+    let is_consensus_running = app_state.read().consensus.is_running;
+    tracing::info!("🔍 ChatInput render - consensus.is_running: {}", is_consensus_running);
+    tracing::info!("🔍 ChatInput render - consensus.is_active: {}", app_state.read().consensus.is_active);
+    tracing::info!("🔍 ChatInput render - consensus.current_stage: {:?}", app_state.read().consensus.current_stage);
+
     rsx! {
         div {
             class: "chat-input-container",
@@ -377,62 +415,25 @@ fn ChatInput() -> Element {
                     spellcheck: "false",
                 }
 
-                // Show Cancel button when consensus is running, otherwise show Send button
-                if app_state.read().consensus.is_running {
-                    button {
-                        class: "cancel-btn",
-                        onclick: {
-                            let consensus_manager = consensus_manager.clone();
-                            move |_| {
-                                if let Some(ref mut manager) = consensus_manager.as_ref() {
-                                    let mut manager_clone = manager.clone();
-                                    spawn(async move {
-                                        if let Err(e) = manager_clone.cancel_consensus("User cancelled").await {
-                                            tracing::warn!("Failed to cancel consensus: {}", e);
-                                        }
-                                    });
-                                }
-                            }
-                        },
-                        svg {
-                            width: "20",
-                            height: "20",
-                            view_box: "0 0 24 24",
-                            fill: "none",
-                            stroke: "currentColor",
-                            stroke_width: "2",
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            rect {
-                                x: "6",
-                                y: "6",
-                                width: "12",
-                                height: "12",
-                                rx: "2"
-                            }
+                // Send button (always show, but disabled when input is empty or consensus is running)
+                button {
+                    class: if input_text.read().trim().is_empty() || is_consensus_running { "send-btn disabled" } else { "send-btn" },
+                    onclick: on_send_click,
+                    disabled: input_text.read().trim().is_empty() || is_consensus_running,
+                    svg {
+                        width: "20",
+                        height: "20",
+                        view_box: "0 0 24 24",
+                        fill: "none",
+                        stroke: "currentColor",
+                        stroke_width: "2",
+                        stroke_linecap: "round",
+                        stroke_linejoin: "round",
+                        path {
+                            d: "M22 2L11 13"
                         }
-                        "Cancel"
-                    }
-                } else {
-                    button {
-                        class: if input_text.read().trim().is_empty() { "send-btn disabled" } else { "send-btn" },
-                        onclick: on_send_click,
-                        disabled: input_text.read().trim().is_empty(),
-                        svg {
-                            width: "20",
-                            height: "20",
-                            view_box: "0 0 24 24",
-                            fill: "none",
-                            stroke: "currentColor",
-                            stroke_width: "2",
-                            stroke_linecap: "round",
-                            stroke_linejoin: "round",
-                            path {
-                                d: "M22 2L11 13"
-                            }
-                            path {
-                                d: "M22 2L15 22L11 13L2 9L22 2Z"
-                            }
+                        path {
+                            d: "M22 2L15 22L11 13L2 9L22 2Z"
                         }
                     }
                 }
