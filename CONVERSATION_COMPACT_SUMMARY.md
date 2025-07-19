@@ -5,7 +5,7 @@ Implement Claude Code-style auto-accept functionality in hive-consensus desktop 
 
 ## 📍 Current Status
 
-### ✅ Completed (15/48 tasks - 31% done)
+### ✅ Completed (17/48 tasks - 35% done)
 1. **AI-Enhanced Auto-Accept Implementation Guide** - Comprehensive 816-line guide with complete architecture
 2. **Operation Intelligence Infrastructure** - Core coordinator managing all AI helpers
 3. **Knowledge Indexer Enhancement** - File operation tracking, similarity search, success prediction
@@ -21,17 +21,16 @@ Implement Claude Code-style auto-accept functionality in hive-consensus desktop 
 13. **Intelligent User Feedback** - AI-powered explanations with risk/confidence details and suggestions
 14. **Advanced Confidence Scoring** - Multi-factor weighted scoring with ML predictions
 15. **Operation Parser** - Natural language parsing with AI context enhancement
+16. **Operation Validator** - Multi-layer validation with security, syntax, and conflict checks
+17. **Operation Preview** - Before/after visualization with diffs and impact analysis
 
 ### 🚧 In Progress
-Ready to implement AI-enhanced operation validation pipeline.
+Ready to implement operation dependency graph generation and sequencing.
 
-### 📋 Remaining Major Tasks (33)
-**Infrastructure (4 tasks)**
-- AI-enhanced validation pipeline
-- Operation preview system
+### 📋 Remaining Major Tasks (31)
+**Infrastructure (2 tasks)**
 - Dependency graph generation
 - Rollback plan generation
-- Safety guardrails
 
 **UI Components (5 tasks)**
 - Control bar with AI insights
