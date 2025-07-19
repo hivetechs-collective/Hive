@@ -351,7 +351,7 @@ impl OperationClusterer {
             match op {
                 FileOperation::Create { .. } => creates += 1,
                 FileOperation::Update { .. } => updates += 1,
-                FileOperation::Rename { .. } | FileOperation::Move { .. } => renames += 1,
+                FileOperation::Rename { .. } => renames += 1,
                 _ => {}
             }
         }
