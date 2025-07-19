@@ -1,0 +1,408 @@
+/* Keyboard Shortcuts Styles */
+
+.keyboard-handler {
+    width: 100%;
+    height: 100%;
+}
+
+/* Shortcuts toggle button */
+.keyboard-shortcuts {
+    position: relative;
+}
+
+.shortcuts-toggle {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: #e0e0e0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 12px;
+}
+
+.shortcuts-toggle:hover {
+    background: #333;
+    border-color: #555;
+}
+
+/* Shortcuts panel */
+.shortcuts-panel {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 8px;
+    width: 480px;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 2000;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.shortcuts-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #333;
+    background: #252525;
+    border-radius: 8px 8px 0 0;
+}
+
+.shortcuts-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+    background: #333;
+    color: #e0e0e0;
+}
+
+/* Shortcuts content */
+.shortcuts-content {
+    padding: 20px;
+}
+
+.shortcut-section {
+    margin-bottom: 24px;
+}
+
+.shortcut-section:last-child {
+    margin-bottom: 0;
+}
+
+.shortcut-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #e0e0e0;
+    border-bottom: 1px solid #333;
+    padding-bottom: 6px;
+}
+
+/* Shortcut items */
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 0;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.shortcut-item:last-child {
+    border-bottom: none;
+}
+
+.shortcut-keys {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 140px;
+}
+
+.key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    background: #333;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #e0e0e0;
+    min-width: 24px;
+    height: 24px;
+    font-family: monospace;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.plus {
+    color: #666;
+    font-size: 10px;
+    margin: 0 2px;
+}
+
+.shortcut-description {
+    flex: 1;
+    font-size: 13px;
+    color: #bbb;
+    line-height: 1.4;
+}
+
+/* Mode descriptions */
+.mode-description-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.mode-description-item:last-child {
+    border-bottom: none;
+}
+
+.mode-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 4px;
+}
+
+.mode-desc {
+    font-size: 12px;
+    color: #999;
+    line-height: 1.4;
+}
+
+/* Mode change notification */
+.mode-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 3000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    pointer-events: none;
+}
+
+.mode-notification.visible {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    min-width: 280px;
+}
+
+.notification-content:hover {
+    background: #252525;
+}
+
+.notification-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.notification-message {
+    flex: 1;
+    font-size: 14px;
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.notification-close:hover {
+    background: #333;
+    color: #e0e0e0;
+}
+
+/* Mode indicator */
+.mode-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.mode-indicator.mode-conservative {
+    background: rgba(76, 175, 80, 0.1);
+    color: #4CAF50;
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.mode-indicator.mode-balanced {
+    background: rgba(33, 150, 243, 0.1);
+    color: #2196F3;
+    border-color: rgba(33, 150, 243, 0.3);
+}
+
+.mode-indicator.mode-aggressive {
+    background: rgba(255, 152, 0, 0.1);
+    color: #FF9800;
+    border-color: rgba(255, 152, 0, 0.3);
+}
+
+.mode-indicator.mode-plan {
+    background: rgba(156, 39, 176, 0.1);
+    color: #9C27B0;
+    border-color: rgba(156, 39, 176, 0.3);
+}
+
+.mode-indicator.mode-manual {
+    background: rgba(96, 125, 139, 0.1);
+    color: #607D8B;
+    border-color: rgba(96, 125, 139, 0.3);
+}
+
+.mode-icon {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.8;
+}
+
+.mode-text {
+    font-family: monospace;
+}
+
+/* Scrollbar for shortcuts panel */
+.shortcuts-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.shortcuts-panel::-webkit-scrollbar-track {
+    background: #1e1e1e;
+    border-radius: 4px;
+}
+
+.shortcuts-panel::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 4px;
+}
+
+.shortcuts-panel::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Animation for mode indicator changes */
+@keyframes modeIndicatorPulse {
+    0% {
+        box-shadow: 0 0 0 0 currentColor;
+    }
+    70% {
+        box-shadow: 0 0 0 6px transparent;
+    }
+    100% {
+        box-shadow: 0 0 0 0 transparent;
+    }
+}
+
+.mode-indicator {
+    animation: modeIndicatorPulse 0.6s ease-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .shortcuts-panel {
+        width: 90vw;
+        max-width: 400px;
+        right: 5vw;
+    }
+    
+    .shortcuts-content {
+        padding: 16px;
+    }
+    
+    .shortcut-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .shortcut-keys {
+        min-width: auto;
+    }
+    
+    .mode-notification {
+        right: 10px;
+        left: 10px;
+        width: auto;
+    }
+    
+    .notification-content {
+        min-width: auto;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .shortcuts-panel {
+        border: 2px solid #666;
+    }
+    
+    .key {
+        border: 2px solid #666;
+        background: #000;
+    }
+    
+    .mode-indicator {
+        border-width: 2px;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .mode-notification,
+    .shortcuts-toggle,
+    .close-btn,
+    .notification-close,
+    .mode-indicator {
+        transition: none;
+    }
+    
+    .mode-notification.visible {
+        transform: none;
+    }
+    
+    @keyframes modeIndicatorPulse {
+        0%, 100% {
+            box-shadow: none;
+        }
+    }
+}
