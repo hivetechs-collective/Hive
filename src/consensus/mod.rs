@@ -22,6 +22,7 @@ pub mod verified_context_builder;
 pub mod operation_intelligence;
 pub mod operation_history;
 pub mod smart_decision_engine;
+pub mod operation_clustering;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -49,6 +50,10 @@ pub use operation_intelligence::{
 pub use smart_decision_engine::{
     SmartDecisionEngine, ExecutionDecision, UserDecision, UserChoice,
     UserPreferences, CustomRule, RuleAction, DecisionMetrics
+};
+pub use operation_clustering::{
+    OperationClusterer, OperationCluster, ClusterType, ClusteringResult,
+    ClusteringConfig
 };
 
 // Re-export commonly used items
