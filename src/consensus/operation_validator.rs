@@ -350,7 +350,7 @@ impl FileSystemValidator {
                 name: "Source file check".to_string(),
                 category: CheckCategory::FileSystem,
                 status: CheckStatus::Failed,
-                message: format!("Source file {} does not exist", old_path.display()),
+                message: format!("Source file {} does not exist", from.display()),
                 severity: Severity::Error,
             });
         }

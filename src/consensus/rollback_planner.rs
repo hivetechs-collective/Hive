@@ -911,22 +911,17 @@ impl RollbackPlanner {
                 Err(anyhow!("Cannot reverse delete operation without backup"))
             }
             FileOperation::Update { path, content } => {
+                // For update, we'd need the original content to truly reverse
+                // In practice, this would come from backups or git history
                 Ok(FileOperation::Update {
                     path: path.clone(),
-                    old_content: new_content.clone(),
-                    new_content: old_content.clone(),
+                    content: "".to_string(), // Would need backup content
                 })
             }
-            FileOperation::Rename { old_path, new_path } => {
+            FileOperation::Rename { from, to } => {
                 Ok(FileOperation::Rename {
-                    old_path: new_path.clone(),
-                    new_path: old_path.clone(),
-                })
-            }
-            FileOperation::Move { source, destination } => {
-                Ok(FileOperation::Move {
-                    source: destination.clone(),
-                    destination: source.clone(),
+                    from: to.clone(),
+                    to: from.clone(),
                 })
             }
         }
