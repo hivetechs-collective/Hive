@@ -36,7 +36,18 @@ pub struct OperationHistoryDatabase {
     stats_cache: Arc<RwLock<Option<CachedStatistics>>>,
 }
 
+impl std::fmt::Debug for OperationHistoryDatabase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OperationHistoryDatabase")
+            .field("pool", &"<SqlitePool>")
+            .field("cache", &self.cache)
+            .field("stats_cache", &self.stats_cache)
+            .finish()
+    }
+}
+
 /// In-memory cache for recent operations
+#[derive(Debug)]
 struct OperationCache {
     /// Recent operations by ID
     operations: HashMap<Uuid, OperationRecord>,
@@ -52,6 +63,7 @@ struct OperationCache {
 }
 
 /// Cached statistics with expiry
+#[derive(Debug)]
 struct CachedStatistics {
     stats: OperationStatistics,
     expires_at: DateTime<Utc>,
