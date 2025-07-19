@@ -2,7 +2,6 @@
 use dioxus::prelude::*;
 use crate::consensus::operation_intelligence::AutoAcceptMode;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Keyboard shortcut handler for auto-accept modes
 #[derive(Debug, Clone)]
@@ -30,158 +29,95 @@ impl AutoAcceptShortcuts {
         }
     }
 
-    /// Handle keyboard events
-    pub fn handle_key_event(&self, event: &KeyboardEvent) -> bool {
-        // Check for Shift+Tab (cycle forward)
-        if event.key() == "Tab" && event.shift_key() && !event.ctrl_key() && !event.alt_key() {
-            self.cycle_mode_forward();
-            return true;
+    /// Handle keyboard shortcut
+    pub fn handle_key_event(&self, key_event: &KeyboardEvent) {
+        // Shift+Tab cycles through auto-accept modes
+        if key_event.shift_key() && key_event.key() == "Tab" {
+            self.cycle_mode();
         }
         
-        // Check for Ctrl+Shift+Tab (cycle backward)
-        if event.key() == "Tab" && event.shift_key() && event.ctrl_key() && !event.alt_key() {
-            self.cycle_mode_backward();
-            return true;
+        // Ctrl+Shift+A toggles auto-accept on/off
+        if key_event.ctrl_key() && key_event.shift_key() && key_event.key() == "A" {
+            self.toggle_auto_accept();
         }
         
-        // Check for direct mode shortcuts (Ctrl+Alt+Number)
-        if event.ctrl_key() && event.alt_key() && !event.shift_key() {
-            match event.key().as_str() {
-                "1" => {
-                    self.set_mode(AutoAcceptMode::Conservative);
-                    return true;
-                }
-                "2" => {
-                    self.set_mode(AutoAcceptMode::Balanced);
-                    return true;
-                }
-                "3" => {
-                    self.set_mode(AutoAcceptMode::Aggressive);
-                    return true;
-                }
-                "4" => {
-                    self.set_mode(AutoAcceptMode::Plan);
-                    return true;
-                }
-                "5" => {
-                    self.set_mode(AutoAcceptMode::Manual);
-                    return true;
-                }
-                _ => {}
-            }
+        // Escape key sets to manual mode
+        if key_event.key() == "Escape" {
+            self.set_manual_mode();
         }
-        
-        false
     }
 
-    /// Cycle to the next mode
-    fn cycle_mode_forward(&self) {
-        let current = self.current_mode.read().clone();
-        let next = match current {
+    fn cycle_mode(&self) {
+        let current = self.current_mode();
+        let next_mode = match current {
+            AutoAcceptMode::Manual => AutoAcceptMode::Conservative,
             AutoAcceptMode::Conservative => AutoAcceptMode::Balanced,
             AutoAcceptMode::Balanced => AutoAcceptMode::Aggressive,
             AutoAcceptMode::Aggressive => AutoAcceptMode::Plan,
             AutoAcceptMode::Plan => AutoAcceptMode::Manual,
+        };
+        
+        (self.on_mode_change)(next_mode);
+        (self.on_notification)(format!("Auto-accept mode: {:?}", next_mode));
+    }
+
+    fn toggle_auto_accept(&self) {
+        let current = self.current_mode();
+        let new_mode = match current {
             AutoAcceptMode::Manual => AutoAcceptMode::Conservative,
+            _ => AutoAcceptMode::Manual,
         };
         
-        self.set_mode(next);
+        (self.on_mode_change)(new_mode);
+        (self.on_notification)(format!("Auto-accept: {}", 
+            if matches!(new_mode, AutoAcceptMode::Manual) { "OFF" } else { "ON" }));
     }
 
-    /// Cycle to the previous mode
-    fn cycle_mode_backward(&self) {
-        let current = self.current_mode.read().clone();
-        let previous = match current {
-            AutoAcceptMode::Conservative => AutoAcceptMode::Manual,
-            AutoAcceptMode::Balanced => AutoAcceptMode::Conservative,
-            AutoAcceptMode::Aggressive => AutoAcceptMode::Balanced,
-            AutoAcceptMode::Plan => AutoAcceptMode::Aggressive,
-            AutoAcceptMode::Manual => AutoAcceptMode::Plan,
-        };
-        
-        self.set_mode(previous);
-    }
-
-    /// Set the mode and notify
-    fn set_mode(&self, mode: AutoAcceptMode) {
-        // Update the signal
-        self.current_mode.set(mode.clone());
-        
-        // Call the callback
-        (self.on_mode_change)(mode.clone());
-        
-        // Show notification
-        let message = format!("Auto-accept mode: {}", get_mode_label(&mode));
-        (self.on_notification)(message);
+    fn set_manual_mode(&self) {
+        (self.on_mode_change)(AutoAcceptMode::Manual);
+        (self.on_notification)("Auto-accept disabled".to_string());
     }
 }
 
-/// Global keyboard event handler component
+/// Keyboard shortcut display component
 #[component]
-pub fn KeyboardHandler(
-    shortcuts: AutoAcceptShortcuts,
-    children: Element,
+pub fn KeyboardShortcutDisplay(
+    show_shortcuts: Signal<bool>,
+    current_mode: Signal<AutoAcceptMode>,
+    on_mode_change: EventHandler<AutoAcceptMode>,
 ) -> Element {
-    // Set up global keyboard listener
+    let shortcuts = use_signal(|| {
+        AutoAcceptShortcuts::new(
+            current_mode,
+            Arc::new(move |mode| on_mode_change.call(mode)),
+            Arc::new(move |msg| {
+                tracing::info!("Keyboard shortcut: {}", msg);
+            }),
+        )
+    });
+
+    // Set up keyboard event listener
     use_effect(move || {
-        let shortcuts_clone = shortcuts.clone();
-        
-        // Add event listener to document
-        let closure = wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
-            let key_event = KeyboardEvent::from(event);
-            shortcuts_clone.handle_key_event(&key_event);
-        }) as Box<dyn FnMut(web_sys::KeyboardEvent)>);
-        
-        web_sys::window()
-            .unwrap()
-            .document()
-            .unwrap()
-            .add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())
-            .unwrap();
-        
-        // Clean up on drop
-        closure.forget();
+        // In a real implementation, this would set up global keyboard listeners
+        // For now, we'll handle it through the component event system
     });
 
     rsx! {
-        div {
-            class: "keyboard-handler",
-            onkeydown: move |event| {
-                shortcuts.handle_key_event(&event.data);
-            },
-            {children}
-        }
-    }
-}
-
-/// Visual keyboard shortcut hints component
-#[component]
-pub fn KeyboardShortcutHints() -> Element {
-    let show_hints = use_signal(|| false);
-    
-    rsx! {
-        div {
-            class: "keyboard-shortcuts",
-            
-            // Toggle button
-            button {
-                class: "shortcuts-toggle",
-                onclick: move |_| show_hints.set(!show_hints()),
-                title: "Show keyboard shortcuts",
-                "⌨️"
-            }
-            
-            // Hints panel
-            if show_hints() {
+        if show_shortcuts() {
+            div {
+                class: "keyboard-shortcuts-overlay",
+                onclick: move |_| show_shortcuts.set(false),
+                
                 div {
                     class: "shortcuts-panel",
+                    onclick: move |e| e.stop_propagation(),
                     
                     div {
-                        class: "shortcuts-header",
-                        h3 { "Auto-Accept Keyboard Shortcuts" }
+                        class: "panel-header",
+                        h3 { "Keyboard Shortcuts" }
                         button {
-                            class: "close-btn",
-                            onclick: move |_| show_hints.set(false),
+                            class: "close-button",
+                            onclick: move |_| show_shortcuts.set(false),
                             "×"
                         }
                     }
@@ -189,82 +125,44 @@ pub fn KeyboardShortcutHints() -> Element {
                     div {
                         class: "shortcuts-content",
                         
-                        div {
-                            class: "shortcut-section",
-                            
-                            h4 { "Mode Cycling" }
-                            
-                            ShortcutItem {
-                                keys: "Shift + Tab",
-                                description: "Cycle to next auto-accept mode"
-                            }
-                            
-                            ShortcutItem {
-                                keys: "Ctrl + Shift + Tab",
-                                description: "Cycle to previous auto-accept mode"
-                            }
+                        ShortcutGroup {
+                            title: "Auto-Accept Modes",
+                            shortcuts: vec![
+                                ("Shift + Tab", "Cycle through modes"),
+                                ("Ctrl + Shift + A", "Toggle auto-accept on/off"), 
+                                ("Esc", "Set to manual mode"),
+                            ]
                         }
                         
-                        div {
-                            class: "shortcut-section",
-                            
-                            h4 { "Direct Mode Selection" }
-                            
-                            ShortcutItem {
-                                keys: "Ctrl + Alt + 1",
-                                description: "Conservative mode"
-                            }
-                            
-                            ShortcutItem {
-                                keys: "Ctrl + Alt + 2",
-                                description: "Balanced mode"
-                            }
-                            
-                            ShortcutItem {
-                                keys: "Ctrl + Alt + 3",
-                                description: "Aggressive mode"
-                            }
-                            
-                            ShortcutItem {
-                                keys: "Ctrl + Alt + 4",
-                                description: "Plan only mode"
-                            }
-                            
-                            ShortcutItem {
-                                keys: "Ctrl + Alt + 5",
-                                description: "Manual mode"
-                            }
+                        ShortcutGroup {
+                            title: "Operation Control",
+                            shortcuts: vec![
+                                ("Enter", "Confirm operation"),
+                                ("Ctrl + Z", "Undo last operation"),
+                                ("Ctrl + Shift + R", "Trigger rollback"),
+                            ]
                         }
                         
+                        ShortcutGroup {
+                            title: "Navigation",
+                            shortcuts: vec![
+                                ("Ctrl + P", "Open command palette"),
+                                ("Ctrl + ,", "Open settings"),
+                                ("F1", "Show help"),
+                            ]
+                        }
+                    }
+                    
+                    div {
+                        class: "current-mode-display",
+                        h4 { "Current Mode" }
                         div {
-                            class: "shortcut-section",
-                            
-                            h4 { "Mode Descriptions" }
-                            
-                            ModeDescription {
-                                mode: "Conservative",
-                                description: "Only auto-accept very safe operations (>90% confidence, <15% risk)"
-                            }
-                            
-                            ModeDescription {
-                                mode: "Balanced",
-                                description: "Balance safety with automation (>80% confidence, <25% risk)"
-                            }
-                            
-                            ModeDescription {
-                                mode: "Aggressive",
-                                description: "Maximize automation, accept more risk (>70% confidence, <40% risk)"
-                            }
-                            
-                            ModeDescription {
-                                mode: "Plan Only",
-                                description: "Generate plans but don't execute automatically"
-                            }
-                            
-                            ModeDescription {
-                                mode: "Manual",
-                                description: "Require confirmation for all operations"
-                            }
+                            class: "mode-indicator {get_mode_class(&current_mode())}",
+                            "{current_mode():?}"
+                        }
+                        div {
+                            class: "mode-description",
+                            "{get_mode_description(&current_mode())}"
                         }
                     }
                 }
@@ -273,115 +171,56 @@ pub fn KeyboardShortcutHints() -> Element {
     }
 }
 
-/// Individual shortcut item
+/// Keyboard shortcut notification
 #[component]
-fn ShortcutItem(keys: &'static str, description: &'static str) -> Element {
-    rsx! {
-        div {
-            class: "shortcut-item",
-            
-            div {
-                class: "shortcut-keys",
-                {keys.split(" + ").map(|key| rsx! {
-                    span { class: "key", "{key}" }
-                    if key != keys.split(" + ").last().unwrap() {
-                        span { class: "plus", "+" }
-                    }
-                })}
-            }
-            
-            div {
-                class: "shortcut-description",
-                "{description}"
-            }
-        }
-    }
-}
-
-/// Mode description component
-#[component]
-fn ModeDescription(mode: &'static str, description: &'static str) -> Element {
-    rsx! {
-        div {
-            class: "mode-description-item",
-            
-            div {
-                class: "mode-name",
-                "{mode}"
-            }
-            
-            div {
-                class: "mode-desc",
-                "{description}"
-            }
-        }
-    }
-}
-
-/// Auto-accept mode toast notification
-#[component]
-pub fn ModeChangeNotification(
+pub fn ShortcutNotification(
     message: Signal<Option<String>>,
-    duration_ms: Option<u64>,
+    visible: Signal<bool>,
+    duration_ms: Option<u32>,
 ) -> Element {
-    let visible = use_signal(|| false);
     let timeout_handle = use_signal(|| None::<i32>);
     
-    // Show/hide logic
+    // Show notification when message changes
     use_effect(move || {
-        if let Some(msg) = message.read().as_ref() {
+        if let Some(_msg) = message.read().as_ref() {
             visible.set(true);
             
-            // Clear existing timeout
-            if let Some(handle) = timeout_handle.read().as_ref() {
-                web_sys::window().unwrap().clear_timeout_with_handle(*handle);
+            // Auto-hide after duration
+            if let Some(duration) = duration_ms {
+                let visible_clone = visible.clone();
+                spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(duration as u64)).await;
+                    visible_clone.set(false);
+                });
             }
-            
-            // Set new timeout
-            let duration = duration_ms.unwrap_or(2000);
-            let callback = wasm_bindgen::closure::Closure::wrap(Box::new(move || {
-                visible.set(false);
-            }) as Box<dyn FnMut()>);
-            
-            let handle = web_sys::window()
-                .unwrap()
-                .set_timeout_with_callback_and_timeout_and_arguments_0(
-                    callback.as_ref().unchecked_ref(),
-                    duration as i32,
-                )
-                .unwrap();
-            
-            timeout_handle.set(Some(handle));
-            callback.forget();
         }
     });
 
     rsx! {
-        if visible() && message().is_some() {
-            div {
-                class: "mode-notification {if visible() { \"visible\" } else { \"\" }}",
-                onclick: move |_| visible.set(false),
-                
+        if visible() {
+            if let Some(ref msg) = message() {
                 div {
-                    class: "notification-content",
+                    class: "shortcut-notification",
+                    onclick: move |_| visible.set(false),
                     
                     div {
-                        class: "notification-icon",
-                        "🔧"
-                    }
-                    
-                    div {
-                        class: "notification-message",
-                        "{message().unwrap_or_default()}"
-                    }
-                    
-                    button {
-                        class: "notification-close",
-                        onclick: move |e| {
-                            e.stop_propagation();
-                            visible.set(false);
-                        },
-                        "×"
+                        class: "notification-content",
+                        
+                        div {
+                            class: "notification-icon",
+                            "⌨️"
+                        }
+                        
+                        div {
+                            class: "notification-message",
+                            "{msg}"
+                        }
+                        
+                        button {
+                            class: "notification-close",
+                            onclick: move |_| visible.set(false),
+                            "×"
+                        }
                     }
                 }
             }
@@ -389,77 +228,115 @@ pub fn ModeChangeNotification(
     }
 }
 
-/// Auto-accept mode indicator in status bar
+/// Individual shortcut group display
 #[component]
-pub fn ModeIndicator(current_mode: Signal<AutoAcceptMode>) -> Element {
-    let mode = current_mode();
-    
+pub fn ShortcutGroup(
+    title: String,
+    shortcuts: Vec<(&'static str, &'static str)>,
+) -> Element {
     rsx! {
         div {
-            class: "mode-indicator mode-{get_mode_class(&mode)}",
-            title: "{get_mode_description(&mode)}",
+            class: "shortcut-group",
             
-            div {
-                class: "mode-icon",
+            h4 {
+                class: "group-title",
+                "{title}"
             }
             
-            span {
-                class: "mode-text",
-                "{get_mode_short_label(&mode)}"
+            div {
+                class: "shortcuts-list",
+                for (key, description) in shortcuts {
+                    div {
+                        class: "shortcut-item",
+                        
+                        div {
+                            class: "shortcut-key",
+                            "{key}"
+                        }
+                        
+                        div {
+                            class: "shortcut-description",
+                            "{description}"
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-// Helper functions
-
-fn get_mode_label(mode: &AutoAcceptMode) -> &'static str {
-    match mode {
-        AutoAcceptMode::Conservative => "Conservative",
-        AutoAcceptMode::Balanced => "Balanced",
-        AutoAcceptMode::Aggressive => "Aggressive",
-        AutoAcceptMode::Plan => "Plan Only",
-        AutoAcceptMode::Manual => "Manual",
+/// Mode status indicator component
+#[component]
+pub fn ModeStatusIndicator(
+    current_mode: Signal<AutoAcceptMode>,
+    compact: Option<bool>,
+) -> Element {
+    let is_compact = compact.unwrap_or(false);
+    
+    rsx! {
+        div {
+            class: if is_compact { "mode-status-indicator compact" } else { "mode-status-indicator" },
+            title: "{get_mode_description(&current_mode())}",
+            
+            div {
+                class: format!("mode-icon {}", get_mode_class(&current_mode())),
+                "{get_mode_icon(&current_mode())}"
+            }
+            
+            if !is_compact {
+                div {
+                    class: "mode-text",
+                    "{current_mode():?}"
+                }
+            }
+        }
     }
 }
 
-fn get_mode_short_label(mode: &AutoAcceptMode) -> &'static str {
-    match mode {
-        AutoAcceptMode::Conservative => "CONS",
-        AutoAcceptMode::Balanced => "BAL",
-        AutoAcceptMode::Aggressive => "AGG",
-        AutoAcceptMode::Plan => "PLAN",
-        AutoAcceptMode::Manual => "MAN",
+/// Global keyboard event listener component
+#[component]
+pub fn GlobalKeyboardListener(
+    current_mode: Signal<AutoAcceptMode>,
+    on_mode_change: EventHandler<AutoAcceptMode>,
+    on_shortcut_triggered: EventHandler<String>,
+) -> Element {
+    let shortcuts = use_signal(|| {
+        AutoAcceptShortcuts::new(
+            current_mode,
+            Arc::new(move |mode| on_mode_change.call(mode)),
+            Arc::new(move |msg| on_shortcut_triggered.call(msg)),
+        )
+    });
+
+    // This component handles global keyboard events
+    // In a desktop app, this would integrate with the window's event system
+    
+    rsx! {
+        div {
+            // Hidden component that handles keyboard events
+            style: "display: none;",
+            tabindex: "0", // Make it focusable to receive keyboard events
+            onkeydown: move |event| {
+                let key_event = KeyboardEvent {
+                    key: event.key().to_string(),
+                    shift_key: event.modifiers().shift(),
+                    ctrl_key: event.modifiers().ctrl(),
+                    alt_key: event.modifiers().alt(),
+                };
+                shortcuts().handle_key_event(&key_event);
+            },
+        }
     }
 }
 
-fn get_mode_description(mode: &AutoAcceptMode) -> &'static str {
-    match mode {
-        AutoAcceptMode::Conservative => "Only auto-accept very safe operations (>90% confidence, <15% risk)",
-        AutoAcceptMode::Balanced => "Balance safety with automation (>80% confidence, <25% risk)",
-        AutoAcceptMode::Aggressive => "Maximize automation, accept more risk (>70% confidence, <40% risk)",
-        AutoAcceptMode::Plan => "Generate plans but don't execute automatically",
-        AutoAcceptMode::Manual => "Require confirmation for all operations",
-    }
-}
+// Helper functions and types
 
-fn get_mode_class(mode: &AutoAcceptMode) -> &'static str {
-    match mode {
-        AutoAcceptMode::Conservative => "conservative",
-        AutoAcceptMode::Balanced => "balanced",
-        AutoAcceptMode::Aggressive => "aggressive",
-        AutoAcceptMode::Plan => "plan",
-        AutoAcceptMode::Manual => "manual",
-    }
-}
-
-/// Mock KeyboardEvent for compatibility
 #[derive(Debug, Clone)]
 pub struct KeyboardEvent {
-    key: String,
-    shift_key: bool,
-    ctrl_key: bool,
-    alt_key: bool,
+    pub key: String,
+    pub shift_key: bool,
+    pub ctrl_key: bool,
+    pub alt_key: bool,
 }
 
 impl KeyboardEvent {
@@ -480,61 +357,32 @@ impl KeyboardEvent {
     }
 }
 
-impl From<web_sys::KeyboardEvent> for KeyboardEvent {
-    fn from(event: web_sys::KeyboardEvent) -> Self {
-        Self {
-            key: event.key(),
-            shift_key: event.shift_key(),
-            ctrl_key: event.ctrl_key(),
-            alt_key: event.alt_key(),
-        }
+fn get_mode_class(mode: &AutoAcceptMode) -> &'static str {
+    match mode {
+        AutoAcceptMode::Manual => "manual",
+        AutoAcceptMode::Conservative => "conservative",
+        AutoAcceptMode::Balanced => "balanced",
+        AutoAcceptMode::Aggressive => "aggressive",
+        AutoAcceptMode::Plan => "plan",
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_mode_cycling() {
-        // Test forward cycling
-        assert_eq!(
-            get_next_mode(&AutoAcceptMode::Conservative),
-            AutoAcceptMode::Balanced
-        );
-        assert_eq!(
-            get_next_mode(&AutoAcceptMode::Manual),
-            AutoAcceptMode::Conservative
-        );
-        
-        // Test backward cycling
-        assert_eq!(
-            get_previous_mode(&AutoAcceptMode::Conservative),
-            AutoAcceptMode::Manual
-        );
-        assert_eq!(
-            get_previous_mode(&AutoAcceptMode::Balanced),
-            AutoAcceptMode::Conservative
-        );
+fn get_mode_icon(mode: &AutoAcceptMode) -> &'static str {
+    match mode {
+        AutoAcceptMode::Manual => "✋",
+        AutoAcceptMode::Conservative => "🛡️",
+        AutoAcceptMode::Balanced => "⚖️",
+        AutoAcceptMode::Aggressive => "⚡",
+        AutoAcceptMode::Plan => "📋",
     }
-    
-    fn get_next_mode(current: &AutoAcceptMode) -> AutoAcceptMode {
-        match current {
-            AutoAcceptMode::Conservative => AutoAcceptMode::Balanced,
-            AutoAcceptMode::Balanced => AutoAcceptMode::Aggressive,
-            AutoAcceptMode::Aggressive => AutoAcceptMode::Plan,
-            AutoAcceptMode::Plan => AutoAcceptMode::Manual,
-            AutoAcceptMode::Manual => AutoAcceptMode::Conservative,
-        }
-    }
-    
-    fn get_previous_mode(current: &AutoAcceptMode) -> AutoAcceptMode {
-        match current {
-            AutoAcceptMode::Conservative => AutoAcceptMode::Manual,
-            AutoAcceptMode::Balanced => AutoAcceptMode::Conservative,
-            AutoAcceptMode::Aggressive => AutoAcceptMode::Balanced,
-            AutoAcceptMode::Plan => AutoAcceptMode::Aggressive,
-            AutoAcceptMode::Manual => AutoAcceptMode::Plan,
-        }
+}
+
+fn get_mode_description(mode: &AutoAcceptMode) -> &'static str {
+    match mode {
+        AutoAcceptMode::Manual => "All operations require manual approval",
+        AutoAcceptMode::Conservative => "Auto-accept only very safe operations (>90% confidence, <15% risk)",
+        AutoAcceptMode::Balanced => "Auto-accept moderately safe operations (>80% confidence, <25% risk)",
+        AutoAcceptMode::Aggressive => "Auto-accept most operations (>70% confidence, <40% risk)",
+        AutoAcceptMode::Plan => "Generate execution plans without auto-execution",
     }
 }

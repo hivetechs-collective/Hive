@@ -61,7 +61,7 @@ pub fn AutoAcceptControl(
                             div {
                                 class: "confidence-indicator",
                                 style: "background: {get_confidence_color(analysis.unified_score.confidence)}",
-                                "{format!("{:.0}%", analysis.unified_score.confidence)}"
+                                "{analysis.unified_score.confidence:.0}%"
                             }
                         }
                         

@@ -3,7 +3,7 @@
 use crate::core::api_keys::ApiKeyManager;
 use crate::desktop::{
     chat::ChatInterface,
-    components::HiveLogoSmall,
+    // components::HiveLogoSmall,
     consensus::ConsensusProgress,
     dialogs::{AboutDialog, CommandPalette, OnboardingDialog, SettingsDialog},
     events::{EventDispatcher, KeyboardEventUtils},
@@ -465,7 +465,7 @@ fn MenuBar() -> Element {
             div {
                 style: "{title_style}",
                 // HiveTechs Logo
-                HiveLogoSmall {}
+                // HiveLogoSmall {}
                 span {
                     style: "font-weight: 400;",
                     "HiveTechs Consensus"

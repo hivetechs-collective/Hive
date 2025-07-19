@@ -1,16 +1,16 @@
 // Smart Decision Engine - Intelligent auto-accept decisions based on AI analysis
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
+use uuid::Uuid;
 
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::operation_analysis::{
-    OperationAnalysis, UnifiedScore, AutoAcceptMode, OperationContext,
-    ActionPriority, OperationOutcome
+    OperationAnalysis, AutoAcceptMode, ActionPriority, OperationOutcome
 };
 use crate::consensus::operation_history::OperationHistoryDatabase;
 
@@ -311,7 +311,7 @@ impl SmartDecisionEngine {
     async fn make_aggressive_decision(
         &self,
         analysis: &OperationAnalysis,
-        prefs: &UserPreferences,
+        _prefs: &UserPreferences,
     ) -> Result<ExecutionDecision> {
         let score = &analysis.unified_score;
         
@@ -349,18 +349,33 @@ impl SmartDecisionEngine {
         // Update operation history if available
         if let Some(history_db) = &self.history_db {
             let outcome = match &decision.decision {
-                UserChoice::Execute => OperationOutcome::Success,
-                UserChoice::Skip => OperationOutcome::Skipped,
-                UserChoice::ModifyAndExecute { .. } => OperationOutcome::Modified,
+                UserChoice::Execute => OperationOutcome {
+                    success: true,
+                    error_message: None,
+                    execution_time_ms: 0,
+                    rollback_required: false,
+                    user_satisfaction: None,
+                },
+                UserChoice::Skip => OperationOutcome {
+                    success: false,
+                    error_message: Some("User skipped operation".to_string()),
+                    execution_time_ms: 0,
+                    rollback_required: false,
+                    user_satisfaction: None,
+                },
+                UserChoice::ModifyAndExecute { .. } => OperationOutcome {
+                    success: true,
+                    error_message: None,
+                    execution_time_ms: 0,
+                    rollback_required: false,
+                    user_satisfaction: None,
+                },
             };
             
-            // Record the outcome
-            history_db.record_operation_outcome(
-                &decision.operation_id,
-                outcome,
-                decision.feedback.clone(),
-                None,
-            ).await?;
+            // Record the outcome - need to parse operation_id as UUID
+            if let Ok(uuid) = uuid::Uuid::parse_str(&decision.operation_id) {
+                history_db.update_outcome(uuid, &outcome)?;
+            }
         }
         
         // Analyze patterns in user decisions
@@ -424,9 +439,9 @@ impl SmartDecisionEngine {
                 let path = match op {
                     FileOperation::Create { path, .. } |
                     FileOperation::Update { path, .. } |
+                    FileOperation::Append { path, .. } |
                     FileOperation::Delete { path } |
-                    FileOperation::Rename { old_path: path, .. } |
-                    FileOperation::Move { source: path, .. } => path,
+                    FileOperation::Rename { from: path, .. } => path,
                 };
                 
                 if regex.is_match(&path.to_string_lossy()) {
@@ -466,11 +481,11 @@ impl SmartDecisionEngine {
 
     async fn get_similar_operation_success_rate(
         &self,
-        analysis: &OperationAnalysis,
+        _analysis: &OperationAnalysis,
         history_db: &Arc<OperationHistoryDatabase>,
     ) -> Result<f32> {
         // Query historical data for similar operations
-        let stats = history_db.get_statistics().await?;
+        let stats = history_db.get_statistics()?;
         
         // Simple heuristic: if we have enough data, use success rate
         if stats.total_operations > 50 {

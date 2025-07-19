@@ -31,6 +31,10 @@ pub mod operation_validator;
 pub mod operation_preview;
 pub mod dependency_graph;
 pub mod rollback_planner;
+pub mod rollback_executor;
+pub mod outcome_tracker;
+pub mod learning_system;
+pub mod safety_guardrails;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -98,6 +102,27 @@ pub use rollback_planner::{
     RollbackStep, RollbackOperation, BackupInfo, BackupMethod,
     RollbackRiskAssessment, RollbackRisk, RiskCategory, DataLossPotential,
     VerificationStep, VerificationType, RollbackExecutionResult
+};
+pub use rollback_executor::{
+    RollbackExecutor, RollbackExecutionConfig, RollbackExecution, RollbackExecutionStatus,
+    RollbackStepResult, RollbackStepStatus, RollbackError, RollbackErrorType,
+    RollbackSummary, ProgressTracker, RollbackProgress, VerificationResult,
+    BackupManager, GitManager, VerificationSystem
+};
+pub use outcome_tracker::{
+    OperationOutcomeTracker, OutcomeTrackingConfig, TrackedOutcome, OperationResult,
+    OutcomeAccuracy, PredictionError, PredictionErrorType, AccuracyMetrics,
+    HelperAccuracy, LearningInsights, ErrorPattern, RetrainingResult
+};
+pub use learning_system::{
+    ContinuousLearningSystem, LearningSystemConfig, LearningState, LearningExperiment,
+    ExperimentType, ExperimentStatus, ExperimentResult, LearningCycleResult,
+    PendingImprovement, LearningSystemStatus, LearningTrend
+};
+pub use safety_guardrails::{
+    SafetyGuardrailSystem, SafetyConfig, SafetyValidator, SafetyValidationResult,
+    SafetyViolation, ViolationSeverity, SafetyContext, SafetyRule, RulePattern,
+    ComprehensiveSafetyResult, EnforcementAction, ExecutionRequirements, SafetyMetrics
 };
 
 // Re-export commonly used items

@@ -89,7 +89,7 @@ pub struct DangerousPattern {
 }
 
 /// Types of dangerous patterns
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum DangerousPatternType {
     MassDeletion,
     OverwriteWithoutBackup,
@@ -97,6 +97,10 @@ pub enum DangerousPatternType {
     BreakingChange,
     DataLoss,
     SecurityVulnerability,
+    ConcurrentAccess,
+    ResourceExhaustion,
+    PermissionEscalation,
+    ConfigurationDrift,
 }
 
 /// Severity of dangerous patterns
@@ -133,6 +137,19 @@ pub enum ClusterType {
     Cleanup,
     Migration,
     Testing,
+}
+
+impl ClusterType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ClusterType::Refactoring => "refactoring",
+            ClusterType::FeatureAddition => "feature_addition",
+            ClusterType::BugFix => "bug_fix",
+            ClusterType::Cleanup => "cleanup",
+            ClusterType::Migration => "migration",
+            ClusterType::Testing => "testing",
+        }
+    }
 }
 
 /// Anti-pattern that creates technical debt
@@ -193,6 +210,17 @@ pub enum ConflictType {
     DependencyViolation,
     RaceCondition,
     LogicalInconsistency,
+}
+
+impl ConflictType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ConflictType::FileOverwrite => "file_overwrite",
+            ConflictType::DependencyViolation => "dependency_violation",
+            ConflictType::RaceCondition => "race_condition",
+            ConflictType::LogicalInconsistency => "logical_inconsistency",
+        }
+    }
 }
 
 /// Rollback complexity assessment
@@ -285,13 +313,25 @@ pub struct ContentPreview {
 }
 
 /// Types of content changes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ChangeType {
     Create,
     Update,
     Append,
     Delete,
     Rename,
+}
+
+impl ChangeType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ChangeType::Create => "create",
+            ChangeType::Update => "update",
+            ChangeType::Append => "append",
+            ChangeType::Delete => "delete",
+            ChangeType::Rename => "rename",
+        }
+    }
 }
 
 /// Backup strategy
@@ -864,7 +904,7 @@ impl OperationIntelligenceCoordinator {
     ) -> Result<()> {
         // Update history database
         if let Some(db) = &self.history_database {
-            db.update_outcome(operation_id, outcome).await?;
+            db.update_outcome(operation_id, outcome)?;
             
             if let Some(satisfaction) = user_satisfaction {
                 db.add_user_feedback(
@@ -872,7 +912,7 @@ impl OperationIntelligenceCoordinator {
                     satisfaction,
                     satisfaction >= 3.0,
                     None,
-                ).await?;
+                )?;
             }
         }
         
@@ -884,7 +924,7 @@ impl OperationIntelligenceCoordinator {
     pub async fn get_success_statistics(&self) -> Result<OperationStatistics> {
         // Try database first if available
         if let Some(db) = &self.history_database {
-            let db_stats = db.get_statistics().await?;
+            let db_stats = db.get_statistics()?;
             return Ok(OperationStatistics {
                 total_operations: db_stats.total_operations as usize,
                 successful_operations: db_stats.successful_operations as usize,
@@ -946,7 +986,7 @@ impl OperationIntelligenceCoordinator {
         
         // First try database if available
         if let Some(db) = &self.history_database {
-            let similar_from_db = db.find_similar_operations(operation, context, 20).await?;
+            let similar_from_db = db.find_similar_operations(operation, context, 20)?;
             
             if !similar_from_db.is_empty() {
                 let successful = similar_from_db.iter()
@@ -982,14 +1022,14 @@ impl OperationIntelligenceCoordinator {
         
         // Extract common failure modes
         let failure_modes = similar_ops.iter()
-            .filter(|op| !op.was_successful)
-            .map(|op| op.failure_reason.clone().unwrap_or_default())
+            .filter(|op| !op.operation.outcome.success)
+            .map(|op| op.operation.outcome.error_message.clone().unwrap_or_default())
             .filter(|reason| !reason.is_empty())
             .collect::<Vec<_>>();
         
         Ok(HistoricalAnalysis {
             similar_operations_count: similar_ops.len(),
-            success_rate: success_prediction.predicted_success_rate,
+            success_rate: success_prediction.success_probability,
             common_failure_modes: failure_modes,
         })
     }
@@ -1009,9 +1049,9 @@ impl OperationIntelligenceCoordinator {
         // Extract relevant precedents
         let precedents = context_analysis.relevant_precedents.iter()
             .map(|p| format!("{}: {} ({}% success)", 
-                p.operation_type, 
-                p.description, 
-                (p.success_rate * 100.0) as i32))
+                self.get_operation_type_name(&p.operation), 
+                self.get_operation_description(&p.operation), 
+                if p.was_successful { 100 } else { 0 }))
             .collect();
         
         Ok(ContextAnalysis {
@@ -1033,26 +1073,12 @@ impl OperationIntelligenceCoordinator {
             .analyze_operation_safety(&[operation.clone()], context)
             .await?;
         
-        // Convert safety patterns to dangerous patterns
+        // Safety patterns are already DangerousPattern structs from pattern_recognizer
         let dangerous_patterns = safety_analysis.dangerous_patterns.iter()
             .map(|p| DangerousPattern {
-                pattern_type: match p.pattern_type {
-                    crate::ai_helpers::SafetyPatternType::MassFileChanges => DangerousPatternType::MassDeletion,
-                    crate::ai_helpers::SafetyPatternType::RecursiveDeletion => DangerousPatternType::MassDeletion,
-                    crate::ai_helpers::SafetyPatternType::ConfigurationCorruption => DangerousPatternType::BreakingChange,
-                    crate::ai_helpers::SafetyPatternType::DependencyHell => DangerousPatternType::CircularDependency,
-                    crate::ai_helpers::SafetyPatternType::DataLoss => DangerousPatternType::DataLoss,
-                    crate::ai_helpers::SafetyPatternType::SecurityRisk => DangerousPatternType::SecurityVulnerability,
-                    crate::ai_helpers::SafetyPatternType::TestDeletion => DangerousPatternType::BreakingChange,
-                    crate::ai_helpers::SafetyPatternType::DocumentationLoss => DangerousPatternType::DataLoss,
-                },
+                pattern_type: p.pattern_type.clone(),
                 description: p.description.clone(),
-                severity: match p.severity {
-                    crate::ai_helpers::RiskSeverity::Low => DangerousSeverity::Low,
-                    crate::ai_helpers::RiskSeverity::Medium => DangerousSeverity::Medium,
-                    crate::ai_helpers::RiskSeverity::High => DangerousSeverity::High,
-                    crate::ai_helpers::RiskSeverity::Critical => DangerousSeverity::Critical,
-                },
+                severity: p.severity.clone(),
                 mitigation: p.mitigation.clone(),
             })
             .collect();
@@ -1060,7 +1086,7 @@ impl OperationIntelligenceCoordinator {
         // Extract anti-patterns
         let anti_patterns = safety_analysis.anti_patterns.iter()
             .map(|ap| AntiPattern {
-                pattern_type: ap.name.clone(),
+                pattern_type: ap.pattern_type.clone(),
                 description: ap.description.clone(),
                 alternative: ap.alternative.clone(),
             })
@@ -1131,9 +1157,9 @@ impl OperationIntelligenceCoordinator {
             conflicts,
             rollback_complexity: RollbackComplexity {
                 complexity_score: risk_assessment.rollback_complexity.complexity_score,
-                rollback_possible: risk_assessment.rollback_complexity.possible,
-                estimated_rollback_time: risk_assessment.rollback_complexity.estimated_time,
-                rollback_steps: risk_assessment.rollback_complexity.steps,
+                rollback_possible: risk_assessment.rollback_complexity.rollback_possible,
+                estimated_rollback_time: risk_assessment.rollback_complexity.estimated_rollback_time,
+                rollback_steps: risk_assessment.rollback_complexity.rollback_steps,
             },
         })
     }
@@ -1168,7 +1194,7 @@ impl OperationIntelligenceCoordinator {
             files_deleted: plan.preview.files_deleted.clone(),
             content_previews: plan.preview.content_previews.iter()
                 .map(|cp| ContentPreview {
-                    file_path: cp.path.clone(),
+                    file_path: cp.file_path.clone(),
                     before: cp.before.clone(),
                     after: cp.after.clone(),
                     change_type: match cp.change_type.as_str() {
@@ -1181,15 +1207,15 @@ impl OperationIntelligenceCoordinator {
                     },
                 })
                 .collect(),
-            change_summary: plan.preview.summary.clone(),
+            change_summary: plan.preview.change_summary.clone(),
         };
         
         // Convert backup strategy
         let backup_strategy = BackupStrategy {
-            backup_required: plan.backup_strategy.required,
-            backup_location: plan.backup_strategy.location.clone(),
-            files_to_backup: plan.backup_strategy.files.clone(),
-            backup_method: match plan.backup_strategy.method.as_str() {
+            backup_required: plan.backup_strategy.backup_required,
+            backup_location: plan.backup_strategy.backup_location.clone(),
+            files_to_backup: plan.backup_strategy.files_to_backup.clone(),
+            backup_method: match plan.backup_strategy.backup_method.as_str() {
                 "copy" => BackupMethod::Copy,
                 "git" => BackupMethod::GitCommit,
                 "archive" => BackupMethod::Archive,
@@ -1871,6 +1897,26 @@ impl OperationIntelligenceCoordinator {
     fn generate_cache_key(&self, operation: &FileOperation, context: &OperationContext) -> String {
         // Generate a cache key based on operation and context
         format!("{:?}_{}", operation, context.source_question.len())
+    }
+
+    /// Get operation type name for display
+    fn get_operation_type_name(&self, operation: &FileOperation) -> String {
+        match operation {
+            FileOperation::Create { .. } => "Create".to_string(),
+            FileOperation::Update { .. } => "Update".to_string(),
+            FileOperation::Delete { .. } => "Delete".to_string(),
+            FileOperation::Move { .. } => "Move".to_string(),
+        }
+    }
+
+    /// Get operation description for display
+    fn get_operation_description(&self, operation: &FileOperation) -> String {
+        match operation {
+            FileOperation::Create { path, .. } => format!("Create {}", path.display()),
+            FileOperation::Update { path, .. } => format!("Update {}", path.display()),
+            FileOperation::Delete { path } => format!("Delete {}", path.display()),
+            FileOperation::Move { from, to } => format!("Move {} to {}", from.display(), to.display()),
+        }
     }
 }
 
