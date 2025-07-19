@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::{toposort, is_cyclic_directed};
 
-use crate::consensus::file_operations::FileOperation;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::ai_helpers::pattern_recognizer::PatternRecognizer;
 
 #[derive(Debug, Clone, PartialEq)]

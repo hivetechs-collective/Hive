@@ -7,11 +7,12 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::consensus::file_operations::FileOperation;
-use crate::consensus::operation_intelligence::{
-    OperationAnalysis, UnifiedScore, AutoAcceptMode, OperationContext
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_analysis::{
+    OperationAnalysis, UnifiedScore, AutoAcceptMode, OperationContext,
+    ActionPriority, OperationOutcome
 };
-use crate::consensus::operation_history::{OperationHistoryDatabase, OperationOutcome};
+use crate::consensus::operation_history::OperationHistoryDatabase;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExecutionDecision {
@@ -168,12 +169,12 @@ impl SmartDecisionEngine {
                     reason: "Plan mode active - review operations before execution".to_string(),
                     warnings: analysis.recommendations
                         .iter()
-                        .filter(|r| r.priority == crate::consensus::operation_intelligence::ActionPriority::High)
+                        .filter(|r| r.priority == ActionPriority::High)
                         .map(|r| r.description.clone())
                         .collect(),
                     suggestions: analysis.recommendations
                         .iter()
-                        .filter(|r| r.priority == crate::consensus::operation_intelligence::ActionPriority::Medium)
+                        .filter(|r| r.priority == ActionPriority::Medium)
                         .map(|r| r.description.clone())
                         .collect(),
                     confidence: analysis.unified_score.confidence,
@@ -491,7 +492,7 @@ impl SmartDecisionEngine {
     fn extract_critical_issues(&self, analysis: &OperationAnalysis) -> Vec<String> {
         analysis.recommendations
             .iter()
-            .filter(|r| r.priority == crate::consensus::operation_intelligence::ActionPriority::Critical)
+            .filter(|r| r.priority == ActionPriority::Critical)
             .map(|r| r.description.clone())
             .collect()
     }
@@ -499,7 +500,7 @@ impl SmartDecisionEngine {
     fn extract_warnings(&self, analysis: &OperationAnalysis) -> Vec<String> {
         analysis.recommendations
             .iter()
-            .filter(|r| r.priority == crate::consensus::operation_intelligence::ActionPriority::High)
+            .filter(|r| r.priority == ActionPriority::High)
             .map(|r| r.description.clone())
             .collect()
     }
@@ -507,7 +508,7 @@ impl SmartDecisionEngine {
     fn extract_suggestions(&self, analysis: &OperationAnalysis) -> Vec<String> {
         analysis.recommendations
             .iter()
-            .filter(|r| r.priority == crate::consensus::operation_intelligence::ActionPriority::Medium)
+            .filter(|r| r.priority == ActionPriority::Medium)
             .map(|r| r.description.clone())
             .collect()
     }

@@ -20,6 +20,7 @@ pub mod fact_checker;
 pub mod cross_validator;
 pub mod verified_context_builder;
 pub mod operation_intelligence;
+pub mod operation_analysis;
 pub mod operation_history;
 pub mod smart_decision_engine;
 pub mod operation_clustering;
@@ -46,13 +47,15 @@ pub use types::{
     ResponseMetadata, Stage,
 };
 pub use verification::{RepositoryFacts, RepositoryVerifier, build_stage_context};
-pub use fact_checker::{FactChecker, ValidationResult, Contradiction, RecommendedAction};
+pub use fact_checker::{FactChecker, ValidationResult, Contradiction, RecommendedAction as FactCheckerRecommendedAction};
 pub use cross_validator::{CrossValidator, ConsensusHealth, StageDiscrepancy, ConsensusReport, SemanticContradiction, ContradictionType, ContradictionSeverity};
 pub use verified_context_builder::VerifiedContextBuilder;
-pub use operation_intelligence::{
-    OperationIntelligenceCoordinator, OperationAnalysis, ActionRecommendation, 
-    OperationStatistics, AutoAcceptMode, UnifiedScore, ComponentScores, 
-    ScoringFactors, OperationGroups
+pub use operation_intelligence::OperationIntelligenceCoordinator;
+pub use operation_analysis::{
+    OperationAnalysis, ActionRecommendation, ActionPriority,
+    UnifiedScore, ComponentScores, ScoringFactors, OperationGroups,
+    OperationContext, RecommendedAction, AnalysisStatistics,
+    OperationOutcome, AutoAcceptMode
 };
 pub use smart_decision_engine::{
     SmartDecisionEngine, ExecutionDecision, UserDecision, UserChoice,
@@ -64,7 +67,7 @@ pub use operation_clustering::{
 };
 pub use intelligent_feedback::{
     IntelligentFeedbackGenerator, UserFeedback, RiskExplanation, ConfidenceExplanation,
-    AIInsight, Suggestion, OperationPreview, VisualIndicators, SuggestionAction
+    AIInsight, Suggestion, OperationPreview as FeedbackOperationPreview, VisualIndicators, SuggestionAction
 };
 pub use confidence_scoring::{
     ConfidenceScoringEngine, ScoringWeights, ScoringResult, ScoreBreakdown,
@@ -76,9 +79,9 @@ pub use operation_parser::{
     ParsingMetadata, AIOperationInsights
 };
 pub use operation_validator::{
-    OperationValidator, ValidationConfig, ValidationResult, ValidationStatus,
+    OperationValidator, ValidationConfig, ValidationResult as OpValidationResult, ValidationStatus,
     ValidationCheck, ValidationError, ValidationWarning, SuggestedFix,
-    RiskAssessment, RiskLevel, CheckCategory, Severity
+    RiskAssessment, RiskLevel as OpRiskLevel, CheckCategory, Severity
 };
 pub use operation_preview::{
     OperationPreviewGenerator, PreviewConfig, OperationPreviewSet, OperationPreview,
@@ -87,7 +90,7 @@ pub use operation_preview::{
 };
 pub use dependency_graph::{
     DependencyGraphGenerator, GraphConfig, DependencyGraph, OperationNode,
-    NodeMetadata, RiskLevel, DependencyEdge, DependencyType, ParallelGroup,
+    NodeMetadata, RiskLevel as GraphRiskLevel, DependencyEdge, DependencyType, ParallelGroup,
     GraphAnalysis, RiskSummary, GraphVisuals
 };
 pub use rollback_planner::{

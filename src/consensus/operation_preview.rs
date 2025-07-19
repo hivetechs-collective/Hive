@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 use similar::{ChangeTag, TextDiff};
 
-use crate::consensus::file_operations::FileOperation;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::operation_parser::EnhancedFileOperation;
 use crate::consensus::operation_clustering::OperationCluster;
 use crate::ai_helpers::knowledge_synthesizer::KnowledgeSynthesizer;
