@@ -396,7 +396,7 @@ impl ConfidenceScoringEngine {
         let mut factors = Vec::new();
 
         // Time-based adjustments
-        let time_of_day = chrono::Local::now().hour();
+        let time_of_day = chrono::Local::now().time().hour();
         if time_of_day >= 22 || time_of_day <= 6 {
             factors.push(AdjustmentFactor {
                 name: "Late night operation".to_string(),
@@ -721,7 +721,6 @@ impl OperationPredictionModel {
                     FileOperation::Update { path, .. } |
                     FileOperation::Delete { path } => path,
                     FileOperation::Rename { new_path, .. } => new_path,
-                    FileOperation::Move { destination, .. } => destination,
                 };
                 path.extension().and_then(|e| e.to_str()).map(|s| s.to_string())
             })
@@ -736,7 +735,6 @@ impl OperationPredictionModel {
                 FileOperation::Update { path, .. } |
                 FileOperation::Delete { path } => path.to_string_lossy(),
                 FileOperation::Rename { new_path, .. } => new_path.to_string_lossy(),
-                FileOperation::Move { destination, .. } => destination.to_string_lossy(),
             };
             path_str.contains("test") || path_str.contains("spec")
         });

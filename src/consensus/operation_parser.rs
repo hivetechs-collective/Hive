@@ -502,7 +502,7 @@ impl OperationParser {
             let source = PathBuf::from(caps[1].trim());
             let destination = PathBuf::from(caps[2].trim());
             
-            let operation = FileOperation::Move { source, destination };
+            let operation = FileOperation::Rename { from: source, to: destination };
 
             operations.push(EnhancedFileOperation {
                 operation,
@@ -674,7 +674,6 @@ impl OperationParser {
             FileOperation::Update { .. } => tags.push("update".to_string()),
             FileOperation::Delete { .. } => tags.push("delete".to_string()),
             FileOperation::Rename { .. } => tags.push("rename".to_string()),
-            FileOperation::Move { .. } => tags.push("move".to_string()),
         }
 
         // Content-based tags
@@ -781,8 +780,8 @@ impl OperationParser {
                         p1 == p2
                     }
                     // Move/Rename depends on operations on source file
-                    (FileOperation::Move { source: s1, .. }, FileOperation::Create { path: p2, .. }) |
-                    (FileOperation::Move { source: s1, .. }, FileOperation::Update { path: p2, .. }) => {
+                    (FileOperation::Rename { from: s1, .. }, FileOperation::Create { path: p2, .. }) |
+                    (FileOperation::Rename { from: s1, .. }, FileOperation::Update { path: p2, .. }) => {
                         s1 == p2
                     }
                     _ => false,
