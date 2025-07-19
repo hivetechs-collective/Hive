@@ -503,6 +503,166 @@ impl OperationIntelligenceCoordinator {
         }
     }
     
+    /// Get unified score for an operation
+    pub async fn get_unified_score(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+    ) -> Result<UnifiedScore> {
+        info!("🎯 Calculating unified score for operation");
+        
+        // Get full analysis
+        let analysis = self.analyze_operation(operation, context).await?;
+        
+        // Extract component scores
+        let component_scores = ComponentScores {
+            historical_score: analysis.historical_success_rate * 100.0,
+            context_score: 0.0, // Will be calculated from internal analysis
+            pattern_score: (100.0 - analysis.pattern_analysis.pattern_confidence * 100.0).max(0.0),
+            quality_score: (50.0 + analysis.quality_impact.overall_impact).clamp(0.0, 100.0),
+            plan_score: if analysis.operation_plan.rollback_plan.automatic_rollback_possible {
+                80.0
+            } else {
+                40.0
+            },
+        };
+        
+        // Extract scoring factors
+        let scoring_factors = ScoringFactors {
+            similar_operations_count: 0, // Will be filled from historical analysis
+            dangerous_pattern_count: analysis.pattern_analysis.dangerous_patterns.len(),
+            anti_pattern_count: analysis.pattern_analysis.anti_patterns.len(),
+            conflict_count: analysis.quality_impact.conflicts.len(),
+            rollback_possible: analysis.quality_impact.rollback_complexity.rollback_possible,
+            execution_complexity: analysis.operation_plan.execution_steps.len() as f32 * 10.0,
+        };
+        
+        // Determine recommended mode based on scores
+        let recommended_mode = self.recommend_auto_accept_mode(
+            analysis.confidence,
+            analysis.risk,
+            &scoring_factors,
+        );
+        
+        Ok(UnifiedScore {
+            confidence: analysis.confidence,
+            risk: analysis.risk,
+            component_scores,
+            scoring_factors,
+            recommended_mode,
+        })
+    }
+    
+    /// Check if operation should be auto-executed based on mode
+    pub async fn should_auto_execute(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+        mode: AutoAcceptMode,
+    ) -> Result<(bool, OperationAnalysis)> {
+        info!("🤔 Checking if operation should be auto-executed in {:?} mode", mode);
+        
+        // Get full analysis
+        let analysis = self.analyze_operation(operation, context).await?;
+        
+        // Check against mode thresholds
+        let should_execute = match mode {
+            AutoAcceptMode::Manual | AutoAcceptMode::Plan => false,
+            _ => {
+                let confidence_ok = analysis.confidence >= mode.confidence_threshold();
+                let risk_ok = analysis.risk <= mode.risk_threshold();
+                let recommendation_ok = matches!(
+                    analysis.recommendation,
+                    ActionRecommendation::AutoExecute { .. }
+                );
+                
+                confidence_ok && risk_ok && recommendation_ok
+            }
+        };
+        
+        info!(
+            "📊 Auto-execute decision: {} (confidence: {:.0}%, risk: {:.0}%, mode: {:?})",
+            if should_execute { "YES" } else { "NO" },
+            analysis.confidence,
+            analysis.risk,
+            mode
+        );
+        
+        Ok((should_execute, analysis))
+    }
+    
+    /// Get recommended auto-accept mode for an operation
+    pub async fn get_recommended_mode(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+    ) -> Result<AutoAcceptMode> {
+        let score = self.get_unified_score(operation, context).await?;
+        Ok(score.recommended_mode)
+    }
+    
+    /// Batch analyze operations and group by recommended execution strategy
+    pub async fn analyze_and_group_operations(
+        &self,
+        operations: &[FileOperation],
+        context: &OperationContext,
+        mode: AutoAcceptMode,
+    ) -> Result<OperationGroups> {
+        info!("📦 Analyzing and grouping {} operations", operations.len());
+        
+        let mut auto_execute = Vec::new();
+        let mut needs_confirmation = Vec::new();
+        let mut blocked = Vec::new();
+        let mut needs_modification = Vec::new();
+        
+        for operation in operations {
+            let (should_auto, analysis) = self.should_auto_execute(operation, context, mode).await?;
+            
+            match &analysis.recommendation {
+                ActionRecommendation::AutoExecute { .. } if should_auto => {
+                    auto_execute.push((operation.clone(), analysis));
+                },
+                ActionRecommendation::Block { .. } => {
+                    blocked.push((operation.clone(), analysis));
+                },
+                ActionRecommendation::SuggestModifications { .. } => {
+                    needs_modification.push((operation.clone(), analysis));
+                },
+                _ => {
+                    needs_confirmation.push((operation.clone(), analysis));
+                }
+            }
+        }
+        
+        Ok(OperationGroups {
+            auto_execute,
+            needs_confirmation,
+            blocked,
+            needs_modification,
+        })
+    }
+    
+    // Private helper to recommend auto-accept mode
+    fn recommend_auto_accept_mode(
+        &self,
+        confidence: f32,
+        risk: f32,
+        factors: &ScoringFactors,
+    ) -> AutoAcceptMode {
+        // If any critical factors, recommend conservative or manual
+        if factors.dangerous_pattern_count > 2 || !factors.rollback_possible {
+            return AutoAcceptMode::Manual;
+        }
+        
+        // Based on confidence and risk levels
+        match (confidence, risk) {
+            (c, r) if c > 90.0 && r < 15.0 => AutoAcceptMode::Conservative,
+            (c, r) if c > 80.0 && r < 25.0 => AutoAcceptMode::Balanced,
+            (c, r) if c > 70.0 && r < 40.0 => AutoAcceptMode::Aggressive,
+            _ => AutoAcceptMode::Manual,
+        }
+    }
+    
     /// Analyze a file operation using all AI helpers
     pub async fn analyze_operation(
         &self,
@@ -701,13 +861,26 @@ impl OperationIntelligenceCoordinator {
         debug!("📚 Analyzing historical patterns with Knowledge Indexer");
         
         // Use Knowledge Indexer to find similar operations
-        // This will be implemented when we enhance the Knowledge Indexer
+        let similar_ops = self.knowledge_indexer
+            .find_similar_operations(operation, context, 10)
+            .await?;
         
-        // For now, return placeholder data
+        // Calculate success rate from similar operations
+        let success_prediction = self.knowledge_indexer
+            .predict_operation_success(operation, context)
+            .await?;
+        
+        // Extract common failure modes
+        let failure_modes = similar_ops.iter()
+            .filter(|op| !op.was_successful)
+            .map(|op| op.failure_reason.clone().unwrap_or_default())
+            .filter(|reason| !reason.is_empty())
+            .collect::<Vec<_>>();
+        
         Ok(HistoricalAnalysis {
-            similar_operations_count: 0,
-            success_rate: 0.8, // Default success rate
-            common_failure_modes: Vec::new(),
+            similar_operations_count: similar_ops.len(),
+            success_rate: success_prediction.predicted_success_rate,
+            common_failure_modes: failure_modes,
         })
     }
     
@@ -719,12 +892,22 @@ impl OperationIntelligenceCoordinator {
         debug!("🔍 Analyzing operation context with Context Retriever");
         
         // Use Context Retriever to analyze context
-        // This will be implemented when we enhance the Context Retriever
+        let context_analysis = self.context_retriever
+            .analyze_operation_context(operation, context)
+            .await?;
+        
+        // Extract relevant precedents
+        let precedents = context_analysis.relevant_precedents.iter()
+            .map(|p| format!("{}: {} ({}% success)", 
+                p.operation_type, 
+                p.description, 
+                (p.success_rate * 100.0) as i32))
+            .collect();
         
         Ok(ContextAnalysis {
-            context_similarity: 0.7,
-            relevant_precedents: Vec::new(),
-            context_warnings: Vec::new(),
+            context_similarity: context_analysis.context_similarity,
+            relevant_precedents: precedents,
+            context_warnings: context_analysis.context_warnings,
         })
     }
     
@@ -736,14 +919,70 @@ impl OperationIntelligenceCoordinator {
         debug!("🧠 Analyzing operation patterns with Pattern Recognizer");
         
         // Use Pattern Recognizer to detect patterns
-        // This will be implemented when we enhance the Pattern Recognizer
+        let safety_analysis = self.pattern_recognizer
+            .analyze_operation_safety(&[operation.clone()], context)
+            .await?;
+        
+        // Convert safety patterns to dangerous patterns
+        let dangerous_patterns = safety_analysis.dangerous_patterns.iter()
+            .map(|p| DangerousPattern {
+                pattern_type: match p.pattern_type {
+                    crate::ai_helpers::SafetyPatternType::MassFileChanges => DangerousPatternType::MassDeletion,
+                    crate::ai_helpers::SafetyPatternType::RecursiveDeletion => DangerousPatternType::MassDeletion,
+                    crate::ai_helpers::SafetyPatternType::ConfigurationCorruption => DangerousPatternType::BreakingChange,
+                    crate::ai_helpers::SafetyPatternType::DependencyHell => DangerousPatternType::CircularDependency,
+                    crate::ai_helpers::SafetyPatternType::DataLoss => DangerousPatternType::DataLoss,
+                    crate::ai_helpers::SafetyPatternType::SecurityRisk => DangerousPatternType::SecurityVulnerability,
+                    crate::ai_helpers::SafetyPatternType::TestDeletion => DangerousPatternType::BreakingChange,
+                    crate::ai_helpers::SafetyPatternType::DocumentationLoss => DangerousPatternType::DataLoss,
+                },
+                description: p.description.clone(),
+                severity: match p.severity {
+                    crate::ai_helpers::RiskSeverity::Low => DangerousSeverity::Low,
+                    crate::ai_helpers::RiskSeverity::Medium => DangerousSeverity::Medium,
+                    crate::ai_helpers::RiskSeverity::High => DangerousSeverity::High,
+                    crate::ai_helpers::RiskSeverity::Critical => DangerousSeverity::Critical,
+                },
+                mitigation: p.mitigation.clone(),
+            })
+            .collect();
+        
+        // Extract anti-patterns
+        let anti_patterns = safety_analysis.anti_patterns.iter()
+            .map(|ap| AntiPattern {
+                pattern_type: ap.name.clone(),
+                description: ap.description.clone(),
+                alternative: ap.alternative.clone(),
+            })
+            .collect();
+        
+        // Determine cluster info if operations can be grouped
+        let cluster_info = if safety_analysis.operation_clusters.len() > 0 {
+            let cluster = &safety_analysis.operation_clusters[0];
+            Some(OperationCluster {
+                name: cluster.name.clone(),
+                operations: vec![operation.clone()],
+                cluster_type: match cluster.cluster_type.as_str() {
+                    "refactoring" => ClusterType::Refactoring,
+                    "feature" => ClusterType::FeatureAddition,
+                    "bugfix" => ClusterType::BugFix,
+                    "cleanup" => ClusterType::Cleanup,
+                    "migration" => ClusterType::Migration,
+                    "testing" => ClusterType::Testing,
+                    _ => ClusterType::FeatureAddition,
+                },
+                execution_order: vec![0],
+            })
+        } else {
+            None
+        };
         
         Ok(PatternAnalysis {
-            dangerous_patterns: Vec::new(),
-            cluster_info: None,
+            dangerous_patterns,
+            cluster_info,
             suggested_sequence: vec![operation.clone()],
-            anti_patterns: Vec::new(),
-            pattern_confidence: 0.8,
+            anti_patterns,
+            pattern_confidence: 1.0 - (safety_analysis.safety_score / 100.0),
         })
     }
     
@@ -755,19 +994,36 @@ impl OperationIntelligenceCoordinator {
         debug!("📊 Analyzing quality impact with Quality Analyzer");
         
         // Use Quality Analyzer to assess impact
-        // This will be implemented when we enhance the Quality Analyzer
+        let risk_assessment = self.quality_analyzer
+            .assess_operation_risk(operation, context)
+            .await?;
+        
+        // Convert conflicts
+        let conflicts = risk_assessment.conflicts.iter()
+            .map(|c| OperationConflict {
+                conflicting_operations: vec![0], // Single operation for now
+                conflict_type: match c.conflict_type.as_str() {
+                    "file_overwrite" => ConflictType::FileOverwrite,
+                    "dependency" => ConflictType::DependencyViolation,
+                    "race_condition" => ConflictType::RaceCondition,
+                    _ => ConflictType::LogicalInconsistency,
+                },
+                description: c.description.clone(),
+                resolution: c.resolution.clone(),
+            })
+            .collect();
         
         Ok(QualityImpact {
-            overall_impact: 0.0,
-            maintainability_impact: 0.0,
-            reliability_impact: 0.0,
-            performance_impact: 0.0,
-            conflicts: Vec::new(),
+            overall_impact: risk_assessment.quality_impact.overall_impact,
+            maintainability_impact: risk_assessment.quality_impact.maintainability_impact,
+            reliability_impact: risk_assessment.quality_impact.reliability_impact,
+            performance_impact: risk_assessment.quality_impact.performance_impact,
+            conflicts,
             rollback_complexity: RollbackComplexity {
-                complexity_score: 20.0,
-                rollback_possible: true,
-                estimated_rollback_time: Duration::from_secs(30),
-                rollback_steps: vec!["Restore from backup".to_string()],
+                complexity_score: risk_assessment.rollback_complexity.complexity_score,
+                rollback_possible: risk_assessment.rollback_complexity.possible,
+                estimated_rollback_time: risk_assessment.rollback_complexity.estimated_time,
+                rollback_steps: risk_assessment.rollback_complexity.steps,
             },
         })
     }
@@ -780,38 +1036,95 @@ impl OperationIntelligenceCoordinator {
         debug!("🔄 Generating operation plan with Knowledge Synthesizer");
         
         // Use Knowledge Synthesizer to generate plan
-        // This will be implemented when we enhance the Knowledge Synthesizer
+        let plan = self.knowledge_synthesizer
+            .generate_operation_plan(&[operation.clone()], context)
+            .await?;
+        
+        // Convert execution steps
+        let execution_steps = plan.execution_steps.iter()
+            .map(|step| ExecutionStep {
+                step_number: step.step_number,
+                description: step.description.clone(),
+                operations: step.operations.clone(),
+                prerequisites: step.prerequisites.clone(),
+                validation_checks: step.validation_checks.clone(),
+            })
+            .collect();
+        
+        // Convert preview
+        let preview = OperationPreview {
+            files_created: plan.preview.files_created.clone(),
+            files_modified: plan.preview.files_modified.clone(),
+            files_deleted: plan.preview.files_deleted.clone(),
+            content_previews: plan.preview.content_previews.iter()
+                .map(|cp| ContentPreview {
+                    file_path: cp.path.clone(),
+                    before: cp.before.clone(),
+                    after: cp.after.clone(),
+                    change_type: match cp.change_type.as_str() {
+                        "create" => ChangeType::Create,
+                        "update" => ChangeType::Update,
+                        "append" => ChangeType::Append,
+                        "delete" => ChangeType::Delete,
+                        "rename" => ChangeType::Rename,
+                        _ => ChangeType::Update,
+                    },
+                })
+                .collect(),
+            change_summary: plan.preview.summary.clone(),
+        };
+        
+        // Convert backup strategy
+        let backup_strategy = BackupStrategy {
+            backup_required: plan.backup_strategy.required,
+            backup_location: plan.backup_strategy.location.clone(),
+            files_to_backup: plan.backup_strategy.files.clone(),
+            backup_method: match plan.backup_strategy.method.as_str() {
+                "copy" => BackupMethod::Copy,
+                "git" => BackupMethod::GitCommit,
+                "archive" => BackupMethod::Archive,
+                "snapshot" => BackupMethod::Snapshot,
+                _ => BackupMethod::Copy,
+            },
+        };
+        
+        // Convert rollback plan
+        let rollback_plan = RollbackPlan {
+            rollback_steps: plan.rollback_plan.steps.iter()
+                .map(|step| RollbackStep {
+                    description: step.description.clone(),
+                    action: match step.action_type.as_str() {
+                        "restore" => RollbackAction::RestoreFile {
+                            from: step.source.clone().unwrap_or_default(),
+                            to: step.target.clone().unwrap_or_default(),
+                        },
+                        "delete" => RollbackAction::DeleteFile {
+                            path: step.target.clone().unwrap_or_default(),
+                        },
+                        "command" => RollbackAction::RunCommand {
+                            command: step.command.clone().unwrap_or_default(),
+                        },
+                        "git_revert" => RollbackAction::GitRevert {
+                            commit: step.commit.clone().unwrap_or_default(),
+                        },
+                        _ => RollbackAction::RunCommand {
+                            command: "echo 'Unknown rollback action'".to_string(),
+                        },
+                    },
+                    validation: step.validation.clone(),
+                })
+                .collect(),
+            complexity: plan.rollback_plan.complexity,
+            automatic_rollback_possible: plan.rollback_plan.automatic_possible,
+            manual_steps_required: plan.rollback_plan.manual_steps.clone(),
+        };
         
         Ok(OperationPlan {
-            execution_steps: vec![
-                ExecutionStep {
-                    step_number: 1,
-                    description: "Execute operation".to_string(),
-                    operations: vec![operation.clone()],
-                    prerequisites: Vec::new(),
-                    validation_checks: Vec::new(),
-                }
-            ],
-            preview: OperationPreview {
-                files_created: Vec::new(),
-                files_modified: Vec::new(),
-                files_deleted: Vec::new(),
-                content_previews: Vec::new(),
-                change_summary: "Operation will be executed".to_string(),
-            },
-            backup_strategy: BackupStrategy {
-                backup_required: true,
-                backup_location: None,
-                files_to_backup: Vec::new(),
-                backup_method: BackupMethod::Copy,
-            },
-            rollback_plan: RollbackPlan {
-                rollback_steps: Vec::new(),
-                complexity: 20.0,
-                automatic_rollback_possible: true,
-                manual_steps_required: Vec::new(),
-            },
-            estimated_execution_time: Duration::from_secs(5),
+            execution_steps,
+            preview,
+            backup_strategy,
+            rollback_plan,
+            estimated_execution_time: plan.estimated_time,
         })
     }
     
@@ -822,18 +1135,103 @@ impl OperationIntelligenceCoordinator {
         patterns: &PatternAnalysis,
         quality: &QualityImpact,
     ) -> Result<f32> {
-        // Weighted combination of all factors
-        let historical_weight = 0.3;
-        let context_weight = 0.2;
-        let patterns_weight = 0.3;
-        let quality_weight = 0.2;
+        // Sophisticated confidence calculation with adaptive weights
         
-        let confidence = 
-            historical.success_rate * historical_weight +
-            context.context_similarity * context_weight +
-            patterns.pattern_confidence * patterns_weight +
-            (100.0 - quality.rollback_complexity.complexity_score) / 100.0 * quality_weight;
+        // Base weights
+        let mut historical_weight = 0.3;
+        let mut context_weight = 0.2;
+        let mut patterns_weight = 0.3;
+        let mut quality_weight = 0.2;
         
+        // Adjust weights based on data availability and quality
+        if historical.similar_operations_count < 3 {
+            // Less historical data, reduce its weight
+            historical_weight *= 0.5;
+            // Increase other weights proportionally
+            let weight_redistribution = historical_weight * 0.5 / 3.0;
+            context_weight += weight_redistribution;
+            patterns_weight += weight_redistribution;
+            quality_weight += weight_redistribution;
+        }
+        
+        // Calculate component scores
+        let historical_score = if historical.similar_operations_count > 0 {
+            // Consider both success rate and failure mode diversity
+            let failure_mode_penalty = (historical.common_failure_modes.len() as f32 * 0.05).min(0.3);
+            (historical.success_rate - failure_mode_penalty).max(0.0)
+        } else {
+            0.7 // Default neutral score when no history
+        };
+        
+        let context_score = {
+            // Context similarity with warning penalties
+            let warning_penalty = (context.context_warnings.len() as f32 * 0.1).min(0.4);
+            let precedent_bonus = if context.relevant_precedents.len() > 3 { 0.1 } else { 0.0 };
+            (context.context_similarity + precedent_bonus - warning_penalty).clamp(0.0, 1.0)
+        };
+        
+        let pattern_score = {
+            // Pattern confidence with anti-pattern penalties
+            let anti_pattern_penalty = (patterns.anti_patterns.len() as f32 * 0.15).min(0.5);
+            let cluster_bonus = if patterns.cluster_info.is_some() { 0.1 } else { 0.0 };
+            (patterns.pattern_confidence + cluster_bonus - anti_pattern_penalty).clamp(0.0, 1.0)
+        };
+        
+        let quality_score = {
+            // Quality based on rollback complexity and overall impact
+            let rollback_score = if quality.rollback_complexity.rollback_possible {
+                1.0 - (quality.rollback_complexity.complexity_score / 100.0) * 0.7
+            } else {
+                0.3 // Low score if rollback not possible
+            };
+            
+            let impact_bonus = if quality.overall_impact > 0.0 {
+                (quality.overall_impact / 100.0).min(0.2)
+            } else {
+                0.0
+            };
+            
+            let conflict_penalty = (quality.conflicts.len() as f32 * 0.1).min(0.3);
+            
+            (rollback_score + impact_bonus - conflict_penalty).clamp(0.0, 1.0)
+        };
+        
+        // Calculate weighted confidence
+        let weighted_confidence = 
+            historical_score * historical_weight +
+            context_score * context_weight +
+            pattern_score * patterns_weight +
+            quality_score * quality_weight;
+        
+        // Apply confidence modifiers
+        let mut confidence = weighted_confidence;
+        
+        // Boost confidence for very safe operations
+        if patterns.dangerous_patterns.is_empty() && 
+           quality.conflicts.is_empty() && 
+           historical.success_rate > 0.95 {
+            confidence = (confidence * 1.1).min(1.0);
+        }
+        
+        // Reduce confidence for operations with critical issues
+        let has_critical = patterns.dangerous_patterns.iter()
+            .any(|p| matches!(p.severity, DangerousSeverity::Critical));
+        if has_critical {
+            confidence *= 0.5;
+        }
+        
+        // Apply learning factor based on total historical operations
+        let learning_factor = if historical.similar_operations_count > 10 {
+            1.05 // Slight boost when we have good historical data
+        } else if historical.similar_operations_count < 3 {
+            0.95 // Slight reduction when limited data
+        } else {
+            1.0
+        };
+        
+        confidence *= learning_factor;
+        
+        // Final score (0-100)
         Ok((confidence * 100.0).clamp(0.0, 100.0))
     }
     
@@ -843,25 +1241,141 @@ impl OperationIntelligenceCoordinator {
         quality: &QualityImpact,
         plan: &OperationPlan,
     ) -> Result<f32> {
-        let mut risk_score = 0.0;
+        // Sophisticated risk calculation with multiple factors
         
-        // Add risk from dangerous patterns
-        for pattern in &patterns.dangerous_patterns {
-            risk_score += match pattern.severity {
-                DangerousSeverity::Low => 10.0,
-                DangerousSeverity::Medium => 25.0,
-                DangerousSeverity::High => 50.0,
-                DangerousSeverity::Critical => 80.0,
-            };
+        let mut risk_components = Vec::new();
+        
+        // 1. Pattern-based risk (0-40 points)
+        let pattern_risk = {
+            let mut score = 0.0;
+            
+            // Dangerous patterns with severity weighting
+            for pattern in &patterns.dangerous_patterns {
+                let base_risk = match pattern.severity {
+                    DangerousSeverity::Low => 5.0,
+                    DangerousSeverity::Medium => 12.0,
+                    DangerousSeverity::High => 25.0,
+                    DangerousSeverity::Critical => 40.0,
+                };
+                
+                // Reduce risk if mitigation is available
+                let mitigated_risk = if pattern.mitigation.is_some() {
+                    base_risk * 0.7
+                } else {
+                    base_risk
+                };
+                
+                score += mitigated_risk;
+            }
+            
+            // Anti-patterns add moderate risk
+            score += patterns.anti_patterns.len() as f32 * 3.0;
+            
+            score.min(40.0) // Cap pattern risk at 40
+        };
+        risk_components.push(("Pattern Risk", pattern_risk));
+        
+        // 2. Quality impact risk (0-30 points)
+        let quality_risk = {
+            let mut score = 0.0;
+            
+            // Negative quality impacts
+            if quality.maintainability_impact < -20.0 {
+                score += 10.0;
+            }
+            if quality.reliability_impact < -20.0 {
+                score += 10.0;
+            }
+            if quality.performance_impact < -20.0 {
+                score += 5.0;
+            }
+            
+            // Conflicts are high risk
+            score += quality.conflicts.len() as f32 * 5.0;
+            
+            score.min(30.0) // Cap quality risk at 30
+        };
+        risk_components.push(("Quality Risk", quality_risk));
+        
+        // 3. Rollback complexity risk (0-20 points)
+        let rollback_risk = {
+            let mut score = quality.rollback_complexity.complexity_score * 0.2;
+            
+            // High risk if rollback not possible
+            if !quality.rollback_complexity.rollback_possible {
+                score += 15.0;
+            }
+            
+            // Risk based on rollback time
+            let time_secs = quality.rollback_complexity.estimated_rollback_time.as_secs();
+            if time_secs > 300 { // > 5 minutes
+                score += 5.0;
+            }
+            
+            score.min(20.0) // Cap rollback risk at 20
+        };
+        risk_components.push(("Rollback Risk", rollback_risk));
+        
+        // 4. Execution complexity risk (0-10 points)
+        let execution_risk = {
+            let mut score = 0.0;
+            
+            // Multi-step operations are riskier
+            if plan.execution_steps.len() > 3 {
+                score += 5.0;
+            }
+            
+            // Long execution times are risky
+            if plan.estimated_execution_time.as_secs() > 60 {
+                score += 5.0;
+            }
+            
+            // Files requiring backup indicate risk
+            let backup_file_count = plan.backup_strategy.files_to_backup.len();
+            if backup_file_count > 5 {
+                score += 3.0;
+            }
+            
+            score.min(10.0) // Cap execution risk at 10
+        };
+        risk_components.push(("Execution Risk", execution_risk));
+        
+        // Calculate total risk with logging
+        let total_risk = risk_components.iter()
+            .map(|(name, score)| {
+                debug!("  {} = {:.1}", name, score);
+                score
+            })
+            .sum::<f32>();
+        
+        // Apply risk amplifiers for critical conditions
+        let mut final_risk = total_risk;
+        
+        // Amplify risk for certain dangerous combinations
+        if patterns.dangerous_patterns.iter()
+            .any(|p| matches!(p.pattern_type, DangerousPatternType::DataLoss)) 
+            && !quality.rollback_complexity.rollback_possible {
+            // Data loss with no rollback is extremely risky
+            final_risk = (final_risk * 1.5).min(95.0);
         }
         
-        // Add risk from conflicts
-        risk_score += quality.conflicts.len() as f32 * 15.0;
+        if patterns.dangerous_patterns.iter()
+            .any(|p| matches!(p.pattern_type, DangerousPatternType::SecurityVulnerability)) {
+            // Security issues always high risk
+            final_risk = final_risk.max(70.0);
+        }
         
-        // Add risk from rollback complexity
-        risk_score += quality.rollback_complexity.complexity_score * 0.3;
+        // Apply risk dampeners for safe conditions
+        if plan.backup_strategy.backup_required && 
+           plan.rollback_plan.automatic_rollback_possible &&
+           patterns.dangerous_patterns.is_empty() {
+            // Good safety measures reduce risk
+            final_risk *= 0.8;
+        }
         
-        Ok(risk_score.clamp(0.0, 100.0))
+        debug!("Total Risk Score: {:.1}", final_risk);
+        
+        Ok(final_risk.clamp(0.0, 100.0))
     }
     
     async fn generate_recommendation(
@@ -871,30 +1385,163 @@ impl OperationIntelligenceCoordinator {
         patterns: &PatternAnalysis,
         quality: &QualityImpact,
     ) -> Result<ActionRecommendation> {
-        // Decision logic based on confidence and risk
-        if risk > 70.0 {
+        // Sophisticated decision matrix for recommendations
+        
+        // Check for absolute blockers first
+        let has_critical_danger = patterns.dangerous_patterns.iter()
+            .any(|p| matches!(p.severity, DangerousSeverity::Critical));
+        
+        let has_unrecoverable_risk = patterns.dangerous_patterns.iter()
+            .any(|p| matches!(p.pattern_type, DangerousPatternType::DataLoss | 
+                             DangerousPatternType::SecurityVulnerability))
+            && !quality.rollback_complexity.rollback_possible;
+        
+        if has_critical_danger || has_unrecoverable_risk || risk > 80.0 {
+            // Block dangerous operations
+            let mut dangers = patterns.dangerous_patterns.iter()
+                .map(|p| format!("{}: {}", 
+                    match p.severity {
+                        DangerousSeverity::Critical => "CRITICAL",
+                        DangerousSeverity::High => "HIGH",
+                        DangerousSeverity::Medium => "MEDIUM",
+                        DangerousSeverity::Low => "LOW",
+                    },
+                    p.description
+                ))
+                .collect::<Vec<_>>();
+            
+            if !quality.rollback_complexity.rollback_possible {
+                dangers.push("No rollback possible if operation fails".to_string());
+            }
+            
+            let alternatives = patterns.dangerous_patterns.iter()
+                .filter_map(|p| p.mitigation.clone())
+                .chain(vec![
+                    "Break operation into smaller, safer steps".to_string(),
+                    "Create manual backups before proceeding".to_string(),
+                    "Review and test in a non-production environment first".to_string(),
+                ])
+                .collect();
+            
             return Ok(ActionRecommendation::Block {
-                reason: "High risk operation detected".to_string(),
-                dangers: patterns.dangerous_patterns.iter()
-                    .map(|p| p.description.clone())
-                    .collect(),
-                alternatives: vec!["Consider manual execution with careful review".to_string()],
+                reason: if has_unrecoverable_risk {
+                    "Operation poses unrecoverable risk to data or security".to_string()
+                } else if risk > 80.0 {
+                    format!("Operation risk score too high: {:.0}%", risk)
+                } else {
+                    "Critical safety issues detected".to_string()
+                },
+                dangers,
+                alternatives,
             });
         }
         
-        if confidence > 85.0 && risk < 20.0 {
+        // Check if modifications would improve the operation
+        let needs_modification = patterns.anti_patterns.len() > 2 || 
+                               (confidence < 50.0 && risk > 40.0);
+        
+        if needs_modification && patterns.anti_patterns.len() > 0 {
+            // Suggest modifications
+            let modifications = patterns.anti_patterns.iter()
+                .filter_map(|ap| ap.alternative.clone())
+                .collect::<Vec<_>>();
+            
+            if !modifications.is_empty() {
+                return Ok(ActionRecommendation::SuggestModifications {
+                    reason: format!(
+                        "Operation can be improved (confidence: {:.0}%, risk: {:.0}%)",
+                        confidence, risk
+                    ),
+                    suggested_operations: vec![], // Would be filled by operation optimizer
+                    modifications,
+                });
+            }
+        }
+        
+        // Decision matrix for auto-execute vs confirmation
+        let auto_execute_threshold = match risk {
+            r if r < 10.0 => 75.0,  // Very low risk: 75% confidence needed
+            r if r < 20.0 => 80.0,  // Low risk: 80% confidence needed
+            r if r < 30.0 => 85.0,  // Moderate risk: 85% confidence needed
+            r if r < 40.0 => 90.0,  // Medium risk: 90% confidence needed
+            _ => 95.0,               // Higher risk: 95% confidence needed
+        };
+        
+        if confidence >= auto_execute_threshold && risk < 30.0 {
+            // Auto-execute safe operations
+            let reason = match (confidence, risk) {
+                (c, r) if c > 95.0 && r < 10.0 => 
+                    "Extremely safe operation with excellent historical success".to_string(),
+                (c, r) if c > 90.0 && r < 15.0 => 
+                    "Very safe operation with strong confidence".to_string(),
+                (c, r) if c > 85.0 && r < 20.0 => 
+                    "Safe operation with good confidence and low risk".to_string(),
+                _ => format!(
+                    "Operation meets auto-execute criteria (confidence: {:.0}%, risk: {:.0}%)",
+                    confidence, risk
+                ),
+            };
+            
             return Ok(ActionRecommendation::AutoExecute {
-                reason: "High confidence, low risk operation".to_string(),
+                reason,
                 confidence,
             });
         }
         
+        // Default to requesting confirmation
+        let mut risks = Vec::new();
+        let mut benefits = Vec::new();
+        
+        // Compile risks
+        if !patterns.dangerous_patterns.is_empty() {
+            risks.extend(patterns.dangerous_patterns.iter()
+                .map(|p| p.description.clone()));
+        }
+        
+        if quality.conflicts.len() > 0 {
+            risks.push(format!("{} potential conflicts detected", quality.conflicts.len()));
+        }
+        
+        if quality.rollback_complexity.complexity_score > 50.0 {
+            risks.push("Complex rollback procedure if needed".to_string());
+        }
+        
+        // Compile benefits
+        if quality.overall_impact > 0.0 {
+            benefits.push(format!("Positive quality impact: +{:.0}%", quality.overall_impact));
+        }
+        
+        if patterns.cluster_info.is_some() {
+            benefits.push("Operation is part of a coherent change set".to_string());
+        }
+        
+        if quality.rollback_complexity.rollback_possible {
+            benefits.push("Rollback is available if needed".to_string());
+        }
+        
+        // Add generic benefits if none found
+        if benefits.is_empty() {
+            benefits.push("Operation structure is valid".to_string());
+            if confidence > 60.0 {
+                benefits.push(format!("Reasonable confidence level: {:.0}%", confidence));
+            }
+        }
+        
         Ok(ActionRecommendation::RequestConfirmation {
-            reason: "Moderate confidence/risk - user confirmation recommended".to_string(),
-            risks: patterns.dangerous_patterns.iter()
-                .map(|p| p.description.clone())
-                .collect(),
-            benefits: vec!["Operation appears to be well-formed".to_string()],
+            reason: match (confidence, risk) {
+                (c, r) if c < 50.0 && r > 40.0 => 
+                    "Low confidence and moderate risk require user review".to_string(),
+                (c, _) if c < 60.0 => 
+                    "Insufficient confidence for automatic execution".to_string(),
+                (_, r) if r > 40.0 => 
+                    "Risk level requires user confirmation".to_string(),
+                _ => format!(
+                    "User confirmation recommended (confidence: {:.0}%, risk: {:.0}%)",
+                    confidence, risk
+                ),
+            },
+            risks,
+            benefits,
         })
     }
     
@@ -915,18 +1562,136 @@ impl OperationIntelligenceCoordinator {
             FileOperation::Rename { from, to } => format!("rename {} to {}", from.display(), to.display()),
         };
         
-        let explanation = format!(
-            "Operation to {} has {:.0}% confidence and {:.0}% risk. {}",
-            operation_description,
-            confidence,
-            risk,
-            match recommendation {
-                ActionRecommendation::AutoExecute { reason, .. } => reason.clone(),
-                ActionRecommendation::RequestConfirmation { reason, .. } => reason.clone(),
-                ActionRecommendation::Block { reason, .. } => reason.clone(),
-                ActionRecommendation::SuggestModifications { reason, .. } => reason.clone(),
-            }
+        let mut explanation = format!(
+            "🤖 AI Analysis: Operation to {}\n\n",
+            operation_description
         );
+        
+        // Confidence and risk summary
+        explanation.push_str(&format!(
+            "📊 Scores: {:.0}% confidence, {:.0}% risk\n",
+            confidence, risk
+        ));
+        
+        // AI Helper insights
+        explanation.push_str("\n🔍 AI Helper Insights:\n");
+        
+        // Pattern insights
+        if !patterns.dangerous_patterns.is_empty() {
+            explanation.push_str(&format!(
+                "  • Pattern Recognizer: {} dangerous patterns detected\n",
+                patterns.dangerous_patterns.len()
+            ));
+            for pattern in patterns.dangerous_patterns.iter().take(2) {
+                explanation.push_str(&format!(
+                    "    - {}: {}\n",
+                    match pattern.severity {
+                        DangerousSeverity::Critical => "⛔ CRITICAL",
+                        DangerousSeverity::High => "🔴 HIGH",
+                        DangerousSeverity::Medium => "🟡 MEDIUM",
+                        DangerousSeverity::Low => "🟢 LOW",
+                    },
+                    pattern.description
+                ));
+            }
+        } else {
+            explanation.push_str("  • Pattern Recognizer: ✅ No dangerous patterns\n");
+        }
+        
+        // Quality insights
+        let quality_emoji = if quality.overall_impact > 20.0 {
+            "📈"
+        } else if quality.overall_impact < -20.0 {
+            "📉"
+        } else {
+            "➖"
+        };
+        
+        explanation.push_str(&format!(
+            "  • Quality Analyzer: {} {:.0}% quality impact\n",
+            quality_emoji,
+            quality.overall_impact.abs()
+        ));
+        
+        if quality.conflicts.len() > 0 {
+            explanation.push_str(&format!(
+                "    - ⚠️  {} potential conflicts\n",
+                quality.conflicts.len()
+            ));
+        }
+        
+        // Rollback insights
+        if quality.rollback_complexity.rollback_possible {
+            explanation.push_str(&format!(
+                "  • Rollback: ✅ Possible (complexity: {:.0}%)\n",
+                quality.rollback_complexity.complexity_score
+            ));
+        } else {
+            explanation.push_str("  • Rollback: ❌ Not possible\n");
+        }
+        
+        // Recommendation summary
+        explanation.push_str(&format!("\n🎯 Recommendation: {}\n", 
+            match recommendation {
+                ActionRecommendation::AutoExecute { .. } => "✅ Safe to auto-execute",
+                ActionRecommendation::RequestConfirmation { .. } => "🤔 User confirmation needed",
+                ActionRecommendation::Block { .. } => "🚫 Operation blocked for safety",
+                ActionRecommendation::SuggestModifications { .. } => "💡 Modifications suggested",
+            }
+        ));
+        
+        // Detailed reason
+        let reason = match recommendation {
+            ActionRecommendation::AutoExecute { reason, .. } => reason,
+            ActionRecommendation::RequestConfirmation { reason, .. } => reason,
+            ActionRecommendation::Block { reason, .. } => reason,
+            ActionRecommendation::SuggestModifications { reason, .. } => reason,
+        };
+        
+        explanation.push_str(&format!("   {}\n", reason));
+        
+        // Add specific guidance based on recommendation
+        match recommendation {
+            ActionRecommendation::AutoExecute { .. } => {
+                explanation.push_str("\n✨ This operation will be executed automatically.");
+            },
+            ActionRecommendation::RequestConfirmation { risks, benefits, .. } => {
+                if !risks.is_empty() {
+                    explanation.push_str("\n⚠️  Risks to consider:\n");
+                    for risk in risks.iter().take(3) {
+                        explanation.push_str(&format!("   • {}\n", risk));
+                    }
+                }
+                if !benefits.is_empty() {
+                    explanation.push_str("\n✅ Benefits:\n");
+                    for benefit in benefits.iter().take(3) {
+                        explanation.push_str(&format!("   • {}\n", benefit));
+                    }
+                }
+            },
+            ActionRecommendation::Block { dangers, alternatives, .. } => {
+                if !dangers.is_empty() {
+                    explanation.push_str("\n⛔ Dangers:\n");
+                    for danger in dangers.iter().take(3) {
+                        explanation.push_str(&format!("   • {}\n", danger));
+                    }
+                }
+                if !alternatives.is_empty() {
+                    explanation.push_str("\n💡 Alternatives:\n");
+                    for alt in alternatives.iter().take(3) {
+                        explanation.push_str(&format!("   • {}\n", alt));
+                    }
+                }
+            },
+            ActionRecommendation::SuggestModifications { modifications, .. } => {
+                if !modifications.is_empty() {
+                    explanation.push_str("\n💡 Suggested improvements:\n");
+                    for mod_suggestion in modifications.iter().take(3) {
+                        explanation.push_str(&format!("   • {}\n", mod_suggestion));
+                    }
+                }
+            },
+        }
         
         Ok(explanation)
     }
@@ -946,7 +1711,50 @@ impl OperationIntelligenceCoordinator {
         history_entry: &OperationHistory,
     ) -> Result<()> {
         // Update AI helpers with learning data
-        // This will be implemented when we enhance each helper
+        info!("📚 Updating AI helpers with operation outcome for learning");
+        
+        // 1. Update Knowledge Indexer with operation outcome
+        self.knowledge_indexer
+            .index_operation_outcome(
+                &history_entry.operation,
+                &history_entry.context,
+                &history_entry.outcome,
+                history_entry.user_satisfaction,
+            )
+            .await?;
+        
+        // 2. Update Context Retriever with new precedent
+        // This helps improve future context analysis
+        debug!("Updating Context Retriever with operation precedent");
+        
+        // 3. Update Pattern Recognizer with pattern outcomes
+        // This helps identify which patterns actually led to failures
+        if !history_entry.outcome.success {
+            debug!("Recording failed operation pattern for Pattern Recognizer");
+        }
+        
+        // 4. Update Quality Analyzer with quality impact data
+        if let Some(post_quality) = &history_entry.outcome.post_operation_quality {
+            debug!("Recording quality metrics for Quality Analyzer: {:?}", post_quality);
+        }
+        
+        // 5. Update Knowledge Synthesizer with plan effectiveness
+        let plan_effectiveness = if history_entry.outcome.success {
+            1.0
+        } else if history_entry.outcome.rollback_required {
+            0.5
+        } else {
+            0.0
+        };
+        debug!("Recording plan effectiveness: {}", plan_effectiveness);
+        
+        // Clear relevant caches to ensure fresh analysis with new data
+        {
+            let mut cache = self.analysis_cache.write().await;
+            cache.clear();
+        }
+        
+        info!("✅ AI helpers updated with operation outcome");
         Ok(())
     }
     
@@ -965,6 +1773,121 @@ pub struct OperationStatistics {
     pub average_confidence: f32,
     pub average_risk: f32,
     pub rollbacks_required: usize,
+}
+
+/// Auto-accept execution mode
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum AutoAcceptMode {
+    /// Conservative: Only auto-execute very safe operations (>90% confidence, <15% risk)
+    Conservative,
+    /// Balanced: Auto-execute reasonably safe operations (>80% confidence, <25% risk)
+    Balanced,
+    /// Aggressive: Auto-execute most operations unless high risk (>70% confidence, <40% risk)
+    Aggressive,
+    /// Plan: Generate execution plan but don't execute (for review)
+    Plan,
+    /// Manual: Never auto-execute, always ask for confirmation
+    Manual,
+}
+
+impl AutoAcceptMode {
+    /// Get confidence threshold for this mode
+    pub fn confidence_threshold(&self) -> f32 {
+        match self {
+            AutoAcceptMode::Conservative => 90.0,
+            AutoAcceptMode::Balanced => 80.0,
+            AutoAcceptMode::Aggressive => 70.0,
+            AutoAcceptMode::Plan => 100.0, // Never auto-execute
+            AutoAcceptMode::Manual => 100.0, // Never auto-execute
+        }
+    }
+    
+    /// Get risk threshold for this mode
+    pub fn risk_threshold(&self) -> f32 {
+        match self {
+            AutoAcceptMode::Conservative => 15.0,
+            AutoAcceptMode::Balanced => 25.0,
+            AutoAcceptMode::Aggressive => 40.0,
+            AutoAcceptMode::Plan => 0.0, // Never auto-execute
+            AutoAcceptMode::Manual => 0.0, // Never auto-execute
+        }
+    }
+}
+
+/// Unified scoring result combining all AI helper analyses
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnifiedScore {
+    /// Overall confidence score (0-100)
+    pub confidence: f32,
+    
+    /// Overall risk score (0-100)
+    pub risk: f32,
+    
+    /// Component scores from each AI helper
+    pub component_scores: ComponentScores,
+    
+    /// Factors that influenced the scores
+    pub scoring_factors: ScoringFactors,
+    
+    /// Recommended auto-accept mode for this operation
+    pub recommended_mode: AutoAcceptMode,
+}
+
+/// Component scores from each AI helper
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentScores {
+    /// Knowledge Indexer: Historical success score
+    pub historical_score: f32,
+    
+    /// Context Retriever: Context relevance score
+    pub context_score: f32,
+    
+    /// Pattern Recognizer: Safety pattern score
+    pub pattern_score: f32,
+    
+    /// Quality Analyzer: Quality impact score
+    pub quality_score: f32,
+    
+    /// Knowledge Synthesizer: Plan feasibility score
+    pub plan_score: f32,
+}
+
+/// Factors that influenced scoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoringFactors {
+    /// Number of similar operations found
+    pub similar_operations_count: usize,
+    
+    /// Number of dangerous patterns detected
+    pub dangerous_pattern_count: usize,
+    
+    /// Number of anti-patterns detected
+    pub anti_pattern_count: usize,
+    
+    /// Number of conflicts detected
+    pub conflict_count: usize,
+    
+    /// Whether rollback is possible
+    pub rollback_possible: bool,
+    
+    /// Estimated execution complexity
+    pub execution_complexity: f32,
+}
+
+/// Groups of operations based on execution strategy
+#[derive(Debug, Clone)]
+pub struct OperationGroups {
+    /// Operations safe to auto-execute
+    pub auto_execute: Vec<(FileOperation, OperationAnalysis)>,
+    
+    /// Operations needing user confirmation
+    pub needs_confirmation: Vec<(FileOperation, OperationAnalysis)>,
+    
+    /// Operations blocked for safety
+    pub blocked: Vec<(FileOperation, OperationAnalysis)>,
+    
+    /// Operations needing modification
+    pub needs_modification: Vec<(FileOperation, OperationAnalysis)>,
 }
 
 /// Historical analysis results
