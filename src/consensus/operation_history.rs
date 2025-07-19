@@ -5,15 +5,17 @@
 //! existing conversational memory system by tracking what was done,
 //! not just what was said.
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{sqlite::SqlitePool, FromRow, Row};
+use rusqlite::{Connection, params, OptionalExtension};
+use r2d2::{Pool, PooledConnection};
+use r2d2_sqlite::SqliteConnectionManager;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 use tracing::{debug, info, warn, error};
 use uuid::Uuid;
 
@@ -25,7 +27,7 @@ use crate::consensus::operation_intelligence::{
 /// Operation history database manager
 pub struct OperationHistoryDatabase {
     /// SQLite connection pool
-    pool: SqlitePool,
+    pool: Pool<SqliteConnectionManager>,
     
     /// In-memory cache for recent operations
     cache: Arc<RwLock<OperationCache>>,
@@ -277,10 +279,11 @@ impl OperationHistoryDatabase {
         info!("🗄️  Initializing operation history database");
         
         // Create connection pool
-        let pool = SqlitePool::connect(database_url).await?;
+        let manager = SqliteConnectionManager::file(database_url);
+        let pool = Pool::new(manager)?;
         
         // Run migrations
-        Self::run_migrations(&pool).await?;
+        Self::run_migrations(&pool)?;
         
         // Initialize cache
         let cache = Arc::new(RwLock::new(OperationCache {
@@ -300,11 +303,13 @@ impl OperationHistoryDatabase {
     }
     
     /// Run database migrations
-    async fn run_migrations(pool: &SqlitePool) -> Result<()> {
+    fn run_migrations(pool: &Pool<SqliteConnectionManager>) -> Result<()> {
         debug!("Running operation history database migrations");
         
+        let conn = pool.get()?;
+        
         // Create main operations table
-        sqlx::query(
+        conn.execute(
             r#"
             CREATE TABLE IF NOT EXISTS operations (
                 id TEXT PRIMARY KEY,
@@ -325,43 +330,33 @@ impl OperationHistoryDatabase {
                 execution_time_ms INTEGER,
                 rollback_required BOOLEAN
             )
-            "#
-        )
-        .execute(pool)
-        .await?;
+            "#,
+            [],
+        )?;
         
         // Create indexes for common queries
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_operations_file_path ON operations(file_path)")
-            .execute(pool)
-            .await?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_operations_file_path ON operations(file_path)", [])?;
         
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_operations_type ON operations(operation_type)")
-            .execute(pool)
-            .await?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_operations_type ON operations(operation_type)", [])?;
         
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_operations_created_at ON operations(created_at)")
-            .execute(pool)
-            .await?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_operations_created_at ON operations(created_at)", [])?;
         
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_operations_success ON operations(success)")
-            .execute(pool)
-            .await?;
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_operations_success ON operations(success)", [])?;
         
         // Create aggregated statistics table
-        sqlx::query(
+        conn.execute(
             r#"
             CREATE TABLE IF NOT EXISTS operation_statistics (
                 id INTEGER PRIMARY KEY,
                 calculated_at TIMESTAMP NOT NULL,
                 statistics TEXT NOT NULL
             )
-            "#
-        )
-        .execute(pool)
-        .await?;
+            "#,
+            [],
+        )?;
         
         // Create user feedback table
-        sqlx::query(
+        conn.execute(
             r#"
             CREATE TABLE IF NOT EXISTS operation_feedback (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -372,10 +367,9 @@ impl OperationHistoryDatabase {
                 provided_at TIMESTAMP NOT NULL,
                 FOREIGN KEY (operation_id) REFERENCES operations(id)
             )
-            "#
-        )
-        .execute(pool)
-        .await?;
+            "#,
+            [],
+        )?;
         
         info!("✅ Operation history database migrations completed");
         Ok(())
@@ -409,26 +403,27 @@ impl OperationHistoryDatabase {
         };
         
         // Insert into database
-        sqlx::query(
+        let conn = self.pool.get()?;
+        conn.execute(
             r#"
             INSERT INTO operations (
                 id, operation_type, file_path, details, context, 
                 prediction, created_at, confidence, risk, was_auto_executed
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-            "#
-        )
-        .bind(id.to_string())
-        .bind(serde_json::to_string(&operation_type)?)
-        .bind(file_path.to_string_lossy())
-        .bind(serde_json::to_string(&details)?)
-        .bind(serde_json::to_string(&context_record)?)
-        .bind(serde_json::to_string(&prediction)?)
-        .bind(now)
-        .bind(confidence)
-        .bind(risk)
-        .bind(was_auto_executed)
-        .execute(&self.pool)
-        .await?;
+            "#,
+            params![
+                id.to_string(),
+                serde_json::to_string(&operation_type)?,
+                file_path.to_string_lossy(),
+                serde_json::to_string(&details)?,
+                serde_json::to_string(&context_record)?,
+                serde_json::to_string(&prediction)?,
+                now.to_rfc3339(),
+                confidence,
+                risk,
+                was_auto_executed
+            ],
+        )?;
         
         // Add to cache
         let record = OperationRecord {
@@ -451,14 +446,14 @@ impl OperationHistoryDatabase {
             completed_at: None,
         };
         
-        self.add_to_cache(record).await;
+        self.add_to_cache(record);
         
         info!("📝 Recorded new operation: {} for {}", id, file_path.display());
         Ok(id)
     }
     
     /// Update operation outcome
-    pub async fn update_outcome(
+    pub fn update_outcome(
         &self,
         operation_id: Uuid,
         outcome: &OperationOutcome,
@@ -482,29 +477,30 @@ impl OperationHistoryDatabase {
             }),
         };
         
-        sqlx::query(
+        let conn = self.pool.get()?;
+        conn.execute(
             r#"
             UPDATE operations 
             SET outcome = ?1, completed_at = ?2, success = ?3, 
                 execution_time_ms = ?4, rollback_required = ?5
             WHERE id = ?6
-            "#
-        )
-        .bind(serde_json::to_string(&outcome_record)?)
-        .bind(now)
-        .bind(outcome.success)
-        .bind(outcome_record.execution_time_ms as i64)
-        .bind(outcome.rollback_required)
-        .bind(operation_id.to_string())
-        .execute(&self.pool)
-        .await?;
+            "#,
+            params![
+                serde_json::to_string(&outcome_record)?,
+                now.to_rfc3339(),
+                outcome.success,
+                outcome_record.execution_time_ms as i64,
+                outcome.rollback_required,
+                operation_id.to_string()
+            ],
+        )?;
         
         // Update cache
-        self.update_cache_outcome(operation_id, outcome_record, now).await;
+        self.update_cache_outcome(operation_id, outcome_record, now);
         
         // Invalidate statistics cache
         {
-            let mut stats_cache = self.stats_cache.write().await;
+            let mut stats_cache = self.stats_cache.write().unwrap();
             *stats_cache = None;
         }
         
@@ -513,7 +509,7 @@ impl OperationHistoryDatabase {
     }
     
     /// Add user feedback
-    pub async fn add_user_feedback(
+    pub fn add_user_feedback(
         &self,
         operation_id: Uuid,
         satisfaction: f32,
@@ -522,20 +518,21 @@ impl OperationHistoryDatabase {
     ) -> Result<()> {
         let now = Utc::now();
         
-        sqlx::query(
+        let conn = self.pool.get()?;
+        conn.execute(
             r#"
             INSERT INTO operation_feedback (
                 operation_id, satisfaction, was_helpful, comment, provided_at
             ) VALUES (?1, ?2, ?3, ?4, ?5)
-            "#
-        )
-        .bind(operation_id.to_string())
-        .bind(satisfaction)
-        .bind(was_helpful)
-        .bind(comment.clone())
-        .bind(now)
-        .execute(&self.pool)
-        .await?;
+            "#,
+            params![
+                operation_id.to_string(),
+                satisfaction,
+                was_helpful,
+                comment.clone(),
+                now.to_rfc3339()
+            ],
+        )?;
         
         // Update operation record with feedback
         let feedback = UserFeedback {
@@ -546,7 +543,7 @@ impl OperationHistoryDatabase {
         };
         
         // Update in cache if present
-        let mut cache = self.cache.write().await;
+        let mut cache = self.cache.write().unwrap();
         if let Some(record) = cache.operations.get_mut(&operation_id) {
             if let Some(outcome) = &mut record.outcome.user_feedback {
                 *outcome = feedback;
@@ -560,7 +557,7 @@ impl OperationHistoryDatabase {
     }
     
     /// Find similar operations
-    pub async fn find_similar_operations(
+    pub fn find_similar_operations(
         &self,
         operation: &FileOperation,
         context: &OperationContext,
@@ -570,7 +567,8 @@ impl OperationHistoryDatabase {
         let file_path = self.get_operation_path(operation);
         
         // Query similar operations
-        let rows = sqlx::query(
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(
             r#"
             SELECT id, operation_type, file_path, details, context, 
                    prediction, outcome, created_at, completed_at
@@ -582,27 +580,30 @@ impl OperationHistoryDatabase {
               created_at DESC
             LIMIT ?3
             "#
-        )
-        .bind(serde_json::to_string(&operation_type)?)
-        .bind(file_path.to_string_lossy())
-        .bind(limit as i64)
-        .fetch_all(&self.pool)
-        .await?;
+        )?;
+        
+        let rows = stmt.query_map(
+            params![
+                serde_json::to_string(&operation_type)?,
+                file_path.to_string_lossy(),
+                limit as i64
+            ],
+            |row| self.row_to_record(row)
+        )?;
         
         let mut results = Vec::new();
         for row in rows {
-            let record = self.row_to_record(row)?;
-            results.push(record);
+            results.push(row?);
         }
         
         Ok(results)
     }
     
     /// Get operation statistics
-    pub async fn get_statistics(&self) -> Result<OperationStatistics> {
+    pub fn get_statistics(&self) -> Result<OperationStatistics> {
         // Check cache first
         {
-            let cache = self.stats_cache.read().await;
+            let cache = self.stats_cache.read().unwrap();
             if let Some(cached) = cache.as_ref() {
                 if cached.expires_at > Utc::now() {
                     return Ok(cached.stats.clone());
@@ -611,11 +612,11 @@ impl OperationHistoryDatabase {
         }
         
         // Calculate fresh statistics
-        let stats = self.calculate_statistics().await?;
+        let stats = self.calculate_statistics()?;
         
         // Cache for 5 minutes
         {
-            let mut cache = self.stats_cache.write().await;
+            let mut cache = self.stats_cache.write().unwrap();
             *cache = Some(CachedStatistics {
                 stats: stats.clone(),
                 expires_at: Utc::now() + chrono::Duration::minutes(5),
@@ -626,7 +627,7 @@ impl OperationHistoryDatabase {
     }
     
     /// Search operations with filters
-    pub async fn search_operations(
+    pub fn search_operations(
         &self,
         filters: &OperationFilters,
     ) -> Result<Vec<OperationRecord>> {
@@ -636,7 +637,7 @@ impl OperationHistoryDatabase {
              FROM operations WHERE 1=1"
         );
         
-        let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Sqlite> + Send + Sync>> = Vec::new();
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         
         // Build dynamic query based on filters
         if let Some(op_type) = &filters.operation_type {
@@ -656,12 +657,12 @@ impl OperationHistoryDatabase {
         
         if let Some(after) = filters.after {
             query.push_str(" AND created_at >= ?");
-            params.push(Box::new(after));
+            params.push(Box::new(after.to_rfc3339()));
         }
         
         if let Some(before) = filters.before {
             query.push_str(" AND created_at <= ?");
-            params.push(Box::new(before));
+            params.push(Box::new(before.to_rfc3339()));
         }
         
         if let Some(min_conf) = filters.min_confidence {
@@ -682,17 +683,18 @@ impl OperationHistoryDatabase {
         }
         
         // Execute query
-        let mut query_builder = sqlx::query(&query);
-        for param in params {
-            query_builder = query_builder.bind(param);
-        }
+        let conn = self.pool.get()?;
+        let mut stmt = conn.prepare(&query)?;
         
-        let rows = query_builder.fetch_all(&self.pool).await?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter()
+            .map(|p| p.as_ref() as &dyn rusqlite::ToSql)
+            .collect();
+        
+        let rows = stmt.query_map(&param_refs[..], |row| self.row_to_record(row))?;
         
         let mut results = Vec::new();
         for row in rows {
-            let record = self.row_to_record(row)?;
-            results.push(record);
+            results.push(row?);
         }
         
         Ok(results)
@@ -771,8 +773,8 @@ impl OperationHistoryDatabase {
         }
     }
     
-    async fn add_to_cache(&self, record: OperationRecord) {
-        let mut cache = self.cache.write().await;
+    fn add_to_cache(&self, record: OperationRecord) {
+        let mut cache = self.cache.write().unwrap();
         
         // Check cache size
         if cache.operations.len() >= cache.max_size {
@@ -805,47 +807,51 @@ impl OperationHistoryDatabase {
         cache.by_type.entry(op_type).or_insert_with(Vec::new).push(id);
     }
     
-    async fn update_cache_outcome(
+    fn update_cache_outcome(
         &self,
         operation_id: Uuid,
         outcome: OutcomeRecord,
         completed_at: DateTime<Utc>,
     ) {
-        let mut cache = self.cache.write().await;
+        let mut cache = self.cache.write().unwrap();
         if let Some(record) = cache.operations.get_mut(&operation_id) {
             record.outcome = outcome;
             record.completed_at = Some(completed_at);
         }
     }
     
-    async fn calculate_statistics(&self) -> Result<OperationStatistics> {
+    fn calculate_statistics(&self) -> Result<OperationStatistics> {
         // Get overall statistics
-        let overall = sqlx::query(
-            r#"
-            SELECT 
-                COUNT(*) as total,
-                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
-                SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed,
-                SUM(CASE WHEN was_auto_executed = 1 THEN 1 ELSE 0 END) as auto_executed,
-                SUM(CASE WHEN rollback_required = 1 THEN 1 ELSE 0 END) as rollbacks,
-                AVG(confidence) as avg_confidence,
-                AVG(risk) as avg_risk,
-                AVG(execution_time_ms) as avg_execution_time
-            FROM operations
-            WHERE success IS NOT NULL
-            "#
-        )
-        .fetch_one(&self.pool)
-        .await?;
-        
-        let total: i64 = overall.get("total");
-        let successful: i64 = overall.get("successful");
-        let failed: i64 = overall.get("failed");
-        let auto_executed: i64 = overall.get("auto_executed");
-        let rollbacks: i64 = overall.get("rollbacks");
-        let avg_confidence: Option<f32> = overall.get("avg_confidence");
-        let avg_risk: Option<f32> = overall.get("avg_risk");
-        let avg_execution_time: Option<f32> = overall.get("avg_execution_time");
+        let conn = self.pool.get()?;
+        let (total, successful, failed, auto_executed, rollbacks, avg_confidence, avg_risk, avg_execution_time) = 
+            conn.query_row(
+                r#"
+                SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
+                    SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failed,
+                    SUM(CASE WHEN was_auto_executed = 1 THEN 1 ELSE 0 END) as auto_executed,
+                    SUM(CASE WHEN rollback_required = 1 THEN 1 ELSE 0 END) as rollbacks,
+                    AVG(confidence) as avg_confidence,
+                    AVG(risk) as avg_risk,
+                    AVG(execution_time_ms) as avg_execution_time
+                FROM operations
+                WHERE success IS NOT NULL
+                "#,
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, i64>(4)?,
+                        row.get::<_, Option<f64>>(5)?.map(|v| v as f32),
+                        row.get::<_, Option<f64>>(6)?.map(|v| v as f32),
+                        row.get::<_, Option<f64>>(7)?.map(|v| v as f32),
+                    ))
+                },
+            )?;
         
         // Get per-type statistics
         let mut by_type = HashMap::new();
@@ -857,25 +863,27 @@ impl OperationHistoryDatabase {
             OperationType::Delete,
             OperationType::Rename,
         ] {
-            let type_stats = sqlx::query(
-                r#"
-                SELECT 
-                    COUNT(*) as count,
-                    SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
-                    AVG(confidence) as avg_confidence,
-                    AVG(risk) as avg_risk
-                FROM operations
-                WHERE operation_type = ?1 AND success IS NOT NULL
-                "#
-            )
-            .bind(serde_json::to_string(op_type)?)
-            .fetch_one(&self.pool)
-            .await?;
-            
-            let count: i64 = type_stats.get("count");
-            let type_successful: i64 = type_stats.get("successful");
-            let type_avg_confidence: Option<f32> = type_stats.get("avg_confidence");
-            let type_avg_risk: Option<f32> = type_stats.get("avg_risk");
+            let (count, type_successful, type_avg_confidence, type_avg_risk) = 
+                conn.query_row(
+                    r#"
+                    SELECT 
+                        COUNT(*) as count,
+                        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successful,
+                        AVG(confidence) as avg_confidence,
+                        AVG(risk) as avg_risk
+                    FROM operations
+                    WHERE operation_type = ?1 AND success IS NOT NULL
+                    "#,
+                    params![serde_json::to_string(op_type)?],
+                    |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, i64>(1)?,
+                            row.get::<_, Option<f64>>(2)?.map(|v| v as f32),
+                            row.get::<_, Option<f64>>(3)?.map(|v| v as f32),
+                        ))
+                    },
+                )?;
             
             if count > 0 {
                 by_type.insert(*op_type, TypeStatistics {
@@ -904,26 +912,38 @@ impl OperationHistoryDatabase {
         })
     }
     
-    fn row_to_record(&self, row: sqlx::sqlite::SqliteRow) -> Result<OperationRecord> {
-        let id: String = row.get("id");
-        let operation_type: String = row.get("operation_type");
-        let file_path: String = row.get("file_path");
-        let details: String = row.get("details");
-        let context: String = row.get("context");
-        let prediction: String = row.get("prediction");
-        let outcome: Option<String> = row.get("outcome");
-        let created_at: DateTime<Utc> = row.get("created_at");
-        let completed_at: Option<DateTime<Utc>> = row.get("completed_at");
+    fn row_to_record(&self, row: &rusqlite::Row) -> rusqlite::Result<OperationRecord> {
+        let id: String = row.get("id")?;
+        let operation_type: String = row.get("operation_type")?;
+        let file_path: String = row.get("file_path")?;
+        let details: String = row.get("details")?;
+        let context: String = row.get("context")?;
+        let prediction: String = row.get("prediction")?;
+        let outcome: Option<String> = row.get("outcome")?;
+        let created_at: String = row.get("created_at")?;
+        let completed_at: Option<String> = row.get("completed_at")?;
         
         Ok(OperationRecord {
-            id: Uuid::parse_str(&id)?,
-            operation_type: serde_json::from_str(&operation_type)?,
+            id: Uuid::parse_str(&id).map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                0, rusqlite::types::Type::Text, Box::new(e)
+            ))?,
+            operation_type: serde_json::from_str(&operation_type).map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                1, rusqlite::types::Type::Text, Box::new(e)
+            ))?,
             file_path: PathBuf::from(file_path),
-            details: serde_json::from_str(&details)?,
-            context: serde_json::from_str(&context)?,
-            prediction: serde_json::from_str(&prediction)?,
+            details: serde_json::from_str(&details).map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                3, rusqlite::types::Type::Text, Box::new(e)
+            ))?,
+            context: serde_json::from_str(&context).map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                4, rusqlite::types::Type::Text, Box::new(e)
+            ))?,
+            prediction: serde_json::from_str(&prediction).map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                5, rusqlite::types::Type::Text, Box::new(e)
+            ))?,
             outcome: outcome
-                .map(|o| serde_json::from_str(&o))
+                .map(|o| serde_json::from_str(&o).map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                    6, rusqlite::types::Type::Text, Box::new(e)
+                )))
                 .transpose()?
                 .unwrap_or_else(|| OutcomeRecord {
                     success: false,
@@ -934,8 +954,18 @@ impl OperationHistoryDatabase {
                     user_feedback: None,
                     post_quality_metrics: None,
                 }),
-            created_at,
-            completed_at,
+            created_at: DateTime::parse_from_rfc3339(&created_at)
+                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                    7, rusqlite::types::Type::Text, Box::new(e)
+                ))?
+                .with_timezone(&Utc),
+            completed_at: completed_at.map(|dt| 
+                DateTime::parse_from_rfc3339(&dt)
+                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                        8, rusqlite::types::Type::Text, Box::new(e)
+                    ))
+                    .map(|dt| dt.with_timezone(&Utc))
+            ).transpose()?,
         })
     }
 }
@@ -944,13 +974,13 @@ impl OperationHistoryDatabase {
 mod tests {
     use super::*;
     
-    #[tokio::test]
-    async fn test_operation_history_creation() {
+    #[test]
+    fn test_operation_history_creation() {
         // Test database creation and basic operations
-        let db = OperationHistoryDatabase::new(":memory:").await.unwrap();
+        let db = OperationHistoryDatabase::new(":memory:").unwrap();
         
         // Test getting empty statistics
-        let stats = db.get_statistics().await.unwrap();
+        let stats = db.get_statistics().unwrap();
         assert_eq!(stats.total_operations, 0);
     }
 }

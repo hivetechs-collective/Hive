@@ -393,8 +393,8 @@ impl SecurityValidator {
     pub fn new() -> Self {
         Self {
             forbidden_patterns: vec![
-                regex::Regex::new(r"(?i)(password|secret|key|token)\s*=\s*['\"][\w\-]+['\"]").unwrap(),
-                regex::Regex::new(r"(?i)api[_-]?key\s*[:=]\s*[\w\-]+").unwrap(),
+                regex::Regex::new(r#"(?i)(password|secret|key|token)\s*=\s*['"'][\w\-]+['"']"#).unwrap(),
+                regex::Regex::new(r#"(?i)api[_-]?key\s*[:=]\s*[\w\-]+"#).unwrap(),
                 regex::Regex::new(r"-----BEGIN (RSA |EC )?PRIVATE KEY-----").unwrap(),
             ],
             sensitive_file_patterns: vec![
