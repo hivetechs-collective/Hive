@@ -1899,7 +1899,6 @@ impl OperationIntelligenceCoordinator {
             FileOperation::Create { .. } => "Create".to_string(),
             FileOperation::Update { .. } => "Update".to_string(),
             FileOperation::Delete { .. } => "Delete".to_string(),
-            FileOperation::Move { .. } => "Move".to_string(),
         }
     }
 
@@ -1909,7 +1908,7 @@ impl OperationIntelligenceCoordinator {
             FileOperation::Create { path, .. } => format!("Create {}", path.display()),
             FileOperation::Update { path, .. } => format!("Update {}", path.display()),
             FileOperation::Delete { path } => format!("Delete {}", path.display()),
-            FileOperation::Move { from, to } => format!("Move {} to {}", from.display(), to.display()),
+            FileOperation::Rename { from, to } => format!("Rename {} to {}", from.display(), to.display()),
         }
     }
 }

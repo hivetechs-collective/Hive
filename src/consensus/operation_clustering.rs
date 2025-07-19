@@ -548,14 +548,6 @@ impl OperationClusterer {
                                 return true; // Can't update a file before it's created
                             }
                         }
-                        FileOperation::Move { destination, .. } => {
-                            // Check if moving to a directory that's being created
-                            if let Some(parent) = destination.parent() {
-                                if create_path == &parent.to_path_buf() {
-                                    return true;
-                                }
-                            }
-                        }
                         _ => {}
                     }
                 }

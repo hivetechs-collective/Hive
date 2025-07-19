@@ -397,26 +397,39 @@ impl RollbackExecutor {
         step: &RollbackStep,
     ) -> Result<Vec<PathBuf>> {
         match &step.operation {
-            RollbackOperation::RestoreFromBackup { backup_path, target_path } => {
-                self.backup_manager.restore_from_backup(backup_path, target_path).await
+            RollbackOperation::RestoreFile { source, destination, .. } => {
+                self.backup_manager.restore_from_backup(source, destination).await
             }
-            RollbackOperation::GitRevert { commit_hash, file_paths } => {
-                self.git_manager.revert_commit(commit_hash, file_paths.as_deref()).await
+            RollbackOperation::GitCommand { command, args, .. } => {
+                if command == "revert" && !args.is_empty() {
+                    self.git_manager.revert_commit(&args[0], None).await
+                } else {
+                    bail!("Unsupported Git command: {}", command)
+                }
             }
-            RollbackOperation::DeleteFile { file_path } => {
-                self.delete_file_safely(file_path).await
+            RollbackOperation::ReverseOperation { operation } => {
+                match operation {
+                    FileOperation::Create { path, .. } => self.delete_file_safely(path).await,
+                    _ => bail!("Unsupported reverse operation")
+                }
             }
-            RollbackOperation::RecreateFile { file_path, content } => {
-                self.recreate_file(file_path, content).await
-            }
-            RollbackOperation::RestoreFileContent { file_path, original_content } => {
-                self.restore_file_content(file_path, original_content).await
-            }
-            RollbackOperation::RunScript { script_path, args } => {
+            RollbackOperation::ExecuteScript { script_path, args } => {
                 self.run_rollback_script(script_path, args).await
             }
-            RollbackOperation::UserAction { description, instructions } => {
-                self.handle_user_action(description, instructions).await
+            RollbackOperation::VerifyState { file, expected_exists, .. } => {
+                if *expected_exists {
+                    if tokio::fs::metadata(file).await.is_ok() {
+                        Ok(vec![file.clone()])
+                    } else {
+                        bail!("Expected file {} to exist", file.display())
+                    }
+                } else {
+                    if tokio::fs::metadata(file).await.is_err() {
+                        Ok(vec![])
+                    } else {
+                        bail!("Expected file {} to not exist", file.display())
+                    }
+                }
             }
         }
     }
@@ -431,8 +444,8 @@ impl RollbackExecutor {
         // Check if all required files and paths exist
         for step in &plan.steps {
             match &step.operation {
-                RollbackOperation::RestoreFromBackup { backup_path, target_path } => {
-                    if !backup_path.exists() {
+                RollbackOperation::RestoreFile { source, .. } => {
+                    if !source.exists() {
                         bail!("Backup file does not exist: {}", backup_path.display());
                     }
                     if let Some(parent) = target_path.parent() {
@@ -441,8 +454,9 @@ impl RollbackExecutor {
                         }
                     }
                 }
-                RollbackOperation::DeleteFile { file_path } => {
-                    if !file_path.exists() {
+                RollbackOperation::ReverseOperation { operation } => {
+                    if let FileOperation::Create { path, .. } = operation {
+                        if !path.exists() {
                         warn!("File to delete does not exist: {}", file_path.display());
                     }
                 }
@@ -502,8 +516,8 @@ impl RollbackExecutor {
 
         let backups_used: Vec<String> = plan.steps.iter()
             .filter_map(|step| {
-                if let RollbackOperation::RestoreFromBackup { backup_path, .. } = &step.operation {
-                    Some(backup_path.display().to_string())
+                if let RollbackOperation::RestoreFile { source, .. } = &step.operation {
+                    Some(source.display().to_string())
                 } else {
                     None
                 }
@@ -613,8 +627,8 @@ impl RollbackExecutor {
         
         for step in &plan.steps {
             match &step.operation {
-                RollbackOperation::RestoreFromBackup { backup_path, .. } => {
-                    if backup_path.exists() {
+                RollbackOperation::RestoreFile { source, .. } => {
+                    if source.exists() {
                         if let Ok(metadata) = fs::metadata(backup_path).await {
                             total_size += metadata.len();
                         }
@@ -631,13 +645,13 @@ impl RollbackExecutor {
 
     fn suggest_action_for_step_failure(&self, step: &RollbackStep, error_msg: &str) -> Option<String> {
         match &step.operation {
-            RollbackOperation::RestoreFromBackup { .. } => {
+            RollbackOperation::RestoreFile { .. } => {
                 Some("Verify backup file integrity and permissions".to_string())
             }
             RollbackOperation::GitRevert { .. } => {
                 Some("Check Git repository state and resolve any conflicts manually".to_string())
             }
-            RollbackOperation::DeleteFile { .. } => {
+            RollbackOperation::ReverseOperation { .. } => {
                 Some("Check file permissions and ensure file is not locked by another process".to_string())
             }
             _ => {
@@ -793,8 +807,8 @@ impl VerificationSystem {
         step: &RollbackStep,
     ) -> Result<VerificationResult> {
         match &step.operation {
-            RollbackOperation::RestoreFromBackup { target_path, .. } => {
-                let exists = target_path.exists();
+            RollbackOperation::RestoreFile { destination, .. } => {
+                let exists = destination.exists();
                 Ok(VerificationResult {
                     is_successful: exists,
                     verification_type: VerificationType::FileExists,
@@ -807,8 +821,9 @@ impl VerificationSystem {
                     verified_at: Utc::now(),
                 })
             }
-            RollbackOperation::DeleteFile { file_path } => {
-                let exists = file_path.exists();
+            RollbackOperation::ReverseOperation { operation } => {
+                if let FileOperation::Create { path, .. } = operation {
+                    let exists = path.exists();
                 Ok(VerificationResult {
                     is_successful: !exists,
                     verification_type: VerificationType::FileExists,

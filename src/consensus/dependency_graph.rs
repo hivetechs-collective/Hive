@@ -278,7 +278,6 @@ impl DependencyGraphGenerator {
             FileOperation::Update { .. } => ("Update", "#2196F3", "ellipse"),
             FileOperation::Delete { .. } => ("Delete", "#F44336", "diamond"),
             FileOperation::Rename { .. } => ("Rename", "#FF9800", "parallelogram"),
-            FileOperation::Move { .. } => ("Move", "#9C27B0", "hexagon"),
         };
 
         let file_path = self.get_operation_path(&enhanced_op.operation);
@@ -361,7 +360,6 @@ impl DependencyGraphGenerator {
                 }
             }
             // Move/Rename depends on file existence
-            (FileOperation::Move { source: s1, .. }, FileOperation::Create { path: p2, .. }) |
             (FileOperation::Rename { old_path: s1, .. }, FileOperation::Create { path: p2, .. }) => {
                 if s1 == p2 {
                     Some(DependencyEdge {
@@ -1080,7 +1078,6 @@ impl DependencyGraphGenerator {
             FileOperation::Update { path, .. } |
             FileOperation::Delete { path } => path.clone(),
             FileOperation::Rename { new_path, .. } => new_path.clone(),
-            FileOperation::Move { destination, .. } => destination.clone(),
         }
     }
 
@@ -1096,7 +1093,7 @@ impl DependencyGraphGenerator {
                 }
             }
             FileOperation::Create { .. } => RiskLevel::Low,
-            FileOperation::Rename { .. } | FileOperation::Move { .. } => RiskLevel::Medium,
+            FileOperation::Rename { .. } => RiskLevel::Medium,
         }
     }
 
@@ -1108,7 +1105,6 @@ impl DependencyGraphGenerator {
             FileOperation::Update { .. } => 15,
             FileOperation::Delete { .. } => 5,
             FileOperation::Rename { .. } => 10,
-            FileOperation::Move { .. } => 15,
         }
     }
 

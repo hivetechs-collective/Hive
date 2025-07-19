@@ -208,9 +208,6 @@ impl FileSystemValidator {
             FileOperation::Rename { from, to } => {
                 self.validate_rename(from, to).await
             }
-            FileOperation::Move { source, destination } => {
-                self.validate_move(source, destination).await
-            }
         }
     }
 
