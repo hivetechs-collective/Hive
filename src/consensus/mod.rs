@@ -20,6 +20,7 @@ pub mod fact_checker;
 pub mod cross_validator;
 pub mod verified_context_builder;
 pub mod operation_intelligence;
+pub mod operation_history;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};

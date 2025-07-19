@@ -18,6 +18,9 @@ use crate::ai_helpers::{
     QualityAnalyzer, KnowledgeSynthesizer
 };
 use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_history::{
+    OperationHistoryDatabase, OperationRecord, OperationFilters
+};
 
 /// Complete analysis of a file operation by all AI helpers
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -479,6 +482,9 @@ pub struct OperationIntelligenceCoordinator {
     /// Operation history storage
     operation_history: Arc<RwLock<Vec<OperationHistory>>>,
     
+    /// Operation history database
+    history_database: Option<Arc<OperationHistoryDatabase>>,
+    
     /// Performance metrics
     analysis_cache: Arc<RwLock<HashMap<String, OperationAnalysis>>>,
 }
@@ -499,8 +505,17 @@ impl OperationIntelligenceCoordinator {
             quality_analyzer,
             knowledge_synthesizer,
             operation_history: Arc::new(RwLock::new(Vec::new())),
+            history_database: None,
             analysis_cache: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+    
+    /// Set operation history database
+    pub async fn set_history_database(&mut self, database_url: &str) -> Result<()> {
+        info!("🗄️  Connecting to operation history database");
+        let db = OperationHistoryDatabase::new(database_url).await?;
+        self.history_database = Some(Arc::new(db));
+        Ok(())
     }
     
     /// Get unified score for an operation
@@ -587,6 +602,28 @@ impl OperationIntelligenceCoordinator {
             analysis.risk,
             mode
         );
+        
+        // Record operation in history database if available
+        if let Some(db) = &self.history_database {
+            let recommendation_str = match &analysis.recommendation {
+                ActionRecommendation::AutoExecute { .. } => "auto_execute",
+                ActionRecommendation::RequestConfirmation { .. } => "request_confirmation",
+                ActionRecommendation::Block { .. } => "block",
+                ActionRecommendation::SuggestModifications { .. } => "suggest_modifications",
+            };
+            
+            if let Err(e) = db.record_operation(
+                operation,
+                context,
+                analysis.confidence,
+                analysis.risk,
+                &format!("{:?}", mode),
+                should_execute,
+                recommendation_str,
+            ).await {
+                warn!("Failed to record operation in history: {}", e);
+            }
+        }
         
         Ok((should_execute, analysis))
     }
@@ -806,12 +843,59 @@ impl OperationIntelligenceCoordinator {
         // Update AI helpers with learning data
         self.update_helpers_with_outcome(&history_entry).await?;
         
+        // Update history database if available
+        if let Some(db) = &self.history_database {
+            // Find the operation ID (would be returned from record_operation in real usage)
+            // For now, we'll update the most recent matching operation
+            warn!("Operation outcome recording in database not yet linked to operation ID");
+            // TODO: Store operation ID when recording and use it here
+        }
+        
         info!("📊 Recorded operation outcome for learning");
+        Ok(())
+    }
+    
+    /// Record operation outcome with known ID
+    pub async fn record_operation_outcome_with_id(
+        &self,
+        operation_id: uuid::Uuid,
+        outcome: &OperationOutcome,
+        user_satisfaction: Option<f32>,
+    ) -> Result<()> {
+        // Update history database
+        if let Some(db) = &self.history_database {
+            db.update_outcome(operation_id, outcome).await?;
+            
+            if let Some(satisfaction) = user_satisfaction {
+                db.add_user_feedback(
+                    operation_id,
+                    satisfaction,
+                    satisfaction >= 3.0,
+                    None,
+                ).await?;
+            }
+        }
+        
+        info!("📊 Updated operation outcome in database: {}", operation_id);
         Ok(())
     }
     
     /// Get operation success statistics
     pub async fn get_success_statistics(&self) -> Result<OperationStatistics> {
+        // Try database first if available
+        if let Some(db) = &self.history_database {
+            let db_stats = db.get_statistics().await?;
+            return Ok(OperationStatistics {
+                total_operations: db_stats.total_operations as usize,
+                successful_operations: db_stats.successful_operations as usize,
+                success_rate: db_stats.success_rate,
+                average_confidence: db_stats.average_confidence,
+                average_risk: db_stats.average_risk,
+                rollbacks_required: db_stats.rollbacks_required as usize,
+            });
+        }
+        
+        // Fall back to in-memory history
         let history = self.operation_history.read().await;
         
         let total_operations = history.len();
@@ -860,7 +944,33 @@ impl OperationIntelligenceCoordinator {
     ) -> Result<HistoricalAnalysis> {
         debug!("📚 Analyzing historical patterns with Knowledge Indexer");
         
-        // Use Knowledge Indexer to find similar operations
+        // First try database if available
+        if let Some(db) = &self.history_database {
+            let similar_from_db = db.find_similar_operations(operation, context, 20).await?;
+            
+            if !similar_from_db.is_empty() {
+                let successful = similar_from_db.iter()
+                    .filter(|r| r.outcome.success)
+                    .count();
+                
+                let failure_modes = similar_from_db.iter()
+                    .filter(|r| !r.outcome.success)
+                    .filter_map(|r| r.outcome.error_message.clone())
+                    .collect::<Vec<_>>();
+                
+                let success_rate = successful as f32 / similar_from_db.len() as f32;
+                
+                debug!("Found {} similar operations in database", similar_from_db.len());
+                
+                return Ok(HistoricalAnalysis {
+                    similar_operations_count: similar_from_db.len(),
+                    success_rate,
+                    common_failure_modes: failure_modes,
+                });
+            }
+        }
+        
+        // Fall back to Knowledge Indexer
         let similar_ops = self.knowledge_indexer
             .find_similar_operations(operation, context, 10)
             .await?;
