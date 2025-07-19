@@ -28,6 +28,7 @@ pub mod confidence_scoring;
 pub mod operation_parser;
 pub mod operation_validator;
 pub mod operation_preview;
+pub mod dependency_graph;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -82,6 +83,11 @@ pub use operation_preview::{
     OperationPreviewGenerator, PreviewConfig, OperationPreviewSet, OperationPreview,
     FileState, DiffView, DiffChunk, LineChangeSummary, OperationImpact,
     CombinedImpact, ExecutionTimeline, VisualSummary
+};
+pub use dependency_graph::{
+    DependencyGraphGenerator, GraphConfig, DependencyGraph, OperationNode,
+    NodeMetadata, RiskLevel, DependencyEdge, DependencyType, ParallelGroup,
+    GraphAnalysis, RiskSummary, GraphVisuals
 };
 
 // Re-export commonly used items
