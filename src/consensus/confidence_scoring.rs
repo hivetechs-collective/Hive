@@ -6,8 +6,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use crate::consensus::file_operations::FileOperation;
-use crate::consensus::operation_intelligence::{
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_analysis::{
     ComponentScores, ScoringFactors, OperationContext
 };
 use crate::consensus::operation_clustering::{ClusterType, OperationCluster};
@@ -788,28 +788,28 @@ mod tests {
         };
         
         let component_scores = ComponentScores {
-            knowledge_indexer: Some(crate::ai_helpers::KnowledgeIndexerScore {
+            knowledge_indexer: Some(crate::ai_helpers::scores::KnowledgeIndexerScore {
                 similarity_score: 0.8,
                 prediction_confidence: 85.0,
                 relevant_context_found: true,
             }),
-            context_retriever: Some(crate::ai_helpers::ContextRetrieverScore {
+            context_retriever: Some(crate::ai_helpers::scores::ContextRetrieverScore {
                 relevance_score: 0.9,
                 precedent_strength: 0.7,
                 success_rate: Some(0.85),
             }),
-            pattern_recognizer: Some(crate::ai_helpers::PatternRecognizerScore {
+            pattern_recognizer: Some(crate::ai_helpers::scores::PatternRecognizerScore {
                 safety_score: 90.0,
                 pattern_matches: vec![],
                 anti_patterns_detected: 0,
             }),
-            quality_analyzer: Some(crate::ai_helpers::QualityAnalyzerScore {
+            quality_analyzer: Some(crate::ai_helpers::scores::QualityAnalyzerScore {
                 risk_score: 15.0,
                 quality_impact: 0.1,
                 conflict_probability: 0.05,
                 rollback_complexity: 10.0,
             }),
-            knowledge_synthesizer: Some(crate::ai_helpers::KnowledgeSynthesizerScore {
+            knowledge_synthesizer: Some(crate::ai_helpers::scores::KnowledgeSynthesizerScore {
                 plan_quality: 0.9,
                 completeness: 0.95,
                 execution_confidence: 0.88,

@@ -7,8 +7,8 @@ use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
 use tracing::{debug, info, warn, error};
 
-use crate::consensus::file_operations::FileOperation;
-use crate::consensus::operation_intelligence::{OperationContext, OperationAnalysis};
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_analysis::{OperationContext, OperationAnalysis};
 use crate::consensus::operation_parser::EnhancedFileOperation;
 use crate::ai_helpers::pattern_recognizer::PatternRecognizer;
 use crate::ai_helpers::quality_analyzer::QualityAnalyzer;

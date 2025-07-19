@@ -16,6 +16,7 @@ pub mod monitoring;
 pub mod python_models;
 pub mod chroma_store;
 pub mod intelligent_context_orchestrator;
+pub mod scores;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -46,6 +47,10 @@ pub use monitoring::{PerformanceMonitor, MonitoringConfig, OperationType, Perfor
 pub use python_models::{PythonModelService, PythonModelConfig};
 pub use chroma_store::{ChromaVectorStore as RealChromaVectorStore, ChromaConfig};
 pub use intelligent_context_orchestrator::{IntelligentContextOrchestrator, IntelligentContextDecision, QuestionCategory};
+pub use scores::{
+    KnowledgeIndexerScore, ContextRetrieverScore, PatternRecognizerScore,
+    QualityAnalyzerScore, KnowledgeSynthesizerScore
+};
 
 /// Processed knowledge from AI helpers
 #[derive(Debug, Clone)]

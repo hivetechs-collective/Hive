@@ -7,10 +7,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use crate::consensus::file_operations::FileOperation;
-use crate::consensus::operation_intelligence::{
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_analysis::{
     OperationAnalysis, UnifiedScore, ActionRecommendation, ComponentScores, 
-    ScoringFactors, OperationContext
+    ScoringFactors, OperationContext, ActionPriority
 };
 use crate::consensus::smart_decision_engine::{ExecutionDecision, UserPreferences};
 use crate::consensus::operation_clustering::{OperationCluster, ClusterType};
@@ -397,16 +397,16 @@ impl IntelligentFeedbackGenerator {
         // Extract insights from recommendations
         for recommendation in &analysis.recommendations {
             let (insight_type, importance) = match recommendation.priority {
-                crate::consensus::operation_intelligence::ActionPriority::Critical => {
+                ActionPriority::Critical => {
                     (InsightType::Warning, InsightImportance::Critical)
                 }
-                crate::consensus::operation_intelligence::ActionPriority::High => {
+                ActionPriority::High => {
                     (InsightType::Warning, InsightImportance::High)
                 }
-                crate::consensus::operation_intelligence::ActionPriority::Medium => {
+                ActionPriority::Medium => {
                     (InsightType::Suggestion, InsightImportance::Medium)
                 }
-                crate::consensus::operation_intelligence::ActionPriority::Low => {
+                ActionPriority::Low => {
                     (InsightType::Suggestion, InsightImportance::Low)
                 }
             };
