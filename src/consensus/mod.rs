@@ -26,6 +26,7 @@ pub mod operation_clustering;
 pub mod intelligent_feedback;
 pub mod confidence_scoring;
 pub mod operation_parser;
+pub mod operation_validator;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -70,6 +71,11 @@ pub use operation_parser::{
     OperationParser, EnhancementConfig, ParsedOperations, EnhancedFileOperation,
     OperationContext as ParsedOperationContext, GlobalContext, ComplexityLevel,
     ParsingMetadata, AIOperationInsights
+};
+pub use operation_validator::{
+    OperationValidator, ValidationConfig, ValidationResult, ValidationStatus,
+    ValidationCheck, ValidationError, ValidationWarning, SuggestedFix,
+    RiskAssessment, RiskLevel, CheckCategory, Severity
 };
 
 // Re-export commonly used items
