@@ -5,6 +5,7 @@ use crate::consensus::rollback_planner::{
 use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
 use crate::consensus::operation_history::OperationHistoryDatabase;
 use crate::consensus::operation_intelligence::OperationOutcome;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use anyhow::{Result, Context, bail};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -444,11 +445,11 @@ impl RollbackExecutor {
         // Check if all required files and paths exist
         for step in &plan.steps {
             match &step.operation {
-                RollbackOperation::RestoreFile { source, .. } => {
+                RollbackOperation::RestoreFile { source, destination, .. } => {
                     if !source.exists() {
-                        bail!("Backup file does not exist: {}", backup_path.display());
+                        bail!("Backup file does not exist: {}", source.display());
                     }
-                    if let Some(parent) = target_path.parent() {
+                    if let Some(parent) = destination.parent() {
                         if !parent.exists() {
                             bail!("Target directory does not exist: {}", parent.display());
                         }
@@ -457,7 +458,8 @@ impl RollbackExecutor {
                 RollbackOperation::ReverseOperation { operation } => {
                     if let FileOperation::Create { path, .. } = operation {
                         if !path.exists() {
-                        warn!("File to delete does not exist: {}", file_path.display());
+                            warn!("File to delete does not exist: {}", path.display());
+                        }
                     }
                 }
                 _ => {}
@@ -627,9 +629,9 @@ impl RollbackExecutor {
         
         for step in &plan.steps {
             match &step.operation {
-                RollbackOperation::RestoreFile { source, .. } => {
+                RollbackOperation::RestoreFile { source, destination, .. } => {
                     if source.exists() {
-                        if let Ok(metadata) = fs::metadata(backup_path).await {
+                        if let Ok(metadata) = fs::metadata(source).await {
                             total_size += metadata.len();
                         }
                     }
@@ -813,7 +815,7 @@ impl VerificationSystem {
                     is_successful: exists,
                     verification_type: VerificationType::FileExists,
                     error_message: if !exists {
-                        Some(format!("Target file was not restored: {}", target_path.display()))
+                        Some(format!("Target file was not restored: {}", destination.display()))
                     } else {
                         None
                     },
@@ -824,17 +826,26 @@ impl VerificationSystem {
             RollbackOperation::ReverseOperation { operation } => {
                 if let FileOperation::Create { path, .. } = operation {
                     let exists = path.exists();
-                Ok(VerificationResult {
-                    is_successful: !exists,
-                    verification_type: VerificationType::FileExists,
-                    error_message: if exists {
-                        Some(format!("File was not deleted: {}", file_path.display()))
-                    } else {
-                        None
-                    },
-                    warnings: Vec::new(),
-                    verified_at: Utc::now(),
-                })
+                    Ok(VerificationResult {
+                        is_successful: !exists,
+                        verification_type: VerificationType::FileExists,
+                        error_message: if exists {
+                            Some(format!("File was not deleted: {}", path.display()))
+                        } else {
+                            None
+                        },
+                        warnings: Vec::new(),
+                        verified_at: Utc::now(),
+                    })
+                } else {
+                    Ok(VerificationResult {
+                        is_successful: true,
+                        verification_type: VerificationType::Custom,
+                        error_message: None,
+                        warnings: vec!["Unsupported reverse operation type".to_string()],
+                        verified_at: Utc::now(),
+                    })
+                }
             }
             _ => {
                 // Default verification - assume success

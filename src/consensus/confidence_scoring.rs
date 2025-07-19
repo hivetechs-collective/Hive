@@ -384,7 +384,7 @@ impl ConfidenceScoringEngine {
             };
         }
 
-        Ok(penalty.min(50.0)) // Cap at 50 points
+        Ok(penalty.min(50.0_f32)) // Cap at 50 points
     }
 
     async fn calculate_adjustment_factors(

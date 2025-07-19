@@ -672,7 +672,7 @@ impl SafetyValidator for SystemFileValidator {
             // Check for backup files
             if path_str.ends_with(".bak") || path_str.ends_with("~") {
                 warnings.push("Modifying backup file".to_string());
-                risk_score = (risk_score + 20.0).min(100.0);
+                risk_score = (risk_score + 20.0).min(100.0_f32);
             }
 
             // Check available disk space
@@ -685,7 +685,7 @@ impl SafetyValidator for SystemFileValidator {
                     mitigation_required: false,
                     auto_fixable: false,
                 });
-                risk_score = (risk_score + 30.0).min(100.0);
+                risk_score = (risk_score + 30.0).min(100.0_f32);
             }
         }
 
