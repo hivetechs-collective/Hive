@@ -24,6 +24,7 @@ pub mod operation_history;
 pub mod smart_decision_engine;
 pub mod operation_clustering;
 pub mod intelligent_feedback;
+pub mod confidence_scoring;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -59,6 +60,10 @@ pub use operation_clustering::{
 pub use intelligent_feedback::{
     IntelligentFeedbackGenerator, UserFeedback, RiskExplanation, ConfidenceExplanation,
     AIInsight, Suggestion, OperationPreview, VisualIndicators, SuggestionAction
+};
+pub use confidence_scoring::{
+    ConfidenceScoringEngine, ScoringWeights, ScoringResult, ScoreBreakdown,
+    ConfidenceInterval, PrimaryFactor, ImprovementSuggestion, ScoringStatistics
 };
 
 // Re-export commonly used items
