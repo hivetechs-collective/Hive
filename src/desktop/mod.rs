@@ -17,6 +17,7 @@ pub mod explorer_enhanced;
 pub mod file_explorer;
 pub mod file_operations;
 pub mod file_system;
+pub mod keyboard;
 pub mod layout;
 pub mod layout_enhanced;
 pub mod logo_svg;
