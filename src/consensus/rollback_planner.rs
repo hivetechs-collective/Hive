@@ -910,7 +910,7 @@ impl RollbackPlanner {
                 // Can't reverse without content
                 Err(anyhow!("Cannot reverse delete operation without backup"))
             }
-            FileOperation::Update { path, old_content, new_content } => {
+            FileOperation::Update { path, content } => {
                 Ok(FileOperation::Update {
                     path: path.clone(),
                     old_content: new_content.clone(),

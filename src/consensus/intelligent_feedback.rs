@@ -557,11 +557,8 @@ impl IntelligentFeedbackGenerator {
                 FileOperation::Delete { path } => {
                     (path.clone(), "Delete", None)
                 }
-                FileOperation::Rename { old_path, new_path } => {
-                    (old_path.clone(), &format!("Rename to {}", new_path.display()), None)
-                }
-                FileOperation::Move { source, destination } => {
-                    (source.clone(), &format!("Move to {}", destination.display()), None)
+                FileOperation::Rename { from, to } => {
+                    (from.clone(), &format!("Rename to {}", to.display()), None)
                 }
             };
 

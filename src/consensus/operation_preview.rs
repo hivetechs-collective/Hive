@@ -433,16 +433,16 @@ impl OperationPreviewGenerator {
                     highlighted_content,
                 })
             }
-            FileOperation::Update { path, new_content, .. } => {
+            FileOperation::Update { path, content, .. } => {
                 let metadata = FileMetadata {
-                    size: Some(new_content.len() as u64),
-                    line_count: Some(new_content.lines().count()),
+                    size: Some(content.len() as u64),
+                    line_count: Some(content.lines().count()),
                     language: before.metadata.language.clone(),
                     encoding: before.metadata.encoding.clone(),
                 };
 
                 let highlighted_content = if self.config.syntax_highlight {
-                    self.syntax_highlight(new_content, &metadata.language).await?
+                    self.syntax_highlight(content, &metadata.language).await?
                 } else {
                     None
                 };
@@ -450,7 +450,7 @@ impl OperationPreviewGenerator {
                 Ok(FileState {
                     path: path.clone(),
                     exists: true,
-                    content: Some(new_content.clone()),
+                    content: Some(content.clone()),
                     metadata,
                     highlighted_content,
                 })
@@ -644,9 +644,9 @@ impl OperationPreviewGenerator {
                 affected_elements.extend(self.extract_code_elements(content, path)?);
                 side_effects.push("New file added to project".to_string());
             }
-            FileOperation::Update { path, old_content, new_content } => {
-                let old_elements = self.extract_code_elements(old_content, path)?;
-                let new_elements = self.extract_code_elements(new_content, path)?;
+            FileOperation::Update { path, content } => {
+                let old_elements = self.extract_code_elements("", path)?;
+                let new_elements = self.extract_code_elements(content, path)?;
                 
                 // Find changed elements
                 for new_elem in &new_elements {
@@ -663,8 +663,8 @@ impl OperationPreviewGenerator {
                 }
                 side_effects.push("File and all its contents will be removed".to_string());
             }
-            FileOperation::Rename { old_path, new_path } => {
-                side_effects.push(format!("All imports of {} need updating", old_path.display()));
+            FileOperation::Rename { from, to } => {
+                side_effects.push(format!("All imports of {} need updating", from.display()));
             }
             FileOperation::Move { source, destination } => {
                 side_effects.push(format!("All imports of {} need updating", source.display()));
@@ -943,8 +943,8 @@ impl OperationPreviewGenerator {
             FileOperation::Create { path, .. } => format!("Create {}", path.display()),
             FileOperation::Update { path, .. } => format!("Update {}", path.display()),
             FileOperation::Delete { path } => format!("Delete {}", path.display()),
-            FileOperation::Rename { old_path, new_path } => {
-                format!("Rename {} to {}", old_path.display(), new_path.display())
+            FileOperation::Rename { from, to } => {
+                format!("Rename {} to {}", from.display(), to.display())
             }
             FileOperation::Move { source, destination } => {
                 format!("Move {} to {}", source.display(), destination.display())
