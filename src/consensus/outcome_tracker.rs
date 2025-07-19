@@ -199,8 +199,8 @@ impl OperationOutcomeTracker {
             operation_id: operation_id.clone(),
             recorded_at: Utc::now(),
             predicted_analysis: analysis.clone(),
-            predicted_confidence: analysis.unified_score.confidence,
-            predicted_risk: analysis.unified_score.risk,
+            predicted_confidence: analysis.confidence,
+            predicted_risk: analysis.risk,
             ai_helper_scores: helper_scores,
             
             // Will be filled in later
@@ -411,11 +411,11 @@ impl OperationOutcomeTracker {
         let mut features = Vec::new();
         
         // Core prediction features
-        features.push(analysis.unified_score.confidence / 100.0);
-        features.push(analysis.unified_score.risk / 100.0);
+        features.push(analysis.confidence / 100.0);
+        features.push(analysis.risk / 100.0);
         
         // Helper component scores
-        if let Some(ref scores) = analysis.unified_score.component_scores {
+        if let Some(ref scores) = analysis.component_scores {
             features.push(scores.knowledge_indexer.unwrap_or(0.0) / 100.0);
             features.push(scores.context_retriever.unwrap_or(0.0) / 100.0);
             features.push(scores.pattern_recognizer.unwrap_or(0.0) / 100.0);
@@ -426,7 +426,7 @@ impl OperationOutcomeTracker {
         }
         
         // Scoring factors
-        if let Some(ref factors) = analysis.unified_score.scoring_factors {
+        if let Some(ref factors) = analysis.scoring_factors {
             features.push(factors.historical_success_rate);
             features.push(factors.pattern_confidence);
             features.push(factors.context_completeness);

@@ -493,7 +493,7 @@ impl SafetyGuardrailSystem {
         }
 
         // Check overall confidence and risk from AI analysis
-        if analysis.unified_score.confidence < 60.0 || analysis.unified_score.risk > 70.0 {
+        if analysis.confidence < 60.0 || analysis.risk > 70.0 {
             return EnforcementAction::RequireConfirmation;
         }
 

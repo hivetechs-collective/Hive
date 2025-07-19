@@ -483,7 +483,7 @@ impl OperationParser {
             let old_path = PathBuf::from(caps[1].trim());
             let new_path = PathBuf::from(caps[2].trim());
             
-            let operation = FileOperation::Rename { old_path, new_path };
+            let operation = FileOperation::Rename { from: old_path, to: new_path };
 
             operations.push(EnhancedFileOperation {
                 operation,
@@ -936,7 +936,7 @@ mod tests {
         assert_eq!(parsed.operations.len(), 1);
         assert!(matches!(
             &parsed.operations[0].operation,
-            FileOperation::Update { path, old_content, new_content } 
+            FileOperation::Update { path, content } 
                 if path == &PathBuf::from("src/config.rs") 
                 && old_content.contains("MAX_RETRIES: u32 = 3")
                 && new_content.contains("MAX_RETRIES: u32 = 5")

@@ -204,8 +204,8 @@ impl FileSystemValidator {
             FileOperation::Delete { path } => {
                 self.validate_delete(path).await
             }
-            FileOperation::Rename { old_path, new_path } => {
-                self.validate_rename(old_path, new_path).await
+            FileOperation::Rename { from, to } => {
+                self.validate_rename(from, to).await
             }
             FileOperation::Move { source, destination } => {
                 self.validate_move(source, destination).await
@@ -342,9 +342,9 @@ impl FileSystemValidator {
         })
     }
 
-    async fn validate_rename(&self, old_path: &Path, new_path: &Path) -> Result<ValidationCheck> {
-        let old_full = self.workspace_root.join(old_path);
-        let new_full = self.workspace_root.join(new_path);
+    async fn validate_rename(&self, from: &Path, to: &Path) -> Result<ValidationCheck> {
+        let old_full = self.workspace_root.join(from);
+        let new_full = self.workspace_root.join(to);
         
         // Check source exists
         if tokio::fs::metadata(&old_full).await.is_err() {
@@ -363,7 +363,7 @@ impl FileSystemValidator {
                 name: "Destination check".to_string(),
                 category: CheckCategory::FileSystem,
                 status: CheckStatus::Failed,
-                message: format!("Destination {} already exists", new_path.display()),
+                message: format!("Destination {} already exists", to.display()),
                 severity: Severity::Error,
             });
         }
@@ -1045,8 +1045,7 @@ impl OperationValidator {
             FileOperation::Create { path, .. } |
             FileOperation::Update { path, .. } |
             FileOperation::Delete { path } => Some(path.clone()),
-            FileOperation::Rename { new_path, .. } => Some(new_path.clone()),
-            FileOperation::Move { destination, .. } => Some(destination.clone()),
+            FileOperation::Rename { to, .. } => Some(to.clone()),
         }
     }
 
