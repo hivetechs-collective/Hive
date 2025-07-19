@@ -893,6 +893,83 @@ mod tests {
         Ok(groups)
     }
     
+    /// Generate rollback strategies for operations
+    pub async fn generate_rollback_strategies(
+        &self,
+        operations: &[FileOperation],
+        operation_context: &OperationContext,
+    ) -> Vec<RollbackStrategy> {
+        let mut strategies = Vec::new();
+        
+        // Check Git availability
+        if self.check_git_available() {
+            strategies.push(RollbackStrategy {
+                name: "Git-based Rollback".to_string(),
+                description: "Use Git to revert changes to previous state".to_string(),
+                confidence: 0.95,
+                prerequisites: vec!["Git repository", "All files tracked"],
+                steps: vec![
+                    "Create Git stash of current changes",
+                    "Revert to previous commit",
+                    "Restore specific files if needed",
+                ],
+            });
+        }
+        
+        // Backup-based strategy
+        strategies.push(RollbackStrategy {
+            name: "Backup Restoration".to_string(),
+            description: "Restore files from automatic backups".to_string(),
+            confidence: 0.90,
+            prerequisites: vec!["Backup files exist", "Sufficient disk space"],
+            steps: vec![
+                "Locate backup files",
+                "Verify backup integrity",
+                "Restore files from backups",
+                "Verify restoration success",
+            ],
+        });
+        
+        // Manual reversal strategy
+        strategies.push(RollbackStrategy {
+            name: "Manual Operation Reversal".to_string(),
+            description: "Reverse each operation manually".to_string(),
+            confidence: 0.75,
+            prerequisites: vec!["Original content available", "Reversible operations"],
+            steps: vec![
+                "Identify reverse operations",
+                "Execute in reverse order",
+                "Verify each step",
+                "Handle dependencies",
+            ],
+        });
+        
+        // Hybrid strategy
+        strategies.push(RollbackStrategy {
+            name: "Hybrid Approach".to_string(),
+            description: "Combine multiple strategies for best results".to_string(),
+            confidence: 0.85,
+            prerequisites: vec!["Multiple strategies available"],
+            steps: vec![
+                "Use Git for tracked files",
+                "Use backups for untracked files",
+                "Manual reversal for complex cases",
+                "Comprehensive verification",
+            ],
+        });
+        
+        strategies
+    }
+    
+    /// Check if Git is available
+    fn check_git_available(&self) -> bool {
+        std::process::Command::new("git")
+            .args(&["rev-parse", "--git-dir"])
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false)
+    }
+    
     /// Get operation directory
     fn get_operation_directory(&self, operation: &FileOperation) -> Option<PathBuf> {
         match operation {
@@ -1298,6 +1375,25 @@ mod tests {
 struct OperationGroup {
     description: String,
     operations: Vec<FileOperation>,
+}
+
+/// Rollback strategy suggestion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RollbackStrategy {
+    /// Strategy name
+    pub name: String,
+    
+    /// Strategy description
+    pub description: String,
+    
+    /// Confidence in this strategy (0-1)
+    pub confidence: f32,
+    
+    /// Prerequisites for this strategy
+    pub prerequisites: Vec<&'static str>,
+    
+    /// Steps to execute
+    pub steps: Vec<&'static str>,
 }
 
 /// Synthesis statistics

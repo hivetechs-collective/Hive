@@ -29,6 +29,7 @@ pub mod operation_parser;
 pub mod operation_validator;
 pub mod operation_preview;
 pub mod dependency_graph;
+pub mod rollback_planner;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -88,6 +89,12 @@ pub use dependency_graph::{
     DependencyGraphGenerator, GraphConfig, DependencyGraph, OperationNode,
     NodeMetadata, RiskLevel, DependencyEdge, DependencyType, ParallelGroup,
     GraphAnalysis, RiskSummary, GraphVisuals
+};
+pub use rollback_planner::{
+    RollbackPlanner, RollbackConfig, RollbackPlan, RollbackStrategy,
+    RollbackStep, RollbackOperation, BackupInfo, BackupMethod,
+    RollbackRiskAssessment, RollbackRisk, RiskCategory, DataLossPotential,
+    VerificationStep, VerificationType, RollbackExecutionResult
 };
 
 // Re-export commonly used items
