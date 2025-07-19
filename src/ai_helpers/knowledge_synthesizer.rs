@@ -564,7 +564,7 @@ mod tests {
         let cache_key = self.generate_plan_cache_key(operations, context);
         {
             let cache = self.plan_cache.read().await;
-            if let Some(cached) = cache.get(&cache_key) {
+            if let Some(cached) = cache.peek(&cache_key) {
                 debug!("📋 Using cached operation plan");
                 return Ok(cached.clone());
             }

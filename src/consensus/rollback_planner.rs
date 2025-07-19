@@ -559,7 +559,7 @@ impl RollbackPlanner {
             
             RollbackStrategy::Hybrid { primary, fallback } => {
                 // Add primary strategy steps
-                let primary_steps = self.generate_rollback_steps(operations, primary, dependency_graph).await?;
+                let primary_steps = Box::pin(self.generate_rollback_steps(operations, primary, dependency_graph)).await?;
                 steps.extend(primary_steps);
                 
                 // Add fallback trigger
@@ -578,7 +578,7 @@ impl RollbackPlanner {
                 });
                 
                 // Add fallback steps
-                let fallback_steps = self.generate_rollback_steps(operations, fallback, dependency_graph).await?;
+                let fallback_steps = Box::pin(self.generate_rollback_steps(operations, fallback, dependency_graph)).await?;
                 let base_step = steps.len();
                 for mut step in fallback_steps {
                     step.step_number += base_step;

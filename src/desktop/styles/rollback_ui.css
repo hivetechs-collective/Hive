@@ -1,0 +1,1286 @@
+/* Rollback Execution UI Styles */
+
+/* Dialog Overlay and Container */
+.rollback-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+}
+
+.rollback-dialog {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 12px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+    width: 90vw;
+    max-width: 900px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Dialog Header */
+.dialog-header {
+    background: #252525;
+    border-bottom: 1px solid #333;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.dialog-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.rollback-plan-summary {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-left: 20px;
+}
+
+.plan-id, .step-count, .strategy {
+    font-size: 12px;
+    color: #999;
+    padding: 4px 8px;
+    background: #333;
+    border-radius: 4px;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.close-button:hover {
+    color: #e0e0e0;
+    background: #333;
+}
+
+/* Dialog Content */
+.dialog-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* Dialog Actions */
+.dialog-actions {
+    background: #252525;
+    border-top: 1px solid #333;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.action-button {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.action-button.primary {
+    background: #007ACC;
+    color: #fff;
+}
+
+.action-button.primary:hover {
+    background: #005a9e;
+}
+
+.action-button.secondary {
+    background: #333;
+    color: #e0e0e0;
+    border: 1px solid #555;
+}
+
+.action-button.secondary:hover {
+    background: #444;
+}
+
+.action-button.danger {
+    background: #d32f2f;
+    color: #fff;
+}
+
+.action-button.danger:hover {
+    background: #b71c1c;
+}
+
+.action-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.execution-status {
+    font-size: 13px;
+    color: #999;
+    font-style: italic;
+}
+
+/* Progress Display */
+.rollback-progress-display {
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.overall-progress {
+    margin-bottom: 20px;
+}
+
+.progress-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.progress-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #e0e0e0;
+}
+
+.progress-percentage {
+    font-size: 18px;
+    font-weight: 600;
+    color: #007ACC;
+}
+
+.progress-bar-container {
+    position: relative;
+    height: 24px;
+    background: #333;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.progress-bar-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #333;
+}
+
+.progress-bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #007ACC, #4CAF50);
+    transition: width 0.3s ease;
+    border-radius: 12px;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Current Operation */
+.current-operation {
+    margin-bottom: 20px;
+}
+
+.operation-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.operation-header h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-badge.in-progress {
+    background: #ffa726;
+    color: #000;
+}
+
+.status-badge.completed {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.status-badge.failed {
+    background: #f44336;
+    color: #fff;
+}
+
+.status-badge.waiting-confirmation {
+    background: #ff9800;
+    color: #000;
+}
+
+.operation-description {
+    font-size: 13px;
+    color: #bbb;
+    margin-bottom: 8px;
+}
+
+.estimated-time {
+    font-size: 12px;
+    color: #999;
+    font-style: italic;
+}
+
+/* Step Progress Section */
+.step-progress-section {
+    border-top: 1px solid #333;
+    padding-top: 16px;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 8px 0;
+    transition: background 0.2s ease;
+    border-radius: 4px;
+}
+
+.section-header:hover {
+    background: #2a2a2a;
+}
+
+.section-header h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.expand-icon {
+    font-size: 12px;
+    color: #999;
+    transition: transform 0.2s ease;
+}
+
+.expand-icon.expanded {
+    transform: rotate(180deg);
+}
+
+/* Step Progress List */
+.step-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.step-progress-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px;
+    background: #2a2a2a;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.step-progress-item:hover {
+    background: #333;
+}
+
+.step-progress-item.completed {
+    border-left: 3px solid #4CAF50;
+}
+
+.step-progress-item.current {
+    border-left: 3px solid #007ACC;
+    background: #1a2332;
+}
+
+.step-progress-item.pending {
+    border-left: 3px solid #666;
+}
+
+.step-number {
+    width: 32px;
+    height: 32px;
+    background: #333;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.step-progress-item.completed .step-number {
+    background: #4CAF50;
+}
+
+.step-progress-item.current .step-number {
+    background: #007ACC;
+}
+
+.step-status-indicator {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+}
+
+.step-description {
+    flex: 1;
+    font-size: 13px;
+    color: #bbb;
+}
+
+/* Plan Overview */
+.rollback-plan-overview {
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.plan-summary {
+    margin-bottom: 20px;
+}
+
+.plan-summary h3 {
+    margin: 0 0 16px 0;
+    font-size: 16px;
+    color: #e0e0e0;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: #2a2a2a;
+    border-radius: 6px;
+}
+
+.stat-label {
+    font-size: 13px;
+    color: #999;
+}
+
+.stat-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+/* Risk Assessment */
+.risk-assessment-section {
+    margin-bottom: 20px;
+    border-top: 1px solid #333;
+    padding-top: 16px;
+}
+
+.risk-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    padding: 8px 0;
+    transition: background 0.2s ease;
+    border-radius: 4px;
+}
+
+.risk-header:hover {
+    background: #2a2a2a;
+}
+
+.risk-header h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.risk-level {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.risk-level.Low {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.risk-level.Medium {
+    background: #ff9800;
+    color: #000;
+}
+
+.risk-level.High {
+    background: #f44336;
+    color: #fff;
+}
+
+.risk-level.Critical {
+    background: #d32f2f;
+    color: #fff;
+}
+
+.success-probability {
+    font-size: 12px;
+    color: #999;
+}
+
+.risk-details {
+    margin-top: 12px;
+    padding: 16px;
+    background: #2a2a2a;
+    border-radius: 6px;
+}
+
+.risks-list, .mitigations-list {
+    margin-bottom: 16px;
+}
+
+.risks-list h5, .mitigations-list h5 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #e0e0e0;
+}
+
+.risk-item, .mitigation-item {
+    font-size: 12px;
+    color: #bbb;
+    margin-bottom: 4px;
+}
+
+.risk-description {
+    font-weight: 500;
+}
+
+.risk-mitigation {
+    color: #999;
+    font-style: italic;
+    margin-top: 2px;
+}
+
+/* Steps Overview */
+.steps-overview {
+    border-top: 1px solid #333;
+    padding-top: 16px;
+}
+
+.steps-overview h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.step-overview-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #2a2a2a;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.step-overview-item:hover {
+    background: #333;
+}
+
+.step-info {
+    flex: 1;
+}
+
+.step-description {
+    font-size: 13px;
+    color: #e0e0e0;
+    margin-bottom: 4px;
+}
+
+.step-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.step-duration, .step-auto, .step-manual {
+    font-size: 11px;
+    color: #999;
+    padding: 2px 6px;
+    background: #333;
+    border-radius: 3px;
+}
+
+.step-risk {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.step-risk.Low {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.step-risk.Medium {
+    background: #ff9800;
+    color: #000;
+}
+
+.step-risk.High {
+    background: #f44336;
+    color: #fff;
+}
+
+.step-risk.Critical {
+    background: #d32f2f;
+    color: #fff;
+}
+
+.steps-truncated {
+    text-align: center;
+    padding: 12px;
+    color: #999;
+    font-style: italic;
+    font-size: 12px;
+}
+
+/* Execution Results */
+.rollback-execution-results {
+    background: #252525;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.execution-summary {
+    margin-bottom: 20px;
+}
+
+.summary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.summary-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #e0e0e0;
+}
+
+.execution-status {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-success {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.status-error {
+    background: #f44336;
+    color: #fff;
+}
+
+.status-warning {
+    background: #ff9800;
+    color: #000;
+}
+
+.status-info {
+    background: #2196F3;
+    color: #fff;
+}
+
+.summary-stats {
+    background: #2a2a2a;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.stat-group {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+/* Error Summary */
+.error-summary {
+    margin-bottom: 20px;
+    border-top: 1px solid #333;
+    padding-top: 16px;
+}
+
+.error-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    padding: 8px 0;
+    transition: background 0.2s ease;
+    border-radius: 4px;
+}
+
+.error-header:hover {
+    background: #2a2a2a;
+}
+
+.error-header h4 {
+    margin: 0;
+    font-size: 14px;
+    color: #f44336;
+}
+
+.error-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Rollback Error Display */
+.rollback-error-display {
+    background: #2a1a1a;
+    border: 1px solid #5d2727;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.error-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.error-type {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.error-type.error-filesystem {
+    background: #d32f2f;
+    color: #fff;
+}
+
+.error-type.error-git {
+    background: #ff5722;
+    color: #fff;
+}
+
+.error-type.error-backup {
+    background: #ff9800;
+    color: #000;
+}
+
+.error-type.error-verification {
+    background: #9c27b0;
+    color: #fff;
+}
+
+.error-type.error-timeout {
+    background: #795548;
+    color: #fff;
+}
+
+.error-timestamp {
+    font-size: 11px;
+    color: #999;
+    font-family: monospace;
+}
+
+.error-step {
+    font-size: 11px;
+    color: #bbb;
+}
+
+.error-message {
+    font-size: 13px;
+    color: #ffcdd2;
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.suggested-action {
+    font-size: 12px;
+    color: #fff3e0;
+    background: #2e2e2e;
+    padding: 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.error-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.recoverable {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+
+.recoverable.yes {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.recoverable.no {
+    background: #666;
+    color: #fff;
+}
+
+/* Step Details Panel */
+.step-details-panel {
+    position: fixed;
+    top: 10%;
+    right: 20px;
+    width: 400px;
+    max-height: 80%;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 3100;
+    overflow: hidden;
+}
+
+.panel-header {
+    background: #252525;
+    border-bottom: 1px solid #333;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.panel-header h3 {
+    margin: 0;
+    font-size: 14px;
+    color: #e0e0e0;
+}
+
+.panel-content {
+    padding: 16px;
+    overflow-y: auto;
+    max-height: 60vh;
+}
+
+.step-info-section {
+    margin-bottom: 20px;
+}
+
+.step-description h4,
+.step-type-details h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #e0e0e0;
+}
+
+.step-description p {
+    margin: 0;
+    font-size: 12px;
+    color: #bbb;
+    line-height: 1.4;
+}
+
+.step-metadata {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.meta-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #333;
+}
+
+.meta-label {
+    font-size: 12px;
+    color: #999;
+}
+
+.meta-value {
+    font-size: 12px;
+    color: #e0e0e0;
+    font-weight: 500;
+}
+
+.meta-value.risk-Low {
+    color: #4CAF50;
+}
+
+.meta-value.risk-Medium {
+    color: #ff9800;
+}
+
+.meta-value.risk-High {
+    color: #f44336;
+}
+
+.meta-value.risk-Critical {
+    color: #d32f2f;
+}
+
+/* Step Type Display */
+.step-type-display {
+    background: #2a2a2a;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.operation-type {
+    font-size: 12px;
+    font-weight: 600;
+    color: #007ACC;
+    margin-bottom: 8px;
+}
+
+.backup-path, .target-path, .commit-hash, .file-paths,
+.file-path, .content-size, .script-path, .script-args,
+.action-description, .action-instructions {
+    font-size: 11px;
+    color: #bbb;
+    margin-bottom: 4px;
+    font-family: monospace;
+    word-break: break-all;
+}
+
+/* Execution Results Section */
+.execution-results-section {
+    border-top: 1px solid #333;
+    padding-top: 16px;
+}
+
+.execution-results-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: #e0e0e0;
+}
+
+.result-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.result-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.result-success {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.result-error {
+    background: #f44336;
+    color: #fff;
+}
+
+.result-progress {
+    background: #2196F3;
+    color: #fff;
+}
+
+.result-skipped {
+    background: #666;
+    color: #fff;
+}
+
+.result-waiting {
+    background: #ff9800;
+    color: #000;
+}
+
+.result-pending {
+    background: #333;
+    color: #fff;
+}
+
+.result-duration, .result-retries {
+    font-size: 11px;
+    color: #999;
+}
+
+.result-error {
+    margin: 12px 0;
+}
+
+.result-error h5 {
+    margin: 0 0 6px 0;
+    font-size: 12px;
+    color: #f44336;
+}
+
+.result-error pre {
+    background: #2a1a1a;
+    border: 1px solid #5d2727;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 11px;
+    color: #ffcdd2;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.files-affected {
+    margin: 12px 0;
+}
+
+.files-affected h5 {
+    margin: 0 0 6px 0;
+    font-size: 12px;
+    color: #e0e0e0;
+}
+
+.files-affected ul {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.files-affected li {
+    font-size: 11px;
+    color: #bbb;
+    font-family: monospace;
+    margin-bottom: 2px;
+}
+
+.verification-result {
+    margin: 12px 0;
+}
+
+.verification-result h5 {
+    margin: 0 0 6px 0;
+    font-size: 12px;
+    color: #e0e0e0;
+}
+
+.verification-status {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.verification-status.success {
+    background: #4CAF50;
+    color: #fff;
+}
+
+.verification-status.failure {
+    background: #f44336;
+    color: #fff;
+}
+
+.verification-error {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #ffcdd2;
+}
+
+/* Summary Display */
+.rollback-summary-display {
+    background: #2a2a2a;
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.metric-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    background: #333;
+    border-radius: 4px;
+}
+
+.metric-label {
+    font-size: 12px;
+    color: #999;
+}
+
+.metric-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e0e0e0;
+}
+
+.files-restored-list, .recommendations-list {
+    margin-bottom: 16px;
+}
+
+.files-restored-list h5, .recommendations-list h5 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #e0e0e0;
+}
+
+.files-restored-list ul, .recommendations-list ul {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.files-restored-list li {
+    font-size: 11px;
+    color: #bbb;
+    font-family: monospace;
+    margin-bottom: 2px;
+}
+
+.recommendations-list li {
+    font-size: 12px;
+    color: #bbb;
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+
+/* Failed Steps Retry Section */
+.failed-steps-retry-section {
+    border-top: 1px solid #333;
+    padding-top: 16px;
+    margin-top: 20px;
+}
+
+.failed-steps-retry-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    color: #f44336;
+}
+
+.failed-steps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.failed-step-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    background: #2a1a1a;
+    border: 1px solid #5d2727;
+    border-radius: 6px;
+}
+
+.failed-step-item input[type="checkbox"] {
+    margin-top: 2px;
+}
+
+.step-info {
+    flex: 1;
+}
+
+.step-number {
+    font-size: 12px;
+    font-weight: 600;
+    color: #e0e0e0;
+    margin-bottom: 4px;
+}
+
+.step-error {
+    font-size: 11px;
+    color: #ffcdd2;
+    margin-bottom: 4px;
+    line-height: 1.3;
+}
+
+.step-retries {
+    font-size: 10px;
+    color: #999;
+}
+
+.retry-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.select-all-button, .retry-selected-button {
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.select-all-button {
+    background: #333;
+    color: #e0e0e0;
+}
+
+.select-all-button:hover {
+    background: #444;
+}
+
+.retry-selected-button {
+    background: #007ACC;
+    color: #fff;
+}
+
+.retry-selected-button:hover {
+    background: #005a9e;
+}
+
+.retry-selected-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .rollback-dialog {
+        width: 95vw;
+        max-height: 95vh;
+    }
+    
+    .dialog-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    
+    .rollback-plan-summary {
+        margin-left: 0;
+        flex-wrap: wrap;
+    }
+    
+    .summary-stats,
+    .stat-group,
+    .summary-metrics {
+        grid-template-columns: 1fr;
+    }
+    
+    .step-details-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 100vw;
+        height: 100vh;
+        max-height: none;
+        border-radius: 0;
+    }
+    
+    .dialog-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .action-button {
+        width: 100%;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .rollback-dialog {
+        border: 2px solid #666;
+    }
+    
+    .step-progress-item,
+    .step-overview-item,
+    .failed-step-item {
+        border: 1px solid #444;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .progress-bar-fill,
+    .expand-icon,
+    .action-button,
+    .step-progress-item {
+        transition: none;
+    }
+}

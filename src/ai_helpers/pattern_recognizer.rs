@@ -591,7 +591,7 @@ impl PatternRecognizer {
         // Check cache first
         {
             let cache = self.safety_cache.read().await;
-            if let Some(cached) = cache.get(&cache_key) {
+            if let Some(cached) = cache.peek(&cache_key) {
                 debug!("📋 Using cached safety analysis");
                 return Ok(cached.clone());
             }
@@ -1198,8 +1198,9 @@ impl PatternRecognizer {
         }
         
         // Keep only recent history (last 1000 records)
-        if history.len() > 1000 {
-            history.drain(0..history.len() - 1000);
+        let history_len = history.len();
+        if history_len > 1000 {
+            history.drain(0..history_len - 1000);
         }
         
         // Clear safety metrics cache since data changed

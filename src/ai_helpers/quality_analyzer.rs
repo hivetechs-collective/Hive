@@ -653,7 +653,7 @@ impl QualityAnalyzer {
         let cache_key = self.generate_risk_cache_key(operation, context);
         {
             let cache = self.risk_cache.read().await;
-            if let Some(cached) = cache.get(&cache_key) {
+            if let Some(cached) = cache.peek(&cache_key) {
                 debug!("📋 Using cached risk assessment");
                 return Ok(cached.clone());
             }
@@ -695,7 +695,7 @@ impl QualityAnalyzer {
         let assessment = OperationRiskAssessment {
             risk_score,
             quality_impact,
-            conflicts,
+            conflicts: conflicts.clone(),
             risk_factors,
             rollback_complexity,
             mitigation_suggestions,
@@ -754,8 +754,8 @@ impl QualityAnalyzer {
                 let new_quality = self.analyze_code_quality(content).await?;
                 
                 maintainability_impact = (new_quality.maintainability - current_quality.maintainability) * 100.0;
-                reliability_impact = (new_quality.reliability - current_quality.reliability) * 100.0;
-                performance_impact = (new_quality.performance - current_quality.performance) * 100.0;
+                reliability_impact = (new_quality.code_quality - current_quality.code_quality) * 100.0;
+                performance_impact = (new_quality.performance_impact - current_quality.performance_impact) * 100.0;
             }
             FileOperation::Delete { path } => {
                 // Deletion can reduce complexity but may break dependencies
@@ -815,7 +815,7 @@ impl QualityAnalyzer {
                     if let Some(conflict_type) = conflict_type {
                         conflicts.push(OperationConflict {
                             conflicting_operations: vec![0, 1], // Placeholder indices
-                            conflict_type,
+                            conflict_type: conflict_type.clone(),
                             description: format!(
                                 "Conflict between {:?} and pending {:?}",
                                 operation, pending.operation
