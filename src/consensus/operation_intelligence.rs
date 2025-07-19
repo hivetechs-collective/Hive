@@ -359,6 +359,17 @@ pub enum BackupMethod {
     Snapshot,
 }
 
+impl BackupMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BackupMethod::Copy => "copy",
+            BackupMethod::GitCommit => "git",
+            BackupMethod::Archive => "archive",
+            BackupMethod::Snapshot => "snapshot",
+        }
+    }
+}
+
 /// Rollback plan
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RollbackPlan {
@@ -1226,33 +1237,16 @@ impl OperationIntelligenceCoordinator {
         
         // Convert rollback plan
         let rollback_plan = RollbackPlan {
-            rollback_steps: plan.rollback_plan.steps.iter()
+            rollback_steps: plan.rollback_plan.rollback_steps.iter()
                 .map(|step| RollbackStep {
                     description: step.description.clone(),
-                    action: match step.action_type.as_str() {
-                        "restore" => RollbackAction::RestoreFile {
-                            from: step.source.clone().unwrap_or_default(),
-                            to: step.target.clone().unwrap_or_default(),
-                        },
-                        "delete" => RollbackAction::DeleteFile {
-                            path: step.target.clone().unwrap_or_default(),
-                        },
-                        "command" => RollbackAction::RunCommand {
-                            command: step.command.clone().unwrap_or_default(),
-                        },
-                        "git_revert" => RollbackAction::GitRevert {
-                            commit: step.commit.clone().unwrap_or_default(),
-                        },
-                        _ => RollbackAction::RunCommand {
-                            command: "echo 'Unknown rollback action'".to_string(),
-                        },
-                    },
+                    action: step.action.clone(),
                     validation: step.validation.clone(),
                 })
                 .collect(),
             complexity: plan.rollback_plan.complexity,
-            automatic_rollback_possible: plan.rollback_plan.automatic_possible,
-            manual_steps_required: plan.rollback_plan.manual_steps.clone(),
+            automatic_rollback_possible: plan.rollback_plan.automatic_rollback_possible,
+            manual_steps_required: plan.rollback_plan.manual_steps_required.clone(),
         };
         
         Ok(OperationPlan {
@@ -1260,7 +1254,7 @@ impl OperationIntelligenceCoordinator {
             preview,
             backup_strategy,
             rollback_plan,
-            estimated_execution_time: plan.estimated_time,
+            estimated_execution_time: plan.estimated_execution_time,
         })
     }
     
@@ -1472,7 +1466,7 @@ impl OperationIntelligenceCoordinator {
                 score += 3.0;
             }
             
-            score.min(10.0) // Cap execution risk at 10
+            score.min(10.0_f32) // Cap execution risk at 10
         };
         risk_components.push(("Execution Risk", execution_risk));
         

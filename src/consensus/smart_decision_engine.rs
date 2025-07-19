@@ -10,8 +10,9 @@ use uuid::Uuid;
 
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::operation_analysis::{
-    OperationAnalysis, AutoAcceptMode, ActionPriority, OperationOutcome
+    OperationAnalysis, AutoAcceptMode, ActionPriority
 };
+use crate::consensus::operation_intelligence::OperationOutcome;
 use crate::consensus::operation_history::OperationHistoryDatabase;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
