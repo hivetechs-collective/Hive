@@ -184,6 +184,7 @@ pub enum RiskLevel {
 }
 
 /// Validates file system operations
+#[derive(Debug)]
 pub struct FileSystemValidator {
     workspace_root: PathBuf,
 }
@@ -384,6 +385,7 @@ impl FileSystemValidator {
 }
 
 /// Validates security aspects of operations
+#[derive(Debug)]
 pub struct SecurityValidator {
     forbidden_patterns: Vec<regex::Regex>,
     sensitive_file_patterns: Vec<regex::Regex>,
@@ -519,6 +521,7 @@ impl SecurityValidator {
 }
 
 /// Validates syntax of code changes
+#[derive(Debug)]
 pub struct SyntaxValidator {
     language_validators: HashMap<String, Box<dyn LanguageValidator>>,
 }

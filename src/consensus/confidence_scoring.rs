@@ -123,6 +123,7 @@ pub struct AdjustmentFactor {
 }
 
 /// Machine learning model for operation predictions
+#[derive(Debug)]
 pub struct OperationPredictionModel {
     // In a real implementation, this would contain:
     // - Neural network or other ML model

@@ -81,6 +81,19 @@ pub struct KnowledgeSynthesizer {
     preview_generator: Arc<RwLock<PreviewGenerator>>,
 }
 
+impl std::fmt::Debug for KnowledgeSynthesizer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KnowledgeSynthesizer")
+            .field("config", &self.config)
+            .field("python_service", &"<PythonModelService>")
+            .field("synthesis_history", &"<SynthesisHistory>")
+            .field("synthesis_cache", &"<LruCache>")
+            .field("plan_cache", &"<LruCache>") 
+            .field("preview_generator", &"<PreviewGenerator>")
+            .finish()
+    }
+}
+
 /// History of synthesis operations
 #[derive(Default)]
 struct SynthesisHistory {

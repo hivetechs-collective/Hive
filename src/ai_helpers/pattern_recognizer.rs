@@ -173,6 +173,21 @@ pub struct PatternRecognizer {
     safety_metrics_cache: Arc<RwLock<Option<(RepositorySafetyMetrics, SystemTime)>>>,
 }
 
+impl std::fmt::Debug for PatternRecognizer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PatternRecognizer")
+            .field("config", &self.config)
+            .field("python_service", &"<PythonModelService>")
+            .field("pattern_store", &"<PatternStore>")
+            .field("detection_cache", &"<LruCache>")
+            .field("safety_cache", &"<LruCache>")
+            .field("safety_history", &"<Vec<OperationSafetyRecord>>")
+            .field("dangerous_file_patterns", &self.dangerous_file_patterns)
+            .field("safety_metrics_cache", &"<Option<RepositorySafetyMetrics>>")
+            .finish()
+    }
+}
+
 /// Historical safety record for trend analysis
 #[derive(Debug, Clone)]
 struct OperationSafetyRecord {
