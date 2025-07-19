@@ -27,6 +27,7 @@ pub mod intelligent_feedback;
 pub mod confidence_scoring;
 pub mod operation_parser;
 pub mod operation_validator;
+pub mod operation_preview;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -76,6 +77,11 @@ pub use operation_validator::{
     OperationValidator, ValidationConfig, ValidationResult, ValidationStatus,
     ValidationCheck, ValidationError, ValidationWarning, SuggestedFix,
     RiskAssessment, RiskLevel, CheckCategory, Severity
+};
+pub use operation_preview::{
+    OperationPreviewGenerator, PreviewConfig, OperationPreviewSet, OperationPreview,
+    FileState, DiffView, DiffChunk, LineChangeSummary, OperationImpact,
+    CombinedImpact, ExecutionTimeline, VisualSummary
 };
 
 // Re-export commonly used items
