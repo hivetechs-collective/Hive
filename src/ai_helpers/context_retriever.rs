@@ -1,15 +1,22 @@
 //! Context Retriever - Uses GraphCodeBERT + LangChain for intelligent retrieval
 //! 
 //! This module finds relevant past knowledge, ranks by relevance to the current question,
-//! and compresses information for optimal context preparation.
+//! compresses information for optimal context preparation, and analyzes operation history
+//! for intelligent auto-accept decisions.
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
 use uuid;
 
 use crate::ai_helpers::{ChromaVectorStore, StageContext, Pattern, Insight};
+use crate::consensus::operation_intelligence::{OperationContext, OperationOutcome};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::types::Stage;
 use crate::consensus::verification::RepositoryFacts;
 use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
@@ -29,6 +36,112 @@ pub struct QuestionAnalysis {
     pub category: String,
     pub confidence: f64,
     pub reasoning: String,
+}
+
+/// Operation context analysis for auto-accept decisions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperationContextAnalysis {
+    /// Historical success rate for similar operations
+    pub historical_success_rate: f32,
+    
+    /// Number of similar operations found
+    pub similar_operations_count: usize,
+    
+    /// Context similarity score (0-1)
+    pub context_similarity: f32,
+    
+    /// Relevant precedents from operation history
+    pub relevant_precedents: Vec<OperationPrecedent>,
+    
+    /// Context-based warnings or recommendations
+    pub context_warnings: Vec<String>,
+    
+    /// Confidence in this analysis
+    pub analysis_confidence: f32,
+}
+
+/// Historical precedent for operation analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperationPrecedent {
+    /// Operation that was performed
+    pub operation: FileOperation,
+    
+    /// Context similarity to current operation
+    pub similarity: f32,
+    
+    /// Whether the precedent was successful
+    pub was_successful: bool,
+    
+    /// User satisfaction rating
+    pub user_satisfaction: Option<f32>,
+    
+    /// Key lessons learned
+    pub lessons_learned: Vec<String>,
+    
+    /// Execution time of the precedent
+    pub execution_time: Duration,
+    
+    /// When this precedent occurred
+    pub timestamp: SystemTime,
+}
+
+/// Success rate analysis by operation type and context
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuccessRateAnalysis {
+    /// Overall success rate for this operation type
+    pub overall_success_rate: f32,
+    
+    /// Success rate in similar contexts
+    pub contextual_success_rate: f32,
+    
+    /// Success rate by time of day
+    pub temporal_success_rates: HashMap<String, f32>,
+    
+    /// Success rate by repository type
+    pub repository_success_rates: HashMap<String, f32>,
+    
+    /// Most common failure modes
+    pub common_failure_modes: Vec<FailureMode>,
+    
+    /// Trend analysis
+    pub success_trend: SuccessTrend,
+}
+
+/// Failure mode analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailureMode {
+    /// Description of the failure
+    pub description: String,
+    
+    /// Frequency of this failure type
+    pub frequency: f32,
+    
+    /// Typical causes
+    pub typical_causes: Vec<String>,
+    
+    /// Suggested mitigations
+    pub mitigations: Vec<String>,
+}
+
+/// Success trend over time
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SuccessTrend {
+    /// Trend direction (improving, declining, stable)
+    pub direction: TrendDirection,
+    
+    /// Magnitude of the trend
+    pub magnitude: f32,
+    
+    /// Confidence in the trend analysis
+    pub confidence: f32,
+}
+
+/// Trend direction enumeration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TrendDirection {
+    Improving,
+    Declining,
+    Stable,
 }
 
 /// Configuration for Context Retriever
@@ -58,7 +171,7 @@ impl Default for RetrieverConfig {
     }
 }
 
-/// Context Retriever with stage-specific intelligence
+/// Context Retriever with stage-specific intelligence and operation history analysis
 pub struct ContextRetriever {
     config: RetrieverConfig,
     vector_store: Arc<ChromaVectorStore>,
@@ -71,6 +184,26 @@ pub struct ContextRetriever {
     
     /// Repository facts for enhanced context
     repository_facts: Arc<RwLock<Option<RepositoryFacts>>>,
+    
+    /// Operation history for analysis (indexed by operation hash)
+    operation_history: Arc<RwLock<HashMap<String, OperationHistoryEntry>>>,
+    
+    /// Success rate cache by operation type and context
+    success_rate_cache: Arc<RwLock<HashMap<String, SuccessRateAnalysis>>>,
+    
+    /// Context analysis cache
+    context_analysis_cache: Arc<RwLock<HashMap<String, OperationContextAnalysis>>>,
+}
+
+/// Internal operation history entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OperationHistoryEntry {
+    pub operation: FileOperation,
+    pub context: OperationContext,
+    pub outcome: OperationOutcome,
+    pub user_satisfaction: Option<f32>,
+    pub indexed_at: SystemTime,
+    pub context_hash: String,
 }
 
 impl ContextRetriever {
@@ -90,6 +223,9 @@ impl ContextRetriever {
             python_service,
             retrieval_cache,
             repository_facts: Arc::new(RwLock::new(None)),
+            operation_history: Arc::new(RwLock::new(HashMap::new())),
+            success_rate_cache: Arc::new(RwLock::new(HashMap::new())),
+            context_analysis_cache: Arc::new(RwLock::new(HashMap::new())),
         })
     }
     
@@ -411,6 +547,709 @@ impl ContextRetriever {
         // If parsing failed, fall back to heuristics
         tracing::warn!("Failed to parse AI context analysis, using fallback");
         Ok(self.fallback_context_analysis(question))
+    }
+    
+    // === Operation History Analysis Methods ===
+    
+    /// Record operation outcome for learning and historical analysis
+    pub async fn record_operation_outcome(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+        outcome: &OperationOutcome,
+        user_satisfaction: Option<f32>,
+    ) -> Result<()> {
+        info!("📚 Recording operation outcome for context analysis");
+        
+        let operation_hash = self.generate_operation_hash(operation, context);
+        let context_hash = self.generate_context_hash(context);
+        
+        let history_entry = OperationHistoryEntry {
+            operation: operation.clone(),
+            context: context.clone(),
+            outcome: outcome.clone(),
+            user_satisfaction,
+            indexed_at: SystemTime::now(),
+            context_hash,
+        };
+        
+        // Store in operation history
+        {
+            let mut history = self.operation_history.write().await;
+            history.insert(operation_hash.clone(), history_entry);
+            
+            // Keep only recent operations in memory (last 5000)
+            if history.len() > 5000 {
+                let cutoff_time = SystemTime::now() - Duration::from_secs(60 * 60 * 24 * 30); // 30 days
+                history.retain(|_, entry| entry.indexed_at > cutoff_time);
+            }
+        }
+        
+        // Clear relevant caches since data has changed
+        self.success_rate_cache.write().await.clear();
+        self.context_analysis_cache.write().await.clear();
+        
+        debug!("✅ Operation outcome recorded: {}", operation_hash);
+        Ok(())
+    }
+    
+    /// Analyze operation context for auto-accept decision making
+    pub async fn analyze_operation_context(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+    ) -> Result<OperationContextAnalysis> {
+        info!("🔍 Analyzing operation context for auto-accept decision");
+        
+        // Check cache first
+        let cache_key = format!("{}_{}", 
+            self.generate_operation_hash(operation, context),
+            self.generate_context_hash(context)
+        );
+        
+        {
+            let cache = self.context_analysis_cache.read().await;
+            if let Some(cached) = cache.get(&cache_key) {
+                debug!("📋 Using cached context analysis");
+                return Ok(cached.clone());
+            }
+        }
+        
+        // Find similar operations in history
+        let similar_operations = self.find_similar_operations(operation, context).await?;
+        
+        // Calculate historical success rate
+        let historical_success_rate = if !similar_operations.is_empty() {
+            similar_operations.iter()
+                .map(|op| if op.was_successful { 1.0 } else { 0.0 })
+                .sum::<f32>() / similar_operations.len() as f32
+        } else {
+            0.5 // Default neutral success rate
+        };
+        
+        // Calculate context similarity (average of similar operations)
+        let context_similarity = if !similar_operations.is_empty() {
+            similar_operations.iter()
+                .map(|op| op.similarity)
+                .sum::<f32>() / similar_operations.len() as f32
+        } else {
+            0.0
+        };
+        
+        // Generate context-based warnings
+        let context_warnings = self.generate_context_warnings(operation, context, &similar_operations).await?;
+        
+        // Calculate analysis confidence
+        let analysis_confidence = self.calculate_analysis_confidence(&similar_operations, context_similarity);
+        
+        let analysis = OperationContextAnalysis {
+            historical_success_rate,
+            similar_operations_count: similar_operations.len(),
+            context_similarity,
+            relevant_precedents: similar_operations,
+            context_warnings,
+            analysis_confidence,
+        };
+        
+        // Cache the result
+        {
+            let mut cache = self.context_analysis_cache.write().await;
+            cache.insert(cache_key, analysis.clone());
+        }
+        
+        info!("📊 Context analysis complete: {:.1}% success rate, {:.1}% confidence", 
+              analysis.historical_success_rate * 100.0, analysis.analysis_confidence * 100.0);
+        
+        Ok(analysis)
+    }
+    
+    /// Get success rate analysis for operation type and context
+    pub async fn get_success_rate_analysis(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+    ) -> Result<SuccessRateAnalysis> {
+        let operation_type = self.get_operation_type(operation);
+        let cache_key = format!("{}_{}", operation_type, self.generate_context_hash(context));
+        
+        // Check cache first
+        {
+            let cache = self.success_rate_cache.read().await;
+            if let Some(cached) = cache.get(&cache_key) {
+                return Ok(cached.clone());
+            }
+        }
+        
+        let history = self.operation_history.read().await;
+        
+        // Filter operations by type
+        let type_operations: Vec<_> = history.values()
+            .filter(|entry| self.get_operation_type(&entry.operation) == operation_type)
+            .collect();
+        
+        // Calculate overall success rate for this operation type
+        let overall_success_rate = if !type_operations.is_empty() {
+            type_operations.iter()
+                .map(|entry| if entry.outcome.success { 1.0 } else { 0.0 })
+                .sum::<f32>() / type_operations.len() as f32
+        } else {
+            0.5
+        };
+        
+        // Calculate contextual success rate (similar repository/question context)
+        let similar_context_ops: Vec<_> = type_operations.iter()
+            .filter(|entry| self.is_similar_context(&entry.context, context))
+            .collect();
+        
+        let contextual_success_rate = if !similar_context_ops.is_empty() {
+            similar_context_ops.iter()
+                .map(|entry| if entry.outcome.success { 1.0 } else { 0.0 })
+                .sum::<f32>() / similar_context_ops.len() as f32
+        } else {
+            overall_success_rate
+        };
+        
+        // Analyze temporal patterns
+        let temporal_success_rates = self.analyze_temporal_patterns(&type_operations);
+        
+        // Analyze by repository type
+        let repository_success_rates = self.analyze_repository_patterns(&type_operations);
+        
+        // Find common failure modes
+        let common_failure_modes = self.analyze_failure_modes(&type_operations);
+        
+        // Analyze success trend
+        let success_trend = self.analyze_success_trend(&type_operations);
+        
+        let analysis = SuccessRateAnalysis {
+            overall_success_rate,
+            contextual_success_rate,
+            temporal_success_rates,
+            repository_success_rates,
+            common_failure_modes,
+            success_trend,
+        };
+        
+        // Cache the result
+        {
+            let mut cache = self.success_rate_cache.write().await;
+            cache.insert(cache_key, analysis.clone());
+        }
+        
+        Ok(analysis)
+    }
+    
+    /// Clear operation history older than specified days
+    pub async fn cleanup_old_operations(&self, keep_days: u32) -> Result<usize> {
+        let cutoff_time = SystemTime::now() - Duration::from_secs(60 * 60 * 24 * keep_days as u64);
+        
+        let mut history = self.operation_history.write().await;
+        let original_len = history.len();
+        
+        history.retain(|_, entry| entry.indexed_at > cutoff_time);
+        
+        let removed_count = original_len - history.len();
+        
+        if removed_count > 0 {
+            info!("🧹 Cleaned up {} old operation history entries", removed_count);
+            
+            // Clear caches since data changed
+            self.success_rate_cache.write().await.clear();
+            self.context_analysis_cache.write().await.clear();
+        }
+        
+        Ok(removed_count)
+    }
+    
+    /// Get operation history statistics
+    pub async fn get_operation_statistics(&self) -> Result<HashMap<String, f32>> {
+        let history = self.operation_history.read().await;
+        let mut stats = HashMap::new();
+        
+        stats.insert("total_operations".to_string(), history.len() as f32);
+        
+        let successful_operations = history.values()
+            .filter(|entry| entry.outcome.success)
+            .count();
+        
+        stats.insert("successful_operations".to_string(), successful_operations as f32);
+        stats.insert("overall_success_rate".to_string(), 
+            if !history.is_empty() { 
+                successful_operations as f32 / history.len() as f32 
+            } else { 
+                0.0 
+            }
+        );
+        
+        // Average execution time
+        let avg_execution_time = if !history.is_empty() {
+            history.values()
+                .map(|entry| entry.outcome.execution_time.as_millis() as f32)
+                .sum::<f32>() / history.len() as f32
+        } else {
+            0.0
+        };
+        
+        stats.insert("average_execution_time_ms".to_string(), avg_execution_time);
+        
+        // Average user satisfaction
+        let satisfaction_scores: Vec<f32> = history.values()
+            .filter_map(|entry| entry.user_satisfaction)
+            .collect();
+        
+        if !satisfaction_scores.is_empty() {
+            let avg_satisfaction = satisfaction_scores.iter().sum::<f32>() / satisfaction_scores.len() as f32;
+            stats.insert("average_user_satisfaction".to_string(), avg_satisfaction);
+        }
+        
+        Ok(stats)
+    }
+    
+    // === Private Helper Methods ===
+    
+    /// Find similar operations based on operation type and context
+    async fn find_similar_operations(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+    ) -> Result<Vec<OperationPrecedent>> {
+        let history = self.operation_history.read().await;
+        let operation_type = self.get_operation_type(operation);
+        
+        let mut precedents = Vec::new();
+        
+        for entry in history.values() {
+            // Only consider same operation type
+            if self.get_operation_type(&entry.operation) != operation_type {
+                continue;
+            }
+            
+            // Calculate similarity
+            let similarity = self.calculate_context_similarity(&entry.context, context);
+            
+            // Only include if similarity is above threshold
+            if similarity >= 0.3 {
+                let lessons_learned = self.extract_lessons_learned(&entry.outcome, &entry.context);
+                
+                precedents.push(OperationPrecedent {
+                    operation: entry.operation.clone(),
+                    similarity,
+                    was_successful: entry.outcome.success,
+                    user_satisfaction: entry.user_satisfaction,
+                    lessons_learned,
+                    execution_time: entry.outcome.execution_time,
+                    timestamp: entry.indexed_at,
+                });
+            }
+        }
+        
+        // Sort by similarity descending
+        precedents.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap());
+        
+        // Return top 10 most similar
+        precedents.truncate(10);
+        
+        Ok(precedents)
+    }
+    
+    /// Generate warnings based on context and historical patterns
+    async fn generate_context_warnings(
+        &self,
+        operation: &FileOperation,
+        context: &OperationContext,
+        similar_operations: &[OperationPrecedent],
+    ) -> Result<Vec<String>> {
+        let mut warnings = Vec::new();
+        
+        // Check for high failure rate in similar contexts
+        let failure_rate = similar_operations.iter()
+            .map(|op| if !op.was_successful { 1.0 } else { 0.0 })
+            .sum::<f32>() / similar_operations.len().max(1) as f32;
+        
+        if failure_rate > 0.3 {
+            warnings.push(format!(
+                "High failure rate ({:.1}%) detected for similar operations in this context",
+                failure_rate * 100.0
+            ));
+        }
+        
+        // Check for recent failures
+        let recent_failures = similar_operations.iter()
+            .filter(|op| !op.was_successful && 
+                op.timestamp > SystemTime::now() - Duration::from_secs(60 * 60 * 24 * 7)) // 7 days
+            .count();
+        
+        if recent_failures > 2 {
+            warnings.push(format!(
+                "{} recent failures detected for similar operations",
+                recent_failures
+            ));
+        }
+        
+        // Check for specific risky patterns
+        if let FileOperation::Delete { .. } = operation {
+            warnings.push("Deletion operation - ensure backups are available".to_string());
+        }
+        
+        // Check repository context warnings
+        if let Some(repo_facts) = &*self.repository_facts.read().await {
+            if repo_facts.is_enterprise && repo_facts.dependency_count > 100 {
+                warnings.push("Complex enterprise repository - extra caution recommended".to_string());
+            }
+        }
+        
+        Ok(warnings)
+    }
+    
+    /// Calculate confidence in the context analysis
+    fn calculate_analysis_confidence(&self, similar_operations: &[OperationPrecedent], avg_similarity: f32) -> f32 {
+        let base_confidence = if similar_operations.is_empty() {
+            0.1 // Very low confidence with no historical data
+        } else {
+            // Confidence based on number of similar operations and their similarity
+            let count_factor = (similar_operations.len() as f32 / 10.0).min(1.0);
+            let similarity_factor = avg_similarity;
+            (count_factor * similarity_factor * 0.8 + 0.2).clamp(0.0, 1.0)
+        };
+        
+        base_confidence
+    }
+    
+    /// Get operation type as string
+    fn get_operation_type(&self, operation: &FileOperation) -> &'static str {
+        match operation {
+            FileOperation::Create { .. } => "create",
+            FileOperation::Update { .. } => "update",
+            FileOperation::Append { .. } => "append",
+            FileOperation::Delete { .. } => "delete",
+            FileOperation::Rename { .. } => "rename",
+        }
+    }
+    
+    /// Generate hash for operation and context
+    fn generate_operation_hash(&self, operation: &FileOperation, context: &OperationContext) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}_{}", operation, context.source_question).hash(&mut hasher);
+        format!("{:x}", hasher.finish())
+    }
+    
+    /// Generate hash for context
+    fn generate_context_hash(&self, context: &OperationContext) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        
+        let mut hasher = DefaultHasher::new();
+        format!("{}_{}_{}", 
+            context.repository_path.display(),
+            context.source_question,
+            context.related_files.len()
+        ).hash(&mut hasher);
+        format!("{:x}", hasher.finish())
+    }
+    
+    /// Calculate similarity between two contexts
+    fn calculate_context_similarity(&self, context1: &OperationContext, context2: &OperationContext) -> f32 {
+        let mut similarity = 0.0;
+        
+        // Repository similarity
+        if context1.repository_path == context2.repository_path {
+            similarity += 0.4;
+        }
+        
+        // Question similarity (simple keyword matching)
+        let words1: std::collections::HashSet<String> = context1.source_question
+            .to_lowercase()
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+        let words2: std::collections::HashSet<String> = context2.source_question
+            .to_lowercase()
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect();
+        
+        let common_words = words1.intersection(&words2).count();
+        let total_words = words1.union(&words2).count();
+        
+        if total_words > 0 {
+            similarity += (common_words as f32 / total_words as f32) * 0.4;
+        }
+        
+        // Related files similarity
+        let files1: std::collections::HashSet<_> = context1.related_files.iter().collect();
+        let files2: std::collections::HashSet<_> = context2.related_files.iter().collect();
+        
+        let common_files = files1.intersection(&files2).count();
+        let total_files = files1.union(&files2).count();
+        
+        if total_files > 0 {
+            similarity += (common_files as f32 / total_files as f32) * 0.2;
+        }
+        
+        similarity.clamp(0.0, 1.0)
+    }
+    
+    /// Check if two contexts are similar
+    fn is_similar_context(&self, context1: &OperationContext, context2: &OperationContext) -> bool {
+        self.calculate_context_similarity(context1, context2) > 0.5
+    }
+    
+    /// Extract lessons learned from operation outcome
+    fn extract_lessons_learned(&self, outcome: &OperationOutcome, context: &OperationContext) -> Vec<String> {
+        let mut lessons = Vec::new();
+        
+        if !outcome.success {
+            if let Some(error) = &outcome.error_message {
+                lessons.push(format!("Error pattern: {}", error));
+            }
+            
+            if outcome.rollback_required {
+                lessons.push("Required rollback - consider more validation".to_string());
+            }
+        } else {
+            if outcome.execution_time < Duration::from_secs(1) {
+                lessons.push("Fast execution - good pattern".to_string());
+            }
+            
+            if let Some(feedback) = &outcome.user_feedback {
+                if !feedback.is_empty() {
+                    lessons.push(format!("User feedback: {}", feedback));
+                }
+            }
+        }
+        
+        lessons
+    }
+    
+    /// Analyze temporal success patterns
+    fn analyze_temporal_patterns(&self, operations: &[&OperationHistoryEntry]) -> HashMap<String, f32> {
+        let mut patterns = HashMap::new();
+        
+        // Group by hour of day
+        let mut hour_success: HashMap<u32, Vec<bool>> = HashMap::new();
+        
+        for entry in operations {
+            if let Ok(duration) = entry.indexed_at.duration_since(SystemTime::UNIX_EPOCH) {
+                let hour = (duration.as_secs() / 3600) % 24;
+                hour_success.entry(hour as u32).or_insert_with(Vec::new).push(entry.outcome.success);
+            }
+        }
+        
+        for (hour, successes) in hour_success {
+            let success_rate = successes.iter().map(|&s| if s { 1.0 } else { 0.0 }).sum::<f32>() / successes.len() as f32;
+            patterns.insert(format!("hour_{:02}", hour), success_rate);
+        }
+        
+        patterns
+    }
+    
+    /// Analyze repository type success patterns
+    fn analyze_repository_patterns(&self, operations: &[&OperationHistoryEntry]) -> HashMap<String, f32> {
+        let mut patterns = HashMap::new();
+        
+        // Group by repository path (simplified)
+        let mut repo_success: HashMap<String, Vec<bool>> = HashMap::new();
+        
+        for entry in operations {
+            let repo_type = self.classify_repository_type(&entry.context);
+            repo_success.entry(repo_type).or_insert_with(Vec::new).push(entry.outcome.success);
+        }
+        
+        for (repo_type, successes) in repo_success {
+            let success_rate = successes.iter().map(|&s| if s { 1.0 } else { 0.0 }).sum::<f32>() / successes.len() as f32;
+            patterns.insert(repo_type, success_rate);
+        }
+        
+        patterns
+    }
+    
+    /// Classify repository type based on context
+    fn classify_repository_type(&self, context: &OperationContext) -> String {
+        let path_str = context.repository_path.to_string_lossy().to_lowercase();
+        
+        if path_str.contains("rust") || context.related_files.iter().any(|f| f.extension() == Some("rs".as_ref())) {
+            "rust".to_string()
+        } else if path_str.contains("node") || context.related_files.iter().any(|f| f.extension() == Some("js".as_ref())) {
+            "javascript".to_string()
+        } else if context.related_files.iter().any(|f| f.extension() == Some("py".as_ref())) {
+            "python".to_string()
+        } else {
+            "other".to_string()
+        }
+    }
+    
+    /// Analyze common failure modes
+    fn analyze_failure_modes(&self, operations: &[&OperationHistoryEntry]) -> Vec<FailureMode> {
+        let mut failure_counts: HashMap<String, Vec<&OperationHistoryEntry>> = HashMap::new();
+        
+        for entry in operations {
+            if !entry.outcome.success {
+                if let Some(error) = &entry.outcome.error_message {
+                    // Classify error types
+                    let error_type = self.classify_error_type(error);
+                    failure_counts.entry(error_type).or_insert_with(Vec::new).push(entry);
+                }
+            }
+        }
+        
+        let total_failures = operations.iter().filter(|e| !e.outcome.success).count();
+        let mut failure_modes = Vec::new();
+        
+        for (error_type, entries) in failure_counts {
+            let frequency = entries.len() as f32 / total_failures.max(1) as f32;
+            
+            if frequency >= 0.1 { // At least 10% of failures
+                let typical_causes = self.extract_typical_causes(&entries);
+                let mitigations = self.suggest_mitigations(&error_type, &typical_causes);
+                
+                failure_modes.push(FailureMode {
+                    description: error_type,
+                    frequency,
+                    typical_causes,
+                    mitigations,
+                });
+            }
+        }
+        
+        // Sort by frequency descending
+        failure_modes.sort_by(|a, b| b.frequency.partial_cmp(&a.frequency).unwrap());
+        
+        failure_modes
+    }
+    
+    /// Classify error type from error message
+    fn classify_error_type(&self, error_message: &str) -> String {
+        let error_lower = error_message.to_lowercase();
+        
+        if error_lower.contains("permission") || error_lower.contains("access") {
+            "Permission Error".to_string()
+        } else if error_lower.contains("file not found") || error_lower.contains("no such file") {
+            "File Not Found".to_string()
+        } else if error_lower.contains("syntax") || error_lower.contains("parse") {
+            "Syntax Error".to_string()
+        } else if error_lower.contains("timeout") {
+            "Timeout Error".to_string()
+        } else {
+            "Other Error".to_string()
+        }
+    }
+    
+    /// Extract typical causes from failed operations
+    fn extract_typical_causes(&self, entries: &[&OperationHistoryEntry]) -> Vec<String> {
+        let mut causes = Vec::new();
+        
+        // Analyze patterns in failed operations
+        let file_types: std::collections::HashSet<_> = entries.iter()
+            .filter_map(|e| self.get_file_extension(&e.operation))
+            .collect();
+        
+        if file_types.len() == 1 {
+            causes.push(format!("Specific to {} files", file_types.iter().next().unwrap()));
+        }
+        
+        // Check for time patterns
+        let recent_failures = entries.iter()
+            .filter(|e| e.indexed_at > SystemTime::now() - Duration::from_secs(60 * 60 * 24))
+            .count();
+        
+        if recent_failures > entries.len() / 2 {
+            causes.push("Recent increase in failures".to_string());
+        }
+        
+        causes
+    }
+    
+    /// Get file extension from operation
+    fn get_file_extension(&self, operation: &FileOperation) -> Option<String> {
+        let path = match operation {
+            FileOperation::Create { path, .. } => path,
+            FileOperation::Update { path, .. } => path,
+            FileOperation::Append { path, .. } => path,
+            FileOperation::Delete { path } => path,
+            FileOperation::Rename { to, .. } => to,
+        };
+        
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_lowercase())
+    }
+    
+    /// Suggest mitigations for error types
+    fn suggest_mitigations(&self, error_type: &str, causes: &[String]) -> Vec<String> {
+        let mut mitigations = Vec::new();
+        
+        match error_type {
+            "Permission Error" => {
+                mitigations.push("Check file permissions before operation".to_string());
+                mitigations.push("Ensure user has write access to directory".to_string());
+            }
+            "File Not Found" => {
+                mitigations.push("Verify file exists before modification".to_string());
+                mitigations.push("Create parent directories if needed".to_string());
+            }
+            "Syntax Error" => {
+                mitigations.push("Validate file syntax before writing".to_string());
+                mitigations.push("Use language-specific formatters".to_string());
+            }
+            "Timeout Error" => {
+                mitigations.push("Increase operation timeout".to_string());
+                mitigations.push("Break large operations into smaller chunks".to_string());
+            }
+            _ => {
+                mitigations.push("Review operation parameters".to_string());
+                mitigations.push("Add additional validation steps".to_string());
+            }
+        }
+        
+        mitigations
+    }
+    
+    /// Analyze success trend over time
+    fn analyze_success_trend(&self, operations: &[&OperationHistoryEntry]) -> SuccessTrend {
+        if operations.len() < 10 {
+            return SuccessTrend {
+                direction: TrendDirection::Stable,
+                magnitude: 0.0,
+                confidence: 0.1,
+            };
+        }
+        
+        // Sort by timestamp
+        let mut sorted_ops: Vec<_> = operations.iter().collect();
+        sorted_ops.sort_by_key(|e| e.indexed_at);
+        
+        // Split into two halves for comparison
+        let mid = sorted_ops.len() / 2;
+        let first_half = &sorted_ops[..mid];
+        let second_half = &sorted_ops[mid..];
+        
+        let first_success_rate = first_half.iter()
+            .map(|e| if e.outcome.success { 1.0 } else { 0.0 })
+            .sum::<f32>() / first_half.len() as f32;
+            
+        let second_success_rate = second_half.iter()
+            .map(|e| if e.outcome.success { 1.0 } else { 0.0 })
+            .sum::<f32>() / second_half.len() as f32;
+        
+        let magnitude = (second_success_rate - first_success_rate).abs();
+        let direction = if second_success_rate > first_success_rate + 0.05 {
+            TrendDirection::Improving
+        } else if second_success_rate < first_success_rate - 0.05 {
+            TrendDirection::Declining
+        } else {
+            TrendDirection::Stable
+        };
+        
+        let confidence = (operations.len() as f32 / 50.0).min(1.0); // Higher confidence with more data
+        
+        SuccessTrend {
+            direction,
+            magnitude,
+            confidence,
+        }
     }
     
     /// Fallback heuristic analysis when AI model is unavailable

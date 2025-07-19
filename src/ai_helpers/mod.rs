@@ -22,9 +22,18 @@ use anyhow::Result;
 use tokio::sync::RwLock;
 
 // Re-export main components
-pub use knowledge_indexer::KnowledgeIndexer;
-pub use context_retriever::ContextRetriever;
-pub use pattern_recognizer::PatternRecognizer;
+pub use knowledge_indexer::{
+    KnowledgeIndexer, IndexedOperation, OperationSimilarity, 
+    OperationSuccessPrediction, OperationStats
+};
+pub use context_retriever::{
+    ContextRetriever, OperationContextAnalysis, OperationPrecedent, 
+    SuccessRateAnalysis, FailureMode, SuccessTrend, TrendDirection
+};
+pub use pattern_recognizer::{
+    PatternRecognizer, SafetyPatternAnalysis, OperationSafetyPattern, 
+    SafetyPatternType, RepositorySafetyMetrics, SafetyTrend
+};
 pub use quality_analyzer::{QualityAnalyzer, QualityMetrics};
 pub use knowledge_synthesizer::KnowledgeSynthesizer;
 pub use vector_store::ChromaVectorStore;
