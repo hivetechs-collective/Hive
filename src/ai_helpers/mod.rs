@@ -34,7 +34,10 @@ pub use pattern_recognizer::{
     PatternRecognizer, SafetyPatternAnalysis, OperationSafetyPattern, 
     SafetyPatternType, RepositorySafetyMetrics, SafetyTrend
 };
-pub use quality_analyzer::{QualityAnalyzer, QualityMetrics};
+pub use quality_analyzer::{
+    QualityAnalyzer, QualityMetrics, OperationRiskAssessment, RiskFactor,
+    RiskType, RiskSeverity
+};
 pub use knowledge_synthesizer::KnowledgeSynthesizer;
 pub use vector_store::ChromaVectorStore;
 pub use parallel_processor::{ParallelProcessor, ParallelConfig};
