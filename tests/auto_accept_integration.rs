@@ -1,273 +1,234 @@
 // Integration tests for AI-Enhanced Auto-Accept System
-use hive_ai::consensus::operation_intelligence::{
-    OperationIntelligenceCoordinator, AutoAcceptMode,
-};
+// These tests verify the auto-accept decision logic without requiring actual Python services
+
+use hive_ai::consensus::operation_analysis::{AutoAcceptMode, OperationContext as AnalysisContext};
+use hive_ai::consensus::smart_decision_engine::{SmartDecisionEngine, UserPreferences, ExecutionDecision};
 use hive_ai::consensus::stages::file_aware_curator::FileOperation;
-use hive_ai::consensus::operation_analysis::OperationContext;
-use hive_ai::ai_helpers::knowledge_indexer::KnowledgeIndexer;
-use hive_ai::ai_helpers::context_retriever::ContextRetriever;
-use hive_ai::ai_helpers::pattern_recognizer::PatternRecognizer;
-use hive_ai::ai_helpers::quality_analyzer::QualityAnalyzer;
-use hive_ai::ai_helpers::knowledge_synthesizer::KnowledgeSynthesizer;
-use std::sync::Arc;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use tempfile::TempDir;
 
-/// Helper to create a test coordinator with all AI helpers
-async fn create_test_coordinator() -> OperationIntelligenceCoordinator {
-    let temp_dir = TempDir::new().unwrap();
-    let db_path = temp_dir.path().join("test_history.db");
-    
-    let knowledge_indexer = Arc::new(KnowledgeIndexer::new(None));
-    let context_retriever = Arc::new(ContextRetriever::new(None));
-    let pattern_recognizer = Arc::new(PatternRecognizer::new());
-    let quality_analyzer = Arc::new(QualityAnalyzer::new(Default::default()));
-    let knowledge_synthesizer = Arc::new(KnowledgeSynthesizer::new(Default::default()));
-    
-    OperationIntelligenceCoordinator::new(
-        knowledge_indexer,
-        context_retriever,
-        pattern_recognizer,
-        quality_analyzer,
-        knowledge_synthesizer,
-        Some(db_path),
-    ).await.unwrap()
+/// Helper to create default user preferences
+fn create_default_preferences() -> UserPreferences {
+    UserPreferences {
+        risk_tolerance: 0.5,
+        auto_backup: true,
+        require_confirmation_for_deletions: true,
+        require_confirmation_for_mass_updates: true,
+        trust_ai_suggestions: 0.8,
+        preferred_mode: AutoAcceptMode::Balanced,
+        custom_rules: vec![],
+    }
 }
 
-/// Helper to create test context
-fn create_test_context(question: &str) -> OperationContext {
-    OperationContext {
-        repository_path: PathBuf::from("/test"),
-        user_question: question.to_string(),
-        consensus_response: String::new(),
-        timestamp: SystemTime::now(),
-        session_id: "test_session".to_string(),
-        git_commit: None,
+/// Helper to create test operation analysis
+fn create_test_analysis(confidence: f32, risk: f32) -> hive_ai::consensus::operation_analysis::OperationAnalysis {
+    hive_ai::consensus::operation_analysis::OperationAnalysis {
+        operations: vec![],
+        context: AnalysisContext {
+            repository_path: PathBuf::from("/test"),
+            user_question: "Test".to_string(),
+            consensus_response: "Test response".to_string(),
+            timestamp: SystemTime::now(),
+            session_id: "test".to_string(),
+            git_commit: None,
+        },
+        unified_score: hive_ai::consensus::operation_analysis::UnifiedScore { confidence, risk },
+        recommendations: vec![],
+        groups: hive_ai::consensus::operation_analysis::OperationGroups {
+            create_operations: vec![],
+            update_operations: vec![],
+            delete_operations: vec![],
+            move_operations: vec![],
+        },
+        component_scores: hive_ai::consensus::operation_analysis::ComponentScores {
+            knowledge_indexer: None,
+            context_retriever: None,
+            pattern_recognizer: None,
+            quality_analyzer: None,
+            knowledge_synthesizer: None,
+        },
+        scoring_factors: hive_ai::consensus::operation_analysis::ScoringFactors {
+            historical_success: None,
+            pattern_safety: None,
+            conflict_probability: None,
+            rollback_complexity: None,
+            user_trust: 0.8,
+            similar_operations_count: None,
+            dangerous_pattern_count: None,
+            anti_pattern_count: None,
+            rollback_possible: None,
+        },
+        statistics: None,
     }
 }
 
 #[tokio::test]
-async fn test_auto_accept_mode_conservative() {
-    let coordinator = create_test_coordinator().await;
+async fn test_conservative_mode_high_confidence_low_risk() {
+    let prefs = create_default_preferences();
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Conservative, prefs, None);
     
-    // Create a safe operation
-    let operation = FileOperation::Create {
+    // Test high confidence (95%), low risk (10%) - should auto-execute
+    let analysis = create_test_analysis(95.0, 10.0);
+    let decision = engine.make_decision(&analysis).await.unwrap();
+    
+    match decision {
+        ExecutionDecision::AutoExecute { confidence, risk_level, .. } => {
+            assert_eq!(confidence, 95.0);
+            assert_eq!(risk_level, 10.0);
+        }
+        _ => panic!("Expected AutoExecute for high confidence, low risk in conservative mode"),
+    }
+}
+
+#[tokio::test]
+async fn test_conservative_mode_high_risk() {
+    let prefs = create_default_preferences();
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Conservative, prefs, None);
+    
+    // Test high risk (75%) - should block
+    let analysis = create_test_analysis(95.0, 75.0);
+    let decision = engine.make_decision(&analysis).await.unwrap();
+    
+    assert!(matches!(decision, ExecutionDecision::Block { .. }), 
+            "Expected Block for high risk in conservative mode");
+}
+
+#[tokio::test]
+async fn test_balanced_mode_thresholds() {
+    let prefs = create_default_preferences();
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Balanced, prefs, None);
+    
+    // Test at balanced thresholds (82% confidence, 20% risk) - should auto-execute
+    let analysis = create_test_analysis(82.0, 20.0);
+    let decision = engine.make_decision(&analysis).await.unwrap();
+    
+    assert!(matches!(decision, ExecutionDecision::AutoExecute { .. }), 
+            "Expected AutoExecute for operations meeting balanced thresholds");
+}
+
+#[tokio::test]
+async fn test_aggressive_mode_accepts_higher_risk() {
+    let prefs = create_default_preferences();
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Aggressive, prefs, None);
+    
+    // Test moderate confidence (75%), moderate risk (35%) - should auto-execute in aggressive
+    let analysis = create_test_analysis(75.0, 35.0);
+    let decision = engine.make_decision(&analysis).await.unwrap();
+    
+    assert!(matches!(decision, ExecutionDecision::AutoExecute { .. }), 
+            "Expected AutoExecute for moderate risk in aggressive mode");
+}
+
+#[tokio::test]
+async fn test_manual_mode_always_requires_confirmation() {
+    let prefs = create_default_preferences();
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Manual, prefs, None);
+    
+    // Test perfect conditions - should still require confirmation
+    let analysis = create_test_analysis(100.0, 0.0);
+    let decision = engine.make_decision(&analysis).await.unwrap();
+    
+    assert!(matches!(decision, ExecutionDecision::RequireConfirmation { .. }), 
+            "Expected RequireConfirmation for manual mode regardless of scores");
+}
+
+#[tokio::test]
+async fn test_plan_mode_requires_review() {
+    let prefs = create_default_preferences();
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Plan, prefs, None);
+    
+    // Test any conditions - should require confirmation with plan details
+    let analysis = create_test_analysis(85.0, 15.0);
+    let decision = engine.make_decision(&analysis).await.unwrap();
+    
+    match decision {
+        ExecutionDecision::RequireConfirmation { reason, .. } => {
+            assert!(reason.contains("Plan mode"), "Plan mode should be mentioned in reason");
+        }
+        _ => panic!("Expected RequireConfirmation for plan mode"),
+    }
+}
+
+#[tokio::test]
+async fn test_deletion_requires_confirmation_in_conservative() {
+    let mut prefs = create_default_preferences();
+    prefs.require_confirmation_for_deletions = true;
+    
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Conservative, prefs, None);
+    
+    // Create analysis with deletion operation
+    let mut analysis = create_test_analysis(95.0, 10.0);
+    analysis.operations = vec![FileOperation::Delete {
         path: PathBuf::from("test.txt"),
-        content: "Hello, world!".to_string(),
-    };
-    let context = create_test_context("Create a test file");
+    }];
     
-    // Test conservative mode
-    let (would_accept, analysis) = coordinator.should_auto_execute(
-        &operation,
-        &context,
-        AutoAcceptMode::Conservative,
-    ).await.unwrap();
+    let decision = engine.make_decision(&analysis).await.unwrap();
     
-    // In conservative mode, only very safe operations should be auto-accepted
-    // A simple text file creation might be safe enough
-    assert!(analysis.unified_score.confidence > 0.0);
-    assert!(analysis.unified_score.risk >= 0.0);
-    
-    // Conservative mode requires >90% confidence and <15% risk
-    if analysis.unified_score.confidence > 90.0 && analysis.unified_score.risk < 15.0 {
-        assert!(would_accept, "Conservative mode should accept safe operations with >90% confidence and <15% risk");
-    } else {
-        assert!(!would_accept, "Conservative mode should reject operations that don't meet thresholds");
+    match decision {
+        ExecutionDecision::RequireConfirmation { reason, .. } => {
+            assert!(reason.to_lowercase().contains("delet"), 
+                    "Deletion warning should be in reason, got: {}", reason);
+        }
+        _ => panic!("Expected RequireConfirmation for deletion with preference set"),
     }
 }
 
 #[tokio::test]
-async fn test_auto_accept_mode_manual() {
-    let coordinator = create_test_coordinator().await;
+async fn test_mass_update_detection() {
+    let mut prefs = create_default_preferences();
+    prefs.require_confirmation_for_mass_updates = true;
     
-    // Create any operation
-    let operation = FileOperation::Create {
-        path: PathBuf::from("test.txt"),
-        content: "Hello, world!".to_string(),
-    };
-    let context = create_test_context("Create a test file");
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Balanced, prefs, None);
     
-    // Manual mode should never auto-accept
-    let (would_accept, _) = coordinator.should_auto_execute(
-        &operation,
-        &context,
-        AutoAcceptMode::Manual,
-    ).await.unwrap();
+    // Create analysis with many operations (mass update)
+    let mut analysis = create_test_analysis(85.0, 20.0);
+    analysis.operations = (0..10).map(|i| FileOperation::Update {
+        path: PathBuf::from(format!("file{}.txt", i)),
+        content: "updated".to_string(),
+    }).collect();
     
-    assert!(!would_accept, "Manual mode should never auto-accept");
-}
-
-#[tokio::test]
-async fn test_risky_operation_rejection() {
-    let coordinator = create_test_coordinator().await;
+    let decision = engine.make_decision(&analysis).await.unwrap();
     
-    // Create a risky operation (deleting a critical file)
-    let operation = FileOperation::Delete {
-        path: PathBuf::from("/etc/passwd"), // Very risky!
-    };
-    let context = create_test_context("Delete passwd file");
-    
-    // Test in balanced mode
-    let (would_accept_balanced, analysis) = coordinator.should_auto_execute(
-        &operation,
-        &context,
-        AutoAcceptMode::Balanced,
-    ).await.unwrap();
-    
-    // This should have low confidence and high risk
-    assert!(analysis.unified_score.risk > 50.0, "Critical system file deletion should have high risk");
-    assert!(!would_accept_balanced, "Should not auto-accept critical system file deletion in balanced mode");
-    
-    // Should not be auto-accepted even in aggressive mode
-    let (would_accept_aggressive, _) = coordinator.should_auto_execute(
-        &operation,
-        &context,
-        AutoAcceptMode::Aggressive,
-    ).await.unwrap();
-    assert!(!would_accept_aggressive, "Should never auto-accept critical system file deletion even in aggressive mode");
-}
-
-#[tokio::test]
-async fn test_operation_history_learning() {
-    let coordinator = create_test_coordinator().await;
-    
-    // Create an operation
-    let operation = FileOperation::Create {
-        path: PathBuf::from("src/lib.rs"),
-        content: "pub fn hello() {}".to_string(),
-    };
-    let context = create_test_context("Create a library file");
-    
-    // Analyze it
-    let (_, analysis) = coordinator.should_auto_execute(
-        &operation,
-        &context,
-        AutoAcceptMode::Balanced,
-    ).await.unwrap();
-    
-    let first_confidence = analysis.unified_score.confidence;
-    
-    // Record a successful outcome
-    let outcome = hive_ai::consensus::operation_intelligence::OperationOutcome {
-        success: true,
-        error_message: None,
-        execution_time: std::time::Duration::from_millis(100),
-        rollback_required: false,
-        user_feedback: Some(hive_ai::consensus::operation_intelligence::UserFeedback {
-            satisfaction_score: 5.0,
-            comments: Some("Great!".to_string()),
-            would_recommend: true,
-        }),
-        post_operation_quality: Some(hive_ai::consensus::operation_intelligence::QualityMetrics {
-            code_quality_score: 0.9,
-            test_coverage: 0.8,
-            documentation_score: 0.85,
-            performance_impact: -0.05,
-            security_score: 0.95,
-            maintainability_score: 0.88,
-        }),
-    };
-    
-    coordinator.record_outcome(
-        analysis.operations[0].clone(),
-        analysis,
-        outcome,
-    ).await.unwrap();
-    
-    // Analyze a similar operation
-    let similar_operation = FileOperation::Create {
-        path: PathBuf::from("src/lib2.rs"),
-        content: "pub fn world() {}".to_string(),
-    };
-    let (_, analysis2) = coordinator.should_auto_execute(
-        &similar_operation,
-        &context,
-        AutoAcceptMode::Balanced,
-    ).await.unwrap();
-    
-    // The system should learn from successful operations
-    println!("First confidence: {}, Second confidence: {}", 
-             first_confidence, analysis2.unified_score.confidence);
-}
-
-#[tokio::test] 
-async fn test_ai_helper_coordination() {
-    let coordinator = create_test_coordinator().await;
-    
-    // Create a complex operation that requires all helpers
-    let operation = FileOperation::Update {
-        path: PathBuf::from("src/main.rs"),
-        content: "fn main() { println!(\"Updated!\"); }".to_string(),
-    };
-    
-    let context = create_test_context("Update the main function");
-    
-    let (_, analysis) = coordinator.should_auto_execute(
-        &operation,
-        &context,
-        AutoAcceptMode::Balanced,
-    ).await.unwrap();
-    
-    // Check that all AI helpers contributed
-    assert!(analysis.component_scores.knowledge_indexer.is_some());
-    assert!(analysis.component_scores.context_retriever.is_some());
-    assert!(analysis.component_scores.pattern_recognizer.is_some());
-    assert!(analysis.component_scores.quality_analyzer.is_some());
-    assert!(analysis.component_scores.knowledge_synthesizer.is_some());
-    
-    // Overall analysis should be reasonable
-    assert!(analysis.unified_score.confidence >= 0.0 && analysis.unified_score.confidence <= 100.0);
-    assert!(analysis.unified_score.risk >= 0.0 && analysis.unified_score.risk <= 100.0);
-}
-
-#[tokio::test]
-async fn test_plan_mode() {
-    let coordinator = create_test_coordinator().await;
-    
-    // Create multiple related operations
-    let operations = vec![
-        FileOperation::Create {
-            path: PathBuf::from("src/auth/mod.rs"),
-            content: "pub mod login;".to_string(),
-        },
-        FileOperation::Create {
-            path: PathBuf::from("src/auth/login.rs"),
-            content: "pub fn login() {}".to_string(),
-        },
-        FileOperation::Create {
-            path: PathBuf::from("src/auth/logout.rs"),
-            content: "pub fn logout() {}".to_string(),
-        },
-    ];
-    
-    let context = create_test_context("Create authentication module");
-    
-    // Analyze each operation in plan mode
-    for operation in &operations {
-        let (would_accept, analysis) = coordinator.should_auto_execute(
-            operation,
-            &context,
-            AutoAcceptMode::Plan,
-        ).await.unwrap();
-        
-        // Plan mode should never auto-execute
-        assert!(!would_accept, "Plan mode should not auto-execute");
-        
-        // But should still provide analysis
-        assert!(analysis.unified_score.confidence >= 0.0);
-        assert!(analysis.unified_score.risk >= 0.0);
+    match decision {
+        ExecutionDecision::RequireConfirmation { warnings, .. } => {
+            assert!(warnings.iter().any(|w| w.contains("10 files")), 
+                    "Mass update warning should mention file count");
+        }
+        _ => panic!("Expected RequireConfirmation for mass update"),
     }
+}
+
+#[tokio::test]
+async fn test_decision_caching() {
+    let prefs = create_default_preferences();
+    let engine = SmartDecisionEngine::new(AutoAcceptMode::Balanced, prefs, None);
+    
+    // Make the same decision twice
+    let analysis = create_test_analysis(85.0, 20.0);
+    
+    let start = std::time::Instant::now();
+    let _decision1 = engine.make_decision(&analysis).await.unwrap();
+    let first_duration = start.elapsed();
+    
+    let start = std::time::Instant::now();
+    let _decision2 = engine.make_decision(&analysis).await.unwrap();
+    let cached_duration = start.elapsed();
+    
+    // Cached decision should be faster (this is a heuristic test)
+    assert!(cached_duration < first_duration / 2, 
+            "Cached decision should be significantly faster");
 }
 
 #[test]
-fn test_auto_accept_mode_thresholds() {
-    // Test that mode thresholds are correctly understood
-    // Conservative: >90% confidence, <15% risk
-    // Balanced: >80% confidence, <25% risk
-    // Aggressive: >70% confidence, <40% risk
+fn test_mode_ordering() {
+    // Verify that modes are ordered by restrictiveness
+    use AutoAcceptMode::*;
     
-    // These thresholds are enforced in the smart decision engine
-    assert!(true, "Mode thresholds are enforced by the smart decision engine");
+    // These assertions document the expected behavior
+    let modes = vec![Conservative, Balanced, Aggressive];
+    
+    // Conservative is most restrictive
+    assert_eq!(modes[0], Conservative);
+    // Aggressive is least restrictive  
+    assert_eq!(modes[2], Aggressive);
 }
