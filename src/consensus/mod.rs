@@ -30,6 +30,7 @@ pub mod operation_parser;
 pub mod operation_validator;
 pub mod operation_preview;
 pub mod dependency_graph;
+pub mod rollback_plan;
 pub mod rollback_planner;
 pub mod rollback_executor;
 pub mod outcome_tracker;
@@ -139,6 +140,12 @@ pub use operation_preview_generator::{
     OperationPreviewGenerator as AIOperationPreviewGenerator, PreviewConfig as AIPreviewConfig,
     OperationPreviewSet as AIOperationPreviewSet, OperationPreview as AIOperationPreview,
     FileState as AIFileState, DiffView as AIDiffView, OperationImpact as AIOperationImpact
+};
+pub use rollback_plan::{
+    RollbackPlan as RollbackPlanV2, RollbackPlanGenerator, 
+    RollbackConfig as RollbackConfigV2, RollbackExecutor as RollbackExecutorV2,
+    RollbackOperation as RollbackOperationV2, RollbackAction, 
+    RollbackExecutionResult as RollbackExecutionResultV2
 };
 
 // Re-export commonly used items
