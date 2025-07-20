@@ -256,26 +256,26 @@ impl AIOperationParser {
         let operation = match op_type.to_lowercase().as_str() {
             "create" | "new" | "add" => {
                 FileOperation::Create {
-                    path: PathBuf::from(path),
+                    path: PathBuf::from(&path),
                     content: block.content.clone(),
                 }
             }
             "update" | "modify" | "edit" | "change" => {
                 FileOperation::Update {
-                    path: PathBuf::from(path),
+                    path: PathBuf::from(&path),
                     content: block.content.clone(),
                 }
             }
             "append" | "add to" => {
                 FileOperation::Append {
-                    path: PathBuf::from(path),
+                    path: PathBuf::from(&path),
                     content: block.content.clone(),
                 }
             }
             "delete" | "remove" => {
                 confidence *= 0.9; // Slightly lower confidence for destructive operations
                 FileOperation::Delete {
-                    path: PathBuf::from(path),
+                    path: PathBuf::from(&path),
                 }
             }
             "rename" | "move" => {
@@ -439,13 +439,14 @@ impl AIOperationParser {
                     
                     // Try to find associated code block
                     let content = self.find_associated_code_block(text, start);
+                    let has_content = content.is_some();
                     
                     operations.push(FileOperationWithMetadata {
                         operation: FileOperation::Create {
                             path: PathBuf::from(path),
                             content: content.unwrap_or_default(),
                         },
-                        confidence: if content.is_some() { 85.0 } else { 60.0 },
+                        confidence: if has_content { 85.0 } else { 60.0 },
                         rationale: None,
                         dependencies: vec![],
                         source_location: SourceLocation {
@@ -588,13 +589,13 @@ impl AIOperationParser {
     }
     
     /// Get primary path from operation
-    fn get_operation_path(&self, op: &FileOperation) -> &PathBuf {
+    fn get_operation_path(&self, op: &FileOperation) -> PathBuf {
         match op {
             FileOperation::Create { path, .. } |
             FileOperation::Update { path, .. } |
             FileOperation::Append { path, .. } |
-            FileOperation::Delete { path } => path,
-            FileOperation::Rename { from, .. } => from,
+            FileOperation::Delete { path } => path.clone(),
+            FileOperation::Rename { from, .. } => from.clone(),
         }
     }
     

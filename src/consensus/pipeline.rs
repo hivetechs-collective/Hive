@@ -1,6 +1,7 @@
 // Consensus Pipeline - Orchestrates the 4-stage consensus process
 // Manages flow from Generator → Refiner → Validator → Curator
 
+use std::path::PathBuf;
 use crate::consensus::repository_context::RepositoryContextManager;
 use crate::consensus::verified_context_builder::VerifiedContextBuilder;
 use crate::consensus::cancellation::{CancellationToken, CancellationReason, CancellationChecker};
@@ -155,12 +156,12 @@ impl ConsensusPipeline {
         if let Some(ref db) = self.database {
             // Create default user preferences
             let user_prefs = UserPreferences {
-                confidence_threshold: 80.0,
                 risk_tolerance: 0.3,
+                auto_backup: true,
                 require_confirmation_for_deletions: true,
                 require_confirmation_for_mass_updates: true,
-                trusted_paths: vec![],
-                blocked_paths: vec![],
+                trust_ai_suggestions: 0.8,
+                preferred_mode: AutoAcceptMode::Conservative,
                 custom_rules: vec![],
             };
             
@@ -171,33 +172,37 @@ impl ConsensusPipeline {
                 None, // History database can be added later
             );
             
-            if let Ok(intelligence_coordinator) = OperationIntelligenceCoordinator::from_ai_helpers(
-                &ai_helpers
-            ) {
-                    let executor_config = ExecutorConfig {
-                        create_backups: true,
-                        validate_syntax: false, // Can be enabled based on config
-                        dry_run_mode: false, // Real execution mode
-                        max_file_size: 10 * 1024 * 1024, // 10MB
-                        allowed_extensions: vec![
-                            "rs", "js", "ts", "py", "java", "cpp", "c", "h", 
-                            "go", "rb", "php", "md", "txt", "json", "yaml", 
-                            "yml", "toml", "html", "css", "scss"
-                        ].into_iter().map(String::from).collect(),
-                        forbidden_paths: vec![], // Can be configured
-                        stop_on_error: true,
-                    };
-                    
-                    let file_executor = FileOperationExecutor::new(
-                        executor_config,
-                        decision_engine,
-                        intelligence_coordinator,
-                    );
-                    
-                    self.file_executor = Some(Arc::new(file_executor));
-                    tracing::info!("Initialized FileOperationExecutor with AI helpers");
-                }
-            }
+            // Extract AI helpers from ecosystem
+            let intelligence_coordinator = OperationIntelligenceCoordinator::new(
+                ai_helpers.knowledge_indexer.clone(),
+                ai_helpers.context_retriever.clone(),
+                ai_helpers.pattern_recognizer.clone(),
+                ai_helpers.quality_analyzer.clone(),
+                ai_helpers.knowledge_synthesizer.clone(),
+            );
+            
+            let executor_config = ExecutorConfig {
+                create_backups: true,
+                validate_syntax: false, // Can be enabled based on config
+                dry_run_mode: false, // Real execution mode
+                max_file_size: 10 * 1024 * 1024, // 10MB
+                allowed_extensions: vec![
+                    "rs", "js", "ts", "py", "java", "cpp", "c", "h", 
+                    "go", "rb", "php", "md", "txt", "json", "yaml", 
+                    "yml", "toml", "html", "css", "scss"
+                ].into_iter().map(String::from).collect(),
+                forbidden_paths: vec![], // Can be configured
+                stop_on_error: true,
+            };
+            
+            let file_executor = FileOperationExecutor::new(
+                executor_config,
+                decision_engine,
+                intelligence_coordinator,
+            );
+            
+            self.file_executor = Some(Arc::new(file_executor));
+            tracing::info!("Initialized FileOperationExecutor with AI helpers");
         }
         
         self
@@ -632,15 +637,18 @@ impl ConsensusPipeline {
         
         // Execute file operations if present in curator output
         if let Some(ref file_executor) = self.file_executor {
-            if let Some(ref repo_context) = self.repository_context {
+            if let Some(ref repo_manager) = self.repository_context {
+                // Get the repository context
+                let repo_context = repo_manager.get_context().await;
+                
                 // Create operation context
                 let operation_context = ConsensusOperationContext {
-                    repository_path: repo_context.repository_path().to_path_buf(),
+                    repository_path: repo_context.root_path.unwrap_or_else(|| PathBuf::from(".")),
                     user_question: question.to_string(),
                     consensus_response: final_answer.clone(),
                     timestamp: SystemTime::now(),
                     session_id: conversation_id.clone(),
-                    git_commit: repo_context.current_commit().map(|s| s.to_string()),
+                    git_commit: repo_context.git_info.and_then(|info| info.last_commit_hash),
                 };
                 
                 // Parse and execute file operations from curator response

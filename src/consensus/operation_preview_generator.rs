@@ -8,12 +8,13 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use tracing::{debug, info};
 use similar::{ChangeTag, TextDiff};
-use syntect::highlighting::{ThemeSet, SyntaxSet};
-use syntect::parsing::SyntaxReference;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::{SyntaxSet, SyntaxReference};
 use syntect::html::highlighted_html_for_string;
 
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::ai_operation_parser::FileOperationWithMetadata;
+use crate::consensus::operation_analysis::OperationContext;
 use crate::core::error::HiveError;
 
 /// Configuration for preview generation
@@ -357,7 +358,7 @@ impl OperationPreviewGenerator {
                     warnings.push(PreviewWarning {
                         severity: WarningSeverity::Error,
                         message: format!("Failed to generate preview: {}", e),
-                        affected_path: self.get_operation_path(&op_meta.operation),
+                        affected_path: self.get_operation_path(&op_meta.operation).cloned(),
                         suggestion: Some("Check file accessibility and permissions".to_string()),
                     });
                 }
@@ -468,7 +469,13 @@ impl OperationPreviewGenerator {
             exists: content.is_some() || metadata.is_some(),
             content,
             size: metadata.as_ref().map(|m| m.len()),
-            permissions: metadata.as_ref().map(|m| format!("{:o}", m.permissions().mode())),
+            #[cfg(unix)]
+            permissions: metadata.as_ref().map(|m| {
+                use std::os::unix::fs::PermissionsExt;
+                format!("{:o}", m.permissions().mode())
+            }),
+            #[cfg(not(unix))]
+            permissions: None,
             last_modified: metadata.and_then(|m| m.modified().ok()),
             language,
         })
@@ -578,15 +585,9 @@ impl OperationPreviewGenerator {
     ) -> String {
         let diff = TextDiff::from_lines(old_content, new_content);
         
-        let mut result = String::new();
-        result.push_str(&format!("--- {}\n", old_path.display()));
-        result.push_str(&format!("+++ {}\n", new_path.display()));
-        
-        for hunk in diff.unified_diff().context_radius(self.config.context_lines) {
-            result.push_str(&hunk.to_string());
-        }
-        
-        result
+        format!("{}", diff.unified_diff()
+            .context_radius(self.config.context_lines)
+            .header(&format!("{}", old_path.display()), &format!("{}", new_path.display())))
     }
     
     /// Create detailed diff chunks
@@ -1167,7 +1168,7 @@ impl OperationPreviewGenerator {
                     warnings.push(PreviewWarning {
                         severity: WarningSeverity::Error,
                         message: "Circular dependency detected".to_string(),
-                        affected_path: self.get_operation_path(&op.operation),
+                        affected_path: self.get_operation_path(&op.operation).cloned(),
                         suggestion: Some("Reorder operations to remove circular dependency".to_string()),
                     });
                 }
@@ -1178,7 +1179,7 @@ impl OperationPreviewGenerator {
     }
     
     /// Get path from operation
-    fn get_operation_path(&self, operation: &FileOperation) -> Option<&PathBuf> {
+    fn get_operation_path<'a>(&self, operation: &'a FileOperation) -> Option<&'a PathBuf> {
         match operation {
             FileOperation::Create { path, .. } |
             FileOperation::Update { path, .. } |

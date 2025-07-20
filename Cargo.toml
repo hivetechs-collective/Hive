@@ -142,6 +142,7 @@ sysinfo = "0.30"
 lru = "0.12"
 petgraph = "0.6"
 similar = "2.3"
+syntect = "5.2"
 
 # AI and ML
 candle-core = "0.9"
