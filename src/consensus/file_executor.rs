@@ -210,10 +210,13 @@ impl FileOperationExecutor {
         intelligence_coordinator: OperationIntelligenceCoordinator,
     ) -> Self {
         let preview_config = PreviewConfig {
-            max_diff_lines: 100,
+            max_preview_lines: 100,
             context_lines: 3,
-            enable_syntax_highlighting: true,
-            enable_impact_analysis: true,
+            syntax_highlighting: true,
+            highlight_theme: "InspiredGitHub".to_string(),
+            show_line_numbers: true,
+            collapse_unchanged: true,
+            unified_diff: true,
         };
         
         Self {
@@ -726,7 +729,10 @@ impl FileOperationExecutor {
         let parsed = self.ai_parser
             .parse_response(curator_response, &intelligence_context)
             .await
-            .map_err(|e| HiveError::Other(format!("Failed to parse curator response: {}", e)))?;
+            .map_err(|e| HiveError::Internal { 
+                context: "ai_parser".to_string(),
+                message: format!("Failed to parse curator response: {}", e)
+            })?;
 
         log::info!("🤖 Parsed {} operations with {}% confidence", 
                   parsed.operations.len(), parsed.confidence);
@@ -738,10 +744,13 @@ impl FileOperationExecutor {
 
         // Check if parsing confidence is too low
         if parsed.confidence < 50.0 {
-            return Err(HiveError::Other(format!(
-                "Parsing confidence too low: {:.0}%. Clarifications needed: {:?}",
-                parsed.confidence, parsed.clarifications
-            )));
+            return Err(HiveError::Internal {
+                context: "ai_parser".to_string(),
+                message: format!(
+                    "Parsing confidence too low: {:.0}%. Clarifications needed: {:?}",
+                    parsed.confidence, parsed.clarifications
+                )
+            });
         }
 
         // Step 3: Extract operations in dependency order
@@ -774,9 +783,10 @@ impl FileOperationExecutor {
             }
             
             if !added_any {
-                return Err(HiveError::Other(
-                    "Circular dependencies detected in operations".to_string()
-                ));
+                return Err(HiveError::Internal {
+                    context: "dependency_resolution".to_string(),
+                    message: "Circular dependencies detected in operations".to_string()
+                });
             }
         }
 
@@ -858,40 +868,31 @@ impl FileOperationExecutor {
         self.ai_parser
             .parse_response(curator_response, &intelligence_context)
             .await
-            .map_err(|e| HiveError::Other(format!("Failed to parse curator response: {}", e)))
+            .map_err(|e| HiveError::Internal {
+                context: "ai_parser".to_string(),
+                message: format!("Failed to parse curator response: {}", e)
+            })
     }
 
     /// Generate previews for parsed operations
     pub async fn generate_operation_previews(
-        &self,
+        &mut self,
         parsed_operations: &ParsedOperations,
         context: &ConsensusOperationContext,
     ) -> Result<OperationPreviewSet, HiveError> {
-        // Extract just the operations from the parsed operations
-        let operations: Vec<_> = parsed_operations.operations
-            .iter()
-            .map(|op_meta| op_meta.operation.clone())
-            .collect();
-
-        // Convert context for preview generator
-        let preview_context = crate::consensus::operation_preview::OperationContext {
-            repository_path: context.repository_path.clone(),
-            user_question: context.user_question.clone(),
-            consensus_response: context.consensus_response.clone(),
-            timestamp: context.timestamp,
-            session_id: context.session_id.clone(),
-            git_commit: context.git_commit.clone(),
-        };
-
+        // Pass the parsed operations with metadata directly to the preview generator
         self.preview_generator
-            .generate_preview_set(&operations, &preview_context)
+            .generate_previews(&parsed_operations.operations)
             .await
-            .map_err(|e| HiveError::Other(format!("Failed to generate operation previews: {}", e)))
+            .map_err(|e| HiveError::Internal {
+                context: "preview_generator".to_string(),
+                message: format!("Failed to generate operation previews: {}", e)
+            })
     }
 
     /// Parse and execute operations with preview generation
     pub async fn parse_execute_with_preview(
-        &self,
+        &mut self,
         curator_response: &str,
         context: &ConsensusOperationContext,
         generate_preview: bool,
