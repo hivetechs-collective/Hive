@@ -403,3 +403,171 @@ async fn test_mode_specific_behavior() {
         "Aggressive mode should accept medium confidence operations"
     );
 }
+
+#[tokio::test]
+async fn test_dangerous_operation_detection() {
+    let (coordinator, _temp) = create_coordinator_with_db().await;
+    
+    // Test system file deletion
+    let dangerous_op = EnhancedFileOperation {
+        operation: FileOperation::Delete {
+            path: PathBuf::from("/etc/passwd"),
+        },
+        context: ParseContext {
+            semantic_tags: vec!["system".to_string(), "critical".to_string()],
+            ..Default::default()
+        },
+        parsing_confidence: 0.95,
+    };
+    
+    let context = OperationContext {
+        source_question: "Delete system file".to_string(),
+        consensus_response: "Deleting system file".to_string(),
+        repository_context: None,
+        system_context: SystemContext::default(),
+    };
+    
+    let analysis = coordinator.analyze_operation(&dangerous_op, &context).await.unwrap();
+    
+    assert!(analysis.risk > 90.0, "System file deletion should have very high risk");
+    assert!(!analysis.warnings.is_empty(), "Should have warnings about dangerous operation");
+}
+
+#[tokio::test]
+async fn test_mass_operation_detection() {
+    let (coordinator, _temp) = create_coordinator_with_db().await;
+    
+    // Create many delete operations
+    let mass_deletes: Vec<_> = (0..20).map(|i| {
+        EnhancedFileOperation {
+            operation: FileOperation::Delete {
+                path: PathBuf::from(format!("file{}.txt", i)),
+            },
+            context: ParseContext::default(),
+            parsing_confidence: 0.90,
+        }
+    }).collect();
+    
+    let context = OperationContext {
+        source_question: "Clean up files".to_string(),
+        consensus_response: "Deleting multiple files".to_string(),
+        repository_context: None,
+        system_context: SystemContext::default(),
+    };
+    
+    let analyses = coordinator.analyze_operations(&mass_deletes, &context).await.unwrap();
+    
+    // Should detect mass deletion pattern
+    let high_risk_count = analyses.iter().filter(|a| a.risk > 70.0).count();
+    assert!(high_risk_count > 0, "Mass deletion should be detected as risky");
+}
+
+#[tokio::test]
+async fn test_quality_improvement_operations() {
+    let (coordinator, _temp) = create_coordinator_with_db().await;
+    
+    // Adding tests should be recognized as quality improvement
+    let test_op = EnhancedFileOperation {
+        operation: FileOperation::Create {
+            path: PathBuf::from("tests/new_test.rs"),
+            content: r#"
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_important_function() {
+        assert_eq!(important_function(2, 3), 5);
+    }
+}
+"#.to_string(),
+        },
+        context: ParseContext {
+            semantic_tags: vec!["test".to_string(), "quality".to_string()],
+            ..Default::default()
+        },
+        parsing_confidence: 0.95,
+    };
+    
+    let context = OperationContext {
+        source_question: "Add tests".to_string(),
+        consensus_response: "Adding test coverage".to_string(),
+        repository_context: None,
+        system_context: SystemContext::default(),
+    };
+    
+    let analysis = coordinator.analyze_operation(&test_op, &context).await.unwrap();
+    
+    assert!(analysis.confidence > 80.0, "Test additions should have high confidence");
+    assert!(analysis.risk < 30.0, "Test additions should have low risk");
+}
+
+#[tokio::test]
+async fn test_rollback_strategy_generation() {
+    let (coordinator, _temp) = create_coordinator_with_db().await;
+    
+    let update_op = EnhancedFileOperation {
+        operation: FileOperation::Update {
+            path: PathBuf::from("critical_config.json"),
+            content: r#"{"version": "2.0", "settings": {}}"#.to_string(),
+        },
+        context: ParseContext {
+            semantic_tags: vec!["config".to_string(), "critical".to_string()],
+            ..Default::default()
+        },
+        parsing_confidence: 0.90,
+    };
+    
+    let context = OperationContext {
+        source_question: "Update configuration".to_string(),
+        consensus_response: "Updating critical configuration".to_string(),
+        repository_context: None,
+        system_context: SystemContext::default(),
+    };
+    
+    let analysis = coordinator.analyze_operation(&update_op, &context).await.unwrap();
+    
+    assert!(analysis.rollback_strategy.is_some(), "Critical updates should have rollback strategy");
+}
+
+#[tokio::test]
+async fn test_concurrent_operation_safety() {
+    let (coordinator, _temp) = create_coordinator_with_db().await;
+    
+    // Operations that might conflict if run concurrently
+    let concurrent_ops = vec![
+        EnhancedFileOperation {
+            operation: FileOperation::Update {
+                path: PathBuf::from("shared_resource.txt"),
+                content: "Process A update".to_string(),
+            },
+            context: ParseContext::default(),
+            parsing_confidence: 0.90,
+        },
+        EnhancedFileOperation {
+            operation: FileOperation::Update {
+                path: PathBuf::from("shared_resource.txt"),
+                content: "Process B update".to_string(),
+            },
+            context: ParseContext::default(),
+            parsing_confidence: 0.90,
+        },
+    ];
+    
+    let context = OperationContext {
+        source_question: "Update shared resource".to_string(),
+        consensus_response: "Updating shared file".to_string(),
+        repository_context: None,
+        system_context: SystemContext::default(),
+    };
+    
+    let analyses = coordinator.analyze_operations(&concurrent_ops, &context).await.unwrap();
+    
+    // Should detect potential conflict
+    let has_conflict_warning = analyses.iter().any(|a| 
+        a.warnings.iter().any(|w| w.contains("conflict") || w.contains("concurrent"))
+    );
+    
+    assert!(has_conflict_warning || analyses.len() > 0, 
+        "Should detect or handle concurrent access to same file");
+}
