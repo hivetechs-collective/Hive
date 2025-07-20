@@ -416,7 +416,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_trial_period_calculation() {
-        let tracker = UsageTracker::new(Arc::new(Database::new(":memory:".into())));
+        use crate::core::database::DatabaseManager;
+        let db_manager = DatabaseManager::in_memory().unwrap();
+        let tracker = UsageTracker::new(Arc::new(db_manager));
 
         // Test new user gets 7-day trial
         let created = Utc::now();
@@ -437,7 +439,9 @@ mod tests {
 
     #[test]
     fn test_tier_parsing() {
-        let tracker = UsageTracker::new(Arc::new(Database::new(":memory:".into())));
+        use crate::core::database::DatabaseManager;
+        let db_manager = DatabaseManager::in_memory().unwrap();
+        let tracker = UsageTracker::new(Arc::new(db_manager));
 
         assert_eq!(tracker.parse_tier("free"), LicenseTier::Free);
         assert_eq!(tracker.parse_tier("Basic"), LicenseTier::Basic);

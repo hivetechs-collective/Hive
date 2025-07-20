@@ -820,7 +820,8 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("team_test.db");
 
-        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
+        use crate::security::permissions::PermissionManager;
+        let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
             super::EnterpriseAuditLogger::new(Some(db_path), 365)
                 .await
@@ -864,7 +865,8 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("membership_test.db");
 
-        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
+        use crate::security::permissions::PermissionManager;
+        let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
             super::EnterpriseAuditLogger::new(Some(db_path), 365)
                 .await
@@ -931,7 +933,8 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("invitation_test.db");
 
-        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
+        use crate::security::permissions::PermissionManager;
+        let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
             super::EnterpriseAuditLogger::new(Some(db_path), 365)
                 .await
@@ -1009,7 +1012,8 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("permissions_test.db");
 
-        let permission_manager = Arc::new(super::PermissionManager::new().await.unwrap());
+        use crate::security::permissions::PermissionManager;
+        let permission_manager = Arc::new(PermissionManager::new().await.unwrap());
         let audit_logger = Arc::new(
             super::EnterpriseAuditLogger::new(Some(db_path), 365)
                 .await

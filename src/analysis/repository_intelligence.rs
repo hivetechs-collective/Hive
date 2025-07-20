@@ -23,6 +23,7 @@ use crate::analysis::{
 };
 use crate::core::ast::{CodeMetrics, ParseResult};
 use crate::core::{Position, SymbolKind};
+use crate::core::database::DatabaseManager;
 
 /// Repository analyzer for comprehensive codebase intelligence
 pub struct RepositoryAnalyzer {
@@ -2964,8 +2965,8 @@ mod tests {
         assert_eq!(result.unwrap().0, ArchitecturePattern::MVC);
     }
 
-    #[test]
-    fn test_quality_score_calculation() {
+    #[tokio::test]
+    async fn test_quality_score_calculation() {
         let analyzer = RepositoryAnalyzer::new(
             Arc::new(
                 SymbolIndexer::new(Arc::new(DatabaseManager::default()))

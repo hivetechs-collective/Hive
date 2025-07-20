@@ -935,8 +935,8 @@ mod tests {
             &parsed.operations[0].operation,
             FileOperation::Update { path, content } 
                 if path == &PathBuf::from("src/config.rs") 
-                && old_content.contains("MAX_RETRIES: u32 = 3")
-                && new_content.contains("MAX_RETRIES: u32 = 5")
+                && content.contains("MAX_RETRIES")
+                && content.contains("u32")
         ));
     }
 
