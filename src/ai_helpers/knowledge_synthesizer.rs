@@ -929,11 +929,11 @@ mod tests {
                 name: "Git-based Rollback".to_string(),
                 description: "Use Git to revert changes to previous state".to_string(),
                 confidence: 0.95,
-                prerequisites: vec!["Git repository", "All files tracked"],
+                prerequisites: vec!["Git repository".to_string(), "All files tracked".to_string()],
                 steps: vec![
-                    "Create Git stash of current changes",
-                    "Revert to previous commit",
-                    "Restore specific files if needed",
+                    "Create Git stash of current changes".to_string(),
+                    "Revert to previous commit".to_string(),
+                    "Restore specific files if needed".to_string(),
                 ],
             });
         }
@@ -943,12 +943,12 @@ mod tests {
             name: "Backup Restoration".to_string(),
             description: "Restore files from automatic backups".to_string(),
             confidence: 0.90,
-            prerequisites: vec!["Backup files exist", "Sufficient disk space"],
+            prerequisites: vec!["Backup files exist".to_string(), "Sufficient disk space".to_string()],
             steps: vec![
-                "Locate backup files",
-                "Verify backup integrity",
-                "Restore files from backups",
-                "Verify restoration success",
+                "Locate backup files".to_string(),
+                "Verify backup integrity".to_string(),
+                "Restore files from backups".to_string(),
+                "Verify restoration success".to_string(),
             ],
         });
         
@@ -957,12 +957,12 @@ mod tests {
             name: "Manual Operation Reversal".to_string(),
             description: "Reverse each operation manually".to_string(),
             confidence: 0.75,
-            prerequisites: vec!["Original content available", "Reversible operations"],
+            prerequisites: vec!["Original content available".to_string(), "Reversible operations".to_string()],
             steps: vec![
-                "Identify reverse operations",
-                "Execute in reverse order",
-                "Verify each step",
-                "Handle dependencies",
+                "Identify reverse operations".to_string(),
+                "Execute in reverse order".to_string(),
+                "Verify each step".to_string(),
+                "Handle dependencies".to_string(),
             ],
         });
         
@@ -971,12 +971,12 @@ mod tests {
             name: "Hybrid Approach".to_string(),
             description: "Combine multiple strategies for best results".to_string(),
             confidence: 0.85,
-            prerequisites: vec!["Multiple strategies available"],
+            prerequisites: vec!["Multiple strategies available".to_string()],
             steps: vec![
-                "Use Git for tracked files",
-                "Use backups for untracked files",
-                "Manual reversal for complex cases",
-                "Comprehensive verification",
+                "Use Git for tracked files".to_string(),
+                "Use backups for untracked files".to_string(),
+                "Manual reversal for complex cases".to_string(),
+                "Comprehensive verification".to_string(),
             ],
         });
         
@@ -1412,10 +1412,10 @@ pub struct RollbackStrategy {
     pub confidence: f32,
     
     /// Prerequisites for this strategy
-    pub prerequisites: Vec<&'static str>,
+    pub prerequisites: Vec<String>,
     
     /// Steps to execute
-    pub steps: Vec<&'static str>,
+    pub steps: Vec<String>,
 }
 
 /// Synthesis statistics

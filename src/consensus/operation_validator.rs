@@ -584,6 +584,7 @@ struct RustValidator;
 
 impl LanguageValidator for RustValidator {
     fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
+        let content = content.to_string();
         Box::pin(async move {
             // Basic Rust syntax checks
             let mut brace_count = 0;
@@ -657,6 +658,7 @@ impl LanguageValidator for TypeScriptValidator {
 struct PythonValidator;
 impl LanguageValidator for PythonValidator {
     fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
+        let content = content.to_string();
         Box::pin(async move {
             // Check indentation consistency
             let lines: Vec<&str> = content.lines().collect();
