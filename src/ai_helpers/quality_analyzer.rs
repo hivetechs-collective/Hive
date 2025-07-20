@@ -1100,7 +1100,7 @@ impl QualityAnalyzer {
     }
     
     /// Get content from operation
-    fn get_operation_content(&self, operation: &FileOperation) -> Option<&str> {
+    fn get_operation_content<'a>(&self, operation: &'a FileOperation) -> Option<&'a str> {
         match operation {
             FileOperation::Create { content, .. } => Some(content),
             FileOperation::Update { content, .. } => Some(content),
