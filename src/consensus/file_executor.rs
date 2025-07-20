@@ -12,6 +12,7 @@ use crate::consensus::operation_intelligence::{
     OperationIntelligenceCoordinator, OperationAnalysis as IntelligenceOperationAnalysis,
     OperationContext as IntelligenceOperationContext
 };
+use crate::consensus::ai_operation_parser::{AIOperationParser, ParsedOperations};
 use std::collections::HashMap;
 use crate::core::error::HiveError;
 use std::path::{Path, PathBuf};
@@ -27,6 +28,7 @@ pub struct ExecutionResult {
     pub operation: FileOperation,
     pub success: bool,
     pub execution_time: Duration,
+    pub message: String,
     pub error_message: Option<String>,
     pub backup_created: Option<PathBuf>,
     pub rollback_required: bool,
@@ -44,6 +46,34 @@ pub struct BackupInfo {
     pub file_hash: String,
 }
 
+/// Summary of executing operations from curator response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionSummary {
+    /// Total number of operations found
+    pub total_operations: usize,
+    
+    /// Number of successfully executed operations
+    pub successful_operations: usize,
+    
+    /// Number of failed operations
+    pub failed_operations: usize,
+    
+    /// Detailed results for each operation
+    pub results: Vec<ExecutionResult>,
+    
+    /// Parser confidence score
+    pub parser_confidence: f32,
+    
+    /// Warnings from parser
+    pub parser_warnings: Vec<String>,
+    
+    /// Code blocks that couldn't be parsed
+    pub unparsed_blocks: Vec<String>,
+    
+    /// Total execution time
+    pub total_execution_time: Duration,
+}
+
 /// Configuration for file execution behavior
 #[derive(Debug, Clone)]
 pub struct ExecutorConfig {
@@ -53,6 +83,7 @@ pub struct ExecutorConfig {
     pub max_file_size: u64, // in bytes
     pub allowed_extensions: Vec<String>,
     pub forbidden_paths: Vec<PathBuf>,
+    pub stop_on_error: bool,
 }
 
 impl Default for ExecutorConfig {
@@ -78,6 +109,7 @@ impl Default for ExecutorConfig {
                 PathBuf::from("/dev"),
                 PathBuf::from("/boot"),
             ],
+            stop_on_error: true,
         }
     }
 }
@@ -89,6 +121,7 @@ pub struct FileOperationExecutor {
     syntax_validator: SyntaxValidator,
     decision_engine: SmartDecisionEngine,
     intelligence_coordinator: OperationIntelligenceCoordinator,
+    ai_parser: AIOperationParser,
 }
 
 /// Convert intelligence OperationContext to consensus OperationContext
@@ -178,6 +211,7 @@ impl FileOperationExecutor {
             config,
             decision_engine,
             intelligence_coordinator,
+            ai_parser: AIOperationParser::new(),
         }
     }
 
@@ -382,6 +416,7 @@ impl FileOperationExecutor {
                                 operation,
                                 success: false,
                                 execution_time,
+                                message: format!("Syntax validation failed: {:?}", syntax_error),
                                 error_message: Some(format!("Syntax validation failed: {:?}", syntax_error)),
                                 backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
                                 rollback_required: true,
@@ -396,6 +431,7 @@ impl FileOperationExecutor {
                     operation,
                     success: true,
                     execution_time,
+                    message: "Operation completed successfully".to_string(),
                     error_message: None,
                     backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
                     rollback_required: false,
@@ -408,6 +444,7 @@ impl FileOperationExecutor {
                     operation,
                     success: false,
                     execution_time,
+                    message: format!("Operation failed: {}", error),
                     error_message: Some(error.to_string()),
                     backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
                     rollback_required: backup_info.is_some(),
@@ -654,6 +691,162 @@ impl FileOperationExecutor {
         log::info!("Rolling back operation: {:?}", operation);
         // TODO: Implement actual rollback logic
         Ok(())
+    }
+
+    /// Parse and execute operations from curator response with AI-enhanced parsing
+    pub async fn parse_and_execute_curator_response(
+        &self,
+        curator_response: &str,
+        context: &ConsensusOperationContext,
+    ) -> Result<ExecutionSummary, HiveError> {
+        let start_time = SystemTime::now();
+        
+        // Step 1: Convert context for AI parser
+        let intelligence_context = IntelligenceOperationContext {
+            repository_path: context.repository_path.clone(),
+            git_commit: context.git_commit.clone(),
+            source_question: context.user_question.clone(),
+            related_files: Vec::new(),
+            project_metadata: HashMap::new(),
+        };
+
+        // Step 2: Parse curator response using AI-enhanced parser
+        let parsed = self.ai_parser
+            .parse_response(curator_response, &intelligence_context)
+            .await
+            .map_err(|e| HiveError::Other(format!("Failed to parse curator response: {}", e)))?;
+
+        log::info!("🤖 Parsed {} operations with {}% confidence", 
+                  parsed.operations.len(), parsed.confidence);
+
+        // Log warnings if any
+        for warning in &parsed.warnings {
+            log::warn!("Parser warning: {}", warning);
+        }
+
+        // Check if parsing confidence is too low
+        if parsed.confidence < 50.0 {
+            return Err(HiveError::Other(format!(
+                "Parsing confidence too low: {:.0}%. Clarifications needed: {:?}",
+                parsed.confidence, parsed.clarifications
+            )));
+        }
+
+        // Step 3: Extract operations in dependency order
+        let mut operations_in_order = Vec::new();
+        let mut processed = vec![false; parsed.operations.len()];
+        
+        // First, add operations without dependencies
+        for (idx, op_meta) in parsed.operations.iter().enumerate() {
+            if op_meta.dependencies.is_empty() {
+                operations_in_order.push((idx, &op_meta.operation));
+                processed[idx] = true;
+            }
+        }
+        
+        // Then, add operations with satisfied dependencies
+        while operations_in_order.len() < parsed.operations.len() {
+            let mut added_any = false;
+            
+            for (idx, op_meta) in parsed.operations.iter().enumerate() {
+                if !processed[idx] {
+                    let deps_satisfied = op_meta.dependencies.iter()
+                        .all(|&dep_idx| processed[dep_idx]);
+                    
+                    if deps_satisfied {
+                        operations_in_order.push((idx, &op_meta.operation));
+                        processed[idx] = true;
+                        added_any = true;
+                    }
+                }
+            }
+            
+            if !added_any {
+                return Err(HiveError::Other(
+                    "Circular dependencies detected in operations".to_string()
+                ));
+            }
+        }
+
+        // Step 4: Execute operations in order
+        let mut results = Vec::new();
+        let mut successful_count = 0;
+        let mut failed_count = 0;
+
+        for (idx, operation) in operations_in_order {
+            log::info!("Executing operation {} of {}: {:?}", 
+                      idx + 1, parsed.operations.len(), operation);
+
+            match self.execute_operation(operation.clone(), context).await {
+                Ok(result) => {
+                    if result.success {
+                        successful_count += 1;
+                        log::info!("✅ Operation succeeded: {}", result.message);
+                    } else {
+                        failed_count += 1;
+                        log::error!("❌ Operation failed: {}", result.message);
+                    }
+                    results.push(result);
+                }
+                Err(e) => {
+                    failed_count += 1;
+                    log::error!("❌ Operation execution error: {}", e);
+                    
+                    // Create error result
+                    results.push(ExecutionResult {
+                        operation_id: Uuid::new_v4(),
+                        operation: operation.clone(),
+                        success: false,
+                        execution_time: Duration::from_millis(0),
+                        message: format!("Operation execution error: {}", e),
+                        error_message: Some(e.to_string()),
+                        backup_created: None,
+                        rollback_required: false,
+                        files_affected: vec![],
+                    });
+
+                    // Optionally stop on first error
+                    if self.config.stop_on_error {
+                        log::error!("Stopping execution due to error (stop_on_error = true)");
+                        break;
+                    }
+                }
+            }
+        }
+
+        let total_time = start_time.elapsed().unwrap_or(Duration::from_millis(0));
+
+        Ok(ExecutionSummary {
+            total_operations: parsed.operations.len(),
+            successful_operations: successful_count,
+            failed_operations: failed_count,
+            results,
+            parser_confidence: parsed.confidence,
+            parser_warnings: parsed.warnings,
+            unparsed_blocks: parsed.unparsed_blocks,
+            total_execution_time: total_time,
+        })
+    }
+
+    /// Parse operations from curator response without executing (dry run analysis)
+    pub async fn parse_curator_response(
+        &self,
+        curator_response: &str,
+        context: &ConsensusOperationContext,
+    ) -> Result<ParsedOperations, HiveError> {
+        // Convert context for AI parser
+        let intelligence_context = IntelligenceOperationContext {
+            repository_path: context.repository_path.clone(),
+            git_commit: context.git_commit.clone(),
+            source_question: context.user_question.clone(),
+            related_files: Vec::new(),
+            project_metadata: HashMap::new(),
+        };
+
+        self.ai_parser
+            .parse_response(curator_response, &intelligence_context)
+            .await
+            .map_err(|e| HiveError::Other(format!("Failed to parse curator response: {}", e)))
     }
 }
 

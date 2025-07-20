@@ -36,6 +36,7 @@ pub mod outcome_tracker;
 pub mod learning_system;
 pub mod safety_guardrails;
 pub mod file_executor;
+pub mod ai_operation_parser;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -126,8 +127,12 @@ pub use safety_guardrails::{
     ComprehensiveSafetyResult, EnforcementAction, ExecutionRequirements, SafetyMetrics
 };
 pub use file_executor::{
-    FileOperationExecutor, ExecutorConfig, ExecutionResult, 
+    FileOperationExecutor, ExecutorConfig, ExecutionResult, ExecutionSummary,
     BackupInfo as FileBackupInfo, BackupManager as FileBackupManager, SyntaxValidator
+};
+pub use ai_operation_parser::{
+    AIOperationParser, ParsedOperations as AIParsedOperations, FileOperationWithMetadata, SourceLocation,
+    LanguageParser
 };
 
 // Re-export commonly used items
