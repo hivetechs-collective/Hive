@@ -1448,7 +1448,7 @@ impl OperationIntelligenceCoordinator {
         
         // 4. Execution complexity risk (0-10 points)
         let execution_risk = {
-            let mut score = 0.0;
+            let mut score = 0.0f32;
             
             // Multi-step operations are riskier
             if plan.execution_steps.len() > 3 {
@@ -1466,7 +1466,7 @@ impl OperationIntelligenceCoordinator {
                 score += 3.0;
             }
             
-            score.min(10.0_f32) // Cap execution risk at 10
+            score.min(10.0) // Cap execution risk at 10
         };
         risk_components.push(("Execution Risk", execution_risk));
         
@@ -1899,6 +1899,8 @@ impl OperationIntelligenceCoordinator {
             FileOperation::Create { .. } => "Create".to_string(),
             FileOperation::Update { .. } => "Update".to_string(),
             FileOperation::Delete { .. } => "Delete".to_string(),
+            FileOperation::Append { .. } => "Append".to_string(),
+            FileOperation::Rename { .. } => "Rename".to_string(),
         }
     }
 
@@ -1908,6 +1910,7 @@ impl OperationIntelligenceCoordinator {
             FileOperation::Create { path, .. } => format!("Create {}", path.display()),
             FileOperation::Update { path, .. } => format!("Update {}", path.display()),
             FileOperation::Delete { path } => format!("Delete {}", path.display()),
+            FileOperation::Append { path, .. } => format!("Append to {}", path.display()),
             FileOperation::Rename { from, to } => format!("Rename {} to {}", from.display(), to.display()),
         }
     }

@@ -52,11 +52,13 @@ impl Default for GraphConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DependencyGraph {
     /// The underlying graph structure
+    #[allow(dead_code)]
     pub graph: DiGraph<OperationNode, DependencyEdge>,
     /// Node indices mapped by operation ID
+    #[allow(dead_code)]
     pub node_map: HashMap<String, NodeIndex>,
     /// Execution sequence (topologically sorted)
     pub execution_sequence: Vec<String>,
@@ -277,6 +279,7 @@ impl DependencyGraphGenerator {
             FileOperation::Create { .. } => ("Create", "#4CAF50", "box"),
             FileOperation::Update { .. } => ("Update", "#2196F3", "ellipse"),
             FileOperation::Delete { .. } => ("Delete", "#F44336", "diamond"),
+            FileOperation::Append { .. } => ("Append", "#00BCD4", "ellipse"),
             FileOperation::Rename { .. } => ("Rename", "#FF9800", "parallelogram"),
         };
 
@@ -360,7 +363,7 @@ impl DependencyGraphGenerator {
                 }
             }
             // Move/Rename depends on file existence
-            (FileOperation::Rename { old_path: s1, .. }, FileOperation::Create { path: p2, .. }) => {
+            (FileOperation::Rename { from: s1, .. }, FileOperation::Create { path: p2, .. }) => {
                 if s1 == p2 {
                     Some(DependencyEdge {
                         dependency_type: DependencyType::FileExistence,
@@ -402,7 +405,7 @@ impl DependencyGraphGenerator {
 
         // Analyze content for import dependencies
         for (i, enhanced_op) in operations.iter().enumerate() {
-            if let FileOperation::Create { content, .. } | FileOperation::Update { new_content: content, .. } = &enhanced_op.operation {
+            if let FileOperation::Create { content, .. } | FileOperation::Update { content, .. } = &enhanced_op.operation {
                 let imports = self.extract_imports(content, &self.get_operation_path(&enhanced_op.operation))?;
                 
                 for import_path in imports {
@@ -648,11 +651,10 @@ impl DependencyGraphGenerator {
             let current_depth = depths[&node];
             max_depth = max_depth.max(current_depth);
 
-            for edge in graph.edges(node) {
-                let target = edge.target();
-                if !depths.contains_key(&target) {
-                    depths.insert(target, current_depth + 1);
-                    queue.push_back(target);
+            for neighbor in graph.neighbors(node) {
+                if !depths.contains_key(&neighbor) {
+                    depths.insert(neighbor, current_depth + 1);
+                    queue.push_back(neighbor);
                 }
             }
         }
@@ -689,8 +691,8 @@ impl DependencyGraphGenerator {
                 let mut stack = vec![node];
                 while let Some(current) = stack.pop() {
                     if visited.insert(current) {
-                        for edge in graph.edges(current) {
-                            stack.push(edge.target());
+                        for neighbor in graph.neighbors(current) {
+                            stack.push(neighbor);
                         }
                     }
                 }
@@ -727,9 +729,8 @@ impl DependencyGraphGenerator {
         for (id, &idx) in node_map {
             let node = &graph[idx];
             if matches!(node.metadata.risk_level, RiskLevel::High | RiskLevel::Critical) {
-                for edge in graph.edges_directed(idx, petgraph::Direction::Outgoing) {
-                    let dependent_idx = edge.target();
-                    let dependent = &graph[dependent_idx];
+                for neighbor in graph.neighbors_directed(idx, petgraph::Direction::Outgoing) {
+                    let dependent = &graph[neighbor];
                     critical_dependencies.push((id.clone(), dependent.id.clone()));
                 }
             }
@@ -925,8 +926,8 @@ impl DependencyGraphGenerator {
                 let idx = node_map[op_id];
                 
                 // Check all incoming edges
-                for edge in graph.edges_directed(idx, petgraph::Direction::Incoming) {
-                    let source_node = &graph[edge.source()];
+                for neighbor in graph.neighbors_directed(idx, petgraph::Direction::Incoming) {
+                    let source_node = &graph[neighbor];
                     if let Some(&source_group) = node_to_group.get(&source_node.id) {
                         if source_group != i {
                             depends_on.insert(source_group);
@@ -981,8 +982,8 @@ impl DependencyGraphGenerator {
             
             if outgoing > 0 {
                 ascii.push_str("  └─> ");
-                let deps: Vec<_> = graph.edges(idx)
-                    .map(|e| &graph[e.target()].id)
+                let deps: Vec<_> = graph.neighbors(idx)
+                    .map(|neighbor| graph[neighbor].id.as_str())
                     .collect();
                 ascii.push_str(&deps.join(", "));
                 ascii.push('\n');
@@ -1026,10 +1027,11 @@ impl DependencyGraphGenerator {
         }
 
         // Add edges
-        for edge in graph.edge_references() {
-            let source = &graph[edge.source()];
-            let target = &graph[edge.target()];
-            let edge_data = edge.weight();
+        for edge_idx in graph.edge_indices() {
+            let (source_idx, target_idx) = graph.edge_endpoints(edge_idx).unwrap();
+            let source = &graph[source_idx];
+            let target = &graph[target_idx];
+            let edge_data = &graph[edge_idx];
             
             mermaid.push_str(&format!("    {} -->|{}| {}\n",
                 source.id,
@@ -1076,8 +1078,9 @@ impl DependencyGraphGenerator {
         match operation {
             FileOperation::Create { path, .. } |
             FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } => path.clone(),
-            FileOperation::Rename { new_path, .. } => new_path.clone(),
+            FileOperation::Delete { path } |
+            FileOperation::Append { path, .. } => path.clone(),
+            FileOperation::Rename { to, .. } => to.clone(),
         }
     }
 
@@ -1093,6 +1096,7 @@ impl DependencyGraphGenerator {
                 }
             }
             FileOperation::Create { .. } => RiskLevel::Low,
+            FileOperation::Append { .. } => RiskLevel::Low,
             FileOperation::Rename { .. } => RiskLevel::Medium,
         }
     }
@@ -1104,6 +1108,9 @@ impl DependencyGraphGenerator {
             }
             FileOperation::Update { .. } => 15,
             FileOperation::Delete { .. } => 5,
+            FileOperation::Append { content, .. } => {
+                5 + (content.len() as u64 / 1000)
+            }
             FileOperation::Rename { .. } => 10,
         }
     }

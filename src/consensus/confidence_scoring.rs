@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
+use chrono::Timelike;
 
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::operation_analysis::{
@@ -349,7 +350,7 @@ impl ConfidenceScoringEngine {
     }
 
     fn calculate_complexity_penalty(&self, operations: &[FileOperation], cluster: Option<&OperationCluster>) -> Result<f32> {
-        let mut penalty = 0.0;
+        let mut penalty = 0.0f32;
 
         // Penalty based on operation count
         penalty += match operations.len() {
@@ -384,7 +385,7 @@ impl ConfidenceScoringEngine {
             };
         }
 
-        Ok(penalty.min(50.0_f32)) // Cap at 50 points
+        Ok(penalty.min(50.0f32)) // Cap at 50 points
     }
 
     async fn calculate_adjustment_factors(
@@ -719,8 +720,9 @@ impl OperationPredictionModel {
                 let path = match op {
                     FileOperation::Create { path, .. } |
                     FileOperation::Update { path, .. } |
-                    FileOperation::Delete { path } => path,
-                    FileOperation::Rename { new_path, .. } => new_path,
+                    FileOperation::Delete { path } |
+                    FileOperation::Append { path, .. } => path,
+                    FileOperation::Rename { to, .. } => to,
                 };
                 path.extension().and_then(|e| e.to_str()).map(|s| s.to_string())
             })
@@ -733,8 +735,9 @@ impl OperationPredictionModel {
             let path_str = match op {
                 FileOperation::Create { path, .. } |
                 FileOperation::Update { path, .. } |
-                FileOperation::Delete { path } => path.to_string_lossy(),
-                FileOperation::Rename { new_path, .. } => new_path.to_string_lossy(),
+                FileOperation::Delete { path } |
+                FileOperation::Append { path, .. } => path.to_string_lossy(),
+                FileOperation::Rename { to, .. } => to.to_string_lossy(),
             };
             path_str.contains("test") || path_str.contains("spec")
         });

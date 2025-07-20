@@ -119,7 +119,7 @@ pub struct RollbackError {
     pub suggested_action: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum RollbackErrorType {
     FileSystemError,
     GitError,
@@ -188,7 +188,7 @@ impl RollbackExecutor {
 
         let mut execution = RollbackExecution {
             execution_id: execution_id.clone(),
-            plan_id: plan.plan_id.clone(),
+            plan_id: plan.id.clone(),
             started_at: Utc::now(),
             completed_at: None,
             status: RollbackExecutionStatus::InProgress,
@@ -231,7 +231,7 @@ impl RollbackExecutor {
                 execution.errors.push(RollbackError {
                     error_type: RollbackErrorType::TimeoutError,
                     message: "Total execution timeout exceeded".to_string(),
-                    step_number: Some(step.step_number),
+                    step_number: Some(step.step_number as u32),
                     timestamp: Utc::now(),
                     is_recoverable: false,
                     suggested_action: Some("Increase timeout or simplify rollback plan".to_string()),
@@ -240,7 +240,7 @@ impl RollbackExecutor {
             }
 
             // Update progress
-            self.update_progress(&execution_id, step.step_number, plan.steps.len() as u32, &step.description).await;
+            self.update_progress(&execution_id, step.step_number as u32, plan.steps.len() as u32, &step.description).await;
 
             // Handle high-risk steps
             if matches!(step.risk_level, RiskLevel::High | RiskLevel::Critical) && self.execution_config.pause_on_high_risk {
@@ -266,7 +266,7 @@ impl RollbackExecutor {
                         execution.errors.push(RollbackError {
                             error_type: RollbackErrorType::InternalError,
                             message: error_msg.clone(),
-                            step_number: Some(step.step_number),
+                            step_number: Some(step.step_number as u32),
                             timestamp: Utc::now(),
                             is_recoverable: step_result.retry_count < self.execution_config.max_retries,
                             suggested_action: self.suggest_action_for_step_failure(step, error_msg),
@@ -326,7 +326,7 @@ impl RollbackExecutor {
         step: &RollbackStep,
     ) -> RollbackStepResult {
         let mut result = RollbackStepResult {
-            step_number: step.step_number,
+            step_number: step.step_number as u32,
             status: RollbackStepStatus::InProgress,
             started_at: Utc::now(),
             completed_at: None,
@@ -353,12 +353,14 @@ impl RollbackExecutor {
                     if self.execution_config.verify_steps {
                         match self.verification_system.verify_step_completion(step).await {
                             Ok(verification) => {
+                                let is_successful = verification.is_successful;
+                                let error_msg = verification.error_message.clone();
                                 result.verification_result = Some(verification);
-                                if !verification.is_successful {
+                                if !is_successful {
                                     result.status = RollbackStepStatus::Failed;
                                     result.error_message = Some(format!(
                                         "Step verification failed: {}",
-                                        verification.error_message.unwrap_or_default()
+                                        error_msg.unwrap_or_default()
                                     ));
                                     continue; // Retry
                                 }
@@ -473,7 +475,7 @@ impl RollbackExecutor {
 
         // Check Git repository state if Git operations are involved
         let has_git_operations = plan.steps.iter().any(|step| {
-            matches!(step.operation, RollbackOperation::GitRevert { .. })
+            matches!(step.operation, RollbackOperation::GitCommand { .. })
         });
         
         if has_git_operations {
@@ -508,8 +510,9 @@ impl RollbackExecutor {
 
         let git_commits_reverted: Vec<String> = plan.steps.iter()
             .filter_map(|step| {
-                if let RollbackOperation::GitRevert { commit_hash, .. } = &step.operation {
-                    Some(commit_hash.clone())
+                if let RollbackOperation::GitCommand { args, .. } = &step.operation {
+                    // Extract commit hash from git args if present
+                    args.get(0).cloned()
                 } else {
                     None
                 }
@@ -533,7 +536,9 @@ impl RollbackExecutor {
         let recommendations = self.generate_recommendations(execution, success_rate).await;
 
         RollbackSummary {
-            original_operations: plan.original_operations.clone(),
+            original_operations: plan.operations.iter()
+                .map(|op| format!("{:?}", op.operation))
+                .collect(),
             files_restored,
             git_commits_reverted,
             backups_used,
@@ -650,7 +655,7 @@ impl RollbackExecutor {
             RollbackOperation::RestoreFile { .. } => {
                 Some("Verify backup file integrity and permissions".to_string())
             }
-            RollbackOperation::GitRevert { .. } => {
+            RollbackOperation::GitCommand { .. } => {
                 Some("Check Git repository state and resolve any conflicts manually".to_string())
             }
             RollbackOperation::ReverseOperation { .. } => {
@@ -840,7 +845,7 @@ impl VerificationSystem {
                 } else {
                     Ok(VerificationResult {
                         is_successful: true,
-                        verification_type: VerificationType::Custom,
+                        verification_type: VerificationType::Custom("reverse_operation".to_string()),
                         error_message: None,
                         warnings: vec!["Unsupported reverse operation type".to_string()],
                         verified_at: Utc::now(),

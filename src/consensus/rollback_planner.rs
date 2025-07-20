@@ -614,7 +614,7 @@ impl RollbackPlanner {
             // Skip if file doesn't exist yet (create operations)
             if let Some(state) = current_states.get(&file_path) {
                 if state.exists {
-                    let size = state.size_bytes.unwrap_or(0);
+                    let size = state.metadata.size.unwrap_or(0);
                     
                     // Check size limit
                     if size > self.config.max_backup_size_mb * 1024 * 1024 {
@@ -635,7 +635,7 @@ impl RollbackPlanner {
                     backups.push(BackupInfo {
                         original_path: file_path.clone(),
                         backup_path,
-                        original_hash: state.content_hash.clone().unwrap_or_default(),
+                        original_hash: String::new(), // TODO: Calculate hash from content
                         size_bytes: size,
                         created_at: Utc::now(),
                         method: BackupMethod::FileCopy,
@@ -743,15 +743,15 @@ impl RollbackPlanner {
                     });
                 }
                 
-                FileOperation::Update { .. } | FileOperation::Delete { .. } => {
+                FileOperation::Update { .. } | FileOperation::Delete { .. } | FileOperation::Append { .. } => {
                     // Verify file was restored
                     if let Some(state) = current_states.get(&file_path) {
-                        if let Some(hash) = &state.content_hash {
+                        if state.content.is_some() { // Check if we have content to hash
                             steps.push(VerificationStep {
                                 description: format!("Verify {} was restored", file_path.display()),
                                 verification_type: VerificationType::ContentHash {
                                     path: file_path.clone(),
-                                    expected_hash: hash.clone(),
+                                    expected_hash: String::new(), // TODO: Calculate from state.content
                                 },
                                 expected_outcome: "File content matches original".to_string(),
                                 automated: true,
@@ -760,28 +760,15 @@ impl RollbackPlanner {
                     }
                 }
                 
-                FileOperation::Rename { old_path, new_path } => {
+                FileOperation::Rename { from, to } => {
                     // Verify rename was reversed
                     steps.push(VerificationStep {
                         description: format!("Verify rename reversed: {} -> {}", 
-                                           new_path.display(), old_path.display()),
+                                           to.display(), from.display()),
                         verification_type: VerificationType::FileExists {
-                            path: old_path.clone(),
+                            path: from.clone(),
                         },
                         expected_outcome: "Original file name restored".to_string(),
-                        automated: true,
-                    });
-                }
-                
-                FileOperation::Move { source, destination } => {
-                    // Verify move was reversed
-                    steps.push(VerificationStep {
-                        description: format!("Verify move reversed: {} -> {}", 
-                                           destination.display(), source.display()),
-                        verification_type: VerificationType::FileExists {
-                            path: source.clone(),
-                        },
-                        expected_outcome: "File moved back to original location".to_string(),
                         automated: true,
                     });
                 }
@@ -869,9 +856,9 @@ impl RollbackPlanner {
         match operation {
             FileOperation::Create { path, .. } |
             FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } => path.clone(),
-            FileOperation::Rename { new_path, .. } => new_path.clone(),
-            FileOperation::Move { destination, .. } => destination.clone(),
+            FileOperation::Delete { path } |
+            FileOperation::Append { path, .. } => path.clone(),
+            FileOperation::Rename { to, .. } => to.clone(),
         }
     }
     
@@ -918,6 +905,10 @@ impl RollbackPlanner {
                     content: "".to_string(), // Would need backup content
                 })
             }
+            FileOperation::Append { path, .. } => {
+                // For append, we'd need to know how much was appended to reverse it
+                Err(anyhow!("Cannot reverse append operation without knowing original length"))
+            }
             FileOperation::Rename { from, to } => {
                 Ok(FileOperation::Rename {
                     from: to.clone(),
@@ -948,14 +939,14 @@ impl RollbackPlanner {
                 FileOperation::Create { path, content } => {
                     script_content.push_str(&format!("cat > \"{}\" << 'EOF'\n{}\nEOF\n", path.display(), content));
                 }
-                FileOperation::Rename { old_path, new_path } => {
-                    script_content.push_str(&format!("mv \"{}\" \"{}\"\n", old_path.display(), new_path.display()));
+                FileOperation::Rename { from, to } => {
+                    script_content.push_str(&format!("mv \"{}\" \"{}\"\n", from.display(), to.display()));
                 }
-                FileOperation::Move { source, destination } => {
-                    script_content.push_str(&format!("mv \"{}\" \"{}\"\n", source.display(), destination.display()));
+                FileOperation::Update { path, content, .. } => {
+                    script_content.push_str(&format!("cat > \"{}\" << 'EOF'\n{}\nEOF\n", path.display(), content));
                 }
-                FileOperation::Update { path, new_content, .. } => {
-                    script_content.push_str(&format!("cat > \"{}\" << 'EOF'\n{}\nEOF\n", path.display(), new_content));
+                FileOperation::Append { path, content } => {
+                    script_content.push_str(&format!("cat >> \"{}\" << 'EOF'\n{}\nEOF\n", path.display(), content));
                 }
             }
             script_content.push_str("\n");
@@ -982,11 +973,9 @@ impl RollbackPlanner {
             FileOperation::Create { path, .. } => format!("Create {}", path.display()),
             FileOperation::Delete { path } => format!("Delete {}", path.display()),
             FileOperation::Update { path, .. } => format!("Update {}", path.display()),
-            FileOperation::Rename { old_path, new_path } => {
-                format!("Rename {} to {}", old_path.display(), new_path.display())
-            }
-            FileOperation::Move { source, destination } => {
-                format!("Move {} to {}", source.display(), destination.display())
+            FileOperation::Append { path, .. } => format!("Append to {}", path.display()),
+            FileOperation::Rename { from, to } => {
+                format!("Rename {} to {}", from.display(), to.display())
             }
         }
     }
@@ -1333,15 +1322,15 @@ mod tests {
         
         // Test rename reversal
         let rename_op = FileOperation::Rename {
-            old_path: PathBuf::from("old.rs"),
-            new_path: PathBuf::from("new.rs"),
+            from: PathBuf::from("old.rs"),
+            to: PathBuf::from("new.rs"),
         };
         
         let reverse = planner.reverse_operation(&rename_op).unwrap();
         match reverse {
-            FileOperation::Rename { old_path, new_path } => {
-                assert_eq!(old_path, PathBuf::from("new.rs"));
-                assert_eq!(new_path, PathBuf::from("old.rs"));
+            FileOperation::Rename { from, to } => {
+                assert_eq!(from, PathBuf::from("new.rs"));
+                assert_eq!(to, PathBuf::from("old.rs"));
             }
             _ => panic!("Expected rename operation"),
         }

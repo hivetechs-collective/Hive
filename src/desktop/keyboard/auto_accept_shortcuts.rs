@@ -4,28 +4,26 @@ use crate::consensus::operation_intelligence::AutoAcceptMode;
 use std::sync::Arc;
 
 /// Keyboard shortcut handler for auto-accept modes
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AutoAcceptShortcuts {
     /// Current mode
     current_mode: Signal<AutoAcceptMode>,
-    
-    /// Callback for mode changes
-    on_mode_change: Arc<dyn Fn(AutoAcceptMode) + Send + Sync>,
-    
-    /// Notification callback
-    on_notification: Arc<dyn Fn(String) + Send + Sync>,
+}
+
+impl std::fmt::Debug for AutoAcceptShortcuts {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutoAcceptShortcuts")
+            .field("current_mode", &self.current_mode)
+            .finish()
+    }
 }
 
 impl AutoAcceptShortcuts {
     pub fn new(
         current_mode: Signal<AutoAcceptMode>,
-        on_mode_change: Arc<dyn Fn(AutoAcceptMode) + Send + Sync>,
-        on_notification: Arc<dyn Fn(String) + Send + Sync>,
     ) -> Self {
         Self {
             current_mode,
-            on_mode_change,
-            on_notification,
         }
     }
 
@@ -48,7 +46,8 @@ impl AutoAcceptShortcuts {
     }
 
     fn cycle_mode(&self) {
-        let current = self.current_mode();
+        let mut mode = self.current_mode;
+        let current = *mode.read();
         let next_mode = match current {
             AutoAcceptMode::Manual => AutoAcceptMode::Conservative,
             AutoAcceptMode::Conservative => AutoAcceptMode::Balanced,
@@ -57,25 +56,27 @@ impl AutoAcceptShortcuts {
             AutoAcceptMode::Plan => AutoAcceptMode::Manual,
         };
         
-        (self.on_mode_change)(next_mode);
-        (self.on_notification)(format!("Auto-accept mode: {:?}", next_mode));
+        mode.set(next_mode);
+        tracing::info!("Auto-accept mode: {:?}", next_mode);
     }
 
     fn toggle_auto_accept(&self) {
-        let current = self.current_mode();
+        let mut mode = self.current_mode;
+        let current = *mode.read();
         let new_mode = match current {
             AutoAcceptMode::Manual => AutoAcceptMode::Conservative,
             _ => AutoAcceptMode::Manual,
         };
         
-        (self.on_mode_change)(new_mode);
-        (self.on_notification)(format!("Auto-accept: {}", 
-            if matches!(new_mode, AutoAcceptMode::Manual) { "OFF" } else { "ON" }));
+        mode.set(new_mode);
+        tracing::info!("Auto-accept: {}", 
+            if matches!(new_mode, AutoAcceptMode::Manual) { "OFF" } else { "ON" });
     }
 
     fn set_manual_mode(&self) {
-        (self.on_mode_change)(AutoAcceptMode::Manual);
-        (self.on_notification)("Auto-accept disabled".to_string());
+        let mut mode = self.current_mode;
+        mode.set(AutoAcceptMode::Manual);
+        tracing::info!("Auto-accept disabled");
     }
 }
 
@@ -87,13 +88,13 @@ pub fn KeyboardShortcutDisplay(
     on_mode_change: EventHandler<AutoAcceptMode>,
 ) -> Element {
     let shortcuts = use_signal(|| {
-        AutoAcceptShortcuts::new(
-            current_mode,
-            Arc::new(move |mode| on_mode_change.call(mode)),
-            Arc::new(move |msg| {
-                tracing::info!("Keyboard shortcut: {}", msg);
-            }),
-        )
+        AutoAcceptShortcuts::new(current_mode)
+    });
+    
+    // Watch for mode changes from shortcuts
+    use_effect(move || {
+        let mode = *current_mode.read();
+        on_mode_change.call(mode);
     });
 
     // Set up keyboard event listener
@@ -187,7 +188,7 @@ pub fn ShortcutNotification(
             
             // Auto-hide after duration
             if let Some(duration) = duration_ms {
-                let visible_clone = visible.clone();
+                let mut visible_clone = visible.clone();
                 spawn(async move {
                     tokio::time::sleep(tokio::time::Duration::from_millis(duration as u64)).await;
                     visible_clone.set(false);
@@ -301,11 +302,7 @@ pub fn GlobalKeyboardListener(
     on_shortcut_triggered: EventHandler<String>,
 ) -> Element {
     let shortcuts = use_signal(|| {
-        AutoAcceptShortcuts::new(
-            current_mode,
-            Arc::new(move |mode| on_mode_change.call(mode)),
-            Arc::new(move |msg| on_shortcut_triggered.call(msg)),
-        )
+        AutoAcceptShortcuts::new(current_mode)
     });
 
     // This component handles global keyboard events
