@@ -275,7 +275,7 @@ impl IntelligentFeedbackGenerator {
         let mut mitigation_strategies = Vec::new();
 
         // Analyze component scores for risk factors
-        if let Some(pattern_score) = analysis.component_scores.pattern_recognizer {
+        if let Some(pattern_score) = &analysis.component_scores.pattern_recognizer {
             if pattern_score.safety_score < 70.0 {
                 main_risk_factors.push(format!(
                     "Dangerous patterns detected (safety score: {:.0}%)",
@@ -285,7 +285,7 @@ impl IntelligentFeedbackGenerator {
             }
         }
 
-        if let Some(quality_score) = analysis.component_scores.quality_analyzer {
+        if let Some(quality_score) = &analysis.component_scores.quality_analyzer {
             if quality_score.conflict_probability > 30.0 {
                 main_risk_factors.push(format!(
                     "High conflict probability ({:.0}%)",
@@ -341,7 +341,7 @@ impl IntelligentFeedbackGenerator {
         let mut uncertainty_factors = Vec::new();
 
         // Gather supporting evidence
-        if let Some(historical) = analysis.component_scores.knowledge_indexer {
+        if let Some(historical) = &analysis.component_scores.knowledge_indexer {
             if historical.prediction_confidence > 80.0 {
                 supporting_evidence.push(format!(
                     "Strong historical precedent ({} similar operations)",
@@ -350,7 +350,7 @@ impl IntelligentFeedbackGenerator {
             }
         }
 
-        if let Some(context) = analysis.component_scores.context_retriever {
+        if let Some(context) = &analysis.component_scores.context_retriever {
             if context.precedent_strength > 0.7 {
                 supporting_evidence.push("Matches established patterns in codebase".to_string());
             }
@@ -544,21 +544,29 @@ impl IntelligentFeedbackGenerator {
                     } else {
                         content.clone()
                     };
-                    (path.clone(), "Create", Some(preview))
+                    (path.clone(), "Create".to_string(), Some(preview))
                 }
-                FileOperation::Update { path, new_content, .. } => {
-                    let preview = if new_content.len() > 100 {
-                        format!("{}...", &new_content[..100])
+                FileOperation::Update { path, content, .. } => {
+                    let preview = if content.len() > 100 {
+                        format!("{}...", &content[..100])
                     } else {
-                        new_content.clone()
+                        content.clone()
                     };
-                    (path.clone(), "Update", Some(preview))
+                    (path.clone(), "Update".to_string(), Some(preview))
                 }
                 FileOperation::Delete { path } => {
-                    (path.clone(), "Delete", None)
+                    (path.clone(), "Delete".to_string(), None)
+                }
+                FileOperation::Append { path, content } => {
+                    let preview = if content.len() > 100 {
+                        format!("{}...", &content[..100])
+                    } else {
+                        content.clone()
+                    };
+                    (path.clone(), "Append".to_string(), Some(preview))
                 }
                 FileOperation::Rename { from, to } => {
-                    (from.clone(), &format!("Rename to {}", to.display()), None)
+                    (from.clone(), format!("Rename to {}", to.display()), None)
                 }
             };
 
@@ -679,7 +687,8 @@ impl IntelligentFeedbackGenerator {
         // Keep only last 100 feedback items
         let mut history = self.feedback_history.write().await;
         if history.len() > 100 {
-            history.drain(0..history.len() - 100);
+            let drain_count = history.len() - 100;
+            history.drain(0..drain_count);
         }
     }
 

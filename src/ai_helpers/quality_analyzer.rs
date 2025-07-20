@@ -81,6 +81,20 @@ pub struct QualityAnalyzer {
     file_state_tracker: Arc<RwLock<FileStateTracker>>,
 }
 
+impl std::fmt::Debug for QualityAnalyzer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QualityAnalyzer")
+            .field("config", &self.config)
+            .field("python_service", &"<PythonModelService>")
+            .field("quality_history", &"<QualityHistory>")
+            .field("analysis_cache", &"<LruCache>")
+            .field("risk_cache", &"<LruCache>")
+            .field("conflict_history", &"<Vec<ConflictRecord>>")
+            .field("file_state_tracker", &"<FileStateTracker>")
+            .finish()
+    }
+}
+
 /// Historical quality tracking
 #[derive(Default)]
 struct QualityHistory {

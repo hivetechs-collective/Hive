@@ -200,7 +200,7 @@ pub enum ElementType {
     Configuration,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ImpactRiskLevel {
     None,
     Low,
@@ -373,9 +373,9 @@ impl OperationPreviewGenerator {
         let path = match operation {
             FileOperation::Create { path, .. } => path,
             FileOperation::Update { path, .. } => path,
+            FileOperation::Append { path, .. } => path,
             FileOperation::Delete { path } => path,
-            FileOperation::Rename { old_path, .. } => old_path,
-            FileOperation::Move { source, .. } => source,
+            FileOperation::Rename { from, .. } => from,
         };
 
         let full_path = self.workspace_root.join(path);
@@ -455,6 +455,17 @@ impl OperationPreviewGenerator {
                     highlighted_content,
                 })
             }
+            FileOperation::Append { path, content } => {
+                let mut after = before.clone();
+                let new_content = match &before.content {
+                    Some(existing) => format!("{}{}", existing, content),
+                    None => content.clone(),
+                };
+                after.content = Some(new_content.clone());
+                after.metadata.size = Some(new_content.len() as u64);
+                after.metadata.line_count = Some(new_content.lines().count());
+                Ok(after)
+            }
             FileOperation::Delete { path } => {
                 Ok(FileState {
                     path: path.clone(),
@@ -469,14 +480,9 @@ impl OperationPreviewGenerator {
                     highlighted_content: None,
                 })
             }
-            FileOperation::Rename { new_path, .. } => {
+            FileOperation::Rename { to, .. } => {
                 let mut after = before.clone();
-                after.path = new_path.clone();
-                Ok(after)
-            }
-            FileOperation::Move { destination, .. } => {
-                let mut after = before.clone();
-                after.path = destination.clone();
+                after.path = to.clone();
                 Ok(after)
             }
         }
@@ -484,9 +490,9 @@ impl OperationPreviewGenerator {
 
     fn generate_diff_view(&self, before: &FileState, after: &FileState) -> Result<Option<DiffView>> {
         let (old_content, new_content) = match (&before.content, &after.content) {
-            (Some(old), Some(new)) => (old, new),
-            (None, Some(new)) => ("", new),
-            (Some(old), None) => (old, ""),
+            (Some(old), Some(new)) => (old.as_str(), new.as_str()),
+            (None, Some(new)) => ("", new.as_str()),
+            (Some(old), None) => (old.as_str(), ""),
             (None, None) => return Ok(None),
         };
 
@@ -663,11 +669,12 @@ impl OperationPreviewGenerator {
                 }
                 side_effects.push("File and all its contents will be removed".to_string());
             }
+            FileOperation::Append { path, content } => {
+                affected_elements.extend(self.extract_code_elements(content, path)?);
+                side_effects.push("Content appended to existing file".to_string());
+            }
             FileOperation::Rename { from, to } => {
                 side_effects.push(format!("All imports of {} need updating", from.display()));
-            }
-            FileOperation::Move { source, destination } => {
-                side_effects.push(format!("All imports of {} need updating", source.display()));
             }
         }
 
@@ -792,7 +799,7 @@ impl OperationPreviewGenerator {
             FileOperation::Create { .. } => 0.95, // High confidence for creates
             FileOperation::Update { .. } if before.exists => 0.90, // Good confidence for updates
             FileOperation::Delete { .. } if before.exists => 0.95, // High confidence for deletes
-            FileOperation::Rename { .. } | FileOperation::Move { .. } if before.exists => 0.85,
+            FileOperation::Rename { .. } if before.exists => 0.85,
             _ => 0.50, // Lower confidence if file doesn't exist
         }
     }
@@ -918,12 +925,13 @@ impl OperationPreviewGenerator {
                 critical_path.push(i);
             }
 
+            let parallelizable = dependencies.is_empty();
             steps.push(TimelineStep {
                 index: i,
                 description: self.describe_operation(&op.operation),
                 dependencies,
                 estimated_duration_ms: self.estimate_duration(&op.operation),
-                parallelizable: dependencies.is_empty(),
+                parallelizable,
             });
         }
 
@@ -943,11 +951,9 @@ impl OperationPreviewGenerator {
             FileOperation::Create { path, .. } => format!("Create {}", path.display()),
             FileOperation::Update { path, .. } => format!("Update {}", path.display()),
             FileOperation::Delete { path } => format!("Delete {}", path.display()),
+            FileOperation::Append { path, .. } => format!("Append to {}", path.display()),
             FileOperation::Rename { from, to } => {
                 format!("Rename {} to {}", from.display(), to.display())
-            }
-            FileOperation::Move { source, destination } => {
-                format!("Move {} to {}", source.display(), destination.display())
             }
         }
     }
@@ -959,8 +965,10 @@ impl OperationPreviewGenerator {
             }
             FileOperation::Update { .. } => 15,
             FileOperation::Delete { .. } => 5,
+            FileOperation::Append { content, .. } => {
+                5 + (content.len() as u64 / 1000) // Base 5ms + 1ms per KB
+            }
             FileOperation::Rename { .. } => 10,
-            FileOperation::Move { .. } => 15,
         }
     }
 
@@ -978,7 +986,8 @@ impl OperationPreviewGenerator {
                 FileOperation::Create { .. } => stats.files_created += 1,
                 FileOperation::Update { .. } => stats.files_modified += 1,
                 FileOperation::Delete { .. } => stats.files_deleted += 1,
-                FileOperation::Rename { .. } | FileOperation::Move { .. } => stats.files_moved += 1,
+                FileOperation::Append { .. } => stats.files_modified += 1,
+                FileOperation::Rename { .. } => stats.files_moved += 1,
             }
 
             // Calculate size change
@@ -1027,12 +1036,9 @@ Total size change: {} bytes
                 FileOperation::Create { path, .. } => ("+", path),
                 FileOperation::Update { path, .. } => ("~", path),
                 FileOperation::Delete { path } => ("-", path),
-                FileOperation::Rename { old_path, new_path } => {
-                    tree.push_str(&format!("  {} {} -> {}\n", "→", old_path.display(), new_path.display()));
-                    continue;
-                }
-                FileOperation::Move { source, destination } => {
-                    tree.push_str(&format!("  {} {} -> {}\n", "→", source.display(), destination.display()));
+                FileOperation::Append { path, .. } => ("»", path),
+                FileOperation::Rename { from, to } => {
+                    tree.push_str(&format!("  {} {} -> {}\n", "→", from.display(), to.display()));
                     continue;
                 }
             };

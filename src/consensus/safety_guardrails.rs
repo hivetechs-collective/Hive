@@ -651,7 +651,7 @@ impl SafetyValidator for SystemFileValidator {
     fn validate(&self, operation: &EnhancedFileOperation, context: &SafetyContext) -> Result<SafetyValidationResult> {
         let mut violations = Vec::new();
         let mut warnings = Vec::new();
-        let mut risk_score = 0.0;
+        let mut risk_score = 0.0f32;
 
         if let Some(path) = get_operation_path(&operation.operation) {
             // Check if operation is within system directories
@@ -672,7 +672,7 @@ impl SafetyValidator for SystemFileValidator {
             // Check for backup files
             if path_str.ends_with(".bak") || path_str.ends_with("~") {
                 warnings.push("Modifying backup file".to_string());
-                risk_score = (risk_score + 20.0).min(100.0_f32);
+                risk_score = (risk_score + 20.0).min(100.0f32);
             }
 
             // Check available disk space
@@ -685,7 +685,7 @@ impl SafetyValidator for SystemFileValidator {
                     mitigation_required: false,
                     auto_fixable: false,
                 });
-                risk_score = (risk_score + 30.0).min(100.0_f32);
+                risk_score = (risk_score + 30.0).min(100.0f32);
             }
         }
 
@@ -978,8 +978,8 @@ fn get_operation_path(operation: &FileOperation) -> Option<PathBuf> {
     match operation {
         FileOperation::Create { path, .. } |
         FileOperation::Update { path, .. } |
-        FileOperation::Delete { path } => Some(path.clone()),
-        FileOperation::Rename { new_path, .. } => Some(new_path.clone()),
-        FileOperation::Move { destination, .. } => Some(destination.clone()),
+        FileOperation::Delete { path } |
+        FileOperation::Append { path, .. } => Some(path.clone()),
+        FileOperation::Rename { to, .. } => Some(to.clone()),
     }
 }

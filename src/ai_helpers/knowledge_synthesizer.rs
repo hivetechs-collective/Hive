@@ -132,7 +132,6 @@ struct SynthesisMetrics {
 }
 
 /// Generates previews for file operations
-#[derive(Default)]
 struct PreviewGenerator {
     /// Template cache for common operations
     templates: HashMap<String, PreviewTemplate>,
@@ -142,6 +141,16 @@ struct PreviewGenerator {
     
     /// Preview generation history
     preview_history: Vec<PreviewRecord>,
+}
+
+impl Default for PreviewGenerator {
+    fn default() -> Self {
+        Self {
+            templates: HashMap::new(),
+            content_cache: lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap()),
+            preview_history: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone)]

@@ -126,7 +126,7 @@ pub enum CheckCategory {
     Content,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CheckStatus {
     Passed,
     Warning,
@@ -201,6 +201,9 @@ impl FileSystemValidator {
             }
             FileOperation::Update { path, .. } => {
                 self.validate_update(path).await
+            }
+            FileOperation::Append { path, .. } => {
+                self.validate_update(path).await // Treat append like update for validation
             }
             FileOperation::Delete { path } => {
                 self.validate_delete(path).await
@@ -409,7 +412,7 @@ impl SecurityValidator {
 
         match operation {
             FileOperation::Create { path, content } | 
-            FileOperation::Update { path, new_content: content, .. } => {
+            FileOperation::Update { path, content, .. } => {
                 // Check for sensitive content
                 checks.push(self.check_sensitive_content(content)?);
                 
@@ -541,7 +544,7 @@ impl SyntaxValidator {
     pub async fn validate(&self, operation: &FileOperation) -> Result<ValidationCheck> {
         let (path, content) = match operation {
             FileOperation::Create { path, content } => (path, content),
-            FileOperation::Update { path, new_content, .. } => (path, new_content),
+            FileOperation::Update { path, content, .. } => (path, content),
             _ => {
                 return Ok(ValidationCheck {
                     name: "Syntax validation".to_string(),
@@ -572,10 +575,11 @@ impl SyntaxValidator {
     }
 }
 
-trait LanguageValidator: Send + Sync {
+trait LanguageValidator: Send + Sync + std::fmt::Debug {
     fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>>;
 }
 
+#[derive(Debug)]
 struct RustValidator;
 
 impl LanguageValidator for RustValidator {
@@ -616,6 +620,7 @@ impl LanguageValidator for RustValidator {
     }
 }
 
+#[derive(Debug)]
 struct JavaScriptValidator;
 impl LanguageValidator for JavaScriptValidator {
     fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
@@ -632,6 +637,7 @@ impl LanguageValidator for JavaScriptValidator {
     }
 }
 
+#[derive(Debug)]
 struct TypeScriptValidator;
 impl LanguageValidator for TypeScriptValidator {
     fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
@@ -647,6 +653,7 @@ impl LanguageValidator for TypeScriptValidator {
     }
 }
 
+#[derive(Debug)]
 struct PythonValidator;
 impl LanguageValidator for PythonValidator {
     fn validate(&self, content: &str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ValidationCheck>> + Send + '_>> {
@@ -1044,7 +1051,8 @@ impl OperationValidator {
         match operation {
             FileOperation::Create { path, .. } |
             FileOperation::Update { path, .. } |
-            FileOperation::Delete { path } => Some(path.clone()),
+            FileOperation::Delete { path } |
+            FileOperation::Append { path, .. } => Some(path.clone()),
             FileOperation::Rename { to, .. } => Some(to.clone()),
         }
     }

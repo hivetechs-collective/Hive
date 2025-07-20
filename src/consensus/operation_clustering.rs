@@ -674,8 +674,8 @@ impl OperationClusterer {
             FileOperation::Create { path, .. } => path.clone(),
             FileOperation::Update { path, .. } => path.clone(),
             FileOperation::Delete { path } => path.clone(),
-            FileOperation::Rename { old_path, .. } => old_path.clone(),
-            FileOperation::Move { source, .. } => source.clone(),
+            FileOperation::Append { path, .. } => path.clone(),
+            FileOperation::Rename { from, .. } => from.clone(),
         }
     }
 

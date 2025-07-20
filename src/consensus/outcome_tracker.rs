@@ -1,5 +1,5 @@
 // Operation Outcome Tracking System for AI Helper Learning
-use crate::consensus::operation_intelligence::{OperationAnalysis, ComponentScores};
+use crate::consensus::operation_analysis::{OperationAnalysis, ComponentScores};
 use crate::consensus::operation_history::OperationHistoryDatabase;
 use crate::consensus::operation_intelligence::OperationOutcome;
 use crate::consensus::smart_decision_engine::{UserDecision, UserChoice};
@@ -199,8 +199,8 @@ impl OperationOutcomeTracker {
             operation_id: operation_id.clone(),
             recorded_at: Utc::now(),
             predicted_analysis: analysis.clone(),
-            predicted_confidence: analysis.confidence,
-            predicted_risk: analysis.risk,
+            predicted_confidence: analysis.unified_score.confidence,
+            predicted_risk: analysis.unified_score.risk,
             ai_helper_scores: helper_scores,
             
             // Will be filled in later
@@ -411,43 +411,32 @@ impl OperationOutcomeTracker {
         let mut features = Vec::new();
         
         // Core prediction features
-        features.push(analysis.confidence / 100.0);
-        features.push(analysis.risk / 100.0);
+        features.push(analysis.unified_score.confidence / 100.0);
+        features.push(analysis.unified_score.risk / 100.0);
         
         // Helper component scores
-        if let Some(ref scores) = analysis.component_scores {
-            features.push(scores.knowledge_indexer.unwrap_or(0.0) / 100.0);
-            features.push(scores.context_retriever.unwrap_or(0.0) / 100.0);
-            features.push(scores.pattern_recognizer.unwrap_or(0.0) / 100.0);
-            features.push(scores.quality_analyzer.unwrap_or(0.0) / 100.0);
-            features.push(scores.knowledge_synthesizer.unwrap_or(0.0) / 100.0);
-        } else {
-            features.extend(vec![0.0; 5]); // Default values
-        }
+        let scores = &analysis.component_scores;
+        features.push(scores.knowledge_indexer.as_ref().map(|s| s.prediction_confidence).unwrap_or(0.0) / 100.0);
+        features.push(scores.context_retriever.as_ref().map(|s| s.relevance_score).unwrap_or(0.0));
+        features.push(scores.pattern_recognizer.as_ref().map(|s| s.safety_score).unwrap_or(0.0) / 100.0);
+        features.push(scores.quality_analyzer.as_ref().map(|s| 100.0 - s.risk_score).unwrap_or(0.0) / 100.0);
+        features.push(scores.knowledge_synthesizer.as_ref().map(|s| s.plan_quality).unwrap_or(0.0));
         
         // Scoring factors
-        if let Some(ref factors) = analysis.scoring_factors {
-            features.push(factors.historical_success_rate);
-            features.push(factors.pattern_confidence);
-            features.push(factors.context_completeness);
-            features.push(factors.code_quality_indicators);
-            features.push(factors.dependency_safety);
-            features.push(factors.user_trust_level);
-        } else {
-            features.extend(vec![0.0; 6]); // Default values
-        }
+        let factors = &analysis.scoring_factors;
+        features.push(factors.historical_success.unwrap_or(0.0));
+        features.push(factors.pattern_safety.unwrap_or(0.0));
+        features.push(factors.conflict_probability.unwrap_or(0.0));
+        features.push(factors.rollback_complexity.unwrap_or(0.0));
+        features.push(factors.user_trust);
         
         // Recommendation count and complexity
         features.push(analysis.recommendations.len() as f32 / 10.0); // Normalized
         
-        // Statistical features
-        if let Some(ref stats) = analysis.operation_statistics {
-            features.push(stats.similar_operations_success_rate);
-            features.push(stats.file_type_auto_accept_rate);
-            features.push(stats.recent_success_trend);
-        } else {
-            features.extend(vec![0.5; 3]); // Default to neutral values
-        }
+        // Statistical features (use scoring factors as proxy)
+        features.push(factors.historical_success.unwrap_or(0.5));
+        features.push(0.5); // Default file type rate
+        features.push(0.5); // Default trend
         
         features
     }
@@ -469,23 +458,28 @@ impl OperationOutcomeTracker {
         let mut helper_accuracy = HashMap::new();
         let actual_success_score = if outcome.actual_outcome.success { 100.0 } else { 0.0 };
         
-        if let Some(score) = outcome.ai_helper_scores.knowledge_indexer {
+        if let Some(indexer) = &outcome.ai_helper_scores.knowledge_indexer {
+            let score = indexer.prediction_confidence;
             helper_accuracy.insert("knowledge_indexer".to_string(), 
                 1.0 - (score - actual_success_score).abs() / 100.0);
         }
-        if let Some(score) = outcome.ai_helper_scores.context_retriever {
+        if let Some(retriever) = &outcome.ai_helper_scores.context_retriever {
+            let score = retriever.relevance_score * 100.0;
             helper_accuracy.insert("context_retriever".to_string(), 
                 1.0 - (score - actual_success_score).abs() / 100.0);
         }
-        if let Some(score) = outcome.ai_helper_scores.pattern_recognizer {
+        if let Some(recognizer) = &outcome.ai_helper_scores.pattern_recognizer {
+            let score = recognizer.safety_score;
             helper_accuracy.insert("pattern_recognizer".to_string(), 
                 1.0 - (score - actual_success_score).abs() / 100.0);
         }
-        if let Some(score) = outcome.ai_helper_scores.quality_analyzer {
+        if let Some(analyzer) = &outcome.ai_helper_scores.quality_analyzer {
+            let score = 100.0 - analyzer.risk_score;
             helper_accuracy.insert("quality_analyzer".to_string(), 
                 1.0 - (score - actual_success_score).abs() / 100.0);
         }
-        if let Some(score) = outcome.ai_helper_scores.knowledge_synthesizer {
+        if let Some(synthesizer) = &outcome.ai_helper_scores.knowledge_synthesizer {
+            let score = synthesizer.plan_quality * 100.0;
             helper_accuracy.insert("knowledge_synthesizer".to_string(), 
                 1.0 - (score - actual_success_score).abs() / 100.0);
         }

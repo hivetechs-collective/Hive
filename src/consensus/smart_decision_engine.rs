@@ -353,23 +353,26 @@ impl SmartDecisionEngine {
                 UserChoice::Execute => OperationOutcome {
                     success: true,
                     error_message: None,
-                    execution_time_ms: 0,
+                    execution_time: std::time::Duration::from_millis(0),
                     rollback_required: false,
-                    user_satisfaction: None,
+                    user_feedback: None,
+                    post_operation_quality: None,
                 },
                 UserChoice::Skip => OperationOutcome {
                     success: false,
                     error_message: Some("User skipped operation".to_string()),
-                    execution_time_ms: 0,
+                    execution_time: std::time::Duration::from_millis(0),
                     rollback_required: false,
-                    user_satisfaction: None,
+                    user_feedback: None,
+                    post_operation_quality: None,
                 },
                 UserChoice::ModifyAndExecute { .. } => OperationOutcome {
                     success: true,
                     error_message: None,
-                    execution_time_ms: 0,
+                    execution_time: std::time::Duration::from_millis(0),
                     rollback_required: false,
-                    user_satisfaction: None,
+                    user_feedback: None,
+                    post_operation_quality: None,
                 },
             };
             

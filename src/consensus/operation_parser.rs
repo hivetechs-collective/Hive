@@ -409,13 +409,14 @@ impl OperationParser {
             
             // Look for content after the file declaration
             let content = self.extract_file_content(section, &path)?;
+            let has_content = content.is_some();
             
             let operation = FileOperation::Create {
                 path: path.clone(),
                 content: content.unwrap_or_default(),
             };
 
-            let confidence = if content.is_some() { 0.9 } else { 0.7 };
+            let confidence = if has_content { 0.9 } else { 0.7 };
 
             operations.push(EnhancedFileOperation {
                 operation,
@@ -435,18 +436,14 @@ impl OperationParser {
             
             // Try to extract old and new content
             let (old_content, new_content) = self.extract_update_content(section, &path)?;
+            let has_new_content = new_content.is_some();
             
             let operation = FileOperation::Update {
                 path: path.clone(),
-                old_content: old_content.unwrap_or_default(),
-                new_content: new_content.unwrap_or_default(),
+                content: new_content.unwrap_or_default(),
             };
 
-            let confidence = match (&old_content, &new_content) {
-                (Some(_), Some(_)) => 0.95,
-                (None, Some(_)) => 0.8,
-                _ => 0.6,
-            };
+            let confidence = if has_new_content { 0.9 } else { 0.7 };
 
             operations.push(EnhancedFileOperation {
                 operation,
@@ -673,6 +670,7 @@ impl OperationParser {
             }
             FileOperation::Update { .. } => tags.push("update".to_string()),
             FileOperation::Delete { .. } => tags.push("delete".to_string()),
+            FileOperation::Append { .. } => tags.push("append".to_string()),
             FileOperation::Rename { .. } => tags.push("rename".to_string()),
         }
 
