@@ -14,6 +14,11 @@ use crate::consensus::streaming::{
 };
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::ai_helpers::AIHelperEcosystem;
+use crate::consensus::{
+    FileOperationExecutor, ExecutorConfig, SmartDecisionEngine, 
+    OperationIntelligenceCoordinator, operation_analysis::{AutoAcceptMode, OperationContext as ConsensusOperationContext},
+    smart_decision_engine::UserPreferences,
+};
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
     TokenUsage,
@@ -31,7 +36,7 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 use uuid::Uuid;
 
 /// The main consensus pipeline orchestrator
@@ -52,6 +57,7 @@ pub struct ConsensusPipeline {
     api_key: Option<String>,
     usage_tracker: Option<Arc<UsageTracker>>,
     ai_helpers: Option<Arc<AIHelperEcosystem>>,
+    file_executor: Option<Arc<FileOperationExecutor>>,
 }
 
 impl ConsensusPipeline {
@@ -102,6 +108,7 @@ impl ConsensusPipeline {
             api_key,
             usage_tracker: None, // Will be set when database is provided
             ai_helpers: None, // Will be set when database is provided
+            file_executor: None, // Will be set when AI helpers are configured
         }
     }
 
@@ -142,7 +149,57 @@ impl ConsensusPipeline {
 
     /// Set the AI helpers for this pipeline
     pub fn with_ai_helpers(mut self, ai_helpers: Arc<AIHelperEcosystem>) -> Self {
-        self.ai_helpers = Some(ai_helpers);
+        self.ai_helpers = Some(ai_helpers.clone());
+        
+        // Initialize file executor when AI helpers are available
+        if let Some(ref db) = self.database {
+            // Create default user preferences
+            let user_prefs = UserPreferences {
+                confidence_threshold: 80.0,
+                risk_tolerance: 0.3,
+                require_confirmation_for_deletions: true,
+                require_confirmation_for_mass_updates: true,
+                trusted_paths: vec![],
+                blocked_paths: vec![],
+                custom_rules: vec![],
+            };
+            
+            // Initialize decision engine with proper constructor
+            let decision_engine = SmartDecisionEngine::new(
+                AutoAcceptMode::Balanced, // Default to balanced mode
+                user_prefs,
+                None, // History database can be added later
+            );
+            
+            if let Ok(intelligence_coordinator) = OperationIntelligenceCoordinator::from_ai_helpers(
+                &ai_helpers
+            ) {
+                    let executor_config = ExecutorConfig {
+                        create_backups: true,
+                        validate_syntax: false, // Can be enabled based on config
+                        dry_run_mode: false, // Real execution mode
+                        max_file_size: 10 * 1024 * 1024, // 10MB
+                        allowed_extensions: vec![
+                            "rs", "js", "ts", "py", "java", "cpp", "c", "h", 
+                            "go", "rb", "php", "md", "txt", "json", "yaml", 
+                            "yml", "toml", "html", "css", "scss"
+                        ].into_iter().map(String::from).collect(),
+                        forbidden_paths: vec![], // Can be configured
+                        stop_on_error: true,
+                    };
+                    
+                    let file_executor = FileOperationExecutor::new(
+                        executor_config,
+                        decision_engine,
+                        intelligence_coordinator,
+                    );
+                    
+                    self.file_executor = Some(Arc::new(file_executor));
+                    tracing::info!("Initialized FileOperationExecutor with AI helpers");
+                }
+            }
+        }
+        
         self
     }
 
@@ -571,6 +628,73 @@ impl ConsensusPipeline {
                     // Continue without helper processing
                 }
             }
+        }
+        
+        // Execute file operations if present in curator output
+        if let Some(ref file_executor) = self.file_executor {
+            if let Some(ref repo_context) = self.repository_context {
+                // Create operation context
+                let operation_context = ConsensusOperationContext {
+                    repository_path: repo_context.repository_path().to_path_buf(),
+                    user_question: question.to_string(),
+                    consensus_response: final_answer.clone(),
+                    timestamp: SystemTime::now(),
+                    session_id: conversation_id.clone(),
+                    git_commit: repo_context.current_commit().map(|s| s.to_string()),
+                };
+                
+                // Parse and execute file operations from curator response
+                match file_executor.parse_and_execute_curator_response(
+                    &final_answer,
+                    &operation_context,
+                ).await {
+                    Ok(execution_summary) => {
+                        tracing::info!(
+                            "🤖 File operations executed: {} total, {} successful, {} failed",
+                            execution_summary.total_operations,
+                            execution_summary.successful_operations,
+                            execution_summary.failed_operations
+                        );
+                        
+                        // Log execution details
+                        for result in &execution_summary.results {
+                            if result.success {
+                                tracing::info!("✅ {} operation on {}: {}", 
+                                    match &result.operation {
+                                        crate::consensus::stages::file_aware_curator::FileOperation::Create { .. } => "CREATE",
+                                        crate::consensus::stages::file_aware_curator::FileOperation::Update { .. } => "UPDATE",
+                                        crate::consensus::stages::file_aware_curator::FileOperation::Delete { .. } => "DELETE",
+                                        crate::consensus::stages::file_aware_curator::FileOperation::Rename { .. } => "RENAME",
+                                        crate::consensus::stages::file_aware_curator::FileOperation::Append { .. } => "APPEND",
+                                    },
+                                    result.files_affected.first()
+                                        .map(|p| p.display().to_string())
+                                        .unwrap_or_else(|| "unknown".to_string()),
+                                    result.message
+                                );
+                            } else {
+                                tracing::error!("❌ Failed operation: {}", 
+                                    result.error_message.as_ref().unwrap_or(&result.message));
+                            }
+                        }
+                        
+                        if execution_summary.failed_operations > 0 {
+                            tracing::warn!(
+                                "⚠️ {} file operations failed. Check logs for details.",
+                                execution_summary.failed_operations
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("No file operations executed or parsing failed: {}", e);
+                        // This is not a critical error - many curator responses don't include file operations
+                    }
+                }
+            } else {
+                tracing::debug!("No repository context available - skipping file operation execution");
+            }
+        } else {
+            tracing::debug!("File executor not initialized - skipping file operation execution");
         }
 
         let result = ConsensusResult {
