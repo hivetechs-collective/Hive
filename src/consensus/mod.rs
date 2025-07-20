@@ -37,6 +37,7 @@ pub mod learning_system;
 pub mod safety_guardrails;
 pub mod file_executor;
 pub mod ai_operation_parser;
+pub mod operation_preview_generator;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -133,6 +134,11 @@ pub use file_executor::{
 pub use ai_operation_parser::{
     AIOperationParser, ParsedOperations as AIParsedOperations, FileOperationWithMetadata, SourceLocation,
     LanguageParser
+};
+pub use operation_preview_generator::{
+    OperationPreviewGenerator as AIOperationPreviewGenerator, PreviewConfig as AIPreviewConfig,
+    OperationPreviewSet as AIOperationPreviewSet, OperationPreview as AIOperationPreview,
+    FileState as AIFileState, DiffView as AIDiffView, OperationImpact as AIOperationImpact
 };
 
 // Re-export commonly used items
