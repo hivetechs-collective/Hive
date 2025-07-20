@@ -591,8 +591,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_keyword_extraction() {
+    #[tokio::test]
+    async fn test_keyword_extraction() {
         let retriever = ContextRetriever::new(Arc::new(EmbeddingEngine::new().await.unwrap()));
         let keywords = retriever.extract_keywords("How do I implement error handling in Rust?");
 

@@ -345,6 +345,7 @@ pub mod regex_optimization {
 mod tests {
     use super::*;
     use tokio::test;
+    use async_trait::async_trait;
 
     #[test]
     async fn test_fast_boot_initialization() {

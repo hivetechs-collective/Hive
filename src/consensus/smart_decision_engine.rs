@@ -1,6 +1,6 @@
 // Smart Decision Engine - Intelligent auto-accept decisions based on AI analysis
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -10,7 +10,8 @@ use uuid::Uuid;
 
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::operation_analysis::{
-    OperationAnalysis, AutoAcceptMode, ActionPriority
+    OperationAnalysis, AutoAcceptMode, ActionPriority, OperationContext,
+    UnifiedScore, OperationGroups, ComponentScores, ScoringFactors, AnalysisStatistics
 };
 use crate::consensus::operation_intelligence::OperationOutcome;
 use crate::consensus::operation_history::OperationHistoryDatabase;
@@ -42,7 +43,7 @@ pub struct UserDecision {
     pub operation_id: String,
     pub analysis: OperationAnalysis,
     pub decision: UserChoice,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: SystemTime,
     pub feedback: Option<String>,
 }
 
@@ -640,30 +641,35 @@ mod tests {
                 repository_path: PathBuf::from("/test"),
                 user_question: "Test".to_string(),
                 consensus_response: "Test response".to_string(),
-                timestamp: Utc::now(),
+                timestamp: SystemTime::now(),
                 session_id: "test".to_string(),
+                git_commit: None,
             },
             unified_score: UnifiedScore { confidence, risk },
             recommendations: vec![],
-            groups: crate::consensus::operation_intelligence::OperationGroups {
+            groups: OperationGroups {
                 create_operations: vec![],
                 update_operations: vec![],
                 delete_operations: vec![],
                 move_operations: vec![],
             },
-            component_scores: crate::consensus::operation_intelligence::ComponentScores {
+            component_scores: ComponentScores {
                 knowledge_indexer: None,
                 context_retriever: None,
                 pattern_recognizer: None,
                 quality_analyzer: None,
                 knowledge_synthesizer: None,
             },
-            scoring_factors: crate::consensus::operation_intelligence::ScoringFactors {
+            scoring_factors: ScoringFactors {
                 historical_success: None,
                 pattern_safety: None,
                 conflict_probability: None,
                 rollback_complexity: None,
                 user_trust: 0.8,
+                similar_operations_count: None,
+                dangerous_pattern_count: None,
+                anti_pattern_count: None,
+                rollback_possible: None,
             },
             statistics: None,
         }
