@@ -3,9 +3,16 @@
 // based on consensus decisions and AI-enhanced auto-accept logic
 
 use crate::consensus::stages::file_aware_curator::FileOperation;
-use crate::consensus::operation_analysis::{OperationContext, OperationAnalysis};
+use crate::consensus::operation_analysis::{
+    OperationContext as ConsensusOperationContext, OperationAnalysis as ConsensusOperationAnalysis,
+    UnifiedScore, OperationGroups, ComponentScores, ScoringFactors
+};
 use crate::consensus::smart_decision_engine::{SmartDecisionEngine, ExecutionDecision};
-use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
+use crate::consensus::operation_intelligence::{
+    OperationIntelligenceCoordinator, OperationAnalysis as IntelligenceOperationAnalysis,
+    OperationContext as IntelligenceOperationContext
+};
+use std::collections::HashMap;
 use crate::core::error::HiveError;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -84,6 +91,81 @@ pub struct FileOperationExecutor {
     intelligence_coordinator: OperationIntelligenceCoordinator,
 }
 
+/// Convert intelligence OperationContext to consensus OperationContext
+fn convert_operation_context(
+    intelligence_context: &IntelligenceOperationContext,
+    user_question: String,
+    consensus_response: String,
+    session_id: String,
+) -> ConsensusOperationContext {
+    ConsensusOperationContext {
+        repository_path: intelligence_context.repository_path.clone(),
+        user_question,
+        consensus_response,
+        timestamp: SystemTime::now(),
+        session_id,
+        git_commit: intelligence_context.git_commit.clone(),
+    }
+}
+
+/// Convert from intelligence analysis to consensus analysis format
+fn convert_analysis(
+    intelligence_analysis: IntelligenceOperationAnalysis,
+    operations: Vec<FileOperation>,
+    context: ConsensusOperationContext,
+) -> ConsensusOperationAnalysis {
+    // Group operations by type
+    let mut create_operations = Vec::new();
+    let mut update_operations = Vec::new();
+    let mut delete_operations = Vec::new();
+    let mut move_operations = Vec::new();
+
+    for op in &operations {
+        match op {
+            FileOperation::Create { .. } => create_operations.push(op.clone()),
+            FileOperation::Update { .. } => update_operations.push(op.clone()),
+            FileOperation::Delete { .. } => delete_operations.push(op.clone()),
+            FileOperation::Rename { .. } => move_operations.push(op.clone()),
+            FileOperation::Append { .. } => update_operations.push(op.clone()),
+        }
+    }
+
+    ConsensusOperationAnalysis {
+        operations,
+        context,
+        unified_score: UnifiedScore {
+            confidence: intelligence_analysis.confidence,
+            risk: intelligence_analysis.risk,
+        },
+        recommendations: vec![], // Convert from intelligence_analysis.recommendation if needed
+        groups: OperationGroups {
+            create_operations,
+            update_operations,
+            delete_operations,
+            move_operations,
+        },
+        component_scores: ComponentScores {
+            knowledge_indexer: None,
+            context_retriever: None,
+            pattern_recognizer: None,
+            quality_analyzer: None,
+            knowledge_synthesizer: None,
+        },
+        scoring_factors: ScoringFactors {
+            historical_success: None,
+            pattern_safety: None,
+            conflict_probability: None,
+            rollback_complexity: None,
+            user_trust: 0.8,
+            similar_operations_count: None,
+            dangerous_pattern_count: None,
+            anti_pattern_count: None,
+            rollback_possible: None,
+        },
+        statistics: None,
+    }
+}
+
 impl FileOperationExecutor {
     pub fn new(
         config: ExecutorConfig,
@@ -103,22 +185,38 @@ impl FileOperationExecutor {
     pub async fn execute_operation(
         &self,
         operation: FileOperation,
-        context: &OperationContext,
+        context: &ConsensusOperationContext,
     ) -> Result<ExecutionResult, HiveError> {
         let operation_id = Uuid::new_v4();
         let start_time = SystemTime::now();
 
-        // Step 1: AI-enhanced analysis  
-        let analysis = self.intelligence_coordinator
-            .analyze_operation(&operation, context)
+        // Step 1: Convert context for intelligence coordinator
+        let intelligence_context = IntelligenceOperationContext {
+            repository_path: context.repository_path.clone(),
+            git_commit: context.git_commit.clone(),
+            source_question: context.user_question.clone(),
+            related_files: Vec::new(), // Could be populated from repository analysis
+            project_metadata: HashMap::new(), // Could be populated from project files
+        };
+
+        // Step 2: AI-enhanced analysis  
+        let intelligence_analysis = self.intelligence_coordinator
+            .analyze_operation(&operation, &intelligence_context)
             .await?;
 
-        // Step 2: Smart decision making
+        // Step 3: Convert to consensus format
+        let consensus_analysis = convert_analysis(
+            intelligence_analysis,
+            vec![operation.clone()],
+            context.clone(),
+        );
+
+        // Step 4: Smart decision making
         let decision = self.decision_engine
-            .make_decision(&analysis)
+            .make_decision(&consensus_analysis)
             .await?;
 
-        // Step 3: Execute based on decision
+        // Step 5: Execute based on decision
         match decision {
             ExecutionDecision::AutoExecute { reason, confidence, risk_level } => {
                 log::info!("Auto-executing operation with {}% confidence, {}% risk: {}", 
@@ -147,18 +245,35 @@ impl FileOperationExecutor {
     pub async fn execute_operations_batch(
         &self,
         operations: Vec<FileOperation>,
-        context: &OperationContext,
+        context: &ConsensusOperationContext,
     ) -> Result<Vec<ExecutionResult>, HiveError> {
         let mut results = Vec::new();
         let mut successful_operations = Vec::new();
 
+        // Convert context for intelligence coordinator
+        let intelligence_context = IntelligenceOperationContext {
+            repository_path: context.repository_path.clone(),
+            git_commit: context.git_commit.clone(),
+            source_question: context.user_question.clone(),
+            related_files: Vec::new(), // Could be populated from repository analysis
+            project_metadata: HashMap::new(), // Could be populated from project files
+        };
+
         // Analyze all operations first
-        let analyses = self.intelligence_coordinator
-            .analyze_operations_batch(&operations, context)
+        let intelligence_analyses = self.intelligence_coordinator
+            .analyze_operations_batch(&operations, &intelligence_context)
             .await?;
 
+        // Convert to consensus format
+        let consensus_analyses: Vec<_> = operations.iter()
+            .zip(intelligence_analyses.into_iter())
+            .map(|(op, intel_analysis)| {
+                convert_analysis(intel_analysis, vec![op.clone()], context.clone())
+            })
+            .collect();
+
         // Execute operations in dependency order
-        for (operation, analysis) in operations.into_iter().zip(analyses.into_iter()) {
+        for (operation, analysis) in operations.into_iter().zip(consensus_analyses.into_iter()) {
             match self.execute_operation_with_analysis(operation.clone(), analysis, context).await {
                 Ok(result) => {
                     if result.success {
@@ -188,8 +303,8 @@ impl FileOperationExecutor {
     async fn execute_operation_with_analysis(
         &self,
         operation: FileOperation,
-        analysis: OperationAnalysis,
-        context: &OperationContext,
+        analysis: ConsensusOperationAnalysis,
+        context: &ConsensusOperationContext,
     ) -> Result<ExecutionResult, HiveError> {
         let operation_id = Uuid::new_v4();
         let start_time = SystemTime::now();
@@ -268,7 +383,7 @@ impl FileOperationExecutor {
                                 success: false,
                                 execution_time,
                                 error_message: Some(format!("Syntax validation failed: {:?}", syntax_error)),
-                                backup_created: backup_info.map(|b| b.backup_path),
+                                backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
                                 rollback_required: true,
                                 files_affected,
                             });
@@ -282,7 +397,7 @@ impl FileOperationExecutor {
                     success: true,
                     execution_time,
                     error_message: None,
-                    backup_created: backup_info.map(|b| b.backup_path),
+                    backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
                     rollback_required: false,
                     files_affected,
                 })
@@ -294,7 +409,7 @@ impl FileOperationExecutor {
                     success: false,
                     execution_time,
                     error_message: Some(error.to_string()),
-                    backup_created: backup_info.map(|b| b.backup_path),
+                    backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
                     rollback_required: backup_info.is_some(),
                     files_affected: vec![],
                 })
