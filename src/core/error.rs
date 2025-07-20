@@ -262,6 +262,34 @@ pub enum HiveError {
     #[error("Feature not available: {feature}")]
     FeatureNotAvailable { feature: String },
 
+    // File operation execution errors
+    /// File operation failed
+    #[error("File operation '{operation}' failed for {path}: {reason}")]
+    FileOperationFailed { operation: String, path: PathBuf, reason: String },
+
+    /// Operation requires user confirmation
+    #[error("Operation requires confirmation (ID: {operation_id})")]
+    OperationRequiresConfirmation { 
+        operation_id: uuid::Uuid, 
+        warnings: Vec<String>, 
+        suggestions: Vec<String> 
+    },
+
+    /// Operation blocked for safety
+    #[error("Operation blocked for safety (ID: {operation_id})")]
+    OperationBlocked { 
+        operation_id: uuid::Uuid, 
+        reasons: Vec<String> 
+    },
+
+    /// Backup operation failed
+    #[error("Backup operation failed: {0}")]
+    BackupError(String),
+
+    /// Syntax validation failed
+    #[error("Syntax validation failed for {file}: {message}")]
+    SyntaxValidationError { file: PathBuf, message: String },
+
     // Generic errors with context
     /// Internal error with context
     #[error("Internal error in {context}: {message}")]
@@ -392,6 +420,12 @@ impl HiveError {
             | Self::TrustDatabaseCorruption { .. }
             | Self::InvalidSecurityToken { .. }
             | Self::SecurityAuditFailed { .. } => ErrorCategory::Security,
+
+            Self::FileOperationFailed { .. }
+            | Self::OperationRequiresConfirmation { .. }
+            | Self::OperationBlocked { .. }
+            | Self::BackupError(..)
+            | Self::SyntaxValidationError { .. } => ErrorCategory::FileSystem,
 
             Self::TerminalTooSmall { .. }
             | Self::TuiRendering { .. }

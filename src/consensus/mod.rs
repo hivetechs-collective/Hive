@@ -35,6 +35,7 @@ pub mod rollback_executor;
 pub mod outcome_tracker;
 pub mod learning_system;
 pub mod safety_guardrails;
+pub mod file_executor;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -123,6 +124,10 @@ pub use safety_guardrails::{
     SafetyGuardrailSystem, SafetyConfig, SafetyValidator, SafetyValidationResult,
     SafetyViolation, ViolationSeverity, SafetyContext, SafetyRule, RulePattern,
     ComprehensiveSafetyResult, EnforcementAction, ExecutionRequirements, SafetyMetrics
+};
+pub use file_executor::{
+    FileOperationExecutor, ExecutorConfig, ExecutionResult, 
+    BackupInfo as FileBackupInfo, BackupManager as FileBackupManager, SyntaxValidator
 };
 
 // Re-export commonly used items
