@@ -246,7 +246,7 @@ pub enum StreamingResponse {
 }
 
 /// Consensus stage enum for TUI
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ConsensusStage {
     Generator,
     Refiner,

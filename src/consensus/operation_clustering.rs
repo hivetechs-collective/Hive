@@ -25,7 +25,7 @@ pub enum ClusterType {
     Mixed,            // Mixed operation types
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OperationCluster {
     pub id: String,
     pub cluster_type: ClusterType,

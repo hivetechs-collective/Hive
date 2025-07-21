@@ -33,7 +33,7 @@ pub struct ParsedOperations {
 }
 
 /// File operation with additional metadata from parsing
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileOperationWithMetadata {
     /// The parsed operation
     pub operation: FileOperation,
@@ -52,7 +52,7 @@ pub struct FileOperationWithMetadata {
 }
 
 /// Location of parsed content in source text
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SourceLocation {
     /// Starting character position
     pub start: usize,

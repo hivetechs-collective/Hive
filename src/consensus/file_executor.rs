@@ -25,7 +25,7 @@ use serde::{Serialize, Deserialize};
 use uuid::Uuid;
 
 /// Represents the outcome of a file operation execution
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExecutionResult {
     pub operation_id: Uuid,
     pub operation: FileOperation,
@@ -50,7 +50,7 @@ pub struct BackupInfo {
 }
 
 /// Summary of executing operations from curator response
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExecutionSummary {
     /// Total number of operations found
     pub total_operations: usize,

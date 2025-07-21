@@ -16,7 +16,7 @@ use crate::consensus::operation_analysis::{
 use crate::consensus::operation_intelligence::OperationOutcome;
 use crate::consensus::operation_history::OperationHistoryDatabase;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ExecutionDecision {
     AutoExecute {
         reason: String,
@@ -38,6 +38,44 @@ pub enum ExecutionDecision {
     },
 }
 
+impl ExecutionDecision {
+    pub fn should_execute(&self) -> bool {
+        matches!(self, ExecutionDecision::AutoExecute { .. })
+    }
+    
+    pub fn confidence(&self) -> f32 {
+        match self {
+            ExecutionDecision::AutoExecute { confidence, .. } => *confidence,
+            ExecutionDecision::RequireConfirmation { confidence, .. } => *confidence,
+            ExecutionDecision::Block { .. } => 0.0,
+        }
+    }
+    
+    pub fn primary_reasoning(&self) -> Vec<String> {
+        match self {
+            ExecutionDecision::AutoExecute { reason, .. } => vec![reason.clone()],
+            ExecutionDecision::RequireConfirmation { reason, warnings, .. } => {
+                let mut reasons = vec![reason.clone()];
+                reasons.extend(warnings.clone());
+                reasons
+            }
+            ExecutionDecision::Block { reason, critical_issues, .. } => {
+                let mut reasons = vec![reason.clone()];
+                reasons.extend(critical_issues.clone());
+                reasons
+            }
+        }
+    }
+    
+    pub fn risk_factors(&self) -> Vec<String> {
+        match self {
+            ExecutionDecision::AutoExecute { .. } => vec![],
+            ExecutionDecision::RequireConfirmation { warnings, .. } => warnings.clone(),
+            ExecutionDecision::Block { critical_issues, .. } => critical_issues.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserDecision {
     pub operation_id: String,
@@ -54,7 +92,7 @@ pub enum UserChoice {
     ModifyAndExecute { modifications: Vec<String> },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UserPreferences {
     pub risk_tolerance: f32, // 0.0 (very conservative) to 1.0 (very aggressive)
     pub auto_backup: bool,
@@ -65,14 +103,14 @@ pub struct UserPreferences {
     pub custom_rules: Vec<CustomRule>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CustomRule {
     pub pattern: String, // Regex pattern for file paths
     pub action: RuleAction,
     pub reason: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RuleAction {
     AlwaysConfirm,
     AlwaysBlock,
