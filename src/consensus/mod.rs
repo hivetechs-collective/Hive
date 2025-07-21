@@ -41,6 +41,7 @@ pub mod ai_operation_parser;
 pub mod operation_preview_generator;
 pub mod streaming_executor;
 pub mod ai_helpers;
+pub mod direct_executor;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -158,6 +159,9 @@ pub use ai_helpers::{
     QualityAnalyzer, KnowledgeSynthesizer, OperationContext as AIOperationContext,
     SimilarOperation, Pattern, PatternType, RiskAssessment as AIRiskAssessment, 
     RiskFactor, RiskFactorType
+};
+pub use direct_executor::{
+    DirectExecutionHandler, DirectExecutionBuilder, InlineOperationParser
 };
 
 // Re-export commonly used items
