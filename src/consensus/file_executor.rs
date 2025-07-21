@@ -707,6 +707,53 @@ impl FileOperationExecutor {
         // TODO: Implement actual rollback logic
         Ok(())
     }
+    
+    /// Parse operations from curator response without executing them
+    pub async fn parse_operations_from_curator_response(
+        &self,
+        curator_response: &str,
+        context: &ConsensusOperationContext,
+    ) -> Result<ParsedOperations, HiveError> {
+        // Use the existing parse_curator_response method
+        self.parse_curator_response(curator_response, context).await
+    }
+    
+    /// Analyze a single operation and get the decision without executing
+    pub async fn analyze_operation_decision(
+        &self,
+        operation: &FileOperation,
+        context: &ConsensusOperationContext,
+    ) -> Result<ExecutionDecision, HiveError> {
+        // Convert context for intelligence coordinator
+        let intelligence_context = IntelligenceOperationContext {
+            repository_path: context.repository_path.clone(),
+            git_commit: context.git_commit.clone(),
+            source_question: context.user_question.clone(),
+            related_files: Vec::new(),
+            project_metadata: HashMap::new(),
+        };
+        
+        // AI-enhanced analysis  
+        let intelligence_analysis = self.intelligence_coordinator
+            .analyze_operation(operation, &intelligence_context)
+            .await?;
+        
+        // Convert to consensus format
+        let consensus_analysis = convert_analysis(
+            intelligence_analysis,
+            vec![operation.clone()],
+            context.clone(),
+        );
+        
+        // Get decision from smart decision engine
+        self.decision_engine
+            .make_decision(&consensus_analysis)
+            .await
+            .map_err(|e| HiveError::Internal {
+                context: "decision_engine".to_string(),
+                message: format!("Failed to make decision: {}", e)
+            })
+    }
 
     /// Parse and execute operations from curator response with AI-enhanced parsing
     pub async fn parse_and_execute_curator_response(
