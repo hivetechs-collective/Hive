@@ -12,8 +12,11 @@ use crate::consensus::streaming_executor::{StreamingOperationExecutor, Execution
 use crate::consensus::stages::{GeneratorStage, ConsensusStage};
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::streaming::{StreamingCallbacks, ConsensusEvent};
-use crate::consensus::openrouter::OpenRouterClient;
-use crate::consensus::models::ModelManager;
+use crate::consensus::openrouter::{OpenRouterClient, OpenRouterRequest, OpenRouterMessage};
+use crate::consensus::models::{DynamicModelSelector, ModelSelectionCriteria};
+use crate::consensus::safety_guardrails::SafetyGuardrailSystem;
+use crate::consensus::types::{Stage, StageResult};
+use crate::core::database::DatabaseManager;
 
 /// Inline operation parser for extracting operations from streaming responses
 pub struct InlineOperationParser {
@@ -135,7 +138,9 @@ pub struct DirectExecutionHandler {
     ai_helpers: Arc<AIHelperEcosystem>,
     executor: Arc<StreamingOperationExecutor>,
     client: Arc<OpenRouterClient>,
-    model_manager: Arc<ModelManager>,
+    model_selector: Arc<DynamicModelSelector>,
+    db: Arc<DatabaseManager>,
+    safety_system: Option<Arc<SafetyGuardrailSystem>>,
 }
 
 impl DirectExecutionHandler {
@@ -144,15 +149,24 @@ impl DirectExecutionHandler {
         ai_helpers: Arc<AIHelperEcosystem>,
         executor: Arc<StreamingOperationExecutor>,
         client: Arc<OpenRouterClient>,
-        model_manager: Arc<ModelManager>,
+        model_selector: Arc<DynamicModelSelector>,
+        db: Arc<DatabaseManager>,
     ) -> Self {
         Self {
             generator,
             ai_helpers,
             executor,
             client,
-            model_manager,
+            model_selector,
+            db,
+            safety_system: None,
         }
+    }
+    
+    /// Set the safety guardrail system
+    pub fn with_safety_system(mut self, safety_system: Arc<SafetyGuardrailSystem>) -> Self {
+        self.safety_system = Some(safety_system);
+        self
     }
 
     /// Handle a request using the direct execution path
@@ -165,48 +179,74 @@ impl DirectExecutionHandler {
         // Build messages for the generator
         let messages = self.generator.build_messages(request, None, context)?;
         
-        // Get appropriate model for generation
-        let model = self.model_manager.get_model_for_stage("generator")?;
+        // Select an appropriate model for generation
+        let criteria = ModelSelectionCriteria {
+            stage: "generator".to_string(),
+            question_complexity: "simple".to_string(),
+            question_category: "coding".to_string(),
+            budget_constraints: None,
+            performance_targets: None,
+            user_preferences: None,
+            profile_template: None,
+        };
+        
+        let model_candidate = self.model_selector
+            .select_optimal_model(&self.db, &criteria, None)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("No suitable model found for direct execution"))?;
         
         // Create a parser for inline operations
         let mut parser = InlineOperationParser::new();
         
-        // Stream the response from the generator
-        let mut response_stream = self.client.create_completion_stream(
-            &messages,
-            &model.id,
-            None, // Use default temperature
-            None, // Use default max tokens
-        ).await?;
+        // Build the OpenRouter request
+        let openrouter_request = OpenRouterRequest {
+            model: model_candidate.openrouter_id.clone(),
+            messages: messages.into_iter().map(|m| OpenRouterMessage {
+                role: m.role,
+                content: m.content,
+            }).collect(),
+            temperature: Some(0.7),
+            max_tokens: Some(2048),
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stream: Some(true),
+            provider: None,
+        };
         
-        // Process the streaming response
-        while let Some(chunk) = response_stream.recv().await {
-            match chunk {
-                Ok(response) => {
-                    if let Some(content) = response.choices.first().and_then(|c| c.delta.content.as_ref()) {
-                        // Send chunk to UI
-                        callbacks.on_chunk(content).await?;
-                        
-                        // Parse for operations
-                        if let Some(operation) = parser.parse_chunk(content) {
-                            // Execute the operation inline
-                            self.executor.execute_inline(operation, None).await?;
-                        }
-                    }
-                }
-                Err(e) => {
-                    callbacks.on_error(&format!("Streaming error: {}", e)).await?;
-                    return Err(e.into());
-                }
-            }
-        }
+        // Create a custom callback wrapper
+        let parser_ref = Arc::new(tokio::sync::Mutex::new(parser));
+        let executor_ref = self.executor.clone();
+        let callbacks_ref = callbacks.clone();
+        
+        let streaming_callbacks = DirectStreamingCallbacks {
+            inner: callbacks_ref,
+            parser: parser_ref,
+            executor: executor_ref,
+            stage: Stage::Generator,
+        };
+        
+        // Stream the response from the generator
+        let response_content = self.client
+            .chat_completion_stream(
+                openrouter_request,
+                Some(Box::new(streaming_callbacks)),
+                None,
+            )
+            .await?;
         
         // Signal completion
-        callbacks.on_event(ConsensusEvent::StageComplete {
-            stage: "direct".to_string(),
-            tokens: 0, // Would need to track this
-            cost: 0.0, // Would need to calculate this
-        }).await?;
+        callbacks.on_stage_complete(Stage::Generator, &StageResult {
+            stage_id: "direct".to_string(),
+            stage_name: "Direct Execution".to_string(),
+            question: request.to_string(),
+            answer: response_content,
+            model: model_candidate.openrouter_id,
+            conversation_id: "direct".to_string(),
+            timestamp: chrono::Utc::now(),
+            usage: None, // Would need to track this
+            analytics: None, // Would need to track this
+        })?;
         
         Ok(())
     }
@@ -257,13 +297,59 @@ impl DirectExecutionHandler {
     }
 }
 
+/// Custom streaming callbacks that parse operations on the fly
+struct DirectStreamingCallbacks {
+    inner: Arc<dyn StreamingCallbacks>,
+    parser: Arc<tokio::sync::Mutex<InlineOperationParser>>,
+    executor: Arc<StreamingOperationExecutor>,
+    stage: Stage,
+}
+
+impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbacks {
+    fn on_start(&self) {
+        // Signal stage start through the consensus callbacks
+        let _ = self.inner.on_stage_start(self.stage, "direct");
+    }
+    
+    fn on_chunk(&self, chunk: String, total_content: String) {
+        // Forward to consensus callbacks
+        let _ = self.inner.on_stage_chunk(self.stage, &chunk, &total_content);
+        
+        // Parse for operations
+        let parser = self.parser.clone();
+        let executor = self.executor.clone();
+        
+        // Spawn a task to handle parsing and execution
+        tokio::spawn(async move {
+            let mut parser_guard = parser.lock().await;
+            if let Some(operation) = parser_guard.parse_chunk(&chunk) {
+                // Execute the operation inline
+                let _ = executor.execute_inline(operation, None).await;
+            }
+        });
+    }
+    
+    fn on_progress(&self, _progress: crate::consensus::openrouter::StreamingProgress) {
+        // Progress tracking would go here
+    }
+    
+    fn on_error(&self, error: &anyhow::Error) {
+        let _ = self.inner.on_error(self.stage, error);
+    }
+    
+    fn on_complete(&self, _final_content: String, _usage: Option<crate::consensus::openrouter::Usage>) {
+        // Completion is handled in the main handler
+    }
+}
+
 /// Builder for DirectExecutionHandler
 pub struct DirectExecutionBuilder {
     generator: Option<Arc<GeneratorStage>>,
     ai_helpers: Option<Arc<AIHelperEcosystem>>,
     executor: Option<Arc<StreamingOperationExecutor>>,
     client: Option<Arc<OpenRouterClient>>,
-    model_manager: Option<Arc<ModelManager>>,
+    model_selector: Option<Arc<DynamicModelSelector>>,
+    db: Option<Arc<DatabaseManager>>,
 }
 
 impl DirectExecutionBuilder {
@@ -273,7 +359,8 @@ impl DirectExecutionBuilder {
             ai_helpers: None,
             executor: None,
             client: None,
-            model_manager: None,
+            model_selector: None,
+            db: None,
         }
     }
 
@@ -297,8 +384,13 @@ impl DirectExecutionBuilder {
         self
     }
 
-    pub fn with_model_manager(mut self, manager: Arc<ModelManager>) -> Self {
-        self.model_manager = Some(manager);
+    pub fn with_model_selector(mut self, selector: Arc<DynamicModelSelector>) -> Self {
+        self.model_selector = Some(selector);
+        self
+    }
+    
+    pub fn with_database(mut self, db: Arc<DatabaseManager>) -> Self {
+        self.db = Some(db);
         self
     }
 
@@ -308,7 +400,9 @@ impl DirectExecutionBuilder {
             ai_helpers: self.ai_helpers.ok_or_else(|| anyhow::anyhow!("AI helpers required"))?,
             executor: self.executor.ok_or_else(|| anyhow::anyhow!("Executor required"))?,
             client: self.client.ok_or_else(|| anyhow::anyhow!("Client required"))?,
-            model_manager: self.model_manager.ok_or_else(|| anyhow::anyhow!("Model manager required"))?,
+            model_selector: self.model_selector.ok_or_else(|| anyhow::anyhow!("Model selector required"))?,
+            db: self.db.ok_or_else(|| anyhow::anyhow!("Database required"))?,
+            safety_system: None,
         })
     }
 }
