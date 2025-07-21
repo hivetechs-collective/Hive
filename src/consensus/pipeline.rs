@@ -219,6 +219,11 @@ impl ConsensusPipeline {
     //     self.consensus_integration = Some(integration);
     //     self
     // }
+    
+    /// Get the file executor if available
+    pub fn get_file_executor(&self) -> Option<Arc<FileOperationExecutor>> {
+        self.file_executor.clone()
+    }
 
     /// Run the full consensus pipeline
     pub async fn run(
