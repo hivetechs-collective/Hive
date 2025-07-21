@@ -19,7 +19,7 @@ use crate::consensus::types::{Message, Stage};
 
 
 /// File modification operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FileOperation {
     /// Create a new file
     Create {

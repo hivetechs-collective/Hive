@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use crate::consensus::stages::file_aware_curator::FileOperation;
 
 /// Complete analysis result from all AI helpers
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OperationAnalysis {
     /// The operations being analyzed
     pub operations: Vec<FileOperation>,
@@ -170,5 +170,66 @@ pub enum AutoAcceptMode {
 impl Default for AutoAcceptMode {
     fn default() -> Self {
         Self::Balanced
+    }
+}
+
+impl Default for OperationContext {
+    fn default() -> Self {
+        Self {
+            repository_path: PathBuf::from("."),
+            user_question: String::new(),
+            consensus_response: String::new(),
+            timestamp: SystemTime::now(),
+            session_id: String::new(),
+            git_commit: None,
+        }
+    }
+}
+
+impl Default for UnifiedScore {
+    fn default() -> Self {
+        Self {
+            confidence: 0.0,
+            risk: 0.0,
+        }
+    }
+}
+
+impl Default for OperationGroups {
+    fn default() -> Self {
+        Self {
+            create_operations: Vec::new(),
+            update_operations: Vec::new(),
+            delete_operations: Vec::new(),
+            move_operations: Vec::new(),
+        }
+    }
+}
+
+impl Default for ComponentScores {
+    fn default() -> Self {
+        Self {
+            knowledge_indexer: None,
+            context_retriever: None,
+            pattern_recognizer: None,
+            quality_analyzer: None,
+            knowledge_synthesizer: None,
+        }
+    }
+}
+
+impl Default for ScoringFactors {
+    fn default() -> Self {
+        Self {
+            historical_success: None,
+            pattern_safety: None,
+            conflict_probability: None,
+            rollback_complexity: None,
+            user_trust: 0.8,
+            similar_operations_count: None,
+            dangerous_pattern_count: None,
+            anti_pattern_count: None,
+            rollback_possible: None,
+        }
     }
 }

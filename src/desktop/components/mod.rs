@@ -36,3 +36,19 @@ pub mod test_simple;
 // pub use progress::ProgressBar;
 // pub use spinner::LoadingSpinner;
 pub use test_simple::SimpleTest;
+
+// Common components
+pub mod common;
+
+// New AI-Enhanced Auto-Accept components
+pub mod auto_accept_settings;
+pub mod operation_preview;
+pub mod approval_interface;
+pub mod progress_indicators;
+pub mod notifications;
+
+pub use auto_accept_settings::AutoAcceptSettings;
+pub use operation_preview::OperationPreview;
+pub use approval_interface::{ApprovalInterface, ApprovalDecision};
+pub use progress_indicators::{ProgressIndicators, OperationProgress};
+pub use notifications::{NotificationSystem, Notification, NotificationType};

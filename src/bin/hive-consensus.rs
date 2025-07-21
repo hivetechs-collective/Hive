@@ -986,23 +986,33 @@ fn App() -> Element {
     // Analytics state
     let mut analytics_data = use_signal(|| AnalyticsData::default());
 
+    // Track the last analytics trigger value to prevent infinite loops
+    let mut last_analytics_trigger = use_signal(|| 0u32);
+    
     // Analytics refresh effect - triggers when analytics_refresh_trigger changes
     use_effect({
         let mut analytics_data = analytics_data.clone();
         let app_state = app_state.clone();
+        let mut last_analytics_trigger = last_analytics_trigger.clone();
         move || {
-            let trigger = app_state.read().analytics_refresh_trigger;
-            spawn(async move {
-                match fetch_analytics_data().await {
-                    Ok(data) => {
-                        *analytics_data.write() = data;
-                        tracing::info!("Analytics data refreshed successfully");
+            let current_trigger = app_state.read().analytics_refresh_trigger;
+            let last_trigger = *last_analytics_trigger.read();
+            
+            // Only fetch if the trigger actually changed
+            if current_trigger != last_trigger {
+                *last_analytics_trigger.write() = current_trigger;
+                spawn(async move {
+                    match fetch_analytics_data().await {
+                        Ok(data) => {
+                            *analytics_data.write() = data;
+                            tracing::info!("Analytics data refreshed successfully (trigger: {})", current_trigger);
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to fetch analytics data: {}", e);
+                        }
                     }
-                    Err(e) => {
-                        tracing::error!("Failed to fetch analytics data: {}", e);
-                    }
-                }
-            });
+                });
+            }
         }
     });
 
@@ -1500,61 +1510,75 @@ fn App() -> Element {
         }
     });
 
-    // Load initial directory
-    {
+    // Track if initial directory has been loaded
+    let mut initial_dir_loaded = use_signal(|| false);
+    
+    // Load initial directory - only run once when current_dir changes from None to Some
+    use_effect({
         let mut file_tree = file_tree.clone();
-        if let Some(current_dir_path) = current_dir.read().clone() {
-            let expanded_map = expanded_dirs.read().clone();
-            let mut app_state_for_project = app_state.clone();
-
-            spawn(async move {
-            // Create root folder item
-            let root_name = current_dir_path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("Root")
-                .to_string();
-
-            match file_system::load_directory_tree(&current_dir_path, &expanded_map, false).await {
-                Ok(files) => {
-                    // Create root folder item with children
-                    let root_item = FileItem {
-                        path: current_dir_path.clone(),
-                        name: root_name.clone(),
-                        is_directory: true,
-                        is_expanded: true, // Root is expanded by default
-                        children: files,
-                        file_type: FileType::Directory,
-                        git_status: None,
-                        size: None,
-                        modified: None,
-                        depth: 0,
-                    };
-
-                    file_tree.write().clear();
-                    file_tree.write().push(root_item);
-                    
-                    // Update AppState with current project information for repository context
-                    let project_info = hive_ai::desktop::state::ProjectInfo {
-                        name: root_name,
-                        path: current_dir_path.clone(),
-                        root_path: current_dir_path.clone(),
-                        language: None, // Will be detected by repository analyzer
-                        git_status: hive_ai::desktop::state::GitStatus::NotRepository,
-                        git_branch: None,
-                        file_count: 0, // Will be updated later
-                    };
-                    
-                    app_state_for_project.write().current_project = Some(project_info);
-                    tracing::info!("Initialized current_project with root path: {}", current_dir_path.display());
+        let current_dir = current_dir.clone();
+        let expanded_dirs = expanded_dirs.clone();
+        let mut app_state_for_project = app_state.clone();
+        let mut initial_dir_loaded = initial_dir_loaded.clone();
+        
+        move || {
+            // Only load if we have a directory and haven't loaded yet
+            if let Some(current_dir_path) = current_dir.read().clone() {
+                if *initial_dir_loaded.read() {
+                    return; // Already loaded
                 }
-                Err(e) => {
-                    eprintln!("Error loading directory: {}", e);
-                }
+                *initial_dir_loaded.write() = true;
+                let expanded_map = expanded_dirs.read().clone();
+                
+                spawn(async move {
+                    // Create root folder item
+                    let root_name = current_dir_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("Root")
+                        .to_string();
+
+                    match file_system::load_directory_tree(&current_dir_path, &expanded_map, false).await {
+                        Ok(files) => {
+                            // Create root folder item with children
+                            let root_item = FileItem {
+                                path: current_dir_path.clone(),
+                                name: root_name.clone(),
+                                is_directory: true,
+                                is_expanded: true, // Root is expanded by default
+                                children: files,
+                                file_type: FileType::Directory,
+                                git_status: None,
+                                size: None,
+                                modified: None,
+                                depth: 0,
+                            };
+
+                            file_tree.write().clear();
+                            file_tree.write().push(root_item);
+                            
+                            // Update AppState with current project information for repository context
+                            let project_info = hive_ai::desktop::state::ProjectInfo {
+                                name: root_name,
+                                path: current_dir_path.clone(),
+                                root_path: current_dir_path.clone(),
+                                language: None, // Will be detected by repository analyzer
+                                git_status: hive_ai::desktop::state::GitStatus::NotRepository,
+                                git_branch: None,
+                                file_count: 0, // Will be updated later
+                            };
+                            
+                            app_state_for_project.write().current_project = Some(project_info);
+                            tracing::info!("Initialized current_project with root path: {}", current_dir_path.display());
+                        }
+                        Err(e) => {
+                            eprintln!("Error loading directory: {}", e);
+                        }
+                    }
+                });
             }
-            });
         }
-    }
+    });
 
     // File selection is handled directly in the onclick handler
 
@@ -1564,15 +1588,16 @@ fn App() -> Element {
     // Auto-scroll response area when streaming content changes
     let mut previous_content_length = use_signal(|| 0usize);
 
+    // Monitor streaming content changes
     use_effect({
         let app_state = app_state.clone();
-        let mut previous_content_length = previous_content_length.clone();
         let should_auto_scroll = should_auto_scroll.clone();
         move || {
             let current_length = app_state.read().consensus.streaming_content.len();
-            if current_length > *previous_content_length.read() && *should_auto_scroll.read() {
-                *previous_content_length.write() = current_length;
-
+            let previous_length = *previous_content_length.read();
+            
+            // Check if content has grown
+            if current_length > previous_length && *should_auto_scroll.read() {
                 // Use eval to scroll to bottom
                 let eval = eval(
                     r#"
@@ -1587,6 +1612,16 @@ fn App() -> Element {
                     let _ = eval.await;
                 });
             }
+        }
+    });
+    
+    // Update previous content length in a separate effect to avoid circular dependency
+    use_effect({
+        let app_state = app_state.clone();
+        let mut previous_content_length = previous_content_length.clone();
+        move || {
+            let current_length = app_state.read().consensus.streaming_content.len();
+            previous_content_length.set(current_length);
         }
     });
 

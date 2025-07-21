@@ -47,6 +47,82 @@ impl Theme {
     }
 }
 
+/// Theme colors for UI components
+#[derive(Debug, Clone, PartialEq)]
+pub struct ThemeColors {
+    pub background: String,
+    pub background_secondary: String,
+    pub text: String,
+    pub text_secondary: String,
+    pub primary: String,
+    pub success: String,
+    pub warning: String,
+    pub error: String,
+    pub info: String,
+    pub border: String,
+}
+
+impl Default for ThemeColors {
+    fn default() -> Self {
+        Self::dark_theme()
+    }
+}
+
+impl ThemeColors {
+    pub fn dark_theme() -> Self {
+        Self {
+            background: "#1e1e1e".to_string(),
+            background_secondary: "#252526".to_string(),
+            text: "#cccccc".to_string(),
+            text_secondary: "#999999".to_string(),
+            primary: "#0e639c".to_string(),
+            success: "#73c991".to_string(),
+            warning: "#e9a23b".to_string(),
+            error: "#f14c4c".to_string(),
+            info: "#3794ff".to_string(),
+            border: "#474747".to_string(),
+        }
+    }
+    
+    pub fn light_theme() -> Self {
+        Self {
+            background: "#ffffff".to_string(),
+            background_secondary: "#f3f3f3".to_string(),
+            text: "#333333".to_string(),
+            text_secondary: "#666666".to_string(),
+            primary: "#0066cc".to_string(),
+            success: "#00a65a".to_string(),
+            warning: "#f39c12".to_string(),
+            error: "#dd4b39".to_string(),
+            info: "#3c8dbc".to_string(),
+            border: "#d4d4d4".to_string(),
+        }
+    }
+    
+    pub fn high_contrast_theme() -> Self {
+        Self {
+            background: "#000000".to_string(),
+            background_secondary: "#2d2d30".to_string(),
+            text: "#ffffff".to_string(),
+            text_secondary: "#cccccc".to_string(),
+            primary: "#00bcd4".to_string(),
+            success: "#00e676".to_string(),
+            warning: "#ffea00".to_string(),
+            error: "#ff5252".to_string(),
+            info: "#448aff".to_string(),
+            border: "#6fc3df".to_string(),
+        }
+    }
+    
+    pub fn from_theme(theme: Theme) -> Self {
+        match theme {
+            Theme::Dark => Self::dark_theme(),
+            Theme::Light => Self::light_theme(),
+            Theme::HighContrast => Self::high_contrast_theme(),
+        }
+    }
+}
+
 /// Theme context provider
 #[component]
 pub fn ThemeProvider(children: Element) -> Element {

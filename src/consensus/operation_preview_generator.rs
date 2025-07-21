@@ -73,7 +73,7 @@ pub struct OperationPreviewSet {
 }
 
 /// Preview of a single file operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OperationPreview {
     /// The operation being previewed
     pub operation: FileOperation,
@@ -98,7 +98,7 @@ pub struct OperationPreview {
 }
 
 /// State of a file at a point in time
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FileState {
     /// File path
     pub path: PathBuf,
@@ -123,7 +123,7 @@ pub struct FileState {
 }
 
 /// Visual diff representation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DiffView {
     /// Unified diff string
     pub unified_diff: Option<String>,
@@ -139,7 +139,7 @@ pub struct DiffView {
 }
 
 /// A chunk of diff showing changes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DiffChunk {
     /// Starting line in old file
     pub old_start: usize,
@@ -161,7 +161,7 @@ pub struct DiffChunk {
 }
 
 /// A single line in a diff
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DiffLine {
     /// Line number in old file (if applicable)
     pub old_line_no: Option<usize>,
@@ -189,7 +189,7 @@ pub enum LineChangeType {
 }
 
 /// Syntax highlighted diff HTML
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DiffHtml {
     /// Full HTML with styling
     pub full_html: String,
@@ -202,7 +202,7 @@ pub struct DiffHtml {
 }
 
 /// Statistics about line changes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LineChangeStats {
     pub lines_added: usize,
     pub lines_removed: usize,
@@ -211,7 +211,7 @@ pub struct LineChangeStats {
 }
 
 /// Impact analysis of an operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OperationImpact {
     /// Risk level of this operation
     pub risk_level: RiskLevel,
@@ -252,7 +252,7 @@ pub enum ComplexityLevel {
 }
 
 /// Preview metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PreviewMetadata {
     /// When preview was generated
     pub generated_at: std::time::SystemTime,
