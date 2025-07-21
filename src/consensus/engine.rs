@@ -251,6 +251,9 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
+        
+        // Configure mode detection for Claude Code-style execution
+        pipeline = pipeline.with_mode_detection().await?;
 
         // Set codebase intelligence if available
         if let Some(ci) = self.codebase_intelligence.read().await.as_ref() {
@@ -371,6 +374,9 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
+        
+        // Configure mode detection for Claude Code-style execution
+        pipeline = pipeline.with_mode_detection().await?;
 
         // Set codebase intelligence if available
         if let Some(ci) = self.codebase_intelligence.read().await.as_ref() {
@@ -498,6 +504,9 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
+        
+        // Configure mode detection for Claude Code-style execution
+        pipeline = pipeline.with_mode_detection().await?;
 
         // Set codebase intelligence if available
         if let Some(ci) = self.codebase_intelligence.read().await.as_ref() {
