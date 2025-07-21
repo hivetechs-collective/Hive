@@ -452,7 +452,7 @@ impl AIOperationParser {
                         source_location: SourceLocation {
                             start,
                             end: cap.get(0).map_or(0, |m| m.end()),
-                            line: text[..start].matches('\n').count() + 1,
+                            line: text.chars().take(start).filter(|&c| c == '\n').count() + 1,
                         },
                     });
                 }
@@ -464,6 +464,16 @@ impl AIOperationParser {
     
     /// Find code block associated with a natural language operation
     fn find_associated_code_block(&self, text: &str, start_pos: usize) -> Option<String> {
+        // Ensure we start at a valid character boundary
+        let start_pos = text.char_indices()
+            .find(|(idx, _)| *idx >= start_pos)
+            .map(|(idx, _)| idx)
+            .unwrap_or(text.len());
+            
+        if start_pos >= text.len() {
+            return None;
+        }
+        
         // Look for the next code block after the operation mention
         let remaining_text = &text[start_pos..];
         let code_block_regex = Regex::new(r"```[^\n]*\n([\s\S]*?)```").unwrap();
@@ -480,7 +490,29 @@ impl AIOperationParser {
     
     /// Extract rationale from text before an operation
     fn extract_rationale(&self, text: &str, operation_start: usize) -> Option<String> {
+        // Ensure we don't slice in the middle of a UTF-8 character
         let context_start = operation_start.saturating_sub(300);
+        
+        // Find the nearest character boundary
+        let context_start = if context_start > 0 {
+            text.char_indices()
+                .rev()
+                .find(|(idx, _)| *idx <= context_start)
+                .map(|(idx, _)| idx)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        
+        let operation_start = text.char_indices()
+            .find(|(idx, _)| *idx >= operation_start)
+            .map(|(idx, _)| idx)
+            .unwrap_or(text.len());
+            
+        if context_start >= operation_start {
+            return None;
+        }
+        
         let context = &text[context_start..operation_start];
         
         // Look for explanation patterns
