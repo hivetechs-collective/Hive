@@ -957,20 +957,26 @@ impl DesktopConsensusManager {
                 auto_backup: true,
                 require_confirmation_for_deletions: true,
                 require_confirmation_for_mass_updates: true,
-                mass_update_threshold: 5,
-                preferred_language: "en".to_string(),
-                timezone: "UTC".to_string(),
+                trust_ai_suggestions: 0.7,
+                preferred_mode: crate::consensus::operation_analysis::AutoAcceptMode::Conservative,
+                custom_rules: vec![],
             };
             
-            // Create decision engine
+            // Create decision engine (without history database for now)
             let decision_engine = SmartDecisionEngine::new(
                 crate::consensus::operation_analysis::AutoAcceptMode::Conservative,
                 user_prefs,
-                ai_helpers.clone(),
+                None, // No history database for manual execution
             );
             
-            // Create intelligence coordinator
-            let intelligence_coordinator = OperationIntelligenceCoordinator::new(ai_helpers);
+            // Create intelligence coordinator with individual AI helper components
+            let intelligence_coordinator = OperationIntelligenceCoordinator::new(
+                ai_helpers.knowledge_indexer.clone(),
+                ai_helpers.context_retriever.clone(),
+                ai_helpers.pattern_recognizer.clone(),
+                ai_helpers.quality_analyzer.clone(),
+                ai_helpers.knowledge_synthesizer.clone(),
+            );
             
             // Create executor config
             let executor_config = ExecutorConfig {

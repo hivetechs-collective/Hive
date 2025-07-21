@@ -3200,17 +3200,20 @@ fn App() -> Element {
                             tracing::info!("Executing {} approved operations", approved_operations.len());
                             
                             // Execute the operations asynchronously
-                            let consensus_manager_clone = consensus_manager.clone();
-                            spawn(async move {
-                                match consensus_manager_clone.execute_approved_operations(approved_operations).await {
-                                    Ok(()) => {
-                                        tracing::info!("✅ Successfully executed approved operations");
+                            if let Some(manager) = consensus_manager.read().clone() {
+                                spawn(async move {
+                                    match manager.execute_approved_operations(approved_operations).await {
+                                        Ok(()) => {
+                                            tracing::info!("✅ Successfully executed approved operations");
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("❌ Failed to execute approved operations: {}", e);
+                                        }
                                     }
-                                    Err(e) => {
-                                        tracing::error!("❌ Failed to execute approved operations: {}", e);
-                                    }
-                                }
-                            });
+                                });
+                            } else {
+                                tracing::error!("Consensus manager not available");
+                            }
                         }
                     }),
                     on_reject: EventHandler::new({
