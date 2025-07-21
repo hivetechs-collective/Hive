@@ -49,6 +49,18 @@ Hive's architecture consists of four main layers:
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed technical documentation.
 
+## Development Guidelines
+
+### 🚨 MANDATORY: Pre-Task Understanding Protocol
+
+**Before starting ANY development task**, developers MUST complete the [PRE-TASK_CHECKLIST.md](PRE-TASK_CHECKLIST.md). This ensures:
+- Complete understanding of existing code
+- Proper API usage
+- Consistent code style
+- Minimal compilation errors
+
+⚠️ **Skipping this checklist leads to bugs, rework, and wasted time.**
+
 ## Quick Start
 
 ### Installation
