@@ -2,15 +2,18 @@
 
 ## 📋 Overview
 
-This document outlines the complete implementation of an AI-enhanced auto-accept edits feature for Hive Consensus, inspired by Claude Code but powered by our advanced AI helper ecosystem. The system will intelligently analyze, risk-assess, and execute file operations suggested by the Curator stage.
+This document outlines the complete implementation of an AI-enhanced auto-accept edits feature for Hive Consensus, creating a true Claude Code-like experience where the AI can analyze, plan, execute, test, and iterate on code changes seamlessly within the conversation flow. The system leverages our advanced AI helper ecosystem for intelligent decision-making while supporting both direct execution (fast iteration) and full consensus analysis (complex decisions).
 
 ## 🎯 Goals
 
+- **Claude Code Experience**: Seamless inline execution within conversation flow
+- **Dual Mode Operation**: Fast direct mode for iteration, full consensus for complex analysis
 - **Intelligent Automation**: Auto-execute safe operations with high confidence
 - **Smart Risk Assessment**: Use AI helpers to evaluate operation safety
 - **Learning System**: Improve accuracy over time through outcome tracking
 - **User Control**: Flexible modes from conservative to aggressive automation
 - **Safety First**: Comprehensive rollback and validation mechanisms
+- **Progressive Execution**: Operations execute as they're generated with real-time feedback
 
 ## 🧠 AI Helper Integration Architecture
 
@@ -206,41 +209,119 @@ impl AIEnhancedParser {
 
 ## 🔄 User Experience Flows
 
-### Auto-Accept Mode (⏵⏵)
+### Auto-Accept Mode (⏵⏵) - Claude Code Style
 
-#### High Confidence Operations
+#### Inline Execution Flow
 ```
-Curator: "I'll create a new test file and update the authentication module."
+You: Create a simple authentication system with tests
 
-AI Analysis:
-✅ Risk Score: 8/100 (Low)
-✅ Confidence: 95% (23 similar operations succeeded)
-✅ Pattern: Standard test creation + module update
-✅ Conflicts: None detected
+Consensus: I'll help you create an authentication system. Let me start by setting up the basic structure:
 
-Auto-executing 2 operations...
-📁 Creating tests/auth_test.rs
-✏️  Updating src/auth.rs (adding validation)
-✅ All operations completed successfully
+Creating `src/auth/mod.rs`:
+```rust
+pub mod user;
+pub mod login;
+pub mod session;
+
+pub use user::User;
+pub use session::Session;
+```
+✅ Created src/auth/mod.rs
+
+Now let me create the user model. Creating `src/auth/user.rs`:
+```rust
+use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Utc};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: u64,
+    pub email: String,
+    pub username: String,
+    pub password_hash: String,
+    pub created_at: DateTime<Utc>,
+}
+
+impl User {
+    pub fn new(email: String, username: String, password_hash: String) -> Self {
+        Self {
+            id: 0, // Will be set by database
+            email,
+            username,
+            password_hash,
+            created_at: Utc::now(),
+        }
+    }
+}
+```
+✅ Created src/auth/user.rs
+
+Great! Now let me add tests. Creating `tests/auth_test.rs`:
+```rust
+use hive::auth::{User, Session};
+
+#[test]
+fn test_user_creation() {
+    let user = User::new(
+        "test@example.com".to_string(),
+        "testuser".to_string(),
+        "hashed_password".to_string(),
+    );
+    assert_eq!(user.email, "test@example.com");
+}
+```
+✅ Created tests/auth_test.rs
+
+Let me run the tests to make sure everything is working:
+```bash
+cargo test auth
+```
+✅ All tests passed (1/1)
+
+Excellent! The basic authentication structure is in place. Would you like me to add login functionality next?
 ```
 
-#### Medium Risk Operations  
+#### Auto-Accept Confirm Mode (⏸) - Inline Confirmation
 ```
-Curator: "I'll refactor the database connection logic."
+You: Refactor the database connection to use a connection pool
 
-AI Analysis:
-⚠️  Risk Score: 45/100 (Medium)
-⚠️  Confidence: 72% (Mixed results in similar contexts)
-🔍 Pattern: Database refactoring (historically complex)
-⚠️  Impact: Affects 12 dependent modules
+Consensus: I'll help you refactor the database connection to use a connection pool. This is a significant change that affects multiple modules.
 
-Confirm before proceeding? 
-[View Details] [Execute] [Skip]
+⚠️ **Confirmation Required** (Medium Risk Operation)
+- Risk Score: 45/100
+- Affects 12 dependent modules
+- Recommended: Create backup first
 
-Details: Pattern Recognizer found 3 similar refactorings:
-- 2 succeeded with minor fixes needed
-- 1 required significant rollback
-Suggested: Execute with backup creation
+Here's what I'll do:
+
+1. Update `src/db/connection.rs` to use r2d2 connection pool:
+```rust
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+
+pub struct DatabasePool {
+    pool: Pool<SqliteConnectionManager>,
+}
+
+impl DatabasePool {
+    pub fn new(database_url: &str) -> Result<Self> {
+        let manager = SqliteConnectionManager::file(database_url);
+        let pool = r2d2::Pool::new(manager)?;
+        Ok(Self { pool })
+    }
+    
+    pub fn get_connection(&self) -> Result<PooledConnection> {
+        Ok(self.pool.get()?)
+    }
+}
+```
+
+2. Update all 12 modules that use direct connections
+3. Add connection pool configuration to settings
+
+**[Execute Refactoring]** | **[Show Full Plan]** | **[Skip]**
+
+> Press Enter to execute, 's' to skip, or 'p' to see the full plan
 ```
 
 #### High Risk Operations
@@ -261,20 +342,64 @@ Suggested alternatives:
 3. Create comprehensive backup first
 ```
 
-### Plan Mode (⏸)
-
+### Plan Mode (💭) - Discussion Only
 ```
-Curator: "Here's my analysis of the authentication refactoring needed..."
+You: How should I approach adding OAuth to my authentication system?
 
-💭 Plan Mode Active - No operations will be executed
+Consensus: I'll analyze your authentication system and create a plan for adding OAuth support.
 
-AI Analysis provides intelligence about suggested changes:
-📊 Risk Assessment: Operations would be medium risk
-🎯 Success Prediction: 78% based on similar patterns  
-🔍 Best Practices: Pattern Recognizer suggests 3 improvement approaches
-📋 Execution Plan: Knowledge Synthesizer outlines 5-step approach
+💭 **Plan Mode** - No operations will be executed automatically
 
-User can review and selectively execute operations manually.
+Based on my analysis of your current authentication system:
+
+## OAuth Integration Plan
+
+### 1. Current State Analysis
+Your authentication system uses:
+- Local user accounts with email/password
+- Session-based authentication
+- SQLite for user storage
+
+### 2. Recommended Approach
+
+**Step 1: Add OAuth Provider Configuration**
+```rust
+// src/auth/oauth.rs
+pub struct OAuthProvider {
+    pub name: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub auth_url: String,
+    pub token_url: String,
+}
+```
+
+**Step 2: Extend User Model**
+- Add `oauth_provider` and `oauth_id` fields
+- Support linking OAuth to existing accounts
+
+**Step 3: Implement OAuth Flow**
+- Authorization redirect endpoint
+- Callback handler
+- Token exchange
+- User creation/linking
+
+**Step 4: Add Provider-Specific Handlers**
+- GitHub OAuth
+- Google OAuth
+- Custom providers
+
+### 3. Risk Assessment
+- **Complexity**: Medium-High
+- **Breaking Changes**: None if done additively
+- **Security Considerations**: Requires careful token handling
+
+### 4. Suggested Libraries
+- `oauth2` crate for OAuth flow
+- `reqwest` for HTTP requests
+- `jsonwebtoken` for JWT handling
+
+Would you like me to switch to auto-accept mode and start implementing this plan?
 ```
 
 ## 🛡️ Safety Mechanisms
@@ -312,25 +437,38 @@ pub struct OperationTracker {
 
 ## 🎨 UI Design
 
-### Control Bar Implementation
+### Control Bar Implementation - Claude Code Style
 ```rust
-// In hive-consensus.rs, add below input container
+// In hive-consensus.rs, below chat input
 div {
-    class: "auto-accept-control-bar",
-    style: "background: #1a1f23; border-top: 1px solid #2d3336; padding: 8px 24px; display: flex; align-items: center; justify-content: space-between;",
+    style: "margin-top: 8px; display: flex; align-items: center; gap: 8px; color: #858585; font-size: 12px;",
     
-    // Left side: Mode toggle
-    div {
-        style: "display: flex; align-items: center; gap: 12px;",
-        button {
-            style: auto_accept_button_style(*auto_accept_mode.read()),
-            onclick: toggle_auto_accept_mode,
-            {auto_accept_mode_text(*auto_accept_mode.read())}
+    // Mode indicator and toggle
+    span {
+        style: "font-size: 14px; color: #FFC107;",
+        if app_state.read().auto_accept { "⏵⏵" } else { "⏸" }
+    }
+    
+    button {
+        style: if app_state.read().auto_accept {
+            "background: none; border: none; color: #FFC107; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;"
+        } else {
+            "background: none; border: none; color: #858585; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
+        },
+        onclick: move |_| {
+            let current = app_state.read().auto_accept;
+            app_state.write().auto_accept = !current;
+        },
+        if app_state.read().auto_accept {
+            "auto-accept edits on"
+        } else {
+            "auto-accept edits off"
         }
-        span {
-            style: "color: #808080; font-size: 12px;",
-            "(shift+tab to cycle)"
-        }
+    }
+    
+    span {
+        style: "color: #606060; margin-left: 4px;",
+        "(shift+tab to cycle)"
     }
     
     // Right side: AI insights
@@ -362,13 +500,13 @@ div {
 }
 ```
 
-### Operation Confirmation Dialog
+### Inline Operation Display (No Modal)
 ```rust
-// Modal for operation confirmation
-if show_operation_confirmation.read() {
+// Operations display inline in the response stream
+if let Some(current_operation) = current_streaming_operation.read() {
     div {
-        class: "operation-modal-overlay",
-        style: "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;",
+        class: "inline-operation",
+        style: "margin: 12px 0; padding: 12px; background: #2d3336; border-left: 3px solid {get_operation_color(&current_operation)}; border-radius: 4px;",
         
         div {
             class: "operation-modal",
@@ -435,9 +573,74 @@ if show_operation_confirmation.read() {
 }
 ```
 
+## 🏗️ Enhanced Architecture
+
+### Streaming Operation Executor
+```rust
+pub struct StreamingOperationExecutor {
+    file_executor: Arc<FileOperationExecutor>,
+    ai_helpers: Arc<AIHelperEcosystem>,
+    auto_accept_mode: Arc<AtomicBool>,
+}
+
+impl StreamingOperationExecutor {
+    pub async fn execute_inline(
+        &self,
+        operation: FileOperation,
+        stream_callback: &dyn Fn(ExecutionStatus),
+    ) -> Result<()> {
+        if self.auto_accept_mode.load(Ordering::Relaxed) {
+            // Execute immediately with status updates
+            stream_callback(ExecutionStatus::Executing);
+            let result = self.file_executor.execute(operation).await?;
+            stream_callback(ExecutionStatus::Completed(result));
+        } else {
+            // Show inline confirmation
+            stream_callback(ExecutionStatus::WaitingConfirmation);
+        }
+        Ok(())
+    }
+}
+```
+
+### Direct Execution Handler
+```rust
+pub struct DirectExecutionHandler {
+    generator: Arc<GeneratorStage>,
+    ai_helpers: Arc<AIHelperEcosystem>,
+    executor: Arc<StreamingOperationExecutor>,
+}
+
+impl DirectExecutionHandler {
+    pub async fn handle_request(
+        &self,
+        request: &str,
+        callbacks: Arc<dyn StreamingCallbacks>,
+    ) -> Result<()> {
+        // Fast path for simple operations
+        let response = self.generator.generate_direct(request).await?;
+        
+        // Parse and execute operations inline
+        let parser = InlineOperationParser::new();
+        
+        for chunk in response.chunks() {
+            callbacks.on_chunk(chunk);
+            
+            if let Some(operation) = parser.parse_chunk(chunk) {
+                self.executor.execute_inline(operation, |status| {
+                    callbacks.on_operation_status(status);
+                }).await?;
+            }
+        }
+        
+        Ok(())
+    }
+}
+```
+
 ## 📋 Implementation Phases
 
-### Phase 1: Foundation & AI Helper Integration (Week 1-2)
+### Phase 1: Foundation & AI Helper Integration (Week 1-2) ✅ COMPLETED
 **Goal**: Enhance existing AI helpers with file operation capabilities
 
 #### Tasks:
@@ -501,7 +704,7 @@ if show_operation_confirmation.read() {
 - Operation history tracking stores and retrieves data correctly
 - Integration tests pass for coordinated AI helper analysis
 
-### Phase 2: Smart Decision Engine (Week 3)
+### Phase 2: Smart Decision Engine (Week 3) ✅ COMPLETED
 **Goal**: Build intelligent decision-making system for auto-accept
 
 #### Tasks:
@@ -546,7 +749,7 @@ if show_operation_confirmation.read() {
 - User feedback provides clear, actionable information
 - Confidence scores correlate with actual operation success
 
-### Phase 3: Advanced File Operations (Week 4)
+### Phase 3: Advanced File Operations (Week 4) ✅ COMPLETED
 **Goal**: Enhanced parsing and validation with AI integration
 
 #### Tasks:
@@ -591,8 +794,61 @@ if show_operation_confirmation.read() {
 - Preview system shows accurate before/after states
 - Dependency graphs enable optimal execution ordering
 
-### Phase 4: UI Integration (Week 5)
+### Phase 4: UI Integration (Week 5) ✅ COMPLETED
 **Goal**: User interface for auto-accept controls and feedback
+
+### Phase 4.5: Claude Code Integration (Week 5.5) 🚧 IN PROGRESS
+**Goal**: Transform to inline execution model like Claude Code
+
+#### Tasks:
+23. **Streaming Operation Executor**
+    - Build executor that runs operations during response streaming
+    - Add real-time status updates inline
+    - Implement progressive execution
+    - **QA**: Test streaming execution reliability
+    - **Commit**: `feat(claude-code): streaming operation executor`
+
+24. **Curator Stage Enhancement**
+    - Modify prompts for inline operation format
+    - Add Claude Code-style response patterns
+    - Ensure operations are clearly marked
+    - **QA**: Test curator output format
+    - **Commit**: `feat(curator): claude code style inline operations`
+
+25. **Direct Execution Path**
+    - Create fast path for simple operations
+    - Bypass full consensus for iterations
+    - Maintain quality with AI helpers
+    - **QA**: Test direct vs consensus paths
+    - **Commit**: `feat(direct): fast execution path for simple ops`
+
+26. **Iteration Handler**
+    - Support multi-step development workflows
+    - Track context between iterations
+    - Generate next steps automatically
+    - **QA**: Test iteration continuity
+    - **Commit**: `feat(iteration): multi-step workflow support`
+
+27. **Smart Mode Detection**
+    - Automatically choose execution mode
+    - Analyze request complexity
+    - Switch modes dynamically
+    - **QA**: Test mode detection accuracy
+    - **Commit**: `feat(modes): smart execution mode detection`
+
+28. **Inline UI Updates**
+    - Remove popup dialogs
+    - Show operations inline in responses
+    - Add inline confirmation controls
+    - **QA**: Test UI responsiveness
+    - **Commit**: `feat(ui): inline operation display`
+
+**Phase 4.5 Verification:**
+- Operations execute during response streaming
+- No popup dialogs interrupt the flow
+- Simple operations use direct path
+- Complex operations use full consensus
+- Iteration workflows feel natural
 
 #### Tasks:
 19. **Control Bar Design & Implementation**
@@ -761,6 +1017,8 @@ auto_accept_edits = true
 ai_enhanced_validation = true
 operation_learning = true
 safety_guardrails = true
+claude_code_mode = true  # Enable inline execution
+direct_execution = true  # Enable fast path
 ```
 
 ### Gradual Rollout
@@ -813,4 +1071,4 @@ safety_guardrails = true
 
 ---
 
-This implementation will create the most advanced AI-powered coding assistant available, combining intelligent automation with comprehensive safety mechanisms and continuous learning capabilities.
+This implementation will create a true Claude Code experience in Hive Consensus, combining the power of our 4-stage consensus pipeline with the seamless inline execution that makes Claude Code so effective. The system intelligently chooses between fast direct execution for simple tasks and full consensus analysis for complex decisions, all while maintaining comprehensive safety mechanisms and continuous learning capabilities.
