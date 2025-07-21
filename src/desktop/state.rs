@@ -75,6 +75,12 @@ pub struct AppState {
 
     /// Trigger for analytics refresh after consensus completion
     pub analytics_refresh_trigger: u32,
+    
+    /// Pending file operations requiring user confirmation
+    pub pending_operations: Option<Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>>,
+    
+    /// Show operation confirmation dialog
+    pub show_operation_confirmation_dialog: bool,
 }
 
 impl Default for AppState {
@@ -105,6 +111,8 @@ impl AppState {
             trial_days_remaining: None,
             subscription_refresh_trigger: 0,
             analytics_refresh_trigger: 0,
+            pending_operations: None,
+            show_operation_confirmation_dialog: false,
         }
     }
 

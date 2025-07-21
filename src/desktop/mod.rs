@@ -34,7 +34,7 @@ pub mod code_editor;
 pub use app::App;
 
 // Re-export commonly used styling components
-pub use dialogs::{AboutDialog, CommandPalette, WelcomeTab, DIALOG_STYLES};
+pub use dialogs::OperationConfirmationDialog;
 pub use menu_bar::{MenuAction, MenuBar};
 pub use styles::components::{
     ButtonVariant, FileTreeItem, IconSize, PanelStyle, StatusBarItem, VsCodeButton, VsCodePanel,
