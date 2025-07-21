@@ -859,6 +859,7 @@ use hive_ai::desktop::menu_bar::{MenuAction, MenuBar};
 use hive_ai::desktop::state::{FileItem, FileType};
 use hive_ai::desktop::code_editor::editor::CodeEditorComponent;
 use hive_ai::desktop::code_editor::renderer::EDITOR_STYLES;
+use hive_ai::desktop::components::{ResponseSection, OperationStatus, parse_operations_from_content};
 
 // Simple markdown to HTML converter
 mod markdown {
@@ -2535,10 +2536,20 @@ fn App() -> Element {
                             });
                         },
                         if !app_state.read().consensus.streaming_content.is_empty() {
-                            // Show streaming content in real-time from all stages
-                            div {
-                                class: "response-content",
-                                dangerous_inner_html: "{markdown::to_html(&app_state.read().consensus.streaming_content)}"
+                            // Parse operations from streaming content
+                            let operations = parse_operations_from_content(&app_state.read().consensus.streaming_content);
+                            let operation_statuses: Vec<(FileOperation, OperationStatus)> = operations.into_iter()
+                                .map(|op| (op, OperationStatus::Completed))
+                                .collect();
+                            
+                            // Get theme
+                            let theme = hive_ai::desktop::styles::theme::ThemeColors::dark_theme();
+                            
+                            // Show streaming content with inline operations
+                            ResponseSection {
+                                content: app_state.read().consensus.streaming_content.clone(),
+                                operations: operation_statuses,
+                                theme: theme,
                             }
                         } else if !current_response.read().is_empty() {
                             // Show final response if no streaming content
