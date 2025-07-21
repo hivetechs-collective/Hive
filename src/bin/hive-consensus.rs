@@ -3199,11 +3199,18 @@ fn App() -> Element {
                             // Execute approved operations
                             tracing::info!("Executing {} approved operations", approved_operations.len());
                             
-                            // TODO: Send operations back to consensus pipeline for execution
-                            // For now, just log them
-                            for op in approved_operations {
-                                tracing::info!("Approved operation: {:?}", op);
-                            }
+                            // Execute the operations asynchronously
+                            let consensus_manager_clone = consensus_manager.clone();
+                            spawn(async move {
+                                match consensus_manager_clone.execute_approved_operations(approved_operations).await {
+                                    Ok(()) => {
+                                        tracing::info!("✅ Successfully executed approved operations");
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("❌ Failed to execute approved operations: {}", e);
+                                    }
+                                }
+                            });
                         }
                     }),
                     on_reject: EventHandler::new({

@@ -930,6 +930,130 @@ impl DesktopConsensusManager {
         
         Ok(())
     }
+    
+    /// Execute approved file operations
+    pub async fn execute_approved_operations(
+        &self,
+        operations: Vec<crate::consensus::stages::file_aware_curator::FileOperation>,
+    ) -> Result<()> {
+        use crate::consensus::{FileOperationExecutor, ExecutorConfig, SmartDecisionEngine, OperationIntelligenceCoordinator};
+        use crate::consensus::smart_decision_engine::UserPreferences;
+        use crate::ai_helpers::AIHelperEcosystem;
+        use std::sync::Arc;
+        
+        // Execute the operations
+        tracing::info!("Executing {} approved operations", operations.len());
+        
+        // Get the engine to access AI helpers and database
+        let engine = self.engine.lock().await;
+        
+        // Get AI helpers from engine if available
+        let ai_helpers = engine.get_ai_helpers().await;
+        
+        if let Some(ai_helpers) = ai_helpers {
+            // Create user preferences with safe defaults
+            let user_prefs = UserPreferences {
+                risk_tolerance: 0.3,
+                auto_backup: true,
+                require_confirmation_for_deletions: true,
+                require_confirmation_for_mass_updates: true,
+                mass_update_threshold: 5,
+                preferred_language: "en".to_string(),
+                timezone: "UTC".to_string(),
+            };
+            
+            // Create decision engine
+            let decision_engine = SmartDecisionEngine::new(
+                crate::consensus::operation_analysis::AutoAcceptMode::Conservative,
+                user_prefs,
+                ai_helpers.clone(),
+            );
+            
+            // Create intelligence coordinator
+            let intelligence_coordinator = OperationIntelligenceCoordinator::new(ai_helpers);
+            
+            // Create executor config
+            let executor_config = ExecutorConfig {
+                create_backups: true,
+                validate_syntax: true,
+                dry_run_mode: false,
+                max_file_size: 10 * 1024 * 1024, // 10MB
+                allowed_extensions: vec![
+                    "rs", "js", "ts", "py", "java", "cpp", "c", "h", "hpp",
+                    "go", "rb", "php", "md", "txt", "json", "yaml", "yml",
+                    "toml", "html", "css", "scss", "swift", "kt", "scala",
+                    "sh", "bash", "zsh", "fish", "ps1", "bat", "cmd",
+                ].into_iter().map(String::from).collect(),
+                forbidden_paths: vec![], // Can be configured
+                stop_on_error: true,
+            };
+            
+            // Create file executor
+            let file_executor = FileOperationExecutor::new(
+                executor_config,
+                decision_engine,
+                intelligence_coordinator,
+            );
+            
+            // Get repository context
+            let repo_context = self.repository_context.get_context().await;
+            let repository_path = repo_context.root_path.unwrap_or_else(|| std::path::PathBuf::from("."));
+            
+            // Create operation context
+            let operation_context = crate::consensus::operation_analysis::OperationContext {
+                repository_path,
+                user_question: "Manual execution of approved operations".to_string(),
+                consensus_response: "User-approved operations".to_string(),
+                timestamp: std::time::SystemTime::now(),
+                session_id: "manual-execution".to_string(),
+                git_commit: None,
+            };
+            
+            // Execute the operations
+            match file_executor.execute_operations_batch(operations, &operation_context).await {
+                Ok(results) => {
+                    let successful = results.iter().filter(|r| r.success).count();
+                    let failed = results.iter().filter(|r| !r.success).count();
+                    
+                    tracing::info!(
+                        "File operations executed: {} successful, {} failed",
+                        successful,
+                        failed
+                    );
+                    
+                    // Log detailed results
+                    for result in &results {
+                        if result.success {
+                            tracing::info!("✅ {}: {}", result.message, result.files_affected.iter()
+                                .map(|p| p.display().to_string())
+                                .collect::<Vec<_>>()
+                                .join(", "));
+                        } else {
+                            tracing::error!("❌ Failed: {} - {}", 
+                                result.message,
+                                result.error_message.as_deref().unwrap_or("Unknown error"));
+                        }
+                    }
+                    
+                    if failed > 0 {
+                        tracing::warn!(
+                            "⚠️ {} file operations failed. Check logs for details.",
+                            failed
+                        );
+                    }
+                    
+                    Ok(())
+                }
+                Err(e) => {
+                    tracing::error!("Failed to execute operations batch: {}", e);
+                    Err(anyhow::anyhow!("Failed to execute operations: {}", e))
+                }
+            }
+        } else {
+            tracing::error!("AI helpers not initialized - cannot execute file operations");
+            Err(anyhow::anyhow!("AI helpers not initialized. Please ensure AI helpers are configured."))
+        }
+    }
 }
 
 /// Hook to use consensus in components

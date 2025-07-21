@@ -715,6 +715,11 @@ impl ConsensusEngine {
         self.current_profile.read().await.clone()
     }
     
+    /// Get AI helpers if available
+    pub async fn get_ai_helpers(&self) -> Option<Arc<AIHelperEcosystem>> {
+        self.ai_helpers.read().await.clone()
+    }
+    
     /// Clear cached profile to force reload from database on next use
     pub async fn clear_cached_profile(&self) {
         tracing::info!("🧹 Clearing cached profile to force database reload on next consensus");
