@@ -71,6 +71,66 @@ This document establishes a **MANDATORY** checklist that must be followed before
 - [ ] Import grouping and ordering
 ```
 
+### 8. **UI Framework Syntax Rules (CRITICAL FOR RSX/DIOXUS)**
+```
+⏺ For any UI/frontend code (Dioxus RSX, React JSX, etc.):
+- [ ] Identify the UI framework version (Dioxus 0.6+, React, etc.)
+- [ ] Find working component examples in the SAME file
+- [ ] Understand conditional rendering patterns used
+- [ ] Note how Rust code is separated from UI markup
+- [ ] Check component props/parameter passing syntax
+- [ ] Verify event handler patterns
+- [ ] Understand state management approach
+```
+
+#### RSX/Dioxus Specific Rules (MANDATORY):
+```
+⚠️ CRITICAL DIOXUS PATTERNS:
+
+1. **Conditional Rendering Structure**:
+   ❌ WRONG: Complex logic mixed with RSX
+   if condition {
+       let data = complex_computation();
+       div { "content: {data}" }
+   }
+   
+   ✅ RIGHT: Logic separated from RSX
+   let data = if condition {
+       complex_computation()
+   } else {
+       default_value()
+   };
+   
+   if condition {
+       div { "content: {data}" }
+   }
+
+2. **Component Parameter Syntax**:
+   ❌ WRONG: Assuming struct syntax without verification
+   MyComponent {
+       field1: value1,
+       field2: value2,
+   }
+   
+   ✅ RIGHT: Check existing working examples first
+   - Search for other component calls in same file
+   - Verify #[component] macro expectations
+   - Check if Props struct is auto-generated correctly
+
+3. **RSX Context Rules**:
+   ❌ WRONG: Complex Rust statements inside RSX
+   div {
+       let result = function_call();
+       "Value: {result}"
+   }
+   
+   ✅ RIGHT: Calculations outside RSX context
+   let result = function_call();
+   div {
+       "Value: {result}"
+   }
+```
+
 ## 📋 Implementation Workflow
 
 ### Phase 1: Deep Research (MANDATORY)
@@ -112,6 +172,36 @@ This document establishes a **MANDATORY** checklist that must be followed before
 5. Design test cases
 ```
 
+### Phase 4: UI Framework Specific Research (IF APPLICABLE)
+```rust
+⏺ For UI/frontend components (Dioxus, React, etc.):
+
+1. Framework Version Check:
+   ⏺ Grep(pattern: "dioxus.*=", path: "Cargo.toml")
+   ⏺ Check exact version and documentation
+
+2. Working Component Research:
+   ⏺ Grep(pattern: "#\\[component\\]", output_mode: "content", -A: 5)
+     ⎿ Find all component definitions
+   
+   ⏺ Grep(pattern: "ComponentName \\{", output_mode: "content", -A: 3)
+     ⎿ Find actual component usage examples
+
+3. RSX Pattern Analysis:
+   ⏺ Search for conditional rendering patterns:
+     - if statements in RSX
+     - How complex logic is handled
+     - Variable declaration placement
+     
+4. State Management Check:
+   ⏺ Look for use_signal, use_state patterns
+   ⏺ Understand how data flows between components
+
+5. Event Handler Patterns:
+   ⏺ Find onclick, on_submit, EventHandler usage
+   ⏺ Note callback/closure patterns
+```
+
 ## 🚨 Common Pitfalls to Avoid
 
 ### 1. **Assuming Method Names**
@@ -129,6 +219,43 @@ This document establishes a **MANDATORY** checklist that must be followed before
 ### 4. **Type Mismatches**
 ❌ **Wrong**: Passing wrong number of arguments
 ✅ **Right**: Count parameters in function signature
+
+### 5. **RSX/UI Framework Context Violations** ⚠️ **CRITICAL**
+❌ **Wrong**: Writing Rust logic inside RSX conditional blocks
+```rust
+if !data.is_empty() {
+    let processed = process_data(&data);
+    let status = calculate_status(processed);
+    div { "Status: {status}" }
+}
+```
+✅ **Right**: Separate logic from UI rendering
+```rust
+let processed = if !data.is_empty() {
+    process_data(&data)
+} else {
+    default_data()
+};
+let status = calculate_status(processed);
+
+if !data.is_empty() {
+    div { "Status: {status}" }
+}
+```
+
+### 6. **Component Usage Without Research**
+❌ **Wrong**: Assuming component syntax without checking existing usage
+```rust
+MyComponent {
+    prop1: value1,
+    prop2: value2,
+}
+```
+✅ **Right**: Search for working component examples first
+```bash
+⏺ Grep(pattern: "MyComponent \\{", output_mode: "content", -A: 3)
+  ⎿ Find how component is actually used in codebase
+```
 
 ## 📊 Time Investment Guide
 
@@ -149,7 +276,7 @@ This document establishes a **MANDATORY** checklist that must be followed before
 - Weekly: Review common errors and how to avoid them
 - Monthly: Update checklist based on team experiences
 
-## 💡 Example: DirectExecutor Implementation
+## 💡 Example 1: DirectExecutor Implementation
 
 ### ❌ What NOT to do:
 ```rust
@@ -169,6 +296,59 @@ let response_stream = self.client.create_completion_stream(...).await?; // Wrong
 // Now implement with correct APIs:
 let criteria = ModelSelectionCriteria { ... };
 let model = self.model_selector.select_optimal_model(&self.db, &criteria, None).await?;
+```
+
+## 💡 Example 2: RSX/Dioxus Component Implementation ⚠️ **CRITICAL**
+
+### ❌ What NOT to do:
+```rust
+// Writing complex logic inside RSX conditional - CAUSES COMPILATION ERRORS!
+if !app_state.read().consensus.streaming_content.is_empty() {
+    // Parse operations from streaming content
+    let operations = parse_operations_from_content(&app_state.read().consensus.streaming_content);
+    let operation_statuses: Vec<(FileOperation, OperationStatus)> = operations.into_iter()
+        .map(|op| (op, OperationStatus::Completed))
+        .collect();
+    
+    // Get theme
+    let theme = ThemeColors::dark_theme();
+    
+    ResponseSection {
+        content: app_state.read().consensus.streaming_content.clone(),
+        operations: operation_statuses,
+        theme,
+    }
+}
+```
+
+### ✅ What TO do:
+```rust
+⏺ First - Research existing patterns:
+  Grep(pattern: "if.*\\{.*div \\{", path: "src/bin/", output_mode: "content")
+  ⎿ Find how other conditionals are structured in same file
+
+⏺ Check working component examples:  
+  Grep(pattern: "ResponseSection \\{", output_mode: "content", -A: 3)
+  ⎿ See if component exists and how it's used
+
+// Now implement with proper RSX structure:
+// 1. Logic OUTSIDE RSX context
+let operations = if !app_state.read().consensus.streaming_content.is_empty() {
+    let parsed = parse_operations_from_content(&app_state.read().consensus.streaming_content);
+    parsed.into_iter().map(|op| (op, OperationStatus::Completed)).collect()
+} else {
+    Vec::new()
+};
+
+let theme = ThemeColors::dark_theme();
+
+// 2. RSX rendering separate and clean
+if !app_state.read().consensus.streaming_content.is_empty() {
+    div {
+        class: "response-content",
+        dangerous_inner_html: "{app_state.read().consensus.streaming_content}"
+    }
+}
 ```
 
 ## 🎯 Success Metrics
@@ -196,12 +376,18 @@ Date: [Date]
 - [ ] Tech stack versions confirmed
 - [ ] Error patterns understood
 - [ ] Code conventions reviewed
+- [ ] **UI Framework patterns analyzed** (if applicable)
+- [ ] **RSX/component syntax verified** (if applicable)
+- [ ] **Existing component usage researched** (if applicable)
 
 ### Research Notes:
 - Key types involved: ___________
 - APIs to use: ___________
 - Patterns to follow: ___________
 - Potential pitfalls: ___________
+- **UI Framework version**: ___________ (if applicable)
+- **Component usage patterns found**: ___________ (if applicable)
+- **RSX conditional rendering approach**: ___________ (if applicable)
 
 ### Implementation Plan:
 1. ___________

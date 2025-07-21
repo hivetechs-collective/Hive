@@ -3,17 +3,19 @@
 //! Executes file operations during response streaming for a Claude Code-like experience.
 //! Operations are executed inline as they appear in the response, with real-time status updates.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::SystemTime;
 use anyhow::Result;
 use tokio::sync::mpsc;
 
-use crate::consensus::ai_helpers::AIHelperEcosystem;
+use crate::ai_helpers::AIHelperEcosystem;
 use crate::consensus::FileOperationExecutor;
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::smart_decision_engine::UserPreferences;
 use crate::consensus::operation_analysis::OperationContext as ConsensusOperationContext;
+use crate::consensus::operation_intelligence::OperationContext;
 
 /// Status of an operation during streaming execution
 #[derive(Debug, Clone)]
@@ -226,18 +228,34 @@ impl StreamingOperationExecutor {
 
     /// Analyze operation risk using AI helpers
     pub async fn analyze_operation_risk(&self, operation: &FileOperation) -> Result<f32> {
+        // Create operation context for AI analysis
+        let context = OperationContext {
+            repository_path: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            git_commit: None, // Could be enhanced to get actual commit
+            source_question: "File operation".to_string(), // Could be enhanced with actual question
+            related_files: vec![],
+            project_metadata: HashMap::new(),
+        };
+        
         // Use AI helpers to assess risk
-        let quality_analyzer = self.ai_helpers.quality_analyzer();
-        let risk_assessment = quality_analyzer.assess_operation_risk(operation).await?;
+        let risk_assessment = self.ai_helpers.quality_analyzer.assess_operation_risk(operation, &context).await?;
         Ok(risk_assessment.risk_score)
     }
 
     /// Get operation confidence using AI helpers
     pub async fn get_operation_confidence(&self, operation: &FileOperation) -> Result<f32> {
+        // Create operation context for AI analysis
+        let context = OperationContext {
+            repository_path: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            git_commit: None, // Could be enhanced to get actual commit
+            source_question: "File operation".to_string(), // Could be enhanced with actual question
+            related_files: vec![],
+            project_metadata: HashMap::new(),
+        };
+        
         // Use AI helpers to get confidence
-        let knowledge_indexer = self.ai_helpers.knowledge_indexer();
-        let confidence = knowledge_indexer.predict_operation_success(operation).await?;
-        Ok(confidence)
+        let prediction = self.ai_helpers.knowledge_indexer.predict_operation_success(operation, &context).await?;
+        Ok(prediction.success_probability)
     }
 }
 

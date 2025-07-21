@@ -40,7 +40,6 @@ pub mod file_executor;
 pub mod ai_operation_parser;
 pub mod operation_preview_generator;
 pub mod streaming_executor;
-pub mod ai_helpers;
 pub mod direct_executor;
 pub mod iteration_handler;
 pub mod mode_detector;
@@ -155,12 +154,6 @@ pub use rollback_plan::{
 pub use streaming_executor::{
     StreamingOperationExecutor, ExecutionStatus, StatusCallback,
     StreamingExecutorBuilder
-};
-pub use ai_helpers::{
-    AIHelperEcosystem, KnowledgeIndexer, ContextRetriever, PatternRecognizer,
-    QualityAnalyzer, KnowledgeSynthesizer, AIOperationContext,
-    SimilarOperation, Pattern, PatternType, RiskAssessment as AIRiskAssessment, 
-    RiskFactor, RiskFactorType
 };
 pub use direct_executor::{
     DirectExecutionHandler, DirectExecutionBuilder, InlineOperationParser
