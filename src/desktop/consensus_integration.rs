@@ -59,6 +59,9 @@ pub enum ConsensusUIEvent {
         reason: String,
     },
     Completed, // Event when consensus completes successfully
+    OperationsRequireConfirmation { // New event for file operations needing approval
+        operations: Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>,
+    },
 }
 
 /// Desktop streaming callbacks that send events to UI
@@ -244,9 +247,13 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         &self,
         operations: Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>,
     ) -> Result<()> {
-        // TODO: Send operations to UI for confirmation
-        // This will be implemented when we add the approval UI
         tracing::info!("Operations require confirmation: {} operations", operations.len());
+        
+        // Send operations to UI for confirmation
+        let _ = self.event_sender.send(ConsensusUIEvent::OperationsRequireConfirmation {
+            operations,
+        });
+        
         Ok(())
     }
 }
@@ -429,9 +436,13 @@ impl StreamingCallbacks for DualChannelCallbacks {
         &self,
         operations: Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>,
     ) -> Result<()> {
-        // TODO: Send operations to UI for confirmation
-        // This will be implemented when we add the approval UI
         tracing::info!("Operations require confirmation: {} operations", operations.len());
+        
+        // Send operations to UI for confirmation
+        let _ = self.event_sender.send(ConsensusUIEvent::OperationsRequireConfirmation {
+            operations,
+        });
+        
         Ok(())
     }
 }
@@ -603,6 +614,15 @@ pub async fn process_consensus_events(
                 let mut state = app_state.write();
                 state.consensus.complete_consensus();
                 tracing::info!("✅ Consensus completed successfully");
+            }
+            ConsensusUIEvent::OperationsRequireConfirmation { operations } => {
+                // Handle operations that need user confirmation
+                tracing::info!("📁 {} operations require user confirmation", operations.len());
+                
+                // Store operations in app state for the dialog to display
+                let mut state = app_state.write();
+                state.pending_operations = Some(operations);
+                state.show_operation_confirmation_dialog = true;
             }
         }
     }

@@ -847,9 +847,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 use hive_ai::desktop::assets::get_logo_html;
 use hive_ai::desktop::consensus_integration::{use_consensus_with_version, DesktopConsensusManager};
 use hive_ai::desktop::dialogs::{
-    AboutDialog, CommandPalette, NoUpdatesDialog, OnboardingDialog, SettingsDialog,
-    UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, WelcomeTab,
-    DIALOG_STYLES,
+    AboutDialog, CommandPalette, NoUpdatesDialog, OnboardingDialog, OperationConfirmationDialog,
+    SettingsDialog, UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, 
+    WelcomeTab, DIALOG_STYLES,
 };
 use hive_ai::desktop::context_menu::{
     ContextMenu, ContextMenuAction, ContextMenuState, FileNameDialog, ConfirmDialog,
@@ -873,6 +873,7 @@ mod markdown {
     }
 }
 use hive_ai::desktop::state::{AppState, ConsensusState, StageInfo};
+use hive_ai::consensus::stages::file_aware_curator::FileOperation;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -3188,6 +3189,44 @@ fn App() -> Element {
                     *show_delete_confirm.write() = false;
                 }
             }),
+        }
+        
+        // Operation Confirmation Dialog
+        if *app_state.read().show_operation_confirmation_dialog {
+            if let Some(operations) = app_state.read().pending_operations.clone() {
+                OperationConfirmationDialog {
+                    operations: operations.clone(),
+                    on_approve: EventHandler::new({
+                        let mut app_state = app_state.clone();
+                        let consensus_manager = consensus_manager.clone();
+                        move |approved_operations: Vec<hive_ai::consensus::stages::file_aware_curator::FileOperation>| {
+                            // Clear dialog state
+                            app_state.write().show_operation_confirmation_dialog = false;
+                            app_state.write().pending_operations = None;
+                            
+                            // Execute approved operations
+                            tracing::info!("Executing {} approved operations", approved_operations.len());
+                            
+                            // TODO: Send operations back to consensus pipeline for execution
+                            // For now, just log them
+                            for op in approved_operations {
+                                tracing::info!("Approved operation: {:?}", op);
+                            }
+                        }
+                    }),
+                    on_reject: EventHandler::new({
+                        let mut app_state = app_state.clone();
+                        move |_| {
+                            // Clear dialog state
+                            app_state.write().show_operation_confirmation_dialog = false;
+                            app_state.write().pending_operations = None;
+                            
+                            tracing::info!("User rejected all pending operations");
+                        }
+                    }),
+                    theme: hive_ai::desktop::styles::theme::get_dark_theme(),
+                }
+            }
         }
     }
 }
