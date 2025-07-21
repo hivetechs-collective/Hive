@@ -42,6 +42,7 @@ pub mod operation_preview_generator;
 pub mod streaming_executor;
 pub mod ai_helpers;
 pub mod direct_executor;
+pub mod iteration_handler;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -162,6 +163,10 @@ pub use ai_helpers::{
 };
 pub use direct_executor::{
     DirectExecutionHandler, DirectExecutionBuilder, InlineOperationParser
+};
+pub use iteration_handler::{
+    IterationHandler, IterationContext, NextIteration, ExecutionResult as IterationExecutionResult,
+    ExecutedOperation, TestResult, IterationError, ErrorType, Recommendation
 };
 
 // Re-export commonly used items
