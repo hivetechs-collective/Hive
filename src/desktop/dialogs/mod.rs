@@ -4,6 +4,79 @@ pub mod operation_confirmation;
 
 pub use operation_confirmation::OperationConfirmationDialog;
 
+// Create stub components for missing dialogs until they are properly implemented
+use dioxus::prelude::*;
+use dioxus::events::Key;
+
+// Add the OnboardingDialog
+#[component]
+pub fn OnboardingDialog(
+    show_onboarding: Signal<bool>,
+    openrouter_key: Signal<String>,
+    hive_key: Signal<String>,
+    current_step: Signal<i32>,
+    api_keys_version: Signal<u32>,
+    on_profile_change: Option<EventHandler<()>>,
+) -> Element {
+    if !*show_onboarding.read() {
+        return rsx! {};
+    }
+    
+    rsx! {
+        div {
+            style: "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;",
+            onclick: move |_| *show_onboarding.write() = false,
+            
+            div {
+                style: "background: #2d2d30; padding: 40px; border-radius: 8px; width: 600px;",
+                onclick: move |e| e.stop_propagation(),
+                
+                h2 { style: "margin: 0 0 20px 0;", "Welcome to Hive Consensus" }
+                p { "Set up your API keys to get started." }
+                
+                div {
+                    style: "margin: 20px 0;",
+                    label { style: "display: block; margin-bottom: 5px;", "OpenRouter API Key:" }
+                    input {
+                        style: "width: 100%; padding: 8px; background: #1e1e1e; border: 1px solid #3e3e42; color: white;",
+                        value: "{openrouter_key.read()}",
+                        oninput: move |e| *openrouter_key.write() = e.value(),
+                        r#type: "password"
+                    }
+                }
+                
+                div {
+                    style: "margin: 20px 0;",
+                    label { style: "display: block; margin-bottom: 5px;", "Hive API Key (optional):" }
+                    input {
+                        style: "width: 100%; padding: 8px; background: #1e1e1e; border: 1px solid #3e3e42; color: white;",
+                        value: "{hive_key.read()}",
+                        oninput: move |e| *hive_key.write() = e.value(),
+                        r#type: "password"
+                    }
+                }
+                
+                div {
+                    style: "display: flex; gap: 10px; justify-content: flex-end;",
+                    
+                    button {
+                        style: "padding: 8px 16px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer;",
+                        onclick: move |_| {
+                            *show_onboarding.write() = false;
+                            // Increment API keys version to trigger reload
+                            *api_keys_version.write() += 1;
+                            if let Some(handler) = &on_profile_change {
+                                handler.call(());
+                            }
+                        },
+                        "Continue"
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Define types that were in dialogs_backup
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProfileInfo {
@@ -20,13 +93,10 @@ pub enum WelcomeAction {
     NewFile,
 }
 
-// Create stub components for missing dialogs until they are properly implemented
-use dioxus::prelude::*;
-
 #[component]
 pub fn AboutDialog(show_about: Signal<bool>) -> Element {
     if !*show_about.read() {
-        return None;
+        return rsx! {};
     }
     
     rsx! {
@@ -55,7 +125,7 @@ pub fn AboutDialog(show_about: Signal<bool>) -> Element {
 #[component]
 pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
     if !*show_palette.read() {
-        return None;
+        return rsx! {};
     }
     
     rsx! {
@@ -66,7 +136,7 @@ pub fn CommandPalette(show_palette: Signal<bool>) -> Element {
                 style: "width: 100%; padding: 10px; background: #1e1e1e; border: 1px solid #3e3e42; color: white; font-size: 14px;",
                 placeholder: "Type a command...",
                 onkeydown: move |e| {
-                    if e.key() == "Escape" {
+                    if e.key() == Key::Escape {
                         *show_palette.write() = false;
                     }
                 }
@@ -83,7 +153,7 @@ pub fn SettingsDialog(
     on_profile_change: Option<EventHandler<()>>,
 ) -> Element {
     if !*show_settings.read() {
-        return None;
+        return rsx! {};
     }
     
     rsx! {
@@ -152,7 +222,7 @@ pub fn UpdateAvailableDialog(
     download_url: String,
 ) -> Element {
     if !*show.read() {
-        return None;
+        return rsx! {};
     }
     
     rsx! {
@@ -180,7 +250,7 @@ pub fn UpdateAvailableDialog(
 #[component]
 pub fn NoUpdatesDialog(show: Signal<bool>) -> Element {
     if !*show.read() {
-        return None;
+        return rsx! {};
     }
     
     rsx! {
@@ -208,7 +278,7 @@ pub fn NoUpdatesDialog(show: Signal<bool>) -> Element {
 #[component]
 pub fn UpdateErrorDialog(show: Signal<bool>, error_message: String) -> Element {
     if !*show.read() {
-        return None;
+        return rsx! {};
     }
     
     rsx! {
@@ -236,7 +306,7 @@ pub fn UpdateErrorDialog(show: Signal<bool>, error_message: String) -> Element {
 #[component]
 pub fn UpgradeDialog(show: Signal<bool>) -> Element {
     if !*show.read() {
-        return None;
+        return rsx! {};
     }
     
     rsx! {
