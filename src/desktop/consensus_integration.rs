@@ -622,10 +622,22 @@ pub async fn process_consensus_events(
                 // Handle operations that need user confirmation
                 tracing::info!("📁 {} operations require user confirmation", operations.len());
                 
-                // Store operations in app state for the dialog to display
+                // In Claude Code mode, we show operations inline instead of a dialog
+                // For now, we'll still store them but not show the dialog
                 let mut state = app_state.write();
-                state.pending_operations = Some(operations);
-                state.show_operation_confirmation_dialog = true;
+                state.pending_operations = Some(operations.clone());
+                
+                // If auto-accept is on, execute immediately
+                if state.auto_accept {
+                    tracing::info!("🚀 Auto-accept is ON - executing operations immediately");
+                    // TODO: Execute operations directly without dialog
+                    state.pending_operations = None;
+                } else {
+                    // Show inline confirmation UI instead of dialog
+                    tracing::info!("⏸ Auto-accept is OFF - showing inline confirmation");
+                    // Don't show the dialog - operations will be shown inline
+                    state.show_operation_confirmation_dialog = false;
+                }
             }
         }
     }

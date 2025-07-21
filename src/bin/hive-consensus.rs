@@ -3194,7 +3194,10 @@ fn App() -> Element {
             }),
         }
         
-        // Operation Confirmation Dialog
+        // Operation Confirmation Dialog - Commented out for Claude Code mode
+        // In Claude Code mode, operations are shown inline in the response
+        // rather than in a popup dialog
+        /*
         if app_state.read().show_operation_confirmation_dialog {
             if let Some(operations) = app_state.read().pending_operations.clone() {
                 OperationConfirmationDialog {
@@ -3241,6 +3244,7 @@ fn App() -> Element {
                 }
             }
         }
+        */
     }
 }
 
