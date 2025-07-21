@@ -4162,7 +4162,20 @@ fn ModelLeaderboard(analytics_data: Signal<AnalyticsData>) -> Element {
 /// Real-Time Activity Component (this is the current/recent activity feed)
 #[component]
 fn RealTimeActivity(analytics_data: Signal<AnalyticsData>) -> Element {
-    let recent_conversations = use_resource(move || fetch_recent_conversations());
+    // Re-fetch conversations when analytics data changes (which happens after each consensus run)
+    let mut recent_conversations = use_resource(move || {
+        // Read analytics data to create a dependency
+        let _ = analytics_data.read();
+        fetch_recent_conversations()
+    });
+    
+    // Also set up periodic refresh every 5 seconds for real-time updates
+    use_future(move || async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+            recent_conversations.restart();
+        }
+    });
     
     rsx! {
         div {
