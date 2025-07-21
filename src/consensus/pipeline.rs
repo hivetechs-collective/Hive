@@ -21,6 +21,7 @@ use crate::consensus::{
     smart_decision_engine::UserPreferences,
     ModeDetector, ExecutionMode, DirectExecutionHandler, StreamingOperationExecutor,
 };
+use crate::consensus::models::DynamicModelSelector;
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
     TokenUsage, AnalyticsFeatures,
@@ -141,8 +142,8 @@ impl ConsensusPipeline {
     /// Configure mode detection for Claude Code-style execution
     pub async fn with_mode_detection(mut self) -> Result<Self> {
         // Only configure if we have the necessary components
-        if let (Some(ai_helpers), Some(openrouter_client), Some(model_manager)) = 
-            (&self.ai_helpers, &self.openrouter_client, &self.model_manager) {
+        if let (Some(ai_helpers), Some(openrouter_client), Some(model_manager), Some(database)) = 
+            (&self.ai_helpers, &self.openrouter_client, &self.model_manager, &self.database) {
             
             // Create mode detector
             let mode_detector = ModeDetector::new()?
@@ -162,13 +163,15 @@ impl ConsensusPipeline {
                 
                 // Create direct execution handler
                 let generator_stage = Arc::new(GeneratorStage::new());
+                let model_selector = Arc::new(DynamicModelSelector::new(self.api_key.clone()));
                 let direct_handler = Arc::new(
                     DirectExecutionHandler::new(
                         generator_stage,
                         ai_helpers.clone(),
                         streaming_executor,
                         openrouter_client.clone(),
-                        model_manager.clone(),
+                        model_selector,
+                        database.clone(),
                     )
                 );
                 
@@ -545,7 +548,7 @@ impl ConsensusPipeline {
                 temporal_context.clone(),
                 memory_context.clone(),
                 self.repository_context.clone(),
-                self.ai_helpers.clone(),
+                self.ai_helpers.as_ref().cloned(),
             ).await {
                 Ok(context) => {
                     tracing::info!("Built verified context for {} stage: {} chars", stage.display_name(), context.len());

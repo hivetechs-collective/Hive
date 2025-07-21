@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::consensus::ai_helpers::AIHelperEcosystem;
+use crate::ai_helpers::AIHelperEcosystem;
 
 /// Execution mode for a request
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

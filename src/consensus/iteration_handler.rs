@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::consensus::ai_helpers::AIHelperEcosystem;
+use crate::ai_helpers::AIHelperEcosystem;
 use crate::consensus::streaming_executor::{StreamingOperationExecutor, ExecutionStatus};
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::direct_executor::DirectExecutionHandler;
@@ -260,7 +260,7 @@ impl IterationHandler {
         };
         
         Ok(IterationAnalysis {
-            recommendation,
+            recommendation: recommendation.clone(),
             confidence: 0.8, // Would be calculated by AI helpers
             reasoning: self.generate_reasoning(&recommendation),
             suggested_actions: self.generate_suggested_actions(&recommendation),
