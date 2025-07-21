@@ -46,9 +46,11 @@ pub mod operation_preview;
 pub mod approval_interface;
 pub mod progress_indicators;
 pub mod notifications;
+pub mod inline_operation_display;
 
 pub use auto_accept_settings::AutoAcceptSettings;
 pub use operation_preview::OperationPreview;
 pub use approval_interface::{ApprovalInterface, ApprovalDecision};
 pub use progress_indicators::{ProgressIndicators, OperationProgress};
 pub use notifications::{NotificationSystem, Notification, NotificationType};
+pub use inline_operation_display::{InlineOperationDisplay, OperationStatus, ResponseSection, parse_operations_from_content};
