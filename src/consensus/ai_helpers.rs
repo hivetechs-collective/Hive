@@ -99,9 +99,9 @@ impl ContextRetriever {
     }
 
     /// Get relevant context for an operation
-    pub async fn get_operation_context(&self, _operation: &FileOperation) -> Result<OperationContext> {
+    pub async fn get_operation_context(&self, _operation: &FileOperation) -> Result<AIOperationContext> {
         // Placeholder - would search vector DB
-        Ok(OperationContext {
+        Ok(AIOperationContext {
             similar_operations: vec![],
             best_practices: vec![],
             warnings: vec![],
@@ -164,7 +164,7 @@ impl KnowledgeSynthesizer {
         confidence: f32,
         risk_assessment: &RiskAssessment,
         _patterns: &[Pattern],
-        context: &OperationContext,
+        context: &AIOperationContext,
     ) -> Result<OperationAnalysis> {
         // Create action recommendation
         let recommendation = ActionRecommendation {
@@ -229,7 +229,7 @@ impl KnowledgeSynthesizer {
                 user_preference_alignment: 0.9,
             },
             context: context.clone(),
-            statistics: AnalysisStatistics {
+            statistics: Some(AnalysisStatistics {
                 total_operations: 1,
                 analyzed_operations: 1,
                 high_confidence_count: if confidence > 0.8 { 1 } else { 0 },
@@ -239,14 +239,14 @@ impl KnowledgeSynthesizer {
                 average_confidence: confidence,
                 average_risk: risk_assessment.risk_score,
                 analysis_duration: std::time::Duration::from_millis(150),
-            },
+            }),
         })
     }
 }
 
 /// Operation context from past operations
 #[derive(Debug, Clone)]
-pub struct OperationContext {
+pub struct AIOperationContext {
     pub similar_operations: Vec<SimilarOperation>,
     pub best_practices: Vec<String>,
     pub warnings: Vec<String>,
