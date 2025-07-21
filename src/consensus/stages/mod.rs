@@ -9,12 +9,14 @@ pub mod generator;
 pub mod refiner;
 pub mod validator;
 pub mod repository_scanner;
+pub mod claude_code_curator;
 
 pub use curator::CuratorStage;
 pub use file_aware_curator::FileAwareCuratorStage;
 pub use generator::GeneratorStage;
 pub use refiner::RefinerStage;
 pub use validator::ValidatorStage;
+pub use claude_code_curator::ClaudeCodeCuratorStage;
 
 use crate::consensus::types::{Message, Stage};
 use anyhow::Result;
