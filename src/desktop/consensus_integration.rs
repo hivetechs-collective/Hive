@@ -438,10 +438,13 @@ impl StreamingCallbacks for DualChannelCallbacks {
     ) -> Result<()> {
         tracing::info!("Operations require confirmation: {} operations", operations.len());
         
-        // Send operations to UI for confirmation
-        let _ = self.event_sender.send(ConsensusUIEvent::OperationsRequireConfirmation {
+        // Send operations to UI for confirmation via both channels
+        let event = ConsensusUIEvent::OperationsRequireConfirmation {
             operations,
-        });
+        };
+        
+        let _ = self.stream_sender.send(event.clone());
+        let _ = self.internal_sender.send(event);
         
         Ok(())
     }

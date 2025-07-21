@@ -33,7 +33,6 @@ pub struct AnalyticsData {
 
 /// Helper functions for analytics calculations and formatting
 mod analytics_helpers {
-    use super::*;
     
     /// Format currency values consistently
     pub fn format_currency(value: f64) -> String {
@@ -2382,7 +2381,6 @@ fn App() -> Element {
                         } else if *active_tab.read() == "__welcome__" && *show_welcome_dialog.read() {
                             // Show welcome tab in editor area
                             WelcomeTab {
-                                show_welcome: show_welcome_dialog.clone(),
                                 on_action: handle_welcome_action,
                             }
                         } else if !active_tab.read().is_empty() && *active_tab.read() != "__welcome__" {
@@ -2886,11 +2884,7 @@ fn App() -> Element {
 
         if *show_upgrade_dialog.read() {
             UpgradeDialog {
-                show_upgrade: show_upgrade_dialog.clone(),
-                user_email: "verone.lazio@gmail.com".to_string(),
-                daily_used: 10,
-                daily_limit: 10,
-                average_usage: 16.0,
+                show: show_upgrade_dialog.clone(),
             }
         }
 
@@ -2899,16 +2893,14 @@ fn App() -> Element {
             UpdateAvailableDialog {
                 show: show_update_available_dialog.clone(),
                 version: update_info.read().0.clone(),
-                release_date: update_info.read().1.clone(),
+                date: update_info.read().1.clone(),
                 download_url: update_info.read().2.clone(),
-                changelog_url: update_info.read().3.clone(),
             }
         }
 
         if *show_no_updates_dialog.read() {
             NoUpdatesDialog {
                 show: show_no_updates_dialog.clone(),
-                current_version: hive_ai::VERSION.to_string(),
             }
         }
 
@@ -3192,7 +3184,7 @@ fn App() -> Element {
         }
         
         // Operation Confirmation Dialog
-        if *app_state.read().show_operation_confirmation_dialog {
+        if app_state.read().show_operation_confirmation_dialog {
             if let Some(operations) = app_state.read().pending_operations.clone() {
                 OperationConfirmationDialog {
                     operations: operations.clone(),
@@ -3224,7 +3216,7 @@ fn App() -> Element {
                             tracing::info!("User rejected all pending operations");
                         }
                     }),
-                    theme: hive_ai::desktop::styles::theme::get_dark_theme(),
+                    theme: hive_ai::desktop::styles::theme::ThemeColors::dark_theme(),
                 }
             }
         }

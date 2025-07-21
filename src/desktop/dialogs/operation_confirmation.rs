@@ -125,10 +125,9 @@ pub fn OperationConfirmationDialog(
                                 input {
                                     r#type: "checkbox",
                                     checked: selected_operations.read()[idx],
-                                    onchange: move |e| {
-                                        if let Ok(checked) = e.checked() {
-                                            selected_operations.write()[idx] = checked;
-                                        }
+                                    onchange: move |_| {
+                                        let current = selected_operations.read()[idx];
+                                        selected_operations.write()[idx] = !current;
                                     }
                                 }
                                 
@@ -176,9 +175,11 @@ pub fn OperationConfirmationDialog(
                                     
                                     OperationPreview {
                                         operation: op_with_metadata.clone(),
+                                        preview: None,
                                         theme: theme.clone(),
+                                        on_approve: EventHandler::new(|_| {}),
+                                        on_reject: EventHandler::new(|_| {}),
                                         is_selected: selected_operations.read()[idx],
-                                        show_full_content: false,
                                     }
                                 }
                             }
