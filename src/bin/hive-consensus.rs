@@ -2623,7 +2623,17 @@ fn App() -> Element {
                             oninput: move |evt| *input_value.write() = evt.value().clone(),
                             onkeydown: {
                                 let consensus_manager = consensus_manager.clone();
+                                let mut app_state_for_toggle = app_state.clone();
                                 move |evt: dioxus::events::KeyboardEvent| {
+                                    // Shift+Tab toggles auto-accept
+                                    if evt.key() == dioxus::events::Key::Tab && evt.modifiers().shift() {
+                                        evt.prevent_default();
+                                        let current = app_state_for_toggle.read().auto_accept;
+                                        app_state_for_toggle.write().auto_accept = !current;
+                                        tracing::info!("Auto-accept toggled via Shift+Tab to: {}", !current);
+                                        return;
+                                    }
+                                    
                                     // Enter without shift submits
                                     if evt.key() == dioxus::events::Key::Enter && !evt.modifiers().shift() && !input_value.read().is_empty() && !*is_processing.read() {
                                         evt.prevent_default();
@@ -2725,6 +2735,42 @@ fn App() -> Element {
                                         }
                                     }
                                 }
+                            }
+                        }
+                        
+                        // Auto-accept toggle below input (Claude Code style)
+                        div {
+                            style: "margin-top: 8px; display: flex; align-items: center; gap: 8px; color: #858585; font-size: 12px;",
+                            
+                            // Toggle indicator
+                            span {
+                                style: "font-size: 14px; color: #FFC107;",
+                                if app_state.read().auto_accept { "⏵⏵" } else { "⏸" }
+                            }
+                            
+                            // Toggle button
+                            button {
+                                style: if app_state.read().auto_accept {
+                                    "background: none; border: none; color: #FFC107; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;"
+                                } else {
+                                    "background: none; border: none; color: #858585; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
+                                },
+                                onclick: move |_| {
+                                    let current = app_state.read().auto_accept;
+                                    app_state.write().auto_accept = !current;
+                                    tracing::info!("Auto-accept toggled to: {}", !current);
+                                },
+                                if app_state.read().auto_accept {
+                                    "auto-accept edits on"
+                                } else {
+                                    "auto-accept edits off"
+                                }
+                            }
+                            
+                            // Keyboard shortcut hint
+                            span {
+                                style: "color: #505050; font-size: 11px; margin-left: 8px;",
+                                "(shift+tab to toggle)"
                             }
                         }
                     }
