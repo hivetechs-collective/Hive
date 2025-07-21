@@ -23,7 +23,7 @@ use crate::consensus::{
 };
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
-    TokenUsage,
+    TokenUsage, AnalyticsFeatures,
 };
 // use crate::hooks::{HooksSystem, EventType, EventSource, HookEvent, ConsensusIntegration};
 use crate::consensus::models::ModelManager;
@@ -475,28 +475,43 @@ impl ConsensusPipeline {
                     
                     // Create a simple result for direct mode
                     let final_result = ConsensusResult {
-                        answer: format!("Direct execution completed for: {}", question),
-                        confidence: 0.95,
-                        profile: self.profile.clone(),
+                        success: true,
+                        result: Some(format!("Direct execution completed for: {}", question)),
+                        error: None,
                         stages: vec![StageResult {
-                            stage: Stage::Generator,
+                            stage_id: "generator".to_string(),
+                            stage_name: "Generator".to_string(),
+                            question: question.to_string(),
+                            answer: "Direct execution completed".to_string(),
                             model: self.profile.generator_model.clone(),
-                            output: format!("Direct execution completed"),
-                            analytics: StageAnalytics {
-                                stage: Stage::Generator,
-                                model: self.profile.generator_model.clone(),
-                                duration_ms: pipeline_start.elapsed().as_millis() as u64,
-                                token_usage: TokenUsage::default(),
+                            conversation_id: conversation_id.clone(),
+                            timestamp: Utc::now(),
+                            usage: None,
+                            analytics: Some(StageAnalytics {
+                                duration: pipeline_start.elapsed().as_secs_f64(),
                                 cost: 0.0,
-                                success: true,
-                                quality_score: Some(0.95),
-                            },
+                                input_cost: 0.0,
+                                output_cost: 0.0,
+                                provider: "direct".to_string(),
+                                model_internal_id: self.profile.generator_model.clone(),
+                                quality_score: 0.95,
+                                error_count: 0,
+                                fallback_used: false,
+                                rate_limit_hit: false,
+                                retry_count: 0,
+                                start_time: Utc::now() - chrono::Duration::milliseconds(pipeline_start.elapsed().as_millis() as i64),
+                                end_time: Utc::now(),
+                                memory_usage: None,
+                                features: AnalyticsFeatures {
+                                    streaming: true,
+                                    routing_variant: "direct".to_string(),
+                                    optimization_applied: Some(true),
+                                },
+                            }),
                         }],
-                        total_duration_ms: pipeline_start.elapsed().as_millis() as u64,
+                        conversation_id: conversation_id.clone(),
+                        total_duration: pipeline_start.elapsed().as_secs_f64(),
                         total_cost,
-                        user_id,
-                        conversation_id,
-                        created_at: Utc::now(),
                     };
                     
                     return Ok(final_result);
