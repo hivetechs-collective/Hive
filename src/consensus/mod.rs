@@ -43,6 +43,7 @@ pub mod streaming_executor;
 pub mod ai_helpers;
 pub mod direct_executor;
 pub mod iteration_handler;
+pub mod mode_detector;
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};
@@ -157,7 +158,7 @@ pub use streaming_executor::{
 };
 pub use ai_helpers::{
     AIHelperEcosystem, KnowledgeIndexer, ContextRetriever, PatternRecognizer,
-    QualityAnalyzer, KnowledgeSynthesizer, OperationContext as AIOperationContext,
+    QualityAnalyzer, KnowledgeSynthesizer, AIOperationContext,
     SimilarOperation, Pattern, PatternType, RiskAssessment as AIRiskAssessment, 
     RiskFactor, RiskFactorType
 };
@@ -167,6 +168,9 @@ pub use direct_executor::{
 pub use iteration_handler::{
     IterationHandler, IterationContext, NextIteration, ExecutionResult as IterationExecutionResult,
     ExecutedOperation, TestResult, IterationError, ErrorType, Recommendation
+};
+pub use mode_detector::{
+    ModeDetector, ExecutionMode, PatternMatcher, ComplexityAnalyzer
 };
 
 // Re-export commonly used items
