@@ -651,24 +651,110 @@ impl ConsensusPipeline {
                     git_commit: repo_context.git_info.and_then(|info| info.last_commit_hash),
                 };
                 
-                // Parse and execute file operations from curator response
-                match file_executor.parse_and_execute_curator_response(
+                // Check if auto-accept is enabled (passed via streaming callbacks)
+                let auto_accept_enabled = self.callbacks.get_auto_accept_state().unwrap_or(false);
+                
+                tracing::info!("🤖 Auto-accept state: {}", auto_accept_enabled);
+                
+                // Parse operations first
+                match file_executor.parse_operations_from_curator_response(
                     &final_answer,
                     &operation_context,
                 ).await {
-                    Ok(execution_summary) => {
-                        tracing::info!(
-                            "🤖 File operations executed: {} total, {} successful, {} failed",
-                            execution_summary.total_operations,
-                            execution_summary.successful_operations,
-                            execution_summary.failed_operations
-                        );
-                        
-                        // Log execution details
-                        for result in &execution_summary.results {
-                            if result.success {
-                                tracing::info!("✅ {} operation on {}: {}", 
-                                    match &result.operation {
+                    Ok(parsed_operations) => {
+                        if parsed_operations.operations.is_empty() {
+                            tracing::debug!("No file operations found in curator response");
+                        } else {
+                            tracing::info!(
+                                "🤖 Found {} file operations with {}% confidence",
+                                parsed_operations.operations.len(),
+                                parsed_operations.confidence
+                            );
+                            
+                            // Analyze operations with decision engine
+                            let mut operations_to_execute = Vec::new();
+                            let mut operations_requiring_confirmation = Vec::new();
+                            let mut blocked_operations = Vec::new();
+                            
+                            for op_with_metadata in &parsed_operations.operations {
+                                match file_executor.analyze_operation_decision(
+                                    &op_with_metadata.operation,
+                                    &operation_context,
+                                ).await {
+                                    Ok(decision) => {
+                                        match decision {
+                                            crate::consensus::smart_decision_engine::ExecutionDecision::AutoExecute { .. } => {
+                                                if auto_accept_enabled {
+                                                    operations_to_execute.push(op_with_metadata.operation.clone());
+                                                } else {
+                                                    operations_requiring_confirmation.push(op_with_metadata.clone());
+                                                }
+                                            }
+                                            crate::consensus::smart_decision_engine::ExecutionDecision::RequireConfirmation { .. } => {
+                                                operations_requiring_confirmation.push(op_with_metadata.clone());
+                                            }
+                                            crate::consensus::smart_decision_engine::ExecutionDecision::Block { .. } => {
+                                                blocked_operations.push(op_with_metadata.clone());
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to analyze operation: {}", e);
+                                        operations_requiring_confirmation.push(op_with_metadata.clone());
+                                    }
+                                }
+                            }
+                            
+                            // Report on operations requiring confirmation
+                            if !operations_requiring_confirmation.is_empty() {
+                                tracing::info!(
+                                    "⚠️ {} operations require user confirmation",
+                                    operations_requiring_confirmation.len()
+                                );
+                                
+                                // Send operations to UI for approval
+                                self.callbacks.on_operations_require_confirmation(
+                                    operations_requiring_confirmation.clone()
+                                ).ok();
+                            }
+                            
+                            // Report on blocked operations
+                            if !blocked_operations.is_empty() {
+                                tracing::warn!(
+                                    "🛑 {} operations blocked for safety",
+                                    blocked_operations.len()
+                                );
+                                for blocked in &blocked_operations {
+                                    tracing::warn!("Blocked: {:?}", blocked.operation);
+                                }
+                            }
+                            
+                            // Execute auto-approved operations
+                            if !operations_to_execute.is_empty() {
+                                tracing::info!(
+                                    "✅ Auto-executing {} approved operations",
+                                    operations_to_execute.len()
+                                );
+                                
+                                match file_executor.execute_operations_batch(
+                                    operations_to_execute,
+                                    &operation_context,
+                                ).await {
+                                    Ok(results) => {
+                                        let successful = results.iter().filter(|r| r.success).count();
+                                        let failed = results.iter().filter(|r| !r.success).count();
+                                        
+                                        tracing::info!(
+                                            "🤖 File operations executed: {} successful, {} failed",
+                                            successful,
+                                            failed
+                                        );
+                                        
+                                        // Log execution details
+                                        for result in &results {
+                                            if result.success {
+                                                tracing::info!("✅ {} operation on {}: {}", 
+                                                    match &result.operation {
                                         crate::consensus::stages::file_aware_curator::FileOperation::Create { .. } => "CREATE",
                                         crate::consensus::stages::file_aware_curator::FileOperation::Update { .. } => "UPDATE",
                                         crate::consensus::stages::file_aware_curator::FileOperation::Delete { .. } => "DELETE",
@@ -680,17 +766,26 @@ impl ConsensusPipeline {
                                         .unwrap_or_else(|| "unknown".to_string()),
                                     result.message
                                 );
-                            } else {
-                                tracing::error!("❌ Failed operation: {}", 
-                                    result.error_message.as_ref().unwrap_or(&result.message));
+                                            } else {
+                                                tracing::error!("❌ Failed operation: {}", 
+                                                    result.error_message.as_ref().unwrap_or(&result.message));
+                                            }
+                                        }
+                                        
+                                        if failed > 0 {
+                                            tracing::warn!(
+                                                "⚠️ {} file operations failed. Check logs for details.",
+                                                failed
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("Failed to execute operations batch: {}", e);
+                                    }
+                                }
+                            } else if operations_to_execute.is_empty() && operations_requiring_confirmation.is_empty() {
+                                tracing::info!("No operations to execute (all blocked or no operations found)");
                             }
-                        }
-                        
-                        if execution_summary.failed_operations > 0 {
-                            tracing::warn!(
-                                "⚠️ {} file operations failed. Check logs for details.",
-                                execution_summary.failed_operations
-                            );
                         }
                     }
                     Err(e) => {

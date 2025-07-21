@@ -64,11 +64,12 @@ pub enum ConsensusUIEvent {
 /// Desktop streaming callbacks that send events to UI
 pub struct DesktopStreamingCallbacks {
     event_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
+    auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl DesktopStreamingCallbacks {
-    pub fn new(event_sender: mpsc::UnboundedSender<ConsensusUIEvent>) -> Self {
-        Self { event_sender }
+    pub fn new(event_sender: mpsc::UnboundedSender<ConsensusUIEvent>, auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>) -> Self {
+        Self { event_sender, auto_accept_enabled }
     }
 }
 
@@ -76,6 +77,7 @@ impl DesktopStreamingCallbacks {
 pub struct DualChannelCallbacks {
     stream_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
     internal_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
+    auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl StreamingCallbacks for DesktopStreamingCallbacks {
@@ -230,6 +232,21 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
 
         tracing::error!("Consensus error at stage {:?}: {}", stage, error);
 
+        Ok(())
+    }
+    
+    fn get_auto_accept_state(&self) -> Option<bool> {
+        // Read the auto-accept state from atomic bool
+        Some(self.auto_accept_enabled.load(std::sync::atomic::Ordering::Relaxed))
+    }
+    
+    fn on_operations_require_confirmation(
+        &self,
+        operations: Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>,
+    ) -> Result<()> {
+        // TODO: Send operations to UI for confirmation
+        // This will be implemented when we add the approval UI
+        tracing::info!("Operations require confirmation: {} operations", operations.len());
         Ok(())
     }
 }
@@ -400,6 +417,21 @@ impl StreamingCallbacks for DualChannelCallbacks {
 
         tracing::error!("Consensus error at stage {:?}: {}", stage, error);
 
+        Ok(())
+    }
+    
+    fn get_auto_accept_state(&self) -> Option<bool> {
+        // Read the auto-accept state from atomic bool
+        Some(self.auto_accept_enabled.load(std::sync::atomic::Ordering::Relaxed))
+    }
+    
+    fn on_operations_require_confirmation(
+        &self,
+        operations: Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>,
+    ) -> Result<()> {
+        // TODO: Send operations to UI for confirmation
+        // This will be implemented when we add the approval UI
+        tracing::info!("Operations require confirmation: {} operations", operations.len());
         Ok(())
     }
 }
@@ -697,10 +729,16 @@ impl DesktopConsensusManager {
             process_consensus_events(rx_internal, app_state_events).await;
         });
 
+        // Create atomic bool for auto-accept state
+        let auto_accept_enabled = Arc::new(std::sync::atomic::AtomicBool::new(
+            self.app_state.read().auto_accept
+        ));
+        
         // Create callbacks that send to both channels
         let callbacks = Arc::new(DualChannelCallbacks {
             stream_sender: tx_stream,
             internal_sender: tx_internal,
+            auto_accept_enabled,
         });
 
         // Create cancellation token for this consensus operation
