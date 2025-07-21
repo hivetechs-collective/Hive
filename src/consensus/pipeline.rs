@@ -19,6 +19,7 @@ use crate::consensus::{
     FileOperationExecutor, ExecutorConfig, SmartDecisionEngine, 
     OperationIntelligenceCoordinator, operation_analysis::{AutoAcceptMode, OperationContext as ConsensusOperationContext},
     smart_decision_engine::UserPreferences,
+    ModeDetector, ExecutionMode, DirectExecutionHandler, StreamingOperationExecutor,
 };
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
@@ -59,6 +60,8 @@ pub struct ConsensusPipeline {
     usage_tracker: Option<Arc<UsageTracker>>,
     ai_helpers: Option<Arc<AIHelperEcosystem>>,
     file_executor: Option<Arc<FileOperationExecutor>>,
+    mode_detector: Option<Arc<ModeDetector>>,
+    direct_handler: Option<Arc<DirectExecutionHandler>>,
 }
 
 impl ConsensusPipeline {
@@ -110,6 +113,8 @@ impl ConsensusPipeline {
             usage_tracker: None, // Will be set when database is provided
             ai_helpers: None, // Will be set when database is provided
             file_executor: None, // Will be set when AI helpers are configured
+            mode_detector: None, // Will be set when AI helpers are configured
+            direct_handler: None, // Will be set when components are configured
         }
     }
 
@@ -131,6 +136,47 @@ impl ConsensusPipeline {
     pub fn with_repository_context(mut self, repository_context: Arc<RepositoryContextManager>) -> Self {
         self.repository_context = Some(repository_context);
         self
+    }
+    
+    /// Configure mode detection for Claude Code-style execution
+    pub async fn with_mode_detection(mut self) -> Result<Self> {
+        // Only configure if we have the necessary components
+        if let (Some(ai_helpers), Some(openrouter_client), Some(model_manager)) = 
+            (&self.ai_helpers, &self.openrouter_client, &self.model_manager) {
+            
+            // Create mode detector
+            let mode_detector = ModeDetector::new()?
+                .with_ai_helpers(ai_helpers.clone());
+            self.mode_detector = Some(Arc::new(mode_detector));
+            
+            // Create streaming executor for direct mode
+            if let Some(file_executor) = &self.file_executor {
+                let streaming_executor = Arc::new(
+                    StreamingOperationExecutor::new(
+                        file_executor.clone(),
+                        ai_helpers.clone(),
+                        Arc::new(std::sync::atomic::AtomicBool::new(true)), // Auto-accept for direct mode
+                        tokio::sync::mpsc::unbounded_channel().0, // Status channel
+                    )
+                );
+                
+                // Create direct execution handler
+                let generator_stage = Arc::new(GeneratorStage::new());
+                let direct_handler = Arc::new(
+                    DirectExecutionHandler::new(
+                        generator_stage,
+                        ai_helpers.clone(),
+                        streaming_executor,
+                        openrouter_client.clone(),
+                        model_manager.clone(),
+                    )
+                );
+                
+                self.direct_handler = Some(direct_handler);
+            }
+        }
+        
+        Ok(self)
     }
     
     /// Initialize repository verification for anti-hallucination
@@ -410,6 +456,61 @@ impl ConsensusPipeline {
 
         let mut previous_answer: Option<String> = None;
         let mut stage_results = Vec::new();
+
+        // Check if we should use direct execution mode (Claude Code style)
+        if let (Some(mode_detector), Some(direct_handler)) = (&self.mode_detector, &self.direct_handler) {
+            let detected_mode = mode_detector.detect_mode(question).await;
+            
+            match detected_mode {
+                ExecutionMode::Direct => {
+                    // Use direct execution path for simple operations
+                    tracing::info!("🚀 Using DIRECT execution mode (Claude Code style)");
+                    
+                    // Execute directly with the generator stage
+                    direct_handler.handle_request(
+                        question,
+                        context.as_deref(),
+                        self.callbacks.clone(),
+                    ).await?;
+                    
+                    // Create a simple result for direct mode
+                    let final_result = ConsensusResult {
+                        answer: format!("Direct execution completed for: {}", question),
+                        confidence: 0.95,
+                        profile: self.profile.clone(),
+                        stages: vec![StageResult {
+                            stage: Stage::Generator,
+                            model: self.profile.generator_model.clone(),
+                            output: format!("Direct execution completed"),
+                            analytics: StageAnalytics {
+                                stage: Stage::Generator,
+                                model: self.profile.generator_model.clone(),
+                                duration_ms: pipeline_start.elapsed().as_millis() as u64,
+                                token_usage: TokenUsage::default(),
+                                cost: 0.0,
+                                success: true,
+                                quality_score: Some(0.95),
+                            },
+                        }],
+                        total_duration_ms: pipeline_start.elapsed().as_millis() as u64,
+                        total_cost,
+                        user_id,
+                        conversation_id,
+                        created_at: Utc::now(),
+                    };
+                    
+                    return Ok(final_result);
+                }
+                ExecutionMode::HybridConsensus => {
+                    tracing::info!("🔄 Using HYBRID consensus mode (consensus with inline operations)");
+                    // Continue with normal consensus but with inline operation support
+                }
+                ExecutionMode::Consensus => {
+                    tracing::info!("🧠 Using FULL consensus mode (4-stage analysis)");
+                    // Continue with normal consensus
+                }
+            }
+        }
 
         // Run through all 4 stages
         for (i, stage_handler) in self.stages.iter().enumerate() {
