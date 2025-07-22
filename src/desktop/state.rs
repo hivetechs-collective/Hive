@@ -76,6 +76,9 @@ pub struct AppState {
     /// Trigger for analytics refresh after consensus completion
     pub analytics_refresh_trigger: u32,
     
+    /// Trigger for repository context update when directory selection changes
+    pub repository_context_update_trigger: u32,
+    
     /// Pending file operations requiring user confirmation
     pub pending_operations: Option<Vec<crate::consensus::ai_operation_parser::FileOperationWithMetadata>>,
     
@@ -111,6 +114,7 @@ impl AppState {
             trial_days_remaining: None,
             subscription_refresh_trigger: 0,
             analytics_refresh_trigger: 0,
+            repository_context_update_trigger: 0,
             pending_operations: None,
             show_operation_confirmation_dialog: false,
         }
@@ -211,6 +215,7 @@ pub struct FileExplorerState {
     pub root_path: Option<PathBuf>,
     pub expanded_dirs: HashMap<PathBuf, bool>,
     pub selected_file: Option<PathBuf>,
+    pub selected_directory: Option<PathBuf>, // Track selected directory for repository context
     pub files: Vec<FileItem>,
     pub filter: String,
     pub show_hidden: bool,
@@ -222,6 +227,7 @@ impl FileExplorerState {
             root_path: None,
             expanded_dirs: HashMap::new(),
             selected_file: None,
+            selected_directory: None,
             files: Vec::new(),
             filter: String::new(),
             show_hidden: false,
@@ -242,6 +248,10 @@ impl FileExplorerState {
 
     pub fn select_file(&mut self, path: PathBuf) {
         self.selected_file = Some(path);
+    }
+    
+    pub fn select_directory(&mut self, path: PathBuf) {
+        self.selected_directory = Some(path);
     }
 }
 

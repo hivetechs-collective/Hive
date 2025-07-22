@@ -22,6 +22,7 @@ pub mod code_translator;
 pub mod semantic_retriever;
 pub mod intelligent_executor;
 pub mod rollback_executor;
+pub mod autonomous_ai_helper;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -71,6 +72,9 @@ pub use intelligent_executor::{
 pub use rollback_executor::{
     AIHelperRollbackExecutor, RollbackPlan, RollbackOperation, RollbackAction,
     RollbackSafetyLevel, RollbackResult, OperationResult
+};
+pub use autonomous_ai_helper::{
+    AutonomousAIHelper, AutonomousDecision, AutonomousAction
 };
 
 /// Processed knowledge from AI helpers
@@ -199,6 +203,9 @@ pub struct AIHelperEcosystem {
     /// Intelligent executor for smart execution with learning
     pub intelligent_executor: Arc<IntelligentExecutor>,
     
+    /// Autonomous AI Helper for independent thinking
+    pub autonomous_helper: Option<Arc<AutonomousAIHelper>>,
+    
     /// Python model service
     python_service: Arc<PythonModelService>,
     
@@ -307,6 +314,7 @@ impl AIHelperEcosystem {
             code_translator,
             semantic_retriever,
             intelligent_executor,
+            autonomous_helper: None, // Will be set when repository context is available
             python_service,
             parallel_processor,
             performance_monitor,
@@ -511,6 +519,25 @@ impl AIHelperEcosystem {
             tracing::info!("✅ AI helpers now have repository awareness for enhanced context");
         } else {
             tracing::warn!("Repository facts cleared from AI helpers");
+        }
+        
+        Ok(())
+    }
+    
+    /// Set repository context to enable autonomous AI Helper
+    pub async fn set_repository_context(&mut self, repository_context: Option<Arc<crate::consensus::repository_context::RepositoryContextManager>>) -> Result<()> {
+        if let Some(repo_ctx) = repository_context {
+            // Create autonomous helper with repository context
+            let autonomous_helper = AutonomousAIHelper::new(
+                Arc::new(self.clone()),
+                Some(repo_ctx),
+            )?;
+            
+            self.autonomous_helper = Some(Arc::new(autonomous_helper));
+            tracing::info!("✅ Autonomous AI Helper activated with repository context");
+        } else {
+            self.autonomous_helper = None;
+            tracing::info!("Autonomous AI Helper deactivated (no repository context)");
         }
         
         Ok(())

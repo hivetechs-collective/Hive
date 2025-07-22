@@ -15,6 +15,25 @@ pub fn ChatInterface() -> Element {
     let state = app_state.read();
     let api_keys_version = use_context::<Signal<u32>>();
     let consensus_manager = use_consensus_with_version(*api_keys_version.read());
+    
+    // Watch for repository context update trigger
+    let repository_context_trigger = state.repository_context_update_trigger;
+    let consensus_manager_for_effect = consensus_manager.clone();
+    use_effect(move || {
+        // Skip the initial trigger (0)
+        if repository_context_trigger > 0 {
+            tracing::info!("Repository context update triggered: {}", repository_context_trigger);
+            if let Some(manager) = consensus_manager_for_effect.clone() {
+                dioxus::prelude::spawn(async move {
+                    if let Err(e) = manager.update_repository_context().await {
+                        tracing::warn!("Failed to update repository context: {}", e);
+                    } else {
+                        tracing::info!("✅ Repository context updated successfully from file explorer");
+                    }
+                });
+            }
+        }
+    });
 
     rsx! {
         div {
@@ -46,10 +65,9 @@ pub fn ChatInterface() -> Element {
                             let consensus_manager = consensus_manager.clone();
                             move |_| {
                                 tracing::info!("🛑 Cancel button clicked from ChatInterface!");
-                                if let Some(ref mut manager) = consensus_manager.as_ref() {
-                                    let mut manager_clone = manager.clone();
+                                if let Some(mut manager) = consensus_manager.clone() {
                                     spawn(async move {
-                                        if let Err(e) = manager_clone.cancel_consensus("User cancelled from chat interface").await {
+                                        if let Err(e) = manager.cancel_consensus("User cancelled from chat interface").await {
                                             tracing::warn!("Failed to cancel consensus: {}", e);
                                         }
                                     });

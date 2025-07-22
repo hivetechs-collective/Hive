@@ -3,6 +3,7 @@
 //! 100% Rust implementation providing professional development experience
 
 pub mod activity_bar;
+pub mod ai_ui_events;
 pub mod app;
 pub mod assets;
 pub mod chat;
