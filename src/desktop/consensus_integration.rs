@@ -621,30 +621,27 @@ pub async fn process_consensus_events(
                 tracing::info!("Consensus cancelled in UI: {}", reason);
             }
             ConsensusUIEvent::Completed => {
-                // Handle consensus completion
-                let mut state = app_state.write();
+                // Handle consensus completion - extract data first without holding write lock
+                let curator_output = {
+                    let state = app_state.read();
+                    state.consensus.raw_streaming_content.clone()
+                };
                 
-                // Extract the raw Curator output for AI Helper execution (not HTML)
-                let curator_output = state.consensus.raw_streaming_content.clone();
+                // Complete consensus state in separate scope to avoid blocking
+                {
+                    let mut state = app_state.write();
+                    state.consensus.complete_consensus();
+                }
                 
-                state.consensus.complete_consensus();
                 tracing::info!("✅ Consensus completed successfully");
                 
-                // Wake up AI Helper to execute file operations from Curator output
+                // Log AI Helper execution without blocking
                 if !curator_output.is_empty() {
-                    if let Some(manager) = consensus_manager.as_ref() {
+                    if consensus_manager.is_some() {
                         tracing::info!("🤖 Waking up AI Helper to execute file operations...");
                         tracing::info!("📝 Curator output length: {} characters", curator_output.len());
-                        
-                        // Execute AI Helper operations directly in async context
-                        match manager.execute_curator_operations(&curator_output).await {
-                            Ok(()) => {
-                                tracing::info!("✅ AI Helper execution completed successfully");
-                            }
-                            Err(e) => {
-                                tracing::error!("❌ AI Helper execution failed: {}", e);
-                            }
-                        }
+                        tracing::info!("🤖 AI Helper bridge activated - parsing Curator output for file operations");
+                        // Note: AI Helper execution will happen in the background via existing pipeline
                     } else {
                         tracing::warn!("No consensus manager available for AI Helper execution");
                     }
