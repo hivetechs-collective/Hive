@@ -106,6 +106,18 @@ pub enum VerificationStatus {
     Updated,
 }
 
+impl Default for FactMetadata {
+    fn default() -> Self {
+        Self {
+            fact_type: FactType::Other("general".to_string()),
+            domain: None,
+            language: "en".to_string(),
+            complexity_score: 0.5,
+            verification_status: VerificationStatus::Unverified,
+        }
+    }
+}
+
 impl AuthoritativeKnowledgeStore {
     /// Create a new knowledge store
     pub async fn new(
@@ -336,6 +348,48 @@ impl AuthoritativeKnowledgeStore {
             .cloned()
             .collect();
             
+        Ok(facts)
+    }
+    
+    /// Get all facts sorted by date (newest first)
+    pub async fn get_all_facts_sorted_by_date(&self) -> Result<Vec<CuratedFact>> {
+        let conn = self.database.get_connection()?;
+        
+        let mut stmt = conn.prepare(
+            "SELECT id, semantic_fingerprint, content, curator_confidence,
+                    source_question, source_conversation_id, consensus_stages,
+                    created_at, last_accessed, access_count, related_facts,
+                    topics, entities, metadata
+             FROM consensus_facts 
+             ORDER BY created_at DESC"
+        )?;
+        
+        let facts = stmt.query_map([], |row| {
+            Ok(CuratedFact {
+                id: row.get(0)?,
+                semantic_fingerprint: row.get(1)?,
+                content: row.get(2)?,
+                curator_confidence: row.get(3)?,
+                source_question: row.get(4)?,
+                source_conversation_id: row.get(5)?,
+                consensus_stages: serde_json::from_str(&row.get::<_, String>(6)?).unwrap_or_default(),
+                created_at: row.get::<_, String>(7)?.parse::<DateTime<Utc>>().unwrap_or(Utc::now()),
+                last_accessed: row.get::<_, String>(8)?.parse::<DateTime<Utc>>().unwrap_or(Utc::now()),
+                access_count: row.get(9)?,
+                related_facts: serde_json::from_str(&row.get::<_, String>(10)?).unwrap_or_default(),
+                topics: serde_json::from_str(&row.get::<_, String>(11)?).unwrap_or_default(),
+                entities: serde_json::from_str(&row.get::<_, String>(12)?).unwrap_or_default(),
+                metadata: serde_json::from_str(&row.get::<_, String>(13)?).unwrap_or_else(|_| FactMetadata {
+                    fact_type: FactType::Other("unknown".to_string()),
+                    domain: None,
+                    language: "en".to_string(),
+                    complexity_score: 0.5,
+                    verification_status: VerificationStatus::Unverified,
+                }),
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+        
         Ok(facts)
     }
     
