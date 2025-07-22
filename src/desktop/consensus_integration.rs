@@ -693,6 +693,57 @@ impl DesktopConsensusManager {
         // Create repository context manager
         let repository_context = Arc::new(RepositoryContextManager::new().await?);
 
+        // Initialize repository context with current working directory immediately
+        let current_dir = std::env::current_dir().map_err(|e| {
+            anyhow::anyhow!("Failed to get current working directory: {}", e)
+        })?;
+        
+        tracing::info!("🔍 Auto-detecting repository at current working directory: {}", current_dir.display());
+        
+        // Check if current directory looks like a repository
+        if current_dir.join("Cargo.toml").exists() || 
+           current_dir.join("package.json").exists() || 
+           current_dir.join(".git").exists() ||
+           current_dir.join("pyproject.toml").exists() ||
+           current_dir.join("go.mod").exists() {
+            
+            tracing::info!("🎯 Repository detected! Setting up context for: {}", current_dir.display());
+            
+            // Update app state with detected repository
+            {
+                let mut app_state_clone = app_state.clone();
+                let project_name = current_dir
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Current Project")
+                    .to_string();
+                    
+                app_state_clone.write().current_project = Some(crate::desktop::state::ProjectInfo {
+                    name: project_name.clone(),
+                    path: current_dir.clone(),
+                    root_path: current_dir.clone(),
+                    language: None,
+                    git_status: crate::desktop::state::GitStatus::NotRepository,
+                    git_branch: None,
+                    file_count: 0,
+                });
+                
+                tracing::info!("📝 Updated app state with project: {}", project_name);
+            }
+            
+            // Update repository context immediately
+            {
+                let app_state_clone = app_state.read();
+                if let Err(e) = repository_context.update_from_ide_state(&app_state_clone).await {
+                    tracing::warn!("Failed to initialize repository context: {}", e);
+                } else {
+                    tracing::info!("✅ Repository context initialized successfully");
+                }
+            }
+        } else {
+            tracing::warn!("⚠️ No repository detected in current directory. AI Helper will ask user for clarification when needed.");
+        }
+
         // Create engine without checking keys - we'll check when processing
         let mut engine = ConsensusEngine::new(Some(db)).await?;
         

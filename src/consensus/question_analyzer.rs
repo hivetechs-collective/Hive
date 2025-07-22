@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use tracing::{debug, info};
+use std::sync::Arc;
 
 /// Categories of questions
 #[derive(Debug, Clone, PartialEq)]
@@ -59,11 +60,49 @@ impl QuestionAnalyzer {
                 "deep learning", "transformer", "gpt", "claude",
                 "consensus", "ai assistant", "chatbot", "nlp",
             ],
+            ai_helpers,
         }
     }
 
     /// Analyze a question and determine its category
-    pub fn analyze(&self, question: &str) -> QuestionCategory {
+    pub async fn analyze(&self, question: &str) -> QuestionCategory {
+        // First try AI-powered semantic analysis if available
+        if let Some(ref ai_helpers) = self.ai_helpers {
+            match ai_helpers.intelligent_orchestrator
+                .make_intelligent_context_decision(question, true)
+                .await {
+                Ok(decision) => {
+                    info!("🤖 AI semantic analysis: category={:?}, confidence={:.2}, should_use_repo={}", 
+                        decision.primary_category, decision.confidence, decision.should_use_repo);
+                    
+                    // Map AI decision to our categories
+                    use crate::ai_helpers::intelligent_context_orchestrator::QuestionCategory as AICategory;
+                    match decision.primary_category {
+                        AICategory::RepositorySpecific => return QuestionCategory::RepositorySpecific,
+                        AICategory::GeneralProgramming => return QuestionCategory::GeneralProgramming,
+                        AICategory::ComputerScience => return QuestionCategory::GeneralProgramming,
+                        AICategory::AcademicKnowledge => return QuestionCategory::General,
+                        AICategory::GeneralKnowledge => return QuestionCategory::General,
+                        _ => {
+                            // For Hybrid/Ambiguous, check if should use repo
+                            if decision.should_use_repo {
+                                return QuestionCategory::RepositorySpecific;
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    debug!("AI semantic analysis failed: {}, falling back to keywords", e);
+                }
+            }
+        }
+        
+        // Fallback to keyword-based analysis
+        self.analyze_with_keywords(question)
+    }
+    
+    /// Keyword-based analysis (fallback when AI is unavailable)
+    fn analyze_with_keywords(&self, question: &str) -> QuestionCategory {
         let question_lower = question.to_lowercase();
         
         // Count keyword matches for each category
