@@ -203,39 +203,7 @@ impl ConsensusPipeline {
     pub fn with_ai_helpers(mut self, ai_helpers: Arc<AIHelperEcosystem>) -> Self {
         self.ai_helpers = Some(ai_helpers.clone());
         
-        // Initialize consensus memory when AI helpers and database are available
-        if let Some(ref db) = self.database {
-            // Initialize ConsensusMemory for storing and retrieving knowledge
-            match tokio::runtime::Handle::try_current() {
-                Ok(handle) => {
-                    let db_clone = db.clone();
-                    match handle.block_on(async move {
-                        ConsensusMemory::new(db_clone).await
-                    }) {
-                        Ok(consensus_memory) => {
-                            let consensus_memory_arc = Arc::new(consensus_memory);
-                            self.consensus_memory = Some(consensus_memory_arc.clone());
-                            
-                            // Connect the hive mind - give AI helpers access to the knowledge store
-                            let ai_helpers_clone = ai_helpers.clone();
-                            if let Err(e) = handle.block_on(async move {
-                                consensus_memory_arc.connect_hive_mind(&ai_helpers_clone).await
-                            }) {
-                                tracing::warn!("Failed to connect hive mind: {}", e);
-                            } else {
-                                tracing::info!("✅ ConsensusMemory initialized and hive mind connected - All stages share collective knowledge!");
-                            }
-                        }
-                        Err(e) => {
-                            tracing::warn!("Failed to initialize ConsensusMemory: {}. Continuing without enhanced memory.", e);
-                        }
-                    }
-                }
-                Err(_) => {
-                    tracing::warn!("No tokio runtime available for ConsensusMemory initialization");
-                }
-            }
-        }
+        // ConsensusMemory will be initialized asynchronously later to avoid runtime conflicts
         
         // Initialize file executor when AI helpers are available
         if let Some(ref db) = self.database {
@@ -291,6 +259,31 @@ impl ConsensusPipeline {
         }
         
         self
+    }
+    
+    /// Initialize consensus memory asynchronously (must be called after with_ai_helpers and with_database)
+    pub async fn initialize_consensus_memory(&mut self) -> Result<()> {
+        if let (Some(ref db), Some(ref ai_helpers)) = (&self.database, &self.ai_helpers) {
+            // Initialize ConsensusMemory for storing and retrieving knowledge
+            match ConsensusMemory::new(db.clone()).await {
+                Ok(consensus_memory) => {
+                    let consensus_memory_arc = Arc::new(consensus_memory);
+                    
+                    // Connect the hive mind - give AI helpers access to the knowledge store
+                    if let Err(e) = consensus_memory_arc.connect_hive_mind(ai_helpers).await {
+                        tracing::warn!("Failed to connect hive mind: {}", e);
+                    } else {
+                        tracing::info!("✅ ConsensusMemory initialized and hive mind connected - All stages share collective knowledge!");
+                    }
+                    
+                    self.consensus_memory = Some(consensus_memory_arc);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize ConsensusMemory: {}. Continuing without enhanced memory.", e);
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Set the hooks system for this pipeline
