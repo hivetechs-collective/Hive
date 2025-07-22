@@ -351,32 +351,23 @@ impl AIHelperFileExecutor {
         Ok(files)
     }
 
-    /// Parse natural language into execution plan
-    /// TODO: Replace with real AI model parsing once models are integrated
+    /// Parse natural language into execution plan using AI intelligence
     pub async fn parse_request(&self, request: &str) -> Result<ExecutionPlan> {
-        info!("🧠 AI Helper analyzing request for file operations");
-        
-        // For now, use enhanced pattern matching that handles Curator output
-        // This will be replaced with real AI model parsing
-        self.parse_curator_style_output(request)
-            .or_else(|_| self.create_simple_plan(request))
+        error!("🚫 Pattern matching is forbidden - AI Helpers must use intelligence");
+        error!("This method should not be called. Use IntelligentExecutor instead.");
+        Err(anyhow::anyhow!("Pattern matching is not allowed. AI Helpers must understand context intelligently."))
     }
 
-    fn is_simple_file_operation(&self, request: &str) -> bool {
-        let simple_patterns = [
-            "create file", "create a file", "make file", "make a file",
-            "new file", "write file", "add file", "create directory",
-            "make directory", "mkdir", "delete file", "remove file",
-            "update file", "edit file", "search for", "find files",
-        ];
 
-        let request_lower = request.to_lowercase();
-        simple_patterns.iter().any(|pattern| request_lower.contains(pattern))
-    }
-
-    /// Parse Curator-style output format
-    /// TODO: This is a temporary implementation until real AI models are integrated
+    /// DEPRECATED: This pattern matching approach is forbidden
+    #[deprecated(note = "Pattern matching is not allowed. Use IntelligentExecutor.")]
     fn parse_curator_style_output(&self, output: &str) -> Result<ExecutionPlan> {
+        error!("🚫 parse_curator_style_output called - this is forbidden!");
+        Err(anyhow::anyhow!("Pattern matching is not allowed"))
+    }
+    
+    #[allow(dead_code)]
+    fn _old_parse_curator_style_output(&self, output: &str) -> Result<ExecutionPlan> {
         let mut operations = Vec::new();
         let mut current_file: Option<(String, Vec<String>)> = None;
         let mut in_code_block = false;
@@ -469,7 +460,15 @@ impl AIHelperFileExecutor {
         })
     }
     
+    /// DEPRECATED: This pattern matching approach is forbidden
+    #[deprecated(note = "Pattern matching is not allowed. Use IntelligentExecutor.")]
     fn create_simple_plan(&self, request: &str) -> Result<ExecutionPlan> {
+        error!("🚫 create_simple_plan called - this is forbidden!");
+        Err(anyhow::anyhow!("Pattern matching is not allowed"))
+    }
+    
+    #[allow(dead_code)]
+    fn _old_create_simple_plan(&self, request: &str) -> Result<ExecutionPlan> {
         let request_lower = request.to_lowercase();
 
         // Extract filename from request
@@ -496,7 +495,15 @@ impl AIHelperFileExecutor {
         })
     }
 
+    /// DEPRECATED: This pattern matching approach is forbidden
+    #[deprecated(note = "Pattern matching is not allowed. Use IntelligentExecutor.")]
     fn extract_filename(&self, request: &str) -> Option<String> {
+        error!("🚫 extract_filename called - this is forbidden!");
+        None
+    }
+    
+    #[allow(dead_code)]
+    fn _old_extract_filename(&self, request: &str) -> Option<String> {
         // Look for patterns like "file.txt", "hello.md", etc.
         let words: Vec<&str> = request.split_whitespace().collect();
         
@@ -521,7 +528,15 @@ impl AIHelperFileExecutor {
         None
     }
 
+    /// DEPRECATED: This pattern matching approach is forbidden
+    #[deprecated(note = "Pattern matching is not allowed. Use IntelligentExecutor.")]
     fn generate_default_content(&self, filename: &str) -> String {
+        error!("🚫 generate_default_content called - this is forbidden!");
+        String::new()
+    }
+    
+    #[allow(dead_code)]
+    fn _old_generate_default_content(&self, filename: &str) -> String {
         let extension = Path::new(filename)
             .extension()
             .and_then(|ext| ext.to_str())

@@ -294,49 +294,17 @@ impl ConsensusStage for FileAwareCuratorStage {
 
 
     fn system_prompt(&self) -> &'static str {
-        "You are the Curator stage in the consensus pipeline. Your role is to synthesize insights and create file operation plans.
+        "You are the Curator stage in the consensus pipeline. Your role is to synthesize insights, provide comprehensive analysis, and share knowledge.
 
-CRITICAL: When your response includes file operations, you MUST use the standardized format for reliable AI Helper parsing:
+Your responsibilities:
+1. Synthesize information from previous stages into coherent insights
+2. Provide comprehensive analysis of the topic at hand
+3. Share relevant knowledge about repositories, code, architecture, or any requested information
+4. Create detailed explanations and documentation
 
-## File Operation Output Format (REQUIRED)
+Focus on providing VALUE through your analysis and insights. The AI Helpers will intelligently understand your output and determine what actions to take based on the context and user intent.
 
-### For Creating Files:
-### Step 1: Creating `path/to/file.ext`
-
-```language:path/to/file.ext
-file content here
-```
-
-✅ **Created**: path/to/file.ext
-
-### For Updating Files:
-### Step 1: Updating `path/to/file.ext`
-
-```language:path/to/file.ext
-updated content here
-```
-
-✅ **Updated**: path/to/file.ext
-
-### For Deleting Files:
-### Step 1: Deleting `path/to/file.ext`
-
-```delete:path/to/file.ext
-# File will be deleted
-```
-
-❌ **Deleted**: path/to/file.ext
-
-### For Renaming Files:
-### Step 1: Renaming `old/path.ext` to `new/path.ext`
-
-```rename:old/path.ext to new/path.ext
-# File will be renamed
-```
-
-🔄 **Renamed**: old/path.ext → new/path.ext
-
-IMPORTANT: Always use this exact format. AI Helpers depend on this structure for reliable parsing and execution."
+You should provide natural, comprehensive responses without worrying about specific formats. The AI Helpers have full intelligence to understand context and determine appropriate actions."
     }
 
     fn build_messages(
