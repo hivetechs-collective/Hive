@@ -232,19 +232,8 @@ impl IntelligentContextOrchestrator {
         pattern_analysis: PatternAnalysis,
         quality_assessment: QualityAssessment,
     ) -> Result<IntelligentContextDecision> {
-        // Never use repository context if no repository is open
-        if !has_open_repository {
-            return Ok(IntelligentContextDecision {
-                should_use_repo: false,
-                confidence: 1.0,
-                primary_category: classification.primary_category,
-                secondary_categories: classification.secondary_categories,
-                reasoning: "No repository open".to_string(),
-                validation_score: 1.0,
-                pattern_analysis,
-                quality_assessment,
-            });
-        }
+        // The ContextRetriever now handles intelligent auto-discovery
+        // We just need to make the decision based on the classification
         
         // Calculate repository context suitability score
         let repo_suitability = self.calculate_repo_suitability(
