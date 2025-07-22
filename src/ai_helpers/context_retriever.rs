@@ -193,6 +193,9 @@ pub struct ContextRetriever {
     
     /// Context analysis cache
     context_analysis_cache: Arc<RwLock<HashMap<String, OperationContextAnalysis>>>,
+    
+    /// Access to authoritative knowledge store for hive mind consciousness
+    knowledge_store: Arc<RwLock<Option<Arc<crate::consensus::memory::AuthoritativeKnowledgeStore>>>>,
 }
 
 /// Internal operation history entry
@@ -226,6 +229,7 @@ impl ContextRetriever {
             operation_history: Arc::new(RwLock::new(HashMap::new())),
             success_rate_cache: Arc::new(RwLock::new(HashMap::new())),
             context_analysis_cache: Arc::new(RwLock::new(HashMap::new())),
+            knowledge_store: Arc::new(RwLock::new(None)),
         })
     }
     
@@ -244,6 +248,23 @@ impl ContextRetriever {
         }
         
         // Clear cache since context will be different with new facts
+        self.retrieval_cache.write().await.clear();
+        
+        Ok(())
+    }
+    
+    /// Update knowledge store for hive mind consciousness
+    pub async fn update_knowledge_store(&self, store: Option<Arc<crate::consensus::memory::AuthoritativeKnowledgeStore>>) -> Result<()> {
+        let mut knowledge_store = self.knowledge_store.write().await;
+        *knowledge_store = store.clone();
+        
+        if store.is_some() {
+            tracing::info!("✅ Hive mind connected: ContextRetriever now has access to all curator knowledge");
+        } else {
+            tracing::warn!("Hive mind disconnected: ContextRetriever has no access to historical knowledge");
+        }
+        
+        // Clear cache since context will be different with knowledge store
         self.retrieval_cache.write().await.clear();
         
         Ok(())
@@ -391,12 +412,57 @@ impl ContextRetriever {
         question: &str,
         limit: usize,
     ) -> Result<Vec<String>> {
-        // TODO: Implement actual retrieval with GraphCodeBERT ranking
-        // For now, return placeholder
-        Ok(vec![
-            "Example: Previous implementation of similar feature...".to_string(),
-            "Pattern: Common approach to this type of problem...".to_string(),
-        ])
+        // Check if we have access to the hive mind (AuthoritativeKnowledgeStore)
+        let knowledge_store_guard = self.knowledge_store.read().await;
+        if let Some(ref knowledge_store) = *knowledge_store_guard {
+            tracing::debug!("🐝 Hive mind active: Retrieving knowledge for Generator stage");
+            
+            // Get recent facts for temporal context
+            let recent_facts = knowledge_store.get_recent_facts(
+                chrono::Duration::days(7) // 7 days
+            ).await?;
+            
+            // Find similar facts based on the question
+            let similar_facts = knowledge_store.find_similar(question, 5).await?;
+            
+            // Combine and format facts for the Generator
+            let mut context_items = Vec::new();
+            
+            // Add recent facts
+            for fact in recent_facts.iter().take(limit / 2) {
+                context_items.push(format!(
+                    "📅 Recent Knowledge ({}): {}\nFrom: {}",
+                    fact.created_at.format("%Y-%m-%d"),
+                    fact.content,
+                    fact.source_question
+                ));
+            }
+            
+            // Add similar facts
+            for fact in similar_facts.iter().take(limit / 2) {
+                context_items.push(format!(
+                    "🔗 Related Knowledge: {}\nContext: {}",
+                    fact.content,
+                    fact.source_question
+                ));
+            }
+            
+            if context_items.is_empty() {
+                tracing::debug!("No relevant facts found in hive mind, returning general guidance");
+                Ok(vec![
+                    "No previous curator knowledge found. Generate a comprehensive response based on your training.".to_string()
+                ])
+            } else {
+                tracing::info!("🌐 Hive mind provided {} context items for Generator", context_items.len());
+                Ok(context_items)
+            }
+        } else {
+            // Fallback to vector store or placeholders
+            tracing::warn!("No hive mind connection - Generator stage operating without historical context");
+            Ok(vec![
+                "Operating without hive mind context. Generate based on training knowledge.".to_string()
+            ])
+        }
     }
     
     /// Retrieve high-quality examples for Refiner
@@ -405,10 +471,40 @@ impl ContextRetriever {
         question: &str,
         limit: usize,
     ) -> Result<Vec<String>> {
-        // TODO: Filter for high-confidence, well-rated responses
-        Ok(vec![
-            "High-quality example with clear explanation...".to_string(),
-        ])
+        let knowledge_store_guard = self.knowledge_store.read().await;
+        if let Some(ref knowledge_store) = *knowledge_store_guard {
+            tracing::debug!("🐝 Hive mind active: Finding quality examples for Refiner");
+            
+            // Get all facts sorted by date and filter for high quality
+            let all_facts = knowledge_store.get_all_facts_sorted_by_date().await?;
+            
+            // Filter for high quality (confidence > 0.8) and sort by confidence
+            let mut quality_facts: Vec<_> = all_facts.into_iter()
+                .filter(|f| f.curator_confidence > 0.8)
+                .collect();
+            
+            // Sort by confidence descending
+            quality_facts.sort_by(|a, b| b.curator_confidence.partial_cmp(&a.curator_confidence).unwrap());
+            let quality_facts: Vec<_> = quality_facts.into_iter().take(limit).collect();
+            
+            let context_items: Vec<String> = quality_facts.iter()
+                .map(|fact| format!(
+                    "✨ High-Quality Example (confidence: {:.2}): {}\nRefined from: {}",
+                    fact.curator_confidence,
+                    fact.content,
+                    fact.source_question
+                ))
+                .collect();
+            
+            if context_items.is_empty() {
+                Ok(vec!["Focus on clarity and completeness. No high-quality examples available yet.".to_string()])
+            } else {
+                tracing::info!("🏆 Hive mind provided {} quality examples for Refiner", context_items.len());
+                Ok(context_items)
+            }
+        } else {
+            Ok(vec!["Refine based on best practices. No historical examples available.".to_string()])
+        }
     }
     
     /// Retrieve edge cases for Validator
@@ -417,10 +513,42 @@ impl ContextRetriever {
         question: &str,
         limit: usize,
     ) -> Result<Vec<String>> {
-        // TODO: Look for past issues, corrections, and edge cases
-        Ok(vec![
-            "Edge case: When X happens, consider Y...".to_string(),
-        ])
+        let knowledge_store_guard = self.knowledge_store.read().await;
+        if let Some(ref knowledge_store) = *knowledge_store_guard {
+            tracing::debug!("🐝 Hive mind active: Finding edge cases for Validator");
+            
+            // Find facts about similar topics to identify potential contradictions
+            let similar_facts = knowledge_store.find_similar(question, limit * 2).await?;
+            
+            // Look for patterns in themes to find edge cases
+            let mut edge_cases = Vec::new();
+            let mut seen_themes = std::collections::HashSet::new();
+            
+            for fact in similar_facts {
+                // Extract unique perspectives
+                let primary_theme = fact.topics.first().cloned().unwrap_or_else(|| "general".to_string());
+                if seen_themes.insert(primary_theme.clone()) {
+                    edge_cases.push(format!(
+                        "⚠️ Consider: {}\nPrevious context: {}",
+                        fact.content,
+                        fact.source_question
+                    ));
+                }
+                
+                if edge_cases.len() >= limit {
+                    break;
+                }
+            }
+            
+            if edge_cases.is_empty() {
+                Ok(vec!["Validate thoroughly. No historical edge cases found.".to_string()])
+            } else {
+                tracing::info!("🔍 Hive mind provided {} edge cases for Validator", edge_cases.len());
+                Ok(edge_cases)
+            }
+        } else {
+            Ok(vec!["Validate based on general principles. No historical cases available.".to_string()])
+        }
     }
     
     /// Retrieve synthesis opportunities for Curator
@@ -429,10 +557,45 @@ impl ContextRetriever {
         question: &str,
         limit: usize,
     ) -> Result<Vec<String>> {
-        // TODO: Find related concepts that can be synthesized
-        Ok(vec![
-            "Related concept that can be integrated...".to_string(),
-        ])
+        let knowledge_store_guard = self.knowledge_store.read().await;
+        if let Some(ref knowledge_store) = *knowledge_store_guard {
+            tracing::debug!("🐝 Hive mind active: Finding synthesis opportunities for Curator");
+            
+            // Get both recent and thematically similar facts
+            let recent_facts = knowledge_store.get_recent_facts(
+                chrono::Duration::days(3) // 3 days
+            ).await?;
+            let similar_facts = knowledge_store.find_similar(question, limit).await?;
+            
+            let mut synthesis_items = Vec::new();
+            
+            // Add recent authoritative knowledge
+            for fact in recent_facts.iter().take(limit / 2) {
+                synthesis_items.push(format!(
+                    "🎯 Recent Authority: {}\nEstablished from: {}",
+                    fact.content,
+                    fact.source_question
+                ));
+            }
+            
+            // Add thematically related synthesis opportunities  
+            for fact in similar_facts.iter().take(limit / 2) {
+                synthesis_items.push(format!(
+                    "🔄 Synthesis Opportunity: {}\nRelated theme: {}",
+                    fact.content,
+                    fact.topics.first().cloned().unwrap_or_else(|| "general".to_string())
+                ));
+            }
+            
+            if synthesis_items.is_empty() {
+                Ok(vec!["Create authoritative knowledge. This will be the first entry in the hive mind.".to_string()])
+            } else {
+                tracing::info!("🌟 Hive mind provided {} synthesis items for Curator", synthesis_items.len());
+                Ok(synthesis_items)
+            }
+        } else {
+            Ok(vec!["Synthesize based on current context. No historical knowledge available.".to_string()])
+        }
     }
     
     /// Find patterns relevant to the question

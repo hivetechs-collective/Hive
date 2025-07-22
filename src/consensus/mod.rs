@@ -20,6 +20,7 @@ pub mod verification;
 pub mod fact_checker;
 pub mod cross_validator;
 pub mod verified_context_builder;
+pub mod memory;
 pub mod operation_intelligence;
 pub mod operation_analysis;
 pub mod operation_history;

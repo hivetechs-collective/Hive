@@ -15,6 +15,7 @@ use crate::consensus::streaming::{
 };
 use crate::consensus::temporal::TemporalContextProvider;
 use crate::ai_helpers::AIHelperEcosystem;
+use crate::consensus::memory::ConsensusMemory;
 use crate::consensus::{
     FileOperationExecutor, ExecutorConfig, SmartDecisionEngine, 
     OperationIntelligenceCoordinator, operation_analysis::{AutoAcceptMode, OperationContext as ConsensusOperationContext},
@@ -60,6 +61,7 @@ pub struct ConsensusPipeline {
     api_key: Option<String>,
     usage_tracker: Option<Arc<UsageTracker>>,
     ai_helpers: Option<Arc<AIHelperEcosystem>>,
+    consensus_memory: Option<Arc<ConsensusMemory>>,
     file_executor: Option<Arc<FileOperationExecutor>>,
     mode_detector: Option<Arc<ModeDetector>>,
     direct_handler: Option<Arc<DirectExecutionHandler>>,
@@ -113,6 +115,7 @@ impl ConsensusPipeline {
             api_key,
             usage_tracker: None, // Will be set when database is provided
             ai_helpers: None, // Will be set when database is provided
+            consensus_memory: None, // Will be set when database is provided
             file_executor: None, // Will be set when AI helpers are configured
             mode_detector: None, // Will be set when AI helpers are configured
             direct_handler: None, // Will be set when components are configured
@@ -199,6 +202,40 @@ impl ConsensusPipeline {
     /// Set the AI helpers for this pipeline
     pub fn with_ai_helpers(mut self, ai_helpers: Arc<AIHelperEcosystem>) -> Self {
         self.ai_helpers = Some(ai_helpers.clone());
+        
+        // Initialize consensus memory when AI helpers and database are available
+        if let Some(ref db) = self.database {
+            // Initialize ConsensusMemory for storing and retrieving knowledge
+            match tokio::runtime::Handle::try_current() {
+                Ok(handle) => {
+                    let db_clone = db.clone();
+                    match handle.block_on(async move {
+                        ConsensusMemory::new(db_clone).await
+                    }) {
+                        Ok(consensus_memory) => {
+                            let consensus_memory_arc = Arc::new(consensus_memory);
+                            self.consensus_memory = Some(consensus_memory_arc.clone());
+                            
+                            // Connect the hive mind - give AI helpers access to the knowledge store
+                            let ai_helpers_clone = ai_helpers.clone();
+                            if let Err(e) = handle.block_on(async move {
+                                consensus_memory_arc.connect_hive_mind(&ai_helpers_clone).await
+                            }) {
+                                tracing::warn!("Failed to connect hive mind: {}", e);
+                            } else {
+                                tracing::info!("✅ ConsensusMemory initialized and hive mind connected - All stages share collective knowledge!");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to initialize ConsensusMemory: {}. Continuing without enhanced memory.", e);
+                        }
+                    }
+                }
+                Err(_) => {
+                    tracing::warn!("No tokio runtime available for ConsensusMemory initialization");
+                }
+            }
+        }
         
         // Initialize file executor when AI helpers are available
         if let Some(ref db) = self.database {
@@ -754,6 +791,23 @@ impl ConsensusPipeline {
                 Err(e) => {
                     tracing::error!("Failed to process Curator output with AI helpers: {}", e);
                     // Continue without helper processing
+                }
+            }
+        }
+        
+        // Store curator output in ConsensusMemory for future context injection
+        if let Some(ref consensus_memory) = self.consensus_memory {
+            match consensus_memory.store_curator_output(&final_answer, question, stage_results.clone()).await {
+                Ok(learning_result) => {
+                    tracing::info!(
+                        "✅ Curator output stored in ConsensusMemory: {} facts added, {} patterns detected",
+                        learning_result.facts_added,
+                        learning_result.patterns_detected
+                    );
+                }
+                Err(e) => {
+                    tracing::error!("Failed to store curator output in ConsensusMemory: {}", e);
+                    // Continue without storing - don't fail consensus
                 }
             }
         }
@@ -1863,7 +1917,50 @@ impl ConsensusPipeline {
 
     /// Get memory context for question (temporal + thematic)
     async fn get_memory_context(&self, question: &str) -> Result<Option<String>> {
-        if let Some(db) = &self.database {
+        // Prefer ConsensusMemory if available (AI-enhanced context)
+        if let Some(ref consensus_memory) = self.consensus_memory {
+            match consensus_memory.context_injector
+                .inject_context(question, crate::consensus::types::Stage::Generator, None)
+                .await {
+                Ok(injected_context) => {
+                    if injected_context.formatted_context.is_empty() {
+                        tracing::info!("ConsensusMemory returned empty context, falling back to direct DB");
+                        // Fall back to direct database query
+                        if let Some(db) = &self.database {
+                            let context = self.build_memory_context(question, db.clone()).await?;
+                            if context.is_empty() {
+                                Ok(None)
+                            } else {
+                                Ok(Some(context))
+                            }
+                        } else {
+                            Ok(None)
+                        }
+                    } else {
+                        tracing::info!(
+                            "✅ Using AI-enhanced memory context: {} facts injected",
+                            injected_context.facts.len()
+                        );
+                        Ok(Some(injected_context.formatted_context))
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("ConsensusMemory failed: {}, falling back to direct DB", e);
+                    // Fall back to direct database query
+                    if let Some(db) = &self.database {
+                        let context = self.build_memory_context(question, db.clone()).await?;
+                        if context.is_empty() {
+                            Ok(None)
+                        } else {
+                            Ok(Some(context))
+                        }
+                    } else {
+                        Ok(None)
+                    }
+                }
+            }
+        } else if let Some(db) = &self.database {
+            // No ConsensusMemory available, use direct database query
             let context = self.build_memory_context(question, db.clone()).await?;
             if context.is_empty() {
                 Ok(None)
