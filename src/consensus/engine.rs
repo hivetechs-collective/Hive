@@ -252,6 +252,9 @@ impl ConsensusEngine {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
         
+        // Initialize consensus memory after AI helpers are set
+        pipeline.initialize_consensus_memory().await?;
+        
         // Configure mode detection for Claude Code-style execution
         pipeline = pipeline.with_mode_detection().await?;
 
@@ -374,6 +377,9 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
+        
+        // Initialize consensus memory after AI helpers are set
+        pipeline.initialize_consensus_memory().await?;
         
         // Configure mode detection for Claude Code-style execution
         pipeline = pipeline.with_mode_detection().await?;
@@ -504,6 +510,9 @@ impl ConsensusEngine {
         if let Some(ai_helpers) = self.ai_helpers.read().await.as_ref() {
             pipeline = pipeline.with_ai_helpers(ai_helpers.clone());
         }
+        
+        // Initialize consensus memory after AI helpers are set
+        pipeline.initialize_consensus_memory().await?;
         
         // Configure mode detection for Claude Code-style execution
         pipeline = pipeline.with_mode_detection().await?;
