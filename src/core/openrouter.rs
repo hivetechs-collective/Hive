@@ -412,9 +412,16 @@ impl ModelSyncManager {
                 let now = chrono::Utc::now().to_rfc3339();
                 tx.execute(
                     "INSERT INTO model_rankings
-                     (model_internal_id, ranking_source, rank_position, last_updated)
-                     VALUES (?1, 'openrouter_general', ?2, ?3)",
-                    rusqlite::params![internal_id, rank, now],
+                     (model_internal_id, ranking_source, rank_position, usage_percentage, period_start, period_end, collected_at)
+                     VALUES (?1, 'openrouter_general', ?2, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![
+                        internal_id, 
+                        rank, 
+                        0.0, // usage_percentage - default for general rankings
+                        now.clone(), // period_start
+                        now.clone(), // period_end
+                        now // collected_at
+                    ],
                 )?;
             }
         }

@@ -1,7 +1,8 @@
 //! File-Aware Curator Stage
 //!
-//! Enhanced curator stage that can read and modify files based on consensus decisions.
-//! This gives the curator stage Claude Code-like capabilities for file operations.
+//! Enhanced curator stage that can READ files and CREATE PLANS for file operations.
+//! IMPORTANT: This stage NEVER executes file operations - it only creates plans
+//! that will be executed by AI Helpers.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -9,16 +10,15 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error};
-use tokio::fs;
 
 use crate::consensus::file_operations::{FileReader, SecurityPolicy, FileContent};
 use crate::consensus::repository_context::RepositoryContext;
 use crate::consensus::stages::ConsensusStage;
 use crate::consensus::stages::repository_scanner::{RepositoryScanner, FileInfo, FilePriority};
 use crate::consensus::types::{Message, Stage};
+use crate::consensus::curator_output_format::{CuratorGuidelines, CuratorOutputFormat};
 
-
-/// File modification operation
+/// File modification operation (PLAN ONLY - NOT EXECUTED HERE)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum FileOperation {
     /// Create a new file
@@ -47,7 +47,7 @@ pub enum FileOperation {
     },
 }
 
-/// Result of file operation
+/// Result of file operation (PLANNED, NOT EXECUTED)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileOperationResult {
     pub operation: FileOperation,
@@ -65,354 +65,18 @@ pub struct FileModificationProposal {
     pub preview: String,
 }
 
-/// File writer with safety mechanisms
-pub struct FileWriter {
-    file_reader: Arc<FileReader>,
-    security_policy: SecurityPolicy,
-    backup_enabled: bool,
-    dry_run: bool,
-}
-
-impl FileWriter {
-    pub fn new(security_policy: SecurityPolicy) -> Self {
-        Self {
-            file_reader: Arc::new(FileReader::new(security_policy.clone())),
-            security_policy,
-            backup_enabled: true,
-            dry_run: false,
-        }
-    }
-
-    /// Set dry run mode (no actual file modifications)
-    pub fn set_dry_run(&mut self, dry_run: bool) {
-        self.dry_run = dry_run;
-    }
-
-    /// Execute a file operation with safety checks
-    pub async fn execute_operation(&self, operation: &FileOperation) -> Result<FileOperationResult> {
-        match operation {
-            FileOperation::Create { path, content } => {
-                self.create_file(path, content).await
-            }
-            FileOperation::Update { path, content } => {
-                self.update_file(path, content).await
-            }
-            FileOperation::Append { path, content } => {
-                self.append_file(path, content).await
-            }
-            FileOperation::Delete { path } => {
-                self.delete_file(path).await
-            }
-            FileOperation::Rename { from, to } => {
-                self.rename_file(from, to).await
-            }
-        }
-    }
-
-    /// Create a new file
-    async fn create_file(&self, path: &Path, content: &str) -> Result<FileOperationResult> {
-        // Security checks
-        self.verify_write_allowed(path)?;
-
-        if self.file_reader.path_exists(path).await? {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Create {
-                    path: path.to_path_buf(),
-                    content: content.to_string(),
-                },
-                success: false,
-                message: format!("File {} already exists", path.display()),
-                backup_path: None,
-            });
-        }
-
-        if self.dry_run {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Create {
-                    path: path.to_path_buf(),
-                    content: content.to_string(),
-                },
-                success: true,
-                message: format!("DRY RUN: Would create file {}", path.display()),
-                backup_path: None,
-            });
-        }
-
-        // Create parent directories if needed
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await?;
-        }
-
-        // Write the file
-        fs::write(path, content).await?;
-
-        Ok(FileOperationResult {
-            operation: FileOperation::Create {
-                path: path.to_path_buf(),
-                content: content.to_string(),
-            },
-            success: true,
-            message: format!("Successfully created file {}", path.display()),
-            backup_path: None,
-        })
-    }
-
-    /// Update an existing file
-    async fn update_file(&self, path: &Path, content: &str) -> Result<FileOperationResult> {
-        // Security checks
-        self.verify_write_allowed(path)?;
-
-        if !self.file_reader.path_exists(path).await? {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Update {
-                    path: path.to_path_buf(),
-                    content: content.to_string(),
-                },
-                success: false,
-                message: format!("File {} does not exist", path.display()),
-                backup_path: None,
-            });
-        }
-
-        let backup_path = if self.backup_enabled && !self.dry_run {
-            Some(self.create_backup(path).await?)
-        } else {
-            None
-        };
-
-        if self.dry_run {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Update {
-                    path: path.to_path_buf(),
-                    content: content.to_string(),
-                },
-                success: true,
-                message: format!("DRY RUN: Would update file {}", path.display()),
-                backup_path,
-            });
-        }
-
-        // Write the updated content
-        fs::write(path, content).await?;
-
-        Ok(FileOperationResult {
-            operation: FileOperation::Update {
-                path: path.to_path_buf(),
-                content: content.to_string(),
-            },
-            success: true,
-            message: format!("Successfully updated file {}", path.display()),
-            backup_path,
-        })
-    }
-
-    /// Append to an existing file
-    async fn append_file(&self, path: &Path, content: &str) -> Result<FileOperationResult> {
-        // Security checks
-        self.verify_write_allowed(path)?;
-
-        if !self.file_reader.path_exists(path).await? {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Append {
-                    path: path.to_path_buf(),
-                    content: content.to_string(),
-                },
-                success: false,
-                message: format!("File {} does not exist", path.display()),
-                backup_path: None,
-            });
-        }
-
-        let backup_path = if self.backup_enabled && !self.dry_run {
-            Some(self.create_backup(path).await?)
-        } else {
-            None
-        };
-
-        if self.dry_run {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Append {
-                    path: path.to_path_buf(),
-                    content: content.to_string(),
-                },
-                success: true,
-                message: format!("DRY RUN: Would append to file {}", path.display()),
-                backup_path,
-            });
-        }
-
-        // Read existing content and append
-        let existing_content = fs::read_to_string(path).await?;
-        let new_content = format!("{}{}", existing_content, content);
-        fs::write(path, new_content).await?;
-
-        Ok(FileOperationResult {
-            operation: FileOperation::Append {
-                path: path.to_path_buf(),
-                content: content.to_string(),
-            },
-            success: true,
-            message: format!("Successfully appended to file {}", path.display()),
-            backup_path,
-        })
-    }
-
-    /// Delete a file
-    async fn delete_file(&self, path: &Path) -> Result<FileOperationResult> {
-        // Security checks
-        self.verify_write_allowed(path)?;
-
-        if !self.file_reader.path_exists(path).await? {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Delete {
-                    path: path.to_path_buf(),
-                },
-                success: false,
-                message: format!("File {} does not exist", path.display()),
-                backup_path: None,
-            });
-        }
-
-        let backup_path = if self.backup_enabled && !self.dry_run {
-            Some(self.create_backup(path).await?)
-        } else {
-            None
-        };
-
-        if self.dry_run {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Delete {
-                    path: path.to_path_buf(),
-                },
-                success: true,
-                message: format!("DRY RUN: Would delete file {}", path.display()),
-                backup_path,
-            });
-        }
-
-        // Delete the file
-        fs::remove_file(path).await?;
-
-        Ok(FileOperationResult {
-            operation: FileOperation::Delete {
-                path: path.to_path_buf(),
-            },
-            success: true,
-            message: format!("Successfully deleted file {}", path.display()),
-            backup_path,
-        })
-    }
-
-    /// Rename/move a file
-    async fn rename_file(&self, from: &Path, to: &Path) -> Result<FileOperationResult> {
-        // Security checks
-        self.verify_write_allowed(from)?;
-        self.verify_write_allowed(to)?;
-
-        if !self.file_reader.path_exists(from).await? {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Rename {
-                    from: from.to_path_buf(),
-                    to: to.to_path_buf(),
-                },
-                success: false,
-                message: format!("Source file {} does not exist", from.display()),
-                backup_path: None,
-            });
-        }
-
-        if self.file_reader.path_exists(to).await? {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Rename {
-                    from: from.to_path_buf(),
-                    to: to.to_path_buf(),
-                },
-                success: false,
-                message: format!("Destination file {} already exists", to.display()),
-                backup_path: None,
-            });
-        }
-
-        if self.dry_run {
-            return Ok(FileOperationResult {
-                operation: FileOperation::Rename {
-                    from: from.to_path_buf(),
-                    to: to.to_path_buf(),
-                },
-                success: true,
-                message: format!("DRY RUN: Would rename {} to {}", from.display(), to.display()),
-                backup_path: None,
-            });
-        }
-
-        // Create parent directories if needed
-        if let Some(parent) = to.parent() {
-            fs::create_dir_all(parent).await?;
-        }
-
-        // Rename the file
-        fs::rename(from, to).await?;
-
-        Ok(FileOperationResult {
-            operation: FileOperation::Rename {
-                from: from.to_path_buf(),
-                to: to.to_path_buf(),
-            },
-            success: true,
-            message: format!("Successfully renamed {} to {}", from.display(), to.display()),
-            backup_path: None,
-        })
-    }
-
-    /// Create a backup of a file
-    async fn create_backup(&self, path: &Path) -> Result<PathBuf> {
-        let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S").to_string();
-        let backup_path = path.with_extension(format!("{}.backup.{}", 
-            path.extension().and_then(|s| s.to_str()).unwrap_or(""), timestamp));
-        
-        fs::copy(path, &backup_path).await?;
-        Ok(backup_path)
-    }
-
-    /// Verify that writing to a path is allowed
-    fn verify_write_allowed(&self, path: &Path) -> Result<()> {
-        let path_str = path.to_string_lossy();
-
-        // Check for denied patterns
-        for denied in &self.security_policy.denied_patterns {
-            if path_str.contains(denied) {
-                anyhow::bail!("Write to path {} contains denied pattern: {}", path_str, denied);
-            }
-        }
-
-        // Additional write-specific restrictions
-        let write_denied_patterns = vec![
-            "/etc/", "/usr/", "/var/", "/sys/", "/proc/",
-            "node_modules/", ".git/", "target/", "dist/", "build/",
-        ];
-
-        for denied in &write_denied_patterns {
-            if path_str.contains(denied) {
-                anyhow::bail!("Write to system or build directory not allowed: {}", path_str);
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// File-aware curator that can read and modify files
+/// File-aware curator that can read files and create operation plans
+/// IMPORTANT: This stage ONLY creates plans, it NEVER executes file operations
 pub struct FileAwareCuratorStage {
     file_reader: Arc<FileReader>,
-    file_writer: Arc<FileWriter>,
+    // Removed file_writer - Curator should NEVER execute operations
 }
 
 impl FileAwareCuratorStage {
     pub fn new() -> Self {
         let security_policy = SecurityPolicy::default();
         Self {
-            file_reader: Arc::new(FileReader::new(security_policy.clone())),
-            file_writer: Arc::new(FileWriter::new(security_policy)),
+            file_reader: Arc::new(FileReader::new(security_policy)),
         }
     }
 
@@ -420,187 +84,259 @@ impl FileAwareCuratorStage {
     async fn read_repository_context(&self, repo_context: &RepositoryContext) -> Result<String> {
         let mut context = String::new();
         
-        if let Some(root_path) = &repo_context.root_path {
-            context.push_str("# CURRENT REPOSITORY CONTEXT\n\n");
-            context.push_str(&format!("Repository: {}\n\n", root_path.display()));
-
-            // First, scan and categorize all files in the repository
-            let discovered_files = RepositoryScanner::scan_repository_files(root_path).await?;
-            
-            context.push_str(&format!("## Repository Structure ({} files)\n\n", discovered_files.len()));
-
-            // Read files in priority order for maximum context value
-            let prioritized_files = RepositoryScanner::prioritize_files_for_reading(&discovered_files);
-            let mut files_read = 0;
-            let max_files = 25; // Limit to prevent context overflow
-            let max_context_chars = 50000; // ~12k tokens
-            
-            for file_info in prioritized_files.iter().take(max_files) {
-                if context.len() > max_context_chars {
-                    context.push_str(&format!("\n... ({} more files truncated for context limits)\n\n", 
-                        prioritized_files.len() - files_read));
-                    break;
-                }
+        // Use the repository scanner to get prioritized files
+        let scan_result = if let Some(root) = &repo_context.root_path {
+            RepositoryScanner::scan_repository_files(root).await?
+        } else {
+            RepositoryScanner::scan_repository_files(std::path::Path::new(".")).await?
+        };
+        
+        // Add repository summary
+        let total_files = scan_result.len();
+        let total_size: u64 = scan_result.iter().map(|f| f.size).sum();
+        let has_rust = scan_result.iter().any(|f| f.path.extension().map_or(false, |ext| ext == "rs"));
+        let has_tests = scan_result.iter().any(|f| f.path.to_string_lossy().contains("test"));
+        let has_docs = scan_result.iter().any(|f| f.path.extension().map_or(false, |ext| ext == "md"));
+        
+        context.push_str(&format!(
+            "Repository Analysis:\n\
+             - Total files: {}\n\
+             - Total size: {} KB\n\
+             - Main language: {:?}\n\
+             - Has tests: {}\n\
+             - Has documentation: {}\n\n",
+            total_files,
+            total_size / 1024,
+            if has_rust { "Rust" } else { "Unknown" },
+            has_tests,
+            has_docs
+        ));
+        
+        // Group files by priority
+        let mut high_priority_files = Vec::new();
+        let mut medium_priority_files = Vec::new();
+        let mut low_priority_files = Vec::new();
+        
+        for file in &scan_result {
+            match file.priority {
+                FilePriority::Critical => high_priority_files.push(file),
+                FilePriority::High => high_priority_files.push(file),
+                FilePriority::Medium => medium_priority_files.push(file),
+                FilePriority::Normal => medium_priority_files.push(file),
+                FilePriority::Low => low_priority_files.push(file),
+            }
+        }
+        
+        // Read high priority files (up to 10)
+        context.push_str("=== Key Files (High Priority) ===\n\n");
+        for (idx, file_info) in high_priority_files.iter().take(10).enumerate() {
+            if let Ok(content) = self.file_reader.read_file(&file_info.path).await {
+                context.push_str(&format!(
+                    "File {}: {} ({} lines)\n",
+                    idx + 1,
+                    file_info.path.display(),
+                    content.lines
+                ));
                 
-                match self.file_reader.read_file(&file_info.path).await {
-                    Ok(content) => {
-                        let relative_path = file_info.path.strip_prefix(root_path)
-                            .unwrap_or(&file_info.path);
-                        
-                        context.push_str(&format!("## File: {}\n", relative_path.display()));
-                        context.push_str(&format!("```{}\n", content.language.as_deref().unwrap_or("")));
-                        
-                        // Smart content summarization based on file size
-                        let lines: Vec<&str> = content.content.lines().collect();
-                        if lines.len() <= 100 {
-                            // Small files: show complete content
-                            context.push_str(&content.content);
-                        } else if file_info.priority == FilePriority::Critical {
-                            // Critical files: show more content
-                            context.push_str(&lines[..150.min(lines.len())].join("\n"));
-                            if lines.len() > 150 {
-                                context.push_str(&format!("\n... ({} more lines)", lines.len() - 150));
-                            }
-                        } else {
-                            // Other files: show first 75 lines
-                            context.push_str(&lines[..75.min(lines.len())].join("\n"));
-                            if lines.len() > 75 {
-                                context.push_str(&format!("\n... ({} more lines)", lines.len() - 75));
-                            }
-                        }
-                        
-                        context.push_str("\n```\n\n");
-                        files_read += 1;
-                    }
-                    Err(e) => {
-                        warn!("Failed to read {}: {}", file_info.path.display(), e);
-                    }
+                // Include file summary or first few lines
+                if content.lines <= 50 {
+                    context.push_str(&format!("Content:\n{}\n\n", content.content));
+                } else {
+                    let preview: Vec<&str> = content.content.lines().take(20).collect();
+                    context.push_str(&format!(
+                        "Preview (first 20 lines):\n{}\n... ({} more lines)\n\n",
+                        preview.join("\n"),
+                        content.lines - 20
+                    ));
                 }
             }
-            
-            // Add summary of repository structure
-            RepositoryScanner::add_repository_summary(&mut context, &discovered_files);
         }
-
+        
+        // List medium priority files
+        if !medium_priority_files.is_empty() {
+            context.push_str("\n=== Project Structure (Medium Priority) ===\n");
+            for file_info in medium_priority_files.iter().take(20) {
+                context.push_str(&format!(
+                    "- {} ({} bytes)\n",
+                    file_info.path.display(),
+                    file_info.size
+                ));
+            }
+        }
+        
+        // Summary of low priority files
+        if !low_priority_files.is_empty() {
+            context.push_str(&format!(
+                "\n=== Other Files ===\n{} additional files found (tests, docs, configs, etc.)\n",
+                low_priority_files.len()
+            ));
+        }
+        
         Ok(context)
     }
 
-    /// Parse file modification proposals from curator response
-    pub fn parse_file_operations(&self, response: &str) -> Vec<FileOperation> {
-        let mut operations = Vec::new();
-        
-        // Look for file operation blocks in the response
-        // This is a simple parser - in practice, you might want a more sophisticated approach
-        
-        // Look for CREATE operations
-        if let Some(create_match) = self.extract_operation_block(response, "CREATE") {
-            if let Some(op) = self.parse_create_operation(&create_match) {
-                operations.push(op);
+    /// Create a file operation plan based on consensus
+    /// This ONLY creates a plan - execution happens in AI Helpers
+    fn create_operation_plan(&self, 
+        operation_type: &str, 
+        path: &Path, 
+        content: Option<&str>,
+        target_path: Option<&Path>
+    ) -> FileOperation {
+        match operation_type {
+            "create" => FileOperation::Create {
+                path: path.to_path_buf(),
+                content: content.unwrap_or("").to_string(),
+            },
+            "update" => FileOperation::Update {
+                path: path.to_path_buf(),
+                content: content.unwrap_or("").to_string(),
+            },
+            "append" => FileOperation::Append {
+                path: path.to_path_buf(),
+                content: content.unwrap_or("").to_string(),
+            },
+            "delete" => FileOperation::Delete {
+                path: path.to_path_buf(),
+            },
+            "rename" => FileOperation::Rename {
+                from: path.to_path_buf(),
+                to: target_path.unwrap_or(path).to_path_buf(),
+            },
+            _ => FileOperation::Create {
+                path: path.to_path_buf(),
+                content: content.unwrap_or("").to_string(),
             }
         }
-        
-        // Look for UPDATE operations
-        if let Some(update_match) = self.extract_operation_block(response, "UPDATE") {
-            if let Some(op) = self.parse_update_operation(&update_match) {
-                operations.push(op);
-            }
-        }
-        
-        // Add more operation types as needed
-        
-        operations
     }
 
-    fn extract_operation_block(&self, text: &str, operation_type: &str) -> Option<String> {
-        // Simple pattern matching - look for blocks like:
-        // ```CREATE:path/to/file
-        // content here
-        // ```
+    /// Analyze safety of proposed operations (planning only)
+    fn analyze_operation_safety(&self, operations: &[FileOperation]) -> String {
+        let mut analysis = String::from("Safety Analysis:\n");
         
-        let start_pattern = format!("```{}:", operation_type);
-        if let Some(start) = text.find(&start_pattern) {
-            if let Some(end) = text[start..].find("```") {
-                if end > start_pattern.len() {
-                    return Some(text[start..start + end].to_string());
+        for op in operations {
+            match op {
+                FileOperation::Delete { path } => {
+                    analysis.push_str(&format!(
+                        "⚠️  DELETE operation on {} - High risk, ensure backup\n", 
+                        path.display()
+                    ));
+                }
+                FileOperation::Update { path, .. } => {
+                    analysis.push_str(&format!(
+                        "✓ UPDATE operation on {} - Medium risk\n", 
+                        path.display()
+                    ));
+                }
+                FileOperation::Create { path, .. } => {
+                    analysis.push_str(&format!(
+                        "✓ CREATE operation on {} - Low risk\n", 
+                        path.display()
+                    ));
+                }
+                _ => {}
+            }
+        }
+        
+        analysis
+    }
+
+    /// Create a preview of operations (for user review)
+    fn create_operation_preview(&self, operations: &[FileOperation]) -> String {
+        let mut preview = String::from("Planned Operations:\n");
+        
+        for (idx, op) in operations.iter().enumerate() {
+            preview.push_str(&format!("{}. ", idx + 1));
+            match op {
+                FileOperation::Create { path, content } => {
+                    preview.push_str(&format!(
+                        "Create {} ({} bytes)\n", 
+                        path.display(),
+                        content.len()
+                    ));
+                }
+                FileOperation::Update { path, content } => {
+                    preview.push_str(&format!(
+                        "Update {} ({} bytes)\n", 
+                        path.display(),
+                        content.len()
+                    ));
+                }
+                FileOperation::Append { path, content } => {
+                    preview.push_str(&format!(
+                        "Append to {} ({} bytes)\n", 
+                        path.display(),
+                        content.len()
+                    ));
+                }
+                FileOperation::Delete { path } => {
+                    preview.push_str(&format!("Delete {}\n", path.display()));
+                }
+                FileOperation::Rename { from, to } => {
+                    preview.push_str(&format!(
+                        "Rename {} to {}\n", 
+                        from.display(),
+                        to.display()
+                    ));
                 }
             }
         }
         
-        None
-    }
-
-    fn parse_create_operation(&self, block: &str) -> Option<FileOperation> {
-        // Parse CREATE:path format
-        let lines: Vec<&str> = block.lines().collect();
-        if lines.is_empty() {
-            return None;
-        }
-        
-        let first_line = lines[0];
-        if let Some(path_start) = first_line.find("CREATE:") {
-            let path_str = &first_line[path_start + 7..].trim();
-            let content = lines[1..].join("\n");
-            
-            return Some(FileOperation::Create {
-                path: PathBuf::from(path_str),
-                content,
-            });
-        }
-        
-        None
-    }
-
-    fn parse_update_operation(&self, block: &str) -> Option<FileOperation> {
-        // Parse UPDATE:path format
-        let lines: Vec<&str> = block.lines().collect();
-        if lines.is_empty() {
-            return None;
-        }
-        
-        let first_line = lines[0];
-        if let Some(path_start) = first_line.find("UPDATE:") {
-            let path_str = &first_line[path_start + 7..].trim();
-            let content = lines[1..].join("\n");
-            
-            return Some(FileOperation::Update {
-                path: PathBuf::from(path_str),
-                content,
-            });
-        }
-        
-        None
+        preview
     }
 }
 
+#[async_trait::async_trait]
 impl ConsensusStage for FileAwareCuratorStage {
     fn stage(&self) -> Stage {
         Stage::Curator
     }
 
+
     fn system_prompt(&self) -> &'static str {
-        r#"You are a file-aware curator with the ability to read and modify files in the current repository.
+        "You are the Curator stage in the consensus pipeline. Your role is to synthesize insights and create file operation plans.
 
-Your role is to:
-1. Review and improve the consensus response
-2. Read relevant files to understand the current codebase
-3. Propose specific file modifications when appropriate
-4. Ensure all suggestions are based on actual file contents
+CRITICAL: When your response includes file operations, you MUST use the standardized format for reliable AI Helper parsing:
 
-When proposing file modifications, use this format:
+## File Operation Output Format (REQUIRED)
 
-```CREATE:path/to/new/file.rs
-// New file content here
+### For Creating Files:
+### Step 1: Creating `path/to/file.ext`
+
+```language:path/to/file.ext
+file content here
 ```
 
-```UPDATE:path/to/existing/file.rs
-// Updated file content here
+✅ **Created**: path/to/file.ext
+
+### For Updating Files:
+### Step 1: Updating `path/to/file.ext`
+
+```language:path/to/file.ext
+updated content here
 ```
 
-```APPEND:path/to/file.rs
-// Content to append
+✅ **Updated**: path/to/file.ext
+
+### For Deleting Files:
+### Step 1: Deleting `path/to/file.ext`
+
+```delete:path/to/file.ext
+# File will be deleted
 ```
 
-Always provide rationale for any file modifications and ensure they align with the project's existing patterns and conventions."#
+❌ **Deleted**: path/to/file.ext
+
+### For Renaming Files:
+### Step 1: Renaming `old/path.ext` to `new/path.ext`
+
+```rename:old/path.ext to new/path.ext
+# File will be renamed
+```
+
+🔄 **Renamed**: old/path.ext → new/path.ext
+
+IMPORTANT: Always use this exact format. AI Helpers depend on this structure for reliable parsing and execution."
     }
 
     fn build_messages(
@@ -609,148 +345,91 @@ Always provide rationale for any file modifications and ensure they align with t
         previous_answer: Option<&str>,
         context: Option<&str>,
     ) -> Result<Vec<Message>> {
-        let validated_response = previous_answer.unwrap_or("No response to curate");
+        info!("🎨 File-Aware Curator Stage - Creating operation plans (NOT executing)");
 
-        let mut messages = vec![];
+        let mut messages = vec![
+            Message {
+                role: "system".to_string(),
+                content: self.system_prompt().to_string(),
+            }
+        ];
 
-        // System prompt
+        // Add format validation instructions
         messages.push(Message {
             role: "system".to_string(),
-            content: self.system_prompt().to_string(),
+            content: CuratorGuidelines::get_format_instructions().to_string(),
         });
 
-        // Add repository context if available
-        if let Some(ctx) = context {
+        // Build enhanced context with repository information if available
+        if let Some(repo_context) = context {
+            let enhanced_context = format!(
+                "=== Repository Context ===\n{}\n\n", 
+                repo_context
+            );
+            
             messages.push(Message {
                 role: "system".to_string(),
-                content: format!("Repository Context:\n{}", ctx),
+                content: enhanced_context,
             });
         }
 
-        // Add the validated response to curate
+        // Add the previous stages' analyses
+        if let Some(prev_answer) = previous_answer {
+            messages.push(Message {
+                role: "system".to_string(),
+                content: format!(
+                    "=== Previous Analysis ===\nThe Generator, Refiner, and Validator stages have analyzed the question. Here is their combined analysis:\n\n{}\n\n=== Your Task ===\nAs the Curator, synthesize this analysis into a polished final response. If file operations are needed, use the EXACT format specified above.",
+                    prev_answer
+                ),
+            });
+        }
+
+        // Add the user's question
         messages.push(Message {
             role: "user".to_string(),
-            content: format!(
-                "Original Question: {}\n\nValidated Response to Curate:\n{}\n\nPlease improve this response and propose any necessary file modifications using the specified format.",
-                question,
-                validated_response
-            ),
+            content: question.to_string(),
         });
 
         Ok(messages)
     }
 }
 
-/// Build file-aware curator messages with repository context
-pub async fn build_file_aware_curator_messages(
-    stage: &FileAwareCuratorStage,
-    question: &str,
-    previous_answer: Option<&str>,
-    repo_context: Option<&RepositoryContext>,
-    base_context: Option<&str>,
-) -> Result<Vec<Message>> {
-    let mut messages = vec![];
-
-    // System prompt
-    messages.push(Message {
-        role: "system".to_string(),
-        content: stage.system_prompt().to_string(),
-    });
-
-    // Add base context if available
-    if let Some(ctx) = base_context {
-        messages.push(Message {
-            role: "system".to_string(),
-            content: format!("Context:\n{}", ctx),
-        });
-    }
-
-    // Add repository context
-    if let Some(repo_ctx) = repo_context {
-        let repo_context_str = stage.read_repository_context(repo_ctx).await?;
-        if !repo_context_str.is_empty() {
-            messages.push(Message {
-                role: "system".to_string(),
-                content: repo_context_str,
-            });
-        }
-    }
-
-    // Add the validated response to curate
-    let validated_response = previous_answer.unwrap_or("No response to curate");
-    messages.push(Message {
-        role: "user".to_string(),
-        content: format!(
-            "Original Question: {}\n\nValidated Response to Curate:\n{}\n\nIMPORTANT: Base your curation on the ACTUAL REPOSITORY FILES provided above. If you propose file modifications, use the specified format and ensure they align with the existing codebase patterns.",
-            question,
-            validated_response
-        ),
-    });
-
-    Ok(messages)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn test_file_writer_security() {
-        let writer = FileWriter::new(SecurityPolicy::default());
-        
-        // Test denied patterns
-        assert!(writer.verify_write_allowed(Path::new(".git/config")).is_err());
-        assert!(writer.verify_write_allowed(Path::new("node_modules/test.js")).is_err());
-        assert!(writer.verify_write_allowed(Path::new("/etc/passwd")).is_err());
-        
-        // Test allowed patterns
-        assert!(writer.verify_write_allowed(Path::new("src/main.rs")).is_ok());
-        assert!(writer.verify_write_allowed(Path::new("test.txt")).is_ok());
-    }
-
     #[test]
-    fn test_operation_parsing() {
+    fn test_operation_plan_creation() {
         let curator = FileAwareCuratorStage::new();
         
-        let response = r#"
-I suggest creating a new test file:
-
-```CREATE:tests/new_test.rs
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_new_feature() {
-        assert!(true);
-    }
-}
-```
-
-And updating the main file:
-
-```UPDATE:src/main.rs
-fn main() {
-    println!("Hello, updated world!");
-}
-```
-        "#;
+        let op = curator.create_operation_plan(
+            "create",
+            Path::new("test.rs"),
+            Some("fn main() {}"),
+            None
+        );
         
-        let operations = curator.parse_file_operations(response);
-        assert_eq!(operations.len(), 2);
-        
-        match &operations[0] {
+        match op {
             FileOperation::Create { path, content } => {
-                assert_eq!(path.to_string_lossy(), "tests/new_test.rs");
-                assert!(content.contains("test_new_feature"));
+                assert_eq!(path, PathBuf::from("test.rs"));
+                assert_eq!(content, "fn main() {}");
             }
-            _ => panic!("Expected CREATE operation"),
+            _ => panic!("Expected Create operation"),
         }
+    }
+
+    #[test]
+    fn test_safety_analysis() {
+        let curator = FileAwareCuratorStage::new();
         
-        match &operations[1] {
-            FileOperation::Update { path, content } => {
-                assert_eq!(path.to_string_lossy(), "src/main.rs");
-                assert!(content.contains("updated world"));
-            }
-            _ => panic!("Expected UPDATE operation"),
-        }
+        let operations = vec![
+            FileOperation::Delete { path: PathBuf::from("important.rs") },
+            FileOperation::Create { path: PathBuf::from("new.rs"), content: String::new() },
+        ];
+        
+        let analysis = curator.analyze_operation_safety(&operations);
+        assert!(analysis.contains("DELETE"));
+        assert!(analysis.contains("High risk"));
+        assert!(analysis.contains("Low risk"));
     }
 }

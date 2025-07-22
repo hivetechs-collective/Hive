@@ -46,6 +46,7 @@ impl Default for ParallelConfig {
 }
 
 /// Parallel processor for AI helpers
+#[derive(Clone)]
 pub struct ParallelProcessor {
     config: ParallelConfig,
     

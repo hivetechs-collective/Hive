@@ -17,6 +17,11 @@ pub mod python_models;
 pub mod chroma_store;
 pub mod intelligent_context_orchestrator;
 pub mod scores;
+pub mod file_executor;
+pub mod code_translator;
+pub mod semantic_retriever;
+pub mod intelligent_executor;
+pub mod rollback_executor;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -50,6 +55,22 @@ pub use intelligent_context_orchestrator::{IntelligentContextOrchestrator, Intel
 pub use scores::{
     KnowledgeIndexerScore, ContextRetrieverScore, PatternRecognizerScore,
     QualityAnalyzerScore, KnowledgeSynthesizerScore
+};
+pub use code_translator::{
+    CodeTranslator, TranslationPlan, TranslationStrategy, TranslationRule,
+    TranslationContext, TranslationResult, TranslationWarning, WarningSeverity
+};
+pub use semantic_retriever::{
+    SemanticRetriever, RetrievalPlan, RetrievalType, RetrievalFilters,
+    TimeRange, RetrievedItem, ItemMetadata, RetrievalResult, SearchStats
+};
+pub use intelligent_executor::{
+    IntelligentExecutor, ExecutionMemory, CuratorUnderstanding, ExecutionResult,
+    ExecutionOutcome, Improvement, ImprovementType
+};
+pub use rollback_executor::{
+    AIHelperRollbackExecutor, RollbackPlan, RollbackOperation, RollbackAction,
+    RollbackSafetyLevel, RollbackResult, OperationResult
 };
 
 /// Processed knowledge from AI helpers
@@ -146,6 +167,7 @@ pub struct StageContext {
 }
 
 /// Main AI Helper Ecosystem coordinator
+#[derive(Clone)]
 pub struct AIHelperEcosystem {
     /// CodeBERT/CodeT5+ for indexing
     pub knowledge_indexer: Arc<KnowledgeIndexer>,
@@ -167,6 +189,15 @@ pub struct AIHelperEcosystem {
     
     /// Chroma for vector storage
     pub vector_store: Arc<ChromaVectorStore>,
+    
+    /// Code translator for language-to-language translation
+    pub code_translator: Arc<CodeTranslator>,
+    
+    /// Semantic retriever for intelligent search
+    pub semantic_retriever: Arc<SemanticRetriever>,
+    
+    /// Intelligent executor for smart execution with learning
+    pub intelligent_executor: Arc<IntelligentExecutor>,
     
     /// Python model service
     python_service: Arc<PythonModelService>,
@@ -245,6 +276,26 @@ impl AIHelperEcosystem {
         // Create performance monitor
         let performance_monitor = Arc::new(PerformanceMonitor::new(MonitoringConfig::default()));
         
+        // Create code translator
+        let code_translator = Arc::new(CodeTranslator::new(
+            python_service.clone(),
+            performance_monitor.clone(),
+        ));
+        
+        // Create semantic retriever
+        let semantic_retriever = Arc::new(SemanticRetriever::new(
+            vector_store.clone(),
+            python_service.clone(),
+            performance_monitor.clone(),
+        ));
+        
+        // Create intelligent executor
+        let intelligent_executor = Arc::new(IntelligentExecutor::new(
+            knowledge_indexer.clone(),
+            pattern_recognizer.clone(),
+            quality_analyzer.clone(),
+        ));
+        
         Ok(Self {
             knowledge_indexer,
             context_retriever,
@@ -253,6 +304,9 @@ impl AIHelperEcosystem {
             knowledge_synthesizer,
             intelligent_orchestrator,
             vector_store,
+            code_translator,
+            semantic_retriever,
+            intelligent_executor,
             python_service,
             parallel_processor,
             performance_monitor,
@@ -478,6 +532,13 @@ impl AIHelperEcosystem {
             tasks_failed: parallel_stats.tasks_failed,
             performance_stats: Some(perf_stats),
         }
+    }
+
+    /// Create a mock instance for testing
+    pub fn new_mock() -> Self {
+        // Create simple mock for testing - temporarily unimplemented
+        // This will be properly implemented when needed for actual testing
+        unimplemented!("Mock AIHelperEcosystem not yet implemented - use real instance")
     }
 }
 

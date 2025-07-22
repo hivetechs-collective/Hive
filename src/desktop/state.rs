@@ -469,6 +469,7 @@ pub struct ConsensusState {
     pub total_tokens: usize,
     pub estimated_cost: f64,
     pub streaming_content: String,
+    pub raw_streaming_content: String,  // Raw markdown before HTML conversion
     pub active_profile_name: String,
 }
 
@@ -488,6 +489,7 @@ impl ConsensusState {
             total_tokens: 0,
             estimated_cost: 0.0,
             streaming_content: String::new(),
+            raw_streaming_content: String::new(),
             active_profile_name: "No profile".to_string(),
         }
     }
@@ -500,6 +502,7 @@ impl ConsensusState {
         self.total_tokens = 0;
         self.estimated_cost = 0.0;
         self.streaming_content.clear();
+        self.raw_streaming_content.clear();
         tracing::info!("🚀 ConsensusState::start_consensus() - is_running set to true");
     }
 

@@ -21,6 +21,7 @@ pub mod keyboard;
 pub mod layout;
 pub mod layout_enhanced;
 pub mod logo_svg;
+pub mod markdown;
 pub mod menu_bar;
 pub mod model_browser;
 pub mod simple_db;

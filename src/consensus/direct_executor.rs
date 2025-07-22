@@ -13,10 +13,11 @@ use crate::consensus::stages::{GeneratorStage, ConsensusStage};
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::streaming::{StreamingCallbacks, ConsensusEvent};
 use crate::consensus::openrouter::{OpenRouterClient, OpenRouterRequest, OpenRouterMessage};
-use crate::consensus::models::{DynamicModelSelector, ModelSelectionCriteria};
+// Removed DynamicModelSelector - using profile's generator model directly
 use crate::consensus::safety_guardrails::SafetyGuardrailSystem;
-use crate::consensus::types::{Stage, StageResult};
+use crate::consensus::types::{Stage, StageResult, ConsensusProfile};
 use crate::core::database::DatabaseManager;
+use crate::consensus::ai_file_executor::AIConsensusFileExecutor;
 
 /// Inline operation parser for extracting operations from streaming responses
 pub struct InlineOperationParser {
@@ -41,7 +42,7 @@ impl InlineOperationParser {
             in_code_block: false,
             code_block_lang: None,
             operation_pattern: regex::Regex::new(
-                r"(?i)(Creating|Updating|Modifying|Deleting|Writing to|Adding to)\s+`([^`]+)`:"
+                r"(?i)(Creating|Updating|Modifying|Deleting|Writing to|Adding to)\s+`?([^`:]+)`:"
             ).unwrap(),
         }
     }
@@ -137,8 +138,9 @@ pub struct DirectExecutionHandler {
     generator: Arc<GeneratorStage>,
     ai_helpers: Arc<AIHelperEcosystem>,
     executor: Arc<StreamingOperationExecutor>,
+    ai_file_executor: Arc<AIConsensusFileExecutor>,
     client: Arc<OpenRouterClient>,
-    model_selector: Arc<DynamicModelSelector>,
+    profile: ConsensusProfile,
     db: Arc<DatabaseManager>,
     safety_system: Option<Arc<SafetyGuardrailSystem>>,
 }
@@ -149,15 +151,21 @@ impl DirectExecutionHandler {
         ai_helpers: Arc<AIHelperEcosystem>,
         executor: Arc<StreamingOperationExecutor>,
         client: Arc<OpenRouterClient>,
-        model_selector: Arc<DynamicModelSelector>,
+        profile: ConsensusProfile,
         db: Arc<DatabaseManager>,
     ) -> Self {
+        // Create the AI-powered file executor
+        let ai_file_executor = Arc::new(AIConsensusFileExecutor::new(
+            (*ai_helpers).clone()
+        ));
+        
         Self {
             generator,
             ai_helpers,
             executor,
+            ai_file_executor,
             client,
-            model_selector,
+            profile,
             db,
             safety_system: None,
         }
@@ -177,30 +185,34 @@ impl DirectExecutionHandler {
         callbacks: Arc<dyn StreamingCallbacks>,
     ) -> Result<()> {
         // Build messages for the generator
-        let messages = self.generator.build_messages(request, None, context)?;
+        let mut messages = self.generator.build_messages(request, None, context)?;
         
-        // Select an appropriate model for generation
-        let criteria = ModelSelectionCriteria {
-            stage: "generator".to_string(),
-            question_complexity: "simple".to_string(),
-            question_category: "coding".to_string(),
-            budget_constraints: None,
-            performance_targets: None,
-            user_preferences: None,
-            profile_template: None,
-        };
+        // Add Direct Execution mode instructions to the system prompt
+        for message in &mut messages {
+            if message.role == "system" {
+                message.content.push_str("\n\n🚀 DIRECT EXECUTION MODE:\n");
+                message.content.push_str("You are in Direct Execution mode for simple file operations. ");
+                message.content.push_str("When creating or modifying files, output the operations in this EXACT format:\n\n");
+                message.content.push_str("Creating `filename.ext`:\n");
+                message.content.push_str("```language\n");
+                message.content.push_str("file content here\n");
+                message.content.push_str("```\n\n");
+                message.content.push_str("For updates use 'Updating `filename.ext`:' and for deletion use 'Deleting `filename.ext`:'\n");
+                message.content.push_str("\nIMPORTANT: Do NOT explain how to create files. Actually output the file creation operations in the format above.\n");
+                message.content.push_str("When asked to create a file, immediately output the Creating block with the actual content.");
+                break;
+            }
+        }
         
-        let model_candidate = self.model_selector
-            .select_optimal_model(&self.db, &criteria, None)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("No suitable model found for direct execution"))?;
+        // Use the profile's generator model directly
+        let model = &self.profile.generator_model;
         
         // Create a parser for inline operations
         let mut parser = InlineOperationParser::new();
         
         // Build the OpenRouter request
         let openrouter_request = OpenRouterRequest {
-            model: model_candidate.openrouter_id.clone(),
+            model: model.clone(),
             messages: messages.into_iter().map(|m| OpenRouterMessage {
                 role: m.role,
                 content: m.content,
@@ -214,15 +226,17 @@ impl DirectExecutionHandler {
             provider: None,
         };
         
-        // Create a custom callback wrapper
+        // Create a custom callback wrapper that uses AI-powered execution
         let parser_ref = Arc::new(tokio::sync::Mutex::new(parser));
         let executor_ref = self.executor.clone();
+        let ai_executor_ref = self.ai_file_executor.clone();
         let callbacks_ref = callbacks.clone();
         
         let streaming_callbacks = DirectStreamingCallbacks {
             inner: callbacks_ref,
             parser: parser_ref,
             executor: executor_ref,
+            ai_file_executor: ai_executor_ref,
             stage: Stage::Generator,
         };
         
@@ -241,7 +255,7 @@ impl DirectExecutionHandler {
             stage_name: "Direct Execution".to_string(),
             question: request.to_string(),
             answer: response_content,
-            model: model_candidate.openrouter_id,
+            model: model.clone(),
             conversation_id: "direct".to_string(),
             timestamp: chrono::Utc::now(),
             usage: None, // Would need to track this
@@ -302,6 +316,7 @@ struct DirectStreamingCallbacks {
     inner: Arc<dyn StreamingCallbacks>,
     parser: Arc<tokio::sync::Mutex<InlineOperationParser>>,
     executor: Arc<StreamingOperationExecutor>,
+    ai_file_executor: Arc<AIConsensusFileExecutor>,
     stage: Stage,
 }
 
@@ -315,16 +330,40 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
         // Forward to consensus callbacks
         let _ = self.inner.on_stage_chunk(self.stage, &chunk, &total_content);
         
-        // Parse for operations
+        // Parse for operations using AI intelligence
         let parser = self.parser.clone();
         let executor = self.executor.clone();
+        let ai_file_executor = self.ai_file_executor.clone();
         
-        // Spawn a task to handle parsing and execution
+        // Spawn a task to handle parsing and AI-powered execution
         tokio::spawn(async move {
             let mut parser_guard = parser.lock().await;
             if let Some(operation) = parser_guard.parse_chunk(&chunk) {
-                // Execute the operation inline
-                let _ = executor.execute_inline(operation, None).await;
+                // Convert to vector for AI executor
+                let operations = vec![operation.clone()];
+                
+                // Use AI-powered execution for intelligent file operations
+                match ai_file_executor.execute_curator_operations(operations).await {
+                    Ok(report) => {
+                        if report.success {
+                            tracing::info!("🤖 AI Helper successfully executed {} operations", 
+                                         report.operations_completed);
+                            if !report.files_created.is_empty() {
+                                tracing::info!("📄 Created files: {:?}", report.files_created);
+                            }
+                            if !report.files_modified.is_empty() {
+                                tracing::info!("✏️ Modified files: {:?}", report.files_modified);
+                            }
+                        } else {
+                            tracing::warn!("⚠️ AI Helper execution had errors: {:?}", report.errors);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ AI Helper execution failed: {}", e);
+                        // Fallback to basic executor if AI fails
+                        let _ = executor.execute_inline(operation, None).await;
+                    }
+                }
             }
         });
     }
@@ -348,7 +387,7 @@ pub struct DirectExecutionBuilder {
     ai_helpers: Option<Arc<AIHelperEcosystem>>,
     executor: Option<Arc<StreamingOperationExecutor>>,
     client: Option<Arc<OpenRouterClient>>,
-    model_selector: Option<Arc<DynamicModelSelector>>,
+    profile: Option<ConsensusProfile>,
     db: Option<Arc<DatabaseManager>>,
 }
 
@@ -359,7 +398,7 @@ impl DirectExecutionBuilder {
             ai_helpers: None,
             executor: None,
             client: None,
-            model_selector: None,
+            profile: None,
             db: None,
         }
     }
@@ -384,8 +423,8 @@ impl DirectExecutionBuilder {
         self
     }
 
-    pub fn with_model_selector(mut self, selector: Arc<DynamicModelSelector>) -> Self {
-        self.model_selector = Some(selector);
+    pub fn with_profile(mut self, profile: ConsensusProfile) -> Self {
+        self.profile = Some(profile);
         self
     }
     
@@ -395,15 +434,14 @@ impl DirectExecutionBuilder {
     }
 
     pub fn build(self) -> Result<DirectExecutionHandler> {
-        Ok(DirectExecutionHandler {
-            generator: self.generator.ok_or_else(|| anyhow::anyhow!("Generator required"))?,
-            ai_helpers: self.ai_helpers.ok_or_else(|| anyhow::anyhow!("AI helpers required"))?,
-            executor: self.executor.ok_or_else(|| anyhow::anyhow!("Executor required"))?,
-            client: self.client.ok_or_else(|| anyhow::anyhow!("Client required"))?,
-            model_selector: self.model_selector.ok_or_else(|| anyhow::anyhow!("Model selector required"))?,
-            db: self.db.ok_or_else(|| anyhow::anyhow!("Database required"))?,
-            safety_system: None,
-        })
+        Ok(DirectExecutionHandler::new(
+            self.generator.ok_or_else(|| anyhow::anyhow!("Generator required"))?,
+            self.ai_helpers.ok_or_else(|| anyhow::anyhow!("AI helpers required"))?,
+            self.executor.ok_or_else(|| anyhow::anyhow!("Executor required"))?,
+            self.client.ok_or_else(|| anyhow::anyhow!("Client required"))?,
+            self.profile.ok_or_else(|| anyhow::anyhow!("Profile required"))?,
+            self.db.ok_or_else(|| anyhow::anyhow!("Database required"))?,
+        ))
     }
 }
 

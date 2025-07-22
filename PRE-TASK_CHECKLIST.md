@@ -4,11 +4,65 @@
 
 This document establishes a **MANDATORY** checklist that must be followed before starting ANY development task. This ensures total understanding of the codebase, reduces bugs, minimizes compilation errors, and maintains consistency with existing patterns.
 
+## 🏗️ CRITICAL ARCHITECTURE PRINCIPLE
+
+### Separation of Concerns: Thinking vs Doing
+
+**MANDATORY**: Before EVERY task, verify adherence to our fundamental design principle:
+
+```
+┌─────────────────────────────────────┐
+│      THINKING (Consensus)           │
+│   • Deep analysis & understanding   │
+│   • Multi-stage validation         │
+│   • Complex reasoning              │
+│   • Uses OpenRouter models         │
+└─────────────────────┬───────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────┐
+│       DOING (AI Helpers)            │
+│   • File operations & execution    │
+│   • Code translation              │
+│   • Semantic retrieval            │
+│   • Uses local AI models          │
+└─────────────────────────────────────┘
+```
+
+### Architecture Verification Checklist
+
+Before ANY implementation:
+- [ ] **Is this THINKING or DOING?** Clearly identify which layer handles this
+- [ ] **Consensus tasks**: Analysis, reasoning, validation → OpenRouter models
+- [ ] **AI Helper tasks**: Execution, file ops, retrieval → Local AI models  
+- [ ] **No mixing**: NEVER have consensus do file operations directly
+- [ ] **No mixing**: NEVER have AI helpers make high-level decisions
+
+### Code Violation Detection
+
+**STOP IMMEDIATELY** if you find:
+- ❌ Consensus pipeline directly executing file operations
+- ❌ AI Helpers making architectural decisions
+- ❌ Direct file manipulation without AI Helper involvement
+- ❌ Consensus stages doing work that AI Helpers should handle
+
+**FIX IMMEDIATELY** by:
+- ✅ Moving execution logic to AI Helpers
+- ✅ Moving decision logic to Consensus
+- ✅ Using AIConsensusFileExecutor for all file operations
+- ✅ Ensuring AI Helpers use their full intelligence
+
 ## ⚠️ CRITICAL RULE
 
 **NEVER** start implementing without completing this checklist. Taking 10-15 minutes to understand the codebase saves hours of debugging and rework.
 
 ## ✅ The Mandatory Pre-Task Checklist
+
+### 0. **Verify Architecture Principles** 🏗️ CRITICAL
+- [ ] Identify if task involves THINKING (consensus) or DOING (AI helpers)
+- [ ] Verify no architecture violations in existing code
+- [ ] Plan implementation to maintain separation of concerns
+- [ ] Ensure AI Helpers handle ALL file operations
 
 ### 1. **Understand the Task Context**
 - [ ] Read the task description completely
@@ -204,6 +258,34 @@ This document establishes a **MANDATORY** checklist that must be followed before
 
 ## 🚨 Common Pitfalls to Avoid
 
+### 0. **Architecture Violations** 🏗️ CRITICAL
+❌ **Wrong**: Consensus directly writing files
+```rust
+// In consensus stage
+fs::write("output.txt", content)?; // VIOLATION!
+```
+✅ **Right**: AI Helpers handle file operations
+```rust
+// In consensus stage
+let operations = vec![FileOperation::Create { path, content }];
+ai_file_executor.execute_curator_operations(operations).await?;
+```
+
+❌ **Wrong**: AI Helpers making high-level decisions
+```rust
+// In AI helper
+if should_use_consensus() { // VIOLATION!
+    decide_architecture();
+}
+```
+✅ **Right**: AI Helpers execute, Consensus decides
+```rust
+// In consensus
+let decision = make_architectural_decision();
+// In AI helper
+execute_decision(decision);
+```
+
 ### 1. **Assuming Method Names**
 ❌ **Wrong**: Assuming `get_model_for_stage()` exists
 ✅ **Right**: Search for actual methods: `select_optimal_model()`
@@ -368,6 +450,8 @@ Copy this template for each new task:
 Date: [Date]
 
 ### Pre-Implementation Checklist
+- [ ] **Architecture principle verified** (Thinking vs Doing separation)
+- [ ] **No architecture violations found** in related code
 - [ ] Task context understood
 - [ ] Affected components identified: ___________
 - [ ] Existing patterns researched
