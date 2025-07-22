@@ -1138,10 +1138,11 @@ impl ConsensusProfile {
     /// Find profile by name
     pub async fn find_by_name(name: &str) -> Result<Option<Self>> {
         let db = get_database().await?;
-        let conn = db.get_connection()?;
 
-        let profile = conn
-            .query_row(
+        // Use scoped block to ensure connection is dropped before returning
+        let profile = {
+            let conn = db.get_connection()?;
+            conn.query_row(
                 "SELECT id, profile_name, generator_model, refiner_model,
                         validator_model, curator_model, created_at, updated_at
                  FROM consensus_profiles WHERE profile_name = ?1",
@@ -1159,7 +1160,8 @@ impl ConsensusProfile {
                     })
                 },
             )
-            .optional()?;
+            .optional()?
+        }; // Connection is dropped here
 
         Ok(profile)
     }
