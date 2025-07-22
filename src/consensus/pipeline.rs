@@ -2357,6 +2357,22 @@ impl ConsensusPipeline {
     ) -> crate::ai_helpers::IntelligentContextDecision {
         let has_repository = self.repository_context.is_some();
         
+        // First, try to use AI helpers for intelligent semantic analysis
+        if let Some(ref ai_helpers) = self.ai_helpers {
+            match ai_helpers.intelligent_orchestrator
+                .make_intelligent_context_decision(question, has_repository)
+                .await {
+                Ok(decision) => {
+                    tracing::info!("🤖 AI semantic analysis for {} stage: category={:?}, confidence={:.2}, should_use_repo={}", 
+                        stage.display_name(), decision.primary_category, decision.confidence, decision.should_use_repo);
+                    return decision;
+                }
+                Err(e) => {
+                    tracing::warn!("AI semantic analysis failed for {} stage: {}, using fallback", stage.display_name(), e);
+                }
+            }
+        }
+        
         // Check for indexed codebase first (always use if available)
         if let Some(ctx) = context {
             if ctx.contains("SEMANTIC CODEBASE SEARCH RESULTS") {

@@ -282,6 +282,55 @@ impl RepositoryContextManager {
         }
     }
     
+    /// Try to get repository description from README or package files
+    async fn get_repository_description(&self, root_path: &Path) -> String {
+        // Try README files
+        for readme_name in &["README.md", "README.txt", "README", "readme.md"] {
+            let readme_path = root_path.join(readme_name);
+            if readme_path.exists() {
+                if let Ok(content) = tokio::fs::read_to_string(&readme_path).await {
+                    // Extract first few meaningful lines
+                    let lines: Vec<&str> = content.lines()
+                        .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
+                        .take(3)
+                        .collect();
+                    if !lines.is_empty() {
+                        return lines.join(" ").chars().take(300).collect();
+                    }
+                }
+            }
+        }
+        
+        // Try Cargo.toml for Rust projects
+        let cargo_path = root_path.join("Cargo.toml");
+        if cargo_path.exists() {
+            if let Ok(content) = tokio::fs::read_to_string(&cargo_path).await {
+                // Simple extraction of description field
+                for line in content.lines() {
+                    if line.starts_with("description") && line.contains('=') {
+                        if let Some(desc) = line.split('=').nth(1) {
+                            return desc.trim().trim_matches('"').to_string();
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Try package.json for Node.js projects
+        let package_path = root_path.join("package.json");
+        if package_path.exists() {
+            if let Ok(content) = tokio::fs::read_to_string(&package_path).await {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(desc) = json.get("description").and_then(|d| d.as_str()) {
+                        return desc.to_string();
+                    }
+                }
+            }
+        }
+        
+        String::new()
+    }
+    
     /// Get context information for prompts
     pub async fn get_context_for_prompts(&self) -> String {
         let context = self.context.read().await;
@@ -310,6 +359,35 @@ impl RepositoryContextManager {
             prompt_context.push_str("\n⚡ CRITICAL: This is a RUST project with Cargo.toml!\n");
             prompt_context.push_str("DO NOT describe it as Node.js, JavaScript, or any other language.\n");
             prompt_context.push_str("Key files: Cargo.toml, src/main.rs, src/lib.rs\n");
+            
+            // Check if this is the Hive AI project specifically
+            if context.root_path.as_ref().map(|p| p.ends_with("hive")).unwrap_or(false) {
+                prompt_context.push_str("\n🐝 PROJECT DESCRIPTION:\n");
+                prompt_context.push_str("This is Hive AI - a complete Rust reimplementation of the original TypeScript Hive AI.\n");
+                prompt_context.push_str("It provides AI-powered development assistance with a revolutionary 4-stage consensus engine.\n");
+                prompt_context.push_str("\nKEY FEATURES:\n");
+                prompt_context.push_str("- 4-Stage Consensus Pipeline: Generator → Refiner → Validator → Curator\n");
+                prompt_context.push_str("- 323+ AI models via OpenRouter integration\n");
+                prompt_context.push_str("- Repository Intelligence for codebase understanding\n");
+                prompt_context.push_str("- VS Code-like TUI interface\n");
+                prompt_context.push_str("- 10-40x performance improvement over TypeScript version\n");
+                prompt_context.push_str("- Enterprise features and hooks system\n");
+                prompt_context.push_str("- Authoritative Knowledge Store (hive mind consciousness)\n");
+                prompt_context.push_str("\nMAIN COMPONENTS:\n");
+                prompt_context.push_str("- src/consensus/: 4-stage consensus engine implementation\n");
+                prompt_context.push_str("- src/ai_helpers/: AI-powered code analysis and context\n");
+                prompt_context.push_str("- src/tui/: Terminal user interface (VS Code-like)\n");
+                prompt_context.push_str("- src/analysis/: Repository and code analysis\n");
+                prompt_context.push_str("- src/bin/hive-consensus.rs: GUI application\n");
+            }
+        }
+        
+        // Try to read README or similar files for project description
+        if let Some(root_path) = &context.root_path {
+            let description = self.get_repository_description(root_path).await;
+            if !description.is_empty() {
+                prompt_context.push_str(&format!("\n📄 PROJECT DESCRIPTION:\n{}\n", description));
+            }
         }
         
         if let Some(analysis) = &context.analysis {
