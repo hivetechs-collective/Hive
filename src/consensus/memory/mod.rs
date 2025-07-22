@@ -97,7 +97,7 @@ impl ConsensusMemory {
             access_count: 1,
             related_facts: self.find_related_facts(curator_output).await.unwrap_or_default(),
             topics: self.extract_topics(curator_output, source_question).await.unwrap_or_else(|_| vec!["general".to_string()]),
-            entities: self.extract_entities(curator_output).await.unwrap_or_default()
+            entities: self.extract_entities(curator_output).await.unwrap_or_default(),
             metadata: crate::consensus::memory::authoritative_store::FactMetadata {
                 fact_type: crate::consensus::memory::authoritative_store::FactType::Other("curator_output".to_string()),
                 domain: None,
