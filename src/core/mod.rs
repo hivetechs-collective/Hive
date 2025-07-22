@@ -13,6 +13,7 @@ pub mod temporal;
 pub mod database;
 pub mod database_simple;
 pub mod database_working;
+pub mod db_actor;
 
 // These modules require additional dependencies not in minimal build
 pub mod schema;

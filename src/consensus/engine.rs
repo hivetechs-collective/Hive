@@ -22,6 +22,7 @@ use crate::core::api_keys::ApiKeyManager;
 use crate::core::config;
 use crate::core::config::get_hive_config_dir;
 use crate::core::database::DatabaseManager;
+use crate::core::db_actor::DatabaseService;
 use crate::subscription::{ConversationGateway, UsageTracker};
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
@@ -34,6 +35,7 @@ use tokio::sync::{mpsc, RwLock};
 #[derive(Clone)]
 pub struct ConsensusEngine {
     database: Option<Arc<DatabaseManager>>,
+    db_service: Option<DatabaseService>,
     current_profile: Arc<RwLock<ConsensusProfile>>,
     config: Arc<RwLock<ConsensusConfig>>,
     openrouter_api_key: Option<String>,
@@ -52,6 +54,9 @@ pub struct ConsensusEngine {
 impl ConsensusEngine {
     /// Create a new consensus engine
     pub async fn new(database: Option<Arc<DatabaseManager>>) -> Result<Self> {
+        // Create database service if we have a database manager
+        let db_service = database.as_ref()
+            .map(|db| DatabaseService::spawn(db.clone()));
         // Load configuration from file system
         let hive_config = config::get_config().await?;
 
@@ -120,7 +125,7 @@ impl ConsensusEngine {
 
         // Load default profile from database (matching TypeScript behavior)
         tracing::info!("Loading default profile from database...");
-        let profile = match Self::load_default_profile(&database).await {
+        let profile = match Self::load_default_profile(&db_service).await {
             Ok(p) => {
                 tracing::info!("Successfully loaded profile: {}", p.profile_name);
                 p
@@ -166,6 +171,7 @@ impl ConsensusEngine {
 
         Ok(Self {
             database,
+            db_service,
             current_profile: Arc::new(RwLock::new(profile)),
             config: Arc::new(RwLock::new(config)),
             openrouter_api_key,
@@ -222,7 +228,7 @@ impl ConsensusEngine {
         let config = self.config.read().await.clone();
 
         // Always load the active profile from database to ensure we use the latest selection
-        let profile = match Self::load_active_profile_from_db().await {
+        let profile = match self.load_active_profile_from_db().await {
             Ok(p) => {
                 tracing::info!("Loaded active profile from database: {}", p.profile_name);
                 // Update the cached profile
@@ -336,7 +342,7 @@ impl ConsensusEngine {
         let config = self.config.read().await.clone();
 
         // Always load the active profile from database to ensure we use the latest selection
-        let profile = match Self::load_active_profile_from_db().await {
+        let profile = match self.load_active_profile_from_db().await {
             Ok(p) => {
                 tracing::info!("✅ Loaded active profile from database: {}", p.profile_name);
                 // Update the cached profile
@@ -466,7 +472,7 @@ impl ConsensusEngine {
         let config = self.config.read().await.clone();
         
         // Always load the active profile from database to ensure we use the latest selection
-        let profile = match Self::load_active_profile_from_db().await {
+        let profile = match self.load_active_profile_from_db().await {
             Ok(p) => {
                 tracing::info!("✅ Loaded active profile from database: {}", p.profile_name);
                 // Update the cached profile
@@ -654,8 +660,8 @@ impl ConsensusEngine {
 
     /// Set active profile
     pub async fn set_profile(&self, profile_name: &str) -> Result<()> {
-        // Try to load from database first
-        let profile = match Self::load_profile_by_name(profile_name).await {
+        // Try to load from database service first
+        let profile = match self.load_profile_by_name(profile_name).await {
             Ok(profile) => profile,
             Err(e) => {
                 // No fallback - profile must exist in database
@@ -663,13 +669,9 @@ impl ConsensusEngine {
             }
         };
 
-        // Update database to set as active profile
-        if let Ok(db) = crate::core::database::get_database().await {
-            let conn = db.get_connection()?;
-            conn.execute(
-                "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
-                rusqlite::params![&profile.id],
-            )?;
+        // Update database to set as active profile through service
+        if let Some(ref db_service) = self.db_service {
+            db_service.set_active_profile(&profile.id).await?;
         }
 
         *self.current_profile.write().await = profile;
@@ -678,54 +680,25 @@ impl ConsensusEngine {
     }
 
     /// Load profile by name from database
-    async fn load_profile_by_name(profile_name: &str) -> Result<ConsensusProfile> {
-        use crate::core::database::{get_database, ConsensusProfile as DbProfile};
-
-        let db = get_database().await?;
-        let db_profile = DbProfile::find_by_name(profile_name)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("Profile '{}' not found", profile_name))?;
-
-        Ok(ConsensusProfile {
-            id: db_profile.id,
-            profile_name: db_profile.profile_name,
-            generator_model: db_profile.generator_model,
-            refiner_model: db_profile.refiner_model,
-            validator_model: db_profile.validator_model,
-            curator_model: db_profile.curator_model,
-            created_at: chrono::DateTime::parse_from_rfc3339(&db_profile.created_at)
-                .unwrap_or_else(|_| Utc::now().into())
-                .with_timezone(&Utc),
-            is_active: true,
-        })
+    async fn load_profile_by_name(&self, profile_name: &str) -> Result<ConsensusProfile> {
+        if let Some(ref db_service) = self.db_service {
+            if let Some(profile) = db_service.get_profile_by_name(profile_name).await? {
+                Ok(profile)
+            } else {
+                anyhow::bail!("Profile '{}' not found", profile_name)
+            }
+        } else {
+            anyhow::bail!("Database service not available")
+        }
     }
     
     /// Load the active profile from database
-    async fn load_active_profile_from_db() -> Result<ConsensusProfile> {
-        use crate::core::database::get_database;
-        use rusqlite::OptionalExtension;
-        
-        let db = get_database().await?;
-        let conn = db.get_connection()?;
-        
-        // Get the active profile ID from consensus_settings
-        let active_profile_id: Option<String> = conn.query_row(
-            "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
-            [],
-            |row| row.get(0)
-        ).optional()?;
-        
-        let profile_id = active_profile_id
-            .ok_or_else(|| anyhow::anyhow!("No active profile configured"))?;
-            
-        // Get the profile by ID
-        let profile_name: String = conn.query_row(
-            "SELECT profile_name FROM consensus_profiles WHERE id = ?1",
-            rusqlite::params![profile_id],
-            |row| row.get(0)
-        )?;
-        
-        Self::load_profile_by_name(&profile_name).await
+    async fn load_active_profile_from_db(&self) -> Result<ConsensusProfile> {
+        if let Some(ref db_service) = self.db_service {
+            db_service.get_active_profile().await
+        } else {
+            anyhow::bail!("Database service not available")
+        }
     }
 
     /// Get current profile
@@ -959,138 +932,41 @@ impl ConsensusEngine {
 
     /// Load default consensus profile from database
     async fn load_default_profile(
-        database: &Option<Arc<DatabaseManager>>,
+        db_service: &Option<DatabaseService>,
     ) -> Result<ConsensusProfile> {
         tracing::info!("load_default_profile: Starting...");
-        let db = database
+        let service = db_service
             .as_ref()
-            .ok_or_else(|| anyhow!("Database not available"))?;
+            .ok_or_else(|| anyhow!("Database service not available"))?;
 
-        // Get a connection from the pool
-        let conn = db.get_connection()?;
-        tracing::info!("load_default_profile: Got connection, executing query...");
-
-        // Use spawn_blocking for the query operation only
-        let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
-            // Query for default profile from consensus_profiles table
-            // Query for active profile from consensus_settings (matching TypeScript)
-            let active_profile_id: Option<String> = conn.query_row(
-                "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
-                [],
-                |row| row.get(0)
-            ).optional()?;
-
-            // If no active profile is set, try to get the first available profile
-            let profile_id = match active_profile_id {
-                Some(id) => id,
-                None => {
-                    tracing::warn!("No active profile set, attempting to select first available profile");
-
-                    // Get the first available profile
-                    let first_profile_id: String = conn.query_row(
-                        "SELECT id FROM consensus_profiles ORDER BY created_at ASC LIMIT 1",
-                        [],
-                        |row| row.get(0)
-                    ).map_err(|_| anyhow!("No profiles found. Please complete onboarding to create profiles."))?;
-
-                    // Set it as the active profile
-                    conn.execute(
-                        "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
-                        params![&first_profile_id],
-                    )?;
-
-                    tracing::info!("Automatically selected profile '{}' as active", first_profile_id);
-                    first_profile_id
-                }
-            };
-
-            // Query profile directly from consensus_profiles (TypeScript schema)
-            let row = conn.query_row(
-                "SELECT
-                    id,
-                    profile_name,
-                    generator_model,
-                    refiner_model,
-                    validator_model,
-                    curator_model
-                FROM consensus_profiles
-                WHERE id = ?1
-                LIMIT 1",
-                params![profile_id],
-                |row| {
-                    Ok(ConsensusProfile {
-                        id: row.get(0)?,
-                        profile_name: row.get(1)?,
-                        generator_model: row.get(2)?,
-                        refiner_model: row.get(3)?,
-                        validator_model: row.get(4)?,
-                        curator_model: row.get(5)?,
-                        created_at: Utc::now(),
-                        is_active: true,
-                    })
-                },
-            ).map_err(|e| {
-                // If profile not found, this is a critical error
-                anyhow!(
-                    "Profile with ID '{}' not found in database. The consensus_settings table has an invalid active_profile_id. Please select a valid profile in Settings.",
-                    profile_id
-                )
-            })?;
-
-            Ok(row)
-        }).await??;
-
-        Ok(profile)
+        // Try to get active profile, fallback to any available profile
+        match service.get_active_profile().await {
+            Ok(profile) => {
+                tracing::info!("Successfully loaded active profile: {}", profile.profile_name);
+                Ok(profile)
+            }
+            Err(_) => {
+                tracing::warn!("No active profile found, this might be a new installation");
+                anyhow::bail!("No profiles found. Please complete onboarding to create profiles.")
+            }
+        }
     }
 
-    /// Load specific consensus profile by name or ID
+    /// Load specific consensus profile by name or ID  
     async fn load_profile_by_name_or_id(
-        database: &Option<Arc<DatabaseManager>>,
+        db_service: &Option<DatabaseService>,
         profile_name_or_id: &str,
     ) -> Result<ConsensusProfile> {
-        let db = database
+        let service = db_service
             .as_ref()
-            .ok_or_else(|| anyhow!("Database not available"))?;
-
-        let profile_id = profile_name_or_id.to_string();
-
-        // Get a connection from the pool
-        let conn = db.get_connection()?;
-
-        // Use spawn_blocking for the query operation only
-        let profile = tokio::task::spawn_blocking(move || -> Result<ConsensusProfile> {
-            // Query for specific profile by name or ID from consensus_profiles table
-            let row = conn.query_row(
-                "SELECT
-                    id,
-                    profile_name,
-                    generator_model,
-                    refiner_model,
-                    validator_model,
-                    curator_model
-                FROM consensus_profiles
-                WHERE id = ?1 OR profile_name = ?1
-                LIMIT 1",
-                params![profile_id],
-                |row| {
-                    Ok(ConsensusProfile {
-                        id: row.get(0)?,
-                        profile_name: row.get(1)?,
-                        generator_model: row.get(2)?,
-                        refiner_model: row.get(3)?,
-                        validator_model: row.get(4)?,
-                        curator_model: row.get(5)?,
-                        created_at: Utc::now(),
-                        is_active: true,
-                    })
-                },
-            )?;
-
-            Ok(row)
-        })
-        .await??;
-
-        Ok(profile)
+            .ok_or_else(|| anyhow!("Database service not available"))?;
+        
+        // Try to find profile by name
+        if let Some(profile) = service.get_profile_by_name(profile_name_or_id).await? {
+            Ok(profile)
+        } else {
+            anyhow::bail!("Profile '{}' not found", profile_name_or_id)
+        }
     }
 
     /// Validate consensus prerequisites

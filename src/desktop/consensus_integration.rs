@@ -832,8 +832,8 @@ impl DesktopConsensusManager {
         // Clone cancellation token manager to clear it when done
         let token_manager = self.current_cancellation_token.clone();
 
-        // Spawn the consensus processing
-        let handle = tokio::spawn(async move {
+        // Process consensus directly without spawning (database connections aren't Send)
+        let result = {
             let engine = engine.lock().await;
 
             // D1 authorization is now sent immediately when received in the pipeline
@@ -853,10 +853,10 @@ impl DesktopConsensusManager {
                 r.result
                     .unwrap_or_else(|| "No response received".to_string())
             })
-        });
+        };
 
-        // Wait for result
-        match handle.await? {
+        // Process result
+        match result {
             Ok(result) => {
                 // Only send completion event if consensus completed successfully
                 let _ = internal_sender_for_completion.send(ConsensusUIEvent::Completed);

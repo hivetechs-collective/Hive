@@ -38,9 +38,9 @@ struct ToolDefinition {
     pub handler: ToolHandler,
 }
 
-/// Tool handler type
+/// Tool handler type - Returns a Send future for hyper compatibility
 type ToolHandler =
-    Box<dyn Fn(&ToolRegistry, Value) -> tokio::task::JoinHandle<Result<ToolResult>> + Send + Sync>;
+    Box<dyn Fn(&ToolRegistry, Value) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<ToolResult>> + Send>> + Send + Sync>;
 
 impl ToolRegistry {
     /// Create new tool registry
@@ -95,7 +95,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_ask_hive(args).await })
+                Box::pin(async move { registry.handle_ask_hive(args).await })
             }),
         );
 
@@ -117,7 +117,7 @@ impl ToolRegistry {
                 "required": ["path"]
             }),
             Box::new(|_registry, args| {
-                tokio::spawn(async move {
+                Box::pin(async move {
                     // Run analyze in blocking context to handle database operations
                     let path = args.get("path")
                         .and_then(|v| v.as_str())
@@ -170,7 +170,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_explain_code(args).await })
+                Box::pin(async move { registry.handle_explain_code(args).await })
             }),
         );
 
@@ -197,7 +197,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move {
+                Box::pin(async move {
                     registry.handle_improve_code(args).await
                 })
             }),
@@ -226,7 +226,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_generate_tests(args).await })
+                Box::pin(async move { registry.handle_generate_tests(args).await })
             }),
         );
 
@@ -244,7 +244,7 @@ impl ToolRegistry {
                 "required": ["path"]
             }),
             Box::new(|_registry, args| {
-                tokio::spawn(async move {
+                Box::pin(async move {
                     // For now, return a placeholder until we fix the Send issue
                     let path = args
                         .get("path")
@@ -286,7 +286,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_plan_project(args).await })
+                Box::pin(async move { registry.handle_plan_project(args).await })
             }),
         );
 
@@ -314,7 +314,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_transform_code(args).await })
+                Box::pin(async move { registry.handle_transform_code(args).await })
             }),
         );
 
@@ -344,7 +344,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_search_memory(args).await })
+                Box::pin(async move { registry.handle_search_memory(args).await })
             }),
         );
 
@@ -373,7 +373,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_generate_analytics(args).await })
+                Box::pin(async move { registry.handle_generate_analytics(args).await })
             }),
         );
 
@@ -402,7 +402,7 @@ impl ToolRegistry {
             }),
             Box::new(|registry, args| {
                 let registry = registry.clone_for_handler();
-                tokio::spawn(async move { registry.handle_generate_docs(args).await })
+                Box::pin(async move { registry.handle_generate_docs(args).await })
             }),
         );
 
@@ -424,7 +424,7 @@ impl ToolRegistry {
                 Box::new(move |registry, args| {
                     let name_clone = name_for_closure.clone();
                     let registry_clone = registry.clone_for_handler();
-                    tokio::spawn(async move {
+                    Box::pin(async move {
                         registry_clone.handle_advanced_tool(&name_clone, args).await
                     })
                 }),
@@ -468,22 +468,16 @@ impl ToolRegistry {
 
         info!("Executing tool: {}", name);
 
-        // Use performance optimizations
-        let result = self
-            .performance_manager
-            .execute_tool_optimized(name, &arguments, || async {
-                let handle = (tool_def.handler)(self, arguments.clone());
-                let tool_result = handle
-                    .await
-                    .map_err(|e| anyhow!("Tool execution failed: {}", e))??;
+        // Execute tool directly without performance optimization for now
+        // (Performance optimization requires Send futures which conflict with database access)
+        info!("Executing tool: {} (direct execution)", name);
+        
+        let handle = (tool_def.handler)(self, arguments);
+        let tool_result = handle
+            .await
+            .map_err(|e| anyhow!("Tool execution failed: {}", e))?;
 
-                // Convert ToolResult to JSON for caching
-                Ok(serde_json::to_value(tool_result)?)
-            })
-            .await?;
-
-        // Convert back to ToolResult
-        Ok(serde_json::from_value(result)?)
+        Ok(tool_result)
     }
 
     /// Clone for handler (simplified version for async closures)

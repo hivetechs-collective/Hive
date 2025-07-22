@@ -44,13 +44,10 @@ pub struct ConsensusMemory {
 
 impl ConsensusMemory {
     /// Create a new consensus memory system
-    pub async fn new(database: Arc<crate::core::database::DatabaseManager>) -> Result<Self> {
-        // Create AI helpers for context injection
-        let ai_helpers = Arc::new(crate::ai_helpers::AIHelperEcosystem::new(database.clone()).await?);
-        
+    pub async fn new(db_service: crate::core::db_actor::DatabaseService, ai_helpers: Arc<crate::ai_helpers::AIHelperEcosystem>) -> Result<Self> {
         // Initialize components
         let fingerprinter = Arc::new(SemanticFingerprinter::new().await?);
-        let knowledge_store = Arc::new(AuthoritativeKnowledgeStore::new(database.clone(), fingerprinter.clone()).await?);
+        let knowledge_store = Arc::new(AuthoritativeKnowledgeStore::new(db_service, fingerprinter.clone()).await?);
         let context_injector = Arc::new(ContextInjector::new(knowledge_store.clone(), ai_helpers).await?);
         
         Ok(Self {

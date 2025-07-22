@@ -34,6 +34,7 @@ use crate::consensus::openrouter::{
     SimpleStreamingCallbacks, StreamingCallbacks as OpenRouterStreamingCallbacks,
 };
 use crate::core::database::DatabaseManager;
+use crate::core::db_actor::DatabaseService;
 use crate::core::usage_tracker::UsageTracker;
 use crate::subscription::conversation_gateway::ConversationGateway;
 use anyhow::{anyhow, Context, Result};
@@ -58,6 +59,7 @@ pub struct ConsensusPipeline {
     openrouter_client: Option<Arc<OpenRouterClient>>,
     model_manager: Option<Arc<ModelManager>>,
     database: Option<Arc<DatabaseManager>>,
+    db_service: Option<DatabaseService>,
     api_key: Option<String>,
     usage_tracker: Option<Arc<UsageTracker>>,
     ai_helpers: Option<Arc<AIHelperEcosystem>>,
@@ -112,6 +114,7 @@ impl ConsensusPipeline {
             openrouter_client,
             model_manager,
             database: None, // Will be set later when needed
+            db_service: None, // Will be set when database is provided
             api_key,
             usage_tracker: None, // Will be set when database is provided
             ai_helpers: None, // Will be set when database is provided
@@ -131,6 +134,8 @@ impl ConsensusPipeline {
     /// Set the database for model management
     pub fn with_database(mut self, database: Arc<DatabaseManager>) -> Self {
         self.database = Some(database.clone());
+        // Create database service for Send-safe operations
+        self.db_service = Some(DatabaseService::spawn(database.clone()));
         // Initialize usage tracker with unified database
         self.usage_tracker = Some(Arc::new(UsageTracker::new(database)));
         self
@@ -263,9 +268,9 @@ impl ConsensusPipeline {
     
     /// Initialize consensus memory asynchronously (must be called after with_ai_helpers and with_database)
     pub async fn initialize_consensus_memory(&mut self) -> Result<()> {
-        if let (Some(ref db), Some(ref ai_helpers)) = (&self.database, &self.ai_helpers) {
+        if let (Some(ref db_service), Some(ref ai_helpers)) = (&self.db_service, &self.ai_helpers) {
             // Initialize ConsensusMemory for storing and retrieving knowledge
-            match ConsensusMemory::new(db.clone()).await {
+            match ConsensusMemory::new(db_service.clone(), ai_helpers.clone()).await {
                 Ok(consensus_memory) => {
                     let consensus_memory_arc = Arc::new(consensus_memory);
                     
@@ -381,21 +386,9 @@ impl ConsensusPipeline {
 
         // UPDATE D1 AND REFRESH UI IMMEDIATELY BEFORE CONSENSUS STARTS
         // This ensures the count is updated in real-time as soon as user initiates consensus
-        let license_key_for_d1 = if let Some(db) = &self.database {
-            // Get the current license key from configurations
-            let conn = db.get_connection()?;
-            let license_key = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
-                // Get current license key only - D1 will validate and return user info
-                let license_key: Option<String> = conn
-                    .query_row(
-                        "SELECT value FROM configurations WHERE key = 'hive_license_key'",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                Ok(license_key)
-            })
-            .await??;
+        let license_key_for_d1 = if let Some(db_service) = &self.db_service {
+            // Get the current license key from configurations through database service
+            let license_key = db_service.get_license_key().await?;
 
             if let Some(license_key) = license_key {
                 tracing::info!("Starting consensus with license key: {}", &license_key[..8]); // Log only first 8 chars for security
