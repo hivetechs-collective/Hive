@@ -1627,6 +1627,16 @@ fn App() -> Element {
     });
 
     // Handle menu actions
+    // Process AI Helper UI events
+    use_effect({
+        let app_state = app_state.clone();
+        
+        move || {
+            use hive_ai::desktop::ai_ui_events::process_ai_helper_events;
+            process_ai_helper_events(app_state);
+        }
+    });
+
     let handle_menu_action = move |action: MenuAction| {
         match action {
             MenuAction::OpenFolder => {

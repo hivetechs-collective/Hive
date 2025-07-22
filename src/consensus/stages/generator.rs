@@ -38,7 +38,7 @@ impl ConsensusStage for GeneratorStage {
                 content: enhanced_context,
             });
         }
-
+        
         // Add the user's question with enhanced formatting
         messages.push(Message {
             role: "user".to_string(),

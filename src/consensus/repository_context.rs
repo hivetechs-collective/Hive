@@ -128,15 +128,25 @@ impl RepositoryContextManager {
     pub async fn update_from_ide_state(&self, app_state: &AppState) -> HiveResult<()> {
         let mut context = self.context.write().await;
         
-        // Update root path from file explorer
-        if let Some(project_info) = &app_state.current_project {
-            if context.root_path.as_ref() != Some(&project_info.root_path) {
-                info!("Repository root changed to: {}", project_info.root_path.display());
-                context.root_path = Some(project_info.root_path.clone());
-                
-                // Trigger repository analysis for new root
-                self.analyze_repository_async(&project_info.root_path).await?;
-            }
+        // First check if a directory is selected in the file explorer
+        // This takes precedence over current_project to reflect what the user has selected
+        let effective_root = if let Some(selected_dir) = &app_state.file_explorer.selected_directory {
+            info!("Using selected directory from File Explorer: {}", selected_dir.display());
+            selected_dir.clone()
+        } else if let Some(project_info) = &app_state.current_project {
+            project_info.root_path.clone()
+        } else {
+            // Fall back to current working directory
+            std::env::current_dir().unwrap_or_default()
+        };
+        
+        // Update root path if it changed
+        if context.root_path.as_ref() != Some(&effective_root) {
+            info!("Repository root changed to: {}", effective_root.display());
+            context.root_path = Some(effective_root.clone());
+            
+            // Trigger repository analysis for new root
+            self.analyze_repository_async(&effective_root).await?;
         }
         
         // Update active file from file explorer
