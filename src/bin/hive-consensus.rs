@@ -845,6 +845,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 use hive_ai::desktop::assets::get_logo_html;
 use hive_ai::desktop::consensus_integration::{use_consensus_with_version, DesktopConsensusManager};
+use hive_ai::ide::ai_helper_broker::IDEAIHelperBroker;
 use hive_ai::desktop::dialogs::{
     AboutDialog, CommandPalette, NoUpdatesDialog, OnboardingDialog, OperationConfirmationDialog,
     SettingsDialog, UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, 
@@ -926,6 +927,34 @@ fn App() -> Element {
     let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
     let mut current_dir = use_signal(|| None::<PathBuf>);
     let mut file_content = use_signal(String::new);
+
+    // Initialize IDE AI Helper Broker for repository awareness (after signals are declared)
+    let mut ide_ai_broker = use_signal(|| None::<IDEAIHelperBroker>);
+    
+    // Create the IDE AI Broker when the app starts
+    use_effect(move || {
+        let current_dir = current_dir.clone();
+        let file_tree = file_tree.clone();
+        let selected_file = selected_file.clone();
+        let mut ide_ai_broker = ide_ai_broker.clone();
+        
+        spawn(async move {
+            // Create IDE AI Helper Broker with File Explorer signals
+            match IDEAIHelperBroker::new(
+                current_dir,
+                file_tree,
+                selected_file
+            ).await {
+                Ok(broker) => {
+                    *ide_ai_broker.write() = Some(broker);
+                    tracing::info!("✅ IDE AI Helper Broker initialized");
+                }
+                Err(e) => {
+                    tracing::error!("Failed to initialize IDE AI Helper Broker: {}", e);
+                }
+            }
+        });
+    });
     
     // Tab management
     let mut open_tabs = use_signal(|| vec!["__welcome__".to_string()]);
@@ -1667,6 +1696,33 @@ fn App() -> Element {
 
                             // Clear expanded dirs for new folder
                             expanded_dirs.write().clear();
+                            
+                            // Update repository context for AI Helper
+                            tracing::info!("📁 User opened folder: {}", folder.path().display());
+                            
+                            // Update both the old consensus manager and the new IDE AI Helper Broker
+                            if let Some(manager) = consensus_manager.read().clone() {
+                                let folder_path = folder.path().to_path_buf();
+                                spawn(async move {
+                                    if let Err(e) = manager.update_repository_context_with_path(folder_path).await {
+                                        tracing::warn!("Failed to update repository context: {}", e);
+                                    } else {
+                                        tracing::info!("✅ Repository context updated for opened folder");
+                                    }
+                                });
+                            }
+                            
+                            // Update IDE AI Helper Broker repository context
+                            let ide_ai_broker = ide_ai_broker.clone();
+                            spawn(async move {
+                                if let Some(broker) = ide_ai_broker.read().as_ref() {
+                                    if let Err(e) = broker.update_repository_context().await {
+                                        tracing::warn!("IDE AI Helper Broker failed to update context: {}", e);
+                                    } else {
+                                        tracing::info!("✅ IDE AI Helper Broker context updated");
+                                    }
+                                }
+                            });
 
                             // Load new directory tree
                             let root_name = folder
@@ -1927,6 +1983,33 @@ fn App() -> Element {
 
                                 // Clear expanded dirs for new folder
                                 expanded_dirs.write().clear();
+                                
+                                // Update repository context for AI Helper
+                                tracing::info!("📁 User opened folder from welcome screen: {}", folder.path().display());
+                                
+                                // Update both the old consensus manager and the new IDE AI Helper Broker
+                                if let Some(manager) = consensus_manager.read().clone() {
+                                    let folder_path = folder.path().to_path_buf();
+                                    spawn(async move {
+                                        if let Err(e) = manager.update_repository_context_with_path(folder_path).await {
+                                            tracing::warn!("Failed to update repository context: {}", e);
+                                        } else {
+                                            tracing::info!("✅ Repository context updated for opened folder");
+                                        }
+                                    });
+                                }
+                                
+                                // Update IDE AI Helper Broker repository context
+                                let ide_ai_broker = ide_ai_broker.clone();
+                                spawn(async move {
+                                    if let Some(broker) = ide_ai_broker.read().as_ref() {
+                                        if let Err(e) = broker.update_repository_context().await {
+                                            tracing::warn!("IDE AI Helper Broker failed to update context: {}", e);
+                                        } else {
+                                            tracing::info!("✅ IDE AI Helper Broker context updated");
+                                        }
+                                    }
+                                });
 
                                 // Load new directory tree
                                 let root_name = folder
@@ -2153,6 +2236,8 @@ fn App() -> Element {
                                 active_tab: active_tab.clone(),
                                 tab_contents: tab_contents.clone(),
                                 context_menu_state: context_menu_state.clone(),
+                                consensus_manager: consensus_manager.clone(),
+                                ide_ai_broker: ide_ai_broker.clone(),
                             }
                         }
 
@@ -2670,13 +2755,31 @@ fn App() -> Element {
                                             let mut is_processing = is_processing.clone();
                                             let mut app_state = app_state.clone();
                                             let mut show_upgrade_dialog = show_upgrade_dialog.clone();
+                                            let ide_ai_broker = ide_ai_broker.clone();
 
                                             spawn(async move {
                                                 // Update UI to show consensus is running
                                                 app_state.write().consensus.start_consensus();
 
-                                                // Process the query - streaming will update app_state automatically
-                                                match consensus.process_query(&user_msg).await {
+                                                // Use IDE AI Helper Broker to enhance query with repository context
+                                                let enhanced_query = if let Some(broker) = ide_ai_broker.read().as_ref() {
+                                                    match broker.process_query_with_context(&user_msg).await {
+                                                        Ok(enhanced) => {
+                                                            tracing::info!("🤖 IDE AI Helper enhanced query with repository context");
+                                                            enhanced.to_consensus_query()
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::warn!("IDE AI Helper failed to enhance query: {}", e);
+                                                            user_msg.clone() // Fallback to original
+                                                        }
+                                                    }
+                                                } else {
+                                                    tracing::info!("💭 IDE AI Helper Broker not available, using original query");
+                                                    user_msg.clone()
+                                                };
+
+                                                // Process the enhanced query - streaming will update app_state automatically
+                                                match consensus.process_query(&enhanced_query).await {
                                                     Ok(final_response) => {
                                                         // Set final response
                                                         let html = markdown::to_html(&final_response);
@@ -3261,6 +3364,8 @@ fn FileTreeItem(
     active_tab: Signal<String>,
     tab_contents: Signal<HashMap<String, String>>,
     context_menu_state: Signal<ContextMenuState>,
+    consensus_manager: Signal<Option<DesktopConsensusManager>>,
+    ide_ai_broker: Signal<Option<IDEAIHelperBroker>>,
 ) -> Element {
     let file_path = file.path.clone();
     let file_path_for_context = file_path.clone(); // Clone for context menu
@@ -3323,11 +3428,32 @@ fn FileTreeItem(
                     let current = expanded_dirs.read().get(&file_path_for_click).copied().unwrap_or(false);
                     expanded_dirs.write().insert(file_path_for_click.clone(), !current);
 
-                    // Trigger reload by changing a dummy state
-                    // This will cause the coroutine to re-run
-                    // (In a real app, we'd use a proper reload trigger)
-                    // Just log for now
-                    println!("Directory expanded/collapsed");
+                    // Update repository context for AI Helper when directory is selected
+                    tracing::info!("📁 User clicked directory: {}", file_path_for_click.display());
+                    
+                    // Update both the old consensus manager and the new IDE AI Helper Broker
+                    if let Some(manager) = consensus_manager.read().clone() {
+                        let dir_path = file_path_for_click.clone();
+                        spawn(async move {
+                            if let Err(e) = manager.update_repository_context_with_path(dir_path).await {
+                                tracing::warn!("Failed to update repository context: {}", e);
+                            } else {
+                                tracing::info!("✅ Repository context updated for clicked directory");
+                            }
+                        });
+                    }
+                    
+                    // Update IDE AI Helper Broker repository context
+                    let ide_ai_broker = ide_ai_broker.clone();
+                    spawn(async move {
+                        if let Some(broker) = ide_ai_broker.read().as_ref() {
+                            if let Err(e) = broker.update_repository_context().await {
+                                tracing::warn!("IDE AI Helper Broker failed to update context: {}", e);
+                            } else {
+                                tracing::info!("✅ IDE AI Helper Broker context updated for clicked directory");
+                            }
+                        }
+                    });
                 } else {
                     // Select file and open in tab
                     println!("File clicked: {}", file_path_for_click.display());
@@ -3414,6 +3540,8 @@ fn FileTreeItem(
                     active_tab: active_tab.clone(),
                     tab_contents: tab_contents.clone(),
                     context_menu_state: context_menu_state.clone(),
+                    consensus_manager: consensus_manager.clone(),
+                    ide_ai_broker: ide_ai_broker.clone(),
                 }
             }
         }

@@ -18,6 +18,7 @@ pub mod core;
 pub mod database;
 pub mod desktop;
 pub mod hooks;
+pub mod ide;
 pub mod install;
 pub mod integration;
 pub mod interactive_tui;
