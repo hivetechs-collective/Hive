@@ -241,6 +241,25 @@ pub fn App() -> Element {
         })
     };
 
+    // Watch for current_project changes and update repository context
+    use_effect({
+        let mut app_state = app_state.clone();
+        
+        move || {
+            // Get the current project root path if it exists
+            let project_root = app_state.read().current_project.as_ref().map(|p| p.root_path.clone());
+            
+            if let Some(root_path) = project_root {
+                tracing::info!("📁 Current project changed to: {}", root_path.display());
+                
+                // Increment the repository context update trigger
+                // This will be picked up by the chat component's watcher
+                app_state.write().repository_context_update_trigger += 1;
+                tracing::info!("🔄 Triggered repository context update via trigger increment");
+            }
+        }
+    });
+
     // Provide state to all child components
     use_context_provider(move || app_state);
     use_context_provider(|| event_dispatcher);
@@ -467,8 +486,33 @@ fn MenuBar() -> Element {
                 // HiveTechs Logo
                 // HiveLogoSmall {}
                 span {
-                    style: "font-weight: 400;",
+                    style: "font-weight: 400; margin-right: 20px;",
                     "HiveTechs Consensus"
+                }
+                
+                // File menu
+                span {
+                    style: "font-weight: 400; font-size: 13px; margin-right: 15px; cursor: pointer; padding: 4px 8px; border-radius: 4px;",
+                    onclick: {
+                        let mut app_state = use_context::<Signal<AppState>>();
+                        move |_| {
+                            let mut app_state = app_state.clone();
+                            spawn(async move {
+                                let dialog = rfd::AsyncFileDialog::new();
+                                if let Some(folder) = dialog.pick_folder().await {
+                                    let path = folder.path().to_path_buf();
+                                    tracing::info!("📁 User selected folder via File menu: {}", path.display());
+                                    
+                                    if let Err(e) = app_state.write().load_project(path.clone()).await {
+                                        tracing::error!("Failed to load project: {}", e);
+                                    } else {
+                                        tracing::info!("✅ Project loaded successfully");
+                                    }
+                                }
+                            });
+                        }
+                    },
+                    "File"
                 }
             }
 

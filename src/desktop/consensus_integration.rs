@@ -17,6 +17,7 @@ use anyhow::Result;
 use dioxus::prelude::*;
 use rusqlite::OptionalExtension;
 use std::sync::Arc;
+use std::path::PathBuf;
 use tokio::{sync::{mpsc, Mutex}, spawn};
 
 /// Events sent from callbacks to UI
@@ -972,6 +973,33 @@ impl DesktopConsensusManager {
     pub async fn can_cancel(&self) -> bool {
         let token_guard = self.current_cancellation_token.lock().await;
         token_guard.is_some()
+    }
+    
+    /// Update repository context with a specific path (for hive-consensus GUI compatibility)
+    pub async fn update_repository_context_with_path(&self, path: PathBuf) -> Result<()> {
+        use crate::consensus::repository_context::RepositoryContextManager;
+        
+        tracing::info!("Updating repository context with path: {}", path.display());
+        
+        // Create a new repository context manager
+        let repository_context_manager = Arc::new(RepositoryContextManager::new().await?);
+        
+        // If it's a directory, analyze it
+        if path.is_dir() {
+            tracing::info!("Analyzing repository at: {}", path.display());
+            
+            // Trigger repository analysis
+            if let Err(e) = repository_context_manager.analyze_repository_async(&path).await {
+                tracing::warn!("Failed to analyze repository: {}", e);
+            }
+        }
+        
+        // Set the repository context on the consensus engine
+        let mut engine = self.engine.lock().await;
+        engine.set_repository_context(repository_context_manager).await?;
+        
+        tracing::info!("✅ Repository context updated with path: {}", path.display());
+        Ok(())
     }
 
     /// Get the consensus engine for direct access

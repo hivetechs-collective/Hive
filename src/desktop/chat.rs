@@ -127,10 +127,40 @@ fn WelcomeMessage() -> Element {
                     class: "commands-section",
                     h3 {
                         class: "commands-title",
-                        "Quick Commands"
+                        "Quick Actions"
                     }
                     div {
                         class: "command-list",
+                        button {
+                            style: "display: inline-flex; align-items: center; padding: 10px 20px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500; transition: background 0.2s; margin-bottom: 20px;",
+                            onmouseover: move |e| {
+                                // Would set hover style if we had mutable access to style
+                            },
+                            onclick: {
+                                let mut app_state = use_context::<Signal<AppState>>();
+                                move |_| {
+                                    let mut app_state = app_state.clone();
+                                    spawn(async move {
+                                        // Open folder dialog
+                                        let dialog = rfd::AsyncFileDialog::new();
+                                        if let Some(folder) = dialog.pick_folder().await {
+                                            let path = folder.path().to_path_buf();
+                                            tracing::info!("📁 User selected folder: {}", path.display());
+                                            
+                                            // Load the project
+                                            if let Err(e) = app_state.write().load_project(path.clone()).await {
+                                                tracing::error!("Failed to load project: {}", e);
+                                            } else {
+                                                tracing::info!("✅ Project loaded successfully");
+                                                // The use_effect watcher in app.rs will trigger repository context update
+                                            }
+                                        }
+                                    });
+                                }
+                            },
+                            i { class: "fa-solid fa-folder-open", style: "margin-right: 8px;" }
+                            "Open Folder"
+                        }
                         div {
                             class: "command-item",
                             code { class: "command-code", "ask \"your question\"" }
@@ -145,11 +175,6 @@ fn WelcomeMessage() -> Element {
                             class: "command-item",
                             code { class: "command-code", "plan \"your goal\"" }
                             span { class: "command-desc", "Create a development plan" }
-                        }
-                        div {
-                            class: "command-item",
-                            code { class: "command-code", "help" }
-                            span { class: "command-desc", "Show all commands" }
                         }
                     }
                 }
