@@ -625,21 +625,45 @@ impl AutonomousAIHelper {
         intent: &IntentAnalysis,
         gathered_context: &Option<String>,
     ) -> Result<bool> {
-        // AI decides based on intent complexity and available context
-        if intent.complexity > 0.7 {
-            return Ok(true); // Complex queries benefit from consensus
+        // For testing and functionality - route more queries through consensus
+        
+        // Always use consensus for complex queries
+        if intent.complexity > 0.5 {
+            info!("🎯 Routing to consensus: high complexity ({})", intent.complexity);
+            return Ok(true);
         }
         
+        // Use consensus for code-related queries
+        let code_keywords = ["create", "write", "implement", "build", "generate", "code", "function", "class", "script"];
+        if code_keywords.iter().any(|&keyword| intent.primary_intent.to_lowercase().contains(keyword)) {
+            info!("🎯 Routing to consensus: code-related query");
+            return Ok(true);
+        }
+        
+        // Use consensus for file operations
+        let file_keywords = ["file", "directory", "folder", "read", "write", "analyze", "scan"];
+        if file_keywords.iter().any(|&keyword| intent.primary_intent.to_lowercase().contains(keyword)) {
+            info!("🎯 Routing to consensus: file operation");
+            return Ok(true);
+        }
+        
+        // Use consensus when no context is available
         if gathered_context.is_none() {
-            return Ok(true); // No context found, let consensus handle it
+            info!("🎯 Routing to consensus: no context available");
+            return Ok(true);
         }
         
-        // Simple factual queries with good context might not need consensus
-        if intent.primary_intent.contains("simple_fact") && gathered_context.is_some() {
-            return Ok(false);
+        // Only answer directly for very simple repository status queries
+        if intent.primary_intent.contains("repository_status") || intent.primary_intent.contains("simple_fact") {
+            if intent.complexity < 0.3 && gathered_context.is_some() {
+                info!("🎯 Answering directly: simple repository status");
+                return Ok(false);
+            }
         }
         
-        Ok(true) // Default to using consensus
+        // Default to using consensus for better testing and functionality
+        info!("🎯 Routing to consensus: default behavior");
+        Ok(true)
     }
     
     /// AI formulates a direct response if appropriate

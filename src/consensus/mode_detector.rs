@@ -90,10 +90,15 @@ impl ComplexityAnalyzer {
             .count();
         complexity += (conditional_count as f32) * 0.15;
         
-        // Check for analysis keywords
-        let analysis_words = ["analyze", "explain", "debug", "investigate", "review", "audit", "assess"];
+        // Check for analysis keywords - but only for clearly complex analysis requests
+        let analysis_words = ["analyze", "debug", "investigate", "review", "audit", "assess"];
         if analysis_words.iter().any(|&word| request.to_lowercase().contains(word)) {
             complexity += 0.4;
+        }
+        
+        // "explain" is often used in simple questions, be less aggressive
+        if request.to_lowercase().contains("explain") && request.len() > 50 {
+            complexity += 0.2;
         }
         
         // Check for architecture/design keywords
@@ -118,74 +123,106 @@ pub struct ModeDetector {
 impl ModeDetector {
     pub fn new() -> Result<Self> {
         let patterns = vec![
-            // Direct mode patterns - simple file operations
+            // Direct mode patterns - simple operations and factual questions
             PatternMatcher::new(
-                r"(?i)^(create|make|add|write)\s+(a\s+)?(new\s+)?(simple\s+)?file",
-                ExecutionMode::Direct,
-                0.9,
-                "Simple file creation"
-            )?,
-            PatternMatcher::new(
-                r"(?i)^(create|add|write)\s+(a\s+)?test\s+for",
+                r"(?i)^(create|make|add|write)\s+(a\s+)?(new\s+)?(simple\s+|empty\s+|basic\s+)?file\s+(called|named)\s+\w+\.(txt|md|json)$",
                 ExecutionMode::Direct,
                 0.85,
-                "Test creation"
+                "Very simple file creation"
             )?,
             PatternMatcher::new(
-                r"(?i)^(update|modify|change|edit)\s+(the\s+)?file",
+                r"(?i)^(delete|remove)\s+(the\s+)?file\s+\w+\.(txt|md|json)$",
                 ExecutionMode::Direct,
                 0.85,
-                "Simple file update"
+                "Simple file deletion"
             )?,
             PatternMatcher::new(
-                r"(?i)^(delete|remove)\s+(the\s+)?file",
+                r"(?i)^(rename|move)\s+(the\s+)?file\s+\w+\s+to\s+\w+$",
                 ExecutionMode::Direct,
-                0.9,
-                "File deletion"
-            )?,
-            PatternMatcher::new(
-                r"(?i)^(rename|move)\s+(the\s+)?file",
-                ExecutionMode::Direct,
-                0.9,
+                0.85,
                 "File rename/move"
             )?,
+            
+            // Simple factual questions - should get direct answers
             PatternMatcher::new(
-                r"(?i)^(add|create|implement)\s+a\s+(simple|basic)\s+\w+",
+                r"(?i)^(what|which)(\s+is)?\s+(the\s+)?(name\s+of\s+the\s+|current\s+)?(repo|repository|project|folder|directory)(\s+name)?(\?)?$",
                 ExecutionMode::Direct,
-                0.8,
-                "Simple feature addition"
+                0.9,
+                "Simple repository name question"
+            )?,
+            PatternMatcher::new(
+                r"(?i)^(what|where)(\s+is)?\s+(my\s+|the\s+)?(current\s+)?(directory|folder|location)(\?)?$",
+                ExecutionMode::Direct,
+                0.9,
+                "Simple directory question"
+            )?,
+            PatternMatcher::new(
+                r"(?i)^(list|show|what)\s+(files?|directories|folders?)(\s+(are\s+)?(here|in\s+this\s+(directory|folder)))?(\?)?$",
+                ExecutionMode::Direct,
+                0.85,
+                "Simple file listing question"
+            )?,
+            PatternMatcher::new(
+                r"(?i)^(which|what)\s+(file|folder|directory)\s+(is\s+)?(selected|open|current)(\?)?$",
+                ExecutionMode::Direct,
+                0.85,
+                "Simple file selection question"
+            )?,
+            PatternMatcher::new(
+                r"(?i)(what|what's|whats)\s+(is\s+)?(the\s+)?(name|title)\s+(of\s+)?(this|the\s+current|my\s+current)?\s*(repo|repository|project)",
+                ExecutionMode::Direct,
+                0.95,
+                "Repository name question"
+            )?,
+            PatternMatcher::new(
+                r"(?i)(what|what's|whats)\s+(is\s+)?(this|the\s+current|my\s+current)?\s*(repo|repository|project)(\s+(name|called))?",
+                ExecutionMode::Direct,
+                0.9,
+                "Simple repository question"
             )?,
             
-            // Consensus mode patterns - complex analysis
+            // Consensus mode patterns - favor collaborative analysis for complex/interesting work
             PatternMatcher::new(
-                r"(?i)(analyze|explain|investigate|debug|diagnose)",
+                r"(?i)(analyze|explain|investigate|debug|diagnose|understand|explore)",
                 ExecutionMode::Consensus,
                 0.9,
-                "Analysis request"
+                "Analysis and exploration requests"
             )?,
             PatternMatcher::new(
-                r"(?i)(architecture|design|structure|pattern|best\s+practice)",
-                ExecutionMode::Consensus,
-                0.85,
-                "Architecture/design request"
-            )?,
-            PatternMatcher::new(
-                r"(?i)(refactor|optimize|improve|enhance)\s+.*(system|architecture|codebase)",
+                r"(?i)(architecture|design|structure|pattern|best\s+practice|approach|strategy)",
                 ExecutionMode::Consensus,
                 0.9,
-                "Complex refactoring"
+                "Architecture and design requests"
             )?,
             PatternMatcher::new(
-                r"(?i)(implement|build|create)\s+.*(system|framework|library|api)",
+                r"(?i)(implement|build|create|write|develop).*(system|framework|library|api|component|feature|function|class|module)",
                 ExecutionMode::Consensus,
                 0.85,
-                "System implementation"
+                "Implementation requests"
             )?,
             PatternMatcher::new(
-                r"(?i)(compare|evaluate|assess|review)",
+                r"(?i)(refactor|optimize|improve|enhance|fix|solve|troubleshoot)",
+                ExecutionMode::Consensus,
+                0.85,
+                "Improvement and problem-solving requests"
+            )?,
+            PatternMatcher::new(
+                r"(?i)(compare|evaluate|assess|review|recommend|suggest|advise)",
+                ExecutionMode::Consensus,
+                0.85,
+                "Evaluation and recommendation requests"
+            )?,
+            PatternMatcher::new(
+                r"(?i)(how\s+(to|do|can)\s+.{10,}|why\s+(does|is|should)\s+.{10,}|when\s+(to|should)\s+.{10,})",
                 ExecutionMode::Consensus,
                 0.8,
-                "Evaluation request"
+                "Complex analytical question patterns"
+            )?,
+            PatternMatcher::new(
+                r"(?i)(help|assist|guide)\s+(me\s+)?(with|to)",
+                ExecutionMode::Consensus,
+                0.75,
+                "Help and guidance requests"
             )?,
             
             // Hybrid patterns - consensus with file operations
@@ -213,7 +250,7 @@ impl ModeDetector {
             patterns,
             complexity_analyzer: ComplexityAnalyzer::new(),
             ai_helpers: None,
-            complexity_threshold: 0.6,
+            complexity_threshold: 0.4, // Lower threshold = more queries go to consensus for better thinking
         })
     }
 
@@ -252,22 +289,34 @@ impl ModeDetector {
             // For now, we'll use the simple heuristics
         }
         
-        // Make decision based on complexity and pattern match
+        // HEAVILY favor direct mode - simple questions should get immediate answers
         match (best_match, complexity) {
-            // High confidence pattern match
-            (Some((mode, confidence)), _) if confidence >= 0.8 => mode,
+            // ANY direct pattern match should be honored - don't let complexity override simple questions
+            (Some((ExecutionMode::Direct, confidence)), _) if confidence >= 0.6 => ExecutionMode::Direct,
             
-            // Low complexity, prefer direct
-            (_, complexity) if complexity < 0.3 => ExecutionMode::Direct,
+            // Only use consensus for very high confidence complex analysis patterns
+            (Some((ExecutionMode::Consensus, confidence)), _) if confidence >= 0.9 => ExecutionMode::Consensus,
             
-            // High complexity, prefer consensus
-            (_, complexity) if complexity > self.complexity_threshold => ExecutionMode::Consensus,
-            
-            // Medium complexity with pattern hint
-            (Some((mode, _)), _) => mode,
-            
-            // Medium complexity, default to hybrid
-            _ => ExecutionMode::HybridConsensus,
+            // All other cases - favor direct mode for simple questions
+            _ => {
+                let simple_question_words = ["what", "which", "where", "when", "who", "how"];
+                let starts_simple = simple_question_words.iter()
+                    .any(|&word| request.to_lowercase().starts_with(word));
+                
+                let factual_patterns = ["what is", "what's", "which is", "where is", "what are", "who is"];
+                let is_factual = factual_patterns.iter()
+                    .any(|&pattern| request.to_lowercase().contains(pattern));
+                
+                // Very aggressive direct mode for simple questions
+                if (starts_simple || is_factual) && request.len() < 100 && complexity < 0.5 {
+                    ExecutionMode::Direct
+                } else if complexity > 0.7 {
+                    ExecutionMode::Consensus
+                } else {
+                    // For unclear cases, default to direct for efficiency unless clearly complex
+                    ExecutionMode::Direct
+                }
+            },
         }
     }
 

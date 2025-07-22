@@ -533,14 +533,14 @@ impl ConsensusPipeline {
         let mut previous_answer: Option<String> = None;
         let mut stage_results = Vec::new();
 
-        // Check if we should use direct execution mode (Claude Code style)
+        // Enhanced AI Helper decision-making for intelligent mode selection
         if let (Some(mode_detector), Some(direct_handler)) = (&self.mode_detector, &self.direct_handler) {
             let detected_mode = mode_detector.detect_mode(question).await;
             
             match detected_mode {
                 ExecutionMode::Direct => {
                     // Use direct execution path for simple operations
-                    tracing::info!("🚀 Using DIRECT execution mode (Claude Code style)");
+                    tracing::info!("🚀 AI Helper chose DIRECT execution mode for efficiency");
                     
                     // Execute directly with the generator stage
                     direct_handler.handle_request(
@@ -593,11 +593,11 @@ impl ConsensusPipeline {
                     return Ok(final_result);
                 }
                 ExecutionMode::HybridConsensus => {
-                    tracing::info!("🔄 Using HYBRID consensus mode (consensus with inline operations)");
+                    tracing::info!("🔄 AI Helper chose HYBRID consensus mode (consensus with inline operations)");
                     // Continue with normal consensus but with inline operation support
                 }
                 ExecutionMode::Consensus => {
-                    tracing::info!("🧠 Using FULL consensus mode (4-stage analysis)");
+                    tracing::info!("🧠 AI Helper chose FULL consensus mode (4-stage collaborative analysis)");
                     // Continue with normal consensus
                 }
             }

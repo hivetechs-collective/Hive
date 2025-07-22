@@ -694,55 +694,81 @@ impl DesktopConsensusManager {
         // Create repository context manager
         let repository_context = Arc::new(RepositoryContextManager::new().await?);
 
-        // Initialize repository context with current working directory immediately
-        let current_dir = std::env::current_dir().map_err(|e| {
-            anyhow::anyhow!("Failed to get current working directory: {}", e)
-        })?;
+        // Initialize repository context from File Explorer state instead of hardcoded working directory
+        let file_explorer_root = {
+            let app_state_read = app_state.read();
+            app_state_read.file_explorer.root_path.clone()
+        };
         
-        tracing::info!("🔍 Auto-detecting repository at current working directory: {}", current_dir.display());
-        
-        // Check if current directory looks like a repository
-        if current_dir.join("Cargo.toml").exists() || 
-           current_dir.join("package.json").exists() || 
-           current_dir.join(".git").exists() ||
-           current_dir.join("pyproject.toml").exists() ||
-           current_dir.join("go.mod").exists() {
+        if let Some(explorer_root) = file_explorer_root {
+            tracing::info!("🔍 Using File Explorer root for repository context: {}", explorer_root.display());
             
-            tracing::info!("🎯 Repository detected! Setting up context for: {}", current_dir.display());
+            // Check if File Explorer root looks like a repository
+            if explorer_root.join("Cargo.toml").exists() || 
+               explorer_root.join("package.json").exists() || 
+               explorer_root.join(".git").exists() ||
+               explorer_root.join("pyproject.toml").exists() ||
+               explorer_root.join("go.mod").exists() {
+                
+                tracing::info!("🎯 Repository detected! Setting up context for: {}", explorer_root.display());
+                
+                // Note: App state updates moved to avoid reactive scope conflicts
+                let project_name = explorer_root
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Current Project")
+                    .to_string();
+                    
+                tracing::info!("📝 Repository project detected: {}", project_name);
+                
+                // Update repository context immediately
+                {
+                    let app_state_clone = app_state.read();
+                    if let Err(e) = repository_context.update_from_ide_state(&app_state_clone).await {
+                        tracing::warn!("Failed to initialize repository context: {}", e);
+                    } else {
+                        tracing::info!("✅ Repository context initialized successfully");
+                    }
+                }
+            }
+        } else {
+            // Fallback to current working directory only if no File Explorer root
+            let current_dir = std::env::current_dir().map_err(|e| {
+                anyhow::anyhow!("Failed to get current working directory: {}", e)
+            })?;
             
-            // Update app state with detected repository
-            {
-                let mut app_state_clone = app_state.clone();
+            tracing::info!("🔍 No File Explorer root found, using current working directory: {}", current_dir.display());
+            
+            // Check if current directory looks like a repository
+            if current_dir.join("Cargo.toml").exists() || 
+               current_dir.join("package.json").exists() || 
+               current_dir.join(".git").exists() ||
+               current_dir.join("pyproject.toml").exists() ||
+               current_dir.join("go.mod").exists() {
+                
+                tracing::info!("🎯 Repository detected! Setting up context for: {}", current_dir.display());
+                
+                // Note: App state updates moved to avoid reactive scope conflicts
                 let project_name = current_dir
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("Current Project")
                     .to_string();
                     
-                app_state_clone.write().current_project = Some(crate::desktop::state::ProjectInfo {
-                    name: project_name.clone(),
-                    path: current_dir.clone(),
-                    root_path: current_dir.clone(),
-                    language: None,
-                    git_status: crate::desktop::state::GitStatus::NotRepository,
-                    git_branch: None,
-                    file_count: 0,
-                });
+                tracing::info!("📝 Repository project detected: {}", project_name);
                 
-                tracing::info!("📝 Updated app state with project: {}", project_name);
-            }
-            
-            // Update repository context immediately
-            {
-                let app_state_clone = app_state.read();
-                if let Err(e) = repository_context.update_from_ide_state(&app_state_clone).await {
-                    tracing::warn!("Failed to initialize repository context: {}", e);
-                } else {
-                    tracing::info!("✅ Repository context initialized successfully");
+                // Update repository context immediately
+                {
+                    let app_state_clone = app_state.read();
+                    if let Err(e) = repository_context.update_from_ide_state(&app_state_clone).await {
+                        tracing::warn!("Failed to initialize repository context: {}", e);
+                    } else {
+                        tracing::info!("✅ Repository context initialized successfully");
+                    }
                 }
+            } else {
+                tracing::warn!("⚠️ No repository detected in current directory. AI Helper will ask user for clarification when needed.");
             }
-        } else {
-            tracing::warn!("⚠️ No repository detected in current directory. AI Helper will ask user for clarification when needed.");
         }
 
         // Create engine without checking keys - we'll check when processing
