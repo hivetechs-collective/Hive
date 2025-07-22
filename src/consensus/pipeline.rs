@@ -21,7 +21,7 @@ use crate::consensus::{
     smart_decision_engine::UserPreferences,
     ModeDetector, ExecutionMode, DirectExecutionHandler, StreamingOperationExecutor,
 };
-use crate::consensus::models::DynamicModelSelector;
+// Removed DynamicModelSelector - direct execution uses profile's generator model
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
     TokenUsage, AnalyticsFeatures,
@@ -163,14 +163,13 @@ impl ConsensusPipeline {
                 
                 // Create direct execution handler
                 let generator_stage = Arc::new(GeneratorStage::new());
-                let model_selector = Arc::new(DynamicModelSelector::new(self.api_key.clone()));
                 let direct_handler = Arc::new(
                     DirectExecutionHandler::new(
                         generator_stage,
                         ai_helpers.clone(),
                         streaming_executor,
                         openrouter_client.clone(),
-                        model_selector,
+                        self.profile.clone(),
                         database.clone(),
                     )
                 );
@@ -2241,22 +2240,19 @@ impl ConsensusPipeline {
         previous_answer: Option<&str>,
         context: Option<&str>,
     ) -> Result<Vec<crate::consensus::types::Message>> {
-        use crate::consensus::stages::file_aware_curator::{FileAwareCuratorStage, build_file_aware_curator_messages};
+        use crate::consensus::stages::file_aware_curator::FileAwareCuratorStage;
+        use crate::consensus::stages::ConsensusStage;
 
         let file_aware_curator = FileAwareCuratorStage::new();
         
         // Get repository context if available
         if let Some(repo_ctx_manager) = &self.repository_context {
-            let repo_context = repo_ctx_manager.get_context().await;
-            
-            // Build messages with actual file contents
-            let messages = build_file_aware_curator_messages(
-                &file_aware_curator,
+            // Build messages using the trait method
+            let messages = file_aware_curator.build_messages(
                 question,
                 previous_answer,
-                Some(&repo_context),
                 context
-            ).await?;
+            )?;
             
             tracing::info!("Built file-aware curator messages with {} messages", messages.len());
             

@@ -560,6 +560,24 @@ impl OperationIntelligenceCoordinator {
             analysis_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+
+    /// Create a mock instance for testing
+    pub fn new_mock() -> Self {
+        // Create mock AI helpers
+        use crate::ai_helpers::AIHelperEcosystem;
+        let ecosystem = AIHelperEcosystem::new_mock();
+        
+        Self {
+            knowledge_indexer: ecosystem.knowledge_indexer,
+            context_retriever: ecosystem.context_retriever,
+            pattern_recognizer: ecosystem.pattern_recognizer,
+            quality_analyzer: ecosystem.quality_analyzer,
+            knowledge_synthesizer: ecosystem.knowledge_synthesizer,
+            operation_history: Arc::new(RwLock::new(Vec::new())),
+            history_database: None,
+            analysis_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
     
     /// Set operation history database
     pub async fn set_history_database(&mut self, database_url: &str) -> Result<()> {

@@ -2534,7 +2534,7 @@ fn App() -> Element {
                                     }
                                 }
                             });
-                        }
+                        },
 
                         if !app_state.read().consensus.streaming_content.is_empty() {
                             div {

@@ -11,12 +11,13 @@ use crate::consensus::{
     cancellation::{CancellationToken, CancellationReason},
 };
 use crate::core::api_keys::ApiKeyManager;
+use crate::desktop::markdown;
 use crate::desktop::state::{AppState, ConsensusStage, StageInfo, StageStatus};
 use anyhow::Result;
 use dioxus::prelude::*;
 use rusqlite::OptionalExtension;
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::{sync::{mpsc, Mutex}, spawn};
 
 /// Events sent from callbacks to UI
 #[derive(Debug, Clone)]
@@ -454,6 +455,7 @@ impl StreamingCallbacks for DualChannelCallbacks {
 pub async fn process_consensus_events(
     mut event_receiver: mpsc::UnboundedReceiver<ConsensusUIEvent>,
     mut app_state: Signal<AppState>,
+    consensus_manager: Option<DesktopConsensusManager>,
 ) {
     while let Some(event) = event_receiver.recv().await {
         match event {
@@ -481,13 +483,15 @@ pub async fn process_consensus_events(
                 };
 
                 // Add visual separator for new stage
-                if !state.consensus.streaming_content.is_empty() {
-                    state.consensus.streaming_content.push_str("\n\n---\n\n");
+                if !state.consensus.raw_streaming_content.is_empty() {
+                    state.consensus.raw_streaming_content.push_str("\n\n---\n\n");
                 }
                 state
                     .consensus
-                    .streaming_content
+                    .raw_streaming_content
                     .push_str(&format!("## 📝 {} Stage\n\n", stage_name));
+                // Also update HTML version for display
+                state.consensus.streaming_content = markdown::to_html(&state.consensus.raw_streaming_content);
 
                 let stage_index = match stage {
                     ConsensusStage::Generator => 0,
@@ -575,12 +579,15 @@ pub async fn process_consensus_events(
             }
             ConsensusUIEvent::StreamingChunk {
                 stage: _,
-                chunk,
-                total_content: _,
+                chunk: _,
+                total_content,
             } => {
                 // Update the streaming content in the consensus state
                 let mut state = app_state.write();
-                state.consensus.streaming_content.push_str(&chunk);
+                // Store raw markdown for AI Helper processing
+                state.consensus.raw_streaming_content = total_content.clone();
+                // Convert markdown to HTML for UI rendering
+                state.consensus.streaming_content = markdown::to_html(&total_content);
             }
             ConsensusUIEvent::D1Authorization { total_remaining } => {
                 // Update app state with D1 authorization info
@@ -603,6 +610,7 @@ pub async fn process_consensus_events(
                 
                 // Clear all stage progress and streaming content
                 state.consensus.streaming_content.clear();
+                state.consensus.raw_streaming_content.clear();
                 state.consensus.current_stage = None;
                 state.consensus.is_running = false;
                 state.consensus.is_active = false;
@@ -615,8 +623,34 @@ pub async fn process_consensus_events(
             ConsensusUIEvent::Completed => {
                 // Handle consensus completion
                 let mut state = app_state.write();
+                
+                // Extract the raw Curator output for AI Helper execution (not HTML)
+                let curator_output = state.consensus.raw_streaming_content.clone();
+                
                 state.consensus.complete_consensus();
                 tracing::info!("✅ Consensus completed successfully");
+                
+                // Wake up AI Helper to execute file operations from Curator output
+                if !curator_output.is_empty() {
+                    if let Some(manager) = consensus_manager.as_ref() {
+                        tracing::info!("🤖 Waking up AI Helper to execute file operations...");
+                        tracing::info!("📝 Curator output length: {} characters", curator_output.len());
+                        
+                        // Execute AI Helper operations directly in async context
+                        match manager.execute_curator_operations(&curator_output).await {
+                            Ok(()) => {
+                                tracing::info!("✅ AI Helper execution completed successfully");
+                            }
+                            Err(e) => {
+                                tracing::error!("❌ AI Helper execution failed: {}", e);
+                            }
+                        }
+                    } else {
+                        tracing::warn!("No consensus manager available for AI Helper execution");
+                    }
+                } else {
+                    tracing::info!("No file operations detected in Curator output");
+                }
             }
             ConsensusUIEvent::OperationsRequireConfirmation { operations } => {
                 // Handle operations that need user confirmation
@@ -760,8 +794,9 @@ impl DesktopConsensusManager {
 
         // Spawn task to process events internally
         let app_state_events = self.app_state.clone();
+        let manager_for_events = Some(self.clone());
         dioxus::prelude::spawn(async move {
-            process_consensus_events(rx_internal, app_state_events).await;
+            process_consensus_events(rx_internal, app_state_events, manager_for_events).await;
         });
 
         // Create atomic bool for auto-accept state
@@ -1070,6 +1105,55 @@ impl DesktopConsensusManager {
         } else {
             tracing::error!("AI helpers not initialized - cannot execute file operations");
             Err(anyhow::anyhow!("AI helpers not initialized. Please ensure AI helpers are configured."))
+        }
+    }
+
+    /// Execute file operations from Curator output using AI Helper bridge
+    pub async fn execute_curator_operations(&self, curator_output: &str) -> Result<()> {
+        use crate::consensus::ai_file_executor::AIConsensusFileExecutor;
+        
+        tracing::info!("🤖 AI Helper bridge activated - parsing Curator output for file operations");
+        
+        // Get AI helpers from the engine
+        let engine = self.engine.lock().await;
+        if let Some(ai_helpers) = engine.get_ai_helpers().await {
+            // Create the AI Helper bridge
+            let ai_executor = AIConsensusFileExecutor::new((*ai_helpers).clone());
+            
+            // Execute operations from Curator output
+            match ai_executor.execute_from_curator(curator_output).await {
+                Ok(report) => {
+                    tracing::info!(
+                        "🎉 AI Helper execution successful: {} of {} operations completed",
+                        report.operations_completed,
+                        report.operations_total
+                    );
+                    
+                    // Log file operations
+                    for file in &report.files_created {
+                        tracing::info!("📄 Created: {}", file.display());
+                    }
+                    for file in &report.files_modified {
+                        tracing::info!("✏️ Modified: {}", file.display());
+                    }
+                    
+                    if !report.errors.is_empty() {
+                        tracing::warn!("⚠️ Errors occurred during execution:");
+                        for error in &report.errors {
+                            tracing::warn!("  - {}", error);
+                        }
+                    }
+                    
+                    Ok(())
+                }
+                Err(e) => {
+                    tracing::error!("❌ AI Helper execution failed: {}", e);
+                    Err(e)
+                }
+            }
+        } else {
+            tracing::error!("AI helpers not available in consensus engine");
+            Err(anyhow::anyhow!("AI helpers not initialized in consensus engine"))
         }
     }
 }

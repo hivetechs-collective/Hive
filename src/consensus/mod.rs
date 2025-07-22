@@ -2,6 +2,7 @@
 // Preserves exact behavior from TypeScript version with Rust performance
 
 pub mod cancellation;
+pub mod curator_output_format;
 pub mod engine;
 pub mod file_operations;
 pub mod maintenance;
@@ -43,6 +44,11 @@ pub mod streaming_executor;
 pub mod direct_executor;
 pub mod iteration_handler;
 pub mod mode_detector;
+pub mod ai_file_executor;
+pub mod file_planner;
+pub mod rollback_planner_v2;
+pub mod ai_rollback_executor;
+// pub mod ai_enhanced_executor; // Removed - violated architecture (see docs/AI_ENHANCED_CAPABILITIES_DESIGN.md)
 // pub mod optimize; // TODO: Fix profile field usage
 
 pub use cancellation::{CancellationToken, CancellationReceiver, CancellationReason, CancellableOperation, CancellationChecker};

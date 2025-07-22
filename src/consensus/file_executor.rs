@@ -16,6 +16,9 @@ use crate::consensus::ai_operation_parser::{AIOperationParser, ParsedOperations}
 use crate::consensus::operation_preview_generator::{
     OperationPreviewGenerator, PreviewConfig, OperationPreviewSet
 };
+use crate::consensus::file_planner::{
+    OperationPlan, ExecutionPlanDecision, SafetyCheck, BatchOperationPlan
+};
 use std::collections::HashMap;
 use crate::core::error::HiveError;
 use std::path::{Path, PathBuf};
@@ -235,7 +238,7 @@ impl FileOperationExecutor {
         &self,
         operation: FileOperation,
         context: &ConsensusOperationContext,
-    ) -> Result<ExecutionResult, HiveError> {
+    ) -> Result<OperationPlan, HiveError> {
         let operation_id = Uuid::new_v4();
         let start_time = SystemTime::now();
 
@@ -325,10 +328,30 @@ impl FileOperationExecutor {
         for (operation, analysis) in operations.into_iter().zip(consensus_analyses.into_iter()) {
             match self.execute_operation_with_analysis(operation.clone(), analysis, context).await {
                 Ok(result) => {
-                    if result.success {
-                        successful_operations.push(operation);
+                    let success = matches!(result.decision, ExecutionPlanDecision::Approved { .. });
+                    if success {
+                        successful_operations.push(operation.clone());
                     }
-                    results.push(result);
+                    
+                    // Convert OperationPlan to ExecutionResult
+                    let execution_result = ExecutionResult {
+                        operation_id: result.operation_id,
+                        operation: operation,
+                        success,
+                        execution_time: Duration::from_millis(0), // TODO: measure actual time
+                        message: format!("Operation planned: {:?}", result.decision),
+                        error_message: None,
+                        backup_created: None,
+                        rollback_required: false,
+                        files_affected: match &result.operation {
+                            FileOperation::Create { path, .. } |
+                            FileOperation::Update { path, .. } |
+                            FileOperation::Delete { path } |
+                            FileOperation::Append { path, .. } => vec![path.clone()],
+                            FileOperation::Rename { from, to } => vec![from.clone(), to.clone()],
+                        },
+                    };
+                    results.push(execution_result);
                 }
                 Err(e) => {
                     log::error!("Operation failed, rolling back previous operations: {:?}", e);
@@ -354,7 +377,7 @@ impl FileOperationExecutor {
         operation: FileOperation,
         analysis: ConsensusOperationAnalysis,
         context: &ConsensusOperationContext,
-    ) -> Result<ExecutionResult, HiveError> {
+    ) -> Result<OperationPlan, HiveError> {
         let operation_id = Uuid::new_v4();
         let start_time = SystemTime::now();
 
@@ -380,7 +403,7 @@ impl FileOperationExecutor {
         operation: FileOperation,
         operation_id: Uuid,
         start_time: SystemTime,
-    ) -> Result<ExecutionResult, HiveError> {
+    ) -> Result<OperationPlan, HiveError> {
         // Safety check: validate path
         self.validate_operation_safety(&operation)?;
 
@@ -426,44 +449,49 @@ impl FileOperationExecutor {
                                 let _ = self.backup_manager.restore_backup(&backup).await;
                             }
                             
-                            return Ok(ExecutionResult {
+                            return Ok(OperationPlan {
                                 operation_id,
                                 operation,
-                                success: false,
-                                execution_time,
-                                message: format!("Syntax validation failed: {:?}", syntax_error),
-                                error_message: Some(format!("Syntax validation failed: {:?}", syntax_error)),
-                                backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
-                                rollback_required: true,
-                                files_affected,
+                                decision: ExecutionPlanDecision::Blocked {
+                                    reasons: vec![format!("Syntax validation failed: {:?}", syntax_error)],
+                                },
+                                safety_checks: Vec::new(),
+                                backup_required: false,
+                                validation_required: false,
+                                analysis: ConsensusOperationAnalysis::default(),
+                                created_at: start_time,
                             });
                         }
                     }
                 }
 
-                Ok(ExecutionResult {
+                Ok(OperationPlan {
                     operation_id,
                     operation,
-                    success: true,
-                    execution_time,
-                    message: "Operation completed successfully".to_string(),
-                    error_message: None,
-                    backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
-                    rollback_required: false,
-                    files_affected,
+                    decision: ExecutionPlanDecision::Approved {
+                        confidence: 1.0,
+                        risk_level: 0.1,
+                        reason: "Operation completed successfully".to_string(),
+                    },
+                    safety_checks: Vec::new(),
+                    backup_required: false,
+                    validation_required: false,
+                    analysis: ConsensusOperationAnalysis::default(),
+                    created_at: start_time,
                 })
             }
             Err(error) => {
-                Ok(ExecutionResult {
+                Ok(OperationPlan {
                     operation_id,
                     operation,
-                    success: false,
-                    execution_time,
-                    message: format!("Operation failed: {}", error),
-                    error_message: Some(error.to_string()),
-                    backup_created: backup_info.as_ref().map(|b| b.backup_path.clone()),
-                    rollback_required: backup_info.is_some(),
-                    files_affected: vec![],
+                    decision: ExecutionPlanDecision::Blocked {
+                        reasons: vec![format!("Operation failed: {}", error)],
+                    },
+                    safety_checks: Vec::new(),
+                    backup_required: backup_info.is_some(),
+                    validation_required: false,
+                    analysis: ConsensusOperationAnalysis::default(),
+                    created_at: start_time,
                 })
             }
         }
@@ -848,14 +876,32 @@ impl FileOperationExecutor {
 
             match self.execute_operation(operation.clone(), context).await {
                 Ok(result) => {
-                    if result.success {
+                    if matches!(result.decision, ExecutionPlanDecision::Approved { .. }) {
                         successful_count += 1;
-                        log::info!("✅ Operation succeeded: {}", result.message);
+                        log::info!("✅ Operation succeeded: {:?}", result.decision);
                     } else {
                         failed_count += 1;
-                        log::error!("❌ Operation failed: {}", result.message);
+                        log::error!("❌ Operation failed: {:?}", result.decision);
                     }
-                    results.push(result);
+                    // Convert OperationPlan to ExecutionResult for summary
+                    let execution_result = ExecutionResult {
+                        operation_id: result.operation_id,
+                        operation: operation.clone(),
+                        success: matches!(result.decision, ExecutionPlanDecision::Approved { .. }),
+                        execution_time: start_time.elapsed().unwrap_or(Duration::from_millis(0)),
+                        message: format!("{:?}", result.decision),
+                        error_message: None,
+                        backup_created: None,
+                        rollback_required: false,
+                        files_affected: match &operation {
+                            FileOperation::Create { path, .. } |
+                            FileOperation::Update { path, .. } |
+                            FileOperation::Delete { path } |
+                            FileOperation::Append { path, .. } => vec![path.clone()],
+                            FileOperation::Rename { from, to } => vec![from.clone(), to.clone()],
+                        },
+                    };
+                    results.push(execution_result);
                 }
                 Err(e) => {
                     failed_count += 1;
@@ -1097,5 +1143,16 @@ impl SyntaxValidator {
     async fn validate_python_syntax(&self, _path: &Path) -> Result<(), HiveError> {
         // Python syntax validation would go here
         Ok(())
+    }
+
+    /// Get affected files from operation
+    fn get_affected_files(&self, operation: &FileOperation) -> Vec<PathBuf> {
+        match operation {
+            FileOperation::Create { path, .. } |
+            FileOperation::Update { path, .. } |
+            FileOperation::Delete { path } |
+            FileOperation::Append { path, .. } => vec![path.clone()],
+            FileOperation::Rename { from, to } => vec![from.clone(), to.clone()],
+        }
     }
 }
