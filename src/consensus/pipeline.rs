@@ -1315,6 +1315,12 @@ impl ConsensusPipeline {
         // Check for cancellation before making API call
         cancellation_token.throw_if_cancelled()?;
         
+        // Also check if we should stop early
+        if cancellation_token.is_cancelled() {
+            tracing::info!("🛑 Model call cancelled before starting");
+            return Err(anyhow::anyhow!("Operation was cancelled"));
+        }
+        
         // Check if OpenRouter client is available
         let openrouter_client = self.openrouter_client.as_ref()
             .ok_or_else(|| anyhow::anyhow!("OpenRouter client not initialized. Please set OPENROUTER_API_KEY environment variable."))?;
@@ -1544,8 +1550,16 @@ impl ConsensusPipeline {
         tracker: &mut ProgressTracker,
         model: &str,
     ) -> Result<ModelResponse> {
-        // Check if this is a model unavailable error
         let error_str = error.to_string();
+        
+        // Check if this is a cancellation error first
+        if error_str.contains("cancelled") || error_str.contains("Cancelled") {
+            tracing::info!("🛑 Consensus cancelled during API call");
+            // Return the cancellation error immediately
+            return Err(error);
+        }
+        
+        // Check if this is a model unavailable error
         let is_model_unavailable = error_str.contains("404")
             || error_str.contains("model not found")
             || error_str.contains("model unavailable");
@@ -2635,9 +2649,20 @@ impl OpenRouterStreamingCallbacks for TrackerForwardingCallbacks {
     ) {
         // Will be handled by on_stage_complete
     }
-
+    
     fn on_error(&self, error: &anyhow::Error) {
-        let _ = self.tracker_callbacks.on_error(self.stage, error);
+        // Forward the error, especially important for cancellation
+        tracing::warn!("OpenRouter streaming error for stage {:?}: {}", self.stage, error);
+        
+        // Check if this is a cancellation error
+        let error_string = error.to_string();
+        if error_string.contains("cancelled") || error_string.contains("Cancelled") {
+            // Send a specific cancellation error through the callbacks
+            let _ = self.tracker_callbacks.on_error(self.stage, &anyhow::anyhow!("Consensus cancelled by user"));
+        } else {
+            // Forward other errors
+            let _ = self.tracker_callbacks.on_error(self.stage, error);
+        }
     }
 }
 
