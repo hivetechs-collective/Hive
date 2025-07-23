@@ -738,10 +738,14 @@ impl ConsensusPipeline {
             // Notify stage complete
             self.callbacks.on_stage_complete(stage, &stage_result)?;
             
-            // Trigger continuous learning from this stage completion
-            if let Some(ref ai_helpers) = self.ai_helpers {
-                if let Err(e) = ai_helpers.learn_from_stage_completion(&stage_result).await {
-                    tracing::warn!("Failed to trigger continuous learning: {}", e);
+            // Only learn from Curator stage as it's the authoritative final output
+            // Earlier stages may contain incomplete or unvalidated information
+            if stage == Stage::Curator {
+                if let Some(ref ai_helpers) = self.ai_helpers {
+                    if let Err(e) = ai_helpers.learn_from_stage_completion(&stage_result).await {
+                        tracing::warn!("Failed to trigger continuous learning from Curator: {}", e);
+                    }
+                    tracing::info!("📚 Learning from Curator's authoritative output");
                 }
             }
 

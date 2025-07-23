@@ -356,6 +356,11 @@ impl AIHelperEcosystem {
     }
     
     /// Process Curator output through all helpers
+    /// 
+    /// This is the PRIMARY learning method - we only learn from Curator output
+    /// as it represents the authoritative, validated, fact-checked final answer.
+    /// Earlier stages (Generator, Refiner, Validator) may contain incomplete
+    /// or unvalidated information and should NOT be used for learning.
     pub async fn process_curator_output(
         &self,
         curator_output: &str,
@@ -626,6 +631,10 @@ impl AIHelperEcosystem {
     }
     
     /// Learn from a consensus stage completion
+    /// 
+    /// NOTE: This should ONLY be called for Curator stage results!
+    /// The Curator provides the authoritative, fact-checked final answer.
+    /// Earlier stages may contain unvalidated or contradictory information.
     pub async fn learn_from_stage_completion(
         &self,
         stage_result: &crate::consensus::types::StageResult,
