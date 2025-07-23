@@ -149,23 +149,17 @@ impl ConsensusPipeline {
     
     /// Configure mode detection for Claude Code-style execution
     pub async fn with_mode_detection(mut self) -> Result<Self> {
-        tracing::info!("🔧 Configuring mode detection for Claude Code-style execution");
-        
         // Only configure if we have the necessary components
         if let (Some(ai_helpers), Some(openrouter_client), Some(model_manager), Some(database)) = 
             (&self.ai_helpers, &self.openrouter_client, &self.model_manager, &self.database) {
-            
-            tracing::info!("✅ All components available for mode detection");
             
             // Create mode detector
             let mode_detector = ModeDetector::new()?
                 .with_ai_helpers(ai_helpers.clone());
             self.mode_detector = Some(Arc::new(mode_detector));
-            tracing::info!("✅ Mode detector created");
             
             // Create streaming executor for direct mode
             if let Some(file_executor) = &self.file_executor {
-                tracing::info!("✅ File executor available, creating direct handler");
                 let streaming_executor = Arc::new(
                     StreamingOperationExecutor::new(
                         file_executor.clone(),
@@ -189,12 +183,7 @@ impl ConsensusPipeline {
                 );
                 
                 self.direct_handler = Some(direct_handler);
-                tracing::info!("✅ Direct handler created and configured");
-            } else {
-                tracing::warn!("⚠️ No file executor available - direct mode will not have file operations");
             }
-        } else {
-            tracing::warn!("⚠️ Missing components for mode detection - will use full consensus for all queries");
         }
         
         Ok(self)
