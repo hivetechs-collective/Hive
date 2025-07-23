@@ -197,62 +197,95 @@ impl OpenRouterClient {
         let mut total_tokens = 0;
         let mut chunk_count = 0;
 
-        // Process streaming response
-        while let Some(chunk) = response.chunk().await.context("Failed to read chunk")? {
-            // Check for cancellation before processing each chunk
+        // Create a cancellation future if we have a token
+        let cancellation_future = async {
             if let Some(token) = cancellation_token {
-                if token.is_cancelled() {
-                    tracing::info!("🛑 Streaming cancelled - stopping chunk processing");
+                // Subscribe to cancellation notifications
+                let mut receiver = token.subscribe();
+                receiver.recv().await.ok();
+                true
+            } else {
+                // Never completes if no cancellation token
+                std::future::pending::<bool>().await
+            }
+        };
+        
+        // Pin the cancellation future so we can use it in select!
+        tokio::pin!(cancellation_future);
+
+        // Process streaming response with cancellation support
+        loop {
+            tokio::select! {
+                // Check for cancellation
+                _ = &mut cancellation_future => {
+                    tracing::info!("🛑 Streaming cancelled - aborting HTTP connection immediately");
                     if let Some(cb) = &callbacks {
                         cb.on_error(&anyhow::anyhow!("Streaming cancelled by user"));
                     }
+                    // Important: drop the response to close the HTTP connection
+                    drop(response);
                     return Err(anyhow::anyhow!("Streaming cancelled by user"));
                 }
-            }
-            
-            let chunk_str = String::from_utf8_lossy(&chunk);
+                
+                // Read next chunk
+                chunk_result = response.chunk() => {
+                    match chunk_result {
+                        Ok(Some(chunk)) => {
+                            let chunk_str = String::from_utf8_lossy(&chunk);
 
-            // Parse Server-Sent Events format
-            for line in chunk_str.lines() {
-                if line.starts_with("data: ") {
-                    let data = &line[6..]; // Remove "data: " prefix
+                            // Parse Server-Sent Events format
+                            for line in chunk_str.lines() {
+                                if line.starts_with("data: ") {
+                                    let data = &line[6..]; // Remove "data: " prefix
 
-                    if data == "[DONE]" {
-                        break;
-                    }
+                                    if data == "[DONE]" {
+                                        break;
+                                    }
 
-                    if let Ok(parsed) = serde_json::from_str::<Value>(data) {
-                        if let Some(choices) = parsed["choices"].as_array() {
-                            if let Some(choice) = choices.first() {
-                                if let Some(delta) = choice["delta"].as_object() {
-                                    if let Some(content) = delta["content"].as_str() {
-                                        full_content.push_str(content);
-                                        chunk_count += 1;
+                                    if let Ok(parsed) = serde_json::from_str::<Value>(data) {
+                                        if let Some(choices) = parsed["choices"].as_array() {
+                                            if let Some(choice) = choices.first() {
+                                                if let Some(delta) = choice["delta"].as_object() {
+                                                    if let Some(content) = delta["content"].as_str() {
+                                                        full_content.push_str(content);
+                                                        chunk_count += 1;
 
-                                        if let Some(cb) = &callbacks {
-                                            tracing::debug!(
-                                                "OpenRouter: Forwarding chunk '{}' to callbacks",
-                                                content
-                                            );
-                                            cb.on_chunk(content.to_string(), full_content.clone());
+                                                        if let Some(cb) = &callbacks {
+                                                            tracing::debug!(
+                                                                "OpenRouter: Forwarding chunk '{}' to callbacks",
+                                                                content
+                                                            );
+                                                            cb.on_chunk(content.to_string(), full_content.clone());
 
-                                            // Estimate progress
-                                            let progress = StreamingProgress {
-                                                tokens: Some(chunk_count * 2), // Rough estimate
-                                                percentage: None,
-                                            };
-                                            cb.on_progress(progress);
+                                                            // Estimate progress
+                                                            let progress = StreamingProgress {
+                                                                tokens: Some(chunk_count * 2), // Rough estimate
+                                                                percentage: None,
+                                                            };
+                                                            cb.on_progress(progress);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Check for usage information
+                                        if let Some(usage) = parsed["usage"].as_object() {
+                                            if let Some(tokens) = usage["total_tokens"].as_u64() {
+                                                total_tokens = tokens as u32;
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-
-                        // Check for usage information
-                        if let Some(usage) = parsed["usage"].as_object() {
-                            if let Some(tokens) = usage["total_tokens"].as_u64() {
-                                total_tokens = tokens as u32;
-                            }
+                        Ok(None) => {
+                            // End of stream
+                            break;
+                        }
+                        Err(e) => {
+                            // Error reading chunk
+                            return Err(e).context("Failed to read chunk");
                         }
                     }
                 }
