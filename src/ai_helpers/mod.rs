@@ -23,6 +23,7 @@ pub mod semantic_retriever;
 pub mod intelligent_executor;
 pub mod rollback_executor;
 pub mod autonomous_ai_helper;
+pub mod continuous_learner;
 
 use std::sync::Arc;
 use anyhow::Result;
@@ -75,6 +76,11 @@ pub use rollback_executor::{
 };
 pub use autonomous_ai_helper::{
     AutonomousAIHelper, AutonomousDecision, AutonomousAction
+};
+pub use continuous_learner::{
+    ContinuousLearner, LearningEvent, FeedbackType, LearnedKnowledge,
+    LearnedPattern, PatternCategory, LearnedContext, PastExperience,
+    ModelRecommendation, LearningWarning, LearningWarningSeverity
 };
 
 /// Processed knowledge from AI helpers
@@ -206,6 +212,9 @@ pub struct AIHelperEcosystem {
     /// Autonomous AI Helper for independent thinking
     pub autonomous_helper: Option<Arc<AutonomousAIHelper>>,
     
+    /// Continuous learner for learning from all interactions
+    pub continuous_learner: Arc<ContinuousLearner>,
+    
     /// Python model service
     python_service: Arc<PythonModelService>,
     
@@ -303,6 +312,12 @@ impl AIHelperEcosystem {
             quality_analyzer.clone(),
         ));
         
+        // Create continuous learner
+        let continuous_learner = Arc::new(ContinuousLearner::new(
+            vector_store.clone(),
+            python_service.clone(),
+        ).await?);
+        
         Ok(Self {
             knowledge_indexer,
             context_retriever,
@@ -315,6 +330,7 @@ impl AIHelperEcosystem {
             semantic_retriever,
             intelligent_executor,
             autonomous_helper: None, // Will be set when repository context is available
+            continuous_learner,
             python_service,
             parallel_processor,
             performance_monitor,
@@ -439,7 +455,8 @@ impl AIHelperEcosystem {
         // Retrieve relevant context based on stage needs
         use crate::consensus::types::Stage;
         
-        match stage {
+        // Get base context from context retriever
+        let mut stage_context = match stage {
             Stage::Generator => {
                 // Generator needs broad context
                 self.context_retriever
@@ -464,7 +481,72 @@ impl AIHelperEcosystem {
                     .get_curator_context(question, context_limit)
                     .await
             }
+        }?;
+        
+        // Enhance with continuous learning insights
+        let learned_context = self.continuous_learner
+            .get_learned_context(question, stage, context_limit)
+            .await?;
+        
+        // Merge learned insights into stage context
+        for exp in learned_context.past_experiences {
+            if exp.question_similarity > 0.7 {
+                stage_context.relevant_facts.push(format!(
+                    "Similar question ({}% match) had outcome: {} - {}",
+                    (exp.question_similarity * 100.0) as i32,
+                    exp.outcome,
+                    exp.key_insights.join(", ")
+                ));
+            }
         }
+        
+        // Add applicable patterns
+        for pattern in learned_context.applicable_patterns {
+            stage_context.patterns.push(Pattern {
+                pattern_type: match pattern.category {
+                    PatternCategory::QuestionType => PatternType::Recurring,
+                    PatternCategory::ModelBehavior => PatternType::Evolution,
+                    PatternCategory::UserPreference => PatternType::Insight,
+                    PatternCategory::OperationSuccess => PatternType::Relationship,
+                    PatternCategory::ErrorPattern => PatternType::Contradiction,
+                    PatternCategory::Performance => PatternType::Evolution,
+                },
+                description: pattern.description,
+                confidence: pattern.confidence,
+                examples: pattern.recommendations,
+            });
+        }
+        
+        // Add warnings as insights
+        for warning in learned_context.warnings {
+            stage_context.insights.push(Insight {
+                insight_type: match warning.severity {
+                    LearningWarningSeverity::Critical => InsightType::Anomaly,
+                    LearningWarningSeverity::High => InsightType::Anomaly,
+                    LearningWarningSeverity::Medium => InsightType::Trend,
+                    LearningWarningSeverity::Low => InsightType::Recommendation,
+                },
+                content: warning.message,
+                supporting_facts: vec![warning.pattern_source],
+                confidence: 0.8,
+            });
+        }
+        
+        // Add success strategies to custom guidance
+        if !learned_context.success_strategies.is_empty() {
+            let strategies = learned_context.success_strategies.join("\n- ");
+            let guidance = format!(
+                "Based on learning from similar past interactions:\n- {}",
+                strategies
+            );
+            
+            stage_context.custom_guidance = match stage_context.custom_guidance {
+                Some(existing) => Some(format!("{}\n\n{}", existing, guidance)),
+                None => Some(guidance),
+            };
+        }
+        
+        Ok(stage_context)
     }
     
     /// Process multiple curator outputs in batch
@@ -543,11 +625,44 @@ impl AIHelperEcosystem {
         Ok(())
     }
     
+    /// Learn from a consensus stage completion
+    pub async fn learn_from_stage_completion(
+        &self,
+        stage_result: &crate::consensus::types::StageResult,
+    ) -> Result<()> {
+        // Create learning event from stage result
+        let event = LearningEvent::StageCompleted {
+            stage: format!("{:?}", stage_result.stage_name),
+            question: stage_result.question.clone(),
+            answer: stage_result.answer.clone(),
+            model: stage_result.model.clone(),
+            duration_ms: 0, // TODO: Track actual duration
+            tokens_used: stage_result.usage.as_ref()
+                .map(|u| u.total_tokens as u64)
+                .unwrap_or(0),
+        };
+        
+        // Trigger continuous learning
+        self.continuous_learner.learn_from_event(event).await?;
+        
+        Ok(())
+    }
+    
+    /// Apply user feedback to improve learning
+    pub async fn apply_user_feedback(
+        &self,
+        conversation_id: &str,
+        feedback: FeedbackType,
+    ) -> Result<()> {
+        self.continuous_learner.apply_feedback(conversation_id, feedback).await
+    }
+    
     /// Get system statistics
     pub async fn get_stats(&self) -> HelperStats {
         let state = self.state.read().await;
         let parallel_stats = self.parallel_processor.get_stats().await;
         let perf_stats = self.performance_monitor.get_stats().await;
+        let learning_stats = self.continuous_learner.get_stats().await;
         
         HelperStats {
             total_facts: state.total_facts,
@@ -558,6 +673,8 @@ impl AIHelperEcosystem {
             tasks_completed: parallel_stats.tasks_completed,
             tasks_failed: parallel_stats.tasks_failed,
             performance_stats: Some(perf_stats),
+            learning_events: learning_stats.total_events as usize,
+            learned_patterns: learning_stats.total_patterns as usize,
         }
     }
 
@@ -580,6 +697,8 @@ pub struct HelperStats {
     pub tasks_completed: usize,
     pub tasks_failed: usize,
     pub performance_stats: Option<PerformanceStats>,
+    pub learning_events: usize,
+    pub learned_patterns: usize,
 }
 
 #[cfg(test)]
