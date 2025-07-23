@@ -250,11 +250,11 @@ impl Default for PatternThresholds {
 
 /// Statistics about continuous learning
 #[derive(Debug, Clone, Default)]
-struct LearningStats {
-    total_events: u64,
-    total_patterns: u64,
-    successful_applications: u64,
-    failed_applications: u64,
+pub struct LearningStats {
+    pub total_events: u64,
+    pub total_patterns: u64,
+    pub successful_applications: u64,
+    pub failed_applications: u64,
 }
 
 impl ContinuousLearner {
@@ -310,7 +310,8 @@ impl ContinuousLearner {
             
             // Keep only last 100 learnings in memory
             if recent.len() > 100 {
-                recent.drain(0..recent.len() - 100);
+                let drain_count = recent.len() - 100;
+                recent.drain(0..drain_count);
             }
         }
         
@@ -529,8 +530,8 @@ impl ContinuousLearner {
             .add_document(
                 &knowledge.id,
                 &serde_json::to_string(&knowledge.event)?,
-                knowledge.embedding.clone(),
-                metadata,
+                &knowledge.embedding,
+                &metadata,
             )
             .await
     }
@@ -553,21 +554,28 @@ impl ContinuousLearner {
         
         // Search vector store
         let results = self.vector_store
-            .search(question_embedding, limit)
+            .search(&question_embedding, limit)
             .await?;
         
         // Convert to past experiences
         let mut experiences = Vec::new();
-        for (doc, score) in results {
-            if let Ok(event) = serde_json::from_str::<LearningEvent>(&doc.page_content) {
+        for (id, content, embedding, metadata) in results {
+            if let Ok(event) = serde_json::from_str::<LearningEvent>(&content) {
                 if let LearningEvent::StageCompleted { question: past_q, answer, .. } = event {
+                    // Calculate similarity score (cosine similarity)
+                    let similarity = self.cosine_similarity(&question_embedding, &embedding);
+                    
                     experiences.push(PastExperience {
-                        question_similarity: score as f64,
+                        question_similarity: similarity,
                         outcome: if answer.is_empty() { "Failed".to_string() } else { "Success".to_string() },
                         key_insights: vec![
-                            format!("Similar question asked before with {} similarity", score),
+                            format!("Similar question asked before with {:.2}% similarity", similarity * 100.0),
                         ],
-                        timestamp: Utc::now(), // TODO: Get from metadata
+                        timestamp: metadata.get("learned_at")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or_else(Utc::now),
                     });
                 }
             }
@@ -602,7 +610,7 @@ impl ContinuousLearner {
     /// Check if a pattern applies to current context
     fn pattern_applies(&self, pattern: &LearnedPattern, question: &str, stage: Stage) -> bool {
         for condition in &pattern.conditions {
-            match (&condition.field.as_str(), &condition.operator) {
+            match (condition.field.as_str(), &condition.operator) {
                 ("stage", ConditionOperator::Equals) => {
                     if let Ok(stage_str) = serde_json::from_value::<String>(condition.value.clone()) {
                         if stage_str != format!("{:?}", stage) {
@@ -717,6 +725,23 @@ impl ContinuousLearner {
     /// Get learning statistics
     pub async fn get_stats(&self) -> LearningStats {
         self.stats.read().await.clone()
+    }
+    
+    /// Calculate cosine similarity between two vectors
+    fn cosine_similarity(&self, a: &[f32], b: &[f32]) -> f64 {
+        if a.len() != b.len() {
+            return 0.0;
+        }
+        
+        let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+        
+        if norm_a == 0.0 || norm_b == 0.0 {
+            0.0
+        } else {
+            (dot_product / (norm_a * norm_b)) as f64
+        }
     }
 }
 
