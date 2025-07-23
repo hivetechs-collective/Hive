@@ -737,6 +737,13 @@ impl ConsensusPipeline {
 
             // Notify stage complete
             self.callbacks.on_stage_complete(stage, &stage_result)?;
+            
+            // Trigger continuous learning from this stage completion
+            if let Some(ref ai_helpers) = self.ai_helpers {
+                if let Err(e) = ai_helpers.learn_from_stage_completion(&stage_result).await {
+                    tracing::warn!("Failed to trigger continuous learning: {}", e);
+                }
+            }
 
             // Execute post-stage hooks with quality validation
             // if let Some(integration) = &self.consensus_integration {
