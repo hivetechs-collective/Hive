@@ -986,11 +986,22 @@ impl DesktopConsensusManager {
             token.cancel(CancellationReason::UserRequested);
             tracing::info!("Consensus cancelled by user: {}", reason);
             
+            // Clear cached profile to force reset
+            {
+                let engine = self.engine.lock().await;
+                engine.clear_cached_profile().await;
+            }
+            
             // Clear the token since consensus is cancelled
             *token_guard = None;
             
             Ok(())
         } else {
+            // Even if no token, clear cached profile for clean state
+            {
+                let engine = self.engine.lock().await;
+                engine.clear_cached_profile().await;
+            }
             Err(anyhow::anyhow!("No consensus operation is currently running"))
         }
     }

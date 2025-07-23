@@ -676,6 +676,11 @@ const DESKTOP_STYLES: &str = r#"
         }
     }
 
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
     /* Progress animations */
     .consensus-stage-running {
         animation: pulse 2s ease-in-out infinite;
@@ -922,6 +927,10 @@ fn App() -> Element {
     let mut current_response = use_signal(String::new); // Final response
     let mut input_value = use_signal(String::new);
     let mut is_processing = use_signal(|| false);
+    let mut is_cancelling = use_signal(|| false); // Track cancellation state
+    let mut cancel_flag = use_signal(|| false); // Simple flag to stop streaming updates
+    let cancellation_flag = use_signal(|| std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))); // Atomic cancellation flag
+    let mut consensus_task_handle = use_signal(|| None::<dioxus::prelude::Task>); // Track the running consensus task
     let mut selected_file = use_signal(|| Some("__welcome__".to_string()));
     let mut file_tree = use_signal(|| Vec::<FileItem>::new());
     let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
@@ -2095,6 +2104,71 @@ fn App() -> Element {
 
         div {
             class: "app-container",
+            onkeydown: {
+                let consensus_manager = consensus_manager.clone();
+                let mut is_processing = is_processing.clone();
+                let mut is_cancelling = is_cancelling.clone();
+                let mut app_state = app_state.clone();
+                let mut current_response = current_response.clone();
+                move |evt: dioxus::events::KeyboardEvent| {
+                    // Check for Ctrl+C (or Cmd+C on Mac) 
+                    let is_mac = cfg!(target_os = "macos");
+                    let modifier_pressed = if is_mac { evt.modifiers().meta() } else { evt.modifiers().ctrl() };
+                    
+                    if modifier_pressed && evt.key() == Key::Character("c".to_string()) {
+                        // Only handle if consensus is running and not already cancelling
+                        if *is_processing.read() && !*is_cancelling.read() {
+                            evt.stop_propagation();
+                            tracing::info!("🛑 Ctrl+C pressed - cancelling consensus!");
+                            
+                            // Immediately set cancelling state and show feedback
+                            is_cancelling.set(true);
+                            
+                            // Show cancelling message immediately
+                            app_state.write().consensus.streaming_content = 
+                                "<div style='color: #FF6B6B; font-weight: bold;'>⏸ Cancelling consensus...</div>".to_string();
+                            
+                            tracing::info!("🛑 Ctrl+C pressed - cancelling consensus");
+                            
+                            // Set the atomic cancellation flag
+                            cancellation_flag.read().store(true, std::sync::atomic::Ordering::Relaxed);
+                            
+                            // Cancel the running task immediately
+                            if let Some(task) = consensus_task_handle.write().take() {
+                                tracing::info!("🛑 Cancelling consensus task via Ctrl+C");
+                                task.cancel();
+                            }
+                            
+                            // Also cancel through the consensus manager for immediate effect
+                            let mut consensus_manager = consensus_manager.clone();
+                            spawn(async move {
+                                if let Some(mut manager) = consensus_manager.write().as_mut() {
+                                    if let Err(e) = manager.cancel_consensus("User pressed Ctrl+C").await {
+                                        tracing::warn!("Failed to cancel consensus via Ctrl+C: {}", e);
+                                    } else {
+                                        tracing::info!("✅ Consensus manager cancellation via Ctrl+C successful");
+                                    }
+                                }
+                            });
+                            
+                            // Reset UI state immediately
+                            cancel_flag.set(true);
+                            app_state.write().consensus.complete_consensus();
+                            app_state.write().consensus.streaming_content.clear();
+                            app_state.write().consensus.current_stage = None;
+                            is_processing.set(false);
+                            is_cancelling.set(false);
+                            current_response.set(String::new());
+                            
+                            // Show immediate feedback
+                            app_state.write().consensus.streaming_content = 
+                                "<div style='color: #4CAF50; font-weight: bold;'>✅ Cancelled via Ctrl+C - ready for new query</div>".to_string();
+                            
+                            tracing::info!("✅ Cancellation flag set via Ctrl+C");
+                        }
+                    }
+                }
+            },
 
             // Menu bar at the top
             MenuBar {
@@ -2594,8 +2668,11 @@ fn App() -> Element {
                     }
 
                     // Consensus progress display (always visible at the top)
-                    ConsensusProgressDisplay {
-                        consensus_state: app_state.read().consensus.clone()
+                    // Only show consensus progress if not cancelled
+                    if !*cancel_flag.read() {
+                        ConsensusProgressDisplay {
+                            consensus_state: app_state.read().consensus.clone()
+                        }
                     }
 
                     // Response display area (Claude Code style)
@@ -2631,18 +2708,18 @@ fn App() -> Element {
                             });
                         },
 
-                        if !app_state.read().consensus.streaming_content.is_empty() {
+                        if !app_state.read().consensus.streaming_content.is_empty() && !*cancel_flag.read() {
                             div {
                                 class: "response-content",
                                 dangerous_inner_html: "{app_state.read().consensus.streaming_content}"
                             }
-                        } else if !current_response.read().is_empty() {
+                        } else if !current_response.read().is_empty() && !*cancel_flag.read() {
                             // Show final response if no streaming content
                             div {
                                 class: "response-content",
                                 dangerous_inner_html: "{current_response.read()}"
                             }
-                        } else if *is_processing.read() && app_state.read().consensus.is_running {
+                        } else if *is_processing.read() && app_state.read().consensus.is_running && !*cancel_flag.read() {
                             // Show processing message while consensus starts
                             div {
                                 class: "processing-message",
@@ -2667,50 +2744,10 @@ fn App() -> Element {
                         class: "input-container",
                         style: "background: #181E21; border-top: 1px solid #2D3336; backdrop-filter: blur(10px); position: relative;",
                         
-                        // Cancel button - displayed when consensus is running (on the left side)
-                        if *is_processing.read() {
-                            button {
-                                style: "position: absolute; left: 12px; top: 12px; background: #2D3336; border: 1px solid #3A4144; color: #FFFFFF; padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; font-weight: 400; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease; z-index: 10; animation: cancelPulse 2s ease-in-out infinite;",
-                                onclick: {
-                                    let consensus_manager = consensus_manager.clone();
-                                    let mut is_processing = is_processing.clone();
-                                    let mut app_state = app_state.clone();
-                                    let mut current_response = current_response.clone();
-                                    move |_| {
-                                        tracing::info!("🛑 Cancel button clicked!");
-                                        
-                                        if let Some(mut manager) = consensus_manager.read().clone() {
-                                            spawn(async move {
-                                                match manager.cancel_consensus("User cancelled from UI").await {
-                                                    Ok(_) => {
-                                                        tracing::info!("✅ Consensus cancelled successfully");
-                                                        // Clear all consensus state and responses
-                                                        app_state.write().consensus.complete_consensus();
-                                                        app_state.write().consensus.streaming_content.clear();
-                                                        app_state.write().consensus.current_stage = None;
-                                                        *is_processing.write() = false;
-                                                        *current_response.write() = String::new(); // Clear response completely
-                                                    }
-                                                    Err(e) => {
-                                                        tracing::warn!("Failed to cancel consensus: {}", e);
-                                                    }
-                                                }
-                                            });
-                                        }
-                                    }
-                                },
-                                span { style: "font-size: 10px; opacity: 0.8;", "×" }
-                                span { "Cancel Consensus" }
-                            }
-                        }
                         
                         textarea {
                             class: "query-input",
-                            style: if *is_processing.read() { 
-                                "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF; padding-left: 80px;"
-                            } else { 
-                                "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF;" 
-                            },
+                            style: "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF;",
                             value: "{input_value.read()}",
                             placeholder: "Ask Hive anything...",
                             disabled: *is_processing.read(),
@@ -2719,6 +2756,16 @@ fn App() -> Element {
                             onkeydown: {
                                 let consensus_manager = consensus_manager.clone();
                                 let mut app_state_for_toggle = app_state.clone();
+                                let mut input_value_ref = input_value.clone();
+                                let mut is_processing_ref = is_processing.clone();
+                                let mut current_response_ref = current_response.clone();
+                                let mut app_state_ref = app_state.clone();
+                                let mut should_auto_scroll_ref = should_auto_scroll.clone();
+                                let mut previous_content_length_ref = previous_content_length.clone();
+                                let mut show_upgrade_dialog_ref = show_upgrade_dialog.clone();
+                                let mut ide_ai_broker_ref = ide_ai_broker.clone();
+                                let mut is_cancelling_ref = is_cancelling.clone();
+                                let mut cancel_flag_ref = cancel_flag.clone();
                                 move |evt: dioxus::events::KeyboardEvent| {
                                     // Shift+Tab toggles auto-accept
                                     if evt.key() == dioxus::events::Key::Tab && evt.modifiers().shift() {
@@ -2729,35 +2776,49 @@ fn App() -> Element {
                                         return;
                                     }
                                     
+                                    
                                     // Enter without shift submits
-                                    if evt.key() == dioxus::events::Key::Enter && !evt.modifiers().shift() && !input_value.read().is_empty() && !*is_processing.read() {
+                                    if evt.key() == dioxus::events::Key::Enter && !evt.modifiers().shift() && !input_value_ref.read().is_empty() && !*is_processing_ref.read() {
                                         evt.prevent_default();
 
-                                        let user_msg = input_value.read().clone();
+                                        let user_msg = input_value_ref.read().clone();
 
                                         // Clear input and response
-                                        input_value.write().clear();
-                                        current_response.write().clear();
-                                        app_state.write().consensus.streaming_content.clear();
+                                        input_value_ref.write().clear();
+                                        current_response_ref.write().clear();
+                                        app_state_ref.write().consensus.streaming_content.clear();
 
                                         // Re-enable auto-scroll for new query
-                                        *should_auto_scroll.write() = true;
+                                        *should_auto_scroll_ref.write() = true;
 
                                         // Reset content length tracker to ensure scrolling works
-                                        *previous_content_length.write() = 0;
+                                        *previous_content_length_ref.write() = 0;
 
                                         // Start processing
-                                        *is_processing.write() = true;
+                                        is_processing_ref.set(true);
+                                        cancel_flag_ref.set(false); // Reset cancel flag for new query
 
                                         // Use consensus engine if available
                                         if let Some(mut consensus) = consensus_manager.read().clone() {
-                                            let mut current_response = current_response.clone();
-                                            let mut is_processing = is_processing.clone();
-                                            let mut app_state = app_state.clone();
-                                            let mut show_upgrade_dialog = show_upgrade_dialog.clone();
-                                            let ide_ai_broker = ide_ai_broker.clone();
+                                            let mut current_response = current_response_ref.clone();
+                                            let mut is_processing = is_processing_ref.clone();
+                                            let mut app_state = app_state_ref.clone();
+                                            let mut show_upgrade_dialog = show_upgrade_dialog_ref.clone();
+                                            let ide_ai_broker = ide_ai_broker_ref.clone();
+                                            let mut is_cancelling = is_cancelling_ref.clone();
+                                            let cancellation_flag_clone = cancellation_flag.read().clone();
 
-                                            spawn(async move {
+                                            // Reset cancellation flag for new query
+                                            cancellation_flag_clone.store(false, std::sync::atomic::Ordering::Relaxed);
+
+                                            // Cancel any existing consensus task
+                                            if let Some(existing_task) = consensus_task_handle.write().take() {
+                                                tracing::info!("🛑 Cancelling existing consensus task before starting new one");
+                                                existing_task.cancel();
+                                            }
+
+                                            // Store the new task handle
+                                            let task = spawn(async move {
                                                 // Update UI to show consensus is running
                                                 app_state.write().consensus.start_consensus();
 
@@ -2778,9 +2839,29 @@ fn App() -> Element {
                                                     user_msg.clone()
                                                 };
 
-                                                // Process the enhanced query - streaming will update app_state automatically
-                                                match consensus.process_query(&enhanced_query).await {
-                                                    Ok(final_response) => {
+                                                // Check cancellation flag before starting consensus
+                                                if cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                                                    tracing::info!("Consensus cancelled before processing started");
+                                                    app_state.write().consensus.complete_consensus();
+                                                    is_processing.set(false);
+                                                    is_cancelling.set(false);
+                                                    return;
+                                                }
+
+                                                // Use streaming version which has proper cancellation support
+                                                let consensus_result = consensus.process_query_streaming(&enhanced_query).await;
+                                                
+                                                match consensus_result {
+                                                    Ok((final_response, _rx)) => {
+                                                        // Check if we were cancelled during processing
+                                                        if cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                                                            tracing::info!("🛑 Consensus completed but was cancelled - not updating UI");
+                                                            app_state.write().consensus.complete_consensus();
+                                                            is_processing.set(false);
+                                                            is_cancelling.set(false);
+                                                            return;
+                                                        }
+                                                        
                                                         // Set final response
                                                         let html = markdown::to_html(&final_response);
                                                         *current_response.write() = html;
@@ -2797,6 +2878,7 @@ fn App() -> Element {
                                                             // Don't show error for cancellation - it's expected behavior
                                                             tracing::info!("Consensus was cancelled by user");
                                                             *current_response.write() = String::new(); // Clear response area
+                                                            is_cancelling.set(false); // Reset cancelling state
                                                         } else {
                                                             // Debug: Log the full error to understand the structure
                                                             tracing::error!("Full error: {}", error_msg);
@@ -2823,14 +2905,25 @@ fn App() -> Element {
                                                     }
                                                 }
 
-                                                // Update UI to show consensus is complete
-                                                app_state.write().consensus.complete_consensus();
-                                                *is_processing.write() = false;
+                                                // Update UI to show consensus is complete (only if not cancelled)
+                                                if !*cancel_flag_ref.read() && !cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
+                                                    app_state.write().consensus.complete_consensus();
+                                                } else {
+                                                    tracing::info!("🛑 Consensus task completed but was cancelled - skipping UI update");
+                                                    app_state.write().consensus.complete_consensus();
+                                                }
+                                                is_processing.set(false);
+                                                is_cancelling.set(false); // Reset cancelling state
+                                                
+                                                tracing::info!("🏁 Consensus completed");
                                             });
+                                            
+                                            // Store the task handle
+                                            *consensus_task_handle.write() = Some(task);
                                         } else {
                                             // Show error if consensus engine not initialized
-                                            *current_response.write() = "<div class='error'>⚠️ Consensus engine not initialized. This usually means no profile is configured. Click Settings to configure a profile.</div>".to_string();
-                                            *is_processing.write() = false;
+                                            *current_response_ref.write() = "<div class='error'>⚠️ Consensus engine not initialized. This usually means no profile is configured. Click Settings to configure a profile.</div>".to_string();
+                                            is_processing_ref.set(false);
 
                                             // Check what's actually missing
                                             spawn(async move {
@@ -2851,39 +2944,112 @@ fn App() -> Element {
                             }
                         }
                         
-                        // Auto-accept toggle below input (Claude Code style)
+                        // Controls below input (Claude Code style)
                         div {
-                            style: "margin-top: 8px; display: flex; align-items: center; gap: 8px; color: #858585; font-size: 12px;",
+                            style: "margin-top: 8px; display: flex; align-items: center; justify-content: space-between; color: #858585; font-size: 12px;",
                             
-                            // Toggle indicator
-                            span {
-                                style: "font-size: 14px; color: #FFC107;",
-                                if app_state.read().auto_accept { "⏵⏵" } else { "⏸" }
-                            }
-                            
-                            // Toggle button
-                            button {
-                                style: if app_state.read().auto_accept {
-                                    "background: none; border: none; color: #FFC107; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;"
-                                } else {
-                                    "background: none; border: none; color: #858585; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
-                                },
-                                onclick: move |_| {
-                                    let current = app_state.read().auto_accept;
-                                    app_state.write().auto_accept = !current;
-                                    tracing::info!("Auto-accept toggled to: {}", !current);
-                                },
-                                if app_state.read().auto_accept {
-                                    "auto-accept edits on"
-                                } else {
-                                    "auto-accept edits off"
+                            // Left side: Auto-accept toggle
+                            div {
+                                style: "display: flex; align-items: center; gap: 8px;",
+                                
+                                // Toggle indicator
+                                span {
+                                    style: "font-size: 14px; color: #FFC107;",
+                                    if app_state.read().auto_accept { "⏵⏵" } else { "⏸" }
+                                }
+                                
+                                // Toggle button
+                                button {
+                                    style: if app_state.read().auto_accept {
+                                        "background: none; border: none; color: #FFC107; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;"
+                                    } else {
+                                        "background: none; border: none; color: #858585; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
+                                    },
+                                    onclick: move |_| {
+                                        let current = app_state.read().auto_accept;
+                                        app_state.write().auto_accept = !current;
+                                        tracing::info!("Auto-accept toggled to: {}", !current);
+                                    },
+                                    if app_state.read().auto_accept {
+                                        "auto-accept edits on"
+                                    } else {
+                                        "auto-accept edits off"
+                                    }
+                                }
+                                
+                                // Keyboard shortcut hint
+                                span {
+                                    style: "color: #505050; font-size: 11px; margin-left: 8px;",
+                                    "(shift+tab to toggle)"
                                 }
                             }
                             
-                            // Keyboard shortcut hint
-                            span {
-                                style: "color: #505050; font-size: 11px; margin-left: 8px;",
-                                "(shift+tab to toggle)"
+                            // Right side: Cancel consensus button (when running)
+                            if *is_processing.read() {
+                                div {
+                                    style: "display: flex; align-items: center; gap: 8px;",
+                                    
+                                    // Cancel indicator - show spinning icon when cancelling
+                                    span {
+                                        style: if *is_cancelling.read() {
+                                            "font-size: 14px; color: #FF6B6B; animation: spin 1s linear infinite;"
+                                        } else {
+                                            "font-size: 14px; color: #FF6B6B; animation: cancelPulse 2s ease-in-out infinite;"
+                                        },
+                                        if *is_cancelling.read() { "⏸" } else { "⏹" }
+                                    }
+                                    
+                                    // Cancel button
+                                    button {
+                                        style: "background: none; border: none; color: #FF6B6B; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;",
+                                        onclick: move |_| {
+                                            tracing::info!("🛑 Cancel button clicked - cancelling consensus");
+                                            
+                                            // Set the atomic cancellation flag
+                                            cancellation_flag.read().store(true, std::sync::atomic::Ordering::Relaxed);
+                                            
+                                            // Cancel the running task immediately
+                                            if let Some(task) = consensus_task_handle.write().take() {
+                                                tracing::info!("🛑 Cancelling consensus task");
+                                                task.cancel();
+                                            }
+                                            
+                                            // Also cancel through the consensus manager for immediate effect
+                                            let mut consensus_manager = consensus_manager.clone();
+                                            spawn(async move {
+                                                if let Some(mut manager) = consensus_manager.write().as_mut() {
+                                                    if let Err(e) = manager.cancel_consensus("User clicked cancel button").await {
+                                                        tracing::warn!("Failed to cancel consensus: {}", e);
+                                                    } else {
+                                                        tracing::info!("✅ Consensus manager cancellation successful");
+                                                    }
+                                                }
+                                            });
+                                            
+                                            // Immediately reset all UI state
+                                            cancel_flag.set(true);
+                                            app_state.write().consensus.complete_consensus();
+                                            app_state.write().consensus.streaming_content.clear();
+                                            app_state.write().consensus.current_stage = None;
+                                            current_response.set(String::new());
+                                            is_processing.set(false);
+                                            is_cancelling.set(false);
+                                            
+                                            // Show immediate feedback
+                                            app_state.write().consensus.streaming_content = 
+                                                "<div style='color: #4CAF50; font-weight: bold;'>✅ Cancelled - ready for new query</div>".to_string();
+                                            
+                                            tracing::info!("✅ Cancellation flag set and UI reset complete");
+                                        },
+                                        "cancel"
+                                    }
+                                    
+                                    // Keyboard shortcut hint
+                                    span {
+                                        style: "color: #505050; font-size: 11px; margin-left: 8px;",
+                                        "(ctrl+c to cancel)"
+                                    }
+                                }
                             }
                         }
                     }
@@ -3018,11 +3184,9 @@ fn App() -> Element {
             }
         }
 
-        if *show_update_error_dialog.read() {
-            UpdateErrorDialog {
-                show: show_update_error_dialog.clone(),
-                error_message: update_error_message.read().clone(),
-            }
+        UpdateErrorDialog {
+            show: show_update_error_dialog,
+            error_message: update_error_message.read().clone(),
         }
 
         // Context menu
@@ -3113,7 +3277,6 @@ fn App() -> Element {
             }),
         }
 
-        // File operation dialogs
         FileNameDialog {
             visible: *show_new_file_dialog.read(),
             title: format!("New File in {}", 
