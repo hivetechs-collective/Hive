@@ -180,6 +180,30 @@ impl ModeDetector {
                 0.9,
                 "Simple repository question"
             )?,
+            PatternMatcher::new(
+                r"(?i)^(what|what's|whats)\s+(is\s+)?(\d+)\s*[\+\-\*\/]\s*(\d+)",
+                ExecutionMode::Direct,
+                0.95,
+                "Simple math calculation"
+            )?,
+            PatternMatcher::new(
+                r"(?i)^(calculate|compute|solve)\s+(\d+)\s*[\+\-\*\/]\s*(\d+)",
+                ExecutionMode::Direct,
+                0.95,
+                "Math calculation request"
+            )?,
+            PatternMatcher::new(
+                r"(?i)^(what|what's|whats|who|who's|where|where's|when|how\s+many)\s+.{1,40}$",
+                ExecutionMode::Direct,
+                0.75,
+                "Short factual questions"
+            )?,
+            PatternMatcher::new(
+                r"(?i)^(is|are|can|does|do|did|will|would|should)\s+.{1,40}$",
+                ExecutionMode::Direct,
+                0.7,
+                "Simple yes/no questions"
+            )?,
             
             // Consensus mode patterns - favor collaborative analysis for complex/interesting work
             PatternMatcher::new(
@@ -262,11 +286,15 @@ impl ModeDetector {
 
     /// Detect the appropriate execution mode for a request
     pub async fn detect_mode(&self, request: &str) -> ExecutionMode {
+        tracing::debug!("🔍 Mode detector analyzing request: '{}'", request);
+        
         // First, check pattern matches
         let mut best_match: Option<(ExecutionMode, f32)> = None;
         
         for pattern in &self.patterns {
             if let Some((mode, confidence)) = pattern.matches(request) {
+                tracing::debug!("  Pattern '{}' matched with mode {:?} (confidence: {})", 
+                    pattern.description, mode, confidence);
                 if best_match.is_none() || best_match.as_ref().unwrap().1 < confidence {
                     best_match = Some((mode, confidence));
                 }
@@ -276,12 +304,14 @@ impl ModeDetector {
         // If we have a high-confidence pattern match, use it
         if let Some((mode, confidence)) = best_match {
             if confidence >= 0.85 {
+                tracing::info!("🎯 Mode detector: High confidence pattern match - using {:?} mode (confidence: {})", mode, confidence);
                 return mode;
             }
         }
         
         // Analyze complexity
         let complexity = self.complexity_analyzer.analyze(request);
+        tracing::debug!("  Complexity score: {}", complexity);
         
         // If we have AI helpers, get their opinion
         if let Some(ai_helpers) = &self.ai_helpers {
@@ -292,10 +322,16 @@ impl ModeDetector {
         // HEAVILY favor direct mode - simple questions should get immediate answers
         match (best_match, complexity) {
             // ANY direct pattern match should be honored - don't let complexity override simple questions
-            (Some((ExecutionMode::Direct, confidence)), _) if confidence >= 0.6 => ExecutionMode::Direct,
+            (Some((ExecutionMode::Direct, confidence)), _) if confidence >= 0.6 => {
+                tracing::info!("🚀 Mode detector: Direct pattern match - using Direct mode (confidence: {})", confidence);
+                ExecutionMode::Direct
+            },
             
             // Only use consensus for very high confidence complex analysis patterns
-            (Some((ExecutionMode::Consensus, confidence)), _) if confidence >= 0.9 => ExecutionMode::Consensus,
+            (Some((ExecutionMode::Consensus, confidence)), _) if confidence >= 0.9 => {
+                tracing::info!("🧠 Mode detector: Consensus pattern match - using Consensus mode (confidence: {})", confidence);
+                ExecutionMode::Consensus
+            },
             
             // All other cases - favor direct mode for simple questions
             _ => {
@@ -309,11 +345,15 @@ impl ModeDetector {
                 
                 // Very aggressive direct mode for simple questions
                 if (starts_simple || is_factual) && request.len() < 100 && complexity < 0.5 {
+                    tracing::info!("🚀 Mode detector: Simple/factual question - using Direct mode");
                     ExecutionMode::Direct
                 } else if complexity > 0.7 {
+                    // Only use consensus for clearly complex analysis
+                    tracing::info!("🧠 Mode detector: High complexity ({}) - using Consensus mode", complexity);
                     ExecutionMode::Consensus
                 } else {
                     // For unclear cases, default to direct for efficiency unless clearly complex
+                    tracing::info!("🚀 Mode detector: Default fallback - using Direct mode (complexity: {})", complexity);
                     ExecutionMode::Direct
                 }
             },
