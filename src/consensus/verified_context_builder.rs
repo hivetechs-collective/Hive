@@ -6,11 +6,39 @@
 use std::sync::Arc;
 use anyhow::{Result, Context};
 use regex::Regex;
+use once_cell::sync::Lazy;
 use crate::consensus::verification::{RepositoryVerifier, RepositoryFacts, build_stage_context};
 use crate::consensus::types::Stage;
 use crate::consensus::repository_context::RepositoryContextManager;
 use crate::consensus::temporal::TemporalContext;
 use crate::ai_helpers::AIHelperEcosystem;
+
+// Pre-compiled regex patterns for general knowledge detection
+static GENERAL_KNOWLEDGE_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    vec![
+        // Geographic/demographic questions
+        Regex::new(r"(?i)(city|cities|country|countries|population|capital|state|province)").unwrap(),
+        Regex::new(r"(?i)(largest|biggest|smallest|top \d+|most populous)").unwrap(),
+        
+        // General facts (simplified patterns)
+        Regex::new(r"(?i)^(what is|what are|who is|who was|when did|where is)\s+\w+").unwrap(),
+        Regex::new(r"(?i)^(define|definition of|meaning of)\s+\w+").unwrap(),
+        
+        // Math/science
+        Regex::new(r"(?i)^\d+\s*[\+\-\*/]\s*\d+").unwrap(),
+        Regex::new(r"(?i)(calculate|compute|solve)").unwrap(),
+        
+        // Historical/factual
+        Regex::new(r"(?i)(history|historical|invented|discovered|founded)").unwrap(),
+        Regex::new(r"(?i)^(fact|facts about)\s+\w+").unwrap(),
+        
+        // Current events (check for non-code-related terms)
+        Regex::new(r"(?i)(news about|current events|latest news|recent news)").unwrap(),
+        
+        // Tutorial/how-to (general knowledge)
+        Regex::new(r"(?i)^(how to|how do i|how can i)\s+(cook|travel|learn|study|write)").unwrap(),
+    ]
+});
 
 /// Enhanced context builder with mandatory repository verification
 pub struct VerifiedContextBuilder {
@@ -65,34 +93,9 @@ impl VerifiedContextBuilder {
         let contains_repo_keyword = repo_keywords.iter()
             .any(|&keyword| question_lower.contains(keyword));
         
-        // General knowledge indicators (NOT repository-related)
-        let general_knowledge_patterns = [
-            // Geographic/demographic questions
-            r"(?i)(city|cities|country|countries|population|capital|state|province)",
-            r"(?i)(largest|biggest|smallest|top \d+|most populous)",
-            
-            // General facts
-            r"(?i)(what is|what are|who is|who was|when did|where is)(?!.*(?:this|here|above|below))",
-            r"(?i)(define|definition of|meaning of)(?!.*(?:this|in this))",
-            
-            // Math/science
-            r"(?i)^\d+\s*[\+\-\*/]\s*\d+",
-            r"(?i)(calculate|compute|solve)",
-            
-            // Historical/factual
-            r"(?i)(history|historical|invented|discovered|founded)",
-            r"(?i)(fact|facts about)(?!.*(?:this|repo|code))",
-            
-            // Current events
-            r"(?i)(news|current|latest|recent)(?!.*(?:commit|update|change|version))",
-            
-            // Tutorial/how-to (general, not about this code)
-            r"(?i)^(how to|how do i|how can i)(?!.*(?:this|here|in this))",
-        ];
-        
         // Check if it matches general knowledge patterns
-        let is_general_knowledge = general_knowledge_patterns.iter()
-            .any(|pattern| regex::Regex::new(pattern).unwrap().is_match(&question_lower));
+        let is_general_knowledge = GENERAL_KNOWLEDGE_PATTERNS.iter()
+            .any(|pattern| pattern.is_match(&question_lower));
         
         // If it's clearly general knowledge, it's NOT repository-related
         if is_general_knowledge && !contains_repo_keyword {
