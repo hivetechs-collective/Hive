@@ -339,12 +339,22 @@ pub fn SettingsDialog(
     let mut show_hive_key = use_signal(|| false);
     let mut show_anthropic_key = use_signal(|| false);
     
+    // Claude execution mode state
+    let mut claude_execution_mode = use_signal(|| "ConsensusAssisted".to_string());
+    
     // Load existing keys and profiles from database on mount
     use_effect(move || {
         // Load OpenRouter key if exists
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
             if !key.is_empty() && openrouter_key.read().is_empty() {
                 *openrouter_key.write() = key;
+            }
+        }
+        
+        // Load Claude execution mode if exists
+        if let Ok(Some(mode)) = crate::desktop::simple_db::get_config("claude_execution_mode") {
+            if !mode.is_empty() {
+                *claude_execution_mode.write() = mode;
             }
         }
         
@@ -563,6 +573,113 @@ pub fn SettingsDialog(
                         }
                     }
                     
+                    // Claude Execution Mode Section (only show if Anthropic key is configured)
+                    if !anthropic_key.read().is_empty() || !local_anthropic_key.read().is_empty() {
+                        div {
+                            class: "settings-section",
+                            h3 { "🤖 Claude Execution Mode" }
+                            p { 
+                                class: "settings-description",
+                                "Control how Claude Code interacts with the consensus pipeline for validation and enhancement." 
+                            }
+                            
+                            div {
+                                class: "execution-mode-selector",
+                                style: "display: flex; flex-direction: column; gap: 15px; margin-top: 20px;",
+                                
+                                // Direct Mode
+                                div {
+                                    class: if *claude_execution_mode.read() == "Direct" { "mode-option selected" } else { "mode-option" },
+                                    style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
+                                    onclick: move |_| *claude_execution_mode.write() = "Direct".to_string(),
+                                    
+                                    div {
+                                        style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                        input {
+                                            r#type: "radio",
+                                            name: "claude_mode",
+                                            checked: *claude_execution_mode.read() == "Direct",
+                                            onchange: move |_| *claude_execution_mode.write() = "Direct".to_string(),
+                                        }
+                                        h4 { 
+                                            style: "margin: 0; color: #ffffff;",
+                                            "⚡ Direct Execution" 
+                                        }
+                                    }
+                                    p { 
+                                        style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
+                                        "Claude executes autonomously with full speed. Best for simple tasks and when you trust Claude's judgment." 
+                                    }
+                                }
+                                
+                                // Consensus Assisted Mode
+                                div {
+                                    class: if *claude_execution_mode.read() == "ConsensusAssisted" { "mode-option selected" } else { "mode-option" },
+                                    style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
+                                    onclick: move |_| *claude_execution_mode.write() = "ConsensusAssisted".to_string(),
+                                    
+                                    div {
+                                        style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                        input {
+                                            r#type: "radio",
+                                            name: "claude_mode",
+                                            checked: *claude_execution_mode.read() == "ConsensusAssisted",
+                                            onchange: move |_| *claude_execution_mode.write() = "ConsensusAssisted".to_string(),
+                                        }
+                                        h4 { 
+                                            style: "margin: 0; color: #ffffff;",
+                                            "🔍 Consensus Assisted (Recommended)" 
+                                        }
+                                    }
+                                    p { 
+                                        style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
+                                        "Claude intelligently invokes consensus for high-risk operations, architectural changes, or when uncertain. Balances speed and safety." 
+                                    }
+                                }
+                                
+                                // Consensus Required Mode
+                                div {
+                                    class: if *claude_execution_mode.read() == "ConsensusRequired" { "mode-option selected" } else { "mode-option" },
+                                    style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
+                                    onclick: move |_| *claude_execution_mode.write() = "ConsensusRequired".to_string(),
+                                    
+                                    div {
+                                        style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                        input {
+                                            r#type: "radio",
+                                            name: "claude_mode",
+                                            checked: *claude_execution_mode.read() == "ConsensusRequired",
+                                            onchange: move |_| *claude_execution_mode.write() = "ConsensusRequired".to_string(),
+                                        }
+                                        h4 { 
+                                            style: "margin: 0; color: #ffffff;",
+                                            "🛡️ Consensus Required" 
+                                        }
+                                    }
+                                    p { 
+                                        style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
+                                        "All Claude plans go through 4-stage consensus validation. Maximum safety but slower. Ideal for critical production changes." 
+                                    }
+                                }
+                            }
+                            
+                            // Show current mode status
+                            div {
+                                style: "margin-top: 15px; padding: 12px; background: #2d2d30; border-radius: 6px; font-size: 14px;",
+                                "💡 Current mode: ",
+                                span {
+                                    style: "color: #4ade80; font-weight: 600;",
+                                    match claude_execution_mode.read().as_str() {
+                                        "Direct" => "Direct Execution",
+                                        "ConsensusAssisted" => "Consensus Assisted",
+                                        "ConsensusRequired" => "Consensus Required",
+                                        _ => "Unknown"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
                     // Consensus Profile Section
                     div {
                         class: "settings-section",
@@ -736,6 +853,7 @@ pub fn SettingsDialog(
                             
                             let selected_profile_id_for_save = selected_profile.read().clone();
                             let on_profile_change_clone = on_profile_change.clone();
+                            let execution_mode_to_save = claude_execution_mode.read().clone();
                             
                             spawn(async move {
                                 // Simple synchronous saves
@@ -756,6 +874,14 @@ pub fn SettingsDialog(
                                         success = false;
                                         error_msg = format!("Failed to save Anthropic key: {}", e);
                                     }
+                                }
+                                
+                                // Save Claude execution mode
+                                if let Err(e) = crate::desktop::simple_db::save_config("claude_execution_mode", &execution_mode_to_save) {
+                                    tracing::error!("Failed to save Claude execution mode: {}", e);
+                                    // Don't fail the whole save for this
+                                } else {
+                                    tracing::info!("✅ Saved Claude execution mode: {}", execution_mode_to_save);
                                 }
                                 
                                 // Save and validate Hive key
@@ -3171,6 +3297,26 @@ pub const DIALOG_STYLES: &str = r#"
     
     .settings-hint a:hover {
         text-decoration: underline;
+    }
+    
+    .mode-option {
+        background: #252526;
+        border-color: #3e3e42 !important;
+    }
+    
+    .mode-option:hover {
+        background: #2d2d30;
+        border-color: #007acc !important;
+    }
+    
+    .mode-option.selected {
+        background: #1e3a2e;
+        border-color: #4ade80 !important;
+    }
+    
+    .mode-option input[type="radio"] {
+        margin: 0;
+        accent-color: #4ade80;
     }
     
     .profile-grid {

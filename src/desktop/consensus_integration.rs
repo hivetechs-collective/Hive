@@ -9,6 +9,7 @@ use crate::consensus::{
     streaming::{ProgressInfo, StreamingCallbacks},
     types::Stage,
     cancellation::{CancellationToken, CancellationReason},
+    claude_code_executor::{ClaudeCodeExecutor, ClaudeExecutionMode},
 };
 use crate::core::api_keys::ApiKeyManager;
 use crate::desktop::markdown;
@@ -682,6 +683,7 @@ pub struct DesktopConsensusManager {
     repository_context: Arc<RepositoryContextManager>,
     app_state: Signal<AppState>,
     current_cancellation_token: Arc<Mutex<Option<CancellationToken>>>,
+    claude_executor: Option<Arc<Mutex<ClaudeCodeExecutor>>>,
 }
 
 impl DesktopConsensusManager {
@@ -772,16 +774,43 @@ impl DesktopConsensusManager {
         }
 
         // Create engine without checking keys - we'll check when processing
-        let mut engine = ConsensusEngine::new(Some(db)).await?;
+        let mut engine = ConsensusEngine::new(Some(db.clone())).await?;
         
         // Connect repository context to engine
         engine.set_repository_context(repository_context.clone()).await?;
+        
+        // Get AI helpers from engine for Claude executor
+        let ai_helpers = engine.get_ai_helpers().await;
+        
+        // Create Claude executor if we have Anthropic API key
+        let claude_executor = if let Ok(Some(anthropic_key)) = crate::desktop::simple_db::get_config("anthropic_api_key") {
+            if !anthropic_key.is_empty() && ai_helpers.is_some() {
+                // Get the current profile for the executor
+                let profile = engine.get_current_profile().await;
+                
+                // Create the executor with all necessary components
+                let executor = ClaudeCodeExecutor::new(
+                    profile,
+                    db.clone(),
+                    ai_helpers.unwrap(),
+                    None, // Knowledge base will be added later
+                    Some(anthropic_key),
+                );
+                
+                Some(Arc::new(Mutex::new(executor)))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         Ok(Self {
             engine: Arc::new(Mutex::new(engine)),
             repository_context,
             app_state,
             current_cancellation_token: Arc::new(Mutex::new(None)),
+            claude_executor,
         })
     }
 
@@ -907,28 +936,68 @@ impl DesktopConsensusManager {
         // Clone cancellation token manager to clear it when done
         let token_manager = self.current_cancellation_token.clone();
 
+        // Check if we should use Claude Code executor based on execution mode
+        let execution_mode = crate::desktop::simple_db::get_config("claude_execution_mode")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "ConsensusAssisted".to_string());
+        
+        tracing::info!("🤖 Processing query with execution mode: {}", execution_mode);
+        
         // Process consensus directly without spawning (database connections aren't Send)
         let result = {
-            let engine = engine.lock().await;
-
-            // D1 authorization is now sent immediately when received in the pipeline
-            // No need to check here as it would be outdated by the time consensus completes
-
-            let result = engine
-                .process_with_callbacks_and_cancellation(&query, None, callbacks_clone, user_id, cancellation_token_clone)
-                .await;
-
-            // Clear the cancellation token when done
-            {
-                let mut token_guard = token_manager.lock().await;
-                *token_guard = None;
+            // Check if we have Claude executor and should use it
+            if let Some(claude_executor) = &self.claude_executor {
+                // Determine if we should use Claude based on execution mode
+                let use_claude = match execution_mode.as_str() {
+                    "Direct" => true, // Always use Claude in Direct mode
+                    "ConsensusAssisted" => true, // Use Claude but it will invoke consensus when needed
+                    "ConsensusRequired" => true, // Use Claude but it will always invoke consensus
+                    _ => false, // Unknown mode, fall back to regular consensus
+                };
+                
+                if use_claude {
+                    tracing::info!("🤖 Using Claude Code executor in {} mode", execution_mode);
+                    
+                    // Set the execution mode on the Claude executor
+                    let mut executor = claude_executor.lock().await;
+                    match execution_mode.as_str() {
+                        "Direct" => executor.set_mode(ClaudeExecutionMode::Direct).await,
+                        "ConsensusAssisted" => executor.set_mode(ClaudeExecutionMode::ConsensusAssisted).await,
+                        "ConsensusRequired" => executor.set_mode(ClaudeExecutionMode::ConsensusRequired).await,
+                        _ => {} // Keep default
+                    }
+                    
+                    // Execute with Claude
+                    match executor.execute(&query, None, callbacks_clone).await {
+                        Ok(result) => Ok(result.result.unwrap_or_else(|| "No response received".to_string())),
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    // Fall back to regular consensus
+                    tracing::info!("📊 Using regular consensus pipeline");
+                    let engine = engine.lock().await;
+                    engine
+                        .process_with_callbacks_and_cancellation(&query, None, callbacks_clone, user_id, cancellation_token_clone)
+                        .await
+                        .map(|r| r.result.unwrap_or_else(|| "No response received".to_string()))
+                }
+            } else {
+                // No Claude executor, use regular consensus
+                tracing::info!("📊 Claude executor not available, using regular consensus pipeline");
+                let engine = engine.lock().await;
+                engine
+                    .process_with_callbacks_and_cancellation(&query, None, callbacks_clone, user_id, cancellation_token_clone)
+                    .await
+                    .map(|r| r.result.unwrap_or_else(|| "No response received".to_string()))
             }
-
-            result.map(|r| {
-                r.result
-                    .unwrap_or_else(|| "No response received".to_string())
-            })
         };
+
+        // Clear the cancellation token when done
+        {
+            let mut token_guard = token_manager.lock().await;
+            *token_guard = None;
+        }
 
         // Process result
         match result {
