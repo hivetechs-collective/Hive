@@ -1,10 +1,11 @@
-//! Verified Context Builder - Mandatory repository verification for all stages
+//! Verified Context Builder - Conditional repository verification for consensus stages
 //!
-//! This module ensures that every consensus stage receives verified repository facts
-//! to prevent hallucinations and ensure accurate analysis.
+//! This module ensures that consensus stages receive verified repository facts
+//! only when the question is repository-related, preventing irrelevant context injection.
 
 use std::sync::Arc;
 use anyhow::{Result, Context};
+use regex::Regex;
 use crate::consensus::verification::{RepositoryVerifier, RepositoryFacts, build_stage_context};
 use crate::consensus::types::Stage;
 use crate::consensus::repository_context::RepositoryContextManager;
@@ -24,6 +25,88 @@ impl VerifiedContextBuilder {
             repository_verifier: None,
             repository_facts: None,
         }
+    }
+    
+    /// Check if the question is related to the repository/codebase
+    fn is_repository_related_question(&self, question: &str) -> bool {
+        let question_lower = question.to_lowercase();
+        
+        // Repository-specific keywords that indicate the question is about the codebase
+        let repo_keywords = [
+            // Code-specific terms
+            "this code", "the code", "this function", "this method", "this class",
+            "this file", "this module", "this project", "this repo", "this repository",
+            "this codebase", "this implementation", "this feature", "this component",
+            "this system", "this architecture", "this design", "this structure",
+            
+            // Direct references
+            "here", "above", "below", "this", "these",
+            
+            // Code analysis terms
+            "analyze this", "explain this", "debug this", "fix this", "refactor this",
+            "improve this", "optimize this", "test this", "document this",
+            
+            // File/path references
+            "src/", ".rs", ".toml", ".md", "cargo", "target/",
+            
+            // Questions about the current context
+            "what does this", "how does this", "why does this", "where is this",
+            "what is this", "can you explain this", "help me understand this",
+            
+            // Development tasks
+            "implement", "add a feature", "create a function", "write a test",
+            "fix the bug", "update the", "modify the", "change the",
+            
+            // Hive-specific terms
+            "hive", "consensus", "ai helper", "curator", "validator", "generator", "refiner",
+        ];
+        
+        // Check if question contains repository-specific terms
+        let contains_repo_keyword = repo_keywords.iter()
+            .any(|&keyword| question_lower.contains(keyword));
+        
+        // General knowledge indicators (NOT repository-related)
+        let general_knowledge_patterns = [
+            // Geographic/demographic questions
+            r"(?i)(city|cities|country|countries|population|capital|state|province)",
+            r"(?i)(largest|biggest|smallest|top \d+|most populous)",
+            
+            // General facts
+            r"(?i)(what is|what are|who is|who was|when did|where is)(?!.*(?:this|here|above|below))",
+            r"(?i)(define|definition of|meaning of)(?!.*(?:this|in this))",
+            
+            // Math/science
+            r"(?i)^\d+\s*[\+\-\*/]\s*\d+",
+            r"(?i)(calculate|compute|solve)",
+            
+            // Historical/factual
+            r"(?i)(history|historical|invented|discovered|founded)",
+            r"(?i)(fact|facts about)(?!.*(?:this|repo|code))",
+            
+            // Current events
+            r"(?i)(news|current|latest|recent)(?!.*(?:commit|update|change|version))",
+            
+            // Tutorial/how-to (general, not about this code)
+            r"(?i)^(how to|how do i|how can i)(?!.*(?:this|here|in this))",
+        ];
+        
+        // Check if it matches general knowledge patterns
+        let is_general_knowledge = general_knowledge_patterns.iter()
+            .any(|pattern| regex::Regex::new(pattern).unwrap().is_match(&question_lower));
+        
+        // If it's clearly general knowledge, it's NOT repository-related
+        if is_general_knowledge && !contains_repo_keyword {
+            return false;
+        }
+        
+        // If it contains repository keywords, it IS repository-related
+        if contains_repo_keyword {
+            return true;
+        }
+        
+        // Default: if we have repository facts loaded, be conservative and assume
+        // ambiguous questions might be repository-related
+        self.repository_facts.is_some() && !is_general_knowledge
     }
     
     /// Initialize with repository path for verification
@@ -56,17 +139,23 @@ impl VerifiedContextBuilder {
     ) -> Result<String> {
         let mut contexts = Vec::new();
         
-        // 1. MANDATORY: Repository verification context (MUST be first)
-        if let Some(facts) = &self.repository_facts {
-            let verification_context = build_stage_context(facts, stage);
-            contexts.push(verification_context);
-            tracing::debug!("Added mandatory repository verification context for {:?} stage", stage);
+        // Check if this question is repository-related
+        let is_repo_related = self.is_repository_related_question(question);
+        
+        // 1. Repository verification context (ONLY if question is repository-related)
+        if is_repo_related {
+            if let Some(facts) = &self.repository_facts {
+                let verification_context = build_stage_context(facts, stage);
+                contexts.push(verification_context);
+                tracing::info!("Question is repository-related, added verification context for {:?} stage", stage);
+            } else {
+                tracing::warn!("Repository-related question but no facts available!");
+                contexts.push(format!(
+                    "\n⚠️  WARNING: This appears to be a repository-specific question, but no repository verification was performed.\n"
+                ));
+            }
         } else {
-            tracing::warn!("No repository facts available - this may lead to hallucinations!");
-            // Add a warning context instead
-            contexts.push(format!(
-                "\n⚠️  WARNING: No repository verification performed. Exercise extreme caution with repository-specific claims.\n"
-            ));
+            tracing::info!("Question is NOT repository-related (e.g., general knowledge), skipping repository context");
         }
         
         // 2. AI Helper enhanced context (with repository facts)
@@ -109,12 +198,14 @@ impl VerifiedContextBuilder {
             }
         }
         
-        // 6. Repository context (current project state)
-        if let Some(repo_ctx) = repository_context {
-            let repo_info = repo_ctx.get_context_for_prompts().await;
-            if !repo_info.is_empty() {
-                contexts.push(format!("## 📁 REPOSITORY CONTEXT\n{}", repo_info));
-                tracing::debug!("Added repository context");
+        // 6. Repository context (current project state - only if repository-related)
+        if is_repo_related {
+            if let Some(repo_ctx) = repository_context {
+                let repo_info = repo_ctx.get_context_for_prompts().await;
+                if !repo_info.is_empty() {
+                    contexts.push(format!("## 📁 REPOSITORY CONTEXT\n{}", repo_info));
+                    tracing::debug!("Added repository context");
+                }
             }
         }
         
@@ -138,9 +229,16 @@ impl VerifiedContextBuilder {
         question: &str,
         stage: Stage,
     ) -> Result<String> {
-        // First ensure AI helpers have latest repository facts
-        if let Err(e) = ai_helpers.update_repository_facts(self.repository_facts.clone()).await {
-            tracing::warn!("Failed to update AI helpers with repository facts: {}", e);
+        // Only update AI helpers with repository facts if the question is repository-related
+        if self.is_repository_related_question(question) {
+            if let Err(e) = ai_helpers.update_repository_facts(self.repository_facts.clone()).await {
+                tracing::warn!("Failed to update AI helpers with repository facts: {}", e);
+            }
+        } else {
+            // Clear repository facts from AI helpers for non-repository questions
+            if let Err(e) = ai_helpers.update_repository_facts(None).await {
+                tracing::warn!("Failed to clear repository facts from AI helpers: {}", e);
+            }
         }
         
         // Use the AI helpers with repository-enhanced context
