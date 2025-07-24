@@ -7,7 +7,7 @@ use crate::desktop::state::AppState;
 /// Information about a consensus profile
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProfileInfo {
-    pub id: i64,
+    pub id: String,  // Changed from i64 to String to match database schema
     pub name: String,
     pub is_default: bool,
     pub created_at: String,
@@ -329,7 +329,7 @@ pub fn SettingsDialog(
     let mut selected_profile = use_signal(|| String::new());
     let mut profiles_loading = use_signal(|| true);
     let mut show_profile_details = use_signal(|| false);
-    let mut editing_profile_id = use_signal(|| None::<i32>);
+    let mut editing_profile_id = use_signal(|| None::<String>);
     
     // Local state for API keys
     let mut local_openrouter_key = use_signal(|| openrouter_key.read().clone());
@@ -616,6 +616,15 @@ pub fn SettingsDialog(
                                 // Content area
                                 if !*show_profile_details.read() {
                                     // Profile selection grid
+                                    {
+                                        let selected = selected_profile.read().clone();
+                                        tracing::info!("Rendering profile grid. Selected profile: {}", selected);
+                                        for profile in profiles.read().iter() {
+                                            tracing::info!("Profile: {} (id: {}), comparing with selected: {}", 
+                                                profile.name, profile.id, selected);
+                                        }
+                                    }
+                                    
                                     div {
                                         class: "profile-grid",
                                         for profile in profiles.read().iter() {
@@ -625,6 +634,7 @@ pub fn SettingsDialog(
                                                 is_selected: *selected_profile.read() == profile.id.to_string(),
                                                 is_default: profile.is_default,
                                                 on_select: move |id: String| {
+                                                    tracing::info!("Profile selection changed to: {}", id);
                                                     *selected_profile.write() = id;
                                                 },
                                             }
@@ -643,8 +653,8 @@ pub fn SettingsDialog(
                                                     let mut editing_profile_id = editing_profile_id.clone();
                                                     let mut profiles = profiles.clone();
                                                     let mut profiles_loading = profiles_loading.clone();
-                                                    move |profile_id: i32| {
-                                                        if profile_id == -1 {
+                                                    move |profile_id: String| {
+                                                        if profile_id.is_empty() {
                                                             // Exit edit mode
                                                             *editing_profile_id.write() = None;
                                                             
@@ -663,11 +673,11 @@ pub fn SettingsDialog(
                                                         }
                                                     }
                                                 },
-                                                on_delete: move |profile_id: i32| {
+                                                on_delete: move |profile_id: String| {
                                                     tracing::info!("Delete profile {} clicked", profile_id);
                                                     // TODO: Implement delete with confirmation
                                                 },
-                                                is_editing: *editing_profile_id.read() == Some(profile.id as i32),
+                                                is_editing: *editing_profile_id.read() == Some(profile.id.clone()),
                                             }
                                         }
                                     }
@@ -724,7 +734,7 @@ pub fn SettingsDialog(
                             let mut show_settings = show_settings.clone();
                             let mut app_state = use_context::<Signal<AppState>>();
                             
-                            let selected_profile_id = selected_profile.read().clone();
+                            let selected_profile_id_for_save = selected_profile.read().clone();
                             let on_profile_change_clone = on_profile_change.clone();
                             
                             spawn(async move {
@@ -799,11 +809,12 @@ pub fn SettingsDialog(
                                     }
                                 }
                                 
-                                // Update selected profile as default if changed
-                                if !selected_profile_id.is_empty() {
-                                    if let Err(e) = update_default_profile(&selected_profile_id).await {
-                                        tracing::error!("Failed to update default profile: {}", e);
+                                // Update selected profile as active if changed
+                                if !selected_profile_id_for_save.is_empty() {
+                                    if let Err(e) = update_active_profile(&selected_profile_id_for_save).await {
+                                        tracing::error!("Failed to update active profile: {}", e);
                                     } else {
+                                        tracing::info!("✅ Updated active profile to: {}", selected_profile_id_for_save);
                                         // Trigger profile change callback if provided
                                         if let Some(callback) = on_profile_change_clone {
                                             callback.call(());
@@ -862,25 +873,46 @@ fn DatabaseProfileOption(
     is_default: bool,
     on_select: EventHandler<String>
 ) -> Element {
+    // Log the selection state for debugging
+    tracing::debug!("DatabaseProfileOption render: profile_id={}, name={}, is_selected={}, is_default={}", 
+        profile_id, name, is_selected, is_default);
+    
     rsx! {
         div {
             class: if is_selected { "profile-option selected" } else { "profile-option" },
-            onclick: move |_| on_select.call(profile_id.clone()),
-            style: "cursor: pointer;",
+            style: if is_selected {
+                "padding: 15px; background: #2d2d30; border: 2px solid #007acc; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;"
+            } else {
+                "padding: 15px; background: #2d2d30; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s; margin-bottom: 10px;"
+            },
+            onclick: move |_| {
+                tracing::info!("Profile clicked: {} ({})", name, profile_id);
+                on_select.call(profile_id.clone())
+            },
             
-            h4 { 
-                "{name}"
-                if is_default {
-                    span { 
-                        style: "font-size: 12px; margin-left: 8px; padding: 2px 6px; background: #4a5568; border-radius: 4px;",
-                        "Default" 
+            div {
+                style: "display: flex; align-items: center; justify-content: space-between;",
+                h4 { 
+                    style: "margin: 0; color: #ffffff; font-size: 16px;",
+                    "{name}"
+                    if is_default {
+                        span { 
+                            style: "font-size: 12px; margin-left: 8px; padding: 2px 6px; background: #4a5568; border-radius: 4px; color: white;",
+                            "DEFAULT" 
+                        }
+                    }
+                }
+                if is_selected {
+                    span {
+                        style: "color: #007acc; font-weight: bold; font-size: 18px;",
+                        "✓"
                     }
                 }
             }
             p { 
                 class: "profile-description", 
-                style: "font-size: 12px; color: #888;",
-                "Expert consensus profile"
+                style: "font-size: 12px; color: #888; margin: 5px 0 0 0;",
+                "Expert consensus profile (default: {is_default}, selected: {is_selected})"
             }
         }
     }
@@ -890,10 +922,15 @@ fn DatabaseProfileOption(
 #[component]
 fn ProfileDetailCard(
     profile: ProfileInfo,
-    on_edit: EventHandler<i32>,
-    on_delete: EventHandler<i32>,
+    on_edit: EventHandler<String>,
+    on_delete: EventHandler<String>,
     is_editing: bool,
 ) -> Element {
+    // Clone profile id to avoid borrow issues in closures
+    let profile_id_for_edit = profile.id.clone();
+    let profile_id_for_save = profile.id.clone();
+    let profile_id_for_delete = profile.id.clone();
+    
     let mut generator_model = use_signal(|| profile.generator_model.clone().unwrap_or_default());
     let mut refiner_model = use_signal(|| profile.refiner_model.clone().unwrap_or_default());
     let mut validator_model = use_signal(|| profile.validator_model.clone().unwrap_or_default());
@@ -931,7 +968,7 @@ fn ProfileDetailCard(
                         button {
                             class: "icon-button",
                             style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
-                            onclick: move |_| on_edit.call(profile.id as i32),
+                            onclick: move |_| on_edit.call(profile_id_for_edit.clone()),
                             "✏️ Edit"
                         }
                     } else {
@@ -940,28 +977,28 @@ fn ProfileDetailCard(
                             style: "padding: 4px 8px; background: #4a5568; border: none; border-radius: 4px; color: #4ade80; cursor: pointer; font-size: 12px;",
                             onclick: move |_| {
                                 // Save changes
-                                let profile_id = profile.id;
+                                let profile_id = profile_id_for_save.clone();
                                 let gen = generator_model.read().clone();
                                 let ref_m = refiner_model.read().clone();
                                 let val = validator_model.read().clone();
                                 let cur = curator_model.read().clone();
                                 
                                 spawn(async move {
-                                    if let Err(e) = update_profile_models(profile_id, &gen, &ref_m, &val, &cur).await {
+                                    if let Err(e) = update_profile_models(&profile_id, &gen, &ref_m, &val, &cur).await {
                                         tracing::error!("Failed to update profile models: {}", e);
                                     } else {
                                         tracing::info!("Successfully updated profile {}", profile_id);
                                     }
                                 });
                                 
-                                on_edit.call(-1); // Signal to exit edit mode
+                                on_edit.call(String::new()); // Signal to exit edit mode
                             },
                             "💾 Save"
                         }
                         button {
                             class: "icon-button",
                             style: "padding: 4px 8px; background: #3e3e42; border: none; border-radius: 4px; color: #cccccc; cursor: pointer; font-size: 12px;",
-                            onclick: move |_| on_edit.call(-1), // Cancel edit
+                            onclick: move |_| on_edit.call(String::new()), // Cancel edit
                             "✖️ Cancel"
                         }
                     }
@@ -969,7 +1006,7 @@ fn ProfileDetailCard(
                         button {
                             class: "icon-button",
                             style: "padding: 4px 8px; background: #5a1e1e; border: none; border-radius: 4px; color: #ff6b6b; cursor: pointer; font-size: 12px;",
-                            onclick: move |_| on_delete.call(profile.id as i32),
+                            onclick: move |_| on_delete.call(profile_id_for_delete.clone()),
                             "🗑️ Delete"
                         }
                     }
@@ -1078,7 +1115,7 @@ fn ProfileDetailCard(
 
 /// Update profile models in the database
 async fn update_profile_models(
-    profile_id: i64,
+    profile_id: &str,
     generator_model: &str,
     refiner_model: &str,
     validator_model: &str,
@@ -1165,7 +1202,7 @@ pub fn OnboardingDialog(
     let mut validation_error = use_signal(|| None::<String>);
     // Load the current default profile name from database
     let mut selected_profile = use_signal(|| String::new());
-    let mut default_profile_id = use_signal(|| None::<i64>);
+    let mut default_profile_id = use_signal(|| None::<String>);
     // Initialize temp keys with existing values from database if available
     let mut temp_openrouter_key = use_signal(|| {
         if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
@@ -1198,7 +1235,7 @@ pub fn OnboardingDialog(
     let mut profile_mode = use_signal(|| "expert".to_string()); // expert, existing, custom
     let mut selected_template = use_signal(|| String::new());
     let mut profile_name = use_signal(|| String::new());
-    let mut selected_profile_id = use_signal(|| None::<i64>);
+    let mut selected_profile_id = use_signal(|| None::<String>);
     let mut existing_profiles = use_signal(|| Vec::<ProfileInfo>::new());
     let mut is_creating_profile = use_signal(|| false);
     let mut profile_error = use_signal(|| None::<String>);
@@ -1288,7 +1325,7 @@ pub fn OnboardingDialog(
             match load_default_profile().await {
                 Ok(Some((id, name))) => {
                     tracing::info!("Loaded default profile: {} (id: {})", name, id);
-                    *selected_profile.write() = name;
+                    *selected_profile.write() = id.to_string();
                     *default_profile_id.write() = Some(id);
                 }
                 Ok(None) => {
@@ -1780,9 +1817,9 @@ pub fn OnboardingDialog(
                                                                 *profiles_created.write() = created.clone();
                                                                 
                                                                 match create_profile_from_template(template_id, name).await {
-                                                                    Ok(_) => {
+                                                                    Ok(profile_id) => {
                                                                         created.push(name.to_string());
-                                                                        tracing::info!("Created profile {}/{}: {}", progress, total, name);
+                                                                        tracing::info!("Created profile {}/{}: {} (id: {})", progress, total, name, profile_id);
                                                                     }
                                                                     Err(e) => {
                                                                         tracing::warn!("Failed to create profile {}: {}", name, e);
@@ -1998,13 +2035,13 @@ pub fn OnboardingDialog(
                                                                 *profile_error.write() = None;
                                                                 
                                                                 match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
-                                                                    Ok(_) => {
-                                                                        tracing::info!("Profile created successfully: {}", name_for_spawn);
+                                                                    Ok(profile_id) => {
+                                                                        tracing::info!("Profile created successfully: {} (id: {})", name_for_spawn, profile_id);
                                                                         let mut created = profiles_created.read().clone();
                                                                         created.push(name_for_spawn.clone());
                                                                         *profiles_created.write() = created;
                                                                         *show_profile_success.write() = true;
-                                                                        *selected_profile.write() = name_for_spawn;
+                                                                        *selected_profile.write() = profile_id;
                                                                         
                                                                         // Reload profiles
                                                                         if let Ok(profiles) = load_existing_profiles().await {
@@ -2044,15 +2081,16 @@ pub fn OnboardingDialog(
                                                 {
                                                     let profiles = existing_profiles.read().clone();
                                                     profiles.into_iter().map(|profile| {
-                                                        let profile_id = profile.id;
-                                                        let is_selected = *selected_profile_id.read() == Some(profile_id);
+                                                        let profile_id = profile.id.clone();
+                                                        let is_selected = *selected_profile_id.read() == Some(profile_id.clone());
                                                         let mut selected_profile_id = selected_profile_id.clone();
+                                                        let profile_id_for_select = profile_id.clone();
                                                         
                                                         rsx! {
                                                             ExistingProfileOption {
                                                                 profile: profile,
                                                                 is_selected: is_selected,
-                                                                on_select: move |_| *selected_profile_id.write() = Some(profile_id),
+                                                                on_select: move |_| *selected_profile_id.write() = Some(profile_id_for_select.clone()),
                                                             }
                                                         }
                                                     })
@@ -2335,7 +2373,7 @@ pub fn OnboardingDialog(
                                 let mode = profile_mode.read().clone();
                                 let template_id = selected_template.read().clone();
                                 let profile_name_val = profile_name.read().clone();
-                                let existing_id = *selected_profile_id.read();
+                                let existing_id = selected_profile_id.read().clone();
                                 
                                 if mode == "expert" && !template_id.is_empty() {
                                     // Create profile from template
@@ -2370,13 +2408,13 @@ pub fn OnboardingDialog(
                                         *profile_error.write() = None;
                                         
                                         match create_profile_from_template(&template_for_spawn, &name_for_spawn).await {
-                                            Ok(_) => {
-                                                tracing::info!("Profile created successfully: {}", name_for_spawn);
+                                            Ok(profile_id) => {
+                                                tracing::info!("Profile created successfully: {} (id: {})", name_for_spawn, profile_id);
                                                 let mut created = profiles_created.read().clone();
                                                 created.push(name_for_spawn.clone());
                                                 *profiles_created.write() = created;
                                                 *show_profile_success.write() = true;
-                                                *selected_profile.write() = name_for_spawn;
+                                                *selected_profile.write() = profile_id;
                                                 
                                                 // Reload profiles
                                                 if let Ok(profiles) = load_existing_profiles().await {
@@ -2401,13 +2439,13 @@ pub fn OnboardingDialog(
                                         let mut show_profile_success = show_profile_success.clone();
                                         
                                         spawn(async move {
-                                            if let Err(e) = set_default_profile(profile_id).await {
+                                            if let Err(e) = set_default_profile(&profile_id).await {
                                                 tracing::error!("Failed to set default profile: {}", e);
                                             } else {
                                                 tracing::info!("Default profile set successfully");
                                                 // Find the profile name from existing profiles
                                                 if let Some(profile) = existing_profiles.read().iter().find(|p| p.id == profile_id) {
-                                                    *selected_profile.write() = profile.name.clone();
+                                                    *selected_profile.write() = profile.id.to_string();
                                                 }
                                                 *show_profile_success.write() = true;
                                             }
@@ -2636,22 +2674,36 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
     let db = get_database().await?;
     let conn = db.get_connection()?;
     
+    // Get the active profile ID from consensus_settings
+    let active_profile_id: Option<String> = match conn
+        .prepare("SELECT value FROM consensus_settings WHERE key = 'active_profile_id'")?
+        .query_row([], |row| {
+            Ok(row.get::<_, String>(0)?)
+        }) {
+        Ok(value) => Some(value),
+        Err(rusqlite::Error::QueryReturnedNoRows) => None,
+        Err(e) => return Err(e.into()),
+    };
+    
     let mut stmt = conn.prepare(
-        "SELECT id, profile_name, 0 as is_default, created_at, generator_model, refiner_model, validator_model, curator_model
+        "SELECT id, profile_name, created_at, generator_model, refiner_model, validator_model, curator_model
          FROM consensus_profiles 
          ORDER BY created_at DESC"
     )?;
     
     let profiles = stmt.query_map([], |row| {
+        let profile_id: String = row.get(0)?;
+        let is_active = active_profile_id.as_ref() == Some(&profile_id);
+        
         Ok(ProfileInfo {
-            id: row.get::<_, String>(0)?.parse::<i64>().unwrap_or(0),
+            id: profile_id,  // No parsing needed - keep as String
             name: row.get(1)?,
-            is_default: row.get::<_, i32>(2)? != 0,
-            created_at: row.get(3)?,
-            generator_model: row.get(4)?,
-            refiner_model: row.get(5)?,
-            validator_model: row.get(6)?,
-            curator_model: row.get(7)?,
+            is_default: is_active,
+            created_at: row.get(2)?,
+            generator_model: row.get(3)?,
+            refiner_model: row.get(4)?,
+            validator_model: row.get(5)?,
+            curator_model: row.get(6)?,
         })
     })?
     .filter_map(Result::ok)
@@ -2661,25 +2713,39 @@ pub async fn load_existing_profiles() -> anyhow::Result<Vec<ProfileInfo>> {
 }
 
 /// Load the current default profile from database
-async fn load_default_profile() -> anyhow::Result<Option<(i64, String)>> {
+async fn load_default_profile() -> anyhow::Result<Option<(String, String)>> {
     use crate::core::database::get_database;
     use rusqlite::OptionalExtension;
     
     let db = get_database().await?;
     let conn = db.get_connection()?;
     
-    // Query for the first profile as a default (since there's no is_default column in this schema)
-    let result = conn.query_row(
-        "SELECT id, profile_name FROM consensus_profiles ORDER BY created_at ASC LIMIT 1",
-        [],
-        |row| Ok((row.get::<_, String>(0)?.parse::<i64>().unwrap_or(0), row.get::<_, String>(1)?))
-    ).optional()?;
+    // Get the active profile ID from consensus_settings
+    let active_profile_id: Option<String> = conn
+        .query_row(
+            "SELECT value FROM consensus_settings WHERE key = 'active_profile_id'",
+            [],
+            |row| Ok(row.get::<_, String>(0)?)
+        )
+        .optional()?;
     
-    Ok(result)
+    if let Some(profile_id) = active_profile_id {
+        // Get the profile details
+        let result = conn.query_row(
+            "SELECT id, profile_name FROM consensus_profiles WHERE id = ?1",
+            [&profile_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        ).optional()?;
+        
+        Ok(result)
+    } else {
+        // No active profile set, return None
+        Ok(None)
+    }
 }
 
 /// Create profile from expert template
-async fn create_profile_from_template(template_id: &str, profile_name: &str) -> anyhow::Result<()> {
+async fn create_profile_from_template(template_id: &str, profile_name: &str) -> anyhow::Result<String> {
     use crate::core::database::DatabaseManager;
     use crate::core::config::get_hive_config_dir;
     use crate::core::profiles::ExpertTemplateManager;
@@ -2702,37 +2768,30 @@ async fn create_profile_from_template(template_id: &str, profile_name: &str) -> 
     
     template_manager.create_profile_from_template(template_id, profile_name, None).await?;
     
-    Ok(())
+    // Get the ID of the created profile
+    use crate::core::database::get_database;
+    let db = get_database().await?;
+    let conn = db.get_connection()?;
+    let profile_id: String = conn.query_row(
+        "SELECT id FROM consensus_profiles WHERE profile_name = ?1 ORDER BY created_at DESC LIMIT 1",
+        [profile_name],
+        |row| row.get(0)
+    )?;
+    
+    Ok(profile_id)
 }
 
 /// Set a profile as default
-async fn set_default_profile(profile_id: i64) -> anyhow::Result<()> {
-    use crate::core::database::DatabaseManager;
-    use crate::core::config::get_hive_config_dir;
+async fn set_default_profile(profile_id: &str) -> anyhow::Result<()> {
+    use crate::core::database::get_database;
     
-    let db_path = get_hive_config_dir().join("hive-ai.db");
-    let db_config = crate::core::database::DatabaseConfig {
-        path: db_path,
-        max_connections: 10,
-        connection_timeout: std::time::Duration::from_secs(5),
-        idle_timeout: std::time::Duration::from_secs(300),
-        enable_wal: true,
-        enable_foreign_keys: true,
-        cache_size: 8192,
-        synchronous: "NORMAL".to_string(),
-        journal_mode: "WAL".to_string(),
-    };
-    
-    let db = DatabaseManager::new(db_config).await?;
+    let db = get_database().await?;
     let conn = db.get_connection()?;
     
-    // First, unset all profiles as default
-    conn.execute("UPDATE consensus_profiles SET is_default = 0", [])?;
-    
-    // Then set the selected profile as default
+    // Set the active profile ID in consensus_settings
     conn.execute(
-        "UPDATE consensus_profiles SET is_default = 1 WHERE id = ?1",
-        [profile_id]
+        "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
+        [profile_id],
     )?;
     
     Ok(())
@@ -3834,4 +3893,20 @@ pub fn UpdateErrorDialog(show: Signal<bool>, error_message: String) -> Element {
             }
         }
     }
+}
+/// Update the active profile in the database
+async fn update_active_profile(profile_id: &str) -> anyhow::Result<()> {
+    use crate::core::database::get_database;
+    
+    let db = get_database().await?;
+    let conn = db.get_connection()?;
+    
+    // Update the active profile ID in consensus_settings
+    conn.execute(
+        "INSERT OR REPLACE INTO consensus_settings (key, value) VALUES ('active_profile_id', ?1)",
+        [profile_id],
+    )?;
+    
+    tracing::info!("Active profile updated to ID: {}", profile_id);
+    Ok(())
 }
