@@ -902,6 +902,19 @@ fn App() -> Element {
     // Initialize app state
     let mut app_state = use_signal(|| AppState::default());
     use_context_provider(|| app_state.clone());
+    
+    // Load Claude execution mode from database (only once on startup)
+    use_effect(move || {
+        let mut app_state_for_load = app_state.clone();
+        spawn(async move {
+            if let Ok(Some(mode)) = hive_ai::desktop::simple_db::get_config("claude_execution_mode") {
+                if !mode.is_empty() {
+                    app_state_for_load.write().claude_execution_mode = mode.clone();
+                    tracing::info!("Loaded Claude execution mode: {}", mode);
+                }
+            }
+        });
+    });
 
     // API keys state (needed before consensus manager)
     let mut openrouter_key = use_signal(String::new);
@@ -2786,6 +2799,26 @@ fn App() -> Element {
                                         return;
                                     }
                                     
+                                    // Ctrl+Shift+C cycles Claude execution mode
+                                    if evt.key() == dioxus::events::Key::Character("c".to_string()) && evt.modifiers().ctrl() && evt.modifiers().shift() {
+                                        evt.prevent_default();
+                                        let current = app_state_for_toggle.read().claude_execution_mode.clone();
+                                        let next_mode = match current.as_str() {
+                                            "Direct" => "ConsensusAssisted",
+                                            "ConsensusAssisted" => "ConsensusRequired",
+                                            "ConsensusRequired" => "Direct",
+                                            _ => "ConsensusAssisted"
+                                        };
+                                        app_state_for_toggle.write().claude_execution_mode = next_mode.to_string();
+                                        
+                                        // Save the mode to database
+                                        if let Err(e) = hive_ai::desktop::simple_db::save_config("claude_execution_mode", next_mode) {
+                                            tracing::error!("Failed to save Claude execution mode: {}", e);
+                                        } else {
+                                            tracing::info!("Claude execution mode toggled via Ctrl+Shift+C to: {}", next_mode);
+                                        }
+                                        return;
+                                    }
                                     
                                     // Enter without shift submits
                                     if evt.key() == dioxus::events::Key::Enter && !evt.modifiers().shift() && !input_value_ref.read().is_empty() && !*is_processing_ref.read() {
@@ -2958,39 +2991,94 @@ fn App() -> Element {
                         div {
                             style: "margin-top: 8px; display: flex; align-items: center; justify-content: space-between; color: #858585; font-size: 12px;",
                             
-                            // Left side: Auto-accept toggle
+                            // Left side: Auto-accept toggle and Claude mode
                             div {
-                                style: "display: flex; align-items: center; gap: 8px;",
+                                style: "display: flex; align-items: center; gap: 20px;",
                                 
-                                // Toggle indicator
-                                span {
-                                    style: "font-size: 14px; color: #FFC107;",
-                                    if app_state.read().auto_accept { "⏵⏵" } else { "⏸" }
-                                }
-                                
-                                // Toggle button
-                                button {
-                                    style: if app_state.read().auto_accept {
-                                        "background: none; border: none; color: #FFC107; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;"
-                                    } else {
-                                        "background: none; border: none; color: #858585; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
-                                    },
-                                    onclick: move |_| {
-                                        let current = app_state.read().auto_accept;
-                                        app_state.write().auto_accept = !current;
-                                        tracing::info!("Auto-accept toggled to: {}", !current);
-                                    },
-                                    if app_state.read().auto_accept {
-                                        "auto-accept edits on"
-                                    } else {
-                                        "auto-accept edits off"
+                                // Auto-accept toggle group
+                                div {
+                                    style: "display: flex; align-items: center; gap: 8px;",
+                                    
+                                    // Toggle indicator
+                                    span {
+                                        style: "font-size: 14px; color: #FFC107;",
+                                        if app_state.read().auto_accept { "⏵⏵" } else { "⏸" }
+                                    }
+                                    
+                                    // Toggle button
+                                    button {
+                                        style: if app_state.read().auto_accept {
+                                            "background: none; border: none; color: #FFC107; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;"
+                                        } else {
+                                            "background: none; border: none; color: #858585; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
+                                        },
+                                        onclick: move |_| {
+                                            let current = app_state.read().auto_accept;
+                                            app_state.write().auto_accept = !current;
+                                            tracing::info!("Auto-accept toggled to: {}", !current);
+                                        },
+                                        if app_state.read().auto_accept {
+                                            "auto-accept edits on"
+                                        } else {
+                                            "auto-accept edits off"
+                                        }
+                                    }
+                                    
+                                    // Keyboard shortcut hint
+                                    span {
+                                        style: "color: #505050; font-size: 11px; margin-left: 8px;",
+                                        "(shift+tab to toggle)"
                                     }
                                 }
                                 
-                                // Keyboard shortcut hint
-                                span {
-                                    style: "color: #505050; font-size: 11px; margin-left: 8px;",
-                                    "(shift+tab to toggle)"
+                                // Claude execution mode toggle group
+                                div {
+                                    style: "display: flex; align-items: center; gap: 8px;",
+                                    
+                                    // Mode indicator
+                                    span {
+                                        style: "font-size: 14px; color: #007ACC;",
+                                        match app_state.read().claude_execution_mode.as_str() {
+                                            "Direct" => "🚀",
+                                            "ConsensusAssisted" => "🤝",
+                                            "ConsensusRequired" => "🔒",
+                                            _ => "🤝"
+                                        }
+                                    }
+                                    
+                                    // Mode button
+                                    button {
+                                        style: "background: none; border: none; color: #007ACC; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;",
+                                        onclick: move |_| {
+                                            let current = app_state.read().claude_execution_mode.clone();
+                                            let next_mode = match current.as_str() {
+                                                "Direct" => "ConsensusAssisted",
+                                                "ConsensusAssisted" => "ConsensusRequired",
+                                                "ConsensusRequired" => "Direct",
+                                                _ => "ConsensusAssisted"
+                                            };
+                                            app_state.write().claude_execution_mode = next_mode.to_string();
+                                            
+                                            // Save the mode to database
+                                            if let Err(e) = hive_ai::desktop::simple_db::save_config("claude_execution_mode", next_mode) {
+                                                tracing::error!("Failed to save Claude execution mode: {}", e);
+                                            } else {
+                                                tracing::info!("Claude execution mode toggled to: {}", next_mode);
+                                            }
+                                        },
+                                        match app_state.read().claude_execution_mode.as_str() {
+                                            "Direct" => "claude: direct",
+                                            "ConsensusAssisted" => "claude: assisted",
+                                            "ConsensusRequired" => "claude: required",
+                                            _ => "claude: assisted"
+                                        }
+                                    }
+                                    
+                                    // Keyboard shortcut hint
+                                    span {
+                                        style: "color: #505050; font-size: 11px; margin-left: 8px;",
+                                        "(ctrl+shift+c to cycle)"
+                                    }
                                 }
                             }
                             

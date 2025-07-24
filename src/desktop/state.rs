@@ -84,6 +84,9 @@ pub struct AppState {
     
     /// Show operation confirmation dialog
     pub show_operation_confirmation_dialog: bool,
+    
+    /// Claude execution mode: Direct, ConsensusAssisted, or ConsensusRequired
+    pub claude_execution_mode: String,
 }
 
 impl Default for AppState {
@@ -117,6 +120,7 @@ impl AppState {
             repository_context_update_trigger: 0,
             pending_operations: None,
             show_operation_confirmation_dialog: false,
+            claude_execution_mode: "ConsensusAssisted".to_string(),
         }
     }
 
