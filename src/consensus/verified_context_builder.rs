@@ -56,7 +56,7 @@ impl VerifiedContextBuilder {
     }
     
     /// Check if the question is related to the repository/codebase
-    fn is_repository_related_question(&self, question: &str) -> bool {
+    pub fn is_repository_related_question(&self, question: &str) -> bool {
         let question_lower = question.to_lowercase();
         
         // Repository-specific keywords that indicate the question is about the codebase

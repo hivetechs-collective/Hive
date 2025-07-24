@@ -1137,33 +1137,26 @@ impl ConsensusPipeline {
         let stage_start = Instant::now();
         let stage_id = Uuid::new_v4().to_string();
 
-        // Get intelligent context decision for this stage
-        let intelligent_context_decision = self.get_intelligent_context_decision_for_stage(question, context, stage).await;
-        
-        // Build messages for this stage using intelligent context decision
-        let messages = match stage {
-            Stage::Generator if intelligent_context_decision.should_use_repo => {
-                // Use enhanced generator with file reading for repository analysis
-                tracing::info!("🧠 {} stage: Using repository context (AI decision: {:?}, confidence: {:.2})", 
-                    stage.display_name(), intelligent_context_decision.primary_category, intelligent_context_decision.confidence);
-                self.build_enhanced_generator_messages(question, previous_answer, context).await?
+        // CRITICAL FIX: Dynamically choose the right curator based on question type
+        let messages = if stage == Stage::Curator {
+            // Check if this is a repository-related question
+            let is_repo_related = self.verified_context_builder.is_repository_related_question(question);
+            
+            if is_repo_related {
+                tracing::info!("🎨 Using FileAwareCuratorStage for repository-related question");
+                handler.build_messages(question, previous_answer, context)?
+            } else {
+                tracing::info!("🎨 Using regular CuratorStage for general knowledge question");
+                // Create a regular curator that doesn't force repository context
+                let regular_curator = CuratorStage::new();
+                regular_curator.build_messages(question, previous_answer, context)?
             }
-            Stage::Curator if intelligent_context_decision.should_use_repo => {
-                // Use enhanced curator with file reading and writing capabilities
-                tracing::info!("🧠 {} stage: Using repository context (AI decision: {:?}, confidence: {:.2})", 
-                    stage.display_name(), intelligent_context_decision.primary_category, intelligent_context_decision.confidence);
-                self.build_enhanced_curator_messages(question, previous_answer, context).await?
-            }
-            _ => {
-                // For all stages: build context-aware messages with intelligent guidance
-                tracing::info!("🧠 {} stage: Using {} context (AI decision: {:?}, confidence: {:.2})", 
-                    stage.display_name(), 
-                    if intelligent_context_decision.should_use_repo { "repository" } else { "general knowledge" },
-                    intelligent_context_decision.primary_category, 
-                    intelligent_context_decision.confidence);
-                self.build_stage_messages_with_intelligent_context(stage, handler, question, previous_answer, context, &intelligent_context_decision).await?
-            }
+        } else {
+            // For non-curator stages, use the provided handler
+            handler.build_messages(question, previous_answer, context)?
         };
+        
+        tracing::info!("🧠 {} stage: Using verified context (already filtered for relevance)", stage.display_name());
         
         // Debug log the messages being sent to the AI
         if stage == Stage::Generator {
@@ -2347,10 +2340,8 @@ impl ConsensusPipeline {
                     || question_lower.contains("here")
                     || question_lower.contains("@codebase");
                     
-                if explicitly_about_code {
-                    tracing::info!("📚 Using basic file reading (fallback heuristics)");
-                    return true;
-                }
+                // Removed fallback heuristics - rely on AI semantic analysis only
+                tracing::debug!("No AI semantic analysis available, skipping file reading");
             }
         }
         
@@ -2492,31 +2483,21 @@ impl ConsensusPipeline {
             }
         }
 
-        // Fallback: basic context decision if AI helpers aren't available
-        let should_use_repo = if !has_repository {
-            false
-        } else {
-            // Use simple heuristics as fallback
-            let question_lower = question.to_lowercase();
-            question_lower.contains("this") || question_lower.contains("code") || question_lower.contains("repository")
-        };
-
+        // No fallback - require AI helpers for proper context decisions
+        tracing::warn!("No AI helpers available for context decision - defaulting to no repository context");
+        
         crate::ai_helpers::IntelligentContextDecision {
-            should_use_repo,
-            confidence: 0.5,
-            primary_category: if should_use_repo { 
-                crate::ai_helpers::QuestionCategory::RepositorySpecific 
-            } else { 
-                crate::ai_helpers::QuestionCategory::GeneralKnowledge 
-            },
+            should_use_repo: false,  // Default to NO repository context without proper analysis
+            confidence: 0.1,  // Very low confidence without AI analysis
+            primary_category: crate::ai_helpers::QuestionCategory::GeneralKnowledge,  // Default to general knowledge without AI analysis
             secondary_categories: vec![],
             reasoning: "Fallback heuristic analysis".to_string(),
             validation_score: 0.5,
             pattern_analysis: crate::ai_helpers::intelligent_context_orchestrator::PatternAnalysis {
                 detected_patterns: vec!["heuristic_fallback".to_string()],
-                code_indicators: if should_use_repo { 0.7 } else { 0.2 },
-                repo_indicators: if should_use_repo { 0.8 } else { 0.1 },
-                general_indicators: if should_use_repo { 0.2 } else { 0.8 },
+                code_indicators: 0.2,  // Low indicators without AI analysis
+                repo_indicators: 0.1,  // Low indicators without AI analysis
+                general_indicators: 0.8,  // High general indicators as default
                 academic_indicators: 0.0,
             },
             quality_assessment: crate::ai_helpers::intelligent_context_orchestrator::QualityAssessment {
