@@ -183,7 +183,7 @@ impl DirectExecutionHandler {
         request: &str,
         context: Option<&str>,
         callbacks: Arc<dyn StreamingCallbacks>,
-    ) -> Result<()> {
+    ) -> Result<String> {
         // Build messages for the generator
         let mut messages = self.generator.build_messages(request, None, context)?;
         
@@ -273,7 +273,7 @@ impl DirectExecutionHandler {
             stage_id: "direct".to_string(),
             stage_name: "Direct Execution".to_string(),
             question: request.to_string(),
-            answer: response_content,
+            answer: response_content.clone(),
             model: model.clone(),
             conversation_id: "direct".to_string(),
             timestamp: chrono::Utc::now(),
@@ -281,7 +281,7 @@ impl DirectExecutionHandler {
             analytics: None, // Would need to track this
         })?;
         
-        Ok(())
+        Ok(response_content)
     }
 
     /// Check if this request is about file operations

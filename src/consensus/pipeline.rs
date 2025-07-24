@@ -542,23 +542,23 @@ impl ConsensusPipeline {
                     // Use direct execution path for simple operations
                     tracing::info!("🚀 AI Helper chose DIRECT execution mode for efficiency");
                     
-                    // Execute directly with the generator stage
-                    direct_handler.handle_request(
+                    // Execute directly with the generator stage and capture the response
+                    let response_content = direct_handler.handle_request(
                         question,
                         context.as_deref(),
                         self.callbacks.clone(),
                     ).await?;
                     
-                    // Create a simple result for direct mode
+                    // Create a proper result for direct mode with the actual response
                     let final_result = ConsensusResult {
                         success: true,
-                        result: Some(format!("Direct execution completed for: {}", question)),
+                        result: Some(response_content.clone()),
                         error: None,
                         stages: vec![StageResult {
                             stage_id: "generator".to_string(),
-                            stage_name: "Generator".to_string(),
+                            stage_name: "Direct Mode".to_string(),
                             question: question.to_string(),
-                            answer: "Direct execution completed".to_string(),
+                            answer: response_content,
                             model: self.profile.generator_model.clone(),
                             conversation_id: conversation_id.clone(),
                             timestamp: Utc::now(),
