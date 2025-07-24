@@ -49,6 +49,7 @@ pub mod ai_file_executor;
 pub mod file_planner;
 pub mod rollback_planner_v2;
 pub mod ai_rollback_executor;
+pub mod claude_code_executor;
 // pub mod ai_enhanced_executor; // Removed - violated architecture (see docs/AI_ENHANCED_CAPABILITIES_DESIGN.md)
 // pub mod optimize; // TODO: Fix profile field usage
 
@@ -171,6 +172,10 @@ pub use iteration_handler::{
 };
 pub use mode_detector::{
     ModeDetector, ExecutionMode, PatternMatcher, ComplexityAnalyzer
+};
+pub use claude_code_executor::{
+    ClaudeCodeExecutor, ClaudeCodeExecutorBuilder, ClaudeExecutionMode,
+    ConsensusInvocationCriteria
 };
 
 // Re-export commonly used items
