@@ -8,6 +8,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, debug};
+use crate::consensus::ExecutionMode;
 
 use crate::ai_helpers::{
     ContextRetriever, PatternRecognizer, QualityAnalyzer, KnowledgeSynthesizer, QualityMetrics
@@ -420,6 +421,79 @@ impl IntelligentContextOrchestrator {
             quality_assessment.contamination_risk,
             if should_use_repo { "use_repo" } else { "general_knowledge" }
         )
+    }
+    
+    /// Make an intelligent execution mode decision (Direct vs Consensus)
+    pub async fn make_execution_mode_decision(&self, question: &str) -> Result<ExecutionMode> {
+        info!("🤖 AI Helper analyzing execution mode for: '{}'", 
+            &question[..question.len().min(100)]);
+        
+        // First classify the question
+        let classification = self.classify_question_multi_ai(question).await?;
+        
+        // Analyze complexity
+        let pattern_analysis = self.analyze_question_patterns(question).await?;
+        let quality_assessment = self.assess_context_quality(question, &classification).await?;
+        
+        // Decision logic based on AI analysis
+        let mode = match classification.primary_category {
+            // Simple factual questions should use Direct mode
+            QuestionCategory::GeneralKnowledge => {
+                info!("📚 General knowledge question - using Direct mode");
+                ExecutionMode::Direct
+            }
+            
+            // Academic questions that don't need codebase context
+            QuestionCategory::AcademicKnowledge => {
+                info!("🎓 Academic question - using Direct mode");
+                ExecutionMode::Direct
+            }
+            
+            // Repository-specific questions
+            QuestionCategory::RepositorySpecific => {
+                // Even repo questions can be simple
+                if quality_assessment.complexity_level < 0.3 {
+                    info!("📂 Simple repository question - using Direct mode");
+                    ExecutionMode::Direct
+                } else {
+                    info!("📂 Complex repository question - using Consensus mode");
+                    ExecutionMode::Consensus
+                }
+            }
+            
+            // General programming questions
+            QuestionCategory::GeneralProgramming => {
+                if quality_assessment.complexity_level < 0.4 {
+                    info!("💻 Simple programming question - using Direct mode");
+                    ExecutionMode::Direct
+                } else {
+                    info!("💻 Complex programming question - using Consensus mode");
+                    ExecutionMode::Consensus
+                }
+            }
+            
+            // Complex CS theory needs consensus
+            QuestionCategory::ComputerScience => {
+                info!("🔬 Computer science theory - using Consensus mode");
+                ExecutionMode::Consensus
+            }
+            
+            // Hybrid/complex questions
+            QuestionCategory::Hybrid | QuestionCategory::Ambiguous => {
+                if quality_assessment.complexity_level > 0.6 {
+                    info!("🔀 Complex/hybrid question - using Consensus mode");
+                    ExecutionMode::Consensus
+                } else {
+                    info!("🔀 Moderate complexity - using Direct mode");
+                    ExecutionMode::Direct
+                }
+            }
+        };
+        
+        info!("🎯 AI Helper decision: {:?} mode (category: {:?}, complexity: {:.2})",
+            mode, classification.primary_category, quality_assessment.complexity_level);
+        
+        Ok(mode)
     }
 }
 

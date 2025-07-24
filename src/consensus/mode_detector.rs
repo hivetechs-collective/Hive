@@ -313,10 +313,18 @@ impl ModeDetector {
         let complexity = self.complexity_analyzer.analyze(request);
         tracing::debug!("  Complexity score: {}", complexity);
         
-        // If we have AI helpers, get their opinion
+        // If we have AI helpers, use their intelligent analysis
         if let Some(ai_helpers) = &self.ai_helpers {
-            // This would use AI to analyze the request
-            // For now, we'll use the simple heuristics
+            // Use AI for intelligent mode detection
+            match ai_helpers.intelligent_orchestrator.make_execution_mode_decision(request).await {
+                Ok(ai_mode) => {
+                    tracing::info!("🤖 AI Helper recommends {:?} mode for: '{}'", ai_mode, request);
+                    return ai_mode;
+                }
+                Err(e) => {
+                    tracing::warn!("AI Helper decision failed: {}, falling back to heuristics", e);
+                }
+            }
         }
         
         // HEAVILY favor direct mode - simple questions should get immediate answers
