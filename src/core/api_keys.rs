@@ -16,6 +16,7 @@ use crate::core::database::get_database;
 pub struct ApiKeyConfig {
     pub openrouter_key: Option<String>,
     pub hive_key: Option<String>,
+    pub anthropic_key: Option<String>,
 }
 
 /// Validates and stores API keys in the database
@@ -23,7 +24,7 @@ pub struct ApiKeyManager;
 
 impl ApiKeyManager {
     /// Validate OpenRouter API key format
-    pub fn validate_format(api_key: &str) -> Result<()> {
+    pub fn validate_openrouter_format(api_key: &str) -> Result<()> {
         // OpenRouter keys can start with sk-or-v1- or sk-or-
         if !api_key.starts_with("sk-or-v1-") && !api_key.starts_with("sk-or-") {
             return Err(anyhow!("OpenRouter API key must start with 'sk-or-v1-' or 'sk-or-'"));
@@ -36,10 +37,24 @@ impl ApiKeyManager {
         Ok(())
     }
 
+    /// Validate Anthropic API key format
+    pub fn validate_anthropic_format(api_key: &str) -> Result<()> {
+        // Anthropic keys start with sk-ant-
+        if !api_key.starts_with("sk-ant-") {
+            return Err(anyhow!("Anthropic API key must start with 'sk-ant-'"));
+        }
+
+        if api_key.len() <= 10 {
+            return Err(anyhow!("Anthropic API key is too short"));
+        }
+
+        Ok(())
+    }
+
     /// Test OpenRouter API key with live authentication
     pub async fn test_openrouter_key(api_key: &str) -> Result<bool> {
         // First validate format
-        Self::validate_format(api_key)?;
+        Self::validate_openrouter_format(api_key)?;
 
         debug!("Testing OpenRouter API key...");
 
@@ -86,17 +101,75 @@ impl ApiKeyManager {
         }
     }
 
+    /// Test Anthropic API key with live authentication
+    pub async fn test_anthropic_key(api_key: &str) -> Result<bool> {
+        // First validate format
+        Self::validate_anthropic_format(api_key)?;
+
+        debug!("Testing Anthropic API key...");
+
+        // Create HTTP client with proper headers
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?;
+
+        // Test against Anthropic messages endpoint with a minimal request
+        let test_request = json!({
+            "model": "claude-3-haiku-20240307",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 1
+        });
+
+        let response = timeout(
+            Duration::from_secs(30),
+            client
+                .post("https://api.anthropic.com/v1/messages")
+                .header("x-api-key", api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("content-type", "application/json")
+                .json(&test_request)
+                .send(),
+        )
+        .await
+        .context("Timeout while testing API key")?
+        .context("Failed to test API key")?;
+
+        match response.status().as_u16() {
+            200 => {
+                info!("Anthropic API key validated successfully");
+                Ok(true)
+            }
+            401 => {
+                warn!("Anthropic API key authentication failed");
+                Err(anyhow!("Invalid API key - authentication failed"))
+            }
+            403 => {
+                warn!("Anthropic API key permission denied");
+                Err(anyhow!("API key permission denied"))
+            }
+            429 => {
+                warn!("Anthropic rate limit hit during validation");
+                Err(anyhow!("Rate limit exceeded - please try again later"))
+            }
+            status => {
+                warn!("Unexpected status code from Anthropic: {}", status);
+                Err(anyhow!("API validation failed with status: {}", status))
+            }
+        }
+    }
+
     /// Save API keys to database configurations table
     pub async fn save_to_database(
         openrouter_key: Option<&str>,
         hive_key: Option<&str>,
+        anthropic_key: Option<&str>,
     ) -> Result<()> {
         use crate::core::database::{get_database, initialize_database, DatabaseConfig};
         use uuid::Uuid;
 
         if let Some(key) = openrouter_key {
             // Validate before saving
-            Self::validate_format(key)?;
+            Self::validate_openrouter_format(key)?;
 
             // Don't save to config.toml - following TypeScript pattern of database-only storage
             // API keys should only be in the database for security
@@ -131,6 +204,20 @@ impl ApiKeyManager {
                                  value = excluded.value,
                                  updated_at = CURRENT_TIMESTAMP",
                                 params!["hive_license_key", hive_key, false, default_user_id],
+                            )?;
+                        }
+                    }
+
+                    if let Some(anthropic_key) = anthropic_key {
+                        if !anthropic_key.is_empty() {
+                            Self::validate_anthropic_format(anthropic_key)?;
+                            tx.execute(
+                                "INSERT INTO configurations (key, value, encrypted, user_id)
+                                 VALUES (?1, ?2, ?3, ?4)
+                                 ON CONFLICT(key) DO UPDATE SET
+                                 value = excluded.value,
+                                 updated_at = CURRENT_TIMESTAMP",
+                                params!["anthropic_api_key", anthropic_key, false, default_user_id],
                             )?;
                         }
                     }
@@ -179,7 +266,17 @@ impl ApiKeyManager {
                         .ok()
                         .filter(|k: &String| !k.is_empty());
 
-                    if openrouter_key.is_some() || hive_key.is_some() {
+                    // Load Anthropic key from configurations table
+                    let anthropic_key: Option<String> = conn
+                        .query_row(
+                            "SELECT value FROM configurations WHERE key = ?1",
+                            params!["anthropic_api_key"],
+                            |row| row.get(0),
+                        )
+                        .ok()
+                        .filter(|k: &String| !k.is_empty());
+
+                    if openrouter_key.is_some() || hive_key.is_some() || anthropic_key.is_some() {
                         debug!("Loaded API keys from database");
                         if let Some(ref key) = openrouter_key {
                             debug!("Found OpenRouter key in database: {} chars", key.len());
@@ -187,9 +284,13 @@ impl ApiKeyManager {
                         if let Some(ref key) = hive_key {
                             debug!("Found Hive key in database: {} chars", key.len());
                         }
+                        if let Some(ref key) = anthropic_key {
+                            debug!("Found Anthropic key in database: {} chars", key.len());
+                        }
                         return Ok(ApiKeyConfig {
                             openrouter_key,
                             hive_key,
+                            anthropic_key,
                         });
                     }
                 }
@@ -206,6 +307,7 @@ impl ApiKeyManager {
         Ok(ApiKeyConfig {
             openrouter_key,
             hive_key,
+            anthropic_key: None,
         })
     }
 
@@ -217,7 +319,7 @@ impl ApiKeyManager {
         if let Some(key) = config.openrouter_key {
             debug!("Found OpenRouter key in config: {} chars", key.len());
             // Validate format at minimum
-            match Self::validate_format(&key) {
+            match Self::validate_openrouter_format(&key) {
                 Ok(_) => {
                     debug!("OpenRouter key format is valid");
                     return Ok(true);
@@ -235,10 +337,10 @@ impl ApiKeyManager {
         if let Ok(config) = crate::core::config::get_config().await {
             if let Some(openrouter) = config.openrouter {
                 if let Some(key) = openrouter.api_key {
-                    if Self::validate_format(&key).is_ok() {
+                    if Self::validate_openrouter_format(&key).is_ok() {
                         debug!("Found valid key in config.toml, migrating to database");
                         // Migrate to database
-                        let _ = Self::save_to_database(Some(&key), None).await;
+                        let _ = Self::save_to_database(Some(&key), None, None).await;
                         return Ok(true);
                     }
                 }
@@ -254,7 +356,7 @@ impl ApiKeyManager {
         // Try loading from database first (this now properly checks database)
         let config = Self::load_from_database().await?;
         if let Some(key) = config.openrouter_key {
-            if !key.is_empty() && Self::validate_format(&key).is_ok() {
+            if !key.is_empty() && Self::validate_openrouter_format(&key).is_ok() {
                 debug!("Found OpenRouter key in database");
                 return Ok(key);
             }
@@ -262,10 +364,10 @@ impl ApiKeyManager {
 
         // Try environment variable as fallback
         if let Ok(key) = std::env::var("OPENROUTER_API_KEY") {
-            if Self::validate_format(&key).is_ok() {
+            if Self::validate_openrouter_format(&key).is_ok() {
                 debug!("Found OpenRouter key in environment");
                 // Save to database for persistence
-                let _ = Self::save_to_database(Some(&key), None).await;
+                let _ = Self::save_to_database(Some(&key), None, None).await;
                 return Ok(key);
             }
         }
@@ -275,14 +377,40 @@ impl ApiKeyManager {
         ))
     }
 
+    /// Get Anthropic API key from database or environment
+    pub async fn get_anthropic_key() -> Result<String> {
+        // Try loading from database first
+        let config = Self::load_from_database().await?;
+        if let Some(key) = config.anthropic_key {
+            if !key.is_empty() && Self::validate_anthropic_format(&key).is_ok() {
+                debug!("Found Anthropic key in database");
+                return Ok(key);
+            }
+        }
+
+        // Try environment variable as fallback
+        if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
+            if Self::validate_anthropic_format(&key).is_ok() {
+                debug!("Found Anthropic key in environment");
+                // Save to database for persistence
+                let _ = Self::save_to_database(None, None, Some(&key)).await;
+                return Ok(key);
+            }
+        }
+
+        Err(anyhow!(
+            "No valid Anthropic API key found. Please configure in Settings."
+        ))
+    }
+
     /// Clear API keys from database (for logout/reset)
     pub async fn clear_keys() -> Result<()> {
         let db = get_database().await?;
         let conn = db.get_connection()?;
 
         conn.execute(
-            "DELETE FROM configurations WHERE key IN (?1, ?2)",
-            params!["openrouter_api_key", "hive_api_key"],
+            "DELETE FROM configurations WHERE key IN (?1, ?2, ?3)",
+            params!["openrouter_api_key", "hive_api_key", "anthropic_api_key"],
         )?;
 
         info!("API keys cleared from database");
@@ -295,12 +423,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_validate_format() {
-        assert!(ApiKeyManager::validate_format("sk-or-abcd1234567890").is_ok());
-        assert!(ApiKeyManager::validate_format("sk-or-v1-abcd1234567890").is_ok());
-        assert!(ApiKeyManager::validate_format("sk-or-123").is_err()); // Too short
-        assert!(ApiKeyManager::validate_format("sk-or-v1-123").is_err()); // Too short
-        assert!(ApiKeyManager::validate_format("sk-invalid").is_err()); // Wrong prefix
-        assert!(ApiKeyManager::validate_format("").is_err()); // Empty
+    fn test_validate_openrouter_format() {
+        assert!(ApiKeyManager::validate_openrouter_format("sk-or-abcd1234567890").is_ok());
+        assert!(ApiKeyManager::validate_openrouter_format("sk-or-v1-abcd1234567890").is_ok());
+        assert!(ApiKeyManager::validate_openrouter_format("sk-or-123").is_err()); // Too short
+        assert!(ApiKeyManager::validate_openrouter_format("sk-or-v1-123").is_err()); // Too short
+        assert!(ApiKeyManager::validate_openrouter_format("sk-invalid").is_err()); // Wrong prefix
+        assert!(ApiKeyManager::validate_openrouter_format("").is_err()); // Empty
+    }
+
+    #[test]
+    fn test_validate_anthropic_format() {
+        assert!(ApiKeyManager::validate_anthropic_format("sk-ant-abcd1234567890").is_ok());
+        assert!(ApiKeyManager::validate_anthropic_format("sk-ant-123").is_err()); // Too short
+        assert!(ApiKeyManager::validate_anthropic_format("sk-invalid").is_err()); // Wrong prefix
+        assert!(ApiKeyManager::validate_anthropic_format("").is_err()); // Empty
     }
 }

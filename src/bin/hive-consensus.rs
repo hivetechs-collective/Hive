@@ -853,8 +853,7 @@ use hive_ai::desktop::consensus_integration::{use_consensus_with_version, Deskto
 use hive_ai::ide::ai_helper_broker::IDEAIHelperBroker;
 use hive_ai::desktop::dialogs::{
     AboutDialog, CommandPalette, NoUpdatesDialog, OnboardingDialog, OperationConfirmationDialog,
-    SettingsDialog, UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, 
-    WelcomeTab, DIALOG_STYLES,
+    SettingsDialog, UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, WelcomeTab, DIALOG_STYLES,
 };
 use hive_ai::desktop::context_menu::{
     ContextMenu, ContextMenuAction, ContextMenuState, FileNameDialog, ConfirmDialog,
@@ -907,10 +906,12 @@ fn App() -> Element {
     // API keys state (needed before consensus manager)
     let mut openrouter_key = use_signal(String::new);
     let mut hive_key = use_signal(String::new);
+    let mut anthropic_key = use_signal(String::new);
     let api_keys_version = use_signal(|| 0u32); // Track when API keys change
     let mut api_config = use_signal(|| hive_ai::core::api_keys::ApiKeyConfig {
         openrouter_key: None,
         hive_key: None,
+        anthropic_key: None,
     });
 
     // Get consensus manager - use a signal to store it
@@ -1125,6 +1126,7 @@ fn App() -> Element {
         let mut api_config = api_config.clone();
         let mut hive_key = hive_key.clone();
         let mut openrouter_key = openrouter_key.clone();
+        let mut anthropic_key = anthropic_key.clone();
         move || {
             spawn(async move {
                 use hive_ai::core::api_keys::ApiKeyManager;
@@ -1135,6 +1137,9 @@ fn App() -> Element {
                     }
                     if let Some(key) = config.openrouter_key {
                         *openrouter_key.write() = key;
+                    }
+                    if let Some(key) = config.anthropic_key {
+                        *anthropic_key.write() = key;
                     }
                 }
             });
@@ -1148,6 +1153,7 @@ fn App() -> Element {
         let mut api_keys_version = api_keys_version.clone();
         let mut api_config = api_config.clone();
         let mut hive_key = hive_key.clone();
+        let mut anthropic_key = anthropic_key.clone();
         spawn(async move {
             use hive_ai::core::api_keys::ApiKeyManager;
 
@@ -1163,6 +1169,9 @@ fn App() -> Element {
                     }
                     if let Some(key) = config.hive_key {
                         *hive_key.write() = key;
+                    }
+                    if let Some(key) = config.anthropic_key {
+                        *anthropic_key.write() = key;
                     }
                     
                     // Trigger consensus manager recreation since we have keys
@@ -2551,6 +2560,7 @@ fn App() -> Element {
                         } else if *active_tab.read() == "__welcome__" && *show_welcome_dialog.read() {
                             // Show welcome tab in editor area
                             WelcomeTab {
+                                show_welcome: show_welcome_dialog,
                                 on_action: handle_welcome_action,
                             }
                         } else if !active_tab.read().is_empty() && *active_tab.read() != "__welcome__" {
@@ -3108,6 +3118,7 @@ fn App() -> Element {
                 show_settings: show_settings_dialog.clone(),
                 openrouter_key: openrouter_key.clone(),
                 hive_key: hive_key.clone(),
+                anthropic_key: anthropic_key.clone(),
                 on_profile_change: Some(EventHandler::new({
                     let mut api_keys_version = api_keys_version.clone();
                     let mut app_state_for_profile = app_state.clone();
@@ -3149,6 +3160,7 @@ fn App() -> Element {
                 show_onboarding: show_onboarding_dialog.clone(),
                 openrouter_key: openrouter_key.clone(),
                 hive_key: hive_key.clone(),
+                anthropic_key: anthropic_key.clone(),
                 current_step: onboarding_current_step.clone(),
                 api_keys_version: api_keys_version.clone(),
                 on_profile_change: Some(EventHandler::new({

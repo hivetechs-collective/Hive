@@ -51,6 +51,12 @@ pub fn App() -> Element {
             .flatten()
             .unwrap_or_default()
     });
+    let mut anthropic_key = use_signal(|| {
+        crate::desktop::simple_db::get_config("anthropic_api_key")
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+    });
 
     // Check for API keys and onboarding status on startup (only once)
     use_effect(move || {
@@ -377,6 +383,7 @@ pub fn App() -> Element {
                 show_onboarding,
                 openrouter_key,
                 hive_key,
+                anthropic_key,
                 current_step: onboarding_current_step,
                 api_keys_version,
                 on_profile_change: Some(on_profile_change.clone())
@@ -387,6 +394,7 @@ pub fn App() -> Element {
                     show_settings,
                     openrouter_key,
                     hive_key,
+                    anthropic_key,
                     on_profile_change: Some(on_profile_change.clone())
                 }
             }
