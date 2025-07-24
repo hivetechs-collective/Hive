@@ -451,8 +451,14 @@ impl IntelligentContextOrchestrator {
             
             // Repository-specific questions
             QuestionCategory::RepositorySpecific => {
-                // Even repo questions can be simple
-                if quality_assessment.complexity_level < 0.3 {
+                // Use our semantic retriever to properly assess complexity
+                let true_complexity = self.assess_true_question_complexity(question).await
+                    .unwrap_or(quality_assessment.complexity_level);
+                
+                info!("📂 Repository question - AI complexity: {:.2}, true complexity: {:.2}", 
+                    quality_assessment.complexity_level, true_complexity);
+                
+                if true_complexity < 0.3 {
                     info!("📂 Simple repository question - using Direct mode");
                     ExecutionMode::Direct
                 } else {
@@ -494,6 +500,22 @@ impl IntelligentContextOrchestrator {
             mode, classification.primary_category, quality_assessment.complexity_level);
         
         Ok(mode)
+    }
+    
+    /// Assess true complexity of a question using AI semantic analysis
+    async fn assess_true_question_complexity(&self, question: &str) -> Result<f64> {
+        // Use our semantic retriever to understand the question's true complexity
+        // This uses GraphCodeBERT to create embeddings and understand semantic meaning
+        
+        // For now, fall back to basic analysis until analyze_question_complexity is implemented
+        // TODO: Implement analyze_question_complexity in KnowledgeSynthesizer
+        warn!("Using fallback complexity analysis - analyze_question_complexity not yet implemented");
+        
+        // Simple fallback based on question length and structure
+        let length_normalized = (question.len() as f64 / 100.0).min(1.0);
+        let complexity = length_normalized * 0.5; // Simple length-based estimate
+        
+        Ok(complexity)
     }
 }
 

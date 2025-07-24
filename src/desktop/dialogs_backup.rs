@@ -1677,14 +1677,14 @@ async fn save_api_keys(openrouter_key: &str, hive_key: &str) -> anyhow::Result<O
 
     // Validate OpenRouter key format first
     if !openrouter_key.is_empty() {
-        ApiKeyManager::validate_format(openrouter_key)?;
+        ApiKeyManager::validate_openrouter_format(openrouter_key)?;
 
         // Test with live API call
         match ApiKeyManager::test_openrouter_key(openrouter_key).await {
             Ok(true) => {
                 tracing::info!("OpenRouter key validated successfully");
                 // Key is valid, save to database
-                ApiKeyManager::save_to_database(Some(openrouter_key), Some(hive_key)).await?;
+                ApiKeyManager::save_to_database(Some(openrouter_key), Some(hive_key), None).await?;
                 tracing::info!("API keys saved to database");
             }
             Ok(false) => {
