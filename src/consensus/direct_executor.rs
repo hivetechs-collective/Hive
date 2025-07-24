@@ -187,28 +187,39 @@ impl DirectExecutionHandler {
         // Build messages for the generator
         let mut messages = self.generator.build_messages(request, None, context)?;
         
-        // Add Direct Execution mode instructions to the system prompt
-        for message in &mut messages {
-            if message.role == "system" {
-                message.content.push_str("\n\n🚀 DIRECT EXECUTION MODE:\n");
-                message.content.push_str("You are in Direct Execution mode for simple file operations. ");
-                message.content.push_str("When creating or modifying files, output the operations in this EXACT format:\n\n");
-                message.content.push_str("Creating `filename.ext`:\n");
-                message.content.push_str("```language\n");
-                message.content.push_str("file content here\n");
-                message.content.push_str("```\n\n");
-                message.content.push_str("For updates use 'Updating `filename.ext`:' and for deletion use 'Deleting `filename.ext`:'\n");
-                message.content.push_str("\nIMPORTANT: Do NOT explain how to create files. Actually output the file creation operations in the format above.\n");
-                message.content.push_str("When asked to create a file, immediately output the Creating block with the actual content.");
-                break;
+        // Check if this is a file operation request
+        let is_file_operation = self.is_file_operation_request(request);
+        
+        // Only add file operation instructions if this is actually about files
+        if is_file_operation {
+            for message in &mut messages {
+                if message.role == "system" {
+                    message.content.push_str("\n\n🚀 DIRECT EXECUTION MODE:\n");
+                    message.content.push_str("You are in Direct Execution mode for simple file operations. ");
+                    message.content.push_str("When creating or modifying files, output the operations in this EXACT format:\n\n");
+                    message.content.push_str("Creating `filename.ext`:\n");
+                    message.content.push_str("```language\n");
+                    message.content.push_str("file content here\n");
+                    message.content.push_str("```\n\n");
+                    message.content.push_str("For updates use 'Updating `filename.ext`:' and for deletion use 'Deleting `filename.ext`:'\n");
+                    message.content.push_str("\nIMPORTANT: Do NOT explain how to create files. Actually output the file creation operations in the format above.\n");
+                    message.content.push_str("When asked to create a file, immediately output the Creating block with the actual content.");
+                    break;
+                }
+            }
+        } else {
+            // For simple Q&A, add a gentle instruction to be concise and direct
+            for message in &mut messages {
+                if message.role == "system" {
+                    message.content.push_str("\n\n🚀 DIRECT RESPONSE MODE:\n");
+                    message.content.push_str("Please provide a direct, concise answer to the user's question.");
+                    break;
+                }
             }
         }
         
         // Use the profile's generator model directly
         let model = &self.profile.generator_model;
-        
-        // Create a parser for inline operations
-        let mut parser = InlineOperationParser::new();
         
         // Build the OpenRouter request
         let openrouter_request = OpenRouterRequest {
@@ -227,10 +238,18 @@ impl DirectExecutionHandler {
         };
         
         // Create a custom callback wrapper that uses AI-powered execution
-        let parser_ref = Arc::new(tokio::sync::Mutex::new(parser));
+        let callbacks_ref = callbacks.clone();
+        
+        // Only create parser for file operations
+        let parser_ref = if is_file_operation {
+            let parser = InlineOperationParser::new();
+            Some(Arc::new(tokio::sync::Mutex::new(parser)))
+        } else {
+            None
+        };
+        
         let executor_ref = self.executor.clone();
         let ai_executor_ref = self.ai_file_executor.clone();
-        let callbacks_ref = callbacks.clone();
         
         let streaming_callbacks = DirectStreamingCallbacks {
             inner: callbacks_ref,
@@ -263,6 +282,43 @@ impl DirectExecutionHandler {
         })?;
         
         Ok(())
+    }
+
+    /// Check if this request is about file operations
+    fn is_file_operation_request(&self, request: &str) -> bool {
+        let request_lower = request.to_lowercase();
+        
+        // File operation patterns
+        let file_patterns = [
+            "create a file",
+            "create file",
+            "make a file",
+            "add a file",
+            "write a file",
+            "update the file",
+            "modify the file",
+            "delete the file",
+            "rename the file",
+            "create a simple",
+            "add a simple",
+            "make a basic",
+            "create a test",
+            "add a test",
+            "write to",
+            "save as",
+            "create.*\\.\\w+", // matches "create foo.txt", "create bar.rs", etc.
+        ];
+        
+        // Check if any file pattern matches
+        file_patterns.iter().any(|&pattern| {
+            if pattern.contains(".*") {
+                // Use regex for patterns with wildcards
+                regex::Regex::new(pattern).unwrap().is_match(&request_lower)
+            } else {
+                // Simple string contains for literal patterns
+                request_lower.contains(pattern)
+            }
+        })
     }
 
     /// Check if a request should use direct execution
@@ -314,7 +370,7 @@ impl DirectExecutionHandler {
 /// Custom streaming callbacks that parse operations on the fly
 struct DirectStreamingCallbacks {
     inner: Arc<dyn StreamingCallbacks>,
-    parser: Arc<tokio::sync::Mutex<InlineOperationParser>>,
+    parser: Option<Arc<tokio::sync::Mutex<InlineOperationParser>>>,
     executor: Arc<StreamingOperationExecutor>,
     ai_file_executor: Arc<AIConsensusFileExecutor>,
     stage: Stage,
@@ -330,42 +386,44 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
         // Forward to consensus callbacks
         let _ = self.inner.on_stage_chunk(self.stage, &chunk, &total_content);
         
-        // Parse for operations using AI intelligence
-        let parser = self.parser.clone();
-        let executor = self.executor.clone();
-        let ai_file_executor = self.ai_file_executor.clone();
-        
-        // Spawn a task to handle parsing and AI-powered execution
-        tokio::spawn(async move {
-            let mut parser_guard = parser.lock().await;
-            if let Some(operation) = parser_guard.parse_chunk(&chunk) {
-                // Convert to vector for AI executor
-                let operations = vec![operation.clone()];
-                
-                // Use AI-powered execution for intelligent file operations
-                match ai_file_executor.execute_curator_operations(operations).await {
-                    Ok(report) => {
-                        if report.success {
-                            tracing::info!("🤖 AI Helper successfully executed {} operations", 
-                                         report.operations_completed);
-                            if !report.files_created.is_empty() {
-                                tracing::info!("📄 Created files: {:?}", report.files_created);
+        // Only parse for operations if we have a parser (file operations)
+        if let Some(parser) = &self.parser {
+            let parser = parser.clone();
+            let executor = self.executor.clone();
+            let ai_file_executor = self.ai_file_executor.clone();
+            
+            // Spawn a task to handle parsing and AI-powered execution
+            tokio::spawn(async move {
+                let mut parser_guard = parser.lock().await;
+                if let Some(operation) = parser_guard.parse_chunk(&chunk) {
+                    // Convert to vector for AI executor
+                    let operations = vec![operation.clone()];
+                    
+                    // Use AI-powered execution for intelligent file operations
+                    match ai_file_executor.execute_curator_operations(operations).await {
+                        Ok(report) => {
+                            if report.success {
+                                tracing::info!("🤖 AI Helper successfully executed {} operations", 
+                                             report.operations_completed);
+                                if !report.files_created.is_empty() {
+                                    tracing::info!("📄 Created files: {:?}", report.files_created);
+                                }
+                                if !report.files_modified.is_empty() {
+                                    tracing::info!("✏️ Modified files: {:?}", report.files_modified);
+                                }
+                            } else {
+                                tracing::warn!("⚠️ AI Helper execution had errors: {:?}", report.errors);
                             }
-                            if !report.files_modified.is_empty() {
-                                tracing::info!("✏️ Modified files: {:?}", report.files_modified);
-                            }
-                        } else {
-                            tracing::warn!("⚠️ AI Helper execution had errors: {:?}", report.errors);
+                        }
+                        Err(e) => {
+                            tracing::error!("❌ AI Helper execution failed: {}", e);
+                            // Fallback to basic executor if AI fails
+                            let _ = executor.execute_inline(operation, None).await;
                         }
                     }
-                    Err(e) => {
-                        tracing::error!("❌ AI Helper execution failed: {}", e);
-                        // Fallback to basic executor if AI fails
-                        let _ = executor.execute_inline(operation, None).await;
-                    }
                 }
-            }
-        });
+            });
+        }
     }
     
     fn on_progress(&self, _progress: crate::consensus::openrouter::StreamingProgress) {
