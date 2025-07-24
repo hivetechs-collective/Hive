@@ -106,6 +106,7 @@ impl IntelligentContextOrchestrator {
     ) -> Result<IntelligentContextDecision> {
         info!("🧠 Starting intelligent context analysis for: '{}'", 
             &question[..question.len().min(100)]);
+        info!("📂 Repository open: {}", has_open_repository);
         
         // Stage 1: Multi-AI Question Classification
         let classification = self.classify_question_multi_ai(question).await?;
@@ -242,13 +243,12 @@ impl IntelligentContextOrchestrator {
             &quality_assessment,
         );
         
-        // Apply contamination prevention rules
-        let should_use_repo = repo_suitability > 0.6 
-            && quality_assessment.contamination_risk < 0.5
+        // Apply stricter contamination prevention rules
+        let should_use_repo = repo_suitability > 0.7  // Increased threshold from 0.6
+            && quality_assessment.contamination_risk < 0.3  // Reduced from 0.5
             && matches!(
                 classification.primary_category,
-                QuestionCategory::RepositorySpecific | 
-                QuestionCategory::GeneralProgramming
+                QuestionCategory::RepositorySpecific  // Only for repository-specific questions
             );
         
         let confidence = if should_use_repo {
@@ -265,16 +265,21 @@ impl IntelligentContextOrchestrator {
             should_use_repo,
         );
         
-        Ok(IntelligentContextDecision {
+        let decision = IntelligentContextDecision {
             should_use_repo,
             confidence,
-            primary_category: classification.primary_category,
+            primary_category: classification.primary_category.clone(),
             secondary_categories: classification.secondary_categories,
             reasoning,
             validation_score: quality_assessment.context_appropriateness,
             pattern_analysis,
             quality_assessment,
-        })
+        };
+        
+        info!("🎯 Final decision: category={:?}, should_use_repo={}, confidence={:.2}, repo_suitability={:.2}",
+            decision.primary_category, decision.should_use_repo, decision.confidence, repo_suitability);
+        
+        Ok(decision)
     }
     
     /// Cache decision in appropriate domain-specific cache
@@ -380,14 +385,23 @@ impl IntelligentContextOrchestrator {
     ) -> f64 {
         let category_weight = match classification.primary_category {
             QuestionCategory::RepositorySpecific => 1.0,
-            QuestionCategory::GeneralProgramming => 0.4,
-            QuestionCategory::ComputerScience => 0.2,
+            QuestionCategory::GeneralProgramming => 0.3,  // Reduced from 0.4
+            QuestionCategory::ComputerScience => 0.1,      // Reduced from 0.2
+            QuestionCategory::GeneralKnowledge => 0.0,     // Explicit zero for general knowledge
+            QuestionCategory::AcademicKnowledge => 0.0,    // Explicit zero for academic knowledge
             _ => 0.0,
         };
         
-        let pattern_weight = (pattern_analysis.code_indicators + pattern_analysis.repo_indicators) / 2.0;
+        // Only consider pattern weight for repository-specific questions
+        let pattern_weight = match classification.primary_category {
+            QuestionCategory::RepositorySpecific => {
+                (pattern_analysis.code_indicators + pattern_analysis.repo_indicators) / 2.0
+            },
+            _ => 0.0  // No pattern weight for non-repository questions
+        };
         
-        (category_weight * 0.7) + (pattern_weight * 0.3)
+        // More conservative calculation
+        (category_weight * 0.8) + (pattern_weight * 0.2)
     }
     
     fn generate_decision_reasoning(
