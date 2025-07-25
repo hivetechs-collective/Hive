@@ -10,22 +10,89 @@
 //! - Accumulate knowledge from curator outputs
 
 use std::sync::Arc;
-use std::process::Stdio;
-use tokio::process::Command;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::{mpsc, RwLock, Mutex};
-use anyhow::{Result, Context};
+use tokio::sync::{RwLock, Mutex};
+use anyhow::{Result, Context, anyhow};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error, debug};
 use uuid::Uuid;
 use rusqlite::params;
+use tokio_stream::StreamExt;
 
 use crate::consensus::streaming::{StreamingCallbacks, ConsensusEvent};
 use crate::consensus::types::{Stage, StageResult, ConsensusProfile, ConsensusResult};
 use crate::consensus::pipeline::ConsensusPipeline;
+use crate::consensus::claude_auth::{ClaudeAuth, AuthType};
+use crate::consensus::claude_api_client::{ClaudeApiClient, Message, MessageRole};
 use crate::core::database::DatabaseManager;
 use crate::consensus::memory::ConsensusMemory;
 use crate::ai_helpers::AIHelperEcosystem;
+
+/// Claude API session manager
+struct ClaudeSession {
+    client: Arc<ClaudeApiClient>,
+    conversation_id: String,
+    messages: Vec<Message>,
+}
+
+impl ClaudeSession {
+    /// Create a new Claude session
+    async fn new(auth_manager: Arc<ClaudeAuth>) -> Result<Self> {
+        info!("🚀 Initializing Claude API session...");
+        
+        let client = Arc::new(ClaudeApiClient::new(auth_manager));
+        let conversation_id = Uuid::new_v4().to_string();
+        
+        Ok(Self {
+            client,
+            conversation_id,
+            messages: Vec::new(),
+        })
+    }
+    
+    /// Send a message to Claude and get response
+    async fn send_message(
+        &mut self,
+        message: &str,
+        system_prompt: Option<String>,
+        callbacks: Option<Arc<dyn StreamingCallbacks>>,
+    ) -> Result<String> {
+        // Add user message to conversation
+        self.messages.push(Message {
+            role: MessageRole::User,
+            content: message.to_string(),
+        });
+        
+        // Send request based on whether we have callbacks for streaming
+        let response_text = if let Some(cbs) = callbacks {
+            // For streaming, pass callbacks to the API client
+            self.client.send_message_streaming(
+                self.messages.clone(),
+                system_prompt,
+                4096, // max_tokens
+                0.7,  // temperature
+                cbs,
+            ).await?
+        } else {
+            // Non-streaming request
+            self.client.send_message(
+                self.messages.clone(),
+                system_prompt,
+                4096, // max_tokens
+                0.7,  // temperature
+            ).await?
+        };
+        
+        // Add assistant response to conversation
+        if !response_text.is_empty() {
+            self.messages.push(Message {
+                role: MessageRole::Assistant,
+                content: response_text.clone(),
+            });
+        }
+        
+        Ok(response_text)
+    }
+}
 
 /// Execution modes for the Claude-Consensus bridge
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +110,18 @@ pub enum ClaudeExecutionMode {
 impl Default for ClaudeExecutionMode {
     fn default() -> Self {
         ClaudeExecutionMode::ConsensusAssisted
+    }
+}
+
+impl ClaudeExecutionMode {
+    /// Parse from string
+    pub fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "Direct" => Ok(ClaudeExecutionMode::Direct),
+            "ConsensusAssisted" => Ok(ClaudeExecutionMode::ConsensusAssisted),
+            "ConsensusRequired" => Ok(ClaudeExecutionMode::ConsensusRequired),
+            _ => Err(anyhow!("Invalid execution mode: {}", s)),
+        }
     }
 }
 
@@ -84,87 +163,16 @@ enum Impact {
     High,
 }
 
-/// Claude Code process manager
-struct ClaudeCodeProcess {
-    process: Option<tokio::process::Child>,
-    stdin_tx: Option<mpsc::Sender<String>>,
-    anthropic_key: String,
-}
-
-impl ClaudeCodeProcess {
-    /// Start the Claude Code process
-    async fn start(anthropic_key: String) -> Result<Self> {
-        info!("🚀 Starting Claude Code process...");
-        
-        let mut cmd = Command::new("claude-code");
-        cmd.stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .env("ANTHROPIC_API_KEY", &anthropic_key);
-            
-        let mut process = cmd.spawn()
-            .context("Failed to start Claude Code process")?;
-            
-        // Create channel for sending input to Claude
-        let (stdin_tx, mut stdin_rx) = mpsc::channel::<String>(100);
-        
-        // Get stdin handle
-        let stdin = process.stdin.take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get stdin handle"))?;
-            
-        // Spawn task to forward messages to Claude's stdin
-        tokio::spawn(async move {
-            use tokio::io::AsyncWriteExt;
-            let mut stdin = stdin;
-            
-            while let Some(msg) = stdin_rx.recv().await {
-                if let Err(e) = stdin.write_all(msg.as_bytes()).await {
-                    error!("Failed to write to Claude stdin: {}", e);
-                    break;
-                }
-                if let Err(e) = stdin.write_all(b"\n").await {
-                    error!("Failed to write newline to Claude stdin: {}", e);
-                    break;
-                }
-                if let Err(e) = stdin.flush().await {
-                    error!("Failed to flush Claude stdin: {}", e);
-                    break;
-                }
-            }
-        });
-        
-        Ok(Self {
-            process: Some(process),
-            stdin_tx: Some(stdin_tx),
-            anthropic_key,
-        })
-    }
-    
-    /// Send a message to Claude
-    async fn send_message(&self, message: &str) -> Result<()> {
-        if let Some(tx) = &self.stdin_tx {
-            tx.send(message.to_string()).await
-                .context("Failed to send message to Claude")?;
-        }
-        Ok(())
-    }
-    
-    /// Stop the Claude Code process
-    async fn stop(&mut self) -> Result<()> {
-        if let Some(mut process) = self.process.take() {
-            process.kill().await.context("Failed to kill Claude process")?;
-        }
-        Ok(())
-    }
-}
-
 /// The main Claude Code executor
 pub struct ClaudeCodeExecutor {
     /// Current execution mode
     mode: Arc<RwLock<ClaudeExecutionMode>>,
     
-    /// Claude Code process handle
-    claude_process: Arc<Mutex<Option<ClaudeCodeProcess>>>,
+    /// Claude API session
+    claude_session: Arc<Mutex<Option<ClaudeSession>>>,
+    
+    /// Claude authentication manager
+    claude_auth: Arc<ClaudeAuth>,
     
     /// Consensus pipeline for validation
     consensus_pipeline: Option<Arc<ConsensusPipeline>>,
@@ -194,9 +202,12 @@ impl ClaudeCodeExecutor {
         knowledge_base: Option<Arc<ConsensusMemory>>,
         anthropic_key: Option<String>,
     ) -> Self {
+        let claude_auth = Arc::new(ClaudeAuth::new("http://localhost:3000/auth/callback".to_string()));
+        
         Self {
             mode: Arc::new(RwLock::new(ClaudeExecutionMode::default())),
-            claude_process: Arc::new(Mutex::new(None)),
+            claude_session: Arc::new(Mutex::new(None)),
+            claude_auth,
             consensus_pipeline: None,
             knowledge_base,
             database,
@@ -223,16 +234,43 @@ impl ClaudeCodeExecutor {
         *self.mode.read().await
     }
     
-    /// Initialize Claude Code process
+    /// Initialize Claude session
     pub async fn initialize(&self) -> Result<()> {
-        let anthropic_key = self.anthropic_key.as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Anthropic API key not configured"))?;
+        let mut session_guard = self.claude_session.lock().await;
+        if session_guard.is_none() {
+            // Set authentication based on what we have
+            if let Some(key) = &self.anthropic_key {
+                // Use API key if provided
+                info!("🔑 Using Anthropic API key for authentication");
+                self.claude_auth.set_api_key(key.clone()).await;
+            } else {
+                // Check if we have stored credentials
+                match ClaudeAuth::load_from_storage().await {
+                    Ok(auth_type) => {
+                        info!("🔐 Using stored credentials");
+                        match auth_type {
+                            AuthType::ApiKey(key) => {
+                                self.claude_auth.set_api_key(key).await;
+                            }
+                            AuthType::OAuth(creds) => {
+                                self.claude_auth.set_oauth(creds).await;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // No stored credentials, need to authenticate
+                        return Err(anyhow!(
+                            "No authentication configured. Please either:\n\
+                            1. Add your Anthropic API key in Settings, or\n\
+                            2. Authenticate as a Claude Pro/Max subscriber ($200/month)"
+                        ));
+                    }
+                }
+            }
             
-        let mut process_guard = self.claude_process.lock().await;
-        if process_guard.is_none() {
-            let process = ClaudeCodeProcess::start(anthropic_key.clone()).await?;
-            *process_guard = Some(process);
-            info!("✅ Claude Code process initialized");
+            let session = ClaudeSession::new(self.claude_auth.clone()).await?;
+            *session_guard = Some(session);
+            info!("✅ Claude API session initialized");
         }
         
         Ok(())
@@ -245,7 +283,7 @@ impl ClaudeCodeExecutor {
         context: Option<&str>,
         callbacks: Arc<dyn StreamingCallbacks>,
     ) -> Result<ConsensusResult> {
-        // Ensure Claude process is running
+        // Ensure Claude session is initialized
         self.initialize().await?;
         
         let mode = self.get_mode().await;
@@ -425,39 +463,47 @@ impl ClaudeCodeExecutor {
     
     /// Get Claude's initial plan for a request
     async fn get_claude_plan(&self, request: &str, context: Option<&str>) -> Result<String> {
-        // Send request to Claude for planning
-        let process_guard = self.claude_process.lock().await;
-        if let Some(process) = process_guard.as_ref() {
+        // Ensure session is initialized
+        self.initialize().await?;
+        
+        let mut session_guard = self.claude_session.lock().await;
+        if let Some(session) = session_guard.as_mut() {
             let prompt = format!(
                 "Provide a brief plan for this request: {}\nContext: {}",
                 request,
                 context.unwrap_or("No additional context")
             );
-            process.send_message(&prompt).await?;
             
-            // TODO: Implement response collection from Claude stdout
-            // For now, return a placeholder
-            Ok(format!("Claude's plan for: {}", request))
+            let system_prompt = Some(
+                "You are Claude, an AI assistant. Provide a concise plan for the given request.".to_string()
+            );
+            
+            session.send_message(&prompt, system_prompt, None).await
         } else {
-            Err(anyhow::anyhow!("Claude process not initialized"))
+            Err(anyhow!("Claude session not initialized"))
         }
     }
     
     /// Generate a comprehensive plan (for consensus mode)
     async fn generate_comprehensive_plan(&self, request: &str, context: Option<&str>) -> Result<String> {
-        let process_guard = self.claude_process.lock().await;
-        if let Some(process) = process_guard.as_ref() {
+        // Ensure session is initialized
+        self.initialize().await?;
+        
+        let mut session_guard = self.claude_session.lock().await;
+        if let Some(session) = session_guard.as_mut() {
             let prompt = format!(
                 "Generate a detailed, step-by-step plan for this request. Include all technical details, potential risks, and implementation steps:\n\nRequest: {}\nContext: {}",
                 request,
                 context.unwrap_or("No additional context")
             );
-            process.send_message(&prompt).await?;
             
-            // TODO: Implement response collection
-            Ok(format!("Comprehensive plan for: {}", request))
+            let system_prompt = Some(
+                "You are Claude, an AI assistant. Generate a comprehensive, detailed plan with all technical considerations.".to_string()
+            );
+            
+            session.send_message(&prompt, system_prompt, None).await
         } else {
-            Err(anyhow::anyhow!("Claude process not initialized"))
+            Err(anyhow!("Claude session not initialized"))
         }
     }
     
@@ -468,31 +514,36 @@ impl ClaudeCodeExecutor {
         context: Option<&str>,
         callbacks: Arc<dyn StreamingCallbacks>,
     ) -> Result<ConsensusResult> {
-        info!("⚡ Executing directly with Claude Code...");
+        info!("⚡ Executing directly with Claude API...");
+        
+        // Ensure session is initialized
+        self.initialize().await?;
         
         callbacks.on_stage_start(Stage::Generator, "claude-direct")?;
         
-        let process_guard = self.claude_process.lock().await;
-        if let Some(process) = process_guard.as_ref() {
+        let mut session_guard = self.claude_session.lock().await;
+        if let Some(session) = session_guard.as_mut() {
             let prompt = format!(
                 "Execute this request: {}\nContext: {}",
                 request,
                 context.unwrap_or("No additional context")
             );
-            process.send_message(&prompt).await?;
             
-            // TODO: Implement streaming response collection
-            let response = format!("Claude executed: {}", request);
+            let system_prompt = Some(
+                "You are Claude, an AI assistant. Execute the given request directly and provide a complete response.".to_string()
+            );
             
-            callbacks.on_stage_chunk(Stage::Generator, &response, &response)?;
+            // Send with streaming callbacks
+            let start_time = std::time::Instant::now();
+            let response = session.send_message(&prompt, system_prompt, Some(callbacks.clone())).await?;
             
             let stage_result = StageResult {
                 stage_id: "claude-direct".to_string(),
                 stage_name: "Claude Direct Execution".to_string(),
                 question: request.to_string(),
                 answer: response.clone(),
-                model: "claude-3.5-sonnet".to_string(),
-                conversation_id: Uuid::new_v4().to_string(),
+                model: "claude-3-5-sonnet-20241022".to_string(),
+                conversation_id: session.conversation_id.clone(),
                 timestamp: chrono::Utc::now(),
                 usage: None,
                 analytics: None,
@@ -505,12 +556,12 @@ impl ClaudeCodeExecutor {
                 result: Some(response),
                 error: None,
                 stages: vec![stage_result],
-                conversation_id: Uuid::new_v4().to_string(),
-                total_duration: 1.0,
-                total_cost: 0.0,
+                conversation_id: session.conversation_id.clone(),
+                total_duration: start_time.elapsed().as_secs_f64(),
+                total_cost: 0.0, // TODO: Calculate cost based on token usage
             })
         } else {
-            Err(anyhow::anyhow!("Claude process not initialized"))
+            Err(anyhow!("Claude session not initialized"))
         }
     }
     
@@ -658,7 +709,7 @@ impl ClaudeCodeExecutorBuilder {
             self.database.ok_or_else(|| anyhow::anyhow!("Database required"))?,
             self.ai_helpers.ok_or_else(|| anyhow::anyhow!("AI helpers required"))?,
             self.knowledge_base,
-            self.anthropic_key,
+            self.anthropic_key, // Pass anthropic key to executor
         );
         
         if let Some(pipeline) = self.consensus_pipeline {
@@ -679,8 +730,8 @@ mod tests {
             ConsensusProfile::default(),
             Arc::new(DatabaseManager::new(None).unwrap()),
             Arc::new(AIHelperEcosystem::new()),
-            Arc::new(ConsensusMemory::new(Arc::new(DatabaseManager::new(None).unwrap()))),
-            None,
+            None, // knowledge_base
+            None, // anthropic_key
         );
         
         // High risk should always invoke consensus
@@ -723,8 +774,8 @@ mod tests {
             ConsensusProfile::default(),
             Arc::new(DatabaseManager::new(None).unwrap()),
             Arc::new(AIHelperEcosystem::new()),
-            Arc::new(ConsensusMemory::new(Arc::new(DatabaseManager::new(None).unwrap()))),
-            None,
+            None, // knowledge_base
+            None, // anthropic_key
         );
         
         // Default should be ConsensusAssisted

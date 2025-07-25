@@ -782,25 +782,31 @@ impl DesktopConsensusManager {
         // Get AI helpers from engine for Claude executor
         let ai_helpers = engine.get_ai_helpers().await;
         
-        // Create Claude executor if we have Anthropic API key
-        let claude_executor = if let Ok(Some(anthropic_key)) = crate::desktop::simple_db::get_config("anthropic_api_key") {
-            if !anthropic_key.is_empty() && ai_helpers.is_some() {
-                // Get the current profile for the executor
-                let profile = engine.get_current_profile().await;
-                
-                // Create the executor with all necessary components
-                let executor = ClaudeCodeExecutor::new(
-                    profile,
-                    db.clone(),
-                    ai_helpers.unwrap(),
-                    None, // Knowledge base will be added later
-                    Some(anthropic_key),
-                );
-                
-                Some(Arc::new(Mutex::new(executor)))
+        // Create Claude executor if we have AI helpers
+        let claude_executor = if ai_helpers.is_some() {
+            // Get the current profile for the executor
+            let profile = engine.get_current_profile().await;
+            
+            // Load API keys from database to get Anthropic key
+            let api_config = ApiKeyManager::load_from_database().await.ok();
+            let anthropic_key = api_config.and_then(|c| c.anthropic_key);
+            
+            if let Some(key) = &anthropic_key {
+                tracing::info!("🔑 Loaded Anthropic API key from database: {} chars", key.len());
             } else {
-                None
+                tracing::info!("🔐 No Anthropic API key found, will use OAuth flow for Pro/Max users");
             }
+            
+            // Create the executor with all necessary components
+            let executor = ClaudeCodeExecutor::new(
+                profile,
+                db.clone(),
+                ai_helpers.unwrap(),
+                None, // Knowledge base will be added later
+                anthropic_key, // Pass the loaded API key
+            );
+            
+            Some(Arc::new(Mutex::new(executor)))
         } else {
             None
         };
@@ -959,6 +965,77 @@ impl DesktopConsensusManager {
                 if use_claude {
                     tracing::info!("🤖 Using Claude Code executor in {} mode", execution_mode);
                     
+                    // Get repository context to pass to Claude
+                    let repo_context = self.repository_context.get_context().await;
+                    let mut context_parts = vec![];
+                    
+                    // Add repository information
+                    if let Some(root) = &repo_context.root_path {
+                        context_parts.push(format!("Repository: {}", root.display()));
+                        
+                        // Add project info if available
+                        if let Some(project_name) = root.file_name().and_then(|n| n.to_str()) {
+                            context_parts.push(format!("Project: {}", project_name));
+                        }
+                    }
+                    
+                    // Add project type
+                    context_parts.push(format!("Project Type: {:?}", repo_context.project_type));
+                    
+                    // Add open files
+                    if !repo_context.open_files.is_empty() {
+                        context_parts.push("Open Files:".to_string());
+                        for file_info in repo_context.open_files.iter().take(10) {
+                            context_parts.push(format!("  - {}", file_info.path.display()));
+                        }
+                        if repo_context.open_files.len() > 10 {
+                            context_parts.push(format!("  ... and {} more files", repo_context.open_files.len() - 10));
+                        }
+                    }
+                    
+                    // Add active file if available
+                    if let Some(active_file) = &repo_context.active_file {
+                        context_parts.push(format!("\nActive File: {}", active_file.display()));
+                        
+                        // Try to read active file content
+                        if let Ok(content) = tokio::fs::read_to_string(active_file).await {
+                            let lines: Vec<&str> = content.lines().collect();
+                            if lines.len() <= 50 {
+                                context_parts.push(format!("Active File Content:\n{}", content));
+                            } else {
+                                // Show first 25 and last 25 lines for large files
+                                let mut preview = String::new();
+                                for line in lines.iter().take(25) {
+                                    preview.push_str(line);
+                                    preview.push('\n');
+                                }
+                                preview.push_str("\n... (truncated) ...\n\n");
+                                for line in lines.iter().skip(lines.len().saturating_sub(25)) {
+                                    preview.push_str(line);
+                                    preview.push('\n');
+                                }
+                                context_parts.push(format!("Active File Content (preview):\n{}", preview));
+                            }
+                        }
+                    }
+                    
+                    // Add repository analysis if available
+                    if let Some(analysis) = &repo_context.analysis {
+                        context_parts.push(format!("\nRepository Analysis:\n{}", analysis));
+                    }
+                    
+                    // Add git information if available
+                    if let Some(git_info) = &repo_context.git_info {
+                        context_parts.push(format!("\nGit Info: Branch: {}, Dirty: {}", 
+                            git_info.current_branch, git_info.has_uncommitted_changes));
+                    }
+                    
+                    let context_str = if context_parts.is_empty() {
+                        None
+                    } else {
+                        Some(context_parts.join("\n"))
+                    };
+                    
                     // Set the execution mode on the Claude executor
                     let mut executor = claude_executor.lock().await;
                     match execution_mode.as_str() {
@@ -968,8 +1045,9 @@ impl DesktopConsensusManager {
                         _ => {} // Keep default
                     }
                     
-                    // Execute with Claude
-                    match executor.execute(&query, None, callbacks_clone).await {
+                    // Execute with Claude - cast callbacks to the trait object
+                    let callbacks_dyn: Arc<dyn StreamingCallbacks> = callbacks_clone;
+                    match executor.execute(&query, context_str.as_deref(), callbacks_dyn).await {
                         Ok(result) => Ok(result.result.unwrap_or_else(|| "No response received".to_string())),
                         Err(e) => Err(e),
                     }

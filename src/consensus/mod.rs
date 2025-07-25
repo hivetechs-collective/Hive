@@ -50,6 +50,8 @@ pub mod file_planner;
 pub mod rollback_planner_v2;
 pub mod ai_rollback_executor;
 pub mod claude_code_executor;
+pub mod claude_auth;
+pub mod claude_api_client;
 // pub mod ai_enhanced_executor; // Removed - violated architecture (see docs/AI_ENHANCED_CAPABILITIES_DESIGN.md)
 // pub mod optimize; // TODO: Fix profile field usage
 
