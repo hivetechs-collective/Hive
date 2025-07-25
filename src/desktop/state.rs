@@ -87,6 +87,9 @@ pub struct AppState {
     
     /// Claude execution mode: Direct, ConsensusAssisted, or ConsensusRequired
     pub claude_execution_mode: String,
+    
+    /// Claude authentication method: ApiKey or OAuth
+    pub claude_auth_method: String,
 }
 
 impl Default for AppState {
@@ -121,6 +124,7 @@ impl AppState {
             pending_operations: None,
             show_operation_confirmation_dialog: false,
             claude_execution_mode: "ConsensusAssisted".to_string(),
+            claude_auth_method: "ApiKey".to_string(),
         }
     }
 

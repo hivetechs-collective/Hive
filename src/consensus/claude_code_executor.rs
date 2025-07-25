@@ -238,39 +238,79 @@ impl ClaudeCodeExecutor {
     pub async fn initialize(&self) -> Result<()> {
         let mut session_guard = self.claude_session.lock().await;
         if session_guard.is_none() {
-            // Set authentication based on what we have
-            if let Some(key) = &self.anthropic_key {
-                // Use API key if provided
-                info!("🔑 Using Anthropic API key for authentication");
-                self.claude_auth.set_api_key(key.clone()).await;
-            } else {
-                // Check if we have stored credentials
-                match ClaudeAuth::load_from_storage().await {
-                    Ok(auth_type) => {
-                        info!("🔐 Using stored credentials");
-                        match auth_type {
-                            AuthType::ApiKey(key) => {
+            // First check the user's auth method preference
+            let auth_method = crate::desktop::simple_db::get_config("claude_auth_method")
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "ApiKey".to_string());
+            
+            info!("🔐 Claude auth method preference: {}", auth_method);
+            
+            match auth_method.as_str() {
+                "ApiKey" => {
+                    // Try to use API key
+                    if let Some(key) = &self.anthropic_key {
+                        info!("🔑 Using Anthropic API key for authentication");
+                        self.claude_auth.set_api_key(key.clone()).await;
+                    } else {
+                        // Try to load API key from storage
+                        match ClaudeAuth::load_from_storage().await {
+                            Ok(AuthType::ApiKey(key)) => {
+                                info!("🔑 Using stored API key");
                                 self.claude_auth.set_api_key(key).await;
                             }
-                            AuthType::OAuth(creds) => {
-                                self.claude_auth.set_oauth(creds).await;
+                            _ => {
+                                return Err(anyhow!(
+                                    "No Anthropic API key configured. Please add your API key in Settings."
+                                ));
                             }
                         }
                     }
-                    Err(_) => {
-                        // No stored credentials, need to authenticate
-                        return Err(anyhow!(
-                            "No authentication configured. Please either:\n\
-                            1. Add your Anthropic API key in Settings, or\n\
-                            2. Authenticate as a Claude Pro/Max subscriber ($200/month)"
-                        ));
+                }
+                "OAuth" => {
+                    // Try to use OAuth credentials
+                    match ClaudeAuth::load_from_storage().await {
+                        Ok(AuthType::OAuth(creds)) => {
+                            info!("🎫 Using Claude Pro/Max OAuth credentials");
+                            self.claude_auth.set_oauth(creds).await;
+                        }
+                        _ => {
+                            // No OAuth credentials, need to authenticate
+                            return Err(anyhow!(
+                                "No Claude Pro/Max authentication found. Please authenticate through Settings.\n\
+                                Note: This requires an active Claude Pro ($200/month) subscription."
+                            ));
+                        }
+                    }
+                }
+                _ => {
+                    // Unknown method, try any available
+                    match ClaudeAuth::load_from_storage().await {
+                        Ok(auth_type) => {
+                            info!("🔐 Using stored credentials (fallback)");
+                            match auth_type {
+                                AuthType::ApiKey(key) => {
+                                    self.claude_auth.set_api_key(key).await;
+                                }
+                                AuthType::OAuth(creds) => {
+                                    self.claude_auth.set_oauth(creds).await;
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            return Err(anyhow!(
+                                "No authentication configured. Please either:\n\
+                                1. Add your Anthropic API key in Settings, or\n\
+                                2. Authenticate as a Claude Pro/Max subscriber ($200/month)"
+                            ));
+                        }
                     }
                 }
             }
             
             let session = ClaudeSession::new(self.claude_auth.clone()).await?;
             *session_guard = Some(session);
-            info!("✅ Claude API session initialized");
+            info!("✅ Claude API session initialized with {} authentication", auth_method);
         }
         
         Ok(())

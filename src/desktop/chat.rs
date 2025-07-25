@@ -484,17 +484,117 @@ fn ChatInput() -> Element {
 
             div {
                 class: "input-shortcuts",
-                span {
-                    class: "shortcut-hint",
-                    "Enter to send"
+                style: "display: flex; justify-content: space-between; align-items: center;",
+                
+                // Left side: Basic shortcuts
+                div {
+                    style: "display: flex; gap: 8px;",
+                    span {
+                        class: "shortcut-hint",
+                        "Enter to send"
+                    }
+                    span {
+                        class: "shortcut-divider",
+                        "·"
+                    }
+                    span {
+                        class: "shortcut-hint",
+                        "Shift+Enter for new line"
+                    }
                 }
-                span {
-                    class: "shortcut-divider",
-                    "·"
-                }
-                span {
-                    class: "shortcut-hint",
-                    "Shift+Enter for new line"
+                
+                // Right side: Claude controls
+                div {
+                    style: "display: flex; gap: 16px; align-items: center;",
+                    
+                    // Claude execution mode toggle
+                    div {
+                        style: "display: flex; align-items: center; gap: 4px;",
+                        
+                        // Mode indicator emoji
+                        span {
+                            style: "font-size: 14px; color: #007ACC;",
+                            match app_state.read().claude_execution_mode.as_str() {
+                                "Direct" => "🚀",
+                                "ConsensusAssisted" => "🤝",
+                                "ConsensusRequired" => "🔒",
+                                _ => "🤝"
+                            }
+                        }
+                        
+                        // Mode button
+                        button {
+                            style: "background: none; border: none; color: #007ACC; cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;",
+                            onclick: move |_| {
+                                let current = app_state.read().claude_execution_mode.clone();
+                                let next_mode = match current.as_str() {
+                                    "Direct" => "ConsensusAssisted",
+                                    "ConsensusAssisted" => "ConsensusRequired",
+                                    "ConsensusRequired" => "Direct",
+                                    _ => "ConsensusAssisted"
+                                };
+                                app_state.write().claude_execution_mode = next_mode.to_string();
+                                
+                                // Save the mode to database
+                                if let Err(e) = crate::desktop::simple_db::save_config("claude_execution_mode", next_mode) {
+                                    tracing::error!("Failed to save Claude execution mode: {}", e);
+                                } else {
+                                    tracing::info!("Claude execution mode toggled to: {}", next_mode);
+                                }
+                            },
+                            match app_state.read().claude_execution_mode.as_str() {
+                                "Direct" => "mode: direct",
+                                "ConsensusAssisted" => "mode: assisted",
+                                "ConsensusRequired" => "mode: required",
+                                _ => "mode: assisted"
+                            }
+                        }
+                    }
+                    
+                    // Claude auth method toggle
+                    div {
+                        style: "display: flex; align-items: center; gap: 4px;",
+                        
+                        // Auth method indicator
+                        span {
+                            style: "font-size: 14px; color: #28a745;",
+                            match app_state.read().claude_auth_method.as_str() {
+                                "ApiKey" => "🔑",
+                                "OAuth" => "🎫",
+                                _ => "🔑"
+                            }
+                        }
+                        
+                        // Auth method button
+                        button {
+                            style: "background: none; border: none; color: #28a745; cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;",
+                            onclick: {
+                                let mut app_state = app_state.clone();
+                                move |_| {
+                                    let current = app_state.read().claude_auth_method.clone();
+                                    let next_method = match current.as_str() {
+                                        "ApiKey" => "OAuth",
+                                        "OAuth" => "ApiKey",
+                                        _ => "ApiKey"
+                                    };
+                                    app_state.write().claude_auth_method = next_method.to_string();
+                                    
+                                    // Save the auth method to database
+                                    if let Err(e) = crate::desktop::simple_db::save_config("claude_auth_method", next_method) {
+                                        tracing::error!("Failed to save Claude auth method: {}", e);
+                                    } else {
+                                        tracing::info!("Claude auth method toggled to: {}", next_method);
+                                        // TODO: Trigger OAuth login flow if OAuth is selected and no credentials exist
+                                    }
+                                }
+                            },
+                            match app_state.read().claude_auth_method.as_str() {
+                                "ApiKey" => "auth: api key",
+                                "OAuth" => "auth: claude pro",
+                                _ => "auth: api key"
+                            }
+                        }
+                    }
                 }
             }
         }

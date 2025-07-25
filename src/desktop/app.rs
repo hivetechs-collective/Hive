@@ -80,6 +80,24 @@ pub fn App() -> Element {
                 if let Ok(Some(key)) = crate::desktop::simple_db::get_config("hive_license_key") {
                     hive_key.set(key);
                 }
+                if let Ok(Some(key)) = crate::desktop::simple_db::get_config("anthropic_api_key") {
+                    anthropic_key.set(key);
+                }
+                
+                // Load Claude settings
+                if let Ok(Some(mode)) = crate::desktop::simple_db::get_config("claude_execution_mode") {
+                    if !mode.is_empty() {
+                        app_state.write().claude_execution_mode = mode.clone();
+                        tracing::info!("Loaded Claude execution mode: {}", mode);
+                    }
+                }
+                if let Ok(Some(method)) = crate::desktop::simple_db::get_config("claude_auth_method") {
+                    if !method.is_empty() {
+                        app_state.write().claude_auth_method = method.clone();
+                        tracing::info!("Loaded Claude auth method: {}", method);
+                    }
+                }
+                
                 return;
             }
 
