@@ -114,7 +114,11 @@ impl ClaudeCodeIntegration {
         info!("🚀 Starting Claude Code process...");
 
         // Try to find Claude Code binary
-        let claude_binary = self.find_claude_binary().await?;
+        let claude_binary = self.find_claude_binary().await
+            .map_err(|e| {
+                error!("Failed to find Claude Code binary: {}", e);
+                e
+            })?;
         
         let mut cmd = TokioCommand::new(&claude_binary);
         cmd.stdin(Stdio::piped())
@@ -185,29 +189,74 @@ impl ClaudeCodeIntegration {
     async fn find_claude_binary(&self) -> Result<String> {
         // Try common locations for Claude Code
         let possible_paths = vec![
-            "claude",                    // In PATH
-            "/usr/local/bin/claude",     // Standard install
-            "/opt/homebrew/bin/claude",  // Homebrew on Apple Silicon
-            "claude-code",               // Alternative name
-            "/usr/local/bin/claude-code",
+            "claude",                          // In PATH
+            "claude-code",                     // Alternative name in PATH
+            "/usr/local/bin/claude",           // Standard install
+            "/usr/local/bin/claude-code",      // Alternative standard install
+            "/opt/homebrew/bin/claude",        // Homebrew on Apple Silicon
+            "/opt/homebrew/bin/claude-code",   // Alternative Homebrew
+            "/usr/bin/claude",                 // System install
+            "/usr/bin/claude-code",            // Alternative system install
+            "~/.local/bin/claude",             // User local install
+            "~/.local/bin/claude-code",        // Alternative user local
         ];
 
-        for path in possible_paths {
-            if let Ok(output) = Command::new(path).arg("--version").output() {
+        info!("🔍 Searching for Claude Code binary...");
+        
+        for path in &possible_paths {
+            let expanded_path = shellexpand::tilde(path);
+            debug!("Checking: {}", expanded_path);
+            
+            if let Ok(output) = Command::new(expanded_path.as_ref())
+                .arg("--version")
+                .output() 
+            {
                 if output.status.success() {
-                    info!("Found Claude Code at: {}", path);
-                    return Ok(path.to_string());
+                    info!("✅ Found Claude Code at: {}", expanded_path);
+                    return Ok(expanded_path.to_string());
                 }
             }
         }
 
-        // If not found, try to detect if this is actually Claude Code itself
-        if std::env::args().next().unwrap_or_default().contains("claude") {
-            return Ok("claude".to_string());
+        // Try using 'which' command to find in PATH
+        if let Ok(output) = Command::new("which")
+            .arg("claude")
+            .output() 
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    info!("✅ Found Claude Code via 'which': {}", path);
+                    return Ok(path);
+                }
+            }
+        }
+
+        // Try using 'which' for claude-code as well
+        if let Ok(output) = Command::new("which")
+            .arg("claude-code")
+            .output() 
+        {
+            if output.status.success() {
+                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path.is_empty() {
+                    info!("✅ Found Claude Code via 'which': {}", path);
+                    return Ok(path);
+                }
+            }
+        }
+
+        error!("❌ Claude Code binary not found in any of these locations:");
+        for path in &possible_paths {
+            error!("   - {}", path);
         }
 
         Err(anyhow::anyhow!(
-            "Claude Code binary not found. Please ensure Claude Code is installed and accessible."
+            "Claude Code binary not found. Please ensure Claude Code is installed and accessible.\n\
+            Installation instructions:\n\
+            1. Download from: https://claude.ai/download\n\
+            2. Install and ensure 'claude' is in your PATH\n\
+            3. Or specify the full path to the Claude Code binary"
         ))
     }
 

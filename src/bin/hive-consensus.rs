@@ -943,6 +943,23 @@ fn App() -> Element {
         let version = *api_keys_version.read();
         tracing::info!("API keys version changed to {}, recreating consensus manager", version);
         *consensus_manager.write() = use_consensus_with_version(version);
+        
+        // Initialize Claude Code integration if we have a consensus manager
+        if consensus_manager.read().is_some() {
+            tracing::info!("🚀 Consensus manager available, initializing Claude Code integration...");
+            let cm = consensus_manager.clone();
+            spawn(async move {
+                // Initialize Claude Code integration for hybrid chat
+                tracing::info!("🔧 Calling initialize_claude_code_integration...");
+                if let Err(e) = initialize_claude_code_integration(&*cm.read()).await {
+                    tracing::error!("Failed to initialize Claude Code integration: {}", e);
+                } else {
+                    tracing::info!("✅ Claude Code integration initialized successfully");
+                }
+            });
+        } else {
+            tracing::warn!("⚠️ Consensus manager not available, skipping Claude Code integration");
+        }
     });
 
     // State management
@@ -2886,18 +2903,70 @@ fn App() -> Element {
                                                 "/login" => {
                                                     // Pass /login command to Claude Code - don't handle locally
                                                     tracing::info!("🔐 Passing /login command to Claude Code integration");
-                                                    // The hybrid chat processor will route this to Claude Code
-                                                    // Don't intercept or handle locally
+                                                    // Actually use the hybrid chat processor
+                                                    let msg = user_msg.clone();
+                                                    let mut resp = current_response_ref.clone();
+                                                    let mut proc = is_processing_ref.clone();
+                                                    let cm = consensus_manager.clone();
+                                                    let mut app = app_state_ref.clone();
+                                                    let mut upg = show_upgrade_dialog_ref.clone();
+                                                    
+                                                    spawn(async move {
+                                                        process_with_hybrid_chat(
+                                                            msg,
+                                                            &mut resp,
+                                                            &mut proc,
+                                                            &cm,
+                                                            &mut app,
+                                                            &mut upg,
+                                                        ).await;
+                                                    });
+                                                    return;
                                                 }
                                                 "/logout" => {
                                                     // Pass /logout command to Claude Code - don't handle locally
                                                     tracing::info!("🔓 Passing /logout command to Claude Code integration");
-                                                    // The hybrid chat processor will route this to Claude Code
-                                                    // Don't intercept or handle locally
+                                                    // Actually use the hybrid chat processor
+                                                    let msg = user_msg.clone();
+                                                    let mut resp = current_response_ref.clone();
+                                                    let mut proc = is_processing_ref.clone();
+                                                    let cm = consensus_manager.clone();
+                                                    let mut app = app_state_ref.clone();
+                                                    let mut upg = show_upgrade_dialog_ref.clone();
+                                                    
+                                                    spawn(async move {
+                                                        process_with_hybrid_chat(
+                                                            msg,
+                                                            &mut resp,
+                                                            &mut proc,
+                                                            &cm,
+                                                            &mut app,
+                                                            &mut upg,
+                                                        ).await;
+                                                    });
+                                                    return;
                                                 }
                                                 _ => {
-                                                    // Pass other slash commands to Claude Code
-                                                    tracing::info!("📋 Passing slash command to Claude: {}", command);
+                                                    // Pass ALL other slash commands through hybrid processor
+                                                    tracing::info!("📋 Passing slash command to hybrid processor: {}", command);
+                                                    let msg = user_msg.clone();
+                                                    let mut resp = current_response_ref.clone();
+                                                    let mut proc = is_processing_ref.clone();
+                                                    let cm = consensus_manager.clone();
+                                                    let mut app = app_state_ref.clone();
+                                                    let mut upg = show_upgrade_dialog_ref.clone();
+                                                    
+                                                    spawn(async move {
+                                                        process_with_hybrid_chat(
+                                                            msg,
+                                                            &mut resp,
+                                                            &mut proc,
+                                                            &cm,
+                                                            &mut app,
+                                                            &mut upg,
+                                                        ).await;
+                                                    });
+                                                    return;
                                                 }
                                             }
                                         }
@@ -4982,3 +5051,109 @@ struct ActiveProfile {
 }
 
 // Removed trigger_claude_oauth_login - Claude Code handles its own authentication
+
+/// Initialize Claude Code integration with proper dependencies
+async fn initialize_claude_code_integration(
+    consensus_manager: &Option<DesktopConsensusManager>
+) -> anyhow::Result<()> {
+    use hive_ai::desktop::claude_integration_manager;
+    use hive_ai::core::database::get_database;
+    use hive_ai::memory::ThematicCluster;
+    use hive_ai::consensus::engine::ConsensusEngine;
+    use std::sync::Arc;
+    
+    tracing::info!("🚧 Initializing Claude Code integration...");
+    
+    // Get the database instance
+    let database = get_database().await?;
+    
+    // Create a consensus engine
+    let consensus_engine = Arc::new(ConsensusEngine::new(Some(database.clone())).await?);
+    
+    // Create thematic cluster
+    let thematic_cluster = Arc::new(ThematicCluster::new().await?);
+    
+    // Initialize the Claude Code integration
+    match claude_integration_manager::initialize_claude_integration(
+        consensus_engine,
+        thematic_cluster,
+        database,
+    ).await {
+        Ok(_) => {
+            tracing::info!("✅ Claude Code integration initialized successfully");
+            Ok(())
+        }
+        Err(e) => {
+            tracing::error!("❌ Failed to initialize Claude Code integration: {}", e);
+            // Don't fail the whole app if Claude Code is not available
+            // Users can still use Hive consensus features
+            Ok(())
+        }
+    }
+}
+
+/// Process message using hybrid chat processor
+async fn process_with_hybrid_chat(
+    message: String,
+    current_response: &mut Signal<String>,
+    is_processing: &mut Signal<bool>,
+    _consensus_manager: &Signal<Option<DesktopConsensusManager>>,
+    _app_state: &mut Signal<AppState>,
+    _show_upgrade_dialog: &mut Signal<bool>,
+) {
+    use hive_ai::consensus::claude_code_integration::{HybridMessage, HybridMessageType};
+    use hive_ai::desktop::claude_integration_manager::get_claude_integration;
+    
+    tracing::info!("🔄 Processing message through hybrid chat system: {}", message);
+    
+    // Process through hybrid integration
+    let result = if let Some(integration) = get_claude_integration().await {
+        tracing::info!("✅ Claude Code integration available, processing message");
+        integration.process_message(&message).await
+    } else {
+        tracing::warn!("⚠️ Claude Code integration not available");
+        // Return error message
+        Ok(vec![HybridMessage {
+            content: format!(
+                "⚠️ Claude Code integration is not available.\n\n\
+                To use native Claude Code commands like /login, /help, etc., ensure:\n\
+                1. Claude Code is installed on your system\n\
+                2. The binary is accessible in your PATH\n\n\
+                Your message: \"{}\"", 
+                message
+            ),
+            message_type: HybridMessageType::SystemMessage,
+            metadata: None,
+        }])
+    };
+    
+    // Update UI with response
+    match result {
+        Ok(responses) => {
+            for response in responses {
+                let formatted_html = format!(
+                    "<div class='message {}'>{}</div>",
+                    match response.message_type {
+                        HybridMessageType::ClaudeResponse => "claude-response",
+                        HybridMessageType::HiveResponse => "hive-response",
+                        HybridMessageType::SystemMessage => "system-message",
+                        HybridMessageType::Error => "error-message",
+                        _ => "assistant-message"
+                    },
+                    response.content.replace("\n", "<br>")
+                );
+                current_response.set(formatted_html);
+            }
+        }
+        Err(e) => {
+            let error_html = format!(
+                "<div class='message error-message'>❌ Error: {}</div>",
+                e.to_string().replace("\n", "<br>")
+            );
+            current_response.set(error_html);
+        }
+    }
+    
+    // Mark processing as complete
+    is_processing.set(false);
+}
