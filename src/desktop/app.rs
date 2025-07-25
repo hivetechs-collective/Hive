@@ -97,6 +97,12 @@ pub fn App() -> Element {
                         tracing::info!("Loaded Claude auth method: {}", method);
                     }
                 }
+                if let Ok(Some(claude_mode)) = crate::desktop::simple_db::get_config("claude_mode") {
+                    if !claude_mode.is_empty() {
+                        app_state.write().claude_mode = claude_mode.clone();
+                        tracing::info!("Loaded Claude Code mode: {}", claude_mode);
+                    }
+                }
                 
                 return;
             }
@@ -412,7 +418,6 @@ pub fn App() -> Element {
                     show_settings,
                     openrouter_key,
                     hive_key,
-                    anthropic_key,
                     on_profile_change: Some(on_profile_change.clone())
                 }
             }
@@ -669,14 +674,16 @@ fn StatusBar() -> Element {
                     "Context: {state.context_usage}%"
                 }
 
-                // Auto-accept Toggle
+                // Claude Code Mode Display
                 div {
-                    class: if state.auto_accept { "status-item auto-accept-toggle enabled" } else { "status-item auto-accept-toggle disabled" },
-                    onclick: move |_| {
-                        let current_value = app_state.read().auto_accept;
-                        app_state.write().auto_accept = !current_value;
-                    },
-                    if state.auto_accept { "Auto: ON" } else { "Auto: OFF" }
+                    class: "status-item claude-mode-display",
+                    style: "color: #007ACC;",
+                    match state.claude_mode.as_str() {
+                        "normal" => "✏️ Normal",
+                        "auto-accept" => "⏵⏵ Auto-Accept",
+                        "plan" => "📋 Plan Mode", 
+                        _ => "✏️ Normal"
+                    }
                 }
 
                 // Model Indicator

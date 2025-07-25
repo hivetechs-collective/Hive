@@ -3,6 +3,7 @@
 use crate::desktop::{
     consensus_integration::{use_consensus_with_version, DesktopConsensusManager},
     events::KeyboardEventUtils,
+    hybrid_chat_processor,
     state::*,
 };
 use dioxus::events::{KeyboardEvent, MouseEvent};
@@ -251,118 +252,7 @@ fn format_timestamp(timestamp: &chrono::DateTime<chrono::Utc>) -> String {
     timestamp.format("%H:%M").to_string()
 }
 
-/// Process a message from the chat input
-fn process_message(
-    text: String,
-    app_state: &mut Signal<AppState>,
-    input_text: &mut Signal<String>,
-    consensus_manager: &Option<DesktopConsensusManager>,
-    show_onboarding: &mut Signal<bool>,
-) {
-    // Check if we need to show onboarding (no profiles configured)
-    if consensus_manager.is_none() {
-        // Check if profiles exist
-        let mut app_state_clone = app_state.clone();
-        let mut show_onboarding_clone = show_onboarding.clone();
-        spawn(async move {
-            use crate::desktop::dialogs::load_existing_profiles;
-
-            match load_existing_profiles().await {
-                Ok(profiles) if profiles.is_empty() => {
-                    tracing::info!("No profiles configured - showing onboarding");
-                    show_onboarding_clone.set(true);
-                }
-                Ok(_) => {
-                    tracing::error!("Consensus manager not available but profiles exist");
-                    let error_msg = ChatMessage {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        content: "⚠️ OpenRouter API key not configured. Click the Settings button to add your API key.".to_string(),
-                        message_type: MessageType::Error,
-                        timestamp: chrono::Utc::now(),
-                        metadata: MessageMetadata::default(),
-                    };
-                    app_state_clone.write().chat.add_message(error_msg);
-                    // Show onboarding to configure API keys
-                    show_onboarding_clone.set(true);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to load profiles: {}", e);
-                    show_onboarding_clone.set(true);
-                }
-            }
-        });
-        return;
-    }
-
-    // Add user message
-    let message = ChatMessage {
-        id: uuid::Uuid::new_v4().to_string(),
-        content: text.clone(),
-        message_type: MessageType::User,
-        timestamp: chrono::Utc::now(),
-        metadata: MessageMetadata::default(),
-    };
-
-    app_state.write().chat.add_message(message);
-
-    // Start consensus processing
-    app_state.write().consensus.start_consensus();
-    tracing::info!("🚀 Consensus started - is_running should be true");
-
-    // Clear input
-    input_text.set(String::new());
-
-    // Send to consensus engine
-    if let Some(consensus) = consensus_manager {
-        let query = text.clone();
-        let mut app_state_consensus = app_state.clone();
-        let mut show_onboarding_clone = show_onboarding.clone();
-        let mut consensus_clone = consensus.clone();
-
-        spawn(async move {
-            match consensus_clone.process_query(&query).await {
-                Ok(response) => {
-                    let response_msg = ChatMessage {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        content: response,
-                        message_type: MessageType::Assistant,
-                        timestamp: chrono::Utc::now(),
-                        metadata: MessageMetadata {
-                            cost: Some(app_state_consensus.read().consensus.estimated_cost),
-                            model: Some("4-stage consensus".to_string()),
-                            processing_time: None,
-                            token_count: Some(
-                                app_state_consensus.read().consensus.total_tokens as u32,
-                            ),
-                        },
-                    };
-                    app_state_consensus.write().chat.add_message(response_msg);
-                }
-                Err(e) => {
-                    tracing::error!("Consensus processing error: {}", e);
-                    let error_msg = ChatMessage {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        content: format!("Error processing request: {}", e),
-                        message_type: MessageType::Error,
-                        timestamp: chrono::Utc::now(),
-                        metadata: MessageMetadata::default(),
-                    };
-                    app_state_consensus.write().chat.add_message(error_msg);
-
-                    // If the error is about missing profiles or API key, show onboarding
-                    if e.to_string().contains("No valid OpenRouter API key")
-                        || e.to_string().contains("profile")
-                    {
-                        show_onboarding_clone.set(true);
-                    }
-                    
-                    // Complete consensus on error
-                    app_state_consensus.write().consensus.complete_consensus();
-                }
-            }
-        });
-    }
-}
+// Removed old process_message function - all processing now goes through hybrid_chat_processor
 
 /// Chat input component
 #[component]
@@ -384,7 +274,7 @@ fn ChatInput() -> Element {
         move |_evt: MouseEvent| {
             let text = input_text.read().clone();
             if !text.trim().is_empty() {
-                process_message(
+                hybrid_chat_processor::process_message(
                     text,
                     &mut app_state,
                     &mut input_text,
@@ -409,7 +299,7 @@ fn ChatInput() -> Element {
             {
                 let text = input_text.read().clone();
                 if !text.trim().is_empty() {
-                    process_message(
+                    hybrid_chat_processor::process_message(
                         text,
                         &mut app_state,
                         &mut input_text,
@@ -421,9 +311,15 @@ fn ChatInput() -> Element {
                 // Clear input on Escape
                 input_text.set(String::new());
             } else if evt.key() == dioxus::html::input_data::keyboard_types::Key::Tab
+                && evt.modifiers().shift()
+            {
+                // Shift+Tab: Cycle Claude Code modes (pass to Claude Code)
+                tracing::info!("🔄 Shift+Tab pressed - cycling Claude Code modes");
+                cycle_claude_mode(&mut app_state);
+            } else if evt.key() == dioxus::html::input_data::keyboard_types::Key::Tab
                 && !evt.modifiers().shift()
             {
-                // Auto-complete or show suggestions
+                // Tab: Auto-complete or show suggestions
                 // TODO: Implement auto-complete
             }
         }
@@ -503,51 +399,40 @@ fn ChatInput() -> Element {
                     }
                 }
                 
-                // Right side: Claude controls
+                // Right side: Claude Code Controls
                 div {
                     style: "display: flex; gap: 16px; align-items: center;",
                     
-                    // Claude execution mode toggle
+                    // Claude Code mode status (read-only display)
                     div {
                         style: "display: flex; align-items: center; gap: 4px;",
                         
-                        // Mode indicator emoji
+                        // Mode indicator
                         span {
                             style: "font-size: 14px; color: #007ACC;",
-                            match app_state.read().claude_execution_mode.as_str() {
-                                "Direct" => "🚀",
-                                "ConsensusAssisted" => "🤝",
-                                "ConsensusRequired" => "🔒",
-                                _ => "🤝"
+                            match app_state.read().claude_mode.as_str() {
+                                "normal" => "✏️",
+                                "auto-accept" => "⏵⏵",
+                                "plan" => "📋",
+                                _ => "✏️"
                             }
                         }
                         
-                        // Mode button
-                        button {
-                            style: "background: none; border: none; color: #007ACC; cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;",
-                            onclick: move |_| {
-                                let current = app_state.read().claude_execution_mode.clone();
-                                let next_mode = match current.as_str() {
-                                    "Direct" => "ConsensusAssisted",
-                                    "ConsensusAssisted" => "ConsensusRequired",
-                                    "ConsensusRequired" => "Direct",
-                                    _ => "ConsensusAssisted"
-                                };
-                                app_state.write().claude_execution_mode = next_mode.to_string();
-                                
-                                // Save the mode to database
-                                if let Err(e) = crate::desktop::simple_db::save_config("claude_execution_mode", next_mode) {
-                                    tracing::error!("Failed to save Claude execution mode: {}", e);
-                                } else {
-                                    tracing::info!("Claude execution mode toggled to: {}", next_mode);
-                                }
-                            },
-                            match app_state.read().claude_execution_mode.as_str() {
-                                "Direct" => "mode: direct",
-                                "ConsensusAssisted" => "mode: assisted",
-                                "ConsensusRequired" => "mode: required",
-                                _ => "mode: assisted"
+                        // Mode status (read-only)
+                        span {
+                            style: "color: #007ACC; font-size: 11px; padding: 2px 6px; border-radius: 3px;", 
+                            match app_state.read().claude_mode.as_str() {
+                                "normal" => "normal mode",
+                                "auto-accept" => "auto-accept on",
+                                "plan" => "plan mode on",
+                                _ => "normal mode"
                             }
+                        }
+                        
+                        // Hint for mode switching
+                        span {
+                            style: "color: #666; font-size: 10px; margin-left: 8px;",
+                            "Shift+Tab to cycle"
                         }
                     }
                     
@@ -561,7 +446,8 @@ fn ChatInput() -> Element {
                             match app_state.read().claude_auth_method.as_str() {
                                 "ApiKey" => "🔑",
                                 "OAuth" => "🎫",
-                                _ => "🔑"
+                                "NotSelected" => "❓",
+                                _ => "❓"
                             }
                         }
                         
@@ -573,6 +459,7 @@ fn ChatInput() -> Element {
                                 move |_| {
                                     let current = app_state.read().claude_auth_method.clone();
                                     let next_method = match current.as_str() {
+                                        "NotSelected" => "ApiKey",
                                         "ApiKey" => "OAuth",
                                         "OAuth" => "ApiKey",
                                         _ => "ApiKey"
@@ -583,20 +470,82 @@ fn ChatInput() -> Element {
                                     if let Err(e) = crate::desktop::simple_db::save_config("claude_auth_method", next_method) {
                                         tracing::error!("Failed to save Claude auth method: {}", e);
                                     } else {
-                                        tracing::info!("Claude auth method toggled to: {}", next_method);
-                                        // TODO: Trigger OAuth login flow if OAuth is selected and no credentials exist
+                                        tracing::info!("🔄 Claude auth method toggled to: {}", next_method);
+                                        tracing::info!("📝 User switched authentication from {} to {}", current, next_method);
+                                        
+                                        // Check if we have credentials for the new method
+                                        if next_method == "OAuth" {
+                                            // Check if OAuth credentials exist
+                                            if let Ok(Some(oauth_json)) = crate::desktop::simple_db::get_config("claude_oauth_credentials") {
+                                                tracing::info!("✅ OAuth credentials found in storage");
+                                            } else {
+                                                tracing::warn!("⚠️ No OAuth credentials found");
+                                                // OAuth authentication should be handled by Claude Code itself
+                                                // Not triggering our own OAuth flow
+                                            }
+                                        } else {
+                                            // Check if API key exists
+                                            if let Ok(Some(key)) = crate::desktop::simple_db::get_config("anthropic_api_key") {
+                                                if !key.is_empty() {
+                                                    tracing::info!("✅ API key found in storage ({} chars)", key.len());
+                                                } else {
+                                                    tracing::warn!("⚠️ API key is empty");
+                                                }
+                                            } else {
+                                                tracing::warn!("⚠️ No API key found in storage");
+                                            }
+                                        }
                                     }
                                 }
                             },
                             match app_state.read().claude_auth_method.as_str() {
                                 "ApiKey" => "auth: api key",
                                 "OAuth" => "auth: claude pro",
-                                _ => "auth: api key"
+                                "NotSelected" => "auth: select method",
+                                _ => "auth: select method"
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// Removed OAuth trigger - Claude Code handles its own authentication
+
+/// Cycle through Claude Code's native modes (normal -> auto-accept -> plan -> normal)
+fn cycle_claude_mode(app_state: &mut Signal<AppState>) {
+    let current_mode = app_state.read().claude_mode.clone();
+    let next_mode = match current_mode.as_str() {
+        "normal" => "auto-accept",
+        "auto-accept" => "plan", 
+        "plan" => "normal",
+        _ => "normal" // Default fallback
+    };
+    
+    // Update the state
+    app_state.write().claude_mode = next_mode.to_string();
+    
+    // Save to database for persistence
+    if let Err(e) = crate::desktop::simple_db::save_config("claude_mode", next_mode) {
+        tracing::error!("Failed to save Claude mode: {}", e);
+    } else {
+        tracing::info!("🔄 Claude mode cycled to: {} (Shift+Tab)", next_mode);
+    }
+    
+    // In a real Claude Code integration, we would send this mode change to Claude Code
+    // For now, we'll just log it and update our internal state
+    match next_mode {
+        "normal" => {
+            tracing::info!("📝 Claude Code switched to normal mode - standard permission prompts");
+        }
+        "auto-accept" => {
+            tracing::info!("⏵⏵ Claude Code switched to auto-accept mode - immediate execution without prompts");
+        }
+        "plan" => {
+            tracing::info!("📋 Claude Code switched to plan mode - read-only research mode");
+        }
+        _ => {}
     }
 }

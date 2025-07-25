@@ -146,3 +146,32 @@ pub fn is_onboarding_completed() -> bool {
         _ => false,
     }
 }
+
+/// Delete a configuration value
+pub fn delete_config(key: &str) -> Result<(), String> {
+    let db_path = get_db_path();
+    info!("Deleting config key '{}' from database at: {:?}", key, db_path);
+
+    let conn = Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open database: {}", e))?;
+
+    // Check if table exists first
+    let table_exists: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='configurations'",
+            params![],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    if table_exists == 0 {
+        debug!("Configurations table does not exist yet");
+        return Ok(());
+    }
+
+    conn.execute("DELETE FROM configurations WHERE key = ?1", params![key])
+        .map_err(|e| format!("Failed to delete config: {}", e))?;
+
+    info!("Successfully deleted config key '{}'", key);
+    Ok(())
+}

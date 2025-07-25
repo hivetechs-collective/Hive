@@ -173,6 +173,20 @@ impl ClaudeApiClient {
     ) -> Result<String> {
         let auth_header = self.auth.get_auth_header().await?;
         
+        // Log which auth method is being used
+        let auth_type = self.auth.get_auth_type().await;
+        match &auth_type {
+            Some(AuthType::ApiKey(key)) => {
+                info!("🔑 Using API Key authentication (key length: {} chars)", key.len());
+            }
+            Some(AuthType::OAuth(creds)) => {
+                info!("🎫 Using OAuth authentication (token expires at: {})", creds.expires_at);
+            }
+            None => {
+                warn!("⚠️ No authentication type set!");
+            }
+        }
+        
         let request_body = ClaudeRequest {
             model: self.model.clone(),
             messages,
@@ -219,6 +233,20 @@ impl ClaudeApiClient {
         callbacks: Arc<dyn StreamingCallbacks>,
     ) -> Result<String> {
         let auth_header = self.auth.get_auth_header().await?;
+        
+        // Log which auth method is being used for streaming
+        let auth_type = self.auth.get_auth_type().await;
+        match &auth_type {
+            Some(AuthType::ApiKey(key)) => {
+                info!("🔑 [STREAMING] Using API Key authentication (key length: {} chars)", key.len());
+            }
+            Some(AuthType::OAuth(creds)) => {
+                info!("🎫 [STREAMING] Using OAuth authentication (token expires at: {})", creds.expires_at);
+            }
+            None => {
+                warn!("⚠️ [STREAMING] No authentication type set!");
+            }
+        }
         
         let request_body = ClaudeRequest {
             model: self.model.clone(),

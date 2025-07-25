@@ -109,7 +109,8 @@ impl ClaudeAuth {
             .append_pair("client_id", CLAUDE_CLIENT_ID)
             .append_pair("response_type", "code")
             .append_pair("redirect_uri", &self.redirect_uri)
-            .append_pair("scope", "messages:write messages:read")
+            // Try standard OAuth scope - Claude's specific scopes are not documented
+            .append_pair("scope", "openid")
             .append_pair("state", state)
             .append_pair("code_challenge", &pkce.code_challenge)
             .append_pair("code_challenge_method", "S256");

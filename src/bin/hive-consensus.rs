@@ -913,6 +913,14 @@ fn App() -> Element {
                     tracing::info!("Loaded Claude execution mode: {}", mode);
                 }
             }
+            
+            // Also load Claude auth method
+            if let Ok(Some(method)) = hive_ai::desktop::simple_db::get_config("claude_auth_method") {
+                if !method.is_empty() {
+                    app_state_for_load.write().claude_auth_method = method.clone();
+                    tracing::info!("Loaded Claude auth method: {}", method);
+                }
+            }
         });
     });
 
@@ -2820,11 +2828,79 @@ fn App() -> Element {
                                         return;
                                     }
                                     
+                                    // Ctrl+Shift+A toggles Claude auth method
+                                    if evt.key() == dioxus::events::Key::Character("a".to_string()) && evt.modifiers().ctrl() && evt.modifiers().shift() {
+                                        evt.prevent_default();
+                                        let current = app_state_for_toggle.read().claude_auth_method.clone();
+                                        let next_method = match current.as_str() {
+                                            "NotSelected" => "ApiKey",
+                                            "ApiKey" => "OAuth",
+                                            "OAuth" => "ApiKey",
+                                            _ => "ApiKey"
+                                        };
+                                        app_state_for_toggle.write().claude_auth_method = next_method.to_string();
+                                        
+                                        // Save the auth method to database
+                                        if let Err(e) = hive_ai::desktop::simple_db::save_config("claude_auth_method", next_method) {
+                                            tracing::error!("Failed to save Claude auth method: {}", e);
+                                        } else {
+                                            tracing::info!("🔄 Claude auth method toggled via Ctrl+Shift+A to: {}", next_method);
+                                            tracing::info!("📝 User switched authentication from {} to {}", current, next_method);
+                                            
+                                            // Check if we have credentials for the new method
+                                            if next_method == "OAuth" {
+                                                // Check if OAuth credentials exist
+                                                if let Ok(Some(oauth_json)) = hive_ai::desktop::simple_db::get_config("claude_oauth_credentials") {
+                                                    tracing::info!("✅ OAuth credentials found in storage");
+                                                } else {
+                                                    tracing::warn!("⚠️ No OAuth credentials found");
+                                                    // OAuth authentication should be handled by Claude Code itself
+                                                    // Not triggering our own OAuth flow
+                                                }
+                                            } else {
+                                                // Check if API key exists
+                                                if let Ok(Some(key)) = hive_ai::desktop::simple_db::get_config("anthropic_api_key") {
+                                                    if !key.is_empty() {
+                                                        tracing::info!("✅ API key found in storage ({} chars)", key.len());
+                                                    } else {
+                                                        tracing::warn!("⚠️ API key is empty");
+                                                    }
+                                                } else {
+                                                    tracing::warn!("⚠️ No API key found in storage");
+                                                }
+                                            }
+                                        }
+                                        return;
+                                    }
+                                    
                                     // Enter without shift submits
                                     if evt.key() == dioxus::events::Key::Enter && !evt.modifiers().shift() && !input_value_ref.read().is_empty() && !*is_processing_ref.read() {
                                         evt.prevent_default();
 
                                         let user_msg = input_value_ref.read().clone();
+                                        
+                                        // Check if this is a slash command
+                                        if user_msg.starts_with('/') {
+                                            let command = user_msg.trim();
+                                            match command {
+                                                "/login" => {
+                                                    // Pass /login command to Claude Code - don't handle locally
+                                                    tracing::info!("🔐 Passing /login command to Claude Code integration");
+                                                    // The hybrid chat processor will route this to Claude Code
+                                                    // Don't intercept or handle locally
+                                                }
+                                                "/logout" => {
+                                                    // Pass /logout command to Claude Code - don't handle locally
+                                                    tracing::info!("🔓 Passing /logout command to Claude Code integration");
+                                                    // The hybrid chat processor will route this to Claude Code
+                                                    // Don't intercept or handle locally
+                                                }
+                                                _ => {
+                                                    // Pass other slash commands to Claude Code
+                                                    tracing::info!("📋 Passing slash command to Claude: {}", command);
+                                                }
+                                            }
+                                        }
 
                                         // Clear input and response
                                         input_value_ref.write().clear();
@@ -3080,6 +3156,80 @@ fn App() -> Element {
                                         "(ctrl+shift+c to cycle)"
                                     }
                                 }
+                                
+                                // Claude auth method toggle group
+                                div {
+                                    style: "display: flex; align-items: center; gap: 8px;",
+                                    
+                                    // Auth method indicator
+                                    span {
+                                        style: "font-size: 14px; color: #28a745;",
+                                        match app_state.read().claude_auth_method.as_str() {
+                                            "ApiKey" => "🔑",
+                                            "OAuth" => "🎫",
+                                            "NotSelected" => "❓",
+                                            _ => "❓"
+                                        }
+                                    }
+                                    
+                                    // Auth method button
+                                    button {
+                                        style: "background: none; border: none; color: #28a745; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;",
+                                        onclick: move |_| {
+                                            let current = app_state.read().claude_auth_method.clone();
+                                            let next_method = match current.as_str() {
+                                                "NotSelected" => "ApiKey",
+                                                "ApiKey" => "OAuth",
+                                                "OAuth" => "ApiKey",
+                                                _ => "ApiKey"
+                                            };
+                                            app_state.write().claude_auth_method = next_method.to_string();
+                                            
+                                            // Save the auth method to database
+                                            if let Err(e) = hive_ai::desktop::simple_db::save_config("claude_auth_method", next_method) {
+                                                tracing::error!("Failed to save Claude auth method: {}", e);
+                                            } else {
+                                                tracing::info!("🔄 Claude auth method toggled to: {}", next_method);
+                                                tracing::info!("📝 User switched authentication from {} to {}", current, next_method);
+                                                
+                                                // Check if we have credentials for the new method
+                                                if next_method == "OAuth" {
+                                                    // Check if OAuth credentials exist
+                                                    if let Ok(Some(oauth_json)) = hive_ai::desktop::simple_db::get_config("claude_oauth_credentials") {
+                                                        tracing::info!("✅ OAuth credentials found in storage");
+                                                    } else {
+                                                        tracing::warn!("⚠️ No OAuth credentials found");
+                                                        // OAuth authentication should be handled by Claude Code itself
+                                                        // Not triggering our own OAuth flow
+                                                    }
+                                                } else {
+                                                    // Check if API key exists
+                                                    if let Ok(Some(key)) = hive_ai::desktop::simple_db::get_config("anthropic_api_key") {
+                                                        if !key.is_empty() {
+                                                            tracing::info!("✅ API key found in storage ({} chars)", key.len());
+                                                        } else {
+                                                            tracing::warn!("⚠️ API key is empty");
+                                                        }
+                                                    } else {
+                                                        tracing::warn!("⚠️ No API key found in storage");
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        match app_state.read().claude_auth_method.as_str() {
+                                            "ApiKey" => "auth: api key",
+                                            "OAuth" => "auth: claude pro",
+                                            "NotSelected" => "auth: select method",
+                                            _ => "auth: select method"
+                                        }
+                                    }
+                                    
+                                    // Keyboard shortcut hint for auth toggle
+                                    span {
+                                        style: "color: #505050; font-size: 11px; margin-left: 8px;",
+                                        "(ctrl+shift+a to toggle)"
+                                    }
+                                }
                             }
                             
                             // Right side: Cancel consensus button (when running)
@@ -3206,7 +3356,6 @@ fn App() -> Element {
                 show_settings: show_settings_dialog.clone(),
                 openrouter_key: openrouter_key.clone(),
                 hive_key: hive_key.clone(),
-                anthropic_key: anthropic_key.clone(),
                 on_profile_change: Some(EventHandler::new({
                     let mut api_keys_version = api_keys_version.clone();
                     let mut app_state_for_profile = app_state.clone();
@@ -4831,3 +4980,5 @@ struct ActiveProfile {
     validator_model: String,
     curator_model: String,
 }
+
+// Removed trigger_claude_oauth_login - Claude Code handles its own authentication

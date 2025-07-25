@@ -90,6 +90,9 @@ pub struct AppState {
     
     /// Claude authentication method: ApiKey or OAuth
     pub claude_auth_method: String,
+    
+    /// Claude Code native mode: normal, auto-accept, plan
+    pub claude_mode: String,
 }
 
 impl Default for AppState {
@@ -124,7 +127,8 @@ impl AppState {
             pending_operations: None,
             show_operation_confirmation_dialog: false,
             claude_execution_mode: "ConsensusAssisted".to_string(),
-            claude_auth_method: "ApiKey".to_string(),
+            claude_auth_method: "NotSelected".to_string(),
+            claude_mode: "normal".to_string(),
         }
     }
 

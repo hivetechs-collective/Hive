@@ -320,7 +320,6 @@ pub fn SettingsDialog(
     show_settings: Signal<bool>, 
     openrouter_key: Signal<String>, 
     hive_key: Signal<String>,
-    anthropic_key: Signal<String>,
     on_profile_change: Option<EventHandler<()>>
 ) -> Element {
     let mut is_validating = use_signal(|| false);
@@ -334,10 +333,8 @@ pub fn SettingsDialog(
     // Local state for API keys
     let mut local_openrouter_key = use_signal(|| openrouter_key.read().clone());
     let mut local_hive_key = use_signal(|| hive_key.read().clone());
-    let mut local_anthropic_key = use_signal(|| anthropic_key.read().clone());
     let mut show_openrouter_key = use_signal(|| false);
     let mut show_hive_key = use_signal(|| false);
-    let mut show_anthropic_key = use_signal(|| false);
     
     // Claude execution mode state
     let mut claude_execution_mode = use_signal(|| "ConsensusAssisted".to_string());
@@ -365,12 +362,6 @@ pub fn SettingsDialog(
             }
         }
         
-        // Load Anthropic key if exists
-        if let Ok(Some(key)) = crate::desktop::simple_db::get_config("anthropic_api_key") {
-            if !key.is_empty() && anthropic_key.read().is_empty() {
-                *anthropic_key.write() = key;
-            }
-        }
         
         // Load consensus profiles from database
         spawn(async move {
@@ -515,54 +506,6 @@ pub fn SettingsDialog(
                             }
                         }
                         
-                        // Anthropic API Key
-                        div {
-                            class: "settings-field",
-                            label { 
-                                class: "settings-label",
-                                "Anthropic API Key (for Claude Code)" 
-                            }
-                            div {
-                                style: "display: flex; gap: 10px; align-items: center;",
-                                input {
-                                    class: "settings-input",
-                                    style: "flex: 1;",
-                                    r#type: if *show_anthropic_key.read() { "text" } else { "password" },
-                                    value: "{local_anthropic_key.read()}",
-                                    placeholder: "sk-ant-...",
-                                    oninput: move |evt| *local_anthropic_key.write() = evt.value().clone(),
-                                }
-                                button {
-                                    class: "button button-secondary",
-                                    style: "padding: 8px 12px;",
-                                    onclick: move |_| {
-                                        let current = *show_anthropic_key.read();
-                                        *show_anthropic_key.write() = !current;
-                                    },
-                                    if *show_anthropic_key.read() { "Hide" } else { "Show" }
-                                }
-                                button {
-                                    class: "button button-secondary",
-                                    style: "padding: 8px 12px;",
-                                    onclick: move |_| *local_anthropic_key.write() = String::new(),
-                                    "Clear"
-                                }
-                            }
-                            p { 
-                                class: "settings-hint",
-                                "Get your API key from ",
-                                a {
-                                    href: "#",
-                                    onclick: move |evt| {
-                                        evt.stop_propagation();
-                                        spawn(async {
-                                            let _ = webbrowser::open("https://console.anthropic.com/");
-                                        });
-                                    },
-                                    "console.anthropic.com"
-                                }
-                            }
-                        }
                         
                         // Show validation error if any
                         if let Some(error) = validation_error.read().as_ref() {
@@ -573,108 +516,202 @@ pub fn SettingsDialog(
                         }
                     }
                     
-                    // Claude Execution Mode Section (only show if Anthropic key is configured)
-                    if !anthropic_key.read().is_empty() || !local_anthropic_key.read().is_empty() {
+                    // Claude Code Integration Guide
+                    div {
+                        class: "settings-section",
+                        h3 { "🤖 Claude Code Integration" }
+                        p { 
+                            class: "settings-description",
+                            "Hive AI now includes Claude Code integration. Use slash commands to authenticate and control Claude's behavior." 
+                        }
+                        
                         div {
-                            class: "settings-section",
-                            h3 { "🤖 Claude Execution Mode" }
-                            p { 
-                                class: "settings-description",
-                                "Control how Claude Code interacts with the consensus pipeline for validation and enhancement." 
+                            style: "background: #2d2d30; border-radius: 8px; padding: 20px; margin-top: 15px;",
+                            h4 { 
+                                style: "margin: 0 0 15px 0; color: #4ade80;",
+                                "🚀 Quick Start Commands" 
                             }
-                            
                             div {
-                                class: "execution-mode-selector",
-                                style: "display: flex; flex-direction: column; gap: 15px; margin-top: 20px;",
+                                style: "display: flex; flex-direction: column; gap: 12px;",
                                 
-                                // Direct Mode
                                 div {
-                                    class: if *claude_execution_mode.read() == "Direct" { "mode-option selected" } else { "mode-option" },
-                                    style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
-                                    onclick: move |_| *claude_execution_mode.write() = "Direct".to_string(),
-                                    
-                                    div {
-                                        style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
-                                        input {
-                                            r#type: "radio",
-                                            name: "claude_mode",
-                                            checked: *claude_execution_mode.read() == "Direct",
-                                            onchange: move |_| *claude_execution_mode.write() = "Direct".to_string(),
-                                        }
-                                        h4 { 
-                                            style: "margin: 0; color: #ffffff;",
-                                            "⚡ Direct Execution" 
-                                        }
+                                    style: "display: flex; align-items: center; gap: 15px;",
+                                    code { 
+                                        style: "background: #1e1e1e; padding: 8px 12px; border-radius: 4px; color: #ffd700; font-family: 'SF Mono', Monaco, monospace;",
+                                        "/login" 
                                     }
-                                    p { 
-                                        style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
-                                        "Claude executes autonomously with full speed. Best for simple tasks and when you trust Claude's judgment." 
+                                    span { 
+                                        style: "color: #cccccc;",
+                                        "Authenticate with Claude Pro/Team subscription (browser login)" 
                                     }
                                 }
                                 
-                                // Consensus Assisted Mode
                                 div {
-                                    class: if *claude_execution_mode.read() == "ConsensusAssisted" { "mode-option selected" } else { "mode-option" },
-                                    style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
-                                    onclick: move |_| *claude_execution_mode.write() = "ConsensusAssisted".to_string(),
-                                    
-                                    div {
-                                        style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
-                                        input {
-                                            r#type: "radio",
-                                            name: "claude_mode",
-                                            checked: *claude_execution_mode.read() == "ConsensusAssisted",
-                                            onchange: move |_| *claude_execution_mode.write() = "ConsensusAssisted".to_string(),
-                                        }
-                                        h4 { 
-                                            style: "margin: 0; color: #ffffff;",
-                                            "🔍 Consensus Assisted (Recommended)" 
-                                        }
+                                    style: "display: flex; align-items: center; gap: 15px;",
+                                    code { 
+                                        style: "background: #1e1e1e; padding: 8px 12px; border-radius: 4px; color: #ffd700; font-family: 'SF Mono', Monaco, monospace;",
+                                        "/logout" 
                                     }
-                                    p { 
-                                        style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
-                                        "Claude intelligently invokes consensus for high-risk operations, architectural changes, or when uncertain. Balances speed and safety." 
+                                    span { 
+                                        style: "color: #cccccc;",
+                                        "Sign out and clear authentication" 
                                     }
                                 }
                                 
-                                // Consensus Required Mode
                                 div {
-                                    class: if *claude_execution_mode.read() == "ConsensusRequired" { "mode-option selected" } else { "mode-option" },
-                                    style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
-                                    onclick: move |_| *claude_execution_mode.write() = "ConsensusRequired".to_string(),
-                                    
-                                    div {
-                                        style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
-                                        input {
-                                            r#type: "radio",
-                                            name: "claude_mode",
-                                            checked: *claude_execution_mode.read() == "ConsensusRequired",
-                                            onchange: move |_| *claude_execution_mode.write() = "ConsensusRequired".to_string(),
-                                        }
-                                        h4 { 
-                                            style: "margin: 0; color: #ffffff;",
-                                            "🛡️ Consensus Required" 
-                                        }
+                                    style: "display: flex; align-items: center; gap: 15px;",
+                                    code { 
+                                        style: "background: #1e1e1e; padding: 8px 12px; border-radius: 4px; color: #ffd700; font-family: 'SF Mono', Monaco, monospace;",
+                                        "Shift+Tab" 
                                     }
-                                    p { 
-                                        style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
-                                        "All Claude plans go through 4-stage consensus validation. Maximum safety but slower. Ideal for critical production changes." 
+                                    span { 
+                                        style: "color: #cccccc;",
+                                        "Cycle through modes: normal → auto-accept → plan" 
+                                    }
+                                }
+                                
+                                div {
+                                    style: "display: flex; align-items: center; gap: 15px;",
+                                    code { 
+                                        style: "background: #1e1e1e; padding: 8px 12px; border-radius: 4px; color: #ffd700; font-family: 'SF Mono', Monaco, monospace;",
+                                        "/plan" 
+                                    }
+                                    span { 
+                                        style: "color: #cccccc;",
+                                        "Switch to plan mode (read-only research)" 
+                                    }
+                                }
+                                
+                                div {
+                                    style: "display: flex; align-items: center; gap: 15px;",
+                                    code { 
+                                        style: "background: #1e1e1e; padding: 8px 12px; border-radius: 4px; color: #ffd700; font-family: 'SF Mono', Monaco, monospace;",
+                                        "/auto-accept" 
+                                    }
+                                    span { 
+                                        style: "color: #cccccc;",
+                                        "Switch to auto-accept mode (immediate execution)" 
                                     }
                                 }
                             }
                             
-                            // Show current mode status
                             div {
-                                style: "margin-top: 15px; padding: 12px; background: #2d2d30; border-radius: 6px; font-size: 14px;",
-                                "💡 Current mode: ",
-                                span {
-                                    style: "color: #4ade80; font-weight: 600;",
-                                    match claude_execution_mode.read().as_str() {
-                                        "Direct" => "Direct Execution",
-                                        "ConsensusAssisted" => "Consensus Assisted",
-                                        "ConsensusRequired" => "Consensus Required",
-                                        _ => "Unknown"
+                                style: "margin-top: 20px; padding: 15px; background: #3a4f5a; border-radius: 6px; border-left: 4px solid #4ade80;",
+                                p { 
+                                    style: "margin: 0; color: #ffffff; font-size: 14px;",
+                                    "💡 ",
+                                    strong { "First time setup:" },
+                                    " Type ",
+                                    code { 
+                                        style: "background: #1e1e1e; padding: 2px 6px; border-radius: 3px; color: #ffd700;",
+                                        "/login" 
+                                    },
+                                    " in the chat to get started. You can authenticate with either your Anthropic API key or Claude Pro subscription."
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Claude Execution Mode Section
+                    div {
+                        class: "settings-section",
+                        h3 { "🤖 Claude Execution Mode" }
+                        p { 
+                            class: "settings-description",
+                            "Control how Claude Code interacts with the consensus pipeline for validation and enhancement." 
+                        }
+                        
+                        div {
+                            class: "execution-mode-selector",
+                            style: "display: flex; flex-direction: column; gap: 15px; margin-top: 20px;",
+                            
+                            // Direct Mode
+                            div {
+                                class: if *claude_execution_mode.read() == "Direct" { "mode-option selected" } else { "mode-option" },
+                                style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
+                                onclick: move |_| *claude_execution_mode.write() = "Direct".to_string(),
+                                
+                                div {
+                                    style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                    input {
+                                        r#type: "radio",
+                                        name: "claude_mode",
+                                        checked: *claude_execution_mode.read() == "Direct",
+                                        onchange: move |_| *claude_execution_mode.write() = "Direct".to_string(),
                                     }
+                                    h4 { 
+                                        style: "margin: 0; color: #ffffff;",
+                                        "⚡ Direct Execution" 
+                                    }
+                                }
+                                p { 
+                                    style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
+                                    "Claude executes autonomously with full speed. Best for simple tasks and when you trust Claude's judgment." 
+                                }
+                            }
+                            
+                            // Consensus Assisted Mode
+                            div {
+                                class: if *claude_execution_mode.read() == "ConsensusAssisted" { "mode-option selected" } else { "mode-option" },
+                                style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
+                                onclick: move |_| *claude_execution_mode.write() = "ConsensusAssisted".to_string(),
+                                
+                                div {
+                                    style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                    input {
+                                        r#type: "radio",
+                                        name: "claude_mode",
+                                        checked: *claude_execution_mode.read() == "ConsensusAssisted",
+                                        onchange: move |_| *claude_execution_mode.write() = "ConsensusAssisted".to_string(),
+                                    }
+                                    h4 { 
+                                        style: "margin: 0; color: #ffffff;",
+                                        "🔍 Consensus Assisted (Recommended)" 
+                                    }
+                                }
+                                p { 
+                                    style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
+                                    "Claude intelligently invokes consensus for high-risk operations, architectural changes, or when uncertain. Balances speed and safety." 
+                                }
+                            }
+                            
+                            // Consensus Required Mode
+                            div {
+                                class: if *claude_execution_mode.read() == "ConsensusRequired" { "mode-option selected" } else { "mode-option" },
+                                style: "padding: 15px; border: 2px solid #3e3e42; border-radius: 8px; cursor: pointer; transition: all 0.2s;",
+                                onclick: move |_| *claude_execution_mode.write() = "ConsensusRequired".to_string(),
+                                
+                                div {
+                                    style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                    input {
+                                        r#type: "radio",
+                                        name: "claude_mode",
+                                        checked: *claude_execution_mode.read() == "ConsensusRequired",
+                                        onchange: move |_| *claude_execution_mode.write() = "ConsensusRequired".to_string(),
+                                    }
+                                    h4 { 
+                                        style: "margin: 0; color: #ffffff;",
+                                        "🛡️ Consensus Required" 
+                                    }
+                                }
+                                p { 
+                                    style: "margin: 0 0 0 30px; color: #cccccc; font-size: 14px;",
+                                    "All Claude plans go through 4-stage consensus validation. Maximum safety but slower. Ideal for critical production changes." 
+                                }
+                            }
+                        }
+                        
+                        // Show current mode status
+                        div {
+                            style: "margin-top: 15px; padding: 12px; background: #2d2d30; border-radius: 6px; font-size: 14px;",
+                            "💡 Current mode: ",
+                            span {
+                                style: "color: #4ade80; font-weight: 600;",
+                                match claude_execution_mode.read().as_str() {
+                                    "Direct" => "Direct Execution",
+                                    "ConsensusAssisted" => "Consensus Assisted",
+                                    "ConsensusRequired" => "Consensus Required",
+                                    _ => "Unknown"
                                 }
                             }
                         }
@@ -839,12 +876,10 @@ pub fn SettingsDialog(
                             // Save settings with validation
                             let openrouter = local_openrouter_key.read().clone();
                             let hive = local_hive_key.read().clone();
-                            let anthropic = local_anthropic_key.read().clone();
                             
                             // Update parent signals
                             *openrouter_key.write() = openrouter.clone();
                             *hive_key.write() = hive.clone();
-                            *anthropic_key.write() = anthropic.clone();
                             
                             let mut is_validating = is_validating.clone();
                             let mut validation_error = validation_error.clone();
@@ -868,13 +903,6 @@ pub fn SettingsDialog(
                                     }
                                 }
                                 
-                                // Save Anthropic key
-                                if !anthropic.is_empty() {
-                                    if let Err(e) = crate::desktop::simple_db::save_config("anthropic_api_key", &anthropic) {
-                                        success = false;
-                                        error_msg = format!("Failed to save Anthropic key: {}", e);
-                                    }
-                                }
                                 
                                 // Save Claude execution mode
                                 if let Err(e) = crate::desktop::simple_db::save_config("claude_execution_mode", &execution_mode_to_save) {
@@ -883,6 +911,9 @@ pub fn SettingsDialog(
                                 } else {
                                     tracing::info!("✅ Saved Claude execution mode: {}", execution_mode_to_save);
                                 }
+                                
+                                // Update app state with new Claude settings
+                                app_state.write().claude_execution_mode = execution_mode_to_save;
                                 
                                 // Save and validate Hive key
                                 if !hive.is_empty() {
@@ -1354,7 +1385,6 @@ pub fn OnboardingDialog(
     
     // Track if keys already exist in database
     let has_existing_openrouter = crate::desktop::simple_db::has_openrouter_key();
-    let has_existing_anthropic = !anthropic_key.read().is_empty();
     let has_existing_hive = crate::desktop::simple_db::has_hive_key();
     
     // Profile configuration state
@@ -1740,13 +1770,6 @@ pub fn OnboardingDialog(
                                     "Add your Anthropic API key to use Claude Code integration for enhanced capabilities." 
                                 }
                                 
-                                // Show existing key message if applicable
-                                if has_existing_anthropic {
-                                    div {
-                                        style: "margin: 10px 0; padding: 10px; background: #2a3f2a; border: 1px solid #3a5f3a; border-radius: 4px; color: #90ee90;",
-                                        "✅ An Anthropic API key already exists. Enter a new key to update it."
-                                    }
-                                }
                                 
                                 div {
                                     class: "settings-field",

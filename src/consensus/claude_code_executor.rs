@@ -242,11 +242,16 @@ impl ClaudeCodeExecutor {
             let auth_method = crate::desktop::simple_db::get_config("claude_auth_method")
                 .ok()
                 .flatten()
-                .unwrap_or_else(|| "ApiKey".to_string());
+                .unwrap_or_else(|| "NotSelected".to_string());
             
             info!("🔐 Claude auth method preference: {}", auth_method);
             
             match auth_method.as_str() {
+                "NotSelected" => {
+                    return Err(anyhow!(
+                        "Please select an authentication method. Click the auth toggle below the chat input to choose between API key and Claude Pro subscription."
+                    ));
+                }
                 "ApiKey" => {
                     // Try to use API key
                     if let Some(key) = &self.anthropic_key {
@@ -277,8 +282,8 @@ impl ClaudeCodeExecutor {
                         _ => {
                             // No OAuth credentials, need to authenticate
                             return Err(anyhow!(
-                                "No Claude Pro/Max authentication found. Please authenticate through Settings.\n\
-                                Note: This requires an active Claude Pro ($200/month) subscription."
+                                "No Claude Pro/Team authentication found. Please authenticate through Settings.\n\
+                                Note: This requires an active Claude subscription (Pro/Team plan)."
                             ));
                         }
                     }
@@ -301,7 +306,7 @@ impl ClaudeCodeExecutor {
                             return Err(anyhow!(
                                 "No authentication configured. Please either:\n\
                                 1. Add your Anthropic API key in Settings, or\n\
-                                2. Authenticate as a Claude Pro/Max subscriber ($200/month)"
+                                2. Authenticate with your Claude Pro/Team subscription"
                             ));
                         }
                     }
