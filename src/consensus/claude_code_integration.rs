@@ -202,7 +202,21 @@ impl ClaudeCodeIntegration {
                 e
             })?;
         
-        let mut cmd = TokioCommand::new(&claude_binary);
+        // Check if it's a Node.js script (contains "node" in shebang or is .js file)
+        let is_node_script = claude_binary.ends_with(".js") || 
+            std::fs::read_to_string(&claude_binary)
+                .map(|content| content.starts_with("#!") && content.contains("node"))
+                .unwrap_or(false);
+        
+        let mut cmd = if is_node_script {
+            info!("📦 Claude Code is a Node.js script, running with node");
+            let mut node_cmd = TokioCommand::new("node");
+            node_cmd.arg(&claude_binary);
+            node_cmd
+        } else {
+            TokioCommand::new(&claude_binary)
+        };
+        
         cmd.stdin(Stdio::piped())
            .stdout(Stdio::piped())
            .stderr(Stdio::piped())
@@ -269,7 +283,33 @@ impl ClaudeCodeIntegration {
 
     /// Find Claude Code binary on system or install it
     async fn find_claude_binary(&self) -> Result<String> {
-        // First check npm global installation paths
+        // First check local node_modules (for bundled Claude Code)
+        let mut paths_to_check = vec![
+            // Project-local installation
+            "./node_modules/.bin/claude".to_string(),
+            "./node_modules/.bin/claude-code".to_string(),
+            "./node_modules/@anthropic-ai/claude-code/bin/claude".to_string(),
+        ];
+        
+        // Add user home directory paths
+        if let Ok(home) = std::env::var("HOME") {
+            paths_to_check.push(format!("{}/.hive/node_modules/.bin/claude", home));
+            paths_to_check.push(format!("{}/.hive/node_modules/.bin/claude-code", home));
+        }
+        
+        for path in &paths_to_check {
+            if let Ok(output) = Command::new(path)
+                .arg("--version")
+                .output() 
+            {
+                if output.status.success() {
+                    info!("✅ Found Claude Code at: {}", path);
+                    return Ok(path.clone());
+                }
+            }
+        }
+        
+        // Then check npm global installation paths
         if let Ok(output) = Command::new("npm")
             .args(&["config", "get", "prefix"])
             .output() 
