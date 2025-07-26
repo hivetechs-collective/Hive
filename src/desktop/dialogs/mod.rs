@@ -717,6 +717,81 @@ pub fn SettingsDialog(
                         }
                     }
                     
+                    // Claude Code Management Section
+                    div {
+                        class: "settings-section",
+                        h3 { "🤖 Claude Code Integration" }
+                        p { 
+                            class: "settings-description",
+                            "Manage the embedded Claude Code CLI that powers the hybrid experience." 
+                        }
+                        
+                        // Check Claude Code status
+                        div {
+                            style: "margin-top: 15px;",
+                            
+                            // Claude Code status indicator
+                            div {
+                                style: "display: flex; align-items: center; gap: 15px; padding: 12px; background: #2d2d30; border-radius: 6px;",
+                                
+                                div {
+                                    style: "flex: 1;",
+                                    div {
+                                        style: "font-weight: 600; margin-bottom: 4px;",
+                                        "Claude Code Status"
+                                    }
+                                    div {
+                                        style: "font-size: 14px; color: #888;",
+                                        "Checking installation..."
+                                    }
+                                }
+                                
+                                button {
+                                    class: "button button-secondary",
+                                    style: "padding: 8px 16px;",
+                                    onclick: move |_| {
+                                        spawn(async {
+                                            // Check for updates
+                                            if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
+                                                match installer.check_for_updates().await {
+                                                    Ok(true) => {
+                                                        tracing::info!("Claude Code update available");
+                                                        // TODO: Show update prompt
+                                                    }
+                                                    Ok(false) => {
+                                                        tracing::info!("Claude Code is up to date");
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::error!("Failed to check for updates: {}", e);
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    },
+                                    "Check for Updates"
+                                }
+                            }
+                            
+                            // Installation/Update options
+                            div {
+                                style: "margin-top: 10px; padding: 12px; background: #252526; border-radius: 6px; font-size: 14px;",
+                                
+                                div {
+                                    style: "display: flex; align-items: center; gap: 10px; margin-bottom: 8px;",
+                                    "ℹ️ Claude Code provides:"
+                                }
+                                
+                                ul {
+                                    style: "margin: 0; padding-left: 20px; color: #cccccc;",
+                                    li { "Native slash command autocomplete" }
+                                    li { "Built-in authentication (/login, /logout)" }
+                                    li { "All Claude Code features and tools" }
+                                    li { "Automatic updates from Anthropic" }
+                                }
+                            }
+                        }
+                    }
+                    
                     // Consensus Profile Section
                     div {
                         class: "settings-section",

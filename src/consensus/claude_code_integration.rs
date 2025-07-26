@@ -185,9 +185,9 @@ impl ClaudeCodeIntegration {
         Ok(())
     }
 
-    /// Find Claude Code binary on system
+    /// Find Claude Code binary on system or install it
     async fn find_claude_binary(&self) -> Result<String> {
-        // Try common locations for Claude Code
+        // First try to find existing Claude Code installation
         let possible_paths = vec![
             "claude",                          // In PATH
             "claude-code",                     // Alternative name in PATH
@@ -203,6 +203,7 @@ impl ClaudeCodeIntegration {
 
         info!("🔍 Searching for Claude Code binary...");
         
+        // Check common locations first
         for path in &possible_paths {
             let expanded_path = shellexpand::tilde(path);
             debug!("Checking: {}", expanded_path);
@@ -232,32 +233,32 @@ impl ClaudeCodeIntegration {
             }
         }
 
-        // Try using 'which' for claude-code as well
-        if let Ok(output) = Command::new("which")
-            .arg("claude-code")
-            .output() 
-        {
-            if output.status.success() {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    info!("✅ Found Claude Code via 'which': {}", path);
-                    return Ok(path);
+        // If not found, use our installer to install Claude Code
+        info!("Claude Code not found in standard locations. Installing bundled version...");
+        
+        match crate::consensus::claude_installer::ensure_claude_installed().await {
+            Ok(binary_path) => {
+                info!("✅ Claude Code installed at: {}", binary_path.display());
+                Ok(binary_path.to_string_lossy().to_string())
+            }
+            Err(e) => {
+                error!("❌ Failed to install Claude Code: {}", e);
+                error!("❌ Claude Code binary not found in any of these locations:");
+                for path in &possible_paths {
+                    error!("   - {}", path);
                 }
+                
+                Err(anyhow::anyhow!(
+                    "Claude Code binary not found and automatic installation failed.\n\
+                    Error: {}\n\n\
+                    Manual installation instructions:\n\
+                    1. Download from: https://claude.ai/download\n\
+                    2. Install and ensure 'claude' is in your PATH\n\
+                    3. Or restart Hive to retry automatic installation",
+                    e
+                ))
             }
         }
-
-        error!("❌ Claude Code binary not found in any of these locations:");
-        for path in &possible_paths {
-            error!("   - {}", path);
-        }
-
-        Err(anyhow::anyhow!(
-            "Claude Code binary not found. Please ensure Claude Code is installed and accessible.\n\
-            Installation instructions:\n\
-            1. Download from: https://claude.ai/download\n\
-            2. Install and ensure 'claude' is in your PATH\n\
-            3. Or specify the full path to the Claude Code binary"
-        ))
     }
 
     /// Process a user message - route to appropriate handler
