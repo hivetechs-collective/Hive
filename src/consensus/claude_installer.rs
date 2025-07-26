@@ -217,6 +217,54 @@ impl ClaudeInstaller {
         Ok(())
     }
     
+    /// Check if Claude Code is installed via npm
+    async fn check_npm_installation(&self) -> Option<PathBuf> {
+        // Get npm global prefix
+        if let Ok(output) = Command::new("npm")
+            .args(&["config", "get", "prefix"])
+            .output()
+        {
+            if output.status.success() {
+                let npm_prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                
+                // Check common npm global bin locations
+                let possible_paths = vec![
+                    PathBuf::from(&npm_prefix).join("bin").join("claude"),
+                    PathBuf::from(&npm_prefix).join("bin").join("claude-code"),
+                    // Windows npm global location
+                    PathBuf::from(&npm_prefix).join("claude.cmd"),
+                    PathBuf::from(&npm_prefix).join("claude-code.cmd"),
+                ];
+                
+                for path in possible_paths {
+                    if path.exists() {
+                        info!("✅ Found Claude Code via npm at: {}", path.display());
+                        return Some(path);
+                    }
+                }
+            }
+        }
+        
+        // Also check common npm global locations directly
+        let common_npm_paths = vec![
+            "/usr/local/lib/node_modules/.bin/claude",
+            "/opt/homebrew/lib/node_modules/.bin/claude",
+            "~/.npm-global/bin/claude",
+            "~/.nvm/versions/node/*/bin/claude",
+        ];
+        
+        for path_str in common_npm_paths {
+            let expanded = shellexpand::tilde(path_str);
+            let path = PathBuf::from(expanded.as_ref());
+            if path.exists() {
+                info!("✅ Found Claude Code at npm location: {}", path.display());
+                return Some(path);
+            }
+        }
+        
+        None
+    }
+    
     /// Check for updates using Claude's built-in update mechanism
     pub async fn check_for_updates(&self) -> Result<bool> {
         if !self.is_installed().await {
@@ -283,10 +331,48 @@ impl ClaudeInstaller {
 
 /// Check and install Claude Code if needed
 pub async fn ensure_claude_installed() -> Result<PathBuf> {
-    let installer = ClaudeInstaller::new()?;
+    let mut installer = ClaudeInstaller::new()?;
     
+    // First check if Claude Code is installed via npm
+    if let Some(npm_path) = installer.check_npm_installation().await {
+        info!("✅ Using npm-installed Claude Code at: {}", npm_path.display());
+        installer.binary_path = npm_path.clone();
+        
+        // Add to PATH for this process
+        installer.add_to_path()?;
+        
+        return Ok(npm_path);
+    }
+    
+    // Check standard installation
     if !installer.is_installed().await {
-        info!("Claude Code not found, installing...");
+        info!("Claude Code not found, attempting to install via npm...");
+        
+        // Try to install via npm
+        match Command::new("npm")
+            .args(&["install", "-g", "@anthropic-ai/claude-code"])
+            .output()
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("✅ Claude Code installed via npm");
+                    
+                    // Check again for npm installation
+                    if let Some(npm_path) = installer.check_npm_installation().await {
+                        installer.binary_path = npm_path.clone();
+                        installer.add_to_path()?;
+                        return Ok(npm_path);
+                    }
+                } else {
+                    warn!("npm install failed: {}", String::from_utf8_lossy(&output.stderr));
+                }
+            }
+            Err(e) => {
+                warn!("Failed to run npm install: {}", e);
+            }
+        }
+        
+        // Fall back to manual installation
         installer.install_or_update().await?;
     } else {
         // Check for updates in background

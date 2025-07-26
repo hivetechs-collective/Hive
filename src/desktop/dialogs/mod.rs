@@ -339,6 +339,13 @@ pub fn SettingsDialog(
     // Claude execution mode state
     let mut claude_execution_mode = use_signal(|| "ConsensusAssisted".to_string());
     
+    // Claude Code installation state
+    let mut claude_installed = use_signal(|| false);
+    let mut claude_version = use_signal(|| None::<String>);
+    let mut claude_update_available = use_signal(|| false);
+    let mut claude_installing = use_signal(|| false);
+    let mut claude_install_progress = use_signal(|| String::new());
+    
     // Load existing keys and profiles from database on mount
     use_effect(move || {
         // Load OpenRouter key if exists
@@ -347,6 +354,20 @@ pub fn SettingsDialog(
                 *openrouter_key.write() = key;
             }
         }
+        
+        // Check Claude Code installation status
+        let mut claude_installed = claude_installed.clone();
+        let mut claude_version = claude_version.clone();
+        spawn(async move {
+            if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
+                if installer.is_installed().await {
+                    *claude_installed.write() = true;
+                    if let Ok(Some(version)) = installer.get_installed_version().await {
+                        *claude_version.write() = Some(version);
+                    }
+                }
+            }
+        });
         
         // Load Claude execution mode if exists
         if let Ok(Some(mode)) = crate::desktop::simple_db::get_config("claude_execution_mode") {
@@ -730,6 +751,27 @@ pub fn SettingsDialog(
                         div {
                             style: "margin-top: 15px;",
                             
+                            // Run dependency check on mount
+                            div {
+                                onmounted: move |_| {
+                                    spawn(async move {
+                                        use crate::desktop::dependency_checker::check_dependencies;
+                                        let deps = check_dependencies().await;
+                                        
+                                        // Find Claude Code status
+                                        for dep in deps {
+                                            if dep.name == "Claude Code" {
+                                                claude_installed.set(dep.installed);
+                                                if let Some(version) = dep.version {
+                                                    claude_version.set(Some(version));
+                                                }
+                                                break;
+                                            }
+                                        }
+                                    });
+                                },
+                            }
+                            
                             // Claude Code status indicator
                             div {
                                 style: "display: flex; align-items: center; gap: 15px; padding: 12px; background: #2d2d30; border-radius: 6px;",
@@ -742,37 +784,188 @@ pub fn SettingsDialog(
                                     }
                                     div {
                                         style: "font-size: 14px; color: #888;",
-                                        "Checking installation..."
+                                        if *claude_installed.read() {
+                                            span {
+                                                style: "color: #4ade80;",
+                                                "✅ Installed - ",
+                                                span {
+                                                    style: "color: #888;",
+                                                    "{claude_version.read().clone().unwrap_or_else(|| \"Unknown version\".to_string())}"
+                                                }
+                                            }
+                                        } else {
+                                            span {
+                                                style: "color: #f87171;",
+                                                "❌ Not installed"
+                                            }
+                                        }
                                     }
                                 }
                                 
-                                button {
-                                    class: "button button-secondary",
-                                    style: "padding: 8px 16px;",
-                                    onclick: move |_| {
-                                        spawn(async {
-                                            // Check for updates
-                                            if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
-                                                match installer.check_for_updates().await {
-                                                    Ok(true) => {
-                                                        tracing::info!("Claude Code update available");
-                                                        // TODO: Show update prompt
-                                                    }
-                                                    Ok(false) => {
-                                                        tracing::info!("Claude Code is up to date");
-                                                    }
-                                                    Err(e) => {
-                                                        tracing::error!("Failed to check for updates: {}", e);
+                                if *claude_installed.read() {
+                                    button {
+                                        class: "button button-secondary",
+                                        style: "padding: 8px 16px;",
+                                        onclick: move |_| {
+                                            let mut claude_update_available = claude_update_available.clone();
+                                            spawn(async move {
+                                                // Check for updates
+                                                if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
+                                                    match installer.check_for_updates().await {
+                                                        Ok(true) => {
+                                                            *claude_update_available.write() = true;
+                                                            tracing::info!("Claude Code update available");
+                                                        }
+                                                        Ok(false) => {
+                                                            *claude_update_available.write() = false;
+                                                            tracing::info!("Claude Code is up to date");
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::error!("Failed to check for updates: {}", e);
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        });
-                                    },
-                                    "Check for Updates"
+                                            });
+                                        },
+                                        "Check for Updates"
+                                    }
+                                } else {
+                                    button {
+                                        class: "button button-primary",
+                                        style: "padding: 8px 16px; background: #4ade80;",
+                                        onclick: move |_| {
+                                            let mut claude_installed = claude_installed.clone();
+                                            let mut claude_version = claude_version.clone();
+                                            let mut claude_installing = claude_installing.clone();
+                                            let mut claude_install_progress = claude_install_progress.clone();
+                                            spawn(async move {
+                                                *claude_installing.write() = true;
+                                                
+                                                // Use our new installer with progress
+                                                use crate::desktop::dependency_checker::install_claude_code;
+                                                
+                                                use std::sync::{Arc, Mutex};
+                                                let progress_ref = Arc::new(Mutex::new(claude_install_progress.clone()));
+                                                match install_claude_code(move |msg| {
+                                                    if let Ok(mut progress) = progress_ref.lock() {
+                                                        progress.set(msg);
+                                                    }
+                                                }).await {
+                                                    Ok(_) => {
+                                                        *claude_installed.write() = true;
+                                                        claude_install_progress.set("✅ Installation complete!".to_string());
+                                                        
+                                                        // Get version
+                                                        if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
+                                                            if let Ok(Some(version)) = installer.get_installed_version().await {
+                                                                *claude_version.write() = Some(version);
+                                                            }
+                                                            tracing::info!("Claude Code installed successfully");
+                                                        } else {
+                                                            tracing::error!("Claude Code installation verification failed");
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::error!("Failed to install Claude Code: {}", e);
+                                                        claude_install_progress.set(format!("❌ Installation failed: {}", e));
+                                                    }
+                                                }
+                                                
+                                                *claude_installing.write() = false;
+                                            });
+                                        },
+                                        if *claude_installing.read() {
+                                            "Installing..."
+                                        } else {
+                                            "Install Claude Code"
+                                        }
+                                    }
                                 }
                             }
                             
-                            // Installation/Update options
+                            // Show installation progress
+                            if *claude_installing.read() && !claude_install_progress.read().is_empty() {
+                                div {
+                                    style: "margin-top: 10px; padding: 12px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px;",
+                                    p {
+                                        style: "color: #cccccc; margin: 0; font-size: 14px;",
+                                        "📦 {claude_install_progress}"
+                                    }
+                                }
+                            }
+                            
+                            // Show update prompt if available
+                            if *claude_update_available.read() {
+                                div {
+                                    style: "margin-top: 10px; padding: 12px; background: #1a472a; border: 1px solid #4ade80; border-radius: 6px;",
+                                    div {
+                                        style: "display: flex; align-items: center; justify-content: space-between;",
+                                        span {
+                                            style: "color: #4ade80;",
+                                            "🎉 A new version of Claude Code is available!"
+                                        }
+                                        button {
+                                            class: "button button-primary",
+                                            style: "padding: 6px 12px; font-size: 13px;",
+                                            onclick: move |_| {
+                                                let mut claude_version = claude_version.clone();
+                                                spawn(async move {
+                                                    if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
+                                                        match installer.perform_update().await {
+                                                            Ok(_) => {
+                                                                if let Ok(Some(version)) = installer.get_installed_version().await {
+                                                                    *claude_version.write() = Some(version);
+                                                                }
+                                                                tracing::info!("Claude Code updated successfully");
+                                                            }
+                                                            Err(e) => {
+                                                                tracing::error!("Failed to update Claude Code: {}", e);
+                                                            }
+                                                        }
+                                                    }
+                                                });
+                                            },
+                                            "Update Now"
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Installation instructions when not installed
+                            if !*claude_installed.read() {
+                                div {
+                                    style: "margin-top: 10px; padding: 15px; background: #252526; border-radius: 6px; font-size: 14px;",
+                                    h4 {
+                                        style: "margin: 0 0 10px 0; color: #f87171;",
+                                        "⚠️ Claude Code Not Found"
+                                    }
+                                    p {
+                                        style: "margin-bottom: 10px; color: #cccccc; line-height: 1.5;",
+                                        "Claude Code CLI is required for the full Hive AI experience. The installer will guide you through the setup process."
+                                    }
+                                    
+                                    div {
+                                        style: "background: #1e1e1e; padding: 10px; border-radius: 4px; margin: 10px 0;",
+                                        h5 {
+                                            style: "margin: 0 0 8px 0; color: #4ade80;",
+                                            "📥 Manual Installation Steps:"
+                                        }
+                                        ol {
+                                            style: "margin: 0; padding-left: 20px; color: #cccccc;",
+                                            li { "Download Claude Code from https://claude.ai/download" }
+                                            li { "Place the 'claude' binary in: ~/.hive/claude-code/" }
+                                            li { "Click 'Install Claude Code' button above" }
+                                        }
+                                    }
+                                    
+                                    p {
+                                        style: "margin-top: 10px; font-size: 13px; color: #888;",
+                                        "Once installed, Claude Code will auto-update through its built-in updater."
+                                    }
+                                }
+                            }
+                            
+                            // Additional installation help
                             div {
                                 style: "margin-top: 10px; padding: 12px; background: #252526; border-radius: 6px; font-size: 14px;",
                                 

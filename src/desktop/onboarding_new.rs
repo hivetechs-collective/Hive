@@ -1,6 +1,7 @@
 //! New simplified onboarding dialog that actually closes
 
 use dioxus::prelude::*;
+use crate::desktop::dependency_checker::{check_dependencies, install_claude_code, DependencyStatus};
 
 /// Onboarding Dialog - completely rewritten to work properly
 #[component]
@@ -15,7 +16,7 @@ pub fn OnboardingDialog(
 
     if !visible {
         tracing::debug!("OnboardingDialog: Not visible, returning None");
-        return None;
+        return rsx! {};
     }
 
     tracing::info!("OnboardingDialog: Rendering (visible=true)");
@@ -23,9 +24,13 @@ pub fn OnboardingDialog(
     // Local state
     let mut temp_openrouter_key = use_signal(|| String::new());
     let mut temp_hive_key = use_signal(|| String::new());
+    let mut dependencies = use_signal(|| Vec::<DependencyStatus>::new());
+    let mut dependency_check_done = use_signal(|| false);
+    let mut installing_claude = use_signal(|| false);
+    let mut install_progress = use_signal(|| String::new());
 
     // Simple close function
-    let close = move || {
+    let mut close = move || {
         tracing::info!("CLOSING DIALOG - setting show_onboarding to false");
         show_onboarding.set(false);
     };
@@ -76,6 +81,104 @@ pub fn OnboardingDialog(
                             div {
                                 h3 {
                                     style: "margin: 0 0 15px 0; color: #ffffff;",
+                                    "🔍 Checking Dependencies"
+                                }
+                                
+                                // Run dependency check on first render of this step
+                                if !dependency_check_done() {
+                                    div {
+                                        onmounted: move |_| {
+                                            spawn(async move {
+                                                let deps = check_dependencies().await;
+                                                dependencies.set(deps);
+                                                dependency_check_done.set(true);
+                                            });
+                                        },
+                                        p {
+                                            style: "color: #cccccc;",
+                                            "Checking system requirements..."
+                                        }
+                                    }
+                                } else {
+                                    // Show dependency status
+                                    div {
+                                        style: "margin-top: 20px;",
+                                        for dep in dependencies() {
+                                            div {
+                                                style: "margin-bottom: 15px; padding: 10px; background: #3c3c3c; border-radius: 4px;",
+                                                div {
+                                                    style: "display: flex; justify-content: space-between; align-items: center;",
+                                                    span {
+                                                        style: "color: #ffffff; font-weight: bold;",
+                                                        "{dep.name}"
+                                                    }
+                                                    if dep.installed {
+                                                        span {
+                                                            style: "color: #4ec9b0;",
+                                                            "✅ Installed"
+                                                        }
+                                                    } else {
+                                                        span {
+                                                            style: "color: #f48771;",
+                                                            "❌ Not installed"
+                                                        }
+                                                    }
+                                                }
+                                                if let Some(version) = &dep.version {
+                                                    p {
+                                                        style: "color: #8b8b8b; margin: 5px 0 0 0; font-size: 12px;",
+                                                        "{version}"
+                                                    }
+                                                }
+                                                if !dep.installed && dep.name == "Claude Code" && !installing_claude() {
+                                                    button {
+                                                        style: "margin-top: 10px; padding: 6px 12px; background: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer;",
+                                                        onclick: move |_| {
+                                                            installing_claude.set(true);
+                                                            spawn(async move {
+                                                                use std::sync::{Arc, Mutex};
+                                                                let progress_ref = Arc::new(Mutex::new(install_progress.clone()));
+                                                                match install_claude_code(move |msg| {
+                                                                    if let Ok(mut progress) = progress_ref.lock() {
+                                                                        progress.set(msg);
+                                                                    }
+                                                                }).await {
+                                                                    Ok(_) => {
+                                                                        // Refresh dependencies
+                                                                        let deps = check_dependencies().await;
+                                                                        dependencies.set(deps);
+                                                                        installing_claude.set(false);
+                                                                    }
+                                                                    Err(e) => {
+                                                                        install_progress.set(format!("Error: {}", e));
+                                                                        installing_claude.set(false);
+                                                                    }
+                                                                }
+                                                            });
+                                                        },
+                                                        "Install Automatically"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        if installing_claude() {
+                                            div {
+                                                style: "margin-top: 20px; padding: 15px; background: #2d2d30; border: 1px solid #3e3e42; border-radius: 4px;",
+                                                p {
+                                                    style: "color: #cccccc; margin: 0;",
+                                                    "📦 {install_progress}"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        3 => rsx! {
+                            div {
+                                h3 {
+                                    style: "margin: 0 0 15px 0; color: #ffffff;",
                                     "Configure Your License (Optional)"
                                 }
                                 input {
@@ -87,7 +190,7 @@ pub fn OnboardingDialog(
                                 }
                             }
                         },
-                        3 => rsx! {
+                        4 => rsx! {
                             div {
                                 h3 {
                                     style: "margin: 0 0 15px 0; color: #ffffff;",
@@ -102,7 +205,7 @@ pub fn OnboardingDialog(
                                 }
                             }
                         },
-                        4 => rsx! {
+                        5 => rsx! {
                             div {
                                 h3 {
                                     style: "margin: 0 0 15px 0; color: #ffffff;",
@@ -114,7 +217,7 @@ pub fn OnboardingDialog(
                                 }
                             }
                         },
-                        5 => rsx! {
+                        6 => rsx! {
                             div {
                                 h3 {
                                     style: "margin: 0 0 15px 0; color: #ffffff;",
@@ -122,7 +225,7 @@ pub fn OnboardingDialog(
                                 }
                                 p {
                                     style: "color: #cccccc;",
-                                    "Click 'Get Started' to begin using Hive Consensus."
+                                    "Click 'Get Started' to begin using Hive Consensus with Claude Code integration."
                                 }
                             }
                         },
@@ -154,11 +257,11 @@ pub fn OnboardingDialog(
                         div {} // Empty spacer
                     }
 
-                    // Skip button for step 2
-                    if current_step() == 2 {
+                    // Skip button for step 3 (Hive key)
+                    if current_step() == 3 {
                         button {
                             style: "padding: 8px 16px; background: #3e3e42; color: #cccccc; border: none; border-radius: 4px; cursor: pointer;",
-                            onclick: move |_| current_step.set(3),
+                            onclick: move |_| current_step.set(4),
                             "Skip"
                         }
                     }
@@ -170,17 +273,17 @@ pub fn OnboardingDialog(
                             let step = current_step();
 
                             match step {
-                                1..=4 => {
+                                1..=5 => {
                                     // Save data if needed at each step
-                                    if step == 2 && !temp_hive_key().is_empty() {
+                                    if step == 3 && !temp_hive_key().is_empty() {
                                         hive_key.set(temp_hive_key());
-                                    } else if step == 3 && !temp_openrouter_key().is_empty() {
+                                    } else if step == 4 && !temp_openrouter_key().is_empty() {
                                         openrouter_key.set(temp_openrouter_key());
                                     }
 
                                     current_step.set(step + 1);
                                 },
-                                5 => {
+                                6 => {
                                     // Final step - close the dialog
                                     tracing::info!("Get Started clicked - CLOSING DIALOG");
 

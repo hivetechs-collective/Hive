@@ -182,7 +182,8 @@ pub use claude_code_executor::{
     ConsensusInvocationCriteria
 };
 pub use claude_code_integration::{
-    ClaudeCodeIntegration, HybridMessage, HybridMessageType
+    ClaudeCodeIntegration, HybridMessage, HybridMessageType,
+    ClaudeExecutionMode as HybridExecutionMode
 };
 
 // Re-export commonly used items

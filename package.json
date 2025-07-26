@@ -40,7 +40,7 @@
     "npm": ">=8.0.0"
   },
   "scripts": {
-    "postinstall": "node install.js",
+    "postinstall": "node install.js && npm install -g @anthropic-ai/claude-code",
     "preuninstall": "node uninstall.js",
     "test": "echo \"Binary distribution - no tests needed\"",
     "version": "./bin/hive --version"
@@ -57,5 +57,8 @@
   "preferGlobal": true,
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.61"
   }
 }

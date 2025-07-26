@@ -96,7 +96,7 @@ pub fn process_ai_helper_events(
                 }
             }
             
-            AIHelperUIEvent::CreateFile { path, content, open_after_create } => {
+            AIHelperUIEvent::CreateFile { path, content: _, open_after_create } => {
                 tracing::info!("📝 AI Helper creating file: {}", path.display());
                 
                 // The file has already been created by the AI Helper

@@ -61,6 +61,9 @@ try {
             console.log('⚠️  Shell completions not installed (optional)');
         }
         
+        // Install Claude Code
+        installClaudeCode();
+        
     } catch (error) {
         console.log('⚠️  Installation completed but verification failed');
         console.log('   You may need to restart your terminal or update your PATH');
@@ -199,3 +202,40 @@ process.on('SIGTERM', () => {
     console.log('\n❌ Installation terminated');
     process.exit(1);
 });
+
+// Install Claude Code function
+function installClaudeCode() {
+    console.log('\n🤖 Installing Claude Code CLI...');
+    
+    try {
+        // Check if Claude Code is already installed
+        try {
+            const claudeVersion = execSync('claude --version', { stdio: 'pipe' }).toString().trim();
+            console.log(`✅ Claude Code already installed: ${claudeVersion}`);
+            return;
+        } catch (e) {
+            // Claude not installed, proceed with installation
+        }
+        
+        // Install Claude Code globally via npm
+        console.log('📦 Installing @anthropic-ai/claude-code...');
+        
+        try {
+            execSync('npm install -g @anthropic-ai/claude-code', { stdio: 'inherit' });
+            
+            // Verify installation
+            const claudeVersion = execSync('claude --version', { stdio: 'pipe' }).toString().trim();
+            console.log(`✅ Claude Code installed successfully: ${claudeVersion}`);
+            
+        } catch (npmError) {
+            console.log('⚠️  Failed to install Claude Code automatically');
+            console.log('   You may need to run: npm install -g @anthropic-ai/claude-code');
+            console.log('   Or check npm permissions and try again');
+        }
+        
+    } catch (error) {
+        console.error('❌ Claude Code installation failed:', error.message);
+        console.log('\n🔧 To use hybrid features, manually install Claude Code:');
+        console.log('   npm install -g @anthropic-ai/claude-code');
+    }
+}

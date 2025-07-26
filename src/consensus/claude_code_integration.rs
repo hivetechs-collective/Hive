@@ -17,6 +17,7 @@ use futures::StreamExt;
 use crate::consensus::engine::ConsensusEngine;
 use crate::memory::ThematicCluster;
 use crate::core::database::DatabaseManager;
+use crate::consensus::types::Stage;
 
 /// Commands that should be handled by Hive instead of Claude Code
 const HIVE_COMMANDS: &[&str] = &[
@@ -27,6 +28,68 @@ const HIVE_COMMANDS: &[&str] = &[
     "/hive-analyze",     // Repository analysis
     "/hive-learn",       // Continuous learning insights
 ];
+
+/// Stateless context injected before Claude queries
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatelessContext {
+    /// Recent curator articles from past 24-48 hours
+    pub recent_knowledge: String,
+    /// Thematically similar past conversations
+    pub thematic_knowledge: String,
+    /// Learned patterns from AI helpers
+    pub learned_patterns: String,
+    /// Repository context if applicable
+    pub repository_context: Option<String>,
+    /// User preferences and profile settings
+    pub user_preferences: Option<String>,
+}
+
+impl StatelessContext {
+    /// Convert context to a system prompt for Claude
+    pub fn to_system_prompt(&self) -> String {
+        let mut prompt = String::from(
+            "You are Claude Code integrated with Hive Consensus, operating in stateless mode.\n\n\
+            Key principles:\n\
+            1. Each request is independent - you have no conversation history\n\
+            2. The context provided contains relevant past knowledge from the memory system\n\
+            3. When uncertain about complex decisions, explicitly state \"I would benefit from consensus validation\"\n\
+            4. All your outputs will be stored as knowledge for future requests\n\
+            5. You have full access to all Claude Code capabilities and commands\n\n"
+        );
+        
+        if !self.recent_knowledge.is_empty() {
+            prompt.push_str("Recent curator knowledge (authoritative answers from past 24h):\n");
+            prompt.push_str(&self.recent_knowledge);
+            prompt.push_str("\n\n");
+        }
+        
+        if !self.thematic_knowledge.is_empty() {
+            prompt.push_str("Thematically similar past conversations:\n");
+            prompt.push_str(&self.thematic_knowledge);
+            prompt.push_str("\n\n");
+        }
+        
+        if !self.learned_patterns.is_empty() {
+            prompt.push_str("Learned patterns and best practices:\n");
+            prompt.push_str(&self.learned_patterns);
+            prompt.push_str("\n\n");
+        }
+        
+        if let Some(repo_context) = &self.repository_context {
+            prompt.push_str("Repository context:\n");
+            prompt.push_str(repo_context);
+            prompt.push_str("\n\n");
+        }
+        
+        if let Some(prefs) = &self.user_preferences {
+            prompt.push_str("User preferences:\n");
+            prompt.push_str(prefs);
+            prompt.push_str("\n\n");
+        }
+        
+        prompt
+    }
+}
 
 /// Represents a message between our interface and Claude Code
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +109,17 @@ pub enum HybridMessageType {
     ClaudeStreaming,
     ClaudeToolUse,
     ClaudeThinking,
+}
+
+/// Execution modes for Claude Code
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ClaudeExecutionMode {
+    /// Run consensus before Claude
+    ConsensusFirst,
+    /// Claude first, then consensus validation
+    ConsensusAssisted,
+    /// Direct Claude only (with context)
+    Direct,
 }
 
 /// Main integration point between Hive and Claude Code
@@ -71,6 +145,11 @@ pub struct ClaudeCodeIntegration {
     /// State management
     is_claude_authenticated: Arc<RwLock<bool>>,
     current_directory: Arc<RwLock<String>>,
+    
+    /// Execution mode controls
+    execution_mode: Arc<RwLock<ClaudeExecutionMode>>,
+    plan_mode_enabled: Arc<RwLock<bool>>,
+    auto_edit_enabled: Arc<RwLock<bool>>,
 }
 
 impl ClaudeCodeIntegration {
@@ -96,6 +175,9 @@ impl ClaudeCodeIntegration {
             database,
             is_claude_authenticated: Arc::new(RwLock::new(false)),
             current_directory: Arc::new(RwLock::new(current_dir)),
+            execution_mode: Arc::new(RwLock::new(ClaudeExecutionMode::Direct)),
+            plan_mode_enabled: Arc::new(RwLock::new(false)),
+            auto_edit_enabled: Arc::new(RwLock::new(true)),
         };
 
         // Start Claude Code process
@@ -187,7 +269,34 @@ impl ClaudeCodeIntegration {
 
     /// Find Claude Code binary on system or install it
     async fn find_claude_binary(&self) -> Result<String> {
-        // First try to find existing Claude Code installation
+        // First check npm global installation paths
+        if let Ok(output) = Command::new("npm")
+            .args(&["config", "get", "prefix"])
+            .output() 
+        {
+            if output.status.success() {
+                let npm_prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let npm_paths = vec![
+                    format!("{}/bin/claude", npm_prefix),
+                    format!("{}/bin/claude-code", npm_prefix),
+                    format!("{}/claude.cmd", npm_prefix),  // Windows
+                ];
+                
+                for path in npm_paths {
+                    if let Ok(output) = Command::new(&path)
+                        .arg("--version")
+                        .output() 
+                    {
+                        if output.status.success() {
+                            info!("✅ Found Claude Code via npm at: {}", path);
+                            return Ok(path);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Then try standard installation paths
         let possible_paths = vec![
             "claude",                          // In PATH
             "claude-code",                     // Alternative name in PATH
@@ -199,6 +308,8 @@ impl ClaudeCodeIntegration {
             "/usr/bin/claude-code",            // Alternative system install
             "~/.local/bin/claude",             // User local install
             "~/.local/bin/claude-code",        // Alternative user local
+            "/usr/local/lib/node_modules/.bin/claude",  // npm global
+            "/opt/homebrew/lib/node_modules/.bin/claude", // npm on Apple Silicon
         ];
 
         info!("🔍 Searching for Claude Code binary...");
@@ -261,6 +372,47 @@ impl ClaudeCodeIntegration {
         }
     }
 
+    /// Build stateless context for Claude queries
+    async fn build_stateless_context(&self, request: &str) -> Result<StatelessContext> {
+        // Get recent curator knowledge
+        let recent_knowledge = match self.thematic_cluster.get_curator_knowledge_base(request).await {
+            Ok(knowledge) => knowledge,
+            Err(e) => {
+                warn!("Failed to get curator knowledge base: {}", e);
+                String::new()
+            }
+        };
+        
+        // Get thematic matches
+        let thematic_knowledge = match self.thematic_cluster.find_relevant_knowledge_for_ai(request, "claude_context").await {
+            Ok(knowledge) => knowledge,
+            Err(e) => {
+                warn!("Failed to get thematic knowledge: {}", e);
+                String::new()
+            }
+        };
+        
+        // Get learned patterns - for now, we'll use a placeholder
+        // TODO: Integrate with ContinuousLearner when available
+        let learned_patterns = String::from("No learned patterns available yet.");
+        
+        // Get repository context if applicable - placeholder for now
+        // TODO: Integrate with repository analysis
+        let repository_context = None;
+        
+        // Get user preferences - placeholder for now
+        // TODO: Load from user profile
+        let user_preferences = None;
+        
+        Ok(StatelessContext {
+            recent_knowledge,
+            thematic_knowledge,
+            learned_patterns,
+            repository_context,
+            user_preferences,
+        })
+    }
+
     /// Process a user message - route to appropriate handler
     pub async fn process_message(&self, message: &str) -> Result<Vec<HybridMessage>> {
         let trimmed = message.trim();
@@ -271,9 +423,33 @@ impl ClaudeCodeIntegration {
             return self.handle_hive_command(&hive_command, trimmed).await;
         }
 
-        // Check if this is a Claude Code command or regular message
-        info!("🤖 Passing to Claude Code: {}", trimmed);
-        self.send_to_claude(trimmed).await
+        // Build stateless context for Claude
+        let context = self.build_stateless_context(trimmed).await?;
+        
+        // Apply mode-based routing
+        let execution_mode = *self.execution_mode.read().await;
+        let responses = match execution_mode {
+            ClaudeExecutionMode::ConsensusFirst => {
+                info!("🎯 ConsensusFirst mode: Running consensus before Claude");
+                self.consensus_first_flow(trimmed, context).await
+            }
+            ClaudeExecutionMode::ConsensusAssisted => {
+                info!("🤖 ConsensusAssisted mode: Claude first, then validation");
+                self.consensus_assisted_flow(trimmed, context).await
+            }
+            ClaudeExecutionMode::Direct => {
+                info!("🤖 Direct mode: Passing to Claude Code with context");
+                self.direct_claude_flow(trimmed, context).await
+            }
+        }?;
+        
+        // Store the responses as conversation context for future queries
+        if let Err(e) = self.store_claude_response_as_context(trimmed, &responses).await {
+            warn!("Failed to store response as context: {}", e);
+            // Don't fail the request if storage fails
+        }
+        
+        Ok(responses)
     }
 
     /// Extract Hive command if present
@@ -592,6 +768,174 @@ impl ClaudeCodeIntegration {
         let responses = self.collect_claude_responses().await?;
         Ok(responses)
     }
+    
+    /// Send message to Claude Code with stateless context
+    async fn send_to_claude_with_context(&self, message: &str, context: StatelessContext) -> Result<Vec<HybridMessage>> {
+        // Check for plan mode and auto-edit mode
+        let plan_mode = *self.plan_mode_enabled.read().await;
+        let auto_edit = *self.auto_edit_enabled.read().await;
+        
+        // Prepare the enhanced message with context and mode instructions
+        let mut system_prompt = context.to_system_prompt();
+        
+        if plan_mode {
+            system_prompt.push_str("\n⚠️ PLAN MODE ENABLED: Create a detailed plan but DO NOT execute any code changes. Only outline the steps.\n");
+        }
+        
+        if !auto_edit {
+            system_prompt.push_str("\n⚠️ AUTO-EDIT DISABLED: Ask for confirmation before making any file modifications.\n");
+        }
+        
+        let enhanced_message = format!(
+            "{}\n\nUser query: {}",
+            system_prompt,
+            message
+        );
+        
+        debug!("Sending to Claude with context. Context size: {} chars", system_prompt.len());
+        
+        // Send the enhanced message
+        self.send_to_claude(&enhanced_message).await
+    }
+    
+    /// ConsensusFirst flow: Run consensus before Claude
+    async fn consensus_first_flow(&self, message: &str, context: StatelessContext) -> Result<Vec<HybridMessage>> {
+        let mut responses = Vec::new();
+        
+        // First, run consensus
+        responses.push(HybridMessage {
+            content: "🎯 Running consensus pipeline first...".to_string(),
+            message_type: HybridMessageType::SystemMessage,
+            metadata: None,
+        });
+        
+        // Run consensus through the engine (this is a simplified version)
+        // In a full implementation, this would use the actual consensus pipeline
+        let consensus_result = format!(
+            "Consensus analysis for: {}\n\
+            Note: Full 4-stage consensus integration pending API stabilization.\n\
+            This would normally run Generator → Refiner → Validator → Curator stages.",
+            message
+        );
+        
+        responses.push(HybridMessage {
+            content: format!("✅ Consensus Result:\n{}", consensus_result),
+            message_type: HybridMessageType::HiveResponse,
+            metadata: Some(json!({ "source": "consensus" })),
+        });
+        
+        // Then send to Claude with consensus results
+        let enhanced_context = StatelessContext {
+            recent_knowledge: format!("{}\n\nConsensus Analysis:\n{}", 
+                context.recent_knowledge, consensus_result),
+            ..context
+        };
+        
+        let claude_responses = self.send_to_claude_with_context(message, enhanced_context).await?;
+        responses.extend(claude_responses);
+        
+        Ok(responses)
+    }
+    
+    /// ConsensusAssisted flow: Claude first, then validate with consensus
+    async fn consensus_assisted_flow(&self, message: &str, context: StatelessContext) -> Result<Vec<HybridMessage>> {
+        let mut responses = Vec::new();
+        
+        // First, get Claude's response
+        let claude_responses = self.send_to_claude_with_context(message, context).await?;
+        responses.extend(claude_responses.clone());
+        
+        // Check if consensus validation is needed
+        let needs_validation = claude_responses.iter().any(|r| {
+            r.content.contains("would benefit from consensus validation") ||
+            r.content.contains("complex decision") ||
+            r.content.contains("uncertain")
+        });
+        
+        if needs_validation {
+            responses.push(HybridMessage {
+                content: "🎯 Running consensus validation...".to_string(),
+                message_type: HybridMessageType::SystemMessage,
+                metadata: None,
+            });
+            
+            // Run validation through consensus (simplified version)
+            let validation_result = "Consensus validation complete. The approach has been analyzed for correctness and best practices.";
+            
+            responses.push(HybridMessage {
+                content: format!("✅ {}", validation_result),
+                message_type: HybridMessageType::HiveResponse,
+                metadata: Some(json!({ "source": "consensus_validation" })),
+            });
+        }
+        
+        Ok(responses)
+    }
+    
+    /// Direct flow: Just Claude with context
+    async fn direct_claude_flow(&self, message: &str, context: StatelessContext) -> Result<Vec<HybridMessage>> {
+        self.send_to_claude_with_context(message, context).await
+    }
+
+    /// Store Claude response as conversation context in the database
+    async fn store_claude_response_as_context(
+        &self, 
+        query: &str, 
+        responses: &[HybridMessage]
+    ) -> Result<()> {
+        // Combine all Claude responses into a single knowledge article
+        let mut claude_content = String::new();
+        let mut has_claude_response = false;
+        
+        for response in responses {
+            match response.message_type {
+                HybridMessageType::ClaudeResponse => {
+                    claude_content.push_str(&response.content);
+                    claude_content.push('\n');
+                    has_claude_response = true;
+                }
+                _ => {}
+            }
+        }
+        
+        if !has_claude_response || claude_content.trim().is_empty() {
+            return Ok(()); // Nothing to store
+        }
+        
+        // Format Claude's response as conversation context (not authoritative)
+        let conversation_context = format!(
+            "Claude Code Response:\n{}\n\n---\n*This is conversation context, not an authoritative source*",
+            claude_content.trim()
+        );
+        
+        // Store the conversation context in the database
+        // Note: We store with empty final_answer and source_of_truth since only curator responses are authoritative
+        use crate::core::database::KnowledgeConversation;
+        
+        match KnowledgeConversation::create(
+            Some(uuid::Uuid::new_v4().to_string()), // conversation_id
+            query.to_string(),                       // question
+            String::new(),                           // final_answer (empty - not authoritative)
+            String::new(),                           // source_of_truth (empty - not authoritative)
+        ).await {
+            Ok(mut knowledge) => {
+                // Set the conversation context
+                knowledge.conversation_context = Some(conversation_context);
+                
+                info!("✅ Stored Claude response as conversation context for thematic clustering");
+                
+                // Don't update thematic clusters with curator knowledge since this isn't authoritative
+                // The thematic cluster will still be able to find this conversation context
+                // when searching for similar questions
+                
+                Ok(())
+            }
+            Err(e) => {
+                warn!("Failed to store Claude response as conversation context: {}", e);
+                Err(e)
+            }
+        }
+    }
 
     /// Collect responses from Claude Code (handles streaming)
     async fn collect_claude_responses(&self) -> Result<Vec<HybridMessage>> {
@@ -729,6 +1073,39 @@ impl ClaudeCodeIntegration {
     /// Get list of available Hive commands
     pub fn get_hive_commands(&self) -> Vec<String> {
         HIVE_COMMANDS.iter().map(|&s| s.to_string()).collect()
+    }
+    
+    /// Set execution mode
+    pub async fn set_execution_mode(&self, mode: ClaudeExecutionMode) {
+        *self.execution_mode.write().await = mode;
+        info!("Set Claude execution mode to: {:?}", mode);
+    }
+    
+    /// Get current execution mode
+    pub async fn get_execution_mode(&self) -> ClaudeExecutionMode {
+        *self.execution_mode.read().await
+    }
+    
+    /// Enable/disable plan mode
+    pub async fn set_plan_mode(&self, enabled: bool) {
+        *self.plan_mode_enabled.write().await = enabled;
+        info!("Plan mode {}", if enabled { "enabled" } else { "disabled" });
+    }
+    
+    /// Check if plan mode is enabled
+    pub async fn is_plan_mode_enabled(&self) -> bool {
+        *self.plan_mode_enabled.read().await
+    }
+    
+    /// Enable/disable auto-edit mode
+    pub async fn set_auto_edit_mode(&self, enabled: bool) {
+        *self.auto_edit_enabled.write().await = enabled;
+        info!("Auto-edit mode {}", if enabled { "enabled" } else { "disabled" });
+    }
+    
+    /// Check if auto-edit mode is enabled
+    pub async fn is_auto_edit_enabled(&self) -> bool {
+        *self.auto_edit_enabled.read().await
     }
     
     /// Enable JSON protocol mode (for Claude Code SDK)

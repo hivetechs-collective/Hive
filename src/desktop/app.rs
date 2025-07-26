@@ -37,6 +37,9 @@ pub fn App() -> Element {
     
     // Track when profile changes to force consensus engine reload
     let profile_change_version = use_signal(|| 0u32);
+    
+    // Notification state for updates
+    let mut update_notification = use_signal(|| None::<String>);
 
     // API key states - initialize with values from database if available
     let mut openrouter_key = use_signal(|| {
@@ -73,6 +76,42 @@ pub fn App() -> Element {
             // Check if onboarding is already completed
             if onboarding_completed {
                 tracing::info!("Onboarding already completed - loading keys");
+                
+                // Check dependencies on every launch
+                tracing::info!("🔍 Checking dependencies...");
+                use crate::desktop::dependency_checker::{check_dependencies, install_claude_code};
+                let dependencies = check_dependencies().await;
+                
+                for dep in dependencies {
+                    if !dep.installed {
+                        tracing::warn!("⚠️ Missing dependency: {}", dep.name);
+                        
+                        // Auto-install Claude Code if missing
+                        if dep.name == "Claude Code" {
+                            tracing::info!("📦 Auto-installing Claude Code...");
+                            match install_claude_code(|msg| {
+                                tracing::info!("Install progress: {}", msg);
+                            }).await {
+                                Ok(_) => tracing::info!("✅ Claude Code installed successfully"),
+                                Err(e) => tracing::error!("❌ Failed to auto-install Claude Code: {}", e),
+                            }
+                        }
+                    } else if dep.name == "Claude Code" {
+                        // Check for updates
+                        tracing::info!("🔄 Checking for Claude Code updates...");
+                        if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
+                            match installer.check_for_updates().await {
+                                Ok(true) => {
+                                    tracing::info!("🎉 Claude Code update available!");
+                                    update_notification.set(Some("🎉 A new version of Claude Code is available! Go to Settings to update.".to_string()));
+                                }
+                                Ok(false) => tracing::info!("✅ Claude Code is up to date"),
+                                Err(e) => tracing::debug!("Could not check for updates: {}", e),
+                            }
+                        }
+                    }
+                }
+                
                 // Just load the keys from simple_db, don't show onboarding
                 if let Ok(Some(key)) = crate::desktop::simple_db::get_config("openrouter_api_key") {
                     openrouter_key.set(key);
@@ -159,6 +198,31 @@ pub fn App() -> Element {
                     tracing::error!("❌ Failed to load initial profile on app startup");
                 }
             });
+        });
+    });
+
+    // Periodic update check (every hour)
+    use_effect(move || {
+        let mut update_notification_clone = update_notification.clone();
+        
+        spawn(async move {
+            loop {
+                // Wait for 1 hour
+                tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+                
+                // Check for Claude Code updates
+                tracing::info!("🔄 Periodic check for Claude Code updates...");
+                if let Ok(installer) = crate::consensus::claude_installer::ClaudeInstaller::new() {
+                    match installer.check_for_updates().await {
+                        Ok(true) => {
+                            tracing::info!("🎉 Claude Code update available (periodic check)!");
+                            update_notification_clone.set(Some("🎉 A new version of Claude Code is available! Go to Settings to update.".to_string()));
+                        }
+                        Ok(false) => tracing::debug!("Claude Code is up to date (periodic check)"),
+                        Err(e) => tracing::debug!("Could not check for updates (periodic): {}", e),
+                    }
+                }
+            }
         });
     });
 
@@ -401,6 +465,42 @@ pub fn App() -> Element {
 
             // Status Bar
             StatusBar {}
+            
+            // Update Notification
+            if let Some(notification) = update_notification.read().as_ref() {
+                div {
+                    class: "update-notification",
+                    style: "position: fixed; top: 20px; right: 20px; background: #2d2d30; border: 1px solid #4ade80; border-radius: 8px; padding: 16px 20px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 1000; max-width: 400px; animation: slideIn 0.3s ease-out;",
+                    div {
+                        style: "display: flex; align-items: center; gap: 12px;",
+                        span {
+                            style: "font-size: 14px; color: #cccccc;",
+                            "{notification}"
+                        }
+                        button {
+                            style: "margin-left: auto; background: none; border: none; color: #888; cursor: pointer; font-size: 18px; padding: 0; width: 24px; height: 24px;",
+                            onclick: move |_| update_notification.set(None),
+                            "×"
+                        }
+                    }
+                    div {
+                        style: "margin-top: 12px; display: flex; gap: 10px;",
+                        button {
+                            style: "padding: 6px 12px; background: #4ade80; color: #000; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;",
+                            onclick: move |_| {
+                                show_settings.set(true);
+                                update_notification.set(None);
+                            },
+                            "Open Settings"
+                        }
+                        button {
+                            style: "padding: 6px 12px; background: #3e3e42; color: #cccccc; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;",
+                            onclick: move |_| update_notification.set(None),
+                            "Dismiss"
+                        }
+                    }
+                }
+            }
 
             // Dialogs (rendered on top of everything)
             OnboardingDialog {

@@ -805,6 +805,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a runtime to initialize the database before launching desktop
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
+        // Check dependencies on startup
+        use hive_ai::desktop::dependency_checker::ensure_dependencies_installed;
+        
+        tracing::info!("🔍 Checking system dependencies...");
+        match ensure_dependencies_installed().await {
+            Ok(_) => tracing::info!("✅ All dependencies verified"),
+            Err(e) => {
+                tracing::warn!("⚠️ Dependency check warning: {}", e);
+                // Don't block startup, but log the warning
+                // The onboarding process will handle missing dependencies
+            }
+        }
+        
         // Initialize the database
         let config = hive_ai::core::config::get_hive_config_dir();
         let db_path = config.join("hive-ai.db");
@@ -944,22 +957,17 @@ fn App() -> Element {
         tracing::info!("API keys version changed to {}, recreating consensus manager", version);
         *consensus_manager.write() = use_consensus_with_version(version);
         
-        // Initialize Claude Code integration if we have a consensus manager
-        if consensus_manager.read().is_some() {
-            tracing::info!("🚀 Consensus manager available, initializing Claude Code integration...");
-            let cm = consensus_manager.clone();
-            spawn(async move {
-                // Initialize Claude Code integration for hybrid chat
-                tracing::info!("🔧 Calling initialize_claude_code_integration...");
-                if let Err(e) = initialize_claude_code_integration(&*cm.read()).await {
-                    tracing::error!("Failed to initialize Claude Code integration: {}", e);
-                } else {
-                    tracing::info!("✅ Claude Code integration initialized successfully");
-                }
-            });
-        } else {
-            tracing::warn!("⚠️ Consensus manager not available, skipping Claude Code integration");
-        }
+        // Always initialize Claude Code integration for hybrid chat experience
+        tracing::info!("🚀 Initializing Claude Code integration for hybrid chat...");
+        spawn(async move {
+            // Initialize Claude Code integration - it doesn't actually need consensus manager
+            tracing::info!("🔧 Starting Claude Code integration initialization...");
+            if let Err(e) = initialize_claude_code_integration(&None).await {
+                tracing::error!("Failed to initialize Claude Code integration: {}", e);
+            } else {
+                tracing::info!("✅ Claude Code integration initialized successfully");
+            }
+        });
     });
 
     // State management
