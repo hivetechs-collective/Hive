@@ -169,7 +169,7 @@ impl ClaudeCodeIntegration {
             input_sender: Arc::new(Mutex::new(None)),
             output_receiver: Arc::new(Mutex::new(None)),
             message_buffer: Arc::new(Mutex::new(String::new())),
-            use_json_protocol: Arc::new(RwLock::new(false)),
+            use_json_protocol: Arc::new(RwLock::new(true)), // Use JSON protocol for Claude Code
             consensus_engine,
             thematic_cluster,
             database,
@@ -183,10 +183,9 @@ impl ClaudeCodeIntegration {
         // Start Claude Code process
         integration.start_claude_process().await?;
         
-        // Initialize context
-        if let Err(e) = integration.initialize_context().await {
-            warn!("Failed to initialize Claude Code context: {}", e);
-        }
+        // Skip initialization message - Claude Code CLI doesn't expect chat-style input
+        // The subprocess is ready to receive actual commands
+        info!("✅ Claude Code process started and ready for commands");
 
         Ok(integration)
     }
@@ -212,9 +211,17 @@ impl ClaudeCodeIntegration {
             info!("📦 Claude Code is a Node.js script, running with node");
             let mut node_cmd = TokioCommand::new("node");
             node_cmd.arg(&claude_binary);
+            // Use stream-json for bidirectional communication
+            node_cmd.arg("--print")
+                    .arg("--output-format").arg("stream-json")
+                    .arg("--input-format").arg("stream-json");
             node_cmd
         } else {
-            TokioCommand::new(&claude_binary)
+            let mut direct_cmd = TokioCommand::new(&claude_binary);
+            direct_cmd.arg("--print")
+                      .arg("--output-format").arg("stream-json")
+                      .arg("--input-format").arg("stream-json");
+            direct_cmd
         };
         
         cmd.stdin(Stdio::piped())
@@ -232,6 +239,10 @@ impl ClaudeCodeIntegration {
         // Get stdout for receiving responses
         let stdout = child.stdout.take()
             .context("Failed to get Claude Code stdout")?;
+            
+        // Get stderr for error monitoring
+        let stderr = child.stderr.take()
+            .context("Failed to get Claude Code stderr")?;
 
         // Set up output monitoring with enhanced parsing
         let (output_tx, output_rx) = mpsc::unbounded_channel();
@@ -269,6 +280,15 @@ impl ClaudeCodeIntegration {
                         break;
                     }
                 }
+            }
+        });
+        
+        // Spawn stderr reader for error monitoring
+        let stderr_reader = BufReader::new(stderr);
+        tokio::spawn(async move {
+            let mut lines = stderr_reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                warn!("Claude Code stderr: {}", line);
             }
         });
 
@@ -782,15 +802,13 @@ impl ClaudeCodeIntegration {
         let use_json = *self.use_json_protocol.read().await;
         
         if use_json {
-            // Send as JSON message for Claude Code SDK
+            // Send as JSON message for Claude Code stream-json format
+            // The format expects just the prompt wrapped in JSON
             let json_message = json!({
-                "type": "message",
-                "content": message,
-                "conversation_id": uuid::Uuid::new_v4().to_string(),
-                "timestamp": chrono::Utc::now().to_rfc3339()
+                "prompt": message
             });
             
-            let json_str = serde_json::to_string(&json_message)?;
+            let json_str = format!("{}\n", serde_json::to_string(&json_message)?);
             input_sender.write_all(json_str.as_bytes()).await
                 .context("Failed to send JSON message to Claude Code")?;
         } else {
