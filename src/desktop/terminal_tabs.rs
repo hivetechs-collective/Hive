@@ -187,7 +187,7 @@ pub fn TerminalTabs() -> Element {
                     // Keyboard shortcut hint
                     span {
                         style: "color: #969696; font-size: 11px; margin-right: 8px;",
-                        "Ctrl+` to toggle"
+                        if cfg!(target_os = "macos") { "Cmd+T to toggle" } else { "Ctrl+T to toggle" }
                     }
                     
                     // Split terminal button

@@ -417,17 +417,42 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
             if is_claude_interactive && command.trim() == "claude" {
                 // Show a message that interactive Claude isn't supported yet
                 output_lines.write().push_back(TerminalLine {
-                    text: "⚠️ Interactive Claude Code mode is not yet supported in this terminal.".to_string(),
+                    text: "⚠️ Interactive Claude mode requires PTY support (coming soon!)".to_string(),
                     line_type: LineType::Error,
                     timestamp: Local::now(),
                 });
                 output_lines.write().push_back(TerminalLine {
-                    text: "Please use Claude with a prompt: claude \"your question here\"".to_string(),
+                    text: "".to_string(),
                     line_type: LineType::Output,
                     timestamp: Local::now(),
                 });
                 output_lines.write().push_back(TerminalLine {
-                    text: "Or use: claude --help for more options".to_string(),
+                    text: "🔧 Workaround options:".to_string(),
+                    line_type: LineType::Success,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "1. Use Claude with a prompt: claude \"your question here\"".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "2. Continue a session: claude --continue".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "3. Use your system terminal for interactive mode".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "💡 Tip: This terminal excels at non-interactive Claude commands!".to_string(),
                     line_type: LineType::Output,
                     timestamp: Local::now(),
                 });
