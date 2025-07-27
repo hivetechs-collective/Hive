@@ -8,6 +8,7 @@ use chrono::{Duration, Utc};
 // Terminal imports
 use hive_ai::desktop::terminal::{Terminal, LineType};
 use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
+use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 /// Analytics data structure for the dashboard
 #[derive(Debug, Clone, Default)]
@@ -1076,7 +1077,11 @@ fn App() -> Element {
     
     // Terminal state
     let mut show_terminal = use_signal(|| true); // Terminal visible by default
-    let terminal_height = use_signal(|| 300); // Default terminal height in pixels
+    
+    // Panel resizing state
+    let sidebar_width = use_signal(|| 250.0);
+    let chat_width = use_signal(|| 400.0);
+    let terminal_height = use_signal(|| 300.0);
 
     // Subscription state
     let subscription_display = use_signal(|| String::from("Loading..."));
@@ -2232,11 +2237,14 @@ fn App() -> Element {
             // Main content (below menu bar)
             div {
                 class: "main-content",
+                style: "position: relative;",
 
                 // Sidebar (left)
                 div {
                     class: "sidebar",
-                    style: "background: #0E1414; border-right: 1px solid #2D3336; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; height: 100%;",
+                    style: format!("background: #0E1414; border-right: 1px solid #2D3336; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; height: 100%; width: {}px; position: relative;", 
+                        sidebar_width.read()
+                    ),
 
                     // Logo section at the top
                     div {
@@ -2672,13 +2680,26 @@ fn App() -> Element {
                     
                     // Terminal section (bottom)
                     if *show_terminal.read() {
+                        // Terminal resize handle
                         div {
-                            style: format!("height: {}px; border-top: 1px solid #3e3e42; display: flex; flex-direction: column; background: #1e1e1e;", 
-                                terminal_height.read()
-                            ),
+                            style: "position: relative;",
                             
-                            // TerminalTabs handles both the tab bar and terminal content
-                            TerminalTabs {}
+                            // Resize divider above terminal
+                            ResizableDivider {
+                                direction: ResizeDirection::Vertical,
+                                size: terminal_height,
+                                min_size: 100.0,
+                                max_size: 600.0,
+                            }
+                            
+                            div {
+                                style: format!("height: {}px; border-top: 1px solid #3e3e42; display: flex; flex-direction: column; background: #1e1e1e;", 
+                                    terminal_height.read()
+                                ),
+                                
+                                // TerminalTabs handles both the tab bar and terminal content
+                                TerminalTabs {}
+                            }
                         }
                     }
                 }
@@ -2686,6 +2707,7 @@ fn App() -> Element {
                 // Chat panel (right)
                 div {
                     class: "chat-panel",
+                    style: format!("width: {}px;", chat_width.read()),
 
                     // Panel header
                     div {
