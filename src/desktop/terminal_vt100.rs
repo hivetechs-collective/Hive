@@ -4,10 +4,12 @@
 //! that provides full terminal capabilities for interactive CLI tools
 
 use dioxus::prelude::*;
+use dioxus::document::eval;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::sync::{Arc, Mutex};
-use std::io::{Read, Write};
+use std::io::{Read, Write, ErrorKind};
 use std::thread;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use vt100;
 
@@ -26,8 +28,9 @@ pub fn TerminalVt100(
 ) -> Element {
     // Terminal state
     let mut terminal_state = use_signal(|| None::<Arc<Vt100Terminal>>);
-    let mut screen_html = use_signal(|| String::new());
+    let mut screen_html = use_signal(|| String::from(r#"<div style="color: #666; padding: 10px;">Initializing terminal...</div>"#));
     let mut update_trigger = use_signal(|| 0u32);
+    let mut is_ready = use_signal(|| false);
     
     // Initialize terminal
     let terminal_id_for_init = terminal_id.clone();
@@ -36,7 +39,12 @@ pub fn TerminalVt100(
             tracing::info!("🚀 Initializing VT100 terminal for {}", terminal_id_for_init.clone());
             match create_terminal(initial_directory.clone()) {
                 Ok((terminal, mut output_rx)) => {
-                    terminal_state.set(Some(Arc::new(terminal)));
+                    let terminal_arc = Arc::new(terminal);
+                    terminal_state.set(Some(terminal_arc.clone()));
+                    
+                    // Set terminal as ready immediately - don't wait for shell prompt
+                    is_ready.set(true);
+                    tracing::info!("🚀 Terminal ready immediately - accepting input");
                     
                     // Spawn output handler
                     let mut screen_html = screen_html.clone();
@@ -45,6 +53,34 @@ pub fn TerminalVt100(
                         while let Some(()) = output_rx.recv().await {
                             // Trigger re-render
                             update_trigger.set(update_trigger() + 1);
+                        }
+                    });
+                    
+                    // Ensure terminal gets focus after initialization
+                    // Try multiple times to ensure focus is acquired
+                    spawn(async move {
+                        for i in 0..5 {
+                            tokio::time::sleep(Duration::from_millis(50 + i * 50)).await;
+                            let result = eval(r#"
+                                const terminal = document.querySelector('.terminal-vt100[tabindex="0"]');
+                                if (terminal && document.activeElement !== terminal) {
+                                    terminal.focus();
+                                    console.log('Terminal auto-focused after init');
+                                    return true;
+                                } else if (terminal && document.activeElement === terminal) {
+                                    console.log('Terminal already has focus');
+                                    return true;
+                                }
+                                return false;
+                            "#).await;
+                            
+                            // If focus was successful, break
+                            if let Ok(focused) = result {
+                                if focused == "true" {
+                                    tracing::info!("✅ Terminal focus acquired on attempt {}", i + 1);
+                                    break;
+                                }
+                            }
                         }
                     });
                     
@@ -66,6 +102,8 @@ pub fn TerminalVt100(
                 screen_html.set(html.clone());
                 if !html.is_empty() {
                     tracing::debug!("🖥️ Terminal screen updated (trigger: {})", trigger_value);
+                    
+                    // Terminal has new content - scrolling will be handled by CSS
                 }
             }
         }
@@ -74,9 +112,20 @@ pub fn TerminalVt100(
     // Handle keyboard input
     let handle_keydown = {
         let terminal_state = terminal_state.clone();
+        let is_ready = is_ready.clone();
         move |evt: Event<KeyboardData>| {
+            // Log immediately to verify events are being received
+            tracing::info!("🎹 Keyboard event received: key={:?}, ready={}", evt.key(), is_ready());
+            
+            // IMPORTANT: Do NOT stop propagation - let it bubble up naturally
+            // Only prevent default to stop browser behavior
             evt.prevent_default();
-            evt.stop_propagation();
+            
+            // Only process input if terminal is ready
+            if !is_ready() {
+                tracing::warn!("⏳ Terminal not ready yet, ignoring input");
+                return;
+            }
             
             if let Some(terminal) = terminal_state.read().as_ref() {
                 if let Some(input) = keyboard_to_bytes(&evt) {
@@ -84,32 +133,39 @@ pub fn TerminalVt100(
                     if let Ok(mut writer) = terminal.writer.lock() {
                         match writer.write_all(&input) {
                             Ok(_) => {
-                                let _ = writer.flush();
-                                tracing::debug!("✅ Keyboard input sent successfully");
+                                match writer.flush() {
+                                    Ok(_) => {
+                                        tracing::debug!("✅ Keyboard input sent and flushed successfully");
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("❌ Failed to flush after keyboard input: {}", e);
+                                    }
+                                }
                             }
                             Err(e) => tracing::error!("❌ Failed to send keyboard input: {}", e),
                         }
+                    } else {
+                        tracing::error!("❌ Failed to acquire writer lock for keyboard input");
                     }
                 }
             }
         }
     };
     
-    // Terminal container style
+    // Terminal container style - simplified to avoid any CSS performance issues
     let container_style = "
         width: 100%;
         height: 100%;
         background: #000000;
         color: #cccccc;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-family: monospace;
         font-size: 14px;
         line-height: 18px;
-        overflow: auto;
+        overflow-y: auto;
         padding: 8px;
         box-sizing: border-box;
         white-space: pre;
         cursor: text;
-        position: relative;
     ";
     
     rsx! {
@@ -117,12 +173,58 @@ pub fn TerminalVt100(
             class: "terminal-vt100",
             style: "{container_style}",
             tabindex: "0",
+            autofocus: "true",
             onkeydown: handle_keydown,
+            onkeyup: move |_| {
+                // Keep focus on terminal
+                tracing::trace!("Key up event");
+            },
+            onclick: move |_| {
+                // Focus terminal on click
+                tracing::debug!("Terminal clicked, ensuring focus");
+                
+                // Use eval to ensure the terminal has focus
+                spawn(async move {
+                    let _ = eval(r#"
+                        const terminal = document.querySelector('.terminal-vt100[tabindex="0"]');
+                        if (terminal && document.activeElement !== terminal) {
+                            terminal.focus();
+                            console.log('Terminal focused on click');
+                        }
+                    "#).await;
+                });
+            },
+            onmounted: move |evt| {
+                // Auto-focus the terminal when mounted
+                tracing::info!("🎯 Terminal mounted, requesting focus");
+                
+                // Use JavaScript eval to focus the element after a short delay
+                // This ensures the element is fully ready in the DOM
+                spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                    let _ = eval(r#"
+                        const terminal = document.querySelector('.terminal-vt100[tabindex="0"]');
+                        if (terminal) {
+                            terminal.focus();
+                            console.log('Terminal focused via eval on mount');
+                        } else {
+                            console.error('Terminal element not found');
+                        }
+                    "#).await;
+                    tracing::info!("🎯 Focus script executed via eval");
+                });
+            },
+            onfocusin: move |_| {
+                tracing::info!("✅ Terminal gained focus");
+            },
+            onfocusout: move |_| {
+                tracing::info!("❌ Terminal lost focus");
+            },
             
-            // Render terminal screen
+            // Render terminal screen without JavaScript
             div {
                 dangerous_inner_html: "{screen_html}",
-                style: "width: 100%; height: 100%;"
+                style: "width: 100%; height: 100%; pointer-events: none;"
             }
         }
     }
@@ -132,17 +234,20 @@ pub fn TerminalVt100(
 fn create_terminal(
     working_directory: Option<String>,
 ) -> Result<(Vt100Terminal, mpsc::UnboundedReceiver<()>), Box<dyn std::error::Error>> {
+    let start_time = Instant::now();
+    
     // Terminal size - use a wider default for modern screens
     let cols = 120;
     let rows = 30;
     
     // Create PTY system
+    tracing::debug!("⏱️ Creating PTY system...");
     let pty_system = NativePtySystem::default();
     
     // Set up command
-    let mut cmd = CommandBuilder::new(
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
-    );
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+    tracing::info!("🐚 Using shell: {}", shell);
+    let mut cmd = CommandBuilder::new(shell.clone());
     
     // Set working directory
     if let Some(dir) = working_directory {
@@ -152,8 +257,11 @@ fn create_terminal(
     // Set environment variables for proper terminal support
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    // Disable shell RC files for faster startup (optional - comment out if you need shell customization)
+    // cmd.env("BASH_ENV", "");
+    // cmd.env("ENV", "");
     
-    tracing::debug!("Creating PTY with size {}x{}", cols, rows);
+    tracing::debug!("⏱️ Creating PTY with size {}x{} ({}ms elapsed)", cols, rows, start_time.elapsed().as_millis());
     
     // Create PTY pair
     let pty_pair = pty_system.openpty(PtySize {
@@ -163,30 +271,43 @@ fn create_terminal(
         pixel_height: rows * 16,
     })?;
     
+    tracing::debug!("⏱️ PTY created ({}ms elapsed)", start_time.elapsed().as_millis());
+    
     // Spawn the shell
-    tracing::info!("🐚 Spawning shell: {}", std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string()));
-    let child = pty_pair.slave.spawn_command(cmd)?;
+    tracing::info!("⏱️ Spawning shell process... ({}ms elapsed)", start_time.elapsed().as_millis());
+    let _child = pty_pair.slave.spawn_command(cmd)?;
     std::mem::drop(pty_pair.slave); // Close slave side
+    
+    tracing::debug!("⏱️ Shell spawned ({}ms elapsed)", start_time.elapsed().as_millis());
     
     // Get reader and writer
     let reader = pty_pair.master.try_clone_reader()?;
     let writer = pty_pair.master.take_writer()?;
     
-    // Create vt100 parser
-    let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 1000)));
+    // IMPORTANT: Don't send any input immediately - let the shell initialize naturally
+    tracing::debug!("⏱️ PTY reader/writer obtained ({}ms elapsed)", start_time.elapsed().as_millis());
+    
+    // Create vt100 parser with larger scrollback buffer
+    let parser = Arc::new(Mutex::new(vt100::Parser::new(rows, cols, 10000)));
     
     // Create update channel
     let (tx, rx) = mpsc::unbounded_channel();
     
-    // Spawn reader thread
+    // Spawn reader thread - simplified to avoid blocking issues
     let parser_for_reader = Arc::clone(&parser);
     thread::spawn(move || {
+        tracing::debug!("📖 Reader thread started");
+        
         let mut reader = reader;
         let mut buf = vec![0u8; 4096];
         
+        // Simple read loop - let the shell initialize naturally
         loop {
             match reader.read(&mut buf) {
-                Ok(0) => break, // EOF
+                Ok(0) => {
+                    tracing::info!("PTY EOF - shell process ended");
+                    break;
+                }
                 Ok(n) => {
                     // Process bytes through vt100 parser
                     if let Ok(mut parser) = parser_for_reader.lock() {
@@ -196,9 +317,18 @@ fn create_terminal(
                     // Notify UI to update
                     let _ = tx.send(());
                 }
-                Err(_) => break,
+                Err(e) if e.kind() == ErrorKind::Interrupted => {
+                    // Interrupted, retry immediately
+                    continue;
+                }
+                Err(e) => {
+                    tracing::error!("Error reading from PTY: {}", e);
+                    break;
+                }
             }
         }
+        
+        tracing::debug!("📖 Reader thread exiting");
     });
     
     Ok((
@@ -275,6 +405,20 @@ fn render_screen(parser: &vt100::Parser) -> String {
     let screen = parser.screen();
     let mut html = String::new();
     
+    // Add styles including cursor animation
+    html.push_str(r#"
+    <style>
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        .terminal-cursor {
+            background-color: #cccccc;
+            animation: blink 1s step-end infinite;
+        }
+    </style>
+    "#);
+    
     html.push_str(r#"<div style="font-family: monospace; white-space: pre; position: relative;">"#);
     
     // Get cursor position
@@ -282,173 +426,111 @@ fn render_screen(parser: &vt100::Parser) -> String {
     let cursor_row = cursor_row as usize;
     let cursor_col = cursor_col as usize;
     
-    // Get screen contents line by line
-    let mut lines = Vec::new();
+    // Process screen with colors and formatting
     for row in 0..screen.size().0 {
-        let mut line = String::new();
-        for col in 0..screen.size().1 {
-            if let Some(cell) = screen.cell(row, col) {
-                let ch = cell.contents();
-                if ch.is_empty() || ch == " " {
-                    line.push(' ');
-                } else {
-                    line.push_str(&ch);
-                }
-            } else {
-                line.push(' ');
-            }
-        }
-        lines.push(line);
-    }
-    
-    // Render lines with cursor
-    for (row_idx, line) in lines.iter().enumerate() {
-        if row_idx > 0 {
+        if row > 0 {
             html.push_str("<br>");
         }
         
-        if row_idx == cursor_row {
-            // Line with cursor - split at cursor position
-            let line_chars: Vec<char> = line.chars().collect();
+        for col in 0..screen.size().1 {
+            let is_cursor = row as usize == cursor_row && col as usize == cursor_col;
             
-            // Before cursor
-            for (col_idx, ch) in line_chars.iter().enumerate() {
-                if col_idx == cursor_col {
-                    // Add blinking cursor
-                    html.push_str(r#"<span style="background-color: #cccccc; color: #000000; animation: blink 1s step-end infinite;">▂</span>"#);
+            if let Some(cell) = screen.cell(row, col) {
+                let ch = cell.contents();
+                let character = if ch.is_empty() { " " } else { &ch };
+                
+                // Get cell attributes
+                let mut style_parts = Vec::new();
+                
+                // Foreground color
+                let fg = cell.fgcolor();
+                if fg != vt100::Color::Default {
+                    style_parts.push(format!("color: {}", vt100_color_to_css(fg)));
                 }
-                match ch {
-                    '<' => html.push_str("&lt;"),
-                    '>' => html.push_str("&gt;"),
-                    '&' => html.push_str("&amp;"),
-                    _ => html.push(*ch),
+                
+                // Background color  
+                let bg = cell.bgcolor();
+                if bg != vt100::Color::Default {
+                    style_parts.push(format!("background-color: {}", vt100_color_to_css(bg)));
                 }
-            }
-            
-            // If cursor is at end of line
-            if cursor_col >= line_chars.len() {
-                html.push_str(r#"<span style="background-color: #cccccc; color: #000000; animation: blink 1s step-end infinite;">▂</span>"#);
-            }
-        } else {
-            // Regular line without cursor
-            for ch in line.chars() {
-                match ch {
-                    '<' => html.push_str("&lt;"),
-                    '>' => html.push_str("&gt;"),
-                    '&' => html.push_str("&amp;"),
-                    _ => html.push(ch),
+                
+                // Bold
+                if cell.bold() {
+                    style_parts.push("font-weight: bold".to_string());
+                }
+                
+                // Italic
+                if cell.italic() {
+                    style_parts.push("font-style: italic".to_string());
+                }
+                
+                // Underline
+                if cell.underline() {
+                    style_parts.push("text-decoration: underline".to_string());
+                }
+                
+                // Render cell with styling
+                if is_cursor {
+                    html.push_str(r#"<span class="terminal-cursor">"#);
+                } else if !style_parts.is_empty() {
+                    html.push_str(&format!(r#"<span style="{}">"#, style_parts.join("; ")));
+                }
+                
+                // Escape HTML characters
+                match character {
+                    "<" => html.push_str("&lt;"),
+                    ">" => html.push_str("&gt;"),
+                    "&" => html.push_str("&amp;"),
+                    " " if is_cursor => html.push('▂'),
+                    _ => html.push_str(character),
+                }
+                
+                if is_cursor || !style_parts.is_empty() {
+                    html.push_str("</span>");
+                }
+            } else {
+                // Empty cell
+                if is_cursor {
+                    html.push_str(r#"<span class="terminal-cursor">▂</span>"#);
+                } else {
+                    html.push(' ');
                 }
             }
         }
     }
-    
-    // Add CSS for cursor blinking
-    html.push_str(r#"
-    <style>
-        @keyframes blink {
-            0%, 50% { opacity: 1; }
-            51%, 100% { opacity: 0; }
-        }
-    </style>
-    "#);
     
     html.push_str("</div>");
-    html
-}
-
-/// Convert ANSI escape sequences to HTML
-fn ansi_to_html(text: &[u8]) -> String {
-    let text_str = String::from_utf8_lossy(text);
     
-    // For now, let's do a simpler conversion that preserves the text
-    // We'll improve ANSI parsing later
-    let mut html = String::new();
-    let mut in_escape = false;
-    let mut escape_buffer = String::new();
-    
-    for ch in text_str.chars() {
-        if in_escape {
-            escape_buffer.push(ch);
-            // Simple check for end of escape sequence
-            if ch.is_alphabetic() || ch == '~' {
-                in_escape = false;
-                escape_buffer.clear();
-            }
-        } else if ch == '\x1b' {
-            in_escape = true;
-            escape_buffer.clear();
-            escape_buffer.push(ch);
-        } else {
-            // Regular character
-            match ch {
-                '<' => html.push_str("&lt;"),
-                '>' => html.push_str("&gt;"),
-                '&' => html.push_str("&amp;"),
-                '\n' => html.push_str("<br>"),
-                '\r' => {}, // Ignore carriage returns
-                _ => html.push(ch),
-            }
-        }
-    }
+    // Add a marker element at the end for auto-scrolling (no JavaScript)
     
     html
 }
 
-#[derive(Default, PartialEq)]
-struct AnsiStyle {
-    fg_color: Option<String>,
-    bg_color: Option<String>,
-    bold: bool,
-    italic: bool,
-    underline: bool,
-}
-
-impl AnsiStyle {
-    fn to_css(&self) -> String {
-        let mut css = String::new();
-        
-        if let Some(fg) = &self.fg_color {
-            css.push_str(&format!("color: {};", fg));
-        }
-        if let Some(bg) = &self.bg_color {
-            css.push_str(&format!("background-color: {};", bg));
-        }
-        if self.bold {
-            css.push_str("font-weight: bold;");
-        }
-        if self.italic {
-            css.push_str("font-style: italic;");
-        }
-        if self.underline {
-            css.push_str("text-decoration: underline;");
-        }
-        
-        css
+/// Convert vt100 color to CSS color
+fn vt100_color_to_css(color: vt100::Color) -> String {
+    match color {
+        vt100::Color::Default => "#cccccc".to_string(),
+        vt100::Color::Idx(idx) => match idx {
+            0 => "#000000".to_string(),   // Black
+            1 => "#cd3131".to_string(),   // Red
+            2 => "#0dbc79".to_string(),   // Green
+            3 => "#e5e510".to_string(),   // Yellow
+            4 => "#2472c8".to_string(),   // Blue
+            5 => "#bc3fbc".to_string(),   // Magenta
+            6 => "#11a8cd".to_string(),   // Cyan
+            7 => "#e5e5e5".to_string(),   // White
+            8 => "#666666".to_string(),   // Bright Black
+            9 => "#f14c4c".to_string(),   // Bright Red
+            10 => "#23d18b".to_string(),  // Bright Green
+            11 => "#f5f543".to_string(),  // Bright Yellow
+            12 => "#3b8eea".to_string(),  // Bright Blue
+            13 => "#d670d6".to_string(),  // Bright Magenta
+            14 => "#29b8db".to_string(),  // Bright Cyan
+            15 => "#e5e5e5".to_string(),  // Bright White
+            // Extended 256 color palette - just use default for now
+            _ => "#cccccc".to_string(),
+        },
+        vt100::Color::Rgb(r, g, b) => format!("#{:02x}{:02x}{:02x}", r, g, b),
     }
 }
 
-fn process_ansi_sequence(params: &str, command: char, style: &mut AnsiStyle) {
-    if command == 'm' {
-        // SGR (Select Graphic Rendition)
-        if params.is_empty() || params == "0" {
-            *style = AnsiStyle::default();
-        } else {
-            for param in params.split(';') {
-                match param {
-                    "1" => style.bold = true,
-                    "3" => style.italic = true,
-                    "4" => style.underline = true,
-                    "30" => style.fg_color = Some("#000000".to_string()),
-                    "31" => style.fg_color = Some("#cd3131".to_string()),
-                    "32" => style.fg_color = Some("#0dbc79".to_string()),
-                    "33" => style.fg_color = Some("#e5e510".to_string()),
-                    "34" => style.fg_color = Some("#2472c8".to_string()),
-                    "35" => style.fg_color = Some("#bc3fbc".to_string()),
-                    "36" => style.fg_color = Some("#11a8cd".to_string()),
-                    "37" => style.fg_color = Some("#e5e5e5".to_string()),
-                    _ => {}
-                }
-            }
-        }
-    }
-}
