@@ -3,7 +3,7 @@
 use crate::desktop::{
     consensus_integration::{use_consensus_with_version, DesktopConsensusManager},
     events::KeyboardEventUtils,
-    hybrid_chat_processor,
+    simple_chat_processor,
     state::*,
 };
 use dioxus::events::{KeyboardEvent, MouseEvent};
@@ -12,6 +12,7 @@ use dioxus::prelude::*;
 /// Chat Interface Component
 #[component]
 pub fn ChatInterface() -> Element {
+    tracing::info!("🎯 ChatInterface component rendering!");
     let app_state = use_context::<Signal<AppState>>();
     let state = app_state.read();
     let api_keys_version = use_context::<Signal<u32>>();
@@ -257,6 +258,7 @@ fn format_timestamp(timestamp: &chrono::DateTime<chrono::Utc>) -> String {
 /// Chat input component
 #[component]
 fn ChatInput() -> Element {
+    tracing::info!("🎯 ChatInput component rendering!");
     let mut app_state = use_context::<Signal<AppState>>();
     let mut input_text = use_signal(String::new);
     let mut is_composing = use_signal(|| false);
@@ -274,7 +276,7 @@ fn ChatInput() -> Element {
         move |_evt: MouseEvent| {
             let text = input_text.read().clone();
             if !text.trim().is_empty() {
-                hybrid_chat_processor::process_message(
+                simple_chat_processor::process_message(
                     text,
                     &mut app_state,
                     &mut input_text,
@@ -299,7 +301,7 @@ fn ChatInput() -> Element {
             {
                 let text = input_text.read().clone();
                 if !text.trim().is_empty() {
-                    hybrid_chat_processor::process_message(
+                    simple_chat_processor::process_message(
                         text,
                         &mut app_state,
                         &mut input_text,
@@ -402,6 +404,34 @@ fn ChatInput() -> Element {
                 // Right side: Claude Code Controls
                 div {
                     style: "display: flex; gap: 16px; align-items: center;",
+                    
+                    // Claude Code SDK Status
+                    div {
+                        style: "display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 4px; background: rgba(0, 122, 204, 0.1); cursor: pointer;",
+                        onclick: move |_| {
+                            spawn(async {
+                                tracing::info!("🧪 Testing Claude integration...");
+                                let status = simple_chat_processor::get_claude_status().await;
+                                tracing::info!("Claude status: {}", status);
+                            });
+                        },
+                        span {
+                            style: "font-size: 12px;",
+                            if app_state.read().claude_sdk_connected {
+                                "✅"
+                            } else {
+                                "❌"
+                            }
+                        }
+                        span {
+                            style: "font-size: 11px; color: #007ACC;",
+                            if app_state.read().claude_sdk_connected {
+                                "Claude Code SDK Connected"
+                            } else {
+                                "Claude Code SDK Offline (click to test)"
+                            }
+                        }
+                    }
                     
                     // Claude Code mode status (read-only display)
                     div {

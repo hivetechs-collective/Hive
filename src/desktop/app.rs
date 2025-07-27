@@ -458,10 +458,10 @@ pub fn App() -> Element {
 
                 // Right Panel - Chat Interface
                 ChatInterface {}
-
-                // Consensus Progress (always visible)
-                ConsensusProgress {}
             }
+
+            // Consensus Progress (always visible - outside main layout as it's fixed positioned)
+            ConsensusProgress {}
 
             // Status Bar
             StatusBar {}

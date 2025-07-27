@@ -467,14 +467,36 @@ input[type="radio"] {
     font-size: 14px;
 }
 
+/* ===== App Container ===== */
+.app-container {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--vscode-editor-background);
+}
+
+/* ===== Main Layout ===== */
+.main-layout {
+    display: flex;
+    flex: 1;
+    width: 100%;
+    height: calc(100vh - 52px); /* Account for menu bar (30px) and status bar (22px) */
+    overflow: hidden;
+}
+
 /* ===== File Explorer Specific ===== */
 .file-explorer {
-    width: 100%;
+    width: 250px;
+    min-width: 200px;
+    max-width: 400px;
     height: 100%;
     background: linear-gradient(135deg, #0E1414 0%, #181E21 100%);
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--hive-yellow-dark);
+    flex-shrink: 0;
 }
 
 .explorer-header {
@@ -640,6 +662,269 @@ input[type="radio"] {
     display: flex;
     flex-direction: column;
     height: 100%;
+    flex: 1;
+    position: relative;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.welcome-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+}
+
+.welcome-content {
+    text-align: center;
+    max-width: 600px;
+}
+
+.welcome-title {
+    font-size: 24px;
+    font-weight: 300;
+    color: var(--vscode-foreground);
+    margin-bottom: 16px;
+}
+
+/* Chat Input Styles */
+.chat-input-container {
+    padding: 20px;
+    border-top: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-panel-background);
+}
+
+.input-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.chat-input {
+    flex: 1;
+    min-height: 40px;
+    max-height: 200px;
+    padding: 10px 16px;
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    font-family: var(--vscode-font-family);
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.chat-input:focus {
+    border-color: var(--vscode-focusBorder);
+}
+
+.chat-input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.input-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.send-button {
+    padding: 8px 16px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+    min-width: 80px;
+}
+
+.send-button:hover:not(:disabled) {
+    background: var(--vscode-button-hoverBackground);
+}
+
+.send-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Send button styles */
+.send-btn {
+    padding: 8px 12px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+}
+
+.send-btn:hover:not(.disabled) {
+    background: var(--vscode-button-hoverBackground);
+}
+
+.send-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--vscode-button-background);
+}
+
+.send-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+/* Additional welcome styles */
+.welcome-subtitle {
+    font-size: 14px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 24px;
+}
+
+.system-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+}
+
+.status-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--vscode-input-background);
+    border-radius: 4px;
+    border: 1px solid var(--vscode-input-border);
+}
+
+.status-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 14px;
+}
+
+.status-icon.success {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+}
+
+.status-text {
+    font-size: 13px;
+    color: var(--vscode-foreground);
+}
+
+.commands-section {
+    margin-top: 32px;
+}
+
+.commands-title {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    color: var(--vscode-foreground);
+}
+
+.command-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.command-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.command-code {
+    font-family: var(--vscode-editor-font-family);
+    font-size: 13px;
+    background: var(--vscode-textCodeBlock-background);
+    padding: 4px 8px;
+    border-radius: 3px;
+    color: var(--vscode-textPreformat-foreground);
+}
+
+.command-desc {
+    font-size: 13px;
+    color: var(--vscode-descriptionForeground);
+}
+
+/* Message row styles */
+.message-row {
+    display: flex;
+    margin-bottom: 16px;
+    animation: fadeIn 0.3s ease;
+}
+
+.message-row.user {
+    justify-content: flex-end;
+}
+
+.message-row.assistant,
+.message-row.system,
+.message-row.error {
+    justify-content: flex-start;
+}
+
+.message-bubble {
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+}
+
+.message-row.user .message-bubble {
+    background: rgba(0, 122, 204, 0.1);
+    border-color: var(--vscode-inputOption-activeBorder);
+}
+
+.message-header {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    opacity: 0.8;
+    color: var(--vscode-foreground);
+}
+
+.message-content {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--vscode-foreground);
+}
+
+.message-timestamp {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-top: 4px;
+    color: var(--vscode-descriptionForeground);
 }
 
 .message {

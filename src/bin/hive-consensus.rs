@@ -2151,6 +2151,116 @@ fn App() -> Element {
         "No folder open".to_string()
     };
 
+    // Define on_submit as a function that can be called
+    let mut submit_query = {
+        let mut input_value = input_value.clone();
+        let mut is_processing = is_processing.clone();
+        let consensus_manager = consensus_manager.clone();
+        let mut app_state = app_state.clone();
+        let mut current_response = current_response.clone();
+        let mut consensus_task_handle = consensus_task_handle.clone();
+        let cancellation_flag = cancellation_flag.clone();
+        let mut is_cancelling = is_cancelling.clone();
+        
+        move || {
+            let query = input_value.read().trim().to_string();
+            if query.is_empty() || *is_processing.read() {
+                return;
+            }
+
+            // Clear input and set processing state
+            input_value.set(String::new());
+            is_processing.set(true);
+            is_cancelling.set(false);
+            current_response.set(String::new());
+            
+            // Reset cancellation flag
+            cancellation_flag.read().store(false, std::sync::atomic::Ordering::Relaxed);
+            
+            // Add user message to chat state  
+            let user_msg = hive_ai::desktop::state::ChatMessage {
+                id: uuid::Uuid::new_v4().to_string(),
+                content: query.clone(),
+                message_type: hive_ai::desktop::state::MessageType::User,
+                timestamp: chrono::Utc::now(),
+                metadata: hive_ai::desktop::state::MessageMetadata::default(),
+            };
+            app_state.write().chat.add_message(user_msg);
+            
+            // Process with consensus or Claude based on execution mode
+            let execution_mode = app_state.read().claude_execution_mode.clone();
+            
+            match execution_mode.as_str() {
+                "Direct" => {
+                    // Process with Claude Code directly
+                    tracing::info!("🚀 Processing with Claude Code directly");
+                    let mut app_state_for_task = app_state.clone();
+                    let mut current_response_for_task = current_response.clone();
+                    let mut is_processing_for_task = is_processing.clone();
+                    
+                    let task = spawn(async move {
+                        // Use simple chat processor with Claude integration
+                        use hive_ai::desktop::simple_chat_processor;
+                        simple_chat_processor::process_message_direct_claude(
+                            query,
+                            &mut app_state_for_task,
+                            &mut current_response_for_task,
+                            &mut is_processing_for_task,
+                        ).await;
+                    });
+                    
+                    *consensus_task_handle.write() = Some(task);
+                }
+                _ => {
+                    // Process with consensus (ConsensusFirst or ConsensusAssisted)
+                    if let Some(manager) = consensus_manager.read().clone() {
+                        let mut manager = manager.clone();
+                        let mut app_state_for_task = app_state.clone();
+                        let mut current_response_for_task = current_response.clone();
+                        let mut is_processing_for_task = is_processing.clone();
+                        let cancellation_flag_for_task = cancellation_flag.read().clone();
+                        let mut is_cancelling_for_task = is_cancelling.clone();
+                        
+                        let task = spawn(async move {
+                            match manager.process_query(&query).await {
+                                Ok(response) => {
+                                    current_response_for_task.set(response.clone());
+                                    let assistant_msg = hive_ai::desktop::state::ChatMessage {
+                                        id: uuid::Uuid::new_v4().to_string(),
+                                        content: response,
+                                        message_type: hive_ai::desktop::state::MessageType::Assistant,
+                                        timestamp: chrono::Utc::now(),
+                                        metadata: hive_ai::desktop::state::MessageMetadata {
+                                            model: Some("Consensus".to_string()),
+                                            ..hive_ai::desktop::state::MessageMetadata::default()
+                                        },
+                                    };
+                                    app_state_for_task.write().chat.add_message(assistant_msg);
+                                }
+                                Err(e) => {
+                                    let error_msg = format!("Error: {}", e);
+                                    current_response_for_task.set(error_msg.clone());
+                                    let error_chat_msg = hive_ai::desktop::state::ChatMessage {
+                                        id: uuid::Uuid::new_v4().to_string(),
+                                        content: error_msg,
+                                        message_type: hive_ai::desktop::state::MessageType::Error,
+                                        timestamp: chrono::Utc::now(),
+                                        metadata: hive_ai::desktop::state::MessageMetadata::default(),
+                                    };
+                                    app_state_for_task.write().chat.add_message(error_chat_msg);
+                                }
+                            }
+                            is_processing_for_task.set(false);
+                            is_cancelling_for_task.set(false);
+                        });
+                        
+                        *consensus_task_handle.write() = Some(task);
+                    }
+                }
+            }
+        }
+    };
+
     rsx! {
         // Inject VS Code-style CSS and dialog styles
         style { "{DESKTOP_STYLES}" }
@@ -2795,348 +2905,48 @@ fn App() -> Element {
                         }
                     }
 
-                    // Input box at the bottom (Claude Code style)
+                    // Chat input container
                     div {
                         class: "input-container",
-                        style: "background: #181E21; border-top: 1px solid #2D3336; backdrop-filter: blur(10px); position: relative;",
+                        style: "background: #181E21; border-top: 1px solid #2D3336; backdrop-filter: blur(10px); position: relative; padding: 20px;",
                         
-                        
-                        textarea {
-                            class: "query-input",
-                            style: "background: #0E1414; border: 1px solid #2D3336; color: #FFFFFF;",
-                            value: "{input_value.read()}",
-                            placeholder: "Ask Hive anything...",
-                            disabled: *is_processing.read(),
-                            rows: "3",
-                            oninput: move |evt| *input_value.write() = evt.value().clone(),
-                            onkeydown: {
-                                let consensus_manager = consensus_manager.clone();
-                                let mut app_state_for_toggle = app_state.clone();
-                                let mut input_value_ref = input_value.clone();
-                                let mut is_processing_ref = is_processing.clone();
-                                let mut current_response_ref = current_response.clone();
-                                let mut app_state_ref = app_state.clone();
-                                let mut should_auto_scroll_ref = should_auto_scroll.clone();
-                                let mut previous_content_length_ref = previous_content_length.clone();
-                                let mut show_upgrade_dialog_ref = show_upgrade_dialog.clone();
-                                let mut ide_ai_broker_ref = ide_ai_broker.clone();
-                                let mut is_cancelling_ref = is_cancelling.clone();
-                                let mut cancel_flag_ref = cancel_flag.clone();
-                                move |evt: dioxus::events::KeyboardEvent| {
-                                    // Shift+Tab toggles auto-accept
-                                    if evt.key() == dioxus::events::Key::Tab && evt.modifiers().shift() {
-                                        evt.prevent_default();
-                                        let current = app_state_for_toggle.read().auto_accept;
-                                        app_state_for_toggle.write().auto_accept = !current;
-                                        tracing::info!("Auto-accept toggled via Shift+Tab to: {}", !current);
-                                        return;
-                                    }
-                                    
-                                    // Ctrl+Shift+C cycles Claude execution mode
-                                    if evt.key() == dioxus::events::Key::Character("c".to_string()) && evt.modifiers().ctrl() && evt.modifiers().shift() {
-                                        evt.prevent_default();
-                                        let current = app_state_for_toggle.read().claude_execution_mode.clone();
-                                        let next_mode = match current.as_str() {
-                                            "Direct" => "ConsensusAssisted",
-                                            "ConsensusAssisted" => "ConsensusRequired",
-                                            "ConsensusRequired" => "Direct",
-                                            _ => "ConsensusAssisted"
-                                        };
-                                        app_state_for_toggle.write().claude_execution_mode = next_mode.to_string();
-                                        
-                                        // Save the mode to database
-                                        if let Err(e) = hive_ai::desktop::simple_db::save_config("claude_execution_mode", next_mode) {
-                                            tracing::error!("Failed to save Claude execution mode: {}", e);
-                                        } else {
-                                            tracing::info!("Claude execution mode toggled via Ctrl+Shift+C to: {}", next_mode);
-                                        }
-                                        return;
-                                    }
-                                    
-                                    // Ctrl+Shift+A toggles Claude auth method
-                                    if evt.key() == dioxus::events::Key::Character("a".to_string()) && evt.modifiers().ctrl() && evt.modifiers().shift() {
-                                        evt.prevent_default();
-                                        let current = app_state_for_toggle.read().claude_auth_method.clone();
-                                        let next_method = match current.as_str() {
-                                            "NotSelected" => "ApiKey",
-                                            "ApiKey" => "OAuth",
-                                            "OAuth" => "ApiKey",
-                                            _ => "ApiKey"
-                                        };
-                                        app_state_for_toggle.write().claude_auth_method = next_method.to_string();
-                                        
-                                        // Save the auth method to database
-                                        if let Err(e) = hive_ai::desktop::simple_db::save_config("claude_auth_method", next_method) {
-                                            tracing::error!("Failed to save Claude auth method: {}", e);
-                                        } else {
-                                            tracing::info!("🔄 Claude auth method toggled via Ctrl+Shift+A to: {}", next_method);
-                                            tracing::info!("📝 User switched authentication from {} to {}", current, next_method);
-                                            
-                                            // Check if we have credentials for the new method
-                                            if next_method == "OAuth" {
-                                                // Check if OAuth credentials exist
-                                                if let Ok(Some(oauth_json)) = hive_ai::desktop::simple_db::get_config("claude_oauth_credentials") {
-                                                    tracing::info!("✅ OAuth credentials found in storage");
-                                                } else {
-                                                    tracing::warn!("⚠️ No OAuth credentials found");
-                                                    // OAuth authentication should be handled by Claude Code itself
-                                                    // Not triggering our own OAuth flow
-                                                }
-                                            } else {
-                                                // Check if API key exists
-                                                if let Ok(Some(key)) = hive_ai::desktop::simple_db::get_config("anthropic_api_key") {
-                                                    if !key.is_empty() {
-                                                        tracing::info!("✅ API key found in storage ({} chars)", key.len());
-                                                    } else {
-                                                        tracing::warn!("⚠️ API key is empty");
-                                                    }
-                                                } else {
-                                                    tracing::warn!("⚠️ No API key found in storage");
-                                                }
-                                            }
-                                        }
-                                        return;
-                                    }
-                                    
-                                    // Enter without shift submits
-                                    if evt.key() == dioxus::events::Key::Enter && !evt.modifiers().shift() && !input_value_ref.read().is_empty() && !*is_processing_ref.read() {
-                                        evt.prevent_default();
-
-                                        let user_msg = input_value_ref.read().clone();
-                                        
-                                        // Check if this is a slash command
-                                        if user_msg.starts_with('/') {
-                                            let command = user_msg.trim();
-                                            match command {
-                                                "/login" => {
-                                                    // Pass /login command to Claude Code - don't handle locally
-                                                    tracing::info!("🔐 Passing /login command to Claude Code integration");
-                                                    // Actually use the hybrid chat processor
-                                                    let msg = user_msg.clone();
-                                                    let mut resp = current_response_ref.clone();
-                                                    let mut proc = is_processing_ref.clone();
-                                                    let cm = consensus_manager.clone();
-                                                    let mut app = app_state_ref.clone();
-                                                    let mut upg = show_upgrade_dialog_ref.clone();
-                                                    
-                                                    spawn(async move {
-                                                        process_with_hybrid_chat(
-                                                            msg,
-                                                            &mut resp,
-                                                            &mut proc,
-                                                            &cm,
-                                                            &mut app,
-                                                            &mut upg,
-                                                        ).await;
-                                                    });
-                                                    return;
-                                                }
-                                                "/logout" => {
-                                                    // Pass /logout command to Claude Code - don't handle locally
-                                                    tracing::info!("🔓 Passing /logout command to Claude Code integration");
-                                                    // Actually use the hybrid chat processor
-                                                    let msg = user_msg.clone();
-                                                    let mut resp = current_response_ref.clone();
-                                                    let mut proc = is_processing_ref.clone();
-                                                    let cm = consensus_manager.clone();
-                                                    let mut app = app_state_ref.clone();
-                                                    let mut upg = show_upgrade_dialog_ref.clone();
-                                                    
-                                                    spawn(async move {
-                                                        process_with_hybrid_chat(
-                                                            msg,
-                                                            &mut resp,
-                                                            &mut proc,
-                                                            &cm,
-                                                            &mut app,
-                                                            &mut upg,
-                                                        ).await;
-                                                    });
-                                                    return;
-                                                }
-                                                _ => {
-                                                    // Pass ALL other slash commands through hybrid processor
-                                                    tracing::info!("📋 Passing slash command to hybrid processor: {}", command);
-                                                    let msg = user_msg.clone();
-                                                    let mut resp = current_response_ref.clone();
-                                                    let mut proc = is_processing_ref.clone();
-                                                    let cm = consensus_manager.clone();
-                                                    let mut app = app_state_ref.clone();
-                                                    let mut upg = show_upgrade_dialog_ref.clone();
-                                                    
-                                                    spawn(async move {
-                                                        process_with_hybrid_chat(
-                                                            msg,
-                                                            &mut resp,
-                                                            &mut proc,
-                                                            &cm,
-                                                            &mut app,
-                                                            &mut upg,
-                                                        ).await;
-                                                    });
-                                                    return;
-                                                }
-                                            }
-                                        }
-
-                                        // Clear input and response
-                                        input_value_ref.write().clear();
-                                        current_response_ref.write().clear();
-                                        app_state_ref.write().consensus.streaming_content.clear();
-
-                                        // Re-enable auto-scroll for new query
-                                        *should_auto_scroll_ref.write() = true;
-
-                                        // Reset content length tracker to ensure scrolling works
-                                        *previous_content_length_ref.write() = 0;
-
-                                        // Start processing
-                                        is_processing_ref.set(true);
-                                        cancel_flag_ref.set(false); // Reset cancel flag for new query
-
-                                        // Use consensus engine if available
-                                        if let Some(mut consensus) = consensus_manager.read().clone() {
-                                            let mut current_response = current_response_ref.clone();
-                                            let mut is_processing = is_processing_ref.clone();
-                                            let mut app_state = app_state_ref.clone();
-                                            let mut show_upgrade_dialog = show_upgrade_dialog_ref.clone();
-                                            let ide_ai_broker = ide_ai_broker_ref.clone();
-                                            let mut is_cancelling = is_cancelling_ref.clone();
-                                            let cancellation_flag_clone = cancellation_flag.read().clone();
-
-                                            // Reset cancellation flag for new query
-                                            cancellation_flag_clone.store(false, std::sync::atomic::Ordering::Relaxed);
-
-                                            // Cancel any existing consensus task
-                                            if let Some(existing_task) = consensus_task_handle.write().take() {
-                                                tracing::info!("🛑 Cancelling existing consensus task before starting new one");
-                                                existing_task.cancel();
-                                            }
-
-                                            // Store the new task handle
-                                            let task = spawn(async move {
-                                                // Update UI to show consensus is running
-                                                app_state.write().consensus.start_consensus();
-
-                                                // Use IDE AI Helper Broker to enhance query with repository context
-                                                let enhanced_query = if let Some(broker) = ide_ai_broker.read().as_ref() {
-                                                    match broker.process_query_with_context(&user_msg).await {
-                                                        Ok(enhanced) => {
-                                                            tracing::info!("🤖 IDE AI Helper enhanced query with repository context");
-                                                            enhanced.to_consensus_query()
-                                                        }
-                                                        Err(e) => {
-                                                            tracing::warn!("IDE AI Helper failed to enhance query: {}", e);
-                                                            user_msg.clone() // Fallback to original
-                                                        }
-                                                    }
-                                                } else {
-                                                    tracing::info!("💭 IDE AI Helper Broker not available, using original query");
-                                                    user_msg.clone()
-                                                };
-
-                                                // Check cancellation flag before starting consensus
-                                                if cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
-                                                    tracing::info!("Consensus cancelled before processing started");
-                                                    app_state.write().consensus.complete_consensus();
-                                                    is_processing.set(false);
-                                                    is_cancelling.set(false);
-                                                    return;
-                                                }
-
-                                                // Use streaming version which has proper cancellation support
-                                                let consensus_result = consensus.process_query_streaming(&enhanced_query).await;
-                                                
-                                                match consensus_result {
-                                                    Ok((final_response, _rx)) => {
-                                                        // Check if we were cancelled during processing
-                                                        if cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
-                                                            tracing::info!("🛑 Consensus completed but was cancelled - not updating UI");
-                                                            app_state.write().consensus.complete_consensus();
-                                                            is_processing.set(false);
-                                                            is_cancelling.set(false);
-                                                            return;
-                                                        }
-                                                        
-                                                        // Set final response
-                                                        let html = markdown::to_html(&final_response);
-                                                        *current_response.write() = html;
-                                                    }
-                                                    Err(e) => {
-                                                        let error_msg = e.to_string();
-                                                        let full_error_chain = format!("{:?}", e);
-
-                                                        // Check if this is a cancellation error
-                                                        if error_msg.contains("cancelled") || 
-                                                           error_msg.contains("Cancelled") ||
-                                                           full_error_chain.contains("cancelled") ||
-                                                           full_error_chain.contains("Cancelled") {
-                                                            // Don't show error for cancellation - it's expected behavior
-                                                            tracing::info!("Consensus was cancelled by user");
-                                                            *current_response.write() = String::new(); // Clear response area
-                                                            is_cancelling.set(false); // Reset cancelling state
-                                                        } else {
-                                                            // Debug: Log the full error to understand the structure
-                                                            tracing::error!("Full error: {}", error_msg);
-                                                            tracing::error!("Error chain: {}", full_error_chain);
-
-                                                            // Check for subscription limit errors at any level of the error chain
-                                                            if error_msg.contains("Daily conversation limit reached") ||
-                                                               error_msg.contains("no credits available") ||
-                                                               error_msg.contains("Authentication failed") ||
-                                                               error_msg.contains("Failed to authorize with D1") ||
-                                                               full_error_chain.contains("Daily conversation limit reached") ||
-                                                               full_error_chain.contains("no credits available") ||
-                                                               full_error_chain.contains("Authentication failed") ||
-                                                               full_error_chain.contains("Failed to authorize with D1") {
-                                                                // Show upgrade dialog for subscription limit errors
-                                                                tracing::info!("Detected subscription limit error, showing upgrade dialog");
-                                                                *show_upgrade_dialog.write() = true;
-                                                                *current_response.write() = String::new(); // Clear response area
-                                                            } else {
-                                                                // Show technical errors normally
-                                                                *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                // Update UI to show consensus is complete (only if not cancelled)
-                                                if !*cancel_flag_ref.read() && !cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
-                                                    app_state.write().consensus.complete_consensus();
-                                                } else {
-                                                    tracing::info!("🛑 Consensus task completed but was cancelled - skipping UI update");
-                                                    app_state.write().consensus.complete_consensus();
-                                                }
-                                                is_processing.set(false);
-                                                is_cancelling.set(false); // Reset cancelling state
-                                                
-                                                tracing::info!("🏁 Consensus completed");
-                                            });
-                                            
-                                            // Store the task handle
-                                            *consensus_task_handle.write() = Some(task);
-                                        } else {
-                                            // Show error if consensus engine not initialized
-                                            *current_response_ref.write() = "<div class='error'>⚠️ Consensus engine not initialized. This usually means no profile is configured. Click Settings to configure a profile.</div>".to_string();
-                                            is_processing_ref.set(false);
-
-                                            // Check what's actually missing
-                                            spawn(async move {
-                                                use hive_ai::core::api_keys::ApiKeyManager;
-                                                
-                                                let has_api_key = ApiKeyManager::has_valid_keys().await.unwrap_or(false);
-                                                if !has_api_key {
-                                                    // Show onboarding for API key
-                                                    *show_onboarding_dialog.write() = true;
-                                                } else {
-                                                    // API key exists but no profile - show settings
-                                                    *show_settings_dialog.write() = true;
-                                                }
-                                            });
+                        // Query input
+                        div {
+                            style: "display: flex; gap: 12px; align-items: flex-end;",
+                            
+                            textarea {
+                                class: "query-input",
+                                placeholder: "Ask Hive anything...",
+                                value: "{input_value.read()}",
+                                oninput: move |evt| {
+                                    input_value.set(evt.value());
+                                },
+                                onkeydown: {
+                                    let mut submit_query = submit_query.clone();
+                                    move |evt: dioxus::events::KeyboardEvent| {
+                                        if evt.key() == Key::Enter && !evt.modifiers().shift() {
+                                            evt.prevent_default();
+                                            submit_query();
                                         }
                                     }
-                                }
+                                },
+                                disabled: "{is_processing.read()}",
+                            }
+                            
+                            // Send button
+                            button {
+                                class: "btn-primary",
+                                style: if *is_processing.read() { 
+                                    "opacity: 0.5; cursor: not-allowed;" 
+                                } else { 
+                                    "" 
+                                },
+                                onclick: {
+                                    let mut submit_query = submit_query.clone();
+                                    move |_| submit_query()
+                                },
+                                disabled: "{is_processing.read()}",
+                                "Send"
                             }
                         }
                         
@@ -3526,7 +3336,7 @@ fn App() -> Element {
                 let mut show_delete_confirm = show_delete_confirm.clone();
                 let mut dialog_target_path = dialog_target_path.clone();
                 let current_dir = current_dir.clone();
-                let mut file_tree = file_tree.clone();
+                let file_tree = file_tree.clone();
                 move |(action, path): (ContextMenuAction, PathBuf)| {
                     *dialog_target_path.write() = Some(path.clone());
                     match action {
@@ -3615,7 +3425,7 @@ fn App() -> Element {
                 let mut show_new_file_dialog = show_new_file_dialog.clone();
                 let dialog_target_path = dialog_target_path.clone();
                 let current_dir = current_dir.clone();
-                let mut file_tree = file_tree.clone();
+                let file_tree = file_tree.clone();
                 let reload_fn = reload_file_tree.clone();
                 move |filename: String| {
                     // Validate filename is not empty
@@ -5064,7 +4874,7 @@ struct ActiveProfile {
 async fn initialize_claude_code_integration(
     consensus_manager: &Option<DesktopConsensusManager>
 ) -> anyhow::Result<()> {
-    use hive_ai::desktop::claude_integration_manager;
+    // use hive_ai::desktop::claude_integration_manager; // Removed - using simple integration
     use hive_ai::core::database::get_database;
     use hive_ai::memory::ThematicCluster;
     use hive_ai::consensus::engine::ConsensusEngine;
@@ -5081,12 +4891,8 @@ async fn initialize_claude_code_integration(
     // Create thematic cluster
     let thematic_cluster = Arc::new(ThematicCluster::new().await?);
     
-    // Initialize the Claude Code integration
-    match claude_integration_manager::initialize_claude_integration(
-        consensus_engine,
-        thematic_cluster,
-        database,
-    ).await {
+    // Initialize the simple Claude Code integration
+    match hive_ai::consensus::SimpleClaudeIntegration::new().await {
         Ok(_) => {
             tracing::info!("✅ Claude Code integration initialized successfully");
             Ok(())
@@ -5100,68 +4906,5 @@ async fn initialize_claude_code_integration(
     }
 }
 
-/// Process message using hybrid chat processor
-async fn process_with_hybrid_chat(
-    message: String,
-    current_response: &mut Signal<String>,
-    is_processing: &mut Signal<bool>,
-    _consensus_manager: &Signal<Option<DesktopConsensusManager>>,
-    _app_state: &mut Signal<AppState>,
-    _show_upgrade_dialog: &mut Signal<bool>,
-) {
-    use hive_ai::consensus::claude_code_integration::{HybridMessage, HybridMessageType};
-    use hive_ai::desktop::claude_integration_manager::get_claude_integration;
-    
-    tracing::info!("🔄 Processing message through hybrid chat system: {}", message);
-    
-    // Process through hybrid integration
-    let result = if let Some(integration) = get_claude_integration().await {
-        tracing::info!("✅ Claude Code integration available, processing message");
-        integration.process_message(&message).await
-    } else {
-        tracing::warn!("⚠️ Claude Code integration not available");
-        // Return error message
-        Ok(vec![HybridMessage {
-            content: format!(
-                "⚠️ Claude Code integration is not available.\n\n\
-                To use native Claude Code commands like /login, /help, etc., ensure:\n\
-                1. Claude Code is installed on your system\n\
-                2. The binary is accessible in your PATH\n\n\
-                Your message: \"{}\"", 
-                message
-            ),
-            message_type: HybridMessageType::SystemMessage,
-            metadata: None,
-        }])
-    };
-    
-    // Update UI with response
-    match result {
-        Ok(responses) => {
-            for response in responses {
-                let formatted_html = format!(
-                    "<div class='message {}'>{}</div>",
-                    match response.message_type {
-                        HybridMessageType::ClaudeResponse => "claude-response",
-                        HybridMessageType::HiveResponse => "hive-response",
-                        HybridMessageType::SystemMessage => "system-message",
-                        HybridMessageType::Error => "error-message",
-                        _ => "assistant-message"
-                    },
-                    response.content.replace("\n", "<br>")
-                );
-                current_response.set(formatted_html);
-            }
-        }
-        Err(e) => {
-            let error_html = format!(
-                "<div class='message error-message'>❌ Error: {}</div>",
-                e.to_string().replace("\n", "<br>")
-            );
-            current_response.set(error_html);
-        }
-    }
-    
-    // Mark processing as complete
-    is_processing.set(false);
-}
+// Removed unused process_with_hybrid_chat function
+// All message processing now goes through the main chat interface

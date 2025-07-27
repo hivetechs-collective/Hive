@@ -93,6 +93,9 @@ pub struct AppState {
     
     /// Claude Code native mode: normal, auto-accept, plan
     pub claude_mode: String,
+    
+    /// Claude SDK connection status
+    pub claude_sdk_connected: bool,
 }
 
 impl Default for AppState {
@@ -129,6 +132,7 @@ impl AppState {
             claude_execution_mode: "ConsensusAssisted".to_string(),
             claude_auth_method: "NotSelected".to_string(),
             claude_mode: "normal".to_string(),
+            claude_sdk_connected: false,
         }
     }
 

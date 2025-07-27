@@ -451,6 +451,27 @@ fn main() -> Result<()> {
                 journal_mode: "WAL".to_string(),
             };
             hive_ai::core::database::initialize_database(Some(db_config)).await?;
+            
+            // 🚨 CRITICAL: Verify Claude Code is available before launching GUI
+            tracing::info!("Checking Claude Code dependency...");
+            match hive_ai::consensus::SimpleClaudeIntegration::new().await {
+                Ok(_) => {
+                    tracing::info!("✅ Claude Code dependency check passed");
+                }
+                Err(e) => {
+                    eprintln!("\n❌ DEPENDENCY CHECK FAILED");
+                    eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    eprintln!("🐝 Hive AI requires Claude Code to function properly.");
+                    eprintln!("");
+                    eprintln!("{}", e);
+                    eprintln!("");
+                    eprintln!("After installing Claude Code, restart Hive AI with:");
+                    eprintln!("   hive --desktop");
+                    eprintln!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    std::process::exit(1);
+                }
+            }
+            
             Ok::<(), anyhow::Error>(())
         })?;
 

@@ -169,7 +169,7 @@ impl ClaudeCodeIntegration {
             input_sender: Arc::new(Mutex::new(None)),
             output_receiver: Arc::new(Mutex::new(None)),
             message_buffer: Arc::new(Mutex::new(String::new())),
-            use_json_protocol: Arc::new(RwLock::new(true)), // Use JSON protocol for Claude Code
+            use_json_protocol: Arc::new(RwLock::new(false)), // Use text protocol for Claude Code
             consensus_engine,
             thematic_cluster,
             database,
@@ -207,27 +207,22 @@ impl ClaudeCodeIntegration {
                 .map(|content| content.starts_with("#!") && content.contains("node"))
                 .unwrap_or(false);
         
+        // For now, run Claude Code in interactive mode without --print
+        // This allows us to send commands via stdin like a normal interactive session
         let mut cmd = if is_node_script {
             info!("📦 Claude Code is a Node.js script, running with node");
             let mut node_cmd = TokioCommand::new("node");
             node_cmd.arg(&claude_binary);
-            // Use stream-json for bidirectional communication
-            node_cmd.arg("--print")
-                    .arg("--output-format").arg("stream-json")
-                    .arg("--input-format").arg("stream-json");
             node_cmd
         } else {
-            let mut direct_cmd = TokioCommand::new(&claude_binary);
-            direct_cmd.arg("--print")
-                      .arg("--output-format").arg("stream-json")
-                      .arg("--input-format").arg("stream-json");
-            direct_cmd
+            TokioCommand::new(&claude_binary)
         };
         
         cmd.stdin(Stdio::piped())
            .stdout(Stdio::piped())
            .stderr(Stdio::piped())
-           .current_dir(&*self.current_directory.read().await);
+           .current_dir(&*self.current_directory.read().await)
+           .env("CLAUDE_CODE_NO_ANALYTICS", "1"); // Disable analytics in subprocess
 
         let mut child = cmd.spawn()
             .context("Failed to spawn Claude Code process")?;

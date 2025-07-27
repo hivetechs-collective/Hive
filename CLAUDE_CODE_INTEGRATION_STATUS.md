@@ -1,472 +1,392 @@
-# Claude Code Integration - Enhanced Vision & Implementation Status
+# Claude Code Integration - GUI-Enhanced Claude Code Strategy
 
-## 🚀 COMPLETE VISION: Intelligent Claude Code Wrapper with Deep Integration
+## 🚀 FINAL VISION: Beautiful GUI Wrapper Around Native Claude Code
 
-**CORE PHILOSOPHY**: Hive-Consensus IDE is a **GUI-first intelligent wrapper** around Claude Code that provides the exact Claude experience while enhancing it with consensus validation, stateless memory, and advanced features - all without requiring CLI knowledge.
+**CORE PHILOSOPHY**: Hive-Consensus is a **beautiful GUI wrapper** around Claude Code that preserves the exact Claude experience while enhancing it with consensus validation, persistent memory, and repository intelligence - all controlled through the existing gorgeous GUI interface.
 
 ### Key Principles:
-- **GUI-First Design**: Visual interface for all features, CLI commands optional
-- **Stateless Intelligence**: No conversation history needed - rich context injection
-- **Unified Experience**: Same chat window for Claude + all Hive features  
-- **Self-Improving**: Every interaction builds the knowledge base
-- **Mode-Based Control**: Existing modes (ConsensusFirst/Assisted/Direct, Plan, Auto-Edit) control Claude
+- **Beautiful GUI First**: Preserve existing gorgeous interface design - no redesign needed
+- **Claude Code Native**: Chat interface becomes a Claude Code terminal with all commands working
+- **GUI-Controlled Enhancement**: Use existing GUI controls (profile dropdown, mode toggles) to control features
+- **Automatic Intelligence**: Memory context and repository awareness injected transparently
+- **No Complex Commands**: No new CLI commands to learn - everything through existing GUI
 
 ### What Users Get:
-- **Full Claude Code Experience**: Native slash commands, authentication, all features
-- **Plus Hive Enhancements**: 4-stage consensus, thematic memory, 323+ models
-- **No Conversation Limits**: Stateless = no context window issues
-- **Visual Accessibility**: Never need to use CLI unless desired
-- **Intelligent Assistance**: Claude + consensus + memory = superior results
+- **Exact Claude Code Experience**: All slash commands work perfectly (/help, /login, /logout, /settings)
+- **Beautiful Existing GUI**: No interface changes needed - keep the gorgeous design you built
+- **Smart Profile System**: Existing profiles now control both Claude responses AND consensus models
+- **Automatic Memory**: Stateless Claude Code enhanced with persistent conversation memory
+- **GUI-Controlled Features**: Click "Consensus Mode" toggle to get 4-stage validation automatically
+- **Repository Intelligence**: Claude automatically knows your codebase context
 
-## 🟡 CURRENT STATUS: Ready for Claude Code npm Integration
+## 🎯 CRITICAL ARCHITECTURAL INSIGHT: Simplification Required
 
-**BREAKTHROUGH**: Claude Code is available as `@anthropic-ai/claude-code` npm package!
+**BREAKTHROUGH REALIZATION**: The hybrid SDK/CLI approach is fundamentally flawed and overly complex. We need to simplify to a CLI-first architecture with non-intrusive enhancements.
 
-### Implementation Path:
-1. **Bundle Claude Code**: Add as npm dependency, install with Hive
-2. **Deep Integration**: Stateless memory context, mode controls, consensus triggers
-3. **Maintain GUI-First**: All features accessible visually, CLI optional
+### Problems with Previous SDK/CLI Hybrid Approach:
+1. **Overengineering** - JSON-RPC bridge, subprocess management, protocol complexity
+2. **Dual Implementation** - Managing both SDK service AND CLI integration simultaneously
+3. **User Confusion** - Unclear when features come from Claude vs Hive
+4. **Maintenance Burden** - Multiple communication layers and failure points
+5. **Breaking Changes** - Risk of interfering with native Claude Code behavior
 
-### Implementation Status:
-- ✅ Complete subprocess integration architecture
-- ✅ Smart command router (Hive vs Claude commands)
-- ✅ Bidirectional communication protocol
-- ✅ Hybrid chat processor integrated
-- ✅ Settings UI with mode controls ready
-- 🚧 Need to add npm package and bundle installation
-- 🚧 Need to implement memory context injection
-- 🚧 Need to connect modes to Claude behavior
+### Key Insights from Team Discussion:
+- **Remove SDK Service**: Eliminate Node.js subprocess and JSON-RPC complexity
+- **CLI-First Approach**: Claude Code CLI remains the primary interface
+- **Non-Intrusive Enhancement**: Add Hive features without disrupting Claude workflow
+- **Optional Integration**: Users choose when to use Hive features vs pure Claude
+- **Transparent Operation**: All Claude commands work exactly as before
 
-## Enhanced Architecture: Deep Integration Pattern
+## FINAL SIMPLIFIED ARCHITECTURE: Beautiful GUI + Native Claude Code
 
 ```
-User Interaction Layer
-    ├─ GUI Controls (Primary)
-    │   ├─ Settings Dialog → Visual configuration
-    │   ├─ Profile Dropdown → Mode selection
-    │   ├─ Buttons/Menus → Direct actions
-    │   └─ Onboarding → Visual setup
+Beautiful GUI Layer (UNCHANGED - Keep Existing Design!)
+    ├─ Chat Interface → Now contains Claude Code CLI (all commands work)
+    ├─ Settings Dialog → Existing design enhanced with Claude integration toggle
+    ├─ Profile Dropdown → Existing profiles now control Claude + Consensus models
+    ├─ Execution Mode Toggle → Direct/ConsensusFirst/ConsensusAssisted (existing)
+    ├─ File Explorer → Existing design with Claude Code file operations
+    └─ Analytics Dashboard → Existing design with Claude usage metrics
+    
+Intelligence Enhancement Layer (TRANSPARENT)
+    ├─ Memory Context Injection → Add relevant past conversations to Claude queries
+    ├─ Repository Context → Inject current codebase understanding automatically  
+    ├─ Profile-Based Enhancement → Use GUI-selected profile to enhance responses
+    ├─ Mode-Based Processing → Route through consensus when mode selected
+    └─ Knowledge Storage → Store all interactions for future memory enhancement
+
+Rust Application Layer (Simplified)
+    ├─ Claude Code CLI Integration
+    │   ├─ Direct CLI Execution → No subprocess complexity
+    │   ├─ Terminal Emulation → Embedded terminal for Claude Code
+    │   ├─ I/O Capture → Read Claude responses for optional enhancement
+    │   └─ Authentication Passthrough → All auth handled by Claude Code
     │
-    └─ Chat Interface (Unified)
-        ├─ Regular Text → Claude with Memory Context
-        ├─ Slash Commands (Optional)
-        │   ├─ /consensus → 4-Stage Pipeline
-        │   ├─ /memory → Thematic Search
-        │   ├─ /openrouter → 323+ Models
-        │   └─ /login, etc → Claude Native
-        │
-        └─ Mode-Based Routing
-            ├─ ConsensusFirst → Consensus then Claude
-            ├─ ConsensusAssisted → Claude then Validate
-            └─ Direct → Claude with Context Only
+    ├─ Hive Enhancement Engine
+    │   ├─ Consensus Pipeline → 4-stage validation when requested
+    │   ├─ Memory System → Thematic knowledge injection when requested  
+    │   ├─ Repository Analysis → Code intelligence when requested
+    │   └─ Knowledge Storage → Store interactions for future context
+    │
+    └─ Non-Intrusive Integration
+        ├─ Response Enhancement → Add Hive context to Claude responses (optional)
+        ├─ Command Detection → Identify when Hive features are requested
+        ├─ Context Building → Inject relevant memory/knowledge when helpful
+        └─ Learning Pipeline → Extract patterns from all interactions
 
-Stateless Context Injection (Before Every Claude Query)
-    ├─ Recent Curator Articles (24-48h window)
-    ├─ Thematic Knowledge (Semantic matches)
-    ├─ Learned Patterns (AI Helper insights)
-    ├─ Repository Context (Code understanding)
-    └─ User Preferences (Profile settings)
-    
-Claude Code Process (npm installed)
-    ├─ Receives Enhanced Prompts
-    ├─ Plan Mode Instructions (when enabled)
-    ├─ Auto-Edit Permissions (when enabled)
-    ├─ Can Trigger Consensus (smart detection)
-    └─ All Native Features Available
+Claude Code CLI (Unchanged)
+    ├─ Native Authentication → /login, /logout work exactly as before
+    ├─ All Native Commands → /help, /settings, tool usage, file operations
+    ├─ Streaming Responses → Real-time output as designed
+    ├─ File Permissions → Trust dialogs and security as intended
+    └─ Agentic Capabilities → Full tool usage and autonomy
 
-Response Processing Pipeline
-    ├─ Store as Curator Article
-    ├─ Update Thematic Clusters
-    ├─ Extract Learning Patterns
-    ├─ Optional Consensus Validation
-    └─ Enhanced Output to User
+Enhancement Processing (Optional)
+    ├─ Knowledge Storage → Save all interactions for future reference
+    ├─ Pattern Learning → Identify successful approaches and techniques
+    ├─ Context Injection → Add relevant background when beneficial
+    ├─ Consensus Validation → Multi-model verification when requested
+    └─ Repository Intelligence → Code analysis and insights when requested
 ```
 
-## What This Architecture Provides
+## What This Simplified Architecture Provides
 
-### All Claude Code Native Features (via subprocess):
-- **Real slash command autocomplete** (like user has now)
-- **Native `/login`, `/logout`** authentication with browser flow
-- **All built-in Claude Code commands** (`/help`, `/settings`, etc.)
-- **Auto-completion and syntax highlighting**
-- **Native file handling** with trust dialogs
-- **Full Claude Code SDK** capabilities
-- **Agentic abilities** and tool usage
+### 100% Claude Code Compatibility (No Changes):
+- **All native slash commands** work exactly as before - /login, /logout, /help, /settings
+- **Native authentication flows** with browser integration unchanged
+- **Full file handling** with trust dialogs and security as designed
+- **Auto-completion and syntax highlighting** provided by Claude Code CLI
+- **Agentic capabilities** and tool usage completely preserved
+- **Streaming responses** and real-time interaction as intended
+- **All built-in commands** work without any modification or interference
 
-### PLUS All Our Advanced Hive Features:
-- **4-stage consensus pipeline** (`/consensus` command or GUI trigger)
-- **Thematic memory** with conversation clustering (`/memory` command)
-- **323+ OpenRouter models** direct access (`/openrouter` command)
-- **Repository intelligence** and analysis (`/hive-analyze` command)
-- **Continuous learning** and pattern recognition (`/hive-learn` command)
-- **Enterprise hooks** and approval workflows
-- **No conversation limits** (stateless execution)
-- **Advanced analytics** and insights
+### Automatic Hive Enhancements (GUI Controlled):
+- **4-stage consensus validation** when "Consensus Mode" toggle is enabled in GUI
+- **Automatic memory context** from past conversations injected transparently
+- **Repository intelligence** automatically provided to Claude about current codebase
+- **Profile-based enhancement** using existing profile dropdown to control response style
+- **Persistent conversation history** that survives Claude Code's stateless nature
+- **Analytics integration** with existing dashboard showing Claude + consensus usage
+- **Smart model routing** using existing 323+ OpenRouter models in selected profiles
 
-### NEW Deep Integration Features:
-- **Stateless Context**: Every Claude query gets relevant memory/knowledge
-- **Mode-Based Control**: ConsensusFirst/Assisted/Direct modes control Claude
-- **Plan Mode**: Toggle to make Claude plan without executing
-- **Auto-Edit Mode**: Toggle to control file modification permissions
-- **Knowledge Building**: Every Q&A becomes searchable curator article
-- **Smart Consensus**: Claude suggests when validation needed
-- **AI Helper Tools**: 5 AI helpers become Claude-callable functions
-- **Self-Improving**: System gets smarter with every interaction
+### Key Benefits of This Approach:
+- **Zero GUI Changes**: Keep your beautiful existing interface design
+- **Zero Learning Curve**: Users get Claude Code exactly as expected + automatic enhancements
+- **Smart Profile System**: Existing profiles become incredibly powerful (Claude + Consensus)
+- **Automatic Intelligence**: Memory and repository context added transparently
+- **Reduced Complexity**: Simple Claude CLI integration instead of complex dual systems
+- **Better User Experience**: GUI controls everything - no new commands to learn
 
-## Implementation Status
+## 📋 IMPLEMENTATION PLAN - Today!
 
-### ✅ Completed - New Architecture Foundation
-1. **ClaudeCodeIntegration Module** (`src/consensus/claude_code_integration.rs`)
-   - Smart command router for Hive vs Claude Code commands
-   - Subprocess management for real Claude Code binary
-   - Bidirectional communication with Claude Code process
-   - Command detection and routing logic
-   - Response integration layer framework
+### Phase 1: Replace Chat with Claude Code CLI (This Week)
+**Goal**: Transform chat interface into Claude Code terminal while preserving beautiful GUI
 
-### 🚧 In Progress - Hybrid Chat Interface
-2. **Updating Chat Interface** (`src/desktop/chat.rs`)
-   - Replace custom slash command handling
-   - Integrate with ClaudeCodeIntegration
-   - Pass-through for native Claude Code experience
-   - Enhanced responses with Hive context
+#### 1.1 Remove Complex Components (TODAY)
+- **Delete SDK service** - Remove `claude_sdk_service.js` and JSON-RPC complexity
+- **Delete SDK client** - Remove `claude_sdk_client.rs` subprocess management  
+- **Simplify chat processor** - Replace complex routing with simple Claude CLI integration
+- **Keep GUI unchanged** - No changes to existing beautiful interface
 
-### 📋 Pending - Complete Integration
+#### 1.2 Simple Claude Integration (TODAY)
+- **Chat becomes Claude CLI** - Direct Claude Code execution in chat window
+- **All commands work** - /help, /login, /logout, /settings pass through perfectly
+- **Capture responses** - Store Claude interactions for memory enhancement
+- **Authentication works** - Claude Code handles all auth natively
 
-#### Phase 1: Core Hybrid System
-1. **Complete Chat Interface Integration**
-   - Replace process_message() with ClaudeCodeIntegration calls
-   - Remove custom /login, /logout handling
-   - Enable native Claude Code command passthrough
-   - Test complete hybrid experience
+#### 1.3 GUI Enhancement Controls (THIS WEEK)
+- **Use existing controls** - Profile dropdown, execution mode toggle, settings dialog
+- **No new UI elements** - Everything works through existing beautiful interface
+- **Automatic enhancement** - Memory context injected based on GUI selections
 
-2. **Implement Hive Command Handlers**
-   - `/consensus` → 4-stage pipeline with full UI integration
-   - `/memory` → Thematic cluster search with results display
-   - `/openrouter` → Direct model access with streaming
-   - `/hive-analyze` → Repository intelligence with visualizations
-   - `/hive-learn` → Learning insights and pattern recognition
+### Phase 2: Smart Profile Enhancement (Next Week)
+**Goal**: Make existing profiles incredibly powerful by controlling both Claude and Consensus
 
-#### Phase 2: Enhanced Capabilities
-3. **Response Integration Layer**
-   - Enhance Claude Code responses with Hive memory context
-   - Add repository intelligence to relevant responses  
-   - Integrate learning system insights
-   - Provide consensus validation hooks
+#### 2.1 Profile-Powered Intelligence
+- **Existing profiles enhanced** - Now control both Claude context AND consensus models
+- **Automatic mode detection** - Profile settings determine when to use consensus
+- **Smart context injection** - Profiles control what memory/repository context to include
+- **GUI-controlled everything** - Mode toggle switches between Direct/Consensus seamlessly
 
-4. **Native Claude Code Process Management**
-   - Reliable subprocess spawning and monitoring
-   - Proper authentication state synchronization
-   - Error handling and recovery
-   - Performance optimization
+#### 2.2 Transparent Memory System  
+- **Automatic context building** - Past conversations automatically enhance Claude queries
+- **Repository awareness** - Claude automatically knows current codebase context
+- **Profile-based context** - Different profiles emphasize different types of memory
+- **Invisible enhancement** - Users just get better responses without complexity
 
-#### Phase 3: Advanced Features
-5. **Enterprise Integration**
-   - Hooks system for approval workflows
-   - Advanced analytics and reporting
-   - Team collaboration features
-   - Audit logging and compliance
+#### 2.3 Existing Analytics Enhanced
+- **Use existing dashboard** - Show Claude usage alongside consensus metrics
+- **Cost tracking integration** - Claude API costs tracked with existing system
+- **Performance analytics** - Response times, success rates through existing interface
+- **No new UI needed** - Everything fits into your beautiful existing design
 
-6. **UI/UX Enhancements**
-   - Command autocomplete for Hive commands
-   - Enhanced response formatting
-   - Progress indicators for long-running operations
-   - Better error handling and user feedback
+### Phase 3: Advanced Integration (Week 5-6)
+**Goal**: Polish the experience and add advanced features
 
-## Key Architectural Decisions
+#### 3.1 Response Enhancement
+- **Smart context injection** - add relevant Hive knowledge to Claude responses when beneficial
+- **Cross-reference system** - link related conversations and knowledge from memory
+- **Learning feedback loop** - improve responses based on successful interaction patterns
+- **Quality scoring** - rate response quality and suggest improvements
 
-### ⭐ **BREAKTHROUGH: Hybrid Architecture Pattern**
-- **Embed Real Claude Code** as subprocess instead of reimplementing
-- **Smart Command Router** intercepts Hive commands, passes others through
-- **Bidirectional Communication** with native Claude Code process
-- **Response Integration Layer** enhances Claude outputs with Hive context
+#### 3.2 User Experience Polish
+- **Seamless authentication sync** - track Claude Code login status
+- **Enhanced error handling** - graceful degradation when features unavailable
+- **Performance optimization** - fast response times and minimal latency
+- **Visual feedback** - clear indicators of which features are active/available
 
-### 1. **Command Routing Strategy**
-```rust
-// Hive-specific commands (handled by us)
-const HIVE_COMMANDS: &[&str] = &[
-    "/consensus",        // 4-stage consensus pipeline
-    "/hive-consensus",   // Alias for consensus
-    "/memory",           // Thematic memory search
-    "/openrouter",       // Direct OpenRouter model access
-    "/hive-analyze",     // Repository analysis
-    "/hive-learn",       // Continuous learning insights
-];
+#### 3.3 Enterprise Features
+- **Team collaboration** - shared knowledge base and conversation history
+- **Analytics and reporting** - usage patterns and productivity insights
+- **Audit logging** - compliance and security tracking
+- **Custom workflows** - configurable enhancement pipelines
 
-// Everything else goes to native Claude Code
+## 🎯 Implementation Status Overview
+
+### ✅ Foundation Components (Existing/Reusable)
+- **Consensus Engine** (`src/consensus/engine.rs`) - Ready for /hive-consensus command
+- **Thematic Memory** (`src/consensus/memory/`) - Ready for /hive-memory command  
+- **OpenRouter Client** (`src/consensus/openrouter.rs`) - Ready for /hive-openrouter command
+- **Repository Intelligence** (`src/analysis/`) - Ready for /hive-analyze command
+- **Database Schema** - SQLite storage for conversations and knowledge
+- **GUI Framework** - Desktop application with chat interface
+
+### 🚧 Current Issues to Address
+- **Remove SDK Service complexity** - Eliminate claude_sdk_service.js and JSON-RPC bridge
+- **Simplify chat processor** - Focus on direct CLI integration rather than subprocess management
+- **Update command routing** - Change from command interception to enhancement detection
+- **Revise GUI integration** - Embed Claude Code terminal rather than replacing it
+
+## 🎯 Key Success Criteria and Verification
+
+### Success Criteria for Each Phase
+
+#### Phase 1 Success Criteria:
+- ✅ **Claude Code CLI Integration**: All native commands work exactly as before
+- ✅ **Authentication Preservation**: /login and /logout work without modification
+- ✅ **Command Pass-through**: No interference with existing Claude Code functionality
+- ✅ **Basic GUI Framework**: Embedded terminal and enhancement buttons functional
+- ✅ **Hive Command Detection**: /hive-* commands properly routed to enhancement features
+
+#### Phase 2 Success Criteria:
+- ✅ **Consensus Integration**: /hive-consensus provides 4-stage validation with streaming results
+- ✅ **Memory Integration**: /hive-memory searches thematic knowledge and injects context
+- ✅ **Repository Analysis**: /hive-analyze provides code intelligence and insights
+- ✅ **Knowledge Storage**: All Claude interactions stored for future reference
+- ✅ **Optional Enhancement**: Users can choose when to use Hive features
+
+#### Phase 3 Success Criteria:
+- ✅ **Smart Context Injection**: Relevant background added to Claude responses when beneficial
+- ✅ **Performance Optimization**: Fast response times with minimal latency
+- ✅ **Error Handling**: Graceful degradation when features unavailable
+- ✅ **User Experience**: Clear visual feedback and intuitive interface
+- ✅ **Enterprise Features**: Team collaboration and analytics available
+
+### Verification Methods
+
+#### Functional Testing:
+```bash
+# Test Claude Code compatibility
+claude --version                    # Should work normally
+claude ask "Hello"                  # Should work normally  
+claude /login                       # Should work normally
+claude /help                        # Should work normally
+
+# Test Hive enhancements
+hive /hive-consensus "Complex question"    # Should provide 4-stage analysis
+hive /hive-memory "Previous topic"         # Should search conversation history
+hive /hive-analyze                         # Should analyze current repository
 ```
 
-### 2. **Process Management**
-- **Subprocess Spawning**: Real Claude Code binary as child process
-- **Communication Protocol**: stdin/stdout with JSON message format
-- **State Synchronization**: Authentication status, current directory
-- **Error Handling**: Process monitoring and recovery
+#### Performance Testing:
+- **Response Time**: All Claude commands < 100ms overhead
+- **Memory Usage**: < 50MB additional RAM usage
+- **Startup Time**: < 2 seconds additional startup time
+- **Error Recovery**: Graceful handling of Claude Code unavailability
 
-### 3. **Enhanced Response Integration**
-- **Memory Context Injection**: Add relevant thematic knowledge
-- **Repository Intelligence**: Enhance responses with code context
-- **Learning Insights**: Include patterns from continuous learning
-- **Consensus Hooks**: Optional validation for complex decisions
+### Risk Mitigation Strategies
 
-## Critical Implementation Files
+#### High-Priority Risks:
+1. **Claude Code Compatibility Breaking**: 
+   - *Mitigation*: Extensive testing with all Claude commands
+   - *Fallback*: Direct CLI passthrough mode
 
-### 🏗️ **Core Integration Module**
-- **`src/consensus/claude_code_integration.rs`** - Main hybrid integration class
-  - `ClaudeCodeIntegration` struct with subprocess management
-  - Smart command routing logic (`HIVE_COMMANDS` array)
-  - Bidirectional communication with Claude Code process
-  - Response integration layer framework
-  - Error handling and process recovery
+2. **Authentication Flow Interference**:
+   - *Mitigation*: Zero modification of auth flows
+   - *Fallback*: Bypass enhancement when auth issues detected
 
-### 🔄 **Updated Chat Interface** 
-- **`src/desktop/chat.rs`** - Chat interface integration
-  - Replace `process_message()` with `ClaudeCodeIntegration` calls
-  - Remove custom slash command handling
-  - Enable native Claude Code passthrough
-  - Integrate Hive command responses
+3. **Performance Degradation**:
+   - *Mitigation*: Async processing and caching
+   - *Fallback*: Disable enhancements if performance impact detected
 
-### 📋 **Command Implementations**
-- **Hive Commands** (in `claude_code_integration.rs`):
-  - `/consensus` → 4-stage consensus pipeline
-  - `/memory` → Thematic memory search  
-  - `/openrouter` → Direct OpenRouter access
+#### Medium-Priority Risks:
+1. **Terminal Integration Complexity**:
+   - *Mitigation*: Use proven terminal emulation libraries
+   - *Fallback*: External terminal mode
+
+2. **Context Injection Confusion**:
+   - *Mitigation*: Clear visual indicators of enhanced responses
+   - *Fallback*: User-controlled enhancement toggle
+
+## 📁 Critical Implementation Files for Simplified Approach
+
+### Phase 1 Files (Core Integration):
+- **`src/desktop/claude_terminal.rs`** - Embedded Claude Code CLI terminal component
+- **`src/desktop/enhancement_detector.rs`** - Non-intrusive detection of Hive enhancement requests
+- **`src/desktop/cli_passthrough.rs`** - Direct passthrough for all Claude Code commands
+- **`src/desktop/chat.rs`** (Updated) - Integration of terminal and enhancement features
+
+### Phase 2 Files (Enhancement Features):
+- **`src/consensus/hive_commands.rs`** - Implementation of /hive-* commands
+  - `/hive-consensus` → 4-stage consensus pipeline
+  - `/hive-memory` → Thematic memory search  
   - `/hive-analyze` → Repository intelligence
-  - `/hive-learn` → Continuous learning insights
+  - `/hive-openrouter` → Direct OpenRouter access
+- **`src/consensus/context_injector.rs`** - Optional context enhancement for Claude responses
+- **`src/consensus/knowledge_storage.rs`** - Store Claude interactions for future reference
 
-## Previous Work (Repurposed)
+### Phase 3 Files (Advanced Features):
+- **`src/desktop/response_enhancer.rs`** - Smart context injection and cross-referencing
+- **`src/enterprise/collaboration.rs`** - Team features and shared knowledge
+- **`src/analytics/usage_tracker.rs`** - Analytics and reporting
+- **`src/enterprise/audit_logger.rs`** - Compliance and security tracking
 
-### ✅ Foundation Components (Reusable)
-1. **API Key Manager** (`src/core/api_keys.rs`) - ✅ Complete
-2. **Consensus Engine** (`src/consensus/engine.rs`) - ✅ Ready for `/consensus` command
-3. **Thematic Memory** (`src/consensus/memory/`) - ✅ Ready for `/memory` command  
-4. **OpenRouter Client** (`src/consensus/openrouter.rs`) - ✅ Ready for `/openrouter` command
-5. **Repository Intelligence** (`src/analysis/`) - ✅ Ready for `/hive-analyze` command
+### Files to Remove/Deprecate:
+- **`src/consensus/claude_sdk_service.js`** - Eliminate Node.js service complexity
+- **`src/consensus/claude_sdk_client.rs`** - Remove JSON-RPC bridge
+- **`src/desktop/hybrid_chat_processor.rs`** - Replace with simpler approach
 
-### ✅ Completed Implementation
+## 🚀 LET'S DO THIS TODAY! - Immediate Implementation Steps
 
-1. **Hybrid Chat Processor** (`src/desktop/hybrid_chat_processor.rs`)
-   - ✅ Created smart command router
-   - ✅ Intercepts Hive commands (/consensus, /memory, etc.)
-   - ✅ Passes other commands to Claude Code
-   - ✅ Integrated with desktop chat interface
-
-2. **Claude Integration Manager** (`src/desktop/claude_integration_manager.rs`)
-   - ✅ Global singleton for Claude Code integration
-   - ✅ Manages lifecycle of Claude subprocess
-   - ✅ Provides access throughout desktop app
-
-3. **Chat Interface Updates** (`src/desktop/chat.rs`)
-   - ✅ Removed all local command processing
-   - ✅ Now uses hybrid_chat_processor exclusively
-   - ✅ Fixed /login and /logout interception issues
-   - ✅ Preserved all UI elements and auth toggles
-
-4. **Command Pass-through Fixes**
-   - ✅ Removed trigger_claude_oauth_login function
-   - ✅ Updated hive-consensus.rs to not intercept /login
-   - ✅ Updated hive-consensus.rs to not intercept /logout
-   - ✅ All Claude Code commands now pass through properly
-
-5. **Claude Code Subprocess Implementation** (`src/consensus/claude_code_integration.rs`)
-   - ✅ Comprehensive binary detection (10+ paths checked)
-   - ✅ Process spawning with Tokio async
-   - ✅ Bidirectional stdin/stdout communication
-   - ✅ JSON protocol support for advanced features
-   - ✅ Streaming response handling
-   - ✅ Process lifecycle management
-   - ✅ Error handling and recovery
-
-6. **Binary Detection Enhancement**
-   - ✅ Searches standard installation paths
-   - ✅ Checks Homebrew locations (Intel and Apple Silicon)
-   - ✅ User local installations (~/.local/bin)
-   - ✅ Uses 'which' command as fallback
-   - ✅ Path expansion with shellexpand crate
-   - ✅ Detailed error messages with all searched locations
-
-7. **Integration into hive-consensus Binary**
-   - ✅ Added initialize_claude_code_integration function
-   - ✅ Creates all required dependencies (database, consensus engine, thematic cluster)
-   - ✅ Initialization triggered when consensus manager is available
-   - ✅ Enhanced logging for debugging
-
-### 🚧 Current Issues
-
-1. **Claude Code CLI Not Installed**
-   - All code is complete and functional
-   - Binary detection is working properly
-   - Just need Claude Code CLI installed to test
-   - Shows helpful error message with installation instructions
-
-2. **Slash Command Autocomplete**
-   - Will work once Claude Code CLI is available
-   - Bidirectional communication protocol already implemented
-   - JSON protocol support ready for UI hints
-
-### 📋 Implementation Plan
-
-#### Phase 1: Bundle Claude Code with Hive (Current Priority)
-1. **Add npm dependency**
-   ```json
-   "@anthropic-ai/claude-code": "^1.0.61"
-   ```
-2. **Update install.js** to install Claude alongside Hive
-3. **Modify claude_installer.rs** to detect npm-installed Claude
-4. **Test bundled installation** process
-
-#### Phase 2: Deep Memory Integration
-1. **Implement stateless context builder**
-   - Query recent curator articles
-   - Find thematic matches
-   - Get learned patterns
-   - Include repository context
-2. **Inject context before Claude queries**
-3. **Store responses as curator articles**
-4. **Update thematic clusters**
-
-#### Phase 3: Mode & Toggle Integration  
-1. **Connect execution modes to Claude**
-   - ConsensusFirst flow
-   - ConsensusAssisted flow
-   - Direct with context
-2. **Implement Plan Mode control**
-   - Inject planning instructions
-   - Prevent execution
-3. **Implement Auto-Edit control**
-   - Configure file permissions
-   - Respect safety settings
-
-#### Phase 4: Complete Integration Testing
-1. **Test all interaction methods**
-   - GUI controls work
-   - Slash commands work
-   - Modes control behavior
-2. **Verify knowledge building**
-   - Q&As stored properly
-   - Context improves over time
-3. **Performance optimization**
-   - Context size limits
-   - Response streaming
-
-## Key Files Modified/To Modify
-
-### Modified:
-- `/src/core/api_keys.rs` - Complete API key management for Anthropic
-- `/src/desktop/dialogs/mod.rs` - Added Anthropic key fields to dialogs
-- `/src/bin/hive-consensus.rs` - Added anthropic_key signal and partially updated
-
-### To Create:
-- `/src/consensus/claude_code_executor.rs` - Main Claude integration
-- `/src/consensus/claude_process.rs` - SDK subprocess management
-- `/src/consensus/claude_hooks.rs` - Hook system for consensus
-
-### To Modify:
-- `/src/consensus/engine.rs` - Add Claude executor option
-- `/src/consensus/mode_detector.rs` - Route to Claude instead of Direct
-- `/src/core/database.rs` - Ensure knowledge storage works
-
-## Critical Implementation Notes
-
-### API Key Handling
-- API keys stored in database only (not config.toml)
-- Same pattern as OpenRouter keys
-- Validation before saving
-- Environment variable fallback
-
-### Stateless Context Building
-```rust
-async fn build_stateless_context(&self, request: &str) -> Result<StatelessContext> {
-    // Get recent curator knowledge (24h window)
-    let recent_knowledge = self.thematic_cluster
-        .get_recent_curator_knowledge(request).await?;
-    
-    // Get thematic matches
-    let thematic_knowledge = self.thematic_cluster
-        .get_thematic_knowledge(request, "direct").await?;
-    
-    // Get learned patterns from ContinuousLearner
-    let learned_context = self.ai_helpers.continuous_learner
-        .get_learned_context(request, Stage::Generator, 5000).await?;
-    
-    Ok(StatelessContext {
-        recent_knowledge,
-        thematic_knowledge,
-        learned_patterns: learned_context,
-        repository_context: repo_context,
-    })
-}
-```
-
-### System Prompt
-```rust
-const HYBRID_SYSTEM_PROMPT: &str = r#"
-You are Claude Code integrated with Hive Consensus, operating in stateless mode.
-
-Key principles:
-1. Each request is independent - you have no conversation history
-2. The context provided contains relevant past knowledge from the memory system
-3. When uncertain about complex decisions, explicitly state "I would benefit from consensus validation"
-4. All your outputs will be stored as knowledge for future requests
-5. You have full access to all Claude Code capabilities and commands
-
-Available context includes:
-- Recent curator knowledge (authoritative answers from past 24h)
-- Thematically similar past conversations
-- Learned patterns and best practices
-- Repository context when applicable
-"#;
-```
-
-## Next Immediate Steps
-
-1. **Find OnboardingDialog usage**:
+### Step 1: Clean Up Complex Code (Next 30 Minutes)
+1. **Delete Complex Files**:
    ```bash
-   grep -r "OnboardingDialog" src/bin/hive-consensus.rs
+   rm src/consensus/claude_sdk_service.js    # Remove Node.js complexity
+   rm src/consensus/claude_sdk_client.rs     # Remove JSON-RPC bridge
+   # Keep hybrid_chat_processor.rs but simplify it drastically
    ```
 
-2. **Implement save_api_keys function**:
+2. **Simplify Chat Integration**:
+   - Replace complex routing with simple Claude CLI execution
+   - Remove all JSON-RPC and subprocess management complexity
+   - Keep existing beautiful chat interface design
+
+### Step 2: Simple Claude Integration (Next 2 Hours)  
+1. **Make Chat Interface a Claude Terminal**:
    ```rust
-   async fn save_api_keys(
-       openrouter_key: &str,
-       hive_key: &str,
-       anthropic_key: &str,
-   ) -> Result<()> {
-       ApiKeyManager::save_to_database(
-           Some(openrouter_key),
-           Some(hive_key),
-           Some(anthropic_key),
-       ).await
+   // In chat.rs - replace complex logic with:
+   async fn send_message(message: String) {
+       match app_state.execution_mode {
+           Direct => send_to_claude_with_memory(message).await,
+           ConsensusFirst => run_consensus_then_claude(message).await,
+           ConsensusAssisted => send_to_claude_then_validate(message).await,
+       }
    }
    ```
 
-3. **Hook up save in dialogs**:
-   - In SettingsDialog "Save" button onclick
-   - In OnboardingDialog "Continue" button onclick
+2. **Test Claude Commands Immediately**:
+   - `/help` should work perfectly
+   - `/login` should work perfectly  
+   - `/logout` should work perfectly
+   - Regular chat should work with Claude responses
 
-4. **Test the flow**:
-   - Open settings
-   - Enter Anthropic API key
-   - Save
-   - Restart app
-   - Verify key persists
+### Step 3: Use Existing GUI (No Changes Needed!)
+1. **Existing Controls Work**:
+   - Profile dropdown → Controls both Claude context and consensus models
+   - Execution mode toggle → Controls Direct/Consensus routing
+   - Settings dialog → Add Claude integration on/off toggle
+   - Analytics dashboard → Shows Claude usage alongside consensus metrics
 
-## Todo List Summary
-- [IN PROGRESS] Add Anthropic API key configuration to Settings UI
-- [PENDING] Complete save functionality for API keys
-- [PENDING] Create ClaudeCodeExecutor module
-- [PENDING] Implement Claude Code SDK process management
-- [PENDING] Build stateless memory context loading
-- [PENDING] Integrate Claude streaming with existing UI
-- [PENDING] Add execution mode toggle to GUI
-- [PENDING] Implement smart consensus invocation
-- [PENDING] Store Claude outputs in knowledge_conversations
-- [PENDING] Create hooks for consensus validation
-- [PENDING] Test complete integration
+2. **No New UI Elements**:
+   - No new buttons needed
+   - No new commands to learn
+   - No interface redesign
+   - Keep your beautiful existing design!
 
-## Key Features to Preserve
-1. **Stateless execution** - No conversation history
-2. **Memory integration** - Use our powerful database
-3. **Consensus validation** - Multi-model perspectives
-4. **Streaming UI** - Real-time updates
-5. **Cancellation support** - Proper cleanup
-6. **Knowledge storage** - Every output saved
-7. **Smart routing** - Claude decides when to use consensus
+## 🎯 Long-term Roadmap (Next 6 Weeks)
+
+### Week 1-2: Foundation
+- Implement simplified CLI integration
+- Basic terminal component and enhancement detection
+- Test Claude Code compatibility
+
+### Week 3-4: Enhancement Features  
+- /hive-consensus command and GUI button
+- /hive-memory search and context injection
+- /hive-analyze repository intelligence
+
+### Week 5-6: Polish and Advanced Features
+- Smart context injection
+- Performance optimization
+- Enterprise features and analytics
+
+## 💡 Key Success Factors
+
+1. **Preserve Claude Code Experience**: Zero breaking changes to existing functionality
+2. **Optional Enhancement**: Users choose when to use Hive features
+3. **Simple Architecture**: Avoid overengineering and complex integrations
+4. **Fast Implementation**: Focus on core value rather than technical complexity
+5. **User Clarity**: Clear distinction between Claude features and Hive enhancements
+
+---
+
+## 📄 PROJECT PLAN SUMMARY
+
+This document outlines the simplified approach to Claude Code integration, moving away from the complex SDK/CLI hybrid approach to a CLI-first architecture with non-intrusive enhancements.
+
+### Core Vision:
+**Hive-Consensus is a GUI-first intelligent enhancement around Claude Code that preserves the exact Claude experience while adding optional consensus validation, stateless memory, and advanced features through non-intrusive integration.**
+
+### Implementation Approach:
+1. **CLI-First**: Claude Code remains the primary interface
+2. **Non-Intrusive**: All Claude commands work exactly as expected
+3. **Optional Enhancement**: Users choose when to use Hive features
+4. **Transparent Operation**: No interference with existing workflows
+
+### Success Metrics:
+- 100% Claude Code compatibility maintained
+- Optional Hive features available on-demand
+- Zero performance degradation for Claude commands
+- Clear user experience with intuitive enhancement options
+
+This simplified approach will deliver the vision faster, with better reliability and user experience than the previous complex hybrid architecture.

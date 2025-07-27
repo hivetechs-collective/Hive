@@ -7,7 +7,7 @@ pub mod ai_ui_events;
 pub mod app;
 pub mod assets;
 pub mod chat;
-pub mod claude_integration_manager;
+// pub mod claude_integration_manager; // Removed - using simple integration
 pub mod components;
 pub mod consensus;
 pub mod consensus_integration;
@@ -19,7 +19,7 @@ pub mod explorer_enhanced;
 pub mod file_explorer;
 pub mod file_operations;
 pub mod file_system;
-pub mod hybrid_chat_processor;
+pub mod simple_chat_processor;
 pub mod keyboard;
 pub mod layout;
 pub mod layout_enhanced;
@@ -36,6 +36,7 @@ pub mod welcome_enhanced;
 pub mod code_editor;
 pub mod dependency_checker;
 pub mod onboarding_new;
+// pub mod test_claude_sdk; // Removed - using simple integration
 
 pub use app::App;
 
@@ -57,23 +58,29 @@ use dioxus_desktop::{Config, LogicalSize, WindowBuilder};
 pub fn launch_desktop_app(config: HiveConfig) -> Result<()> {
     tracing::info!("Launching HiveTechs Consensus Desktop Application");
 
-    // Configure the desktop window
+    // Configure the desktop window with macOS-specific fixes
     let window_config = WindowBuilder::new()
         .with_title("HiveTechs Consensus")
         .with_min_inner_size(LogicalSize::new(800, 600))
         .with_inner_size(LogicalSize::new(1200, 800))
-        .with_resizable(true);
+        .with_resizable(true)
+        .with_visible(true)
+        .with_focused(true)
+        .with_always_on_top(false);
 
     let desktop_config = Config::new()
         .with_window(window_config)
         .with_custom_head(include_str!("styles/global_head.html").to_string())
         .with_custom_index(create_custom_index());
 
-    // Launch the Dioxus app
+    tracing::info!("🖥️ Starting Dioxus desktop with window configuration...");
+
+    // Launch the Dioxus app - this blocks until the window is closed
     LaunchBuilder::desktop()
         .with_cfg(desktop_config)
         .launch(app::App);
 
+    tracing::info!("✅ Desktop application window closed");
     Ok(())
 }
 
