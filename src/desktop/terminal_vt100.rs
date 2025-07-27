@@ -8,6 +8,7 @@ use dioxus::document::eval;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::sync::{Arc, Mutex};
 use std::io::{Read, Write, ErrorKind};
+use crate::desktop::terminal_registry::{register_terminal, unregister_terminal};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
@@ -32,6 +33,12 @@ pub fn TerminalVt100(
     let mut update_trigger = use_signal(|| 0u32);
     let mut is_ready = use_signal(|| false);
     
+    // Cleanup on unmount
+    let terminal_id_for_cleanup = terminal_id.clone();
+    use_drop(move || {
+        unregister_terminal(&terminal_id_for_cleanup);
+    });
+    
     // Initialize terminal
     let terminal_id_for_init = terminal_id.clone();
     use_effect(move || {
@@ -41,6 +48,9 @@ pub fn TerminalVt100(
                 Ok((terminal, mut output_rx)) => {
                     let terminal_arc = Arc::new(terminal);
                     terminal_state.set(Some(terminal_arc.clone()));
+                    
+                    // Register terminal in global registry
+                    register_terminal(terminal_id_for_init.clone(), terminal_arc.parser.clone());
                     
                     // Set terminal as ready immediately - don't wait for shell prompt
                     is_ready.set(true);
@@ -398,6 +408,30 @@ fn keyboard_to_bytes(event: &Event<KeyboardData>) -> Option<Vec<u8>> {
         
         _ => None,
     }
+}
+
+/// Get plain text content from terminal
+pub fn get_terminal_text(parser: &vt100::Parser) -> String {
+    let screen = parser.screen();
+    let (rows, cols) = screen.size();
+    let mut text = String::new();
+    
+    for row in 0..rows {
+        let mut line = String::new();
+        for col in 0..cols {
+            if let Some(cell) = screen.cell(row, col) {
+                line.push_str(&cell.contents());
+            }
+        }
+        // Trim trailing whitespace from each line
+        let trimmed = line.trim_end();
+        if !trimmed.is_empty() {
+            text.push_str(trimmed);
+            text.push('\n');
+        }
+    }
+    
+    text.trim().to_string()
 }
 
 /// Render vt100 screen to HTML

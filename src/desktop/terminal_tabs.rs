@@ -5,6 +5,9 @@
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
+use crate::desktop::response_coordinator::SendToConsensusButton;
+use crate::desktop::state::AppState;
+use crate::desktop::consensus_integration::DesktopConsensusManager;
 
 /// Terminal tab data
 #[derive(Clone, Debug)]
@@ -277,6 +280,14 @@ pub fn TerminalTabs() -> Element {
                 // Terminal dropdown menu (VS Code style)
                 div {
                     style: "margin-left: auto; display: flex; gap: 4px; align-items: center;",
+                    
+                    // Send to Consensus button
+                    div {
+                        style: "margin-right: 12px;",
+                        SendToConsensusButton {
+                            app_state: use_context::<Signal<AppState>>(),
+                        }
+                    }
                     
                     // Keyboard shortcut hint
                     span {

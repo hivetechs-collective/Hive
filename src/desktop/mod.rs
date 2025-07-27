@@ -37,6 +37,8 @@ pub mod terminal_vt100;
 pub mod welcome_enhanced;
 pub mod resizable_panels;
 pub mod code_editor;
+pub mod response_coordinator;
+pub mod terminal_registry;
 
 // Re-export commonly used styling components
 pub use dialogs::OperationConfirmationDialog;
