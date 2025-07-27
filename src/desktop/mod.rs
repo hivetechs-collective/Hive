@@ -35,6 +35,7 @@ pub mod terminal_tabs;
 // pub mod terminal_emulator; // Disabled - using terminal_vt100 instead
 pub mod terminal_vt100;
 pub mod welcome_enhanced;
+pub mod resizable_panels;
 pub mod code_editor;
 
 // Re-export commonly used styling components
