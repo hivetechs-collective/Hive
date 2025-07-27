@@ -350,62 +350,85 @@ pub fn App() -> Element {
         }
     };
 
+    // Create inline styles as a string
+    let inline_grid_styles = r#"
+        #app {
+            display: grid !important;
+            grid-template-rows: 30px 1fr 22px !important;
+            grid-template-columns: 1fr !important;
+            height: 100vh !important;
+            width: 100vw !important;
+            overflow: hidden !important;
+        }
+        
+        .main-layout-grid {
+            display: grid !important;
+            grid-template-columns: 250px 1fr 350px !important;
+            grid-template-rows: 1fr !important;
+            height: 100% !important;
+            overflow: hidden !important;
+        }
+        
+        .center-panel-grid {
+            display: grid !important;
+            grid-template-rows: 1fr 250px !important;
+            grid-template-columns: 1fr !important;
+            overflow: hidden !important;
+        }
+        
+        .terminal-panel-grid {
+            background: #ff0000 !important;
+            border-top: 3px solid #00ff00 !important;
+            overflow: hidden !important;
+        }
+    "#;
+
     rsx! {
         style { {get_global_styles()} }
+        style { {inline_grid_styles} }
 
         div {
             id: "app",
-            class: "app-container",
+            class: "app-container-grid",
             tabindex: 0,
             onkeydown: on_global_keydown,
 
-            // Menu Bar Component
+            // Menu Bar Component (grid row 1)
             MenuBar {}
 
-            // Main Layout
+            // Main Layout - contains everything below menu bar (grid row 2)
             div {
-                class: "main-layout",
+                class: "main-layout-grid",
                 
-                // Left Sidebar - File Explorer
+                // Left Sidebar - File Explorer (grid column 1)
                 FileExplorer {}
 
-                // Center Panel - Split between Chat and Terminal
+                // Center Panel - Split between Chat and Terminal (grid column 2)
                 div {
-                    class: "center-panel",
-                    style: "flex: 1; display: flex; flex-direction: column; height: 100%; overflow: hidden;",
+                    class: "center-panel-grid",
                     
-                    // Chat Interface (top portion)
+                    // Chat Interface (grid row 1) - Let's also give it a bright background
                     div {
-                        style: "flex: 1; min-height: 0; overflow: hidden;",
+                        style: "background: #00ff00 !important; overflow: hidden;",
                         ChatInterface {}
                     }
                     
-                    // Terminal Panel (bottom portion)
+                    // Terminal Panel (grid row 2) - BRIGHT RED FOR DEBUG
                     div {
-                        style: "height: 300px; background: #1e1e1e; border-top: 1px solid #474747; display: flex; flex-direction: column;",
+                        style: "background: #ff0000 !important; height: 250px !important; display: block !important;",
                         
-                        // Terminal header
-                        div {
-                            style: "height: 35px; background: #252526; border-bottom: 1px solid #1e1e1e; display: flex; align-items: center; padding: 0 10px;",
-                            span {
-                                style: "color: #cccccc; font-size: 13px; font-weight: 500; text-transform: uppercase;",
-                                "Terminal"
-                            }
-                        }
-                        
-                        // Terminal content
-                        div {
-                            style: "flex: 1; overflow: hidden;",
-                            TerminalTabs {}
+                        h1 { 
+                            style: "color: #ffffff !important; font-size: 48px !important; text-align: center !important; padding: 50px !important;", 
+                            "TERMINAL HERE - RED BACKGROUND" 
                         }
                     }
                 }
 
-                // Consensus Progress (always visible)
+                // Consensus Progress (always visible) (grid column 3)
                 ConsensusProgress {}
             }
 
-            // Status Bar
+            // Status Bar (grid row 3)
             StatusBar {}
 
             // Dialogs (rendered on top of everything)
