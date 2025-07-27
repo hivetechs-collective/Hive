@@ -179,10 +179,6 @@ body {
 
 /* ===== Layout Container ===== */
 #app {
-    height: 100vh;
-    width: 100vw;
-    display: flex;
-    flex-direction: column;
     background: var(--vscode-editor-background);
 }
 
@@ -643,7 +639,15 @@ input[type="radio"] {
 .chat-container {
     display: flex;
     flex-direction: column;
+    overflow: hidden;
     height: 100%;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    min-height: 0;
 }
 
 .message {
@@ -677,6 +681,14 @@ input[type="radio"] {
 
 .message-content {
     line-height: 1.5;
+}
+
+/* Chat Input Container */
+.chat-input-container {
+    flex-shrink: 0;
+    border-top: 1px solid var(--vscode-sideBar-border);
+    background: var(--vscode-input-background);
+    padding: 12px;
 }
 
 /* ===== Code Blocks in Messages ===== */
@@ -2188,6 +2200,14 @@ fn get_terminal_styles() -> &'static str {
     overflow: hidden;
 }
 
+.center-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+}
+
 .file-explorer {
     width: 250px;
     min-width: 200px;
@@ -2198,10 +2218,40 @@ fn get_terminal_styles() -> &'static str {
 }
 
 .chat-container {
-    flex: 1;
     display: flex;
     flex-direction: column;
     background: #1e1e1e;
+    overflow: hidden;
+}
+
+/* CSS Grid Layout for main app */
+.app-container-grid {
+    display: grid;
+    grid-template-rows: 30px 1fr 22px;
+    grid-template-columns: 1fr;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+.main-layout-grid {
+    display: grid;
+    grid-template-columns: 250px 1fr 350px;
+    grid-template-rows: 1fr;
+    height: 100%;
+    overflow: hidden;
+}
+
+.center-panel-grid {
+    display: grid;
+    grid-template-rows: 1fr 250px;
+    grid-template-columns: 1fr;
+    overflow: hidden;
+}
+
+.terminal-panel-grid {
+    background: #ff0000;
+    border-top: 3px solid #00ff00;
     overflow: hidden;
 }
 "#
