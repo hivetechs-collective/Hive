@@ -40,7 +40,10 @@ pub fn get_global_styles() -> String {
 {layout_styles}
 
 /* HiveTechs Brand Theme */
-{hivetechs_theme}"#,
+{hivetechs_theme}
+
+/* Terminal and Layout styles */
+{terminal_styles}"#,
         base_styles = get_base_styles(),
         platform_fonts = get_platform_fonts(),
         platform_adjustments = theme::platform_adjustments(),
@@ -51,7 +54,8 @@ pub fn get_global_styles() -> String {
         vscode_menu_styles = get_vscode_menu_styles(),
         welcome_styles = crate::desktop::welcome_enhanced::WELCOME_STYLES,
         layout_styles = crate::desktop::layout_enhanced::LAYOUT_STYLES,
-        hivetechs_theme = hivetechs_theme::get_hivetechs_theme()
+        hivetechs_theme = hivetechs_theme::get_hivetechs_theme(),
+        terminal_styles = get_terminal_styles()
     )
 }
 
@@ -1987,4 +1991,165 @@ pub mod themes {
         --vscode-sideBar-border: #6fc3df;
     }
     "#;
+}
+
+/// Get terminal and layout styles
+fn get_terminal_styles() -> &'static str {
+    r#"
+/* Main layout with terminal */
+.main-layout-with-terminal {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* Terminal tabs styles */
+.terminal-tabs {
+    display: flex;
+    flex-direction: column;
+    background: #1e1e1e;
+    height: 100%;
+}
+
+.terminal-tab-bar {
+    display: flex;
+    align-items: center;
+    height: 35px;
+    background: #252526;
+    border-bottom: 1px solid #1e1e1e;
+    padding: 0 10px;
+    gap: 2px;
+}
+
+.terminal-tab {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    height: 35px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    border-right: 1px solid #1e1e1e;
+    gap: 6px;
+    transition: background 0.1s;
+}
+
+.terminal-tab.active {
+    background: #1e1e1e;
+    color: #cccccc;
+}
+
+.terminal-tab:not(.active) {
+    background: transparent;
+    color: #969696;
+}
+
+.terminal-tab:hover {
+    background: #2a2a2a;
+}
+
+.terminal-content {
+    flex: 1;
+    background: #000000;
+    color: #cccccc;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+    overflow-y: auto;
+    padding: 10px;
+}
+
+/* Terminal output styles */
+.terminal-line {
+    margin: 2px 0;
+    display: flex;
+    align-items: baseline;
+}
+
+.terminal-line.command {
+    color: #569cd6;
+    font-weight: 600;
+}
+
+.terminal-line.output {
+    color: #cccccc;
+}
+
+.terminal-line.error {
+    color: #f44747;
+}
+
+.terminal-line.success {
+    color: #4ec9b0;
+}
+
+.terminal-line.prompt {
+    color: #dcdcaa;
+    font-weight: 600;
+}
+
+/* Terminal input */
+.terminal-input-container {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    background: #1a1a1a;
+    border-top: 1px solid #333333;
+}
+
+.terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #cccccc;
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+    padding: 4px;
+}
+
+.terminal-prompt {
+    color: #4ec9b0;
+    margin-right: 8px;
+    font-weight: 600;
+}
+
+/* Resizable terminal */
+.terminal-resize-handle {
+    height: 4px;
+    background: transparent;
+    cursor: ns-resize;
+    position: relative;
+}
+
+.terminal-resize-handle:hover {
+    background: #007acc;
+}
+
+/* Main layout adjustments */
+.main-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.file-explorer {
+    width: 250px;
+    min-width: 200px;
+    max-width: 500px;
+    background: #252526;
+    border-right: 1px solid #3e3e42;
+    overflow-y: auto;
+}
+
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e1e;
+    overflow: hidden;
+}
+"#
 }
