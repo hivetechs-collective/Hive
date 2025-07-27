@@ -49,8 +49,12 @@ pub fn TerminalVt100(
                     let terminal_arc = Arc::new(terminal);
                     terminal_state.set(Some(terminal_arc.clone()));
                     
-                    // Register terminal in global registry
-                    register_terminal(terminal_id_for_init.clone(), terminal_arc.parser.clone());
+                    // Register terminal in global registry with writer
+                    register_terminal(
+                        terminal_id_for_init.clone(), 
+                        terminal_arc.parser.clone(),
+                        Some(terminal_arc.writer.clone())
+                    );
                     
                     // Set terminal as ready immediately - don't wait for shell prompt
                     is_ready.set(true);
