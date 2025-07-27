@@ -137,8 +137,8 @@ pub fn TerminalTabs() -> Element {
                             "{tab.title}"
                         }
 
-                        // Close button
-                        if terminals.read().len() > 1 {
+                        // Close button - don't allow closing Claude Code terminal if it's the only one
+                        if terminals.read().len() > 1 || (terminals.read().len() == 1 && id != "claude-code") {
                             span {
                                 style: "{tab_close_style}",
                                 onmouseenter: |_| {
@@ -273,12 +273,19 @@ fn create_new_terminal(
     terminal_counter: &mut Signal<u32>,
 ) {
     let count = *terminal_counter.read();
-    let id = format!("terminal-{}", count);
+    let (id, title, icon) = if count == 1 {
+        // First terminal is always Claude Code
+        ("claude-code".to_string(), "Claude Code".to_string(), "🤖".to_string())
+    } else {
+        // Subsequent terminals are numbered starting from 1
+        let terminal_number = count - 1;
+        (format!("terminal-{}", terminal_number), format!("Terminal {}", terminal_number), "$".to_string())
+    };
     
     let new_terminal = TerminalTab {
         id: id.clone(),
-        title: format!("Terminal {}", count),
-        icon: "$".to_string(),
+        title,
+        icon,
         is_active: true,
         working_directory: std::env::current_dir()
             .unwrap_or_default()
