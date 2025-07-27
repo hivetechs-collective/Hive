@@ -203,6 +203,8 @@ pub async fn process_message_direct_claude(
     current_response: &mut Signal<String>,
     is_processing: &mut Signal<bool>,
 ) {
+    info!("🎯 process_message_direct_claude called with query: {}", query);
+    
     // Ensure Claude is available
     let claude_integration = match ensure_claude_integration().await {
         Ok(integration) => integration,

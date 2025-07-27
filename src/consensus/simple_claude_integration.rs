@@ -121,6 +121,8 @@ impl SimpleClaudeIntegration {
     
     /// Send message to Claude Code with optional memory context
     pub async fn send_message(&self, message: &str, memory_context: Option<&str>) -> Result<String> {
+        info!("🔍 SimpleClaudeIntegration::send_message called with: {}", message);
+        
         let claude_binary = match &self.claude_binary {
             Some(binary) => binary,
             None => {
@@ -138,6 +140,8 @@ impl SimpleClaudeIntegration {
         } else {
             message.to_string()
         };
+        
+        info!("🔍 Sending to Claude with enhanced message: {}", enhanced_message);
         
         // Execute Claude Code with the message
         self.execute_claude_command(&claude_binary, &enhanced_message).await

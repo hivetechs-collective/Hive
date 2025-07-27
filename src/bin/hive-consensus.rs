@@ -2189,11 +2189,13 @@ fn App() -> Element {
             
             // Process with consensus or Claude based on execution mode
             let execution_mode = app_state.read().claude_execution_mode.clone();
+            tracing::info!("🔍 Current execution mode: {}", execution_mode);
+            tracing::info!("🔍 Query being processed: {}", query);
             
             match execution_mode.as_str() {
                 "Direct" => {
                     // Process with Claude Code directly
-                    tracing::info!("🚀 Processing with Claude Code directly");
+                    tracing::info!("🚀 Processing with Claude Code directly - query: {}", query);
                     let mut app_state_for_task = app_state.clone();
                     let mut current_response_for_task = current_response.clone();
                     let mut is_processing_for_task = is_processing.clone();
