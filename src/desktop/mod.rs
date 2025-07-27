@@ -4,7 +4,6 @@
 
 pub mod activity_bar;
 pub mod ai_ui_events;
-pub mod app;
 pub mod assets;
 pub mod chat;
 pub mod components;
@@ -34,8 +33,6 @@ pub mod terminal;
 pub mod terminal_tabs;
 pub mod welcome_enhanced;
 pub mod code_editor;
-
-pub use app::App;
 
 // Re-export commonly used styling components
 pub use dialogs::OperationConfirmationDialog;
@@ -68,9 +65,9 @@ pub fn launch_desktop_app(config: HiveConfig) -> Result<()> {
         .with_custom_index(create_custom_index());
 
     // Launch the Dioxus app
-    LaunchBuilder::desktop()
-        .with_cfg(desktop_config)
-        .launch(app::App);
+    // NOTE: This module no longer provides an App component
+    // The actual App is defined in src/bin/hive-consensus.rs
+    panic!("desktop::app::App has been removed. Use the App component from src/bin/hive-consensus.rs instead");
 
     Ok(())
 }
