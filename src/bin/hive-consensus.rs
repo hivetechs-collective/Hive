@@ -2127,7 +2127,32 @@ fn App() -> Element {
                 let mut is_cancelling = is_cancelling.clone();
                 let mut app_state = app_state.clone();
                 let mut current_response = current_response.clone();
+                let mut show_terminal = show_terminal.clone();
                 move |evt: dioxus::events::KeyboardEvent| {
+                    // IMPORTANT: When terminal is visible, only handle the terminal toggle shortcut
+                    // Let all other keyboard events pass through to the terminal
+                    if *show_terminal.read() {
+                        // Only handle terminal toggle (Ctrl+T) when terminal is visible
+                        let is_mac = cfg!(target_os = "macos");
+                        let modifier_pressed = if is_mac { evt.modifiers().meta() } else { evt.modifiers().ctrl() };
+                        
+                        if modifier_pressed && evt.key() == Key::Character("t".to_string()) {
+                            evt.stop_propagation();
+                            evt.prevent_default();
+                            
+                            // Toggle terminal visibility
+                            let current = *show_terminal.read();
+                            show_terminal.set(!current);
+                            
+                            tracing::info!("🖥️ Terminal toggled: {}", if !current { "shown" } else { "hidden" });
+                            return;
+                        }
+                        
+                        // CRITICAL: Don't handle ANY other events when terminal is visible
+                        // This allows the terminal to receive all keyboard input
+                        return;
+                    }
+                    
                     // Check for Ctrl+C (or Cmd+C on Mac) 
                     let is_mac = cfg!(target_os = "macos");
                     let modifier_pressed = if is_mac { evt.modifiers().meta() } else { evt.modifiers().ctrl() };
