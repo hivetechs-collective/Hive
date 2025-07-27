@@ -102,12 +102,14 @@ pub fn TerminalVt100(
         background: #000000;
         color: #cccccc;
         font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 13px;
-        line-height: 16px;
+        font-size: 14px;
+        line-height: 18px;
         overflow: auto;
-        padding: 4px;
+        padding: 8px;
         box-sizing: border-box;
         white-space: pre;
+        cursor: text;
+        position: relative;
     ";
     
     rsx! {
@@ -119,7 +121,8 @@ pub fn TerminalVt100(
             
             // Render terminal screen
             div {
-                dangerous_inner_html: "{screen_html}"
+                dangerous_inner_html: "{screen_html}",
+                style: "width: 100%; height: 100%;"
             }
         }
     }
@@ -129,9 +132,9 @@ pub fn TerminalVt100(
 fn create_terminal(
     working_directory: Option<String>,
 ) -> Result<(Vt100Terminal, mpsc::UnboundedReceiver<()>), Box<dyn std::error::Error>> {
-    // Terminal size
-    let cols = 80;
-    let rows = 24;
+    // Terminal size - use a wider default for modern screens
+    let cols = 120;
+    let rows = 30;
     
     // Create PTY system
     let pty_system = NativePtySystem::default();
@@ -272,25 +275,82 @@ fn render_screen(parser: &vt100::Parser) -> String {
     let screen = parser.screen();
     let mut html = String::new();
     
-    html.push_str(r#"<div style="font-family: monospace; white-space: pre;">"#);
+    html.push_str(r#"<div style="font-family: monospace; white-space: pre; position: relative;">"#);
     
-    // Get screen contents with formatting
-    let formatted = screen.contents_formatted();
+    // Get cursor position
+    let (cursor_row, cursor_col) = screen.cursor_position();
+    let cursor_row = cursor_row as usize;
+    let cursor_col = cursor_col as usize;
     
-    // Debug: Log first few lines of terminal content
-    let content_preview = String::from_utf8_lossy(&formatted);
-    let lines: Vec<&str> = content_preview.lines().take(5).collect();
-    if !lines.is_empty() && !lines[0].trim().is_empty() {
-        tracing::trace!("📺 Terminal content preview: {:?}", lines);
+    // Get screen contents line by line
+    let mut lines = Vec::new();
+    for row in 0..screen.size().0 {
+        let mut line = String::new();
+        for col in 0..screen.size().1 {
+            if let Some(cell) = screen.cell(row, col) {
+                let ch = cell.contents();
+                if ch.is_empty() || ch == " " {
+                    line.push(' ');
+                } else {
+                    line.push_str(&ch);
+                }
+            } else {
+                line.push(' ');
+            }
+        }
+        lines.push(line);
     }
     
-    // Convert ANSI escape sequences to HTML
-    let html_content = ansi_to_html(&formatted);
-    html.push_str(&html_content);
+    // Render lines with cursor
+    for (row_idx, line) in lines.iter().enumerate() {
+        if row_idx > 0 {
+            html.push_str("<br>");
+        }
+        
+        if row_idx == cursor_row {
+            // Line with cursor - split at cursor position
+            let line_chars: Vec<char> = line.chars().collect();
+            
+            // Before cursor
+            for (col_idx, ch) in line_chars.iter().enumerate() {
+                if col_idx == cursor_col {
+                    // Add blinking cursor
+                    html.push_str(r#"<span style="background-color: #cccccc; color: #000000; animation: blink 1s step-end infinite;">▂</span>"#);
+                }
+                match ch {
+                    '<' => html.push_str("&lt;"),
+                    '>' => html.push_str("&gt;"),
+                    '&' => html.push_str("&amp;"),
+                    _ => html.push(*ch),
+                }
+            }
+            
+            // If cursor is at end of line
+            if cursor_col >= line_chars.len() {
+                html.push_str(r#"<span style="background-color: #cccccc; color: #000000; animation: blink 1s step-end infinite;">▂</span>"#);
+            }
+        } else {
+            // Regular line without cursor
+            for ch in line.chars() {
+                match ch {
+                    '<' => html.push_str("&lt;"),
+                    '>' => html.push_str("&gt;"),
+                    '&' => html.push_str("&amp;"),
+                    _ => html.push(ch),
+                }
+            }
+        }
+    }
     
-    // Add cursor
-    let (cursor_row, cursor_col) = (screen.cursor_position().0 as usize, screen.cursor_position().1 as usize);
-    // This is simplified - in a real implementation we'd overlay the cursor
+    // Add CSS for cursor blinking
+    html.push_str(r#"
+    <style>
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+    </style>
+    "#);
     
     html.push_str("</div>");
     html
