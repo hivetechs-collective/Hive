@@ -470,3 +470,20 @@ The vt100-based terminal emulator has been successfully integrated into the term
 - **ANSI-to-HTML rendering** for display in Dioxus
 
 **Next**: Need to test the terminal in the running application to verify Claude interactive mode works.
+
+### ✅ Terminal Cursor Enhancement
+
+**Date: 2025-07-27**
+
+Added a visible blinking cursor to the terminal:
+- Implemented proper cursor rendering at the correct position
+- Added CSS animation for blinking cursor effect  
+- Increased terminal size to 120x30 for modern screens
+- Improved font size and padding for better readability
+- Cell-by-cell rendering for accurate display
+
+The terminal now shows:
+- A blinking cursor (▂) at the current position
+- Proper text rendering with HTML escaping
+- Cursor follows as you type
+- Full terminal grid display
