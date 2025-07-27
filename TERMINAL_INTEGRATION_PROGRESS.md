@@ -117,10 +117,24 @@ The terminal integration is complete and the hive-consensus binary builds and ru
 3. **Modified editor-container**: Changed to flex column layout to support split view
 4. **Added terminal section**: Below editor content with VS Code styling
 5. **Terminal features working**:
-   - Terminal tabs for multiple instances
-   - Command execution
-   - Claude Code auto-detection
+   - Terminal tabs for multiple instances (each with independent state)
+   - Command execution with stdout/stderr streaming
+   - Claude Code auto-detection and installation helper
    - VS Code dark theme styling
+   - Command history with arrow key navigation
+   - Built-in commands: help, clear, cd, install-claude
+   - Each terminal shows unique ID in welcome message
+   - Helpful Claude Code usage examples in help command
+
+### Known Limitations
+1. **Interactive Claude Mode**: Currently not supported due to lack of PTY allocation
+   - Shows helpful message when user types just `claude`
+   - Recommends using `claude "prompt"` format instead
+   - Future work: Implement proper pseudo-terminal support
+
+2. **Terminal Switching**: Fixed issue where all terminals showed same content
+   - Now renders all terminals but only displays the active one
+   - Each terminal maintains truly independent state
 
 ### GUI Layout Structure
 ```
@@ -137,11 +151,29 @@ The terminal integration is complete and the hive-consensus binary builds and ru
 
 ## 📋 Next Steps
 
-1. **Add Terminal Toggle**: Implement keyboard shortcut (Ctrl+`) to show/hide terminal
-2. **Resizable Terminal**: Add drag handle to resize terminal height
-3. **Enhance MCP Server**: Add tools for Claude to access Hive knowledge
-4. **Create Curator Bridge**: Enable curator results to trigger Claude operations
-5. **Polish Terminal**: Better scrolling, multiple terminal support, theme integration
+1. **Dedicated Claude Code Terminal**: 
+   - Create a special "Claude Code" terminal that's always present
+   - This terminal is optimized for Claude interactions
+   - Users can type `claude`, `claude --resume`, or any Claude command
+   - Fully aware of the file system
+   - Separate from numbered terminals (1, 2, 3, etc.)
+   - Consider implementing PTY (pseudo-terminal) support for true interactive mode
+
+2. **Terminal Naming**:
+   - Regular terminals numbered 1, 2, 3, etc.
+   - Future: Allow terminals to take contextual names (like Ghostty)
+   - Example: "Terminal: Feature Development", "Terminal: Bug Fix", etc.
+
+3. **Interactive Claude Mode**:
+   - Currently shows helpful message when user types just `claude`
+   - Need to implement proper PTY allocation for interactive sessions
+   - Allow continuous conversation within the terminal
+
+4. **Add Terminal Toggle**: Implement keyboard shortcut (Ctrl+`) to show/hide terminal
+5. **Resizable Terminal**: Add drag handle to resize terminal height
+6. **Enhance MCP Server**: Add tools for Claude to access Hive knowledge
+7. **Create Curator Bridge**: Enable curator results to trigger Claude operations
+8. **Polish Terminal**: Better scrolling, theme integration
 
 ## 🔍 Critical Discovery
 
