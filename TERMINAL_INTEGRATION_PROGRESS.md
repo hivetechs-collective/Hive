@@ -1,5 +1,8 @@
 # Terminal Integration Progress Report
 
+## ⚠️ CRITICAL UPDATE: 2025-07-27 (Later)
+**IMPORTANT DISCOVERY:** The actual GUI is NOT in `src/desktop/app.rs` but in `src/bin/hive-consensus.rs`! All previous work was on the wrong component. See "Critical Discovery" section below.
+
 ## 📅 Date: 2025-07-27
 
 ## ✅ What We Accomplished

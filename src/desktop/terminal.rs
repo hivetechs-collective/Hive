@@ -594,7 +594,7 @@ struct TerminalLine {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum LineType {
+pub enum LineType {
     Command,
     Output,
     Error,
