@@ -2184,6 +2184,18 @@ fn App() -> Element {
                             tracing::info!("✅ Cancellation flag set via Ctrl+C");
                         }
                     }
+                    
+                    // Check for Ctrl+` (backtick) to toggle terminal
+                    if modifier_pressed && evt.key() == Key::Character("`".to_string()) {
+                        evt.stop_propagation();
+                        evt.prevent_default();
+                        
+                        // Toggle terminal visibility
+                        let current = *show_terminal.read();
+                        show_terminal.set(!current);
+                        
+                        tracing::info!("🖥️ Terminal toggled: {}", if !current { "shown" } else { "hidden" });
+                    }
                 }
             },
 

@@ -182,7 +182,13 @@ pub fn TerminalTabs() -> Element {
 
                 // Terminal dropdown menu (VS Code style)
                 div {
-                    style: "margin-left: auto; display: flex; gap: 4px;",
+                    style: "margin-left: auto; display: flex; gap: 4px; align-items: center;",
+                    
+                    // Keyboard shortcut hint
+                    span {
+                        style: "color: #969696; font-size: 11px; margin-right: 8px;",
+                        "Ctrl+` to toggle"
+                    }
                     
                     // Split terminal button
                     button {
