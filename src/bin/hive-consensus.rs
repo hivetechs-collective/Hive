@@ -350,7 +350,6 @@ const DESKTOP_STYLES: &str = r#"
 
     /* Sidebar styles (left) */
     .sidebar {
-        width: 250px;
         background: #252526;
         display: flex;
         flex-direction: column;
@@ -482,11 +481,9 @@ const DESKTOP_STYLES: &str = r#"
 
     /* Chat panel (right) */
     .chat-panel {
-        flex: 1;
         background: #1e1e1e;
         display: flex;
         flex-direction: column;
-        min-width: 400px;
     }
 
     .panel-header {
@@ -2454,6 +2451,14 @@ fn App() -> Element {
                         }
                     }
                 }
+                
+                // Resize divider between sidebar and editor
+                ResizableDivider {
+                    direction: ResizeDirection::Horizontal,
+                    size: sidebar_width,
+                    min_size: 150.0,
+                    max_size: 500.0,
+                }
 
                 // Code editor area (center) - now split between editor and terminal
                 div {
@@ -2702,6 +2707,14 @@ fn App() -> Element {
                             }
                         }
                     }
+                }
+                
+                // Resize divider between editor and chat
+                ResizableDivider {
+                    direction: ResizeDirection::Horizontal,
+                    size: chat_width,
+                    min_size: 300.0,
+                    max_size: 800.0,
                 }
 
                 // Chat panel (right)
