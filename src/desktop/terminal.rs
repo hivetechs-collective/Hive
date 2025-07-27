@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 use tokio::process::Command;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use chrono::Local;
+use super::terminal_pty::PtyProcess;
 
 const MAX_OUTPUT_LINES: usize = 1000;
 const MAX_HISTORY: usize = 100;
@@ -38,6 +39,9 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
     // Claude Code installation state
     let mut claude_installed = use_signal(|| false);
     let mut checked_claude = use_signal(|| false);
+    
+    // PTY process for interactive commands
+    let mut pty_process: Signal<Option<Arc<Mutex<PtyProcess>>>> = use_signal(|| None);
 
     // Initialize terminal only once
     let mut initialized = use_signal(|| false);
@@ -64,6 +68,11 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                 });
                 output_lines.write().push_back(TerminalLine {
                     text: "Try: claude \"What files are in this directory?\"".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: r#"Note: Use straight quotes (") not curly quotes (" ")"#.to_string(),
                     line_type: LineType::Output,
                     timestamp: Local::now(),
                 });
@@ -170,6 +179,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
         let mut current_directory = current_directory.clone();
         let mut command_history = command_history.clone();
         let mut should_scroll = should_scroll.clone();
+        let mut pty_process = pty_process.clone();
 
         // Add command to output
         output_lines.write().push_back(TerminalLine {
@@ -234,7 +244,7 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                     timestamp: Local::now(),
                 });
                 output_lines.write().push_back(TerminalLine {
-                    text: "  claude \"prompt\"   - Ask Claude a question".to_string(),
+                    text: "  claude \"prompt\"   - Ask Claude a question (use straight quotes!)".to_string(),
                     line_type: LineType::Output,
                     timestamp: Local::now(),
                 });
@@ -407,66 +417,103 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
         // Special handling for Claude interactive mode
         let is_claude_interactive = command.trim() == "claude" || command.trim().starts_with("claude ");
         
+        // Check for common quote mistakes
+        if command.contains('\u{201C}') || command.contains('\u{201D}') || command.contains('\u{2018}') || command.contains('\u{2019}') {
+            output_lines.write().push_back(TerminalLine {
+                text: "⚠️ Error: You're using curly/smart quotes. Please use straight quotes (\")".to_string(),
+                line_type: LineType::Error,
+                timestamp: Local::now(),
+            });
+            output_lines.write().push_back(TerminalLine {
+                text: "Example: claude \"What files are in this directory?\"".to_string(),
+                line_type: LineType::Output,
+                timestamp: Local::now(),
+            });
+            output_lines.write().push_back(TerminalLine {
+                text: String::new(),
+                line_type: LineType::Output,
+                timestamp: Local::now(),
+            });
+            output_lines.write().push_back(TerminalLine {
+                text: format!("{}> ", current_directory.read()),
+                line_type: LineType::Prompt,
+                timestamp: Local::now(),
+            });
+            should_scroll.set(true);
+            return;
+        }
+        
         // Execute external command
         is_running.set(true);
         spawn(async move {
             let shell = if cfg!(windows) { "cmd" } else { "sh" };
             let shell_arg = if cfg!(windows) { "/C" } else { "-c" };
 
-            // For Claude interactive mode, we need to allocate a pseudo-TTY
+            // For Claude interactive mode, use PTY
             if is_claude_interactive && command.trim() == "claude" {
-                // Show a message that interactive Claude isn't supported yet
-                output_lines.write().push_back(TerminalLine {
-                    text: "⚠️ Interactive Claude mode requires PTY support (coming soon!)".to_string(),
-                    line_type: LineType::Error,
-                    timestamp: Local::now(),
-                });
-                output_lines.write().push_back(TerminalLine {
-                    text: "".to_string(),
-                    line_type: LineType::Output,
-                    timestamp: Local::now(),
-                });
-                output_lines.write().push_back(TerminalLine {
-                    text: "🔧 Workaround options:".to_string(),
-                    line_type: LineType::Success,
-                    timestamp: Local::now(),
-                });
-                output_lines.write().push_back(TerminalLine {
-                    text: "1. Use Claude with a prompt: claude \"your question here\"".to_string(),
-                    line_type: LineType::Output,
-                    timestamp: Local::now(),
-                });
-                output_lines.write().push_back(TerminalLine {
-                    text: "2. Continue a session: claude --continue".to_string(),
-                    line_type: LineType::Output,
-                    timestamp: Local::now(),
-                });
-                output_lines.write().push_back(TerminalLine {
-                    text: "3. Use your system terminal for interactive mode".to_string(),
-                    line_type: LineType::Output,
-                    timestamp: Local::now(),
-                });
-                output_lines.write().push_back(TerminalLine {
-                    text: "".to_string(),
-                    line_type: LineType::Output,
-                    timestamp: Local::now(),
-                });
-                output_lines.write().push_back(TerminalLine {
-                    text: "💡 Tip: This terminal excels at non-interactive Claude commands!".to_string(),
-                    line_type: LineType::Output,
-                    timestamp: Local::now(),
-                });
+                let current_dir = current_directory.read().clone();
                 
-                // Add new prompt
-                output_lines.write().push_back(TerminalLine {
-                    text: format!("{}> ", current_directory.read()),
-                    line_type: LineType::Prompt,
-                    timestamp: Local::now(),
-                });
-                
-                is_running.set(false);
-                should_scroll.set(true);
-                return;
+                // Try to spawn Claude in PTY
+                match PtyProcess::spawn("claude", &[], &current_dir) {
+                    Ok((mut pty, mut rx)) => {
+                        // Store the PTY process
+                        let pty_arc = Arc::new(Mutex::new(pty));
+                        pty_process.set(Some(pty_arc.clone()));
+                        
+                        // Clear the prompt line since Claude will handle its own
+                        output_lines.write().clear();
+                        
+                        // Spawn a task to read PTY output
+                        let mut output_lines_clone = output_lines.clone();
+                        let mut should_scroll_clone = should_scroll.clone();
+                        let mut pty_process_clone = pty_process.clone();
+                        spawn(async move {
+                            while let Some(output) = rx.recv().await {
+                                // Split output by lines and add each
+                                for line in output.lines() {
+                                    output_lines_clone.write().push_back(TerminalLine {
+                                        text: line.to_string(),
+                                        line_type: LineType::Output,
+                                        timestamp: Local::now(),
+                                    });
+                                    
+                                    // Limit output size
+                                    while output_lines_clone.read().len() > MAX_OUTPUT_LINES {
+                                        output_lines_clone.write().pop_front();
+                                    }
+                                }
+                                should_scroll_clone.set(true);
+                            }
+                            
+                            // Claude exited, clear PTY process and show prompt again
+                            pty_process_clone.set(None);
+                            output_lines_clone.write().push_back(TerminalLine {
+                                text: format!("{}> ", current_dir),
+                                line_type: LineType::Prompt,
+                                timestamp: Local::now(),
+                            });
+                        });
+                        
+                        is_running.set(false);
+                        should_scroll.set(true);
+                        return;
+                    }
+                    Err(e) => {
+                        output_lines.write().push_back(TerminalLine {
+                            text: format!("❌ Failed to start interactive Claude: {}", e),
+                            line_type: LineType::Error,
+                            timestamp: Local::now(),
+                        });
+                        output_lines.write().push_back(TerminalLine {
+                            text: format!("{}> ", current_dir),
+                            line_type: LineType::Prompt,
+                            timestamp: Local::now(),
+                        });
+                        is_running.set(false);
+                        should_scroll.set(true);
+                        return;
+                    }
+                }
             }
 
             match Command::new(shell)
@@ -671,12 +718,27 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                         let mut input_text = input_text.clone();
                         let command_history = command_history.clone();
                         let execute_command_for_keydown = execute_command_for_submit.clone();
+                        let pty_process = pty_process.clone();
                         move |evt: Event<KeyboardData>| {
                             match evt.data().key() {
                                 Key::Enter => {
                                     evt.prevent_default();
                                     let command = input_text.read().clone();
-                                    if !command.trim().is_empty() {
+                                    
+                                    // Check if we have an active PTY process
+                                    if let Some(pty_arc) = pty_process.read().as_ref() {
+                                        // Send input to PTY
+                                        let input = format!("{}\n", command);
+                                        let pty_clone = pty_arc.clone();
+                                        spawn(async move {
+                                            let pty = pty_clone.lock().await;
+                                            if let Err(e) = pty.write(&input).await {
+                                                tracing::error!("Failed to write to PTY: {}", e);
+                                            }
+                                        });
+                                        input_text.set(String::new());
+                                    } else if !command.trim().is_empty() {
+                                        // Normal command execution
                                         execute_command_for_keydown(command);
                                         input_text.set(String::new());
                                         history_index.set(None);

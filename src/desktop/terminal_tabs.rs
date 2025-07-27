@@ -257,7 +257,7 @@ pub fn TerminalTabs() -> Element {
 #[component]
 fn TerminalInstance(terminal_id: String, working_directory: String) -> Element {
     // Import the existing Terminal component
-    use crate::desktop::terminal::Terminal;
+    use super::terminal::Terminal;
     
     // Each terminal instance maintains its own state through the terminal_id
     rsx! {
