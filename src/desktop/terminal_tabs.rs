@@ -26,8 +26,12 @@ pub fn TerminalTabs() -> Element {
     
     // Create initial terminal on mount
     use_effect(move || {
+        tracing::info!("🔍 TerminalTabs component mounted - checking terminals");
         if terminals.read().is_empty() {
+            tracing::info!("📝 Creating initial terminal");
             create_new_terminal(&mut terminals, &mut active_terminal_id, &mut terminal_counter);
+        } else {
+            tracing::info!("✅ Terminals already exist: {}", terminals.read().len());
         }
     });
 
@@ -96,6 +100,9 @@ pub fn TerminalTabs() -> Element {
         overflow: hidden;
     ";
 
+    // Debug log render
+    tracing::info!("🎨 TerminalTabs rendering with {} terminals", terminals.read().len());
+    
     rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%;",
