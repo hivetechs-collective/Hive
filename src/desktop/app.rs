@@ -11,6 +11,7 @@ use crate::desktop::{
     profile_service::ProfileService,
     state::{AppState, ConnectionStatus, StageInfo},
     styles::get_global_styles,
+    terminal_tabs::TerminalTabs,
 };
 use dioxus::events::{KeyboardEvent, MouseEvent};
 use dioxus::html::input_data::keyboard_types::Key;
@@ -361,18 +362,30 @@ pub fn App() -> Element {
             // Menu Bar Component
             MenuBar {}
 
-            // Main Content Layout
+            // Main Content Layout with Terminal
             div {
-                class: "main-layout",
+                class: "main-layout-with-terminal",
+                style: "display: flex; flex-direction: column; flex: 1; overflow: hidden;",
 
-                // Left Sidebar - File Explorer
-                FileExplorer {}
+                // Top section - File Explorer and Chat
+                div {
+                    style: "display: flex; flex: 1; min-height: 0;",
+                    
+                    // Left Sidebar - File Explorer
+                    FileExplorer {}
 
-                // Right Panel - Chat Interface
-                ChatInterface {}
+                    // Right Panel - Chat Interface
+                    ChatInterface {}
 
-                // Consensus Progress (always visible)
-                ConsensusProgress {}
+                    // Consensus Progress (always visible)
+                    ConsensusProgress {}
+                }
+
+                // Bottom section - Terminal
+                div {
+                    style: "height: 300px; min-height: 200px; max-height: 50%; border-top: 1px solid #474747;",
+                    TerminalTabs {}
+                }
             }
 
             // Status Bar

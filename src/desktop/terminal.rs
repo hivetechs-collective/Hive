@@ -31,15 +31,88 @@ pub fn Terminal() -> Element {
 
     // Auto-scroll to bottom flag
     let mut should_scroll = use_signal(|| true);
+    
+    // Claude Code installation state
+    let mut claude_installed = use_signal(|| false);
+    let mut checked_claude = use_signal(|| false);
 
-    // Initialize with prompt
+    // Initialize with prompt and check for Claude Code
     use_effect(move || {
         if output_lines.read().is_empty() {
+            // Welcome message
             output_lines.write().push_back(TerminalLine {
-                text: format!("{}> ", current_directory.read()),
-                line_type: LineType::Prompt,
+                text: "🐝 HiveTechs Terminal - VS Code Style".to_string(),
+                line_type: LineType::Success,
                 timestamp: Local::now(),
             });
+            output_lines.write().push_back(TerminalLine {
+                text: "Type 'help' for available commands".to_string(),
+                line_type: LineType::Output,
+                timestamp: Local::now(),
+            });
+            output_lines.write().push_back(TerminalLine {
+                text: String::new(),
+                line_type: LineType::Output,
+                timestamp: Local::now(),
+            });
+            
+            // Check for Claude Code installation
+            if !*checked_claude.read() {
+                checked_claude.set(true);
+                let mut output_lines = output_lines.clone();
+                let mut claude_installed = claude_installed.clone();
+                let mut current_directory = current_directory.clone();
+                
+                spawn(async move {
+                    output_lines.write().push_back(TerminalLine {
+                        text: "Checking for Claude Code installation...".to_string(),
+                        line_type: LineType::Output,
+                        timestamp: Local::now(),
+                    });
+                    
+                    // Check if claude command exists
+                    match Command::new("claude")
+                        .arg("--version")
+                        .output()
+                        .await
+                    {
+                        Ok(output) if output.status.success() => {
+                            let version = String::from_utf8_lossy(&output.stdout);
+                            output_lines.write().push_back(TerminalLine {
+                                text: format!("✅ Claude Code is installed: {}", version.trim()),
+                                line_type: LineType::Success,
+                                timestamp: Local::now(),
+                            });
+                            claude_installed.set(true);
+                        }
+                        _ => {
+                            output_lines.write().push_back(TerminalLine {
+                                text: "⚠️ Claude Code not found. Would you like to install it?".to_string(),
+                                line_type: LineType::Error,
+                                timestamp: Local::now(),
+                            });
+                            output_lines.write().push_back(TerminalLine {
+                                text: "Run 'install-claude' to set up Claude Code automatically.".to_string(),
+                                line_type: LineType::Output,
+                                timestamp: Local::now(),
+                            });
+                        }
+                    }
+                    
+                    output_lines.write().push_back(TerminalLine {
+                        text: String::new(),
+                        line_type: LineType::Output,
+                        timestamp: Local::now(),
+                    });
+                    
+                    // Add initial prompt
+                    output_lines.write().push_back(TerminalLine {
+                        text: format!("{}> ", current_directory.read()),
+                        line_type: LineType::Prompt,
+                        timestamp: Local::now(),
+                    });
+                });
+            }
         }
     });
 
@@ -76,6 +149,124 @@ pub fn Terminal() -> Element {
 
         // Handle built-in commands
         match parts[0] {
+            "help" => {
+                output_lines.write().push_back(TerminalLine {
+                    text: "Available commands:".to_string(),
+                    line_type: LineType::Success,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  help              - Show this help message".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  clear             - Clear the terminal".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  cd <path>         - Change directory".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  install-claude    - Install Claude Code CLI".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  claude <command>  - Run Claude Code commands".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: String::new(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: format!("{}> ", current_directory.read()),
+                    line_type: LineType::Prompt,
+                    timestamp: Local::now(),
+                });
+                should_scroll.set(true);
+                return;
+            }
+            "install-claude" => {
+                output_lines.write().push_back(TerminalLine {
+                    text: "🚀 Installing Claude Code...".to_string(),
+                    line_type: LineType::Success,
+                    timestamp: Local::now(),
+                });
+                
+                let mut output_lines_clone = output_lines.clone();
+                let mut claude_installed_clone = claude_installed.clone();
+                let current_dir = current_directory.read().clone();
+                
+                is_running.set(true);
+                spawn(async move {
+                    // Try npm install first
+                    output_lines_clone.write().push_back(TerminalLine {
+                        text: "Attempting to install via npm...".to_string(),
+                        line_type: LineType::Output,
+                        timestamp: Local::now(),
+                    });
+                    
+                    match Command::new("npm")
+                        .args(&["install", "-g", "@anthropic-ai/claude-code"])
+                        .output()
+                        .await
+                    {
+                        Ok(output) if output.status.success() => {
+                            output_lines_clone.write().push_back(TerminalLine {
+                                text: "✅ Claude Code installed successfully!".to_string(),
+                                line_type: LineType::Success,
+                                timestamp: Local::now(),
+                            });
+                            claude_installed_clone.set(true);
+                        }
+                        _ => {
+                            // If npm fails, provide manual instructions
+                            output_lines_clone.write().push_back(TerminalLine {
+                                text: "⚠️ Automatic installation failed. Please install manually:".to_string(),
+                                line_type: LineType::Error,
+                                timestamp: Local::now(),
+                            });
+                            output_lines_clone.write().push_back(TerminalLine {
+                                text: "1. Visit https://claude.ai/download".to_string(),
+                                line_type: LineType::Output,
+                                timestamp: Local::now(),
+                            });
+                            output_lines_clone.write().push_back(TerminalLine {
+                                text: "2. Download and install Claude Code for your platform".to_string(),
+                                line_type: LineType::Output,
+                                timestamp: Local::now(),
+                            });
+                            output_lines_clone.write().push_back(TerminalLine {
+                                text: "3. Restart this terminal once installed".to_string(),
+                                line_type: LineType::Output,
+                                timestamp: Local::now(),
+                            });
+                        }
+                    }
+                    
+                    output_lines_clone.write().push_back(TerminalLine {
+                        text: String::new(),
+                        line_type: LineType::Output,
+                        timestamp: Local::now(),
+                    });
+                    output_lines_clone.write().push_back(TerminalLine {
+                        text: format!("{}> ", current_dir),
+                        line_type: LineType::Prompt,
+                        timestamp: Local::now(),
+                    });
+                });
+                
+                is_running.set(false);
+                should_scroll.set(true);
+                return;
+            }
             "clear" => {
                 output_lines.write().clear();
                 output_lines.write().push_back(TerminalLine {
@@ -242,46 +433,46 @@ pub fn Terminal() -> Element {
         });
     };
 
-    // Handle input submission
-    let on_submit = move |_| {
-        let command = input_text.read().clone();
-        execute_command(command);
-        input_text.set(String::new());
-        history_index.set(None);
-    };
+    // Clone for the submit handler
+    let execute_command_for_submit = execute_command.clone();
 
     // Handle key events for history navigation
-    let on_keydown = move |evt: Event<KeyboardData>| {
-        match evt.data().key() {
-            Key::ArrowUp => {
-                let history = command_history.read();
-                if !history.is_empty() {
-                    let current_index = history_index.read().unwrap_or(history.len());
-                    if current_index > 0 {
-                        let new_index = current_index - 1;
-                        history_index.set(Some(new_index));
-                        if let Some(cmd) = history.get(new_index) {
-                            input_text.set(cmd.clone());
+    let on_keydown = {
+        let mut history_index = history_index.clone();
+        let mut input_text = input_text.clone();
+        let command_history = command_history.clone();
+        move |evt: Event<KeyboardData>| {
+            match evt.data().key() {
+                Key::ArrowUp => {
+                    let history = command_history.read();
+                    if !history.is_empty() {
+                        let current_index = (*history_index.read()).unwrap_or(history.len());
+                        if current_index > 0 {
+                            let new_index = current_index - 1;
+                            if let Some(cmd) = history.get(new_index) {
+                                input_text.set(cmd.clone());
+                                history_index.set(Some(new_index));
+                            }
                         }
                     }
                 }
-            }
-            Key::ArrowDown => {
-                let history = command_history.read();
-                if let Some(current_index) = history_index.read() {
-                    if current_index < history.len() - 1 {
-                        let new_index = current_index + 1;
-                        history_index.set(Some(new_index));
-                        if let Some(cmd) = history.get(new_index) {
-                            input_text.set(cmd.clone());
+                Key::ArrowDown => {
+                    let history = command_history.read();
+                    if let Some(current_index) = *history_index.read() {
+                        if current_index < history.len() - 1 {
+                            let new_index = current_index + 1;
+                            if let Some(cmd) = history.get(new_index) {
+                                input_text.set(cmd.clone());
+                                history_index.set(Some(new_index));
+                            }
+                        } else {
+                            input_text.set(String::new());
+                            history_index.set(None);
                         }
-                    } else {
-                        history_index.set(None);
-                        input_text.set(String::new());
                     }
                 }
+                _ => {}
             }
-            _ => {}
         }
     };
 
@@ -369,9 +560,16 @@ pub fn Terminal() -> Element {
                     autofocus: true,
                     oninput: move |evt| input_text.set(evt.value()),
                     onkeydown: on_keydown,
-                    onkeypress: move |evt| {
-                        if evt.key() == Key::Enter {
-                            on_submit(evt);
+                    onkeypress: {
+                        let mut input_text = input_text.clone();
+                        let mut history_index = history_index.clone();
+                        move |evt| {
+                            if evt.key() == Key::Enter {
+                                let command = input_text.read().clone();
+                                execute_command_for_submit(command);
+                                input_text.set(String::new());
+                                history_index.set(None);
+                            }
                         }
                     }
                 }
@@ -381,14 +579,14 @@ pub fn Terminal() -> Element {
 }
 
 /// Terminal line data
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct TerminalLine {
     text: String,
     line_type: LineType,
     timestamp: chrono::DateTime<chrono::Local>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum LineType {
     Command,
     Output,
