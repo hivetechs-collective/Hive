@@ -215,23 +215,28 @@ pub fn TerminalTabs() -> Element {
                 }
             }
 
-            // Terminal content area
+            // Terminal content area - render all terminals but only show active
             div {
                 style: "{terminal_container_style}",
                 
-                if let Some(active_id) = active_terminal_id.read().as_ref() {
-                    // Import and use the existing Terminal component
-                    // Pass the active terminal's working directory
-                    TerminalInstance {
-                        terminal_id: active_id.clone(),
-                        working_directory: terminals.read().get(active_id)
-                            .map(|t| t.working_directory.clone())
-                            .unwrap_or_else(|| std::env::current_dir()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .to_string())
+                // Render all terminals but only display the active one
+                for (id, terminal) in terminals.read().iter() {
+                    div {
+                        key: "{id}",
+                        style: if Some(id) == active_terminal_id.read().as_ref() {
+                            "display: block; height: 100%; width: 100%;"
+                        } else {
+                            "display: none;"
+                        },
+                        TerminalInstance {
+                            terminal_id: id.clone(),
+                            working_directory: terminal.working_directory.clone()
+                        }
                     }
-                } else {
+                }
+                
+                // Show message if no terminals exist
+                if terminals.read().is_empty() {
                     div {
                         style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #666;",
                         "No terminal active"

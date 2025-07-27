@@ -94,6 +94,11 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                                 line_type: LineType::Success,
                                 timestamp: Local::now(),
                             });
+                            output_lines.write().push_back(TerminalLine {
+                                text: "💡 Try: claude \"What files are in this directory?\"".to_string(),
+                                line_type: LineType::Output,
+                                timestamp: Local::now(),
+                            });
                             claude_installed.set(true);
                         }
                         _ => {
@@ -187,7 +192,32 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                     timestamp: Local::now(),
                 });
                 output_lines.write().push_back(TerminalLine {
-                    text: "  claude <command>  - Run Claude Code commands".to_string(),
+                    text: String::new(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "Claude Code usage:".to_string(),
+                    line_type: LineType::Success,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  claude --help     - Show Claude Code help".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  claude \"prompt\"   - Ask Claude a question".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  echo \"text\" | claude - Pipe input to Claude".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "  claude --continue - Resume previous conversation".to_string(),
                     line_type: LineType::Output,
                     timestamp: Local::now(),
                 });
@@ -347,11 +377,45 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
             _ => {}
         }
 
+        // Special handling for Claude interactive mode
+        let is_claude_interactive = command.trim() == "claude" || command.trim().starts_with("claude ");
+        
         // Execute external command
         is_running.set(true);
         spawn(async move {
             let shell = if cfg!(windows) { "cmd" } else { "sh" };
             let shell_arg = if cfg!(windows) { "/C" } else { "-c" };
+
+            // For Claude interactive mode, we need to allocate a pseudo-TTY
+            if is_claude_interactive && command.trim() == "claude" {
+                // Show a message that interactive Claude isn't supported yet
+                output_lines.write().push_back(TerminalLine {
+                    text: "⚠️ Interactive Claude Code mode is not yet supported in this terminal.".to_string(),
+                    line_type: LineType::Error,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "Please use Claude with a prompt: claude \"your question here\"".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "Or use: claude --help for more options".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                
+                // Add new prompt
+                output_lines.write().push_back(TerminalLine {
+                    text: format!("{}> ", current_directory.read()),
+                    line_type: LineType::Prompt,
+                    timestamp: Local::now(),
+                });
+                
+                is_running.set(false);
+                should_scroll.set(true);
+                return;
+            }
 
             match Command::new(shell)
                 .arg(shell_arg)
