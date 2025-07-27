@@ -16,7 +16,7 @@ const MAX_HISTORY: usize = 100;
 
 /// Terminal panel component that provides command execution
 #[component]
-pub fn Terminal() -> Element {
+pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Element {
     // Terminal state
     let mut output_lines = use_signal(|| VecDeque::<TerminalLine>::new());
     let mut input_text = use_signal(|| String::new());
@@ -24,10 +24,12 @@ pub fn Terminal() -> Element {
     let mut history_index = use_signal(|| Option::<usize>::None);
     let mut is_running = use_signal(|| false);
     let mut current_directory = use_signal(|| {
-        std::env::current_dir()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string()
+        initial_directory.clone().unwrap_or_else(|| {
+            std::env::current_dir()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+        })
     });
 
     // Auto-scroll to bottom flag
@@ -37,12 +39,20 @@ pub fn Terminal() -> Element {
     let mut claude_installed = use_signal(|| false);
     let mut checked_claude = use_signal(|| false);
 
+    // Initialize terminal only once
+    let mut initialized = use_signal(|| false);
+    
+    // Clone terminal_id for use in effects
+    let terminal_id_for_init = terminal_id.clone();
+    
     // Initialize with prompt and check for Claude Code
     use_effect(move || {
-        if output_lines.read().is_empty() {
+        if !*initialized.read() {
+            initialized.set(true);
+            
             // Welcome message
             output_lines.write().push_back(TerminalLine {
-                text: "🐝 HiveTechs Terminal - VS Code Style".to_string(),
+                text: format!("🐝 HiveTechs Terminal {} - VS Code Style", terminal_id_for_init),
                 line_type: LineType::Success,
                 timestamp: Local::now(),
             });
@@ -438,16 +448,20 @@ pub fn Terminal() -> Element {
     let execute_command_for_submit = execute_command.clone();
 
     // Focus the terminal input when component mounts
+    let terminal_input_id = format!("terminal-input-{}", terminal_id);
+    let terminal_input_id_for_effect = terminal_input_id.clone();
     use_effect(move || {
+        let terminal_input_id_for_spawn = terminal_input_id_for_effect.clone();
         spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            if let Ok(eval) = eval(r#"
-                const input = document.getElementById('terminal-input');
-                if (input) {
+            let script = format!(r#"
+                const input = document.getElementById('{}');
+                if (input) {{
                     input.focus();
-                }
-            "#).await {
-                tracing::debug!("Terminal input focused");
+                }}
+            "#, terminal_input_id_for_spawn);
+            if let Ok(_) = eval(&script).await {
+                tracing::debug!("Terminal input focused for {}", terminal_input_id_for_spawn);
             }
         });
     });
@@ -528,7 +542,7 @@ pub fn Terminal() -> Element {
                 }
 
                 input {
-                    id: "terminal-input",
+                    id: "{terminal_input_id}",
                     style: "{input_style}",
                     r#type: "text",
                     value: "{input_text}",

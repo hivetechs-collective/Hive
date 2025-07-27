@@ -253,7 +253,10 @@ fn TerminalInstance(terminal_id: String, working_directory: String) -> Element {
         div {
             key: "{terminal_id}",
             style: "height: 100%; width: 100%;",
-            Terminal {}
+            Terminal {
+                terminal_id: terminal_id.clone(),
+                initial_directory: Some(working_directory)
+            }
         }
     }
 }
