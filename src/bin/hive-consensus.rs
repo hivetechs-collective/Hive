@@ -5,6 +5,10 @@ use dioxus::prelude::*;
 use rfd;
 use chrono::{Duration, Utc};
 
+// Terminal imports
+use hive_ai::desktop::terminal::{Terminal, LineType};
+use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
+
 /// Analytics data structure for the dashboard
 #[derive(Debug, Clone, Default)]
 pub struct AnalyticsData {
@@ -1069,6 +1073,10 @@ fn App() -> Element {
         )
     }); // version, date, download_url, changelog_url
     let update_error_message = use_signal(String::new);
+    
+    // Terminal state
+    let mut show_terminal = use_signal(|| true); // Terminal visible by default
+    let terminal_height = use_signal(|| 300); // Default terminal height in pixels
 
     // Subscription state
     let subscription_display = use_signal(|| String::from("Loading..."));
@@ -2402,10 +2410,10 @@ fn App() -> Element {
                     }
                 }
 
-                // Code editor area (center)
+                // Code editor area (center) - now split between editor and terminal
                 div {
                     class: "editor-container",
-                    style: "background: #0E1414; position: relative;",
+                    style: "background: #0E1414; position: relative; display: flex; flex-direction: column;",
 
                     // Enhanced editor tabs with overflow scrolling
                     div {
@@ -2551,9 +2559,13 @@ fn App() -> Element {
                         }
                     }
 
-                    // Editor content
+                    // Editor and terminal split view
+                    // Editor content (top section)
                     div {
                         class: "editor-content",
+                        style: format!("flex: 1; overflow: hidden; min-height: 0; display: {}; background: #1e1e1e;", 
+                            if *show_terminal.read() { "block" } else { "block" }
+                        ),
                         if *active_tab.read() == "__analytics__" {
                             // Show analytics view
                             AnalyticsView { analytics_data: analytics_data.clone() }
@@ -2617,6 +2629,24 @@ fn App() -> Element {
                             div {
                                 class: "welcome-message",
                                 "Select a file from the explorer to view its contents"
+                            }
+                        }
+                    }
+                    
+                    // Terminal section (bottom)
+                    if *show_terminal.read() {
+                        div {
+                            style: format!("height: {}px; border-top: 1px solid #3e3e42; display: flex; flex-direction: column; background: #1e1e1e;", 
+                                terminal_height.read()
+                            ),
+                            
+                            // Terminal tabs header
+                            TerminalTabs {}
+                            
+                            // Terminal content
+                            div {
+                                style: "flex: 1; overflow: hidden;",
+                                Terminal {}
                             }
                         }
                     }
