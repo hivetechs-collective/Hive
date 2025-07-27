@@ -51,16 +51,34 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
             initialized.set(true);
             
             // Welcome message
-            output_lines.write().push_back(TerminalLine {
-                text: format!("🐝 HiveTechs Terminal {} - VS Code Style", terminal_id_for_init),
-                line_type: LineType::Success,
-                timestamp: Local::now(),
-            });
-            output_lines.write().push_back(TerminalLine {
-                text: "Type 'help' for available commands".to_string(),
-                line_type: LineType::Output,
-                timestamp: Local::now(),
-            });
+            if terminal_id_for_init == "claude-code" {
+                output_lines.write().push_back(TerminalLine {
+                    text: "🤖 Claude Code Terminal - Interactive AI Assistant".to_string(),
+                    line_type: LineType::Success,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "This terminal is dedicated to Claude Code interactions".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "Try: claude \"What files are in this directory?\"".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+            } else {
+                output_lines.write().push_back(TerminalLine {
+                    text: format!("🐝 HiveTechs {} - VS Code Style", terminal_id_for_init.replace("-", " ").replace("terminal", "Terminal")),
+                    line_type: LineType::Success,
+                    timestamp: Local::now(),
+                });
+                output_lines.write().push_back(TerminalLine {
+                    text: "Type 'help' for available commands".to_string(),
+                    line_type: LineType::Output,
+                    timestamp: Local::now(),
+                });
+            }
             output_lines.write().push_back(TerminalLine {
                 text: String::new(),
                 line_type: LineType::Output,
@@ -73,13 +91,22 @@ pub fn Terminal(terminal_id: String, initial_directory: Option<String>) -> Eleme
                 let mut output_lines = output_lines.clone();
                 let mut claude_installed = claude_installed.clone();
                 let mut current_directory = current_directory.clone();
+                let is_claude_terminal = terminal_id_for_init == "claude-code";
                 
                 spawn(async move {
-                    output_lines.write().push_back(TerminalLine {
-                        text: "Checking for Claude Code installation...".to_string(),
-                        line_type: LineType::Output,
-                        timestamp: Local::now(),
-                    });
+                    if is_claude_terminal {
+                        output_lines.write().push_back(TerminalLine {
+                            text: "🔍 Checking Claude Code installation for optimal experience...".to_string(),
+                            line_type: LineType::Output,
+                            timestamp: Local::now(),
+                        });
+                    } else {
+                        output_lines.write().push_back(TerminalLine {
+                            text: "Checking for Claude Code installation...".to_string(),
+                            line_type: LineType::Output,
+                            timestamp: Local::now(),
+                        });
+                    }
                     
                     // Check if claude command exists
                     match Command::new("claude")
