@@ -2195,7 +2195,12 @@ fn App() -> Element {
             match execution_mode.as_str() {
                 "Direct" => {
                     // Process with Claude Code directly
-                    tracing::info!("🚀 Processing with Claude Code directly - query: {}", query);
+                    let auth_method = app_state.read().claude_auth_method.clone();
+                    tracing::info!("🚀 Processing with Claude Code directly");
+                    tracing::info!("   Query: {}", query);
+                    tracing::info!("   Auth method: {}", auth_method);
+                    tracing::info!("   Execution mode: Direct");
+                    
                     let mut app_state_for_task = app_state.clone();
                     let mut current_response_for_task = current_response.clone();
                     let mut is_processing_for_task = is_processing.clone();
@@ -2213,7 +2218,7 @@ fn App() -> Element {
                     
                     *consensus_task_handle.write() = Some(task);
                 }
-                _ => {
+                "ConsensusRequired" | "ConsensusAssisted" | _ => {
                     // Process with consensus (ConsensusFirst or ConsensusAssisted)
                     if let Some(manager) = consensus_manager.read().clone() {
                         let mut manager = manager.clone();

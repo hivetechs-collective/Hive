@@ -149,11 +149,14 @@ impl SimpleClaudeIntegration {
     
     /// Execute Claude Code command and return response
     async fn execute_claude_command(&self, binary: &str, message: &str) -> Result<String> {
-        info!("Sending to Claude: {}", message);
+        info!("🎯 execute_claude_command called");
+        info!("   Binary: {}", binary);
+        info!("   Message: {}", message);
         
         // Check if this is a slash command
         let trimmed = message.trim();
         if trimmed.starts_with('/') {
+            info!("   Detected slash command: {}", trimmed);
             // Extract the command after the slash
             let cmd_parts: Vec<&str> = trimmed.split_whitespace().collect();
             if cmd_parts.is_empty() {
@@ -166,32 +169,22 @@ impl SimpleClaudeIntegration {
             // Special handling for common Claude commands
             match command {
                 "help" => {
-                    // Execute claude --help
-                    let output = Command::new(binary)
-                        .arg("--help")
-                        .output()
-                        .await?;
-                    return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+                    info!("   Handling /help command directly");
+                    // For help, we should pass it through stdin like other commands
+                    // Claude handles /help internally
+                    // Fall through to regular message handling
                 }
                 "login" => {
                     // For login, we need to return a message since it requires interaction
                     return Ok("Login requires interactive mode. Please run 'claude login' in your terminal.".to_string());
                 }
                 "logout" => {
-                    // Execute claude logout
-                    let output = Command::new(binary)
-                        .arg("logout")
-                        .output()
-                        .await?;
-                    return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+                    info!("   Handling /logout command directly");
+                    // Fall through to regular message handling
                 }
                 "context" => {
-                    // Execute claude context
-                    let output = Command::new(binary)
-                        .arg("context")
-                        .output()
-                        .await?;
-                    return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+                    info!("   Handling /context command directly");
+                    // Fall through to regular message handling
                 }
                 _ => {
                     // For other slash commands, pass them through as regular messages
@@ -200,83 +193,55 @@ impl SimpleClaudeIntegration {
             }
         }
         
-        // For regular messages (including unhandled slash commands), use ask command with stdin
-        // This approach works better for slash commands
-        let mut child = Command::new(binary)
-            .arg("ask")
-            .arg("-") // Read from stdin
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+        // For regular messages (including unhandled slash commands), use stdin
+        info!("   Executing claude ask - with message: {}", message);
         
-        // Write the message to stdin
-        if let Some(mut stdin) = child.stdin.take() {
+        // Create a child process with stdin piped
+        let mut cmd = Command::new(binary);
+        cmd.arg("ask")
+           .arg("-")
+           .stdin(Stdio::piped())
+           .stdout(Stdio::piped())
+           .stderr(Stdio::piped());
+        
+        let mut child = cmd.spawn()?;
+        
+        // Write to stdin and close it
+        if let Some(stdin) = child.stdin.as_mut() {
             stdin.write_all(message.as_bytes()).await?;
             stdin.flush().await?;
-            drop(stdin); // Close stdin to signal EOF
         }
+        child.stdin.take(); // Drop stdin to close it
         
-        let stdout = child.stdout.take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to capture stdout"))?;
-        let stderr = child.stderr.take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to capture stderr"))?;
-        
-        // Read output
-        let mut stdout_reader = BufReader::new(stdout).lines();
-        let mut stderr_reader = BufReader::new(stderr).lines();
-        let mut output = String::new();
-        let mut error_output = String::new();
-        
-        // Set up timeout for reading
-        let timeout_duration = tokio::time::Duration::from_secs(30);
-        
-        // Read with timeout
-        match tokio::time::timeout(timeout_duration, async {
-            // Read stdout
-            while let Some(line) = stdout_reader.next_line().await? {
-                output.push_str(&line);
-                output.push('\n');
-            }
-            
-            // Read stderr if needed
-            while let Some(line) = stderr_reader.next_line().await? {
-                error_output.push_str(&line);
-                error_output.push('\n');
-            }
-            
-            Ok::<(), anyhow::Error>(())
-        }).await {
-            Ok(Ok(())) => {
-                // Successfully read output, now wait for process
-                let status = child.wait().await?;
+        // Wait for output with timeout
+        let timeout = tokio::time::Duration::from_secs(60);
+        match tokio::time::timeout(timeout, child.wait_with_output()).await {
+            Ok(Ok(output)) => {
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                let stderr_str = String::from_utf8_lossy(&output.stderr);
                 
-                if status.success() {
-                    Ok(if output.is_empty() { 
+                if output.status.success() {
+                    Ok(if stdout_str.is_empty() { 
                         "Claude Code executed successfully.".to_string() 
                     } else { 
-                        output.trim().to_string() 
+                        stdout_str.trim().to_string() 
                     })
                 } else {
-                    if !error_output.is_empty() {
-                        warn!("Claude Code error output: {}", error_output);
-                        Ok(format!("Error: {}", error_output.trim()))
+                    if !stderr_str.is_empty() {
+                        warn!("Claude Code error output: {}", stderr_str);
+                        Ok(format!("Error: {}", stderr_str.trim()))
                     } else {
-                        Ok(format!("Claude Code command failed with exit code: {:?}", status.code()))
+                        Ok(format!("Claude Code command failed with exit code: {:?}", output.status.code()))
                     }
                 }
             }
             Ok(Err(e)) => {
-                error!("Error reading Claude output: {}", e);
-                // Kill the child process
-                let _ = child.kill().await;
-                Err(e)
+                error!("Error executing Claude: {}", e);
+                Err(anyhow::anyhow!("Error executing Claude: {}", e))
             }
             Err(_) => {
-                error!("Claude Code command timed out after 30 seconds");
-                // Kill the child process
-                let _ = child.kill().await;
-                Ok("Claude Code request timed out. This might happen if Claude is waiting for additional input or authentication.".to_string())
+                error!("Claude Code command timed out after 60 seconds");
+                Ok("Claude Code request timed out.".to_string())
             }
         }
     }
