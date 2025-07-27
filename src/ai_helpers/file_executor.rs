@@ -480,7 +480,7 @@ impl AIHelperFileExecutor {
                 step: 1,
                 action: OperationType::CreateFile {
                     path: PathBuf::from(&filename),
-                    content: self.generate_default_content(&filename),
+                    content: String::new(), // Placeholder - intelligent executor should handle this
                 },
                 description: format!("Create file {}", filename),
             }
