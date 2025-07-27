@@ -30,7 +30,9 @@ pub mod status_bar_enhanced;
 pub mod profile_service;
 pub mod styles;
 pub mod terminal;
+pub mod terminal_pty;
 pub mod terminal_tabs;
+pub mod terminal_emulator;
 pub mod welcome_enhanced;
 pub mod code_editor;
 

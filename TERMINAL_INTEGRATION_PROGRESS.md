@@ -126,15 +126,29 @@ The terminal integration is complete and the hive-consensus binary builds and ru
    - Each terminal shows unique ID in welcome message
    - Helpful Claude Code usage examples in help command
 
-### Known Limitations
-1. **Interactive Claude Mode**: Currently not supported due to lack of PTY allocation
-   - Shows helpful message when user types just `claude`
-   - Recommends using `claude "prompt"` format instead
-   - Future work: Implement proper pseudo-terminal support
+### Known Limitations of Current Implementation
 
-2. **Terminal Switching**: Fixed issue where all terminals showed same content
-   - Now renders all terminals but only displays the active one
-   - Each terminal maintains truly independent state
+**CRITICAL**: The current terminal is **not a real terminal emulator** - it's just a command executor that runs commands and displays output. This is why:
+
+1. **Interactive Claude Mode Doesn't Work**
+   - Claude detects it's not in a real terminal and refuses interactive mode
+   - No proper VT100/ANSI escape sequence support
+   - Missing terminal capabilities (TERM environment variable, etc.)
+   - Current workaround: Use `claude "prompt"` format only
+
+2. **No Support for TUI Applications**
+   - Vim, htop, and other terminal apps won't work
+   - No cursor positioning or screen clearing
+   - No color support beyond basic output
+   - No mouse support for terminal applications
+
+3. **Limited Terminal Features**
+   - No scrollback buffer (only stores last 1000 lines)
+   - No proper copy/paste support
+   - No link detection
+   - No resize handling
+
+**Solution**: See "Phase 2: True Terminal Emulator" section below for the complete rewrite using alacritty_terminal that will fix all these issues.
 
 ### GUI Layout Structure
 ```
@@ -149,33 +163,42 @@ The terminal integration is complete and the hive-consensus binary builds and ru
 └─────────────────┴───────────────────┴───────────┘
 ```
 
-## 📋 Next Steps
+## 📋 Next Steps (Updated Priority)
 
-1. **✅ Dedicated Claude Code Terminal** - COMPLETED!
-   - First terminal is always "Claude Code" with robot icon
-   - Subsequent terminals are numbered 1, 2, 3, etc.
-   - Claude Code terminal shows specialized welcome message
-   - Cannot be closed if it's the only terminal
+### 🔴 HIGHEST PRIORITY: Build True Terminal Emulator
 
-2. **Terminal Naming** - Future enhancement to allow custom names
+1. **Replace Current Terminal with Real Emulator** (Phase 2)
+   - Implement alacritty_terminal backend
+   - Create proper grid renderer
+   - Full VT100/ANSI support
+   - **This will enable Claude interactive mode!**
 
-3. **Interactive Claude Mode**:
-   - Currently shows helpful message when user types just `claude`
-   - Need to implement proper PTY allocation for interactive sessions
-   - Allow continuous conversation within the terminal
+2. **Test Full CLI Compatibility**
+   - Verify Claude Code works in interactive mode
+   - Test vim, htop, and other TUI apps
+   - Ensure colors and escape sequences work
+   - Validate copy/paste functionality
 
-4. **✅ Terminal Toggle** - COMPLETED!
-   - Implemented Ctrl+` keyboard shortcut to show/hide terminal
-   - Added visual hint in terminal tab bar
-   - Terminal state preserved when toggled
+### 🟡 MEDIUM PRIORITY: Enhanced Features
 
-5. **Resizable Terminal**: Add drag handle to resize terminal height
+3. **Resizable Terminal**: Add drag handle to resize terminal height
 
-6. **Enhance MCP Server**: Add tools for Claude to access Hive knowledge
+4. **Enhance MCP Server**: Add tools for Claude to access Hive knowledge
 
-7. **Create Curator Bridge**: Enable curator results to trigger Claude operations
+5. **Create Curator Bridge**: Enable curator results to trigger Claude operations
 
-8. **Polish Terminal**: Better scrolling, theme integration
+### 🟢 LOWER PRIORITY: Polish
+
+6. **Terminal Naming**: Allow custom names for terminals
+
+7. **Terminal Themes**: Match VS Code themes
+
+8. **Advanced Features**: Split panes, search in terminal, etc.
+
+### ✅ COMPLETED
+- Dedicated Claude Code Terminal (first terminal with robot icon)
+- Terminal Toggle (Cmd+T shortcut)
+- Basic terminal functionality (command execution)
 
 ## 🔍 Critical Discovery
 
@@ -198,3 +221,150 @@ The approach of running Claude Code in an embedded terminal (like VS Code does) 
 - Familiar VS Code-like experience
 
 This aligns perfectly with the user's vision of having consensus for analysis and Claude for file manipulation, working together but not tightly coupled.
+
+---
+
+## 🚀 Phase 2: True Terminal Emulator (Pure Rust) - IN PROGRESS
+
+### 📅 Date: 2025-07-27
+
+### 🔍 Fundamental Issue Discovered
+
+Our current implementation is **not a real terminal emulator** - it's just a command executor with basic PTY support. This is why Claude Code doesn't work in interactive mode. Real terminals (VS Code, Ghostty, etc.) provide:
+
+1. **Full VT100/ANSI escape sequence parsing** - for colors, cursor control, etc.
+2. **Proper terminal grid management** - cell-based rendering with attributes
+3. **Complete PTY environment** - TERM variable, window size, signal handling
+4. **Bidirectional real-time I/O** - for interactive applications
+5. **Terminal state management** - scrollback, selection, etc.
+
+### 🏗️ New Architecture: Pure Rust Terminal Emulator
+
+```
+┌─────────────────────────────────────────────────┐
+│           Dioxus Desktop (WebView)              │
+├─────────────────────────────────────────────────┤
+│          Terminal Grid Renderer                  │
+│     (Converts grid to HTML/CSS elements)        │
+├─────────────────────────────────────────────────┤
+│         alacritty_terminal Backend              │
+│  (VT100 parser, grid state, PTY management)     │
+├─────────────────────────────────────────────────┤
+│              System PTY                          │
+│        (Full terminal capabilities)              │
+└─────────────────────────────────────────────────┘
+```
+
+### 📋 Implementation Plan
+
+#### Phase 1: Terminal Backend Setup ✅ COMPLETED WITH ISSUES
+- [x] Add `alacritty_terminal = "0.25.0"` to Cargo.toml
+- [x] Create `src/desktop/terminal_emulator/` module structure
+- [x] Set up terminal configuration and initialization
+
+**Issues Discovered:**
+- alacritty_terminal v0.25.0 has significant API changes from documentation
+- Many expected methods and traits are missing or changed
+- The crate is tightly coupled to Alacritty's internal architecture
+- Would require significant reverse engineering to make work
+
+#### Phase 2: Grid Rendering System
+- [ ] Create grid-to-HTML renderer for Dioxus
+- [ ] Implement cell styling (colors, attributes)
+- [ ] Add cursor rendering and blinking
+- [ ] Support for font styling (bold, italic, etc.)
+
+#### Phase 3: Input/Output Pipeline
+- [ ] Capture all keyboard events with proper modifiers
+- [ ] Convert to escape sequences for special keys
+- [ ] Handle mouse events for terminal applications
+- [ ] Stream PTY output through VT parser
+
+#### Phase 4: Terminal Features
+- [ ] Scrollback buffer implementation
+- [ ] Copy/paste with system clipboard
+- [ ] Terminal resize handling
+- [ ] Link detection and clicking
+- [ ] Selection support
+
+#### Phase 5: Integration & Testing
+- [ ] Replace current terminal.rs with new emulator
+- [ ] Maintain tab system compatibility
+- [ ] Test Claude Code interactive mode
+- [ ] Verify vim, htop, and other TUI apps work
+
+### 🔧 Technical Details
+
+**Dependencies:**
+```toml
+alacritty_terminal = "0.25.0"  # Terminal backend
+vt100 = "0.15.2"              # Alternative/supplementary parser
+```
+
+**Key Components:**
+1. **TerminalBackend** - Manages alacritty_terminal instance
+2. **GridRenderer** - Converts terminal grid to Dioxus elements
+3. **InputHandler** - Processes keyboard/mouse events
+4. **PtyManager** - Enhanced PTY with proper environment
+
+### ✅ Expected Outcomes
+
+Once implemented, this will provide:
+- **Full Claude Code support** - Interactive mode will work perfectly
+- **100% CLI compatibility** - Any terminal app will work
+- **Native performance** - Pure Rust, no JavaScript
+- **Professional experience** - Like using a real terminal
+
+### 📊 Progress Tracking
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| alacritty_terminal integration | 🔄 Planned | Core terminal backend |
+| Grid renderer | ⏳ Not started | HTML or Canvas approach |
+| Input handler | ⏳ Not started | Keyboard and mouse |
+| PTY manager | ⏳ Not started | Enhanced from current |
+| Integration | ⏳ Not started | Replace current terminal |
+
+### 🎯 Success Criteria
+
+The new terminal emulator will be considered complete when:
+1. Claude Code works in full interactive mode
+2. Vim and other TUI apps display correctly
+3. Colors and styling work properly
+4. Copy/paste functions as expected
+5. Performance is smooth and responsive
+
+---
+
+## 🔄 Alternative Approach: Enhanced PTY with VT100 Parser
+
+### 📅 Date: 2025-07-27 (Updated)
+
+Given the challenges with alacritty_terminal, we should consider a more pragmatic approach:
+
+### Option 1: Use vt100 crate directly
+The `vt100` crate we already added provides a simpler VT100 parser that might be easier to integrate:
+```rust
+let mut parser = vt100::Parser::new(24, 80, 0);
+parser.process(b"Hello \x1b[31mRed Text\x1b[m");
+let screen = parser.screen();
+```
+
+### Option 2: Enhanced portable-pty approach
+Build on our existing portable-pty implementation but add:
+- Proper VT100/ANSI parsing using the vt100 crate
+- Grid-based rendering
+- Better terminal environment setup
+
+### Option 3: Web-based approach (xterm.js)
+Since Dioxus uses WebView, integrating xterm.js might be more practical:
+- Mature, battle-tested terminal emulator
+- Used by VS Code, Hyper, and many others
+- Would require JavaScript interop but guaranteed to work
+
+### Recommendation
+Start with Option 2 - enhance our existing PTY implementation with the vt100 parser. This gives us:
+- A working PTY (already have this)
+- VT100/ANSI parsing (vt100 crate)
+- Simpler integration path
+- Can still achieve full terminal emulation
