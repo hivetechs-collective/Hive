@@ -256,15 +256,15 @@ pub fn TerminalTabs() -> Element {
 /// Terminal instance wrapper that maintains state per terminal
 #[component]
 fn TerminalInstance(terminal_id: String, working_directory: String) -> Element {
-    // Import the existing Terminal component
-    use super::terminal::Terminal;
+    // Import the new VT100 Terminal component for full terminal emulation
+    use super::terminal_vt100::TerminalVt100;
     
     // Each terminal instance maintains its own state through the terminal_id
     rsx! {
         div {
             key: "{terminal_id}",
             style: "height: 100%; width: 100%;",
-            Terminal {
+            TerminalVt100 {
                 terminal_id: terminal_id.clone(),
                 initial_directory: Some(working_directory)
             }
