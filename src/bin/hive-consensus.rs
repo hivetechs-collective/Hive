@@ -2234,7 +2234,7 @@ fn App() -> Element {
             // Main content (below menu bar)
             div {
                 class: "main-content",
-                style: "position: relative;",
+                style: "position: relative; display: flex; flex: 1; overflow: hidden;",
 
                 // Sidebar (left)
                 div {
@@ -2458,6 +2458,7 @@ fn App() -> Element {
                     size: sidebar_width,
                     min_size: 150.0,
                     max_size: 500.0,
+                    invert_drag: false,  // Dragging right increases sidebar width
                 }
 
                 // Code editor area (center) - now split between editor and terminal
@@ -2685,9 +2686,11 @@ fn App() -> Element {
                     
                     // Terminal section (bottom)
                     if *show_terminal.read() {
-                        // Terminal resize handle
+                        // Terminal at bottom with resize handle
                         div {
-                            style: "position: relative;",
+                            style: format!("position: relative; height: {}px; border-top: 1px solid #3e3e42; display: flex; flex-direction: column; background: #1e1e1e;", 
+                                terminal_height.read()
+                            ),
                             
                             // Resize divider above terminal
                             ResizableDivider {
@@ -2695,16 +2698,11 @@ fn App() -> Element {
                                 size: terminal_height,
                                 min_size: 100.0,
                                 max_size: 600.0,
+                                invert_drag: false,  // Not used for vertical, but provided for consistency
                             }
                             
-                            div {
-                                style: format!("height: {}px; border-top: 1px solid #3e3e42; display: flex; flex-direction: column; background: #1e1e1e;", 
-                                    terminal_height.read()
-                                ),
-                                
-                                // TerminalTabs handles both the tab bar and terminal content
-                                TerminalTabs {}
-                            }
+                            // TerminalTabs handles both the tab bar and terminal content
+                            TerminalTabs {}
                         }
                     }
                 }
@@ -2715,6 +2713,7 @@ fn App() -> Element {
                     size: chat_width,
                     min_size: 300.0,
                     max_size: 800.0,
+                    invert_drag: true,  // Dragging right decreases chat width (makes chat smaller)
                 }
 
                 // Chat panel (right)
