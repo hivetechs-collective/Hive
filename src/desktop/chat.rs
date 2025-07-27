@@ -3,6 +3,7 @@
 use crate::desktop::{
     consensus_integration::{use_consensus_with_version, DesktopConsensusManager},
     events::KeyboardEventUtils,
+    response_coordinator::{SendToClaudeButton, CopyResponseButton},
     state::*,
 };
 use dioxus::events::{KeyboardEvent, MouseEvent};
@@ -221,6 +222,24 @@ fn ChatMessageItem(message: ChatMessage) -> Element {
                 div {
                     class: "message-content",
                     dangerous_inner_html: format_message_content(&message.content),
+                }
+
+                // Action buttons for assistant messages
+                if matches!(message.message_type, MessageType::Assistant) {
+                    div {
+                        class: "message-actions",
+                        style: "display: flex; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1);",
+                        
+                        // Send to Claude button
+                        SendToClaudeButton {
+                            app_state: use_context::<Signal<AppState>>(),
+                        }
+                        
+                        // Copy button
+                        CopyResponseButton {
+                            content: message.content.clone(),
+                        }
+                    }
                 }
 
                 // Timestamp
