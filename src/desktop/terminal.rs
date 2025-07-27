@@ -3,6 +3,7 @@
 //! VS Code-like integrated terminal experience
 
 use dioxus::prelude::*;
+use dioxus::document::eval;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -436,52 +437,20 @@ pub fn Terminal() -> Element {
     // Clone for the submit handler
     let execute_command_for_submit = execute_command.clone();
 
-    // Handle key events for history navigation
-    let on_keydown = {
-        let mut history_index = history_index.clone();
-        let mut input_text = input_text.clone();
-        let command_history = command_history.clone();
-        move |evt: Event<KeyboardData>| {
-            match evt.data().key() {
-                Key::ArrowUp => {
-                    let history = command_history.read();
-                    if !history.is_empty() {
-                        let current_idx = history_index.with(|idx| *idx);
-                        let current_index = current_idx.unwrap_or(history.len());
-                        if current_index > 0 {
-                            let new_index = current_index - 1;
-                            if let Some(cmd) = history.get(new_index) {
-                                let cmd = cmd.clone();
-                                drop(history); // Release the borrow
-                                input_text.set(cmd);
-                                history_index.set(Some(new_index));
-                            }
-                        }
-                    }
+    // Focus the terminal input when component mounts
+    use_effect(move || {
+        spawn(async move {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            if let Ok(eval) = eval(r#"
+                const input = document.getElementById('terminal-input');
+                if (input) {
+                    input.focus();
                 }
-                Key::ArrowDown => {
-                    let history = command_history.read();
-                    let current_idx = history_index.with(|idx| *idx);
-                    if let Some(current_index) = current_idx {
-                        if current_index < history.len() - 1 {
-                            let new_index = current_index + 1;
-                            if let Some(cmd) = history.get(new_index) {
-                                let cmd = cmd.clone();
-                                drop(history); // Release the borrow
-                                input_text.set(cmd);
-                                history_index.set(Some(new_index));
-                            }
-                        } else {
-                            drop(history); // Release the borrow
-                            input_text.set(String::new());
-                            history_index.set(None);
-                        }
-                    }
-                }
-                _ => {}
+            "#).await {
+                tracing::debug!("Terminal input focused");
             }
-        }
-    };
+        });
+    });
 
     let terminal_style = "
         display: flex;
@@ -559,6 +528,7 @@ pub fn Terminal() -> Element {
                 }
 
                 input {
+                    id: "terminal-input",
                     style: "{input_style}",
                     r#type: "text",
                     value: "{input_text}",
@@ -566,16 +536,60 @@ pub fn Terminal() -> Element {
                     disabled: is_running(),
                     autofocus: true,
                     oninput: move |evt| input_text.set(evt.value()),
-                    onkeydown: on_keydown,
-                    onkeypress: {
-                        let mut input_text = input_text.clone();
+                    onkeydown: {
                         let mut history_index = history_index.clone();
+                        let mut input_text = input_text.clone();
+                        let command_history = command_history.clone();
+                        let execute_command_for_keydown = execute_command_for_submit.clone();
                         move |evt: Event<KeyboardData>| {
-                            if evt.key() == Key::Enter {
-                                let command = input_text.read().clone();
-                                execute_command_for_submit(command);
-                                input_text.set(String::new());
-                                history_index.set(None);
+                            match evt.data().key() {
+                                Key::Enter => {
+                                    evt.prevent_default();
+                                    let command = input_text.read().clone();
+                                    if !command.trim().is_empty() {
+                                        execute_command_for_keydown(command);
+                                        input_text.set(String::new());
+                                        history_index.set(None);
+                                    }
+                                }
+                                Key::ArrowUp => {
+                                    evt.prevent_default();
+                                    let history = command_history.read();
+                                    if !history.is_empty() {
+                                        let current_idx = history_index.with(|idx| *idx);
+                                        let current_index = current_idx.unwrap_or(history.len());
+                                        if current_index > 0 {
+                                            let new_index = current_index - 1;
+                                            if let Some(cmd) = history.get(new_index) {
+                                                let cmd = cmd.clone();
+                                                drop(history); // Release the borrow
+                                                input_text.set(cmd);
+                                                history_index.set(Some(new_index));
+                                            }
+                                        }
+                                    }
+                                }
+                                Key::ArrowDown => {
+                                    evt.prevent_default();
+                                    let history = command_history.read();
+                                    let current_idx = history_index.with(|idx| *idx);
+                                    if let Some(current_index) = current_idx {
+                                        if current_index < history.len() - 1 {
+                                            let new_index = current_index + 1;
+                                            if let Some(cmd) = history.get(new_index) {
+                                                let cmd = cmd.clone();
+                                                drop(history); // Release the borrow
+                                                input_text.set(cmd);
+                                                history_index.set(Some(new_index));
+                                            }
+                                        } else {
+                                            drop(history); // Release the borrow
+                                            input_text.set(String::new());
+                                            history_index.set(None);
+                                        }
+                                    }
+                                }
+                                _ => {}
                             }
                         }
                     }
