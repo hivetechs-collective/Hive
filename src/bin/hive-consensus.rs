@@ -2640,14 +2640,8 @@ fn App() -> Element {
                                 terminal_height.read()
                             ),
                             
-                            // Terminal tabs header
+                            // TerminalTabs handles both the tab bar and terminal content
                             TerminalTabs {}
-                            
-                            // Terminal content
-                            div {
-                                style: "flex: 1; overflow: hidden;",
-                                Terminal {}
-                            }
                         }
                     }
                 }
