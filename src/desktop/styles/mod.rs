@@ -2005,6 +2005,59 @@ fn get_terminal_styles() -> &'static str {
     overflow: hidden;
 }
 
+/* Workspace container - main area below menu bar */
+.workspace-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+}
+
+/* Editor area - contains file explorer and chat */
+.editor-area {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Center content area */
+.center-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Panel container - terminal panel at bottom */
+.panel-container {
+    display: flex;
+    flex-direction: column;
+    height: 35%;
+    min-height: 150px;
+    max-height: 80%;
+    background: #1e1e1e;
+    border-top: 1px solid #474747;
+}
+
+/* Panel header bar */
+.panel-header {
+    display: flex;
+    align-items: center;
+    height: 35px;
+    background: #252526;
+    padding: 0 10px;
+    border-bottom: 1px solid #1e1e1e;
+    user-select: none;
+}
+
+/* Panel content area */
+.panel-content {
+    flex: 1;
+    overflow: hidden;
+}
+
 /* Terminal tabs styles */
 .terminal-tabs {
     display: flex;

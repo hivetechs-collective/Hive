@@ -362,30 +362,47 @@ pub fn App() -> Element {
             // Menu Bar Component
             MenuBar {}
 
-            // Main Content Layout with Terminal
+            // Main Layout
             div {
-                class: "main-layout-with-terminal",
-                style: "display: flex; flex-direction: column; flex: 1; overflow: hidden;",
+                class: "main-layout",
+                
+                // Left Sidebar - File Explorer
+                FileExplorer {}
 
-                // Top section - File Explorer and Chat
+                // Center Panel - Split between Chat and Terminal
                 div {
-                    style: "display: flex; flex: 1; min-height: 0;",
+                    class: "center-panel",
+                    style: "flex: 1; display: flex; flex-direction: column; height: 100%; overflow: hidden;",
                     
-                    // Left Sidebar - File Explorer
-                    FileExplorer {}
-
-                    // Right Panel - Chat Interface
-                    ChatInterface {}
-
-                    // Consensus Progress (always visible)
-                    ConsensusProgress {}
+                    // Chat Interface (top portion)
+                    div {
+                        style: "flex: 1; min-height: 0; overflow: hidden;",
+                        ChatInterface {}
+                    }
+                    
+                    // Terminal Panel (bottom portion)
+                    div {
+                        style: "height: 300px; background: #1e1e1e; border-top: 1px solid #474747; display: flex; flex-direction: column;",
+                        
+                        // Terminal header
+                        div {
+                            style: "height: 35px; background: #252526; border-bottom: 1px solid #1e1e1e; display: flex; align-items: center; padding: 0 10px;",
+                            span {
+                                style: "color: #cccccc; font-size: 13px; font-weight: 500; text-transform: uppercase;",
+                                "Terminal"
+                            }
+                        }
+                        
+                        // Terminal content
+                        div {
+                            style: "flex: 1; overflow: hidden;",
+                            TerminalTabs {}
+                        }
+                    }
                 }
 
-                // Bottom section - Terminal
-                div {
-                    style: "height: 300px; min-height: 200px; max-height: 50%; border-top: 1px solid #474747;",
-                    TerminalTabs {}
-                }
+                // Consensus Progress (always visible)
+                ConsensusProgress {}
             }
 
             // Status Bar
