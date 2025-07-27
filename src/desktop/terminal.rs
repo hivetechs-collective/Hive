@@ -446,11 +446,14 @@ pub fn Terminal() -> Element {
                 Key::ArrowUp => {
                     let history = command_history.read();
                     if !history.is_empty() {
-                        let current_index = (*history_index.read()).unwrap_or(history.len());
+                        let current_idx = history_index.with(|idx| *idx);
+                        let current_index = current_idx.unwrap_or(history.len());
                         if current_index > 0 {
                             let new_index = current_index - 1;
                             if let Some(cmd) = history.get(new_index) {
-                                input_text.set(cmd.clone());
+                                let cmd = cmd.clone();
+                                drop(history); // Release the borrow
+                                input_text.set(cmd);
                                 history_index.set(Some(new_index));
                             }
                         }
@@ -458,14 +461,18 @@ pub fn Terminal() -> Element {
                 }
                 Key::ArrowDown => {
                     let history = command_history.read();
-                    if let Some(current_index) = *history_index.read() {
+                    let current_idx = history_index.with(|idx| *idx);
+                    if let Some(current_index) = current_idx {
                         if current_index < history.len() - 1 {
                             let new_index = current_index + 1;
                             if let Some(cmd) = history.get(new_index) {
-                                input_text.set(cmd.clone());
+                                let cmd = cmd.clone();
+                                drop(history); // Release the borrow
+                                input_text.set(cmd);
                                 history_index.set(Some(new_index));
                             }
                         } else {
+                            drop(history); // Release the borrow
                             input_text.set(String::new());
                             history_index.set(None);
                         }
@@ -563,7 +570,7 @@ pub fn Terminal() -> Element {
                     onkeypress: {
                         let mut input_text = input_text.clone();
                         let mut history_index = history_index.clone();
-                        move |evt| {
+                        move |evt: Event<KeyboardData>| {
                             if evt.key() == Key::Enter {
                                 let command = input_text.read().clone();
                                 execute_command_for_submit(command);
