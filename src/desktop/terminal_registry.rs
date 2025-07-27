@@ -4,12 +4,14 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::io::Write;
 use once_cell::sync::Lazy;
 
 /// Terminal instance info for registry
 pub struct TerminalInfo {
     pub id: String,
     pub parser: Arc<Mutex<vt100::Parser>>,
+    pub writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
 }
 
 /// Global terminal registry
@@ -17,9 +19,13 @@ pub static TERMINAL_REGISTRY: Lazy<Arc<Mutex<HashMap<String, TerminalInfo>>>> =
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 /// Register a terminal instance
-pub fn register_terminal(id: String, parser: Arc<Mutex<vt100::Parser>>) {
+pub fn register_terminal(
+    id: String, 
+    parser: Arc<Mutex<vt100::Parser>>,
+    writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
+) {
     if let Ok(mut registry) = TERMINAL_REGISTRY.lock() {
-        registry.insert(id.clone(), TerminalInfo { id, parser });
+        registry.insert(id.clone(), TerminalInfo { id, parser, writer });
         tracing::info!("📝 Registered terminal in global registry");
     }
 }
@@ -96,4 +102,35 @@ pub fn extract_claude_response(content: &str) -> Option<String> {
     } else {
         Some(response_text)
     }
+}
+
+/// Send text to a terminal by ID
+pub fn send_to_terminal(id: &str, text: &str) -> bool {
+    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
+        if let Some(info) = registry.get(id) {
+            if let Some(writer) = &info.writer {
+                if let Ok(mut w) = writer.lock() {
+                    // Write the text to the terminal
+                    if let Ok(_) = w.write_all(text.as_bytes()) {
+                        let _ = w.flush();
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Send text to the active terminal
+pub fn send_to_active_terminal(text: &str) -> bool {
+    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
+        // For now, just send to the first terminal
+        if let Some((id, _)) = registry.iter().next() {
+            let id = id.clone();
+            drop(registry); // Release lock before calling send_to_terminal
+            return send_to_terminal(&id, text);
+        }
+    }
+    false
 }

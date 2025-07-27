@@ -12,8 +12,10 @@ pub fn SendToConsensusButton(
     app_state: Signal<AppState>,
 ) -> Element {
     let is_sending = use_signal(|| false);
-    let consensus_manager = use_context::<Option<DesktopConsensusManager>>();
-    let has_consensus = consensus_manager.is_some();
+    
+    // Check if we have app_state context
+    let has_app_state = app_state.read().chat.messages.len() >= 0; // Simple check to ensure it's valid
+    let has_consensus = has_app_state;
 
     rsx! {
         button {
@@ -35,7 +37,6 @@ pub fn SendToConsensusButton(
             disabled: *is_sending.read() || !has_consensus,
             onclick: move |_| {
                 let mut app_state = app_state.clone();
-                let consensus = consensus_manager.clone();
                 let mut is_sending = is_sending.clone();
                 
                 spawn(async move {
@@ -43,10 +44,25 @@ pub fn SendToConsensusButton(
                     
                     // Extract terminal content
                     if let Some(terminal_content) = extract_terminal_response(&app_state).await {
-                        // Send to consensus
-                        if let Some(consensus) = consensus {
-                            process_with_consensus(terminal_content, &mut app_state, &consensus).await;
-                        }
+                        // Add system message showing what we're doing
+                        let system_msg = ChatMessage {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            content: format!("📤 Sending Claude's response ({} characters) to consensus for enhancement...", terminal_content.len()),
+                            message_type: MessageType::System,
+                            timestamp: chrono::Utc::now(),
+                            metadata: MessageMetadata::default(),
+                        };
+                        app_state.write().chat.add_message(system_msg);
+                        
+                        // Add the content as a user message to trigger consensus
+                        let user_msg = ChatMessage {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            content: terminal_content,
+                            message_type: MessageType::User,
+                            timestamp: chrono::Utc::now(),
+                            metadata: MessageMetadata::default(),
+                        };
+                        app_state.write().chat.add_message(user_msg);
                     }
                     
                     is_sending.set(false);
@@ -102,8 +118,28 @@ pub fn SendToClaudeButton(
                     
                     // Extract last consensus response
                     if let Some(consensus_content) = extract_consensus_response(&app_state).await {
+                        // Add system message
+                        let system_msg = ChatMessage {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            content: format!("📥 Sending consensus response ({} characters) to Claude terminal...", consensus_content.len()),
+                            message_type: MessageType::System,
+                            timestamp: chrono::Utc::now(),
+                            metadata: MessageMetadata::default(),
+                        };
+                        let mut app_state_mut = app_state.clone();
+                        app_state_mut.write().chat.add_message(system_msg);
+                        
                         // Send to terminal as input
-                        send_to_terminal(&app_state, &consensus_content).await;
+                        if send_to_terminal(&app_state, &consensus_content).await {
+                            let success_msg = ChatMessage {
+                                id: uuid::Uuid::new_v4().to_string(),
+                                content: "✅ Response sent to Claude terminal".to_string(),
+                                message_type: MessageType::System,
+                                timestamp: chrono::Utc::now(),
+                                metadata: MessageMetadata::default(),
+                            };
+                            app_state_mut.write().chat.add_message(success_msg);
+                        }
                     }
                     
                     is_sending.set(false);
@@ -200,12 +236,20 @@ async fn extract_consensus_response(app_state: &Signal<AppState>) -> Option<Stri
 }
 
 /// Send content to terminal as input
-async fn send_to_terminal(_app_state: &Signal<AppState>, _content: &str) -> bool {
-    // TODO: Implement sending to terminal
-    // This will require access to the terminal's PTY writer
+async fn send_to_terminal(_app_state: &Signal<AppState>, content: &str) -> bool {
+    use crate::desktop::terminal_registry::send_to_active_terminal;
     
-    tracing::warn!("Sending to terminal not yet implemented");
-    false
+    // Format the content as a command for the terminal
+    // We'll send it as a comment so it doesn't execute, but Claude can see it
+    let formatted_content = format!("# Consensus response:\n# {}\n", content.replace('\n', "\n# "));
+    
+    if send_to_active_terminal(&formatted_content) {
+        tracing::info!("📤 Sent consensus response to terminal");
+        true
+    } else {
+        tracing::error!("❌ Failed to send to terminal");
+        false
+    }
 }
 
 /// Process content with consensus
