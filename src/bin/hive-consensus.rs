@@ -2185,8 +2185,8 @@ fn App() -> Element {
                         }
                     }
                     
-                    // Check for Ctrl+` (backtick) to toggle terminal
-                    if modifier_pressed && evt.key() == Key::Character("`".to_string()) {
+                    // Check for Ctrl+T or Cmd+T to toggle terminal
+                    if modifier_pressed && evt.key() == Key::Character("t".to_string()) {
                         evt.stop_propagation();
                         evt.prevent_default();
                         
