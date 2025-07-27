@@ -200,13 +200,22 @@ impl SimpleClaudeIntegration {
             }
         }
         
-        // For regular messages (including unhandled slash commands), use ask command
+        // For regular messages (including unhandled slash commands), use ask command with stdin
+        // This approach works better for slash commands
         let mut child = Command::new(binary)
             .arg("ask")
-            .arg(message)
+            .arg("-") // Read from stdin
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
+        
+        // Write the message to stdin
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(message.as_bytes()).await?;
+            stdin.flush().await?;
+            drop(stdin); // Close stdin to signal EOF
+        }
         
         let stdout = child.stdout.take()
             .ok_or_else(|| anyhow::anyhow!("Failed to capture stdout"))?;
