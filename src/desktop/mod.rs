@@ -32,7 +32,8 @@ pub mod styles;
 pub mod terminal;
 pub mod terminal_pty;
 pub mod terminal_tabs;
-pub mod terminal_emulator;
+// pub mod terminal_emulator; // Disabled - using terminal_vt100 instead
+pub mod terminal_vt100;
 pub mod welcome_enhanced;
 pub mod code_editor;
 
