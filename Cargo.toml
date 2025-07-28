@@ -107,7 +107,7 @@ regex = "1.10"
 globset = "0.4"
 ropey = "1.6"
 lsp-types = "0.97"
-git2 = "0.19"
+git2 = "0.20.2"
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled", "chrono", "serde_json", "backup"] }

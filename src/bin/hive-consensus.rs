@@ -9,6 +9,9 @@ use chrono::{Duration, Utc};
 use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
+// Git imports
+use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent};
+
 /// Analytics data structure for the dashboard
 #[derive(Debug, Clone, Default)]
 pub struct AnalyticsData {
@@ -903,6 +906,9 @@ fn App() -> Element {
     // Initialize app state
     let mut app_state = use_signal(|| AppState::default());
     use_context_provider(|| app_state.clone());
+    
+    // Initialize git state
+    let git_state = use_git_state();
 
     // API keys state (needed before consensus manager)
     let mut openrouter_key = use_signal(String::new);
@@ -1693,7 +1699,9 @@ fn App() -> Element {
         }
     });
 
-    let handle_menu_action = move |action: MenuAction| {
+    let handle_menu_action = {
+        let git_state = git_state.clone();
+        move |action: MenuAction| {
         match action {
             MenuAction::OpenFolder => {
                 // Open folder dialog
@@ -1703,6 +1711,7 @@ fn App() -> Element {
                     let mut expanded_dirs = expanded_dirs.clone();
                     let mut selected_file = selected_file.clone();
                     let mut file_content = file_content.clone();
+                    let git_state = git_state.clone();
 
                     async move {
                         let current_path = current_dir.read().clone();
@@ -1723,6 +1732,17 @@ fn App() -> Element {
 
                             // Clear expanded dirs for new folder
                             expanded_dirs.write().clear();
+                            
+                            // Initialize git repository detection
+                            let folder_path = folder.path().to_path_buf();
+                            let git_state_clone = git_state.clone();
+                            spawn(async move {
+                                // Git repository detection
+                                let repos = GitRepository::discover_repositories(&folder_path);
+                                if !repos.is_empty() {
+                                    tracing::info!("🗃️ Found {} git repositories", repos.len());
+                                }
+                            });
                             
                             // Update repository context for AI Helper
                             tracing::info!("📁 User opened folder: {}", folder.path().display());
@@ -1969,6 +1989,7 @@ fn App() -> Element {
                 println!("{:?} action not implemented yet", action);
             }
         }
+        }
     };
 
     // Handle welcome page actions
@@ -1979,6 +2000,7 @@ fn App() -> Element {
         let current_dir = current_dir.clone();
         let file_tree = file_tree.clone();
         let expanded_dirs = expanded_dirs.clone();
+        let git_state = git_state.clone();
 
         move |action: WelcomeAction| {
             match action {
@@ -1990,6 +2012,7 @@ fn App() -> Element {
                         let mut expanded_dirs = expanded_dirs.clone();
                         let mut selected_file = selected_file.clone();
                         let mut file_content = file_content.clone();
+                        let git_state = git_state.clone();
 
                         async move {
                             let current_path = current_dir.read().clone();
@@ -2010,6 +2033,17 @@ fn App() -> Element {
 
                                 // Clear expanded dirs for new folder
                                 expanded_dirs.write().clear();
+                                
+                                // Initialize git repository detection
+                                let folder_path = folder.path().to_path_buf();
+                                let git_state_clone = git_state.clone();
+                                spawn(async move {
+                                    // Git repository detection
+                                    let repos = GitRepository::discover_repositories(&folder_path);
+                                    if !repos.is_empty() {
+                                        tracing::info!("🗃️ Found {} git repositories", repos.len());
+                                    }
+                                });
                                 
                                 // Update repository context for AI Helper
                                 tracing::info!("📁 User opened folder from welcome screen: {}", folder.path().display());
@@ -3326,8 +3360,32 @@ fn App() -> Element {
                     div {
                         class: "git-branch",
                         style: "display: flex; align-items: center; gap: 5px;",
-                        span { style: "color: #FFC107; font-weight: 600; font-size: 14px;", "H" }
-                        span { style: "color: #000; font-weight: 700;", "main" }
+                        span { style: "color: #FFC107; font-weight: 600; font-size: 14px;", "⎇" }
+                        span { 
+                            style: "color: #000; font-weight: 700;", 
+                            {
+                                if let Some(branch_info) = git_state.branch_info.read().as_ref() {
+                                    branch_info.name.clone()
+                                } else {
+                                    "No repository".to_string()
+                                }
+                            }
+                        }
+                        // Show sync status if available
+                        {
+                            let branch_info = git_state.branch_info.read();
+                            let sync_status = git_state.sync_status.read();
+                            if branch_info.is_some() && sync_status.has_upstream {
+                                rsx! {
+                                    span { 
+                                        style: "color: #000; margin-left: 8px;", 
+                                        {sync_status.format()}
+                                    }
+                                }
+                            } else {
+                                rsx! {}
+                            }
+                        }
                     }
                     span { style: "color: #000;", " • " }
                     span { style: "color: #000;", "✓ 0 problems" }

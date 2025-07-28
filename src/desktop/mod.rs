@@ -40,6 +40,7 @@ pub mod code_editor;
 pub mod response_coordinator;
 pub mod terminal_registry;
 pub mod terminal_buffer;
+pub mod git;
 
 // Re-export commonly used styling components
 pub use dialogs::OperationConfirmationDialog;
