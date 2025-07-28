@@ -5,7 +5,6 @@
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
-use crate::desktop::response_coordinator::SendToConsensusButton;
 use crate::desktop::state::AppState;
 use crate::desktop::consensus_integration::DesktopConsensusManager;
 
@@ -280,20 +279,6 @@ pub fn TerminalTabs() -> Element {
                 // Terminal dropdown menu (VS Code style)
                 div {
                     style: "margin-left: auto; display: flex; gap: 4px; align-items: center;",
-                    
-                    // Send to Consensus button
-                    div {
-                        style: "margin-right: 12px;",
-                        SendToConsensusButton {
-                            app_state: use_context::<Signal<AppState>>(),
-                        }
-                    }
-                    
-                    // Keyboard shortcut hint
-                    span {
-                        style: "color: #969696; font-size: 11px; margin-right: 8px;",
-                        if cfg!(target_os = "macos") { "Cmd+T to toggle" } else { "Ctrl+T to toggle" }
-                    }
                     
                     // Split terminal button
                     button {

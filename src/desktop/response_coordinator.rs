@@ -44,25 +44,11 @@ pub fn SendToConsensusButton(
                     
                     // Extract terminal content
                     if let Some(terminal_content) = extract_terminal_response(&app_state).await {
-                        // Add system message showing what we're doing
-                        let system_msg = ChatMessage {
-                            id: uuid::Uuid::new_v4().to_string(),
-                            content: format!("📤 Sending Claude's response ({} characters) to consensus for enhancement...", terminal_content.len()),
-                            message_type: MessageType::System,
-                            timestamp: chrono::Utc::now(),
-                            metadata: MessageMetadata::default(),
-                        };
-                        app_state.write().chat.add_message(system_msg);
-                        
-                        // Add the content as a user message to trigger consensus
-                        let user_msg = ChatMessage {
-                            id: uuid::Uuid::new_v4().to_string(),
-                            content: terminal_content,
-                            message_type: MessageType::User,
-                            timestamp: chrono::Utc::now(),
-                            metadata: MessageMetadata::default(),
-                        };
-                        app_state.write().chat.add_message(user_msg);
+                        // Paste the content into the chat input field
+                        app_state.write().chat.input_text = terminal_content;
+                        tracing::info!("📋 Pasted Claude's response into chat input");
+                    } else {
+                        tracing::warn!("⚠️ Could not extract Claude's response from terminal");
                     }
                     
                     is_sending.set(false);
@@ -116,29 +102,28 @@ pub fn SendToClaudeButton(
                 spawn(async move {
                     is_sending.set(true);
                     
-                    // Extract last consensus response
-                    if let Some(consensus_content) = extract_consensus_response(&app_state).await {
-                        // Add system message
-                        let system_msg = ChatMessage {
-                            id: uuid::Uuid::new_v4().to_string(),
-                            content: format!("📥 Sending consensus response ({} characters) to Claude terminal...", consensus_content.len()),
-                            message_type: MessageType::System,
-                            timestamp: chrono::Utc::now(),
-                            metadata: MessageMetadata::default(),
-                        };
-                        let mut app_state_mut = app_state.clone();
-                        app_state_mut.write().chat.add_message(system_msg);
-                        
-                        // Send to terminal as input
-                        if send_to_terminal(&app_state, &consensus_content).await {
-                            let success_msg = ChatMessage {
-                                id: uuid::Uuid::new_v4().to_string(),
-                                content: "✅ Response sent to Claude terminal".to_string(),
-                                message_type: MessageType::System,
-                                timestamp: chrono::Utc::now(),
-                                metadata: MessageMetadata::default(),
-                            };
-                            app_state_mut.write().chat.add_message(success_msg);
+                    // Get the latest curator result from database
+                    match get_latest_curator_from_database().await {
+                        Ok(Some((curator_content, timestamp))) => {
+                            // Format the curator result for terminal
+                            let formatted_content = format!(
+                                "# Consensus Curator Result\n# Generated: {}\n# ---\n{}\n",
+                                timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+                                curator_content
+                            );
+                            
+                            // Send to terminal
+                            if send_to_terminal(&app_state, &formatted_content).await {
+                                tracing::info!("✅ Sent curator result to Claude terminal");
+                            } else {
+                                tracing::error!("❌ Failed to send curator result to terminal");
+                            }
+                        }
+                        Ok(None) => {
+                            tracing::warn!("⚠️ No curator results found in database");
+                        }
+                        Err(e) => {
+                            tracing::error!("❌ Failed to fetch curator result: {}", e);
                         }
                     }
                     
@@ -205,7 +190,7 @@ pub fn CopyResponseButton(content: String) -> Element {
 
 /// Extract the last Claude response from terminal
 async fn extract_terminal_response(_app_state: &Signal<AppState>) -> Option<String> {
-    use crate::desktop::terminal_registry::{get_active_terminal_content, extract_claude_response};
+    use crate::desktop::terminal_registry::get_active_terminal_content;
     
     tracing::info!("🔍 Attempting to extract terminal response...");
     
@@ -213,18 +198,63 @@ async fn extract_terminal_response(_app_state: &Signal<AppState>) -> Option<Stri
     if let Some(content) = get_active_terminal_content() {
         tracing::info!("📜 Got terminal content: {} chars", content.len());
         
-        // Log a preview of the content
-        if !content.is_empty() {
-            let preview = content.chars().take(200).collect::<String>();
-            tracing::info!("📜 Terminal preview: {:?}", preview);
+        // For Claude Code, we need a different extraction strategy
+        // Look for the most recent substantial block of text
+        let lines: Vec<&str> = content.lines().collect();
+        
+        // Find the last non-empty block of text (Claude's response)
+        let mut response_lines = Vec::new();
+        let mut found_content = false;
+        
+        // Scan from bottom to top to find the most recent response
+        for line in lines.iter().rev() {
+            let trimmed = line.trim();
+            
+            // Skip empty lines at the bottom
+            if !found_content && trimmed.is_empty() {
+                continue;
+            }
+            
+            // Skip command lines (like .hive)
+            if trimmed == ".hive" || trimmed == ".h" || trimmed.starts_with("claude ") {
+                if found_content {
+                    // We've found the end of the response
+                    break;
+                }
+                continue;
+            }
+            
+            // Skip shell prompts
+            if trimmed.ends_with('$') || trimmed.ends_with('%') || trimmed.ends_with('#') || trimmed.ends_with('>') {
+                if found_content {
+                    // We've found the end of the response
+                    break;
+                }
+                continue;
+            }
+            
+            // This looks like content
+            if !trimmed.is_empty() {
+                found_content = true;
+                response_lines.push(line.to_string());
+            } else if found_content {
+                // Add empty lines that are part of the response
+                response_lines.push(line.to_string());
+            }
         }
         
-        // Extract Claude's response from the content
-        if let Some(response) = extract_claude_response(&content) {
+        // Reverse to get the correct order (we scanned bottom to top)
+        response_lines.reverse();
+        
+        // Join and clean up
+        let response = response_lines.join("\n").trim().to_string();
+        
+        if response.len() > 50 { // Minimum 50 chars for a meaningful response
             tracing::info!("✅ Extracted Claude response: {} chars", response.len());
+            tracing::info!("📝 Response preview: {}", response.chars().take(100).collect::<String>());
             return Some(response);
         } else {
-            tracing::warn!("⚠️ Could not identify Claude response in terminal content");
+            tracing::warn!("⚠️ Response too short or empty: {} chars", response.len());
         }
     } else {
         tracing::warn!("❌ No active terminal found in registry");
@@ -290,6 +320,14 @@ async fn process_with_consensus(
         };
         app_state.write().chat.add_message(error_msg);
     }
+}
+
+/// Get the latest curator result from the database
+async fn get_latest_curator_from_database() -> Result<Option<(String, chrono::DateTime<chrono::Utc>)>, anyhow::Error> {
+    use crate::core::database::get_database;
+    
+    let db = get_database().await?;
+    db.get_latest_curator_result().await
 }
 
 /// Copy text to clipboard using JavaScript
