@@ -29,6 +29,7 @@ pub fn TerminalEmulator(
     let mut pty_manager = use_signal(|| Arc::new(Mutex::new(PtyManager::new(terminal_id.clone()))));
     let mut grid_html = use_signal(|| String::new());
     let mut terminal_size = use_signal(|| (80u16, 24u16));
+    let mut scroll_offset = use_signal(|| 0i32);
     
     // Initialize terminal
     let terminal_id_for_init = terminal_id.clone();
@@ -86,9 +87,9 @@ pub fn TerminalEmulator(
                                 _ => {}
                             }
                             
-                            // Update grid display
+                            // Update grid display with scroll offset
                             let terminal = terminal_for_events.lock();
-                            let html = GridRenderer::render_to_html(&*terminal);
+                            let html = GridRenderer::render_to_html_with_scroll(&*terminal, *scroll_offset.read());
                             drop(terminal);
                             grid_html.set(html);
                         }
@@ -96,7 +97,7 @@ pub fn TerminalEmulator(
                     
                     // Initial render
                     let terminal = terminal.lock();
-                    let html = GridRenderer::render_to_html(&*terminal);
+                    let html = GridRenderer::render_to_html_with_scroll(&*terminal, 0);
                     drop(terminal);
                     
                     grid_html.set(html);
@@ -181,6 +182,30 @@ pub fn TerminalEmulator(
             tabindex: "0",
             onkeydown: handle_keydown,
             onpaste: handle_paste,
+            onwheel: move |evt| {
+                // Handle mouse wheel for scrolling
+                if let Some(terminal) = terminal_ref.read().as_ref() {
+                    use alacritty_terminal::grid::Scroll;
+                    
+                    let delta = evt.delta().y;
+                    let lines_to_scroll = (delta / 16.0).round() as i32; // 16px per line
+                    
+                    // Scroll the terminal
+                    let mut terminal = terminal.lock();
+                    if lines_to_scroll > 0 {
+                        // Scrolling down (towards newer content)
+                        terminal.scroll_display(Scroll::Delta(-lines_to_scroll));
+                    } else if lines_to_scroll < 0 {
+                        // Scrolling up (towards older content)
+                        terminal.scroll_display(Scroll::Delta(-lines_to_scroll));
+                    }
+                    
+                    // Re-render after scroll
+                    let html = GridRenderer::render_to_html(&*terminal);
+                    drop(terminal);
+                    grid_html.set(html);
+                }
+            },
             
             // Render terminal grid
             div {

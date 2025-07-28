@@ -59,17 +59,29 @@ impl GridRenderer {
     /// Convert terminal grid to HTML string (alternative approach)
     pub fn render_to_html(terminal: &Term<EventProxy>) -> String {
         let mut html = String::new();
-        html.push_str(r#"<div style="font-family: monospace; background: #000; color: #ccc; white-space: pre;">"#);
+        html.push_str(r#"<div style="font-family: monospace; background: #000; color: #ccc; white-space: pre; overflow-y: auto; height: 100%;">"#);
         
         let grid = terminal.grid();
         let cursor = terminal.cursor();
         let cursor_point = cursor.point;
         
+        // Get the display offset for scrollback
+        let display_offset = terminal.grid().display_offset();
+        let total_scrollback = terminal.grid().history_size();
+        
+        // If we're scrolled up, show indicator
+        if display_offset > 0 {
+            html.push_str(r#"<div style="background: #111; color: #888; padding: 2px 4px; font-size: 11px; position: sticky; top: 0; z-index: 10;">"#);
+            html.push_str(&format!("📜 Scrolled up {} lines (total history: {})", display_offset, total_scrollback));
+            html.push_str("</div>");
+        }
+        
         for (line_idx, line) in grid.display_iter().enumerate() {
             html.push_str(r#"<div style="height: 16px; line-height: 16px;">"#);
             
             for (col_idx, cell) in line.into_iter().enumerate() {
-                let is_cursor = line_idx as i32 == cursor_point.line.0 && 
+                let is_cursor = display_offset == 0 && 
+                    line_idx as i32 == cursor_point.line.0 && 
                     col_idx == cursor_point.column.0;
                 
                 html.push_str(&cell_to_html(cell, is_cursor));
@@ -80,6 +92,12 @@ impl GridRenderer {
         
         html.push_str("</div>");
         html
+    }
+    
+    /// Convert terminal grid to HTML string with scroll offset
+    pub fn render_to_html_with_scroll(terminal: &Term<EventProxy>, scroll_offset: i32) -> String {
+        // Just use the main method since alacritty handles scrolling internally
+        Self::render_to_html(terminal)
     }
 }
 
