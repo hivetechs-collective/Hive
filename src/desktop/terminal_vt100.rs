@@ -120,27 +120,51 @@ pub fn TerminalVt100(
     let terminal_id_for_update = terminal_id.clone();
     use_effect(move || {
         let trigger_value = update_trigger(); // Subscribe to updates
-        let show_buffer = show_full_buffer();
         
-        if show_buffer {
-            // Show full terminal buffer
+        if let Some(terminal) = terminal_state.read().as_ref() {
+            // Always show combined view: buffer history + current screen
             use crate::desktop::terminal_buffer::get_terminal_buffer_content;
+            
+            let mut combined_html = String::new();
+            
+            // Add buffer history (if any)
             if let Some(buffer_content) = get_terminal_buffer_content(&terminal_id_for_update) {
-                let html = format!(
-                    r#"<div style="font-family: monospace; white-space: pre-wrap; word-wrap: break-word;">{}</div>"#,
-                    html_escape::encode_text(&buffer_content)
-                );
-                screen_html.set(html);
-            }
-        } else if let Some(terminal) = terminal_state.read().as_ref() {
-            // Show VT100 screen
-            if let Ok(parser) = terminal.parser.lock() {
-                let html = render_screen(&parser);
-                screen_html.set(html.clone());
-                if !html.is_empty() {
-                    tracing::debug!("🖥️ Terminal screen updated (trigger: {})", trigger_value);
+                let lines: Vec<&str> = buffer_content.lines().collect();
+                if lines.len() > 30 {
+                    // Show history before current screen
+                    let history_lines = &lines[..lines.len().saturating_sub(30)];
+                    if !history_lines.is_empty() {
+                        combined_html.push_str(r#"<div style="opacity: 0.8; margin-bottom: 20px;">"#);
+                        for line in history_lines {
+                            combined_html.push_str(&html_escape::encode_text(line));
+                            combined_html.push_str("<br>");
+                        }
+                        combined_html.push_str("</div>");
+                    }
                 }
             }
+            
+            // Add current VT100 screen
+            if let Ok(parser) = terminal.parser.lock() {
+                let screen_content = render_screen(&parser);
+                combined_html.push_str(&screen_content);
+            }
+            
+            // Auto-scroll to bottom
+            combined_html.push_str(r#"<div id="terminal-bottom" style="height: 1px;"></div>"#);
+            
+            screen_html.set(combined_html);
+            
+            // Scroll to bottom after render
+            spawn(async move {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                let _ = eval(r#"
+                    const scrollContainer = document.querySelector('.terminal-vt100 > div > div');
+                    if (scrollContainer) {
+                        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+                    }
+                "#).await;
+            });
         }
     });
     
@@ -199,17 +223,24 @@ pub fn TerminalVt100(
         height: 100%;
         background: #000000;
         color: #cccccc;
-        font-family: monospace;
-        font-size: 14px;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 13px;
         line-height: 18px;
-        overflow-y: auto;
-        overflow-x: auto;
-        padding: 8px;
-        box-sizing: border-box;
-        white-space: pre;
-        cursor: text;
+        overflow: hidden;
+        position: relative;
         display: flex;
         flex-direction: column;
+    ";
+    
+    let scrollable_content_style = "
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 8px;
+        box-sizing: border-box;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        cursor: text;
     ";
     
     rsx! {
@@ -265,10 +296,10 @@ pub fn TerminalVt100(
                 tracing::info!("❌ Terminal lost focus");
             },
             
-            // Render terminal screen without JavaScript
+            // Scrollable content container
             div {
+                style: "{scrollable_content_style}",
                 dangerous_inner_html: "{screen_html}",
-                style: "width: 100%; height: 100%; pointer-events: none;"
             }
         }
     }
