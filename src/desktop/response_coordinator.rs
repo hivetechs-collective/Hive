@@ -72,7 +72,7 @@ pub fn SendToConsensusButton(
             if *is_sending.read() {
                 "Sending..."
             } else {
-                "→ Send to Consensus"
+                "→ Send to Consensus (.hive)"
             }
             
             // Arrow icon
@@ -149,7 +149,7 @@ pub fn SendToClaudeButton(
             if *is_sending.read() {
                 "Sending..."
             } else {
-                "← Send to Claude"
+                "← Send to Claude (.claude)"
             }
             
             // Arrow icon
