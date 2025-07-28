@@ -33,7 +33,7 @@ pub mod terminal;
 pub mod terminal_pty;
 pub mod terminal_tabs;
 // pub mod terminal_emulator; // Disabled - API incompatibilities
-pub mod terminal_vt100;
+pub mod terminal_xterm_simple;
 pub mod welcome_enhanced;
 pub mod resizable_panels;
 pub mod code_editor;

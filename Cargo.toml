@@ -211,6 +211,10 @@ path = "src/bin/test_consensus_cost.rs"
 name = "test-consensus-simple"
 path = "src/bin/test_consensus_simple.rs"
 
+[[bin]]
+name = "test-terminal-cleaning"
+path = "src/bin/test-terminal-cleaning.rs"
+
 [package.metadata.bundle]
 name = "Hive"
 identifier = "com.hivetechs.hive"

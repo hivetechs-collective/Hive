@@ -195,7 +195,7 @@ async fn extract_terminal_response(_app_state: &Signal<AppState>) -> Option<Stri
     tracing::info!("🔍 Attempting to extract terminal response...");
     
     // Get the active terminal content
-    if let Some(content) = get_active_terminal_content() {
+    if let Some(content) = get_active_terminal_content().await {
         tracing::info!("📜 Got terminal content: {} chars", content.len());
         
         // For Claude Code, we need a different extraction strategy

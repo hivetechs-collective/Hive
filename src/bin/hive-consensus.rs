@@ -6,7 +6,6 @@ use rfd;
 use chrono::{Duration, Utc};
 
 // Terminal imports
-use hive_ai::desktop::terminal::{Terminal, LineType};
 use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
@@ -2869,7 +2868,7 @@ fn App() -> Element {
                                 let mut previous_content_length_ref = previous_content_length.clone();
                                 let mut show_upgrade_dialog_ref = show_upgrade_dialog.clone();
                                 let mut ide_ai_broker_ref = ide_ai_broker.clone();
-                                let mut is_cancelling_ref = is_cancelling.clone();
+                                let is_cancelling_ref = is_cancelling.clone();
                                 let mut cancel_flag_ref = cancel_flag.clone();
                                 move |evt: dioxus::events::KeyboardEvent| {
                                     // Shift+Tab toggles auto-accept
@@ -3071,69 +3070,74 @@ fn App() -> Element {
                                         onclick: move |_| {
                                             tracing::info!("📋 Send to Consensus clicked");
                                             
-                                            // Extract terminal content and paste to chat input
-                                            use hive_ai::desktop::terminal_buffer::get_active_terminal_buffer_cleaned_content;
-                                            if let Some(content) = get_active_terminal_buffer_cleaned_content() {
-                                                tracing::info!("✅ Extracted content length: {}", content.len());
-                                                tracing::info!("📝 First 200 chars: {}", &content.chars().take(200).collect::<String>());
+                                            let mut input_value = input_value.clone();
+                                            let mut app_state = app_state.clone();
+                                            
+                                            // Extract terminal content using xterm.js
+                                            spawn(async move {
+                                                use hive_ai::desktop::terminal_xterm_simple::get_xterm_content;
                                                 
-                                                // Extract the most recent substantial block of text
-                                                let lines: Vec<&str> = content.lines().collect();
-                                                tracing::info!("📊 Total lines in terminal: {}", lines.len());
-                                                
-                                                let mut response_lines = Vec::new();
-                                                let mut found_content = false;
-                                                
-                                                // Scan from bottom to top to find the most recent response
-                                                for (idx, line) in lines.iter().rev().enumerate() {
-                                                    let trimmed = line.trim();
+                                                // Get content from the active terminal (claude-code)
+                                                if let Some(content) = get_xterm_content("claude-code").await {
+                                                    tracing::info!("✅ Extracted content length: {}", content.len());
+                                                    tracing::info!("📝 First 200 chars: {}", &content.chars().take(200).collect::<String>());
                                                     
-                                                    // Skip empty lines at the bottom
-                                                    if !found_content && trimmed.is_empty() {
-                                                        continue;
-                                                    }
+                                                    // Extract the most recent substantial block of text
+                                                    let lines: Vec<&str> = content.lines().collect();
+                                                    tracing::info!("📊 Total lines in terminal: {}", lines.len());
                                                     
-                                                    // Skip shell prompts
-                                                    if trimmed.ends_with('$') || trimmed.ends_with('%') || trimmed.ends_with('#') || trimmed.ends_with('>') {
-                                                        if found_content {
-                                                            tracing::debug!("🛑 Found prompt at line {}, stopping extraction", lines.len() - idx);
-                                                            break;
+                                                    let mut response_lines = Vec::new();
+                                                    let mut found_content = false;
+                                                    
+                                                    // Scan from bottom to top to find the most recent response
+                                                    for (idx, line) in lines.iter().rev().enumerate() {
+                                                        let trimmed = line.trim();
+                                                        
+                                                        // Skip empty lines at the bottom
+                                                        if !found_content && trimmed.is_empty() {
+                                                            continue;
                                                         }
-                                                        continue;
-                                                    }
-                                                    
-                                                    // This looks like content
-                                                    if !trimmed.is_empty() {
-                                                        if !found_content {
-                                                            tracing::debug!("🎯 Found content start at line {}", lines.len() - idx);
+                                                        
+                                                        // Skip shell prompts
+                                                        if trimmed.ends_with('$') || trimmed.ends_with('%') || trimmed.ends_with('#') || trimmed.ends_with('>') {
+                                                            if found_content {
+                                                                tracing::debug!("🛑 Found prompt at line {}, stopping extraction", lines.len() - idx);
+                                                                break;
+                                                            }
+                                                            continue;
                                                         }
-                                                        found_content = true;
-                                                        response_lines.push(line.to_string());
-                                                    } else if found_content {
-                                                        // Add empty lines that are part of the response
-                                                        response_lines.push(line.to_string());
+                                                        
+                                                        // This looks like content
+                                                        if !trimmed.is_empty() {
+                                                            if !found_content {
+                                                                tracing::debug!("🎯 Found content start at line {}", lines.len() - idx);
+                                                            }
+                                                            found_content = true;
+                                                            response_lines.push(line.to_string());
+                                                        } else if found_content {
+                                                            // Add empty lines that are part of the response
+                                                            response_lines.push(line.to_string());
+                                                        }
                                                     }
-                                                }
-                                                
-                                                // Reverse to get the correct order
-                                                response_lines.reverse();
-                                                let response = response_lines.join("\n").trim().to_string();
-                                                
-                                                tracing::info!("📄 Extracted response length: {}", response.len());
-                                                tracing::info!("📝 Extracted response preview: {}", &response.chars().take(100).collect::<String>());
-                                                
-                                                if response.len() > 50 {
-                                                    // Update the input_value signal directly
-                                                    tracing::info!("📌 Current input value: '{}'", input_value.read());
-                                                    *input_value.write() = response.clone();
-                                                    tracing::info!("✅ Updated input value: '{}'", input_value.read());
                                                     
-                                                    // Also update app state
-                                                    app_state.write().chat.input_text = response.clone();
+                                                    // Reverse to get the correct order
+                                                    response_lines.reverse();
+                                                    let response = response_lines.join("\n").trim().to_string();
                                                     
-                                                    // Also try direct DOM manipulation as a fallback
-                                                    let response_for_js = response.clone();
-                                                    spawn(async move {
+                                                    tracing::info!("📄 Extracted response length: {}", response.len());
+                                                    tracing::info!("📝 Extracted response preview: {}", &response.chars().take(100).collect::<String>());
+                                                    
+                                                    if response.len() > 50 {
+                                                        // Update the input_value signal directly
+                                                        tracing::info!("📌 Current input value: '{}'", input_value.read());
+                                                        *input_value.write() = response.clone();
+                                                        tracing::info!("✅ Updated input value: '{}'", input_value.read());
+                                                        
+                                                        // Also update app state
+                                                        app_state.write().chat.input_text = response.clone();
+                                                        
+                                                        // Also try direct DOM manipulation as a fallback
+                                                        let response_for_js = response.clone();
                                                         use dioxus::document::eval;
                                                         let escaped_text = response_for_js
                                                             .replace('\\', "\\\\")
@@ -3164,18 +3168,18 @@ fn App() -> Element {
                                                                 tracing::error!("❌ DOM manipulation failed: {}", e);
                                                             }
                                                         }
-                                                    });
-                                                    
-                                                    tracing::info!("✅ Pasted Claude's response to chat input");
-                                                } else {
-                                                    tracing::warn!("⚠️ Response too short or empty: {} chars", response.len());
-                                                    if response.len() > 0 {
-                                                        tracing::warn!("📝 Short response content: '{}'", response);
+                                                        
+                                                        tracing::info!("✅ Pasted Claude's response to chat input");
+                                                    } else {
+                                                        tracing::warn!("⚠️ Response too short or empty: {} chars", response.len());
+                                                        if response.len() > 0 {
+                                                            tracing::warn!("📝 Short response content: '{}'", response);
+                                                        }
                                                     }
+                                                } else {
+                                                    tracing::warn!("❌ No active terminal found or couldn't retrieve content");
                                                 }
-                                            } else {
-                                                tracing::warn!("❌ No active terminal found");
-                                            }
+                                            });
                                         },
                                         "Send to Consensus"
                                     }

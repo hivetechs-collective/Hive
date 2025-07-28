@@ -50,18 +50,43 @@ impl TerminalBuffer {
     pub fn get_cleaned_content(&self) -> String {
         use regex::Regex;
         
-        // Regex to match ANSI escape sequences
-        let ansi_regex = Regex::new(r"\x1b\[[0-9;]*[mGKHJ]|\x1b\[[0-9;]*[A-Z]|\x1b\].*?\x07|\x1b\[.*?[a-zA-Z]|\x1b\?[0-9]+[hl]|\[[\?0-9;]+[hlm]").unwrap();
+        // Simple approach: just remove ANSI escape sequences
+        let ansi_regex = Regex::new(
+            r"\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\[[\d;]+m|\[\d+[A-Z]|\[\d+;\d+[Hf]|\[\??\d+[lh]"
+        ).unwrap();
         
-        self.lines.iter()
-            .map(|line| {
-                // Remove ANSI escape sequences
-                let cleaned = ansi_regex.replace_all(line, "");
-                cleaned.trim().to_string()
-            })
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>()
-            .join("\n")
+        let mut result = String::new();
+        
+        for line in &self.lines {
+            // Remove ANSI escape sequences
+            let cleaned = ansi_regex.replace_all(line, "").to_string();
+            
+            // Skip empty lines and pure UI lines
+            let trimmed = cleaned.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            
+            // Skip lines that are just box drawing
+            if trimmed.chars().all(|c| "╭─╮│╰╯┴┬├┤┼━┃┏┓┗┛┣┫┳┻╋┠┨┯┷┿╂┝┥┰┸║═╔╗╚╝".contains(c)) {
+                continue;
+            }
+            
+            // Skip Claude Code UI status lines
+            if trimmed == "? for shortcuts" ||
+               trimmed == "esc to interrupt" ||
+               trimmed.starts_with("tokens:") ||
+               trimmed.contains("Thinking...") ||
+               trimmed.contains("Processing") ||
+               trimmed.contains("Analyzing") {
+                continue;
+            }
+            
+            result.push_str(trimmed);
+            result.push('\n');
+        }
+        
+        result.trim().to_string()
     }
     
     /// Get recent content (last N lines)

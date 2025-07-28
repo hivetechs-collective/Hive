@@ -346,15 +346,15 @@ pub fn TerminalTabs() -> Element {
 /// Terminal instance wrapper that maintains state per terminal
 #[component]
 fn TerminalInstance(terminal_id: String, working_directory: String) -> Element {
-    // Import the VT100 Terminal component
-    use super::terminal_vt100::TerminalVt100;
+    // Import the xterm.js Terminal component
+    use super::terminal_xterm_simple::TerminalXterm;
     
     // Each terminal instance maintains its own state through the terminal_id
     rsx! {
         div {
             key: "{terminal_id}",
             style: "height: 100%; width: 100%;",
-            TerminalVt100 {
+            TerminalXterm {
                 terminal_id: terminal_id.clone(),
                 initial_directory: Some(working_directory)
             }

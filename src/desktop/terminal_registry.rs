@@ -12,7 +12,6 @@ use chrono::{DateTime, Utc};
 /// Terminal instance info for registry
 pub struct TerminalInfo {
     pub id: String,
-    pub parser: Arc<Mutex<vt100::Parser>>,
     pub writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
 }
 
@@ -23,13 +22,11 @@ pub static TERMINAL_REGISTRY: Lazy<Arc<Mutex<HashMap<String, TerminalInfo>>>> =
 /// Register a terminal instance
 pub fn register_terminal(
     id: String, 
-    parser: Arc<Mutex<vt100::Parser>>,
     writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
 ) {
     if let Ok(mut registry) = TERMINAL_REGISTRY.lock() {
         registry.insert(id.clone(), TerminalInfo { 
             id, 
-            parser, 
             writer,
         });
         tracing::info!("📝 Registered terminal in global registry");
@@ -45,29 +42,15 @@ pub fn unregister_terminal(id: &str) {
 }
 
 /// Get terminal content by ID
-pub fn get_terminal_content(id: &str) -> Option<String> {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        if let Some(info) = registry.get(id) {
-            if let Ok(parser) = info.parser.lock() {
-                return Some(crate::desktop::terminal_vt100::get_terminal_text(&*parser));
-            }
-        }
-    }
-    None
+pub async fn get_terminal_content(id: &str) -> Option<String> {
+    // For xterm.js terminals, use the xterm.js API
+    crate::desktop::terminal_xterm_simple::get_xterm_content(id).await
 }
 
 /// Get active terminal content (first terminal found)
-pub fn get_active_terminal_content() -> Option<String> {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        // For now, just get the first terminal
-        // In the future, we should track which terminal is active
-        if let Some((_, info)) = registry.iter().next() {
-            if let Ok(parser) = info.parser.lock() {
-                return Some(crate::desktop::terminal_vt100::get_terminal_text(&*parser));
-            }
-        }
-    }
-    None
+pub async fn get_active_terminal_content() -> Option<String> {
+    // For xterm.js terminals, always use claude-code terminal
+    crate::desktop::terminal_xterm_simple::get_xterm_content("claude-code").await
 }
 
 /// Extract Claude's last response from terminal content
