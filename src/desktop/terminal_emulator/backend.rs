@@ -86,7 +86,15 @@ impl TerminalBackend {
             .map_err(|e| anyhow!("Failed to create PTY: {}", e))?;
             
         // Get writer before moving pty
-        let pty_writer = pty.writer();
+        let mut pty_writer = pty.writer();
+        
+        // Send terminal reset sequences to ensure proper cursor position
+        use std::io::Write;
+        let reset_sequences = b"\x1b[H\x1b[2J\x1b[3J"; // Home cursor, clear screen, clear scrollback
+        let _ = pty_writer.write_all(reset_sequences);
+        let _ = pty_writer.flush();
+        
+        tracing::info!("Sent terminal reset sequences to fix cursor position");
 
         // Create event loop and spawn it
         let terminal_for_loop = Arc::clone(&terminal);
