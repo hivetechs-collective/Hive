@@ -34,6 +34,7 @@ pub fn TerminalVt100(
     let mut update_trigger = use_signal(|| 0u32);
     let mut is_ready = use_signal(|| false);
     let mut show_full_buffer = use_signal(|| false);
+    let mut scroll_position = use_signal(|| 0i32);
     
     // Cleanup on unmount
     let terminal_id_for_cleanup = terminal_id.clone();
