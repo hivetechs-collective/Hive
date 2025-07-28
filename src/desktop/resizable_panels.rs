@@ -25,10 +25,7 @@ pub fn ResizableDivider(
             };
             let delta = pos - *drag_start.read();
             // Apply inversion based on direction and invert_drag flag
-            let adjusted_delta = match direction {
-                ResizeDirection::Horizontal => if invert_drag { -delta } else { delta },
-                ResizeDirection::Vertical => delta,   // For terminal: dragging up increases height
-            };
+            let adjusted_delta = if invert_drag { -delta } else { delta };
             let new_size = (*size_start.read() + adjusted_delta).clamp(min_size, max_size);
             size.set(new_size);
         }
@@ -50,19 +47,30 @@ pub fn ResizableDivider(
         evt.stop_propagation();
     };
 
+    let mut is_hovering = use_signal(|| false);
+    
     let divider_style = match direction {
         ResizeDirection::Horizontal => format!(
             "position: relative; width: 8px; height: 100%; \
             cursor: col-resize; z-index: 999; \
-            background: transparent; flex-shrink: 0; \
-            &:hover {{ background: rgba(255, 193, 7, 0.2); }}"
+            background: {}; flex-shrink: 0; \
+            transition: background 0.2s ease;",
+            if *is_hovering.read() || *is_dragging.read() { 
+                "rgba(255, 193, 7, 0.2)" 
+            } else { 
+                "transparent" 
+            }
         ),
         ResizeDirection::Vertical => format!(
-            "position: absolute; left: 0; right: 0; height: 8px; \
+            "position: relative; width: 100%; height: 6px; \
             cursor: row-resize; z-index: 999; \
-            top: -4px; \
-            background: transparent; \
-            &:hover {{ background: rgba(255, 193, 7, 0.2); }}",
+            background: {}; \
+            transition: background 0.2s ease;",
+            if *is_hovering.read() || *is_dragging.read() { 
+                "rgba(255, 193, 7, 0.2)" 
+            } else { 
+                "transparent" 
+            }
         ),
     };
     
@@ -89,6 +97,12 @@ pub fn ResizableDivider(
         div {
             style: "{divider_style} {active_style}",
             onmousedown: handle_mouse_down,
+            onmouseenter: move |_| {
+                is_hovering.set(true);
+            },
+            onmouseleave: move |_| {
+                is_hovering.set(false);
+            },
             
             // Visual indicator
             div {
@@ -97,13 +111,21 @@ pub fn ResizableDivider(
                         "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); \
                         width: 2px; height: 40px; background: {}; \
                         border-radius: 1px; pointer-events: none;",
-                        if *is_dragging.read() { "rgba(255, 193, 7, 0.8)" } else { "rgba(255, 255, 255, 0.2)" }
+                        if *is_dragging.read() || *is_hovering.read() { 
+                            "rgba(255, 193, 7, 0.8)" 
+                        } else { 
+                            "rgba(255, 255, 255, 0.3)" 
+                        }
                     ),
                     ResizeDirection::Vertical => format!(
                         "position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); \
                         width: 40px; height: 2px; background: {}; \
                         border-radius: 1px; pointer-events: none;",
-                        if *is_dragging.read() { "rgba(255, 193, 7, 0.8)" } else { "rgba(255, 255, 255, 0.2)" }
+                        if *is_dragging.read() || *is_hovering.read() { 
+                            "rgba(255, 193, 7, 0.8)" 
+                        } else { 
+                            "rgba(255, 255, 255, 0.3)" 
+                        }
                     ),
                 }
             }

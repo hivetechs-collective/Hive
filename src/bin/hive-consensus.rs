@@ -2115,7 +2115,7 @@ fn App() -> Element {
     };
 
     rsx! {
-        // Inject VS Code-style CSS and dialog styles
+        // Inject comprehensive styles including all component styles
         style { "{DESKTOP_STYLES}" }
         style { "{DIALOG_STYLES}" }
         style { "{EDITOR_STYLES}" }
@@ -2463,7 +2463,7 @@ fn App() -> Element {
                 // Code editor area (center) - now split between editor and terminal
                 div {
                     class: "editor-container",
-                    style: "background: #0E1414; position: relative; display: flex; flex-direction: column;",
+                    style: "background: #0E1414; position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden; flex: 1;",
 
                     // Enhanced editor tabs with overflow scrolling
                     div {
@@ -2609,13 +2609,14 @@ fn App() -> Element {
                         }
                     }
 
-                    // Editor and terminal split view
-                    // Editor content (top section)
+                    // Editor and terminal split view container
                     div {
-                        class: "editor-content",
-                        style: format!("flex: 1; overflow: hidden; min-height: 0; display: {}; background: #1e1e1e;", 
-                            if *show_terminal.read() { "block" } else { "block" }
-                        ),
+                        style: "flex: 1; display: flex; flex-direction: column; overflow: hidden;",
+                        
+                        // Editor content (top section - grows to fill available space)
+                        div {
+                            class: "editor-content",
+                            style: "flex: 1; overflow: auto; min-height: 0; display: flex; flex-direction: column; background: #1e1e1e;",
                         if *active_tab.read() == "__analytics__" {
                             // Show analytics view
                             AnalyticsView { analytics_data: analytics_data.clone() }
@@ -2681,27 +2682,28 @@ fn App() -> Element {
                                 "Select a file from the explorer to view its contents"
                             }
                         }
-                    }
-                    
-                    // Terminal section (bottom)
-                    if *show_terminal.read() {
-                        // Terminal at bottom with resize handle
-                        div {
-                            style: format!("position: relative; height: {}px; border-top: 1px solid #3e3e42; display: flex; flex-direction: column; background: #1e1e1e;", 
-                                terminal_height.read()
-                            ),
-                            
-                            // Resize divider above terminal
+                        }
+                        
+                        // Terminal section (bottom - fixed height at bottom)
+                        if *show_terminal.read() {
+                            // Resize divider for terminal
                             ResizableDivider {
                                 direction: ResizeDirection::Vertical,
                                 size: terminal_height,
                                 min_size: 100.0,
                                 max_size: 600.0,
-                                invert_drag: false,  // Not used for vertical, but provided for consistency
+                                invert_drag: true,  // Dragging up increases terminal height
                             }
                             
-                            // TerminalTabs handles both the tab bar and terminal content
-                            TerminalTabs {}
+                            // Terminal container - fixed at bottom
+                            div {
+                                style: format!("height: {}px; border-top: 1px solid #3e3e42; display: flex; flex-direction: column; background: #1e1e1e; flex-shrink: 0;", 
+                                    terminal_height.read()
+                                ),
+                                
+                                // TerminalTabs handles both the tab bar and terminal content
+                                TerminalTabs {}
+                            }
                         }
                     }
                 }
