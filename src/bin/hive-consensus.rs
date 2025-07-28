@@ -1735,12 +1735,31 @@ fn App() -> Element {
                             
                             // Initialize git repository detection
                             let folder_path = folder.path().to_path_buf();
-                            let git_state_clone = git_state.clone();
+                            let mut git_state_clone = git_state.clone();
                             spawn(async move {
                                 // Git repository detection
                                 let repos = GitRepository::discover_repositories(&folder_path);
                                 if !repos.is_empty() {
                                     tracing::info!("🗃️ Found {} git repositories", repos.len());
+                                    
+                                    // Update git state with simplified approach
+                                    if let Some(first_repo) = repos.first() {
+                                        // Just update the branch name for now
+                                        if let Ok(git_repo) = GitRepository::open(&first_repo.path) {
+                                            if let Ok(branch_name) = git_repo.current_branch() {
+                                                let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                    name: branch_name,
+                                                    branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                    is_current: true,
+                                                    upstream: None,
+                                                    ahead: 0,
+                                                    behind: 0,
+                                                    last_commit: None,
+                                                };
+                                                *git_state_clone.branch_info.write() = Some(branch_info);
+                                            }
+                                        }
+                                    }
                                 }
                             });
                             
@@ -2036,12 +2055,31 @@ fn App() -> Element {
                                 
                                 // Initialize git repository detection
                                 let folder_path = folder.path().to_path_buf();
-                                let git_state_clone = git_state.clone();
+                                let mut git_state_clone = git_state.clone();
                                 spawn(async move {
                                     // Git repository detection
                                     let repos = GitRepository::discover_repositories(&folder_path);
                                     if !repos.is_empty() {
                                         tracing::info!("🗃️ Found {} git repositories", repos.len());
+                                        
+                                        // Update git state with simplified approach
+                                        if let Some(first_repo) = repos.first() {
+                                            // Just update the branch name for now
+                                            if let Ok(git_repo) = GitRepository::open(&first_repo.path) {
+                                                if let Ok(branch_name) = git_repo.current_branch() {
+                                                    let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                        name: branch_name,
+                                                        branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                        is_current: true,
+                                                        upstream: None,
+                                                        ahead: 0,
+                                                        behind: 0,
+                                                        last_commit: None,
+                                                    };
+                                                    *git_state_clone.branch_info.write() = Some(branch_info);
+                                                }
+                                            }
+                                        }
                                     }
                                 });
                                 
