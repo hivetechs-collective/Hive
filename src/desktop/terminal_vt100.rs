@@ -156,9 +156,9 @@ pub fn TerminalVt100(
                     // Track input for command detection
                     crate::desktop::terminal_registry::update_terminal_input(&terminal_id_for_input, &input_str);
                     
-                    // Check if this is the !hive command
+                    // Check if this is the .hive command
                     if evt.key() == Key::Enter && crate::desktop::terminal_registry::is_hive_command(&terminal_id_for_input) {
-                        tracing::info!("🔄 Processing !hive command");
+                        tracing::info!("🔄 Processing .hive command");
                         
                         // Get the last Claude response with context
                         if let Some((user_input, claude_response, timestamp)) = 
@@ -197,7 +197,7 @@ pub fn TerminalVt100(
                             }
                         }
                         
-                        // Don't send the !hive command itself to the terminal
+                        // Don't send the .hive command itself to the terminal
                         return;
                     }
                     

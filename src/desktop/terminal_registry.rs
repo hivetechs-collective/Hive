@@ -172,9 +172,9 @@ pub fn update_terminal_input(id: &str, input: &str) {
                     // User pressed Enter - process the completed input
                     let cleaned_input = context.input_buffer.trim().to_string();
                     
-                    // Check for hive command (using exclamation mark to avoid Claude Code's # prefix)
-                    if cleaned_input == "!hive" || cleaned_input == "!h" {
-                        tracing::info!("🔄 Detected !hive command in buffer: '{}'", cleaned_input);
+                    // Check for hive command using dot notation (like hidden files)
+                    if cleaned_input == ".hive" || cleaned_input == ".h" {
+                        tracing::info!("🔄 Detected .hive command in buffer: '{}'", cleaned_input);
                         // This will be handled by the terminal component
                     } else if !cleaned_input.is_empty() {
                         // Regular input - store as last user input
@@ -231,13 +231,13 @@ pub fn get_last_claude_response_with_context(id: &str) -> Option<(String, String
     None
 }
 
-/// Check if the current input is a !hive command
+/// Check if the current input is a .hive command
 pub fn is_hive_command(id: &str) -> bool {
     if let Ok(registry) = TERMINAL_REGISTRY.lock() {
         if let Some(info) = registry.get(id) {
             if let Ok(context) = info.context.lock() {
                 let input = context.input_buffer.trim();
-                return input == "!hive" || input == "!h";
+                return input == ".hive" || input == ".h";
             }
         }
     }
