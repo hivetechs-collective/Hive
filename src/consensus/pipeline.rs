@@ -533,74 +533,13 @@ impl ConsensusPipeline {
         let mut previous_answer: Option<String> = None;
         let mut stage_results = Vec::new();
 
-        // Enhanced AI Helper decision-making for intelligent mode selection
-        if let (Some(mode_detector), Some(direct_handler)) = (&self.mode_detector, &self.direct_handler) {
+        // Always use 4-stage consensus pipeline - Direct Mode has been removed
+        tracing::info!("🏛️ Using 4-stage consensus pipeline for comprehensive analysis");
+        
+        // Log mode detection for debugging but don't act on it
+        if let Some(mode_detector) = &self.mode_detector {
             let detected_mode = mode_detector.detect_mode(question).await;
-            
-            match detected_mode {
-                ExecutionMode::Direct => {
-                    // Use direct execution path for simple operations
-                    tracing::info!("🚀 AI Helper chose DIRECT execution mode for efficiency");
-                    
-                    // Execute directly with the generator stage and capture the response
-                    let response_content = direct_handler.handle_request(
-                        question,
-                        context.as_deref(),
-                        self.callbacks.clone(),
-                    ).await?;
-                    
-                    // Create a proper result for direct mode with the actual response
-                    let final_result = ConsensusResult {
-                        success: true,
-                        result: Some(response_content.clone()),
-                        error: None,
-                        stages: vec![StageResult {
-                            stage_id: "generator".to_string(),
-                            stage_name: "Direct Mode".to_string(),
-                            question: question.to_string(),
-                            answer: response_content,
-                            model: self.profile.generator_model.clone(),
-                            conversation_id: conversation_id.clone(),
-                            timestamp: Utc::now(),
-                            usage: None,
-                            analytics: Some(StageAnalytics {
-                                duration: pipeline_start.elapsed().as_secs_f64(),
-                                cost: 0.0,
-                                input_cost: 0.0,
-                                output_cost: 0.0,
-                                provider: "direct".to_string(),
-                                model_internal_id: self.profile.generator_model.clone(),
-                                quality_score: 0.95,
-                                error_count: 0,
-                                fallback_used: false,
-                                rate_limit_hit: false,
-                                retry_count: 0,
-                                start_time: Utc::now() - chrono::Duration::milliseconds(pipeline_start.elapsed().as_millis() as i64),
-                                end_time: Utc::now(),
-                                memory_usage: None,
-                                features: AnalyticsFeatures {
-                                    streaming: true,
-                                    routing_variant: "direct".to_string(),
-                                    optimization_applied: Some(true),
-                                },
-                            }),
-                        }],
-                        conversation_id: conversation_id.clone(),
-                        total_duration: pipeline_start.elapsed().as_secs_f64(),
-                        total_cost,
-                    };
-                    
-                    return Ok(final_result);
-                }
-                ExecutionMode::HybridConsensus => {
-                    tracing::info!("🔄 AI Helper chose HYBRID consensus mode (consensus with inline operations)");
-                    // Continue with normal consensus but with inline operation support
-                }
-                ExecutionMode::Consensus => {
-                    tracing::info!("🧠 AI Helper chose FULL consensus mode (4-stage collaborative analysis)");
-                    // Continue with normal consensus
-                }
-            }
+            tracing::debug!("Mode detector suggested {:?}, but always using 4-stage consensus", detected_mode);
         }
 
         // Run through all 4 stages
