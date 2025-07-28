@@ -119,17 +119,41 @@ pub fn TerminalXterm(
                     is_initialized.set(true);
                     tracing::info!("🚀 Terminal ready immediately - accepting input");
                     
-                    // For Claude Code terminal, show usage instructions
+                    // For Claude Code terminal, show usage instructions after shell loads
                     if is_claude_code {
-                        let help_msg = "\x1b[1;36m🤖 Claude Code Terminal\x1b[0m\n\
-                                       Type: \x1b[1;32mclaude \"your prompt\"\x1b[0m to ask Claude\n\
-                                       Example: \x1b[0;90mclaude \"explain this code\"\x1b[0m\n\n";
-                        if let Some(writer_ref) = terminal_writer.read().as_ref() {
-                            if let Ok(mut w) = writer_ref.lock() {
-                                let _ = w.write_all(help_msg.as_bytes());
-                                let _ = w.flush();
+                        let writer_for_help = terminal_writer.read().clone();
+                        spawn(async move {
+                            // Wait for shell to be ready
+                            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+                            
+                            // Send a clear command first to avoid interference
+                            if let Some(writer_ref) = writer_for_help.as_ref() {
+                                if let Ok(mut w) = writer_ref.lock() {
+                                    let _ = w.write_all(b"clear\r");
+                                    let _ = w.flush();
+                                }
                             }
-                        }
+                            
+                            // Wait a bit more for clear to process
+                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                            
+                            // Send help using printf for proper ANSI handling
+                            if let Some(writer_ref) = writer_for_help.as_ref() {
+                                if let Ok(mut w) = writer_ref.lock() {
+                                    // Use printf to properly handle ANSI escape sequences
+                                    let help_commands = vec![
+                                        "printf '\\033[38;2;137;180;250m🤖 Claude Code Terminal\\033[0m\\n'\r",
+                                        "printf '\\033[38;2;166;227;161mType:\\033[0m claude \"your prompt\" to ask Claude\\n'\r",
+                                        "printf '\\033[38;2;186;187;241mExample:\\033[0m claude \"explain this code\"\\n'\r",
+                                    ];
+                                    
+                                    for cmd in help_commands {
+                                        let _ = w.write_all(cmd.as_bytes());
+                                    }
+                                    let _ = w.flush();
+                                }
+                            }
+                        });
                     }
                     
                     // Focus this specific terminal after initialization
