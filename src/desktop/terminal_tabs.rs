@@ -280,16 +280,6 @@ pub fn TerminalTabs() -> Element {
                 div {
                     style: "margin-left: auto; display: flex; gap: 4px; align-items: center;",
                     
-                    // Split terminal button
-                    button {
-                        style: "{new_terminal_btn_style}",
-                        title: "Split Terminal",
-                        onclick: move |_| {
-                            // Split terminal functionality
-                            tracing::info!("Split terminal clicked");
-                        },
-                        "⊞"
-                    }
 
                     // Kill terminal button  
                     button {
@@ -356,7 +346,7 @@ pub fn TerminalTabs() -> Element {
 /// Terminal instance wrapper that maintains state per terminal
 #[component]
 fn TerminalInstance(terminal_id: String, working_directory: String) -> Element {
-    // Import the new VT100 Terminal component for full terminal emulation
+    // Import the VT100 Terminal component
     use super::terminal_vt100::TerminalVt100;
     
     // Each terminal instance maintains its own state through the terminal_id

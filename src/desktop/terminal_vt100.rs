@@ -420,12 +420,15 @@ fn keyboard_to_bytes(event: &Event<KeyboardData>) -> Option<Vec<u8>> {
     }
 }
 
-/// Get plain text content from terminal
+/// Get plain text content from terminal including as much history as possible
 pub fn get_terminal_text(parser: &vt100::Parser) -> String {
+    // VT100 parser only gives us access to the visible screen buffer
+    // For full scrollback, we'd need to implement our own buffer
     let screen = parser.screen();
     let (rows, cols) = screen.size();
     let mut text = String::new();
     
+    // Get the visible screen content
     for row in 0..rows {
         let mut line = String::new();
         for col in 0..cols {

@@ -86,15 +86,7 @@ impl TerminalBackend {
             .map_err(|e| anyhow!("Failed to create PTY: {}", e))?;
             
         // Get writer before moving pty
-        let mut pty_writer = pty.writer();
-        
-        // Send terminal reset sequences to ensure proper cursor position
-        use std::io::Write;
-        let reset_sequences = b"\x1b[H\x1b[2J\x1b[3J"; // Home cursor, clear screen, clear scrollback
-        let _ = pty_writer.write_all(reset_sequences);
-        let _ = pty_writer.flush();
-        
-        tracing::info!("Sent terminal reset sequences to fix cursor position");
+        let pty_writer = pty.take_writer();
 
         // Create event loop and spawn it
         let terminal_for_loop = Arc::clone(&terminal);
@@ -106,7 +98,9 @@ impl TerminalBackend {
                 false, // hold
                 false, // disable_kitty_keyboard_protocol
             );
-            let _ = event_loop.run();
+            if let Err(e) = event_loop.run() {
+                tracing::error!("Event loop error: {:?}", e);
+            }
         });
 
         Ok((
@@ -150,8 +144,9 @@ impl TerminalBackend {
     /// Get terminal dimensions
     pub fn dimensions(&self) -> (u16, u16) {
         let terminal = self.terminal.lock();
-        let dims = terminal.grid().dimensions();
-        (dims.columns as u16, dims.lines as u16)
+        let cols = terminal.grid().columns();
+        let lines = terminal.grid().screen_lines();
+        (cols as u16, lines as u16)
     }
 
     /// Check if terminal is in alternate screen mode (e.g., vim)

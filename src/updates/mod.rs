@@ -31,27 +31,29 @@ pub struct UpdateInfo {
     pub is_critical: bool,
 }
 
-/// Release metadata structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReleaseInfo {
-    pub version: String,
-    pub release_date: String,
-    pub changelog_url: String,
-    pub downloads: PlatformDownloads,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlatformDownloads {
-    pub macos_arm64: String,
-    pub macos_intel: String,
-    pub windows_x64: String,
-    pub linux_x64: String,
-}
-
+/// Release metadata structure - matches actual server response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReleasesMetadata {
-    pub stable: ReleaseInfo,
-    pub beta: ReleaseInfo,
+    pub latest_version: String,
+    pub last_updated: String,
+    pub channels: Channels,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checksums: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub release_notes_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Channels {
+    pub stable: ChannelInfo,
+    pub beta: ChannelInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelInfo {
+    pub version: String,
+    pub release_date: String,
+    pub platforms: serde_json::Value, // Dynamic platform structure
 }
 
 /// Auto-update checker
@@ -81,23 +83,26 @@ impl UpdateChecker {
         let releases = self.fetch_releases_metadata().await?;
 
         // Get target release based on channel
-        let target_release = match self.channel {
-            UpdateChannel::Stable => &releases.stable,
-            UpdateChannel::Beta => &releases.beta,
+        let target_channel = match self.channel {
+            UpdateChannel::Stable => &releases.channels.stable,
+            UpdateChannel::Beta => &releases.channels.beta,
         };
 
         // Compare versions
-        if self.is_newer_version(&target_release.version)? {
-            let download_url = self.get_platform_download_url(target_release)?;
+        if self.is_newer_version(&target_channel.version)? {
+            let download_url = self.get_platform_download_url_from_json(&target_channel.platforms)?;
+            let changelog_url = releases.release_notes_url.unwrap_or_else(|| {
+                format!("https://github.com/hivetechs/hive/releases/tag/v{}", target_channel.version)
+            });
 
             Ok(Some(UpdateInfo {
-                version: target_release.version.clone(),
+                version: target_channel.version.clone(),
                 release_date: chrono::DateTime::parse_from_rfc3339(&format!(
                     "{}T00:00:00Z",
-                    target_release.release_date
+                    target_channel.release_date
                 ))?
                 .with_timezone(&Utc),
-                changelog_url: target_release.changelog_url.clone(),
+                changelog_url,
                 download_url,
                 is_critical: false, // TODO: Add critical flag to metadata
             }))
@@ -128,28 +133,22 @@ impl UpdateChecker {
                     );
                     // Return fake metadata indicating current version is latest
                     return Ok(ReleasesMetadata {
-                        stable: ReleaseInfo {
-                            version: self.current_version.clone(),
-                            release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-                            changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
-                            downloads: PlatformDownloads {
-                                macos_arm64: "".to_string(),
-                                macos_intel: "".to_string(),
-                                windows_x64: "".to_string(),
-                                linux_x64: "".to_string(),
+                        latest_version: self.current_version.clone(),
+                        last_updated: chrono::Utc::now().to_rfc3339(),
+                        channels: Channels {
+                            stable: ChannelInfo {
+                                version: self.current_version.clone(),
+                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                platforms: serde_json::json!({}),
+                            },
+                            beta: ChannelInfo {
+                                version: self.current_version.clone(),
+                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                platforms: serde_json::json!({}),
                             },
                         },
-                        beta: ReleaseInfo {
-                            version: self.current_version.clone(),
-                            release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-                            changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
-                            downloads: PlatformDownloads {
-                                macos_arm64: "".to_string(),
-                                macos_intel: "".to_string(),
-                                windows_x64: "".to_string(),
-                                linux_x64: "".to_string(),
-                            },
-                        },
+                        checksums: None,
+                        release_notes_url: Some("https://github.com/hivetechs/hive/releases".to_string()),
                     });
                 }
 
@@ -161,28 +160,22 @@ impl UpdateChecker {
                         tracing::warn!("Failed to parse releases metadata (server may be unavailable): {}", e);
                         // Return fake metadata indicating current version is latest
                         Ok(ReleasesMetadata {
-                            stable: ReleaseInfo {
-                                version: self.current_version.clone(),
-                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-                                changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
-                                downloads: PlatformDownloads {
-                                    macos_arm64: "".to_string(),
-                                    macos_intel: "".to_string(),
-                                    windows_x64: "".to_string(),
-                                    linux_x64: "".to_string(),
+                            latest_version: self.current_version.clone(),
+                            last_updated: chrono::Utc::now().to_rfc3339(),
+                            channels: Channels {
+                                stable: ChannelInfo {
+                                    version: self.current_version.clone(),
+                                    release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                    platforms: serde_json::json!({}),
+                                },
+                                beta: ChannelInfo {
+                                    version: self.current_version.clone(),
+                                    release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                    platforms: serde_json::json!({}),
                                 },
                             },
-                            beta: ReleaseInfo {
-                                version: self.current_version.clone(),
-                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-                                changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
-                                downloads: PlatformDownloads {
-                                    macos_arm64: "".to_string(),
-                                    macos_intel: "".to_string(),
-                                    windows_x64: "".to_string(),
-                                    linux_x64: "".to_string(),
-                                },
-                            },
+                            checksums: None,
+                            release_notes_url: Some("https://github.com/hivetechs/hive/releases".to_string()),
                         })
                     }
                 }
@@ -196,28 +189,22 @@ impl UpdateChecker {
                     );
                     // Return fake metadata indicating current version is latest
                     Ok(ReleasesMetadata {
-                        stable: ReleaseInfo {
-                            version: self.current_version.clone(), // Same as current = no update
-                            release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-                            changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
-                            downloads: PlatformDownloads {
-                                macos_arm64: "".to_string(),
-                                macos_intel: "".to_string(),
-                                windows_x64: "".to_string(),
-                                linux_x64: "".to_string(),
+                        latest_version: self.current_version.clone(),
+                        last_updated: chrono::Utc::now().to_rfc3339(),
+                        channels: Channels {
+                            stable: ChannelInfo {
+                                version: self.current_version.clone(),
+                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                platforms: serde_json::json!({}),
+                            },
+                            beta: ChannelInfo {
+                                version: self.current_version.clone(),
+                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                platforms: serde_json::json!({}),
                             },
                         },
-                        beta: ReleaseInfo {
-                            version: self.current_version.clone(),
-                            release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
-                            changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
-                            downloads: PlatformDownloads {
-                                macos_arm64: "".to_string(),
-                                macos_intel: "".to_string(),
-                                windows_x64: "".to_string(),
-                                linux_x64: "".to_string(),
-                            },
-                        },
+                        checksums: None,
+                        release_notes_url: Some("https://github.com/hivetechs/hive/releases".to_string()),
                     })
                 } else {
                     Err(anyhow!("Failed to fetch releases metadata: {}", e))
@@ -226,21 +213,30 @@ impl UpdateChecker {
         }
     }
 
-    /// Get download URL for current platform
-    fn get_platform_download_url(&self, release: &ReleaseInfo) -> Result<String> {
-        let platform_url = if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-            &release.downloads.macos_arm64
-        } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
-            &release.downloads.macos_intel
-        } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
-            &release.downloads.windows_x64
-        } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            &release.downloads.linux_x64
+    /// Get download URL for current platform from JSON structure
+    fn get_platform_download_url_from_json(&self, platforms: &serde_json::Value) -> Result<String> {
+        let (os_key, arch_key, download_key) = if cfg!(target_os = "macos") {
+            let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+            ("darwin", arch, "dmg")
+        } else if cfg!(target_os = "windows") {
+            ("windows", "x64", "msi")
+        } else if cfg!(target_os = "linux") {
+            ("linux", "x64", "appimage")
         } else {
             return Err(anyhow!("Unsupported platform for auto-updates"));
         };
 
-        Ok(platform_url.clone())
+        // Navigate through the JSON structure
+        let download_path = platforms
+            .get(os_key)
+            .and_then(|os| os.get(arch_key))
+            .and_then(|arch| arch.get(download_key))
+            .and_then(|url| url.as_str());
+
+        match download_path {
+            Some(path) => Ok(format!("{}/{}", self.base_url, path)),
+            None => Err(anyhow!("Download URL not found for this platform")),
+        }
     }
 
     /// Compare version strings (semantic versioning)

@@ -46,6 +46,10 @@ pub fn TerminalEmulator(
                     let terminal = backend.terminal();
                     terminal_ref.set(Some(Arc::clone(&terminal)));
                     
+                    // Register with alacritty registry for Send to Consensus
+                    use super::alacritty_registry::register_alacritty_terminal;
+                    register_alacritty_terminal(terminal_id_for_init.clone(), Arc::clone(&terminal));
+                    
                     let backend = Arc::new(Mutex::new(backend));
                     backend_ref.set(Some(Arc::clone(&backend)));
                     
