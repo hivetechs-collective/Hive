@@ -207,17 +207,27 @@ pub fn CopyResponseButton(content: String) -> Element {
 async fn extract_terminal_response(_app_state: &Signal<AppState>) -> Option<String> {
     use crate::desktop::terminal_registry::{get_active_terminal_content, extract_claude_response};
     
+    tracing::info!("🔍 Attempting to extract terminal response...");
+    
     // Get the active terminal content
     if let Some(content) = get_active_terminal_content() {
+        tracing::info!("📜 Got terminal content: {} chars", content.len());
+        
+        // Log a preview of the content
+        if !content.is_empty() {
+            let preview = content.chars().take(200).collect::<String>();
+            tracing::info!("📜 Terminal preview: {:?}", preview);
+        }
+        
         // Extract Claude's response from the content
         if let Some(response) = extract_claude_response(&content) {
-            tracing::info!("📤 Extracted Claude response: {} chars", response.len());
+            tracing::info!("✅ Extracted Claude response: {} chars", response.len());
             return Some(response);
         } else {
-            tracing::warn!("Could not identify Claude response in terminal content");
+            tracing::warn!("⚠️ Could not identify Claude response in terminal content");
         }
     } else {
-        tracing::warn!("No active terminal found");
+        tracing::warn!("❌ No active terminal found in registry");
     }
     
     None

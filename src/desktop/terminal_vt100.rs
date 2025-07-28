@@ -9,6 +9,7 @@ use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::sync::{Arc, Mutex};
 use std::io::{Read, Write, ErrorKind};
 use crate::desktop::terminal_registry::{register_terminal, unregister_terminal};
+use crate::desktop::state::{AppState, ChatMessage, MessageType, MessageMetadata};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
@@ -108,6 +109,7 @@ pub fn TerminalVt100(
     });
     
     // Update screen HTML when triggered
+    let terminal_id_for_update = terminal_id.clone();
     use_effect(move || {
         let trigger_value = update_trigger(); // Subscribe to updates
         if let Some(terminal) = terminal_state.read().as_ref() {
@@ -117,7 +119,9 @@ pub fn TerminalVt100(
                 if !html.is_empty() {
                     tracing::debug!("🖥️ Terminal screen updated (trigger: {})", trigger_value);
                     
-                    // Terminal has new content - scrolling will be handled by CSS
+                    // Track terminal output for response detection
+                    let text_content = get_terminal_text(&*parser);
+                    crate::desktop::terminal_registry::update_terminal_response(&terminal_id_for_update, &text_content);
                 }
             }
         }
@@ -127,6 +131,9 @@ pub fn TerminalVt100(
     let handle_keydown = {
         let terminal_state = terminal_state.clone();
         let is_ready = is_ready.clone();
+        let terminal_id_for_input = terminal_id.clone();
+        let mut app_state = use_context::<Signal<AppState>>();
+        
         move |evt: Event<KeyboardData>| {
             // Log immediately to verify events are being received
             tracing::info!("🎹 Keyboard event received: key={:?}, ready={}", evt.key(), is_ready());
@@ -143,7 +150,58 @@ pub fn TerminalVt100(
             
             if let Some(terminal) = terminal_state.read().as_ref() {
                 if let Some(input) = keyboard_to_bytes(&evt) {
-                    tracing::debug!("⌨️ Sending keyboard input: {:?}", String::from_utf8_lossy(&input));
+                    let input_str = String::from_utf8_lossy(&input);
+                    tracing::debug!("⌨️ Sending keyboard input: {:?}", input_str);
+                    
+                    // Track input for command detection
+                    crate::desktop::terminal_registry::update_terminal_input(&terminal_id_for_input, &input_str);
+                    
+                    // Check if this is the #hive command
+                    if evt.key() == Key::Enter && crate::desktop::terminal_registry::is_hive_command(&terminal_id_for_input) {
+                        tracing::info!("🔄 Processing #hive command");
+                        
+                        // Get the last Claude response with context
+                        if let Some((user_input, claude_response, timestamp)) = 
+                            crate::desktop::terminal_registry::get_last_claude_response_with_context(&terminal_id_for_input) {
+                            
+                            // Send to consensus with context
+                            let context_msg = format!(
+                                "Context: Enhancing Claude's response to \"{}\"\n\n\
+                                Claude's Response:\n{}\n\n\
+                                Please enhance this response with consensus processing.",
+                                user_input, claude_response
+                            );
+                            
+                            // Add to consensus chat
+                            let msg = ChatMessage {
+                                id: uuid::Uuid::new_v4().to_string(),
+                                content: context_msg,
+                                message_type: MessageType::User,
+                                timestamp: chrono::Utc::now(),
+                                metadata: MessageMetadata::default(),
+                            };
+                            app_state.write().chat.add_message(msg);
+                            
+                            // Send visual feedback to terminal
+                            if let Ok(mut writer) = terminal.writer.lock() {
+                                let feedback = "\n\r\x1b[32m→ Sent to Consensus for enhancement\x1b[0m\n\r";
+                                let _ = writer.write_all(feedback.as_bytes());
+                                let _ = writer.flush();
+                            }
+                        } else {
+                            // No Claude response found
+                            if let Ok(mut writer) = terminal.writer.lock() {
+                                let feedback = "\n\r\x1b[33m⚠ No recent Claude response found. Ask Claude something first.\x1b[0m\n\r";
+                                let _ = writer.write_all(feedback.as_bytes());
+                                let _ = writer.flush();
+                            }
+                        }
+                        
+                        // Don't send the #hive command itself to the terminal
+                        return;
+                    }
+                    
+                    // Send regular input to terminal
                     if let Ok(mut writer) = terminal.writer.lock() {
                         match writer.write_all(&input) {
                             Ok(_) => {
