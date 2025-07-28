@@ -278,10 +278,10 @@ fn process_message(
     consensus_manager: &Option<DesktopConsensusManager>,
     show_onboarding: &mut Signal<bool>,
 ) {
-    // Check for #claude command
+    // Check for !claude command (using exclamation mark to avoid Claude Code's # prefix)
     let trimmed = text.trim();
-    if trimmed == "#claude" || trimmed == "#c" {
-        tracing::info!("🔄 Detected #claude command - preparing to send to terminal");
+    if trimmed == "!claude" || trimmed == "!c" {
+        tracing::info!("🔄 Detected !claude command - preparing to send to terminal");
         
         // Get the last consensus curator result
         let (last_curator_msg, original_query) = {
