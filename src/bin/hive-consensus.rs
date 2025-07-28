@@ -909,6 +909,7 @@ fn App() -> Element {
     
     // Initialize git state
     let git_state = use_git_state();
+    let active_git_watcher = use_signal(|| None::<GitWatcher>);
 
     // API keys state (needed before consensus manager)
     let mut openrouter_key = use_signal(String::new);
@@ -1701,6 +1702,7 @@ fn App() -> Element {
 
     let handle_menu_action = {
         let git_state = git_state.clone();
+        let active_git_watcher = active_git_watcher.clone();
         move |action: MenuAction| {
         match action {
             MenuAction::OpenFolder => {
@@ -1736,6 +1738,7 @@ fn App() -> Element {
                             // Initialize git repository detection
                             let folder_path = folder.path().to_path_buf();
                             let mut git_state_clone = git_state.clone();
+                            let mut active_git_watcher_clone = active_git_watcher.clone();
                             spawn(async move {
                                 // Git repository detection
                                 let repos = GitRepository::discover_repositories(&folder_path);
@@ -1757,6 +1760,59 @@ fn App() -> Element {
                                                     last_commit: None,
                                                 };
                                                 *git_state_clone.branch_info.write() = Some(branch_info);
+                                            }
+                                        }
+                                        
+                                        // Set up git watcher
+                                        match GitWatcher::new(&first_repo.path) {
+                                            Ok((watcher, mut event_rx)) => {
+                                                tracing::info!("✅ Git watcher started for repository");
+                                                
+                                                // Store the watcher
+                                                *active_git_watcher_clone.write() = Some(watcher);
+                                                
+                                                // Spawn task to handle git events
+                                                let mut git_state_for_events = git_state_clone.clone();
+                                                let repo_path = first_repo.path.clone();
+                                                spawn(async move {
+                                                    while let Some(event) = event_rx.recv().await {
+                                                        match event {
+                                                            GitEvent::BranchChanged => {
+                                                                tracing::info!("🔄 Branch changed detected");
+                                                                // Re-read branch info
+                                                                if let Ok(git_repo) = GitRepository::open(&repo_path) {
+                                                                    if let Ok(branch_name) = git_repo.current_branch() {
+                                                                        let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                                            name: branch_name,
+                                                                            branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                                            is_current: true,
+                                                                            upstream: None,
+                                                                            ahead: 0,
+                                                                            behind: 0,
+                                                                            last_commit: None,
+                                                                        };
+                                                                        *git_state_for_events.branch_info.write() = Some(branch_info);
+                                                                    }
+                                                                }
+                                                            }
+                                                            GitEvent::StatusChanged => {
+                                                                tracing::debug!("📝 Git status changed");
+                                                                // Future: Update file statuses
+                                                            }
+                                                            GitEvent::RemoteChanged => {
+                                                                tracing::debug!("🌐 Git remote changed");
+                                                                // Future: Update sync status
+                                                            }
+                                                            GitEvent::ConfigChanged => {
+                                                                tracing::debug!("⚙️ Git config changed");
+                                                                // Future: Re-read config
+                                                            }
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!("Failed to start git watcher: {}", e);
                                             }
                                         }
                                     }
@@ -2020,6 +2076,7 @@ fn App() -> Element {
         let file_tree = file_tree.clone();
         let expanded_dirs = expanded_dirs.clone();
         let git_state = git_state.clone();
+        let active_git_watcher = active_git_watcher.clone();
 
         move |action: WelcomeAction| {
             match action {
@@ -2056,6 +2113,7 @@ fn App() -> Element {
                                 // Initialize git repository detection
                                 let folder_path = folder.path().to_path_buf();
                                 let mut git_state_clone = git_state.clone();
+                                let mut active_git_watcher_clone = active_git_watcher.clone();
                                 spawn(async move {
                                     // Git repository detection
                                     let repos = GitRepository::discover_repositories(&folder_path);
@@ -2077,6 +2135,59 @@ fn App() -> Element {
                                                         last_commit: None,
                                                     };
                                                     *git_state_clone.branch_info.write() = Some(branch_info);
+                                                }
+                                            }
+                                            
+                                            // Set up git watcher
+                                            match GitWatcher::new(&first_repo.path) {
+                                                Ok((watcher, mut event_rx)) => {
+                                                    tracing::info!("✅ Git watcher started for repository");
+                                                    
+                                                    // Store the watcher
+                                                    *active_git_watcher_clone.write() = Some(watcher);
+                                                    
+                                                    // Spawn task to handle git events
+                                                    let mut git_state_for_events = git_state_clone.clone();
+                                                    let repo_path = first_repo.path.clone();
+                                                    spawn(async move {
+                                                        while let Some(event) = event_rx.recv().await {
+                                                            match event {
+                                                                GitEvent::BranchChanged => {
+                                                                    tracing::info!("🔄 Branch changed detected");
+                                                                    // Re-read branch info
+                                                                    if let Ok(git_repo) = GitRepository::open(&repo_path) {
+                                                                        if let Ok(branch_name) = git_repo.current_branch() {
+                                                                            let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                                                name: branch_name,
+                                                                                branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                                                is_current: true,
+                                                                                upstream: None,
+                                                                                ahead: 0,
+                                                                                behind: 0,
+                                                                                last_commit: None,
+                                                                            };
+                                                                            *git_state_for_events.branch_info.write() = Some(branch_info);
+                                                                        }
+                                                                    }
+                                                                }
+                                                                GitEvent::StatusChanged => {
+                                                                    tracing::debug!("📝 Git status changed");
+                                                                    // Future: Update file statuses
+                                                                }
+                                                                GitEvent::RemoteChanged => {
+                                                                    tracing::debug!("🌐 Git remote changed");
+                                                                    // Future: Update sync status
+                                                                }
+                                                                GitEvent::ConfigChanged => {
+                                                                    tracing::debug!("⚙️ Git config changed");
+                                                                    // Future: Re-read config
+                                                                }
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!("Failed to start git watcher: {}", e);
                                                 }
                                             }
                                         }
