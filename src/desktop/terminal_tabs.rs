@@ -463,7 +463,9 @@ fn close_terminal(
     
     // First, unregister from global terminal registry to prevent dangling references
     use crate::desktop::terminal_registry::unregister_terminal;
+    use crate::desktop::terminal_buffer::unregister_terminal_buffer;
     unregister_terminal(terminal_id);
+    unregister_terminal_buffer(terminal_id);
     tracing::info!("🗑️ Closing terminal: {}", terminal_id);
     
     let current_active = active_terminal_id.read().clone();

@@ -3072,8 +3072,8 @@ fn App() -> Element {
                                             tracing::info!("📋 Send to Consensus clicked");
                                             
                                             // Extract terminal content and paste to chat input
-                                            use hive_ai::desktop::terminal_registry::get_active_terminal_content;
-                                            if let Some(content) = get_active_terminal_content() {
+                                            use hive_ai::desktop::terminal_buffer::get_active_terminal_buffer_content;
+                                            if let Some(content) = get_active_terminal_buffer_content() {
                                                 tracing::info!("✅ Extracted content length: {}", content.len());
                                                 tracing::info!("📝 First 200 chars: {}", &content.chars().take(200).collect::<String>());
                                                 
