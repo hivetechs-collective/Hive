@@ -38,6 +38,8 @@ pub fn TerminalVt100(
     let terminal_id_for_cleanup = terminal_id.clone();
     use_drop(move || {
         unregister_terminal(&terminal_id_for_cleanup);
+        use crate::desktop::terminal_buffer::unregister_terminal_buffer;
+        unregister_terminal_buffer(&terminal_id_for_cleanup);
     });
     
     // Initialize terminal
@@ -45,7 +47,7 @@ pub fn TerminalVt100(
     use_effect(move || {
         if terminal_state.read().is_none() {
             tracing::info!("🚀 Initializing VT100 terminal for {}", terminal_id_for_init.clone());
-            match create_terminal(initial_directory.clone()) {
+            match create_terminal(terminal_id_for_init.clone(), initial_directory.clone()) {
                 Ok((terminal, mut output_rx)) => {
                     let terminal_arc = Arc::new(terminal);
                     terminal_state.set(Some(terminal_arc.clone()));
@@ -56,6 +58,10 @@ pub fn TerminalVt100(
                         terminal_arc.parser.clone(),
                         Some(terminal_arc.writer.clone())
                     );
+                    
+                    // Register terminal buffer for full output history
+                    use crate::desktop::terminal_buffer::register_terminal_buffer;
+                    register_terminal_buffer(terminal_id_for_init.clone());
                     
                     // Set terminal as ready immediately - don't wait for shell prompt
                     is_ready.set(true);
@@ -252,6 +258,7 @@ pub fn TerminalVt100(
 
 /// Create a new terminal instance
 fn create_terminal(
+    terminal_id: String,
     working_directory: Option<String>,
 ) -> Result<(Vt100Terminal, mpsc::UnboundedReceiver<()>), Box<dyn std::error::Error>> {
     let start_time = Instant::now();
@@ -315,6 +322,7 @@ fn create_terminal(
     
     // Spawn reader thread - simplified to avoid blocking issues
     let parser_for_reader = Arc::clone(&parser);
+    let terminal_id_for_buffer = terminal_id.clone();
     thread::spawn(move || {
         tracing::debug!("📖 Reader thread started");
         
@@ -329,9 +337,17 @@ fn create_terminal(
                     break;
                 }
                 Ok(n) => {
+                    let data = &buf[..n];
+                    
+                    // Store the raw output in our buffer for full history
+                    if let Ok(text) = std::str::from_utf8(data) {
+                        use crate::desktop::terminal_buffer::add_to_terminal_buffer;
+                        add_to_terminal_buffer(&terminal_id_for_buffer, text);
+                    }
+                    
                     // Process bytes through vt100 parser
                     if let Ok(mut parser) = parser_for_reader.lock() {
-                        parser.process(&buf[..n]);
+                        parser.process(data);
                         tracing::trace!("📝 Processed {} bytes from PTY", n);
                     }
                     // Notify UI to update

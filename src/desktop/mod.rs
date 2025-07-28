@@ -32,13 +32,14 @@ pub mod styles;
 pub mod terminal;
 pub mod terminal_pty;
 pub mod terminal_tabs;
-pub mod terminal_emulator; // Using alacritty-based terminal for scrollback support
+// pub mod terminal_emulator; // Disabled - API incompatibilities
 pub mod terminal_vt100;
 pub mod welcome_enhanced;
 pub mod resizable_panels;
 pub mod code_editor;
 pub mod response_coordinator;
 pub mod terminal_registry;
+pub mod terminal_buffer;
 
 // Re-export commonly used styling components
 pub use dialogs::OperationConfirmationDialog;
