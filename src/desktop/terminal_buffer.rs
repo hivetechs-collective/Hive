@@ -46,6 +46,24 @@ impl TerminalBuffer {
             .join("\n")
     }
     
+    /// Get cleaned content without escape sequences
+    pub fn get_cleaned_content(&self) -> String {
+        use regex::Regex;
+        
+        // Regex to match ANSI escape sequences
+        let ansi_regex = Regex::new(r"\x1b\[[0-9;]*[mGKHJ]|\x1b\[[0-9;]*[A-Z]|\x1b\].*?\x07|\x1b\[.*?[a-zA-Z]|\x1b\?[0-9]+[hl]|\[[\?0-9;]+[hlm]").unwrap();
+        
+        self.lines.iter()
+            .map(|line| {
+                // Remove ANSI escape sequences
+                let cleaned = ansi_regex.replace_all(line, "");
+                cleaned.trim().to_string()
+            })
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+    
     /// Get recent content (last N lines)
     pub fn get_recent_content(&self, num_lines: usize) -> String {
         let start = self.lines.len().saturating_sub(num_lines);
@@ -97,6 +115,16 @@ pub fn get_active_terminal_buffer_content() -> Option<String> {
     if let Ok(buffers) = TERMINAL_BUFFERS.lock() {
         // Get the first terminal's buffer
         buffers.values().next().map(|b| b.get_all_content())
+    } else {
+        None
+    }
+}
+
+/// Get cleaned content from the first active terminal buffer
+pub fn get_active_terminal_buffer_cleaned_content() -> Option<String> {
+    if let Ok(buffers) = TERMINAL_BUFFERS.lock() {
+        // Get the first terminal's buffer
+        buffers.values().next().map(|b| b.get_cleaned_content())
     } else {
         None
     }
