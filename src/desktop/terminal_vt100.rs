@@ -33,6 +33,7 @@ pub fn TerminalVt100(
     let mut screen_html = use_signal(|| String::from(r#"<div style="color: #666; padding: 10px;">Initializing terminal...</div>"#));
     let mut update_trigger = use_signal(|| 0u32);
     let mut is_ready = use_signal(|| false);
+    let mut show_full_buffer = use_signal(|| false);
     
     // Cleanup on unmount
     let terminal_id_for_cleanup = terminal_id.clone();
@@ -118,7 +119,20 @@ pub fn TerminalVt100(
     let terminal_id_for_update = terminal_id.clone();
     use_effect(move || {
         let trigger_value = update_trigger(); // Subscribe to updates
-        if let Some(terminal) = terminal_state.read().as_ref() {
+        let show_buffer = show_full_buffer();
+        
+        if show_buffer {
+            // Show full terminal buffer
+            use crate::desktop::terminal_buffer::get_terminal_buffer_content;
+            if let Some(buffer_content) = get_terminal_buffer_content(&terminal_id_for_update) {
+                let html = format!(
+                    r#"<div style="font-family: monospace; white-space: pre-wrap; word-wrap: break-word;">{}</div>"#,
+                    html_escape::encode_text(&buffer_content)
+                );
+                screen_html.set(html);
+            }
+        } else if let Some(terminal) = terminal_state.read().as_ref() {
+            // Show VT100 screen
             if let Ok(parser) = terminal.parser.lock() {
                 let html = render_screen(&parser);
                 screen_html.set(html.clone());
@@ -188,10 +202,13 @@ pub fn TerminalVt100(
         font-size: 14px;
         line-height: 18px;
         overflow-y: auto;
+        overflow-x: auto;
         padding: 8px;
         box-sizing: border-box;
         white-space: pre;
         cursor: text;
+        display: flex;
+        flex-direction: column;
     ";
     
     rsx! {
@@ -489,16 +506,37 @@ fn render_screen(parser: &vt100::Parser) -> String {
     let cursor_row = cursor_row as usize;
     let cursor_col = cursor_col as usize;
     
+    // Find the last row with content or the cursor row (whichever is greater)
+    let mut last_content_row = cursor_row;
+    for row in (0..screen.size().0).rev() {
+        let mut has_content = false;
+        for col in 0..screen.size().1 {
+            if let Some(cell) = screen.cell(row, col) {
+                if !cell.contents().trim().is_empty() {
+                    has_content = true;
+                    break;
+                }
+            }
+        }
+        if has_content {
+            last_content_row = last_content_row.max(row as usize);
+            break;
+        }
+    }
+    
+    // Only render rows up to the last content row or cursor position
+    let rows_to_render = (last_content_row + 1).min(screen.size().0 as usize);
+    
     // Process screen with colors and formatting
-    for row in 0..screen.size().0 {
+    for row in 0..rows_to_render {
         if row > 0 {
             html.push_str("<br>");
         }
         
         for col in 0..screen.size().1 {
-            let is_cursor = row as usize == cursor_row && col as usize == cursor_col;
+            let is_cursor = row == cursor_row && col as usize == cursor_col;
             
-            if let Some(cell) = screen.cell(row, col) {
+            if let Some(cell) = screen.cell(row as u16, col) {
                 let ch = cell.contents();
                 let character = if ch.is_empty() { " " } else { &ch };
                 
