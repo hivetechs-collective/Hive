@@ -27,7 +27,7 @@ pub fn ResizableDivider(
             // Apply inversion based on direction and invert_drag flag
             let adjusted_delta = match direction {
                 ResizeDirection::Horizontal => if invert_drag { -delta } else { delta },
-                ResizeDirection::Vertical => -delta,   // Always invert for terminal (dragging from top)
+                ResizeDirection::Vertical => delta,   // For terminal: dragging up increases height
             };
             let new_size = (*size_start.read() + adjusted_delta).clamp(min_size, max_size);
             size.set(new_size);
