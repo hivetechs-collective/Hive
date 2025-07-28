@@ -9,6 +9,7 @@ pub mod grid_renderer;
 pub mod input;
 pub mod pty_manager;
 pub mod terminal_widget;
+pub mod alacritty_registry;
 
 pub use terminal_widget::TerminalEmulator;
 
