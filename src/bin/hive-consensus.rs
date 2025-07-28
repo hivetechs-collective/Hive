@@ -3074,13 +3074,18 @@ fn App() -> Element {
                                             // Extract terminal content and paste to chat input
                                             use hive_ai::desktop::terminal_registry::get_active_terminal_content;
                                             if let Some(content) = get_active_terminal_content() {
+                                                tracing::info!("✅ Extracted content length: {}", content.len());
+                                                tracing::info!("📝 First 200 chars: {}", &content.chars().take(200).collect::<String>());
+                                                
                                                 // Extract the most recent substantial block of text
                                                 let lines: Vec<&str> = content.lines().collect();
+                                                tracing::info!("📊 Total lines in terminal: {}", lines.len());
+                                                
                                                 let mut response_lines = Vec::new();
                                                 let mut found_content = false;
                                                 
                                                 // Scan from bottom to top to find the most recent response
-                                                for line in lines.iter().rev() {
+                                                for (idx, line) in lines.iter().rev().enumerate() {
                                                     let trimmed = line.trim();
                                                     
                                                     // Skip empty lines at the bottom
@@ -3091,6 +3096,7 @@ fn App() -> Element {
                                                     // Skip shell prompts
                                                     if trimmed.ends_with('$') || trimmed.ends_with('%') || trimmed.ends_with('#') || trimmed.ends_with('>') {
                                                         if found_content {
+                                                            tracing::debug!("🛑 Found prompt at line {}, stopping extraction", lines.len() - idx);
                                                             break;
                                                         }
                                                         continue;
@@ -3098,6 +3104,9 @@ fn App() -> Element {
                                                     
                                                     // This looks like content
                                                     if !trimmed.is_empty() {
+                                                        if !found_content {
+                                                            tracing::debug!("🎯 Found content start at line {}", lines.len() - idx);
+                                                        }
                                                         found_content = true;
                                                         response_lines.push(line.to_string());
                                                     } else if found_content {
@@ -3110,11 +3119,59 @@ fn App() -> Element {
                                                 response_lines.reverse();
                                                 let response = response_lines.join("\n").trim().to_string();
                                                 
+                                                tracing::info!("📄 Extracted response length: {}", response.len());
+                                                tracing::info!("📝 Extracted response preview: {}", &response.chars().take(100).collect::<String>());
+                                                
                                                 if response.len() > 50 {
-                                                    app_state.write().chat.input_text = response;
+                                                    // Update the input_value signal directly
+                                                    tracing::info!("📌 Current input value: '{}'", input_value.read());
+                                                    *input_value.write() = response.clone();
+                                                    tracing::info!("✅ Updated input value: '{}'", input_value.read());
+                                                    
+                                                    // Also update app state
+                                                    app_state.write().chat.input_text = response.clone();
+                                                    
+                                                    // Also try direct DOM manipulation as a fallback
+                                                    let response_for_js = response.clone();
+                                                    spawn(async move {
+                                                        use dioxus::document::eval;
+                                                        let escaped_text = response_for_js
+                                                            .replace('\\', "\\\\")
+                                                            .replace('"', "\\\"")
+                                                            .replace('\n', "\\n")
+                                                            .replace('\r', "\\r");
+                                                        
+                                                        let js_code = format!(r#"
+                                                            const chatInput = document.querySelector('textarea.query-input');
+                                                            if (chatInput) {{
+                                                                chatInput.value = "{}";
+                                                                chatInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                                                chatInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                                                console.log('✅ Set chat input via DOM manipulation to query-input textarea');
+                                                                console.log('📝 Set value length:', chatInput.value.length);
+                                                                true;
+                                                            }} else {{
+                                                                console.error('❌ Could not find query-input textarea element');
+                                                                false;
+                                                            }}
+                                                        "#, escaped_text);
+                                                        
+                                                        match eval(&js_code).await {
+                                                            Ok(result) => {
+                                                                tracing::info!("🔧 DOM manipulation result: {:?}", result);
+                                                            }
+                                                            Err(e) => {
+                                                                tracing::error!("❌ DOM manipulation failed: {}", e);
+                                                            }
+                                                        }
+                                                    });
+                                                    
                                                     tracing::info!("✅ Pasted Claude's response to chat input");
                                                 } else {
-                                                    tracing::warn!("⚠️ Response too short or empty");
+                                                    tracing::warn!("⚠️ Response too short or empty: {} chars", response.len());
+                                                    if response.len() > 0 {
+                                                        tracing::warn!("📝 Short response content: '{}'", response);
+                                                    }
                                                 }
                                             } else {
                                                 tracing::warn!("❌ No active terminal found");
