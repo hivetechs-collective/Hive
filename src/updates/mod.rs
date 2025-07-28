@@ -121,18 +121,71 @@ impl UpdateChecker {
         {
             Ok(response) => {
                 if !response.status().is_success() {
-                    return Err(anyhow!(
-                        "Failed to fetch releases: HTTP {}",
+                    // If we get a 404 or other error, treat it as no updates available
+                    tracing::warn!(
+                        "Update server returned HTTP {} - treating as no updates available",
                         response.status()
-                    ));
+                    );
+                    // Return fake metadata indicating current version is latest
+                    return Ok(ReleasesMetadata {
+                        stable: ReleaseInfo {
+                            version: self.current_version.clone(),
+                            release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                            changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
+                            downloads: PlatformDownloads {
+                                macos_arm64: "".to_string(),
+                                macos_intel: "".to_string(),
+                                windows_x64: "".to_string(),
+                                linux_x64: "".to_string(),
+                            },
+                        },
+                        beta: ReleaseInfo {
+                            version: self.current_version.clone(),
+                            release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                            changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
+                            downloads: PlatformDownloads {
+                                macos_arm64: "".to_string(),
+                                macos_intel: "".to_string(),
+                                windows_x64: "".to_string(),
+                                linux_x64: "".to_string(),
+                            },
+                        },
+                    });
                 }
 
-                let releases: ReleasesMetadata = response
-                    .json()
-                    .await
-                    .map_err(|e| anyhow!("Failed to parse releases metadata: {}", e))?;
-
-                Ok(releases)
+                // Try to parse the JSON response
+                match response.json::<ReleasesMetadata>().await {
+                    Ok(releases) => Ok(releases),
+                    Err(e) => {
+                        // If JSON parsing fails, treat it as no updates available
+                        tracing::warn!("Failed to parse releases metadata (server may be unavailable): {}", e);
+                        // Return fake metadata indicating current version is latest
+                        Ok(ReleasesMetadata {
+                            stable: ReleaseInfo {
+                                version: self.current_version.clone(),
+                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
+                                downloads: PlatformDownloads {
+                                    macos_arm64: "".to_string(),
+                                    macos_intel: "".to_string(),
+                                    windows_x64: "".to_string(),
+                                    linux_x64: "".to_string(),
+                                },
+                            },
+                            beta: ReleaseInfo {
+                                version: self.current_version.clone(),
+                                release_date: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                                changelog_url: "https://github.com/hivetechs/hive/releases".to_string(),
+                                downloads: PlatformDownloads {
+                                    macos_arm64: "".to_string(),
+                                    macos_intel: "".to_string(),
+                                    windows_x64: "".to_string(),
+                                    linux_x64: "".to_string(),
+                                },
+                            },
+                        })
+                    }
+                }
             }
             Err(e) => {
                 // If it's a DNS/network error, return a fallback that indicates no updates
