@@ -118,10 +118,6 @@ pub fn TerminalVt100(
                 screen_html.set(html.clone());
                 if !html.is_empty() {
                     tracing::debug!("🖥️ Terminal screen updated (trigger: {})", trigger_value);
-                    
-                    // Track terminal output for response detection
-                    let text_content = get_terminal_text(&*parser);
-                    crate::desktop::terminal_registry::update_terminal_response(&terminal_id_for_update, &text_content);
                 }
             }
         }
@@ -153,55 +149,7 @@ pub fn TerminalVt100(
                     let input_str = String::from_utf8_lossy(&input);
                     tracing::debug!("⌨️ Sending keyboard input: {:?}", input_str);
                     
-                    // Track input for command detection
-                    crate::desktop::terminal_registry::update_terminal_input(&terminal_id_for_input, &input_str);
-                    
-                    // Check if this is the .hive command
-                    if evt.key() == Key::Enter && crate::desktop::terminal_registry::is_hive_command(&terminal_id_for_input) {
-                        tracing::info!("🔄 Processing .hive command");
-                        
-                        // Get the last Claude response with context
-                        if let Some((user_input, claude_response, timestamp)) = 
-                            crate::desktop::terminal_registry::get_last_claude_response_with_context(&terminal_id_for_input) {
-                            
-                            // Send to consensus with context
-                            let context_msg = format!(
-                                "Context: Enhancing Claude's response to \"{}\"\n\n\
-                                Claude's Response:\n{}\n\n\
-                                Please enhance this response with consensus processing.",
-                                user_input, claude_response
-                            );
-                            
-                            // Add to consensus chat
-                            let msg = ChatMessage {
-                                id: uuid::Uuid::new_v4().to_string(),
-                                content: context_msg,
-                                message_type: MessageType::User,
-                                timestamp: chrono::Utc::now(),
-                                metadata: MessageMetadata::default(),
-                            };
-                            app_state.write().chat.add_message(msg);
-                            
-                            // Send visual feedback to terminal
-                            if let Ok(mut writer) = terminal.writer.lock() {
-                                let feedback = "\n\r\x1b[32m→ Sent to Consensus for enhancement\x1b[0m\n\r";
-                                let _ = writer.write_all(feedback.as_bytes());
-                                let _ = writer.flush();
-                            }
-                        } else {
-                            // No Claude response found
-                            if let Ok(mut writer) = terminal.writer.lock() {
-                                let feedback = "\n\r\x1b[33m⚠ No recent Claude response found. Ask Claude something first.\x1b[0m\n\r";
-                                let _ = writer.write_all(feedback.as_bytes());
-                                let _ = writer.flush();
-                            }
-                        }
-                        
-                        // Don't send the .hive command itself to the terminal
-                        return;
-                    }
-                    
-                    // Send regular input to terminal
+                    // Send input to terminal
                     if let Ok(mut writer) = terminal.writer.lock() {
                         match writer.write_all(&input) {
                             Ok(_) => {

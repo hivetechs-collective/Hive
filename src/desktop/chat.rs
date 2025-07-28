@@ -35,6 +35,7 @@ pub fn ChatInterface() -> Element {
             }
         }
     });
+    
 
     rsx! {
         div {
@@ -278,86 +279,6 @@ fn process_message(
     consensus_manager: &Option<DesktopConsensusManager>,
     show_onboarding: &mut Signal<bool>,
 ) {
-    // Check for .claude command (using dot notation like hidden files)
-    let trimmed = text.trim();
-    if trimmed == ".claude" || trimmed == ".c" {
-        tracing::info!("🔄 Detected .claude command - preparing to send to terminal");
-        
-        // Get the last consensus curator result
-        let (last_curator_msg, original_query) = {
-            let state = app_state.read();
-            let curator = state.chat.messages.iter()
-                .rev()
-                .find(|msg| matches!(msg.message_type, MessageType::Assistant))
-                .cloned();
-            
-            let query = if let Some(ref curator_msg) = curator {
-                state.chat.messages.iter()
-                    .rev()
-                    .find(|msg| matches!(msg.message_type, MessageType::User) && 
-                         msg.timestamp < curator_msg.timestamp)
-                    .map(|m| m.content.clone())
-                    .unwrap_or_else(|| "Unknown query".to_string())
-            } else {
-                String::new()
-            };
-            
-            (curator, query)
-        };
-        
-        if let Some(curator_msg) = last_curator_msg {
-            // Format the consensus result for terminal
-            let formatted_content = format!(
-                "# Consensus Enhancement (via 4-stage pipeline)\n\
-                # Original Query: {}\n\
-                # Timestamp: {}\n\
-                #\n{}",
-                original_query,
-                curator_msg.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
-                curator_msg.content.lines()
-                    .map(|line| format!("# {}", line))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
-            
-            // Send to terminal
-            if crate::desktop::terminal_registry::send_to_active_terminal(&formatted_content) {
-                // Add system message showing success
-                let success_msg = ChatMessage {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    content: "✅ Sent consensus result to Claude terminal".to_string(),
-                    message_type: MessageType::System,
-                    timestamp: chrono::Utc::now(),
-                    metadata: MessageMetadata::default(),
-                };
-                app_state.write().chat.add_message(success_msg);
-            } else {
-                // Add error message
-                let error_msg = ChatMessage {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    content: "❌ Failed to send to terminal. Make sure a terminal is open.".to_string(),
-                    message_type: MessageType::Error,
-                    timestamp: chrono::Utc::now(),
-                    metadata: MessageMetadata::default(),
-                };
-                app_state.write().chat.add_message(error_msg);
-            }
-        } else {
-            // No consensus result found
-            let warning_msg = ChatMessage {
-                id: uuid::Uuid::new_v4().to_string(),
-                content: "⚠️ No consensus result found. Run consensus first before sending to Claude.".to_string(),
-                message_type: MessageType::System,
-                timestamp: chrono::Utc::now(),
-                metadata: MessageMetadata::default(),
-            };
-            app_state.write().chat.add_message(warning_msg);
-        }
-        
-        // Clear the input
-        input_text.set(String::new());
-        return;
-    }
     
     // Check if we need to show onboarding (no profiles configured)
     if consensus_manager.is_none() {

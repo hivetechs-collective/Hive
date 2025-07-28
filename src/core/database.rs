@@ -518,6 +518,75 @@ impl DatabaseManager {
 
         Ok(())
     }
+    
+    /// Get the most recent curator result from multiple possible tables
+    pub async fn get_latest_curator_result(&self) -> Result<Option<(String, chrono::DateTime<chrono::Utc>)>> {
+        let conn = self.get_connection()?;
+        
+        // Try multiple tables in order of preference
+        
+        // 1. Try curator_truths table first (most specific)
+        if let Ok(result) = conn.query_row(
+            "SELECT curator_output, created_at 
+             FROM curator_truths 
+             ORDER BY created_at DESC 
+             LIMIT 1",
+            [],
+            |row| {
+                let curator_output: String = row.get(0)?;
+                let created_at: String = row.get(1)?;
+                let timestamp = chrono::DateTime::parse_from_rfc3339(&created_at)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(|_| chrono::Utc::now());
+                Ok((curator_output, timestamp))
+            }
+        ) {
+            return Ok(Some(result));
+        }
+        
+        // 2. Try knowledge_conversations table
+        if let Ok(result) = conn.query_row(
+            "SELECT source_of_truth, created_at 
+             FROM knowledge_conversations 
+             WHERE source_of_truth IS NOT NULL AND source_of_truth != ''
+             ORDER BY created_at DESC 
+             LIMIT 1",
+            [],
+            |row| {
+                let source_of_truth: String = row.get(0)?;
+                let created_at: String = row.get(1)?;
+                let timestamp = chrono::DateTime::parse_from_rfc3339(&created_at)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(|_| chrono::Utc::now());
+                Ok((source_of_truth, timestamp))
+            }
+        ) {
+            return Ok(Some(result));
+        }
+        
+        // 3. Try messages table for curator stage
+        if let Ok(result) = conn.query_row(
+            "SELECT content, timestamp 
+             FROM messages 
+             WHERE stage = 'curator' AND role = 'assistant'
+             ORDER BY timestamp DESC 
+             LIMIT 1",
+            [],
+            |row| {
+                let content: String = row.get(0)?;
+                let timestamp_str: String = row.get(1)?;
+                let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(|_| chrono::Utc::now());
+                Ok((content, timestamp))
+            }
+        ) {
+            return Ok(Some(result));
+        }
+        
+        // No curator results found in any table
+        Ok(None)
+    }
 
     /// Gracefully close all database connections
     pub async fn close(&self) {

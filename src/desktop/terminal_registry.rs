@@ -8,32 +8,12 @@ use std::io::Write;
 use once_cell::sync::Lazy;
 use chrono::{DateTime, Utc};
 
-/// Terminal context for tracking conversation
-#[derive(Clone, Debug)]
-pub struct TerminalContext {
-    pub last_user_input: String,
-    pub last_claude_response: String,
-    pub response_timestamp: DateTime<Utc>,
-    pub input_buffer: String,  // Current line being typed
-}
-
-impl Default for TerminalContext {
-    fn default() -> Self {
-        Self {
-            last_user_input: String::new(),
-            last_claude_response: String::new(),
-            response_timestamp: Utc::now(),
-            input_buffer: String::new(),
-        }
-    }
-}
 
 /// Terminal instance info for registry
 pub struct TerminalInfo {
     pub id: String,
     pub parser: Arc<Mutex<vt100::Parser>>,
     pub writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
-    pub context: Arc<Mutex<TerminalContext>>,
 }
 
 /// Global terminal registry
@@ -51,7 +31,6 @@ pub fn register_terminal(
             id, 
             parser, 
             writer,
-            context: Arc::new(Mutex::new(TerminalContext::default())),
         });
         tracing::info!("📝 Registered terminal in global registry");
     }
@@ -162,84 +141,5 @@ pub fn send_to_active_terminal(text: &str) -> bool {
     false
 }
 
-/// Update terminal context with new input
-pub fn update_terminal_input(id: &str, input: &str) {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        if let Some(info) = registry.get(id) {
-            if let Ok(mut context) = info.context.lock() {
-                // Build up the input buffer character by character
-                if input == "\r" || input == "\n" {
-                    // User pressed Enter - process the completed input
-                    let cleaned_input = context.input_buffer.trim().to_string();
-                    
-                    // Check for hive command using dot notation (like hidden files)
-                    if cleaned_input == ".hive" || cleaned_input == ".h" {
-                        tracing::info!("🔄 Detected .hive command in buffer: '{}'", cleaned_input);
-                        // This will be handled by the terminal component
-                    } else if !cleaned_input.is_empty() {
-                        // Regular input - store as last user input
-                        context.last_user_input = cleaned_input.clone();
-                        tracing::info!("📝 Stored user input: '{}'", cleaned_input);
-                    }
-                    
-                    // Clear the buffer for next input
-                    context.input_buffer.clear();
-                } else if input == "\x7f" {
-                    // Backspace - remove last character
-                    context.input_buffer.pop();
-                } else if input.chars().all(|c| !c.is_control()) {
-                    // Regular character - add to buffer
-                    context.input_buffer.push_str(input);
-                }
-            }
-        }
-    }
-}
 
-/// Update terminal context with Claude's response
-pub fn update_terminal_response(id: &str, response: &str) {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        if let Some(info) = registry.get(id) {
-            if let Ok(mut context) = info.context.lock() {
-                // Detect Claude's response patterns
-                if response.contains("╭") || response.contains("│") || response.contains("╰") {
-                    // This looks like Claude's formatted output
-                    context.last_claude_response = response.to_string();
-                    context.response_timestamp = Utc::now();
-                    tracing::info!("📝 Captured Claude response: {} chars", response.len());
-                }
-            }
-        }
-    }
-}
 
-/// Get the last Claude response with context
-pub fn get_last_claude_response_with_context(id: &str) -> Option<(String, String, DateTime<Utc>)> {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        if let Some(info) = registry.get(id) {
-            if let Ok(context) = info.context.lock() {
-                if !context.last_claude_response.is_empty() {
-                    return Some((
-                        context.last_user_input.clone(),
-                        context.last_claude_response.clone(),
-                        context.response_timestamp,
-                    ));
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Check if the current input is a .hive command
-pub fn is_hive_command(id: &str) -> bool {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        if let Some(info) = registry.get(id) {
-            if let Ok(context) = info.context.lock() {
-                let input = context.input_buffer.trim();
-                return input == ".hive" || input == ".h";
-            }
-        }
-    }
-    false
-}

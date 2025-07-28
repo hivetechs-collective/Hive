@@ -3049,43 +3049,135 @@ fn App() -> Element {
                             }
                         }
                         
-                        // Controls below input (Claude Code style)
+                        // Controls below input - Response coordination buttons
                         div {
                             style: "margin-top: 8px; display: flex; align-items: center; justify-content: space-between; color: #858585; font-size: 12px;",
                             
-                            // Left side: Auto-accept toggle
+                            // Left side: Response coordination buttons
                             div {
-                                style: "display: flex; align-items: center; gap: 8px;",
+                                style: "display: flex; align-items: center; gap: 16px;",
                                 
-                                // Toggle indicator
-                                span {
-                                    style: "font-size: 14px; color: #FFC107;",
-                                    if app_state.read().auto_accept { "⏵⏵" } else { "⏸" }
-                                }
-                                
-                                // Toggle button
-                                button {
-                                    style: if app_state.read().auto_accept {
-                                        "background: none; border: none; color: #FFC107; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s; text-decoration: underline;"
-                                    } else {
-                                        "background: none; border: none; color: #858585; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; transition: all 0.2s;"
-                                    },
-                                    onclick: move |_| {
-                                        let current = app_state.read().auto_accept;
-                                        app_state.write().auto_accept = !current;
-                                        tracing::info!("Auto-accept toggled to: {}", !current);
-                                    },
-                                    if app_state.read().auto_accept {
-                                        "auto-accept edits on"
-                                    } else {
-                                        "auto-accept edits off"
+                                // Send to Consensus button
+                                div {
+                                    style: "display: flex; align-items: center; gap: 8px;",
+                                    
+                                    span {
+                                        style: "font-size: 14px; color: #FFC107;",
+                                        "→"
+                                    }
+                                    
+                                    button {
+                                        style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #FFC107; cursor: pointer; font-size: 12px; padding: 4px 12px; border-radius: 4px; transition: all 0.2s;",
+                                        onclick: move |_| {
+                                            tracing::info!("📋 Send to Consensus clicked");
+                                            
+                                            // Extract terminal content and paste to chat input
+                                            use hive_ai::desktop::terminal_registry::get_active_terminal_content;
+                                            if let Some(content) = get_active_terminal_content() {
+                                                // Extract the most recent substantial block of text
+                                                let lines: Vec<&str> = content.lines().collect();
+                                                let mut response_lines = Vec::new();
+                                                let mut found_content = false;
+                                                
+                                                // Scan from bottom to top to find the most recent response
+                                                for line in lines.iter().rev() {
+                                                    let trimmed = line.trim();
+                                                    
+                                                    // Skip empty lines at the bottom
+                                                    if !found_content && trimmed.is_empty() {
+                                                        continue;
+                                                    }
+                                                    
+                                                    // Skip shell prompts
+                                                    if trimmed.ends_with('$') || trimmed.ends_with('%') || trimmed.ends_with('#') || trimmed.ends_with('>') {
+                                                        if found_content {
+                                                            break;
+                                                        }
+                                                        continue;
+                                                    }
+                                                    
+                                                    // This looks like content
+                                                    if !trimmed.is_empty() {
+                                                        found_content = true;
+                                                        response_lines.push(line.to_string());
+                                                    } else if found_content {
+                                                        // Add empty lines that are part of the response
+                                                        response_lines.push(line.to_string());
+                                                    }
+                                                }
+                                                
+                                                // Reverse to get the correct order
+                                                response_lines.reverse();
+                                                let response = response_lines.join("\n").trim().to_string();
+                                                
+                                                if response.len() > 50 {
+                                                    app_state.write().chat.input_text = response;
+                                                    tracing::info!("✅ Pasted Claude's response to chat input");
+                                                } else {
+                                                    tracing::warn!("⚠️ Response too short or empty");
+                                                }
+                                            } else {
+                                                tracing::warn!("❌ No active terminal found");
+                                            }
+                                        },
+                                        "Send to Consensus"
                                     }
                                 }
                                 
-                                // Keyboard shortcut hint
-                                span {
-                                    style: "color: #505050; font-size: 11px; margin-left: 8px;",
-                                    "(shift+tab to toggle)"
+                                // Send to Claude button
+                                div {
+                                    style: "display: flex; align-items: center; gap: 8px;",
+                                    
+                                    span {
+                                        style: "font-size: 14px; color: #8B5CF6;",
+                                        "←"
+                                    }
+                                    
+                                    button {
+                                        style: "background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); color: #8B5CF6; cursor: pointer; font-size: 12px; padding: 4px 12px; border-radius: 4px; transition: all 0.2s;",
+                                        onclick: move |_| {
+                                            tracing::info!("🤖 Send to Claude clicked");
+                                            
+                                            // Get latest curator from database and send to terminal
+                                            let app_state_clone = app_state.clone();
+                                            spawn(async move {
+                                                use hive_ai::core::database::get_database;
+                                                
+                                                match get_database().await {
+                                                    Ok(db) => {
+                                                        match db.get_latest_curator_result().await {
+                                                            Ok(Some((curator_content, timestamp))) => {
+                                                                // Format the curator result for terminal
+                                                                let formatted_content = format!(
+                                                                    "# Consensus Curator Result\n# Generated: {}\n# ---\n{}\n",
+                                                                    timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+                                                                    curator_content
+                                                                );
+                                                                
+                                                                // Send to terminal
+                                                                use hive_ai::desktop::terminal_registry::send_to_active_terminal;
+                                                                if send_to_active_terminal(&formatted_content) {
+                                                                    tracing::info!("✅ Sent curator result to Claude terminal");
+                                                                } else {
+                                                                    tracing::error!("❌ Failed to send curator result to terminal");
+                                                                }
+                                                            }
+                                                            Ok(None) => {
+                                                                tracing::warn!("⚠️ No curator results found in database");
+                                                            }
+                                                            Err(e) => {
+                                                                tracing::error!("❌ Failed to fetch curator result: {}", e);
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        tracing::error!("❌ Failed to get database: {}", e);
+                                                    }
+                                                }
+                                            });
+                                        },
+                                        "Send to Claude"
+                                    }
                                 }
                             }
                             
