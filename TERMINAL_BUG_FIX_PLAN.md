@@ -247,7 +247,94 @@ pub async fn run_consensus(&mut self, question: &str, ...) -> Result<ConsensusRe
 // Update stage display to always show 4 stages
 ```
 
-## 🐛 Bug #5: Check for Updates Error
+## 🐛 Bug #5: Kill Terminal Button Crashes GUI
+
+### Problem Description
+The trash can icon (🗑) in the terminal tabs header crashes the GUI when clicked instead of properly closing the terminal tab.
+
+### Root Cause Analysis
+
+1. **Missing Registry Cleanup**: The terminal is removed from the local tabs list but not unregistered from the global terminal registry
+2. **PTY Resource Leak**: The pseudo-terminal process is not properly terminated
+3. **State Inconsistency**: Terminal components may still be trying to access the removed terminal
+
+### Investigation Steps
+
+1. **Check Terminal Registry**:
+```rust
+// The terminal is registered in TerminalVt100 component:
+register_terminal(terminal_id.clone(), terminal_arc.parser.clone(), Some(terminal_arc.writer.clone()));
+
+// But never unregistered when closing
+```
+
+2. **Check for Dangling References**:
+- Terminal writer thread may still be running
+- PTY process may still be active
+- Registry still has reference to closed terminal
+
+### Proposed Solution
+
+1. **Add Proper Terminal Cleanup**:
+```rust
+fn close_terminal(
+    terminals: &mut Signal<HashMap<String, TerminalTab>>,
+    active_terminal_id: &mut Signal<Option<String>>,
+    terminal_id: &str,
+) {
+    // First, unregister from global registry
+    use crate::desktop::terminal_registry::unregister_terminal;
+    unregister_terminal(terminal_id);
+    
+    // Log the closure
+    tracing::info!("🗑️ Closing terminal: {}", terminal_id);
+    
+    // Then proceed with existing logic
+    let current_active = active_terminal_id.read().clone();
+    terminals.write().remove(terminal_id);
+    
+    // Rest of the function...
+}
+```
+
+2. **Ensure PTY Cleanup**:
+```rust
+// In TerminalVt100 component, use drop handler
+use_drop({
+    let terminal_id = terminal_id.clone();
+    move || {
+        tracing::info!("🧹 Terminal component dropping: {}", terminal_id);
+        unregister_terminal(&terminal_id);
+        // PTY will be dropped automatically when Terminal struct is dropped
+    }
+});
+```
+
+3. **Add Error Handling**:
+```rust
+// Wrap the close operation in error handling
+onclick: move |_| {
+    if let Some(active_id) = active_terminal_id_clone.read().as_ref() {
+        let active_id = active_id.clone();
+        
+        // Don't allow closing the last terminal
+        if terminals.read().len() <= 1 {
+            tracing::warn!("⚠️ Cannot close the last terminal");
+            return;
+        }
+        
+        // Safely close terminal
+        match std::panic::catch_unwind(|| {
+            close_terminal(&mut terminals, &mut active_terminal_id_mut, &active_id);
+        }) {
+            Ok(_) => tracing::info!("✅ Terminal closed successfully"),
+            Err(e) => tracing::error!("❌ Failed to close terminal: {:?}", e),
+        }
+    }
+}
+```
+
+## 🐛 Bug #6: Check for Updates Error
 
 ### Problem Description
 Update checker fails with JSON parsing error: missing field 'stable'.
@@ -301,15 +388,18 @@ let update_info = if let Ok(response) = serde_json::from_str::<UpdateResponse>(&
 
 ## 📋 Implementation Priority
 
-1. **Immediate (High Impact)**:
+1. **Critical (App Stability)**:
+   - Fix Kill Terminal button crash (prevents GUI crash)
+
+2. **Immediate (High Impact)**:
    - Fix Send to Consensus button (core functionality)
    - Fix terminal cursor position (major UX issue)
 
-2. **Soon (Medium Impact)**:
+3. **Soon (Medium Impact)**:
    - Add terminal scrollback (user requested)
    - Remove Direct Mode (consistency)
 
-3. **Later (Low Impact)**:
+4. **Later (Low Impact)**:
    - Fix update checker (non-critical)
 
 ## 🧪 Testing Plan

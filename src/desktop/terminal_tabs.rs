@@ -302,7 +302,17 @@ pub fn TerminalTabs() -> Element {
                             move |_| {
                                 if let Some(active_id) = active_terminal_id_clone.read().as_ref() {
                                     let active_id = active_id.clone();
-                                    close_terminal(&mut terminals, &mut active_terminal_id_mut, &active_id);
+                                    
+                                    // Safely close terminal with error handling
+                                    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                        close_terminal(&mut terminals, &mut active_terminal_id_mut, &active_id);
+                                    })) {
+                                        Ok(_) => tracing::info!("✅ Terminal closed successfully"),
+                                        Err(e) => {
+                                            tracing::error!("❌ Failed to close terminal: {:?}", e);
+                                            // Don't crash the GUI - just log the error
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -455,6 +465,17 @@ fn close_terminal(
     active_terminal_id: &mut Signal<Option<String>>,
     terminal_id: &str,
 ) {
+    // Don't allow closing the last terminal
+    if terminals.read().len() <= 1 {
+        tracing::warn!("⚠️ Cannot close the last terminal - at least one must remain open");
+        return;
+    }
+    
+    // First, unregister from global terminal registry to prevent dangling references
+    use crate::desktop::terminal_registry::unregister_terminal;
+    unregister_terminal(terminal_id);
+    tracing::info!("🗑️ Closing terminal: {}", terminal_id);
+    
     let current_active = active_terminal_id.read().clone();
     terminals.write().remove(terminal_id);
     
