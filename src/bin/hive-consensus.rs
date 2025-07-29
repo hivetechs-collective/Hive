@@ -910,6 +910,14 @@ fn App() -> Element {
     // Initialize git state
     let git_state = use_git_state();
     let active_git_watcher = use_signal(|| None::<GitWatcher>);
+    
+    // Sidebar view state
+    #[derive(Clone, Copy, PartialEq)]
+    enum SidebarView {
+        FileExplorer,
+        SourceControl,
+    }
+    let mut sidebar_view = use_signal(|| SidebarView::FileExplorer);
 
     // API keys state (needed before consensus manager)
     let mut openrouter_key = use_signal(String::new);
@@ -1747,7 +1755,7 @@ fn App() -> Element {
                                     
                                     // Update git state with simplified approach
                                     if let Some(first_repo) = repos.first() {
-                                        // Just update the branch name for now
+                                        // Update branch name and file statuses
                                         if let Ok(git_repo) = GitRepository::open(&first_repo.path) {
                                             if let Ok(branch_name) = git_repo.current_branch() {
                                                 let branch_info = hive_ai::desktop::git::BranchInfo {
@@ -1760,6 +1768,37 @@ fn App() -> Element {
                                                     last_commit: None,
                                                 };
                                                 *git_state_clone.branch_info.write() = Some(branch_info);
+                                            }
+                                            
+                                            // Load initial file statuses
+                                            if let Ok(statuses) = git_repo.file_statuses() {
+                                                let mut status_map = HashMap::new();
+                                                for (path, git_status) in statuses {
+                                                    // Convert git2::Status to our FileStatus
+                                                    let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                        hive_ai::desktop::git::StatusType::Modified
+                                                    } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                        hive_ai::desktop::git::StatusType::Added
+                                                    } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                        hive_ai::desktop::git::StatusType::Deleted
+                                                    } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                        hive_ai::desktop::git::StatusType::Renamed
+                                                    } else if git_status.is_wt_new() {
+                                                        hive_ai::desktop::git::StatusType::Untracked
+                                                    } else {
+                                                        continue; // Skip other statuses
+                                                    };
+                                                    
+                                                    let file_status = hive_ai::desktop::git::FileStatus {
+                                                        path: path.clone(),
+                                                        status_type,
+                                                        is_staged: git_status.intersects(git2::Status::INDEX_NEW | git2::Status::INDEX_MODIFIED | git2::Status::INDEX_DELETED | git2::Status::INDEX_RENAMED),
+                                                    };
+                                                    
+                                                    status_map.insert(path, file_status);
+                                                }
+                                                *git_state_clone.file_statuses.write() = status_map;
+                                                tracing::info!("✅ Loaded {} file statuses", git_state_clone.file_statuses.read().len());
                                             }
                                         }
                                         
@@ -1796,8 +1835,39 @@ fn App() -> Element {
                                                                 }
                                                             }
                                                             GitEvent::StatusChanged => {
-                                                                tracing::debug!("📝 Git status changed");
-                                                                // Future: Update file statuses
+                                                                tracing::info!("📝 Git status changed detected");
+                                                                // Update file statuses
+                                                                if let Ok(git_repo) = GitRepository::open(&repo_path) {
+                                                                    if let Ok(statuses) = git_repo.file_statuses() {
+                                                                        let mut status_map = HashMap::new();
+                                                                        for (path, git_status) in statuses {
+                                                                            // Convert git2::Status to our FileStatus
+                                                                            let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                                                hive_ai::desktop::git::StatusType::Modified
+                                                                            } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                                                hive_ai::desktop::git::StatusType::Added
+                                                                            } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                                                hive_ai::desktop::git::StatusType::Deleted
+                                                                            } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                                                hive_ai::desktop::git::StatusType::Renamed
+                                                                            } else if git_status.is_wt_new() {
+                                                                                hive_ai::desktop::git::StatusType::Untracked
+                                                                            } else {
+                                                                                continue; // Skip other statuses
+                                                                            };
+                                                                            
+                                                                            let file_status = hive_ai::desktop::git::FileStatus {
+                                                                                path: path.clone(),
+                                                                                status_type,
+                                                                                is_staged: git_status.intersects(git2::Status::INDEX_NEW | git2::Status::INDEX_MODIFIED | git2::Status::INDEX_DELETED | git2::Status::INDEX_RENAMED),
+                                                                            };
+                                                                            
+                                                                            status_map.insert(path, file_status);
+                                                                        }
+                                                                        *git_state_for_events.file_statuses.write() = status_map;
+                                                                        tracing::info!("✅ Updated {} file statuses", git_state_for_events.file_statuses.read().len());
+                                                                    }
+                                                                }
                                                             }
                                                             GitEvent::RemoteChanged => {
                                                                 tracing::debug!("🌐 Git remote changed");
@@ -2122,7 +2192,7 @@ fn App() -> Element {
                                         
                                         // Update git state with simplified approach
                                         if let Some(first_repo) = repos.first() {
-                                            // Just update the branch name for now
+                                            // Update branch name and file statuses
                                             if let Ok(git_repo) = GitRepository::open(&first_repo.path) {
                                                 if let Ok(branch_name) = git_repo.current_branch() {
                                                     let branch_info = hive_ai::desktop::git::BranchInfo {
@@ -2135,6 +2205,37 @@ fn App() -> Element {
                                                         last_commit: None,
                                                     };
                                                     *git_state_clone.branch_info.write() = Some(branch_info);
+                                                }
+                                                
+                                                // Load initial file statuses
+                                                if let Ok(statuses) = git_repo.file_statuses() {
+                                                    let mut status_map = HashMap::new();
+                                                    for (path, git_status) in statuses {
+                                                        // Convert git2::Status to our FileStatus
+                                                        let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                            hive_ai::desktop::git::StatusType::Modified
+                                                        } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                            hive_ai::desktop::git::StatusType::Added
+                                                        } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                            hive_ai::desktop::git::StatusType::Deleted
+                                                        } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                            hive_ai::desktop::git::StatusType::Renamed
+                                                        } else if git_status.is_wt_new() {
+                                                            hive_ai::desktop::git::StatusType::Untracked
+                                                        } else {
+                                                            continue; // Skip other statuses
+                                                        };
+                                                        
+                                                        let file_status = hive_ai::desktop::git::FileStatus {
+                                                            path: path.clone(),
+                                                            status_type,
+                                                            is_staged: git_status.intersects(git2::Status::INDEX_NEW | git2::Status::INDEX_MODIFIED | git2::Status::INDEX_DELETED | git2::Status::INDEX_RENAMED),
+                                                        };
+                                                        
+                                                        status_map.insert(path, file_status);
+                                                    }
+                                                    *git_state_clone.file_statuses.write() = status_map;
+                                                    tracing::info!("✅ Loaded {} file statuses", git_state_clone.file_statuses.read().len());
                                                 }
                                             }
                                             
@@ -2171,8 +2272,39 @@ fn App() -> Element {
                                                                     }
                                                                 }
                                                                 GitEvent::StatusChanged => {
-                                                                    tracing::debug!("📝 Git status changed");
-                                                                    // Future: Update file statuses
+                                                                    tracing::info!("📝 Git status changed detected");
+                                                                    // Update file statuses
+                                                                    if let Ok(git_repo) = GitRepository::open(&repo_path) {
+                                                                        if let Ok(statuses) = git_repo.file_statuses() {
+                                                                            let mut status_map = HashMap::new();
+                                                                            for (path, git_status) in statuses {
+                                                                                // Convert git2::Status to our FileStatus
+                                                                                let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                                                    hive_ai::desktop::git::StatusType::Modified
+                                                                                } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                                                    hive_ai::desktop::git::StatusType::Added
+                                                                                } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                                                    hive_ai::desktop::git::StatusType::Deleted
+                                                                                } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                                                    hive_ai::desktop::git::StatusType::Renamed
+                                                                                } else if git_status.is_wt_new() {
+                                                                                    hive_ai::desktop::git::StatusType::Untracked
+                                                                                } else {
+                                                                                    continue; // Skip other statuses
+                                                                                };
+                                                                                
+                                                                                let file_status = hive_ai::desktop::git::FileStatus {
+                                                                                    path: path.clone(),
+                                                                                    status_type,
+                                                                                    is_staged: git_status.intersects(git2::Status::INDEX_NEW | git2::Status::INDEX_MODIFIED | git2::Status::INDEX_DELETED | git2::Status::INDEX_RENAMED),
+                                                                                };
+                                                                                
+                                                                                status_map.insert(path, file_status);
+                                                                            }
+                                                                            *git_state_for_events.file_statuses.write() = status_map;
+                                                                            tracing::info!("✅ Updated {} file statuses", git_state_for_events.file_statuses.read().len());
+                                                                        }
+                                                                    }
                                                                 }
                                                                 GitEvent::RemoteChanged => {
                                                                     tracing::debug!("🌐 Git remote changed");
@@ -2459,21 +2591,53 @@ fn App() -> Element {
                             "{current_dir_display}"
                         }
                     }
+                    
+                    // View toggle buttons
+                    div {
+                        style: "display: flex; padding: 0; background: #181E21; border-bottom: 1px solid #2D3336;",
+                        
+                        // File Explorer button
+                        button {
+                            style: format!("flex: 1; padding: 8px; background: {}; border: none; color: {}; font-size: 12px; cursor: pointer; transition: all 0.2s;",
+                                if *sidebar_view.read() == SidebarView::FileExplorer { "#2D3336" } else { "transparent" },
+                                if *sidebar_view.read() == SidebarView::FileExplorer { "#FFC107" } else { "#9CA3AF" }
+                            ),
+                            onclick: move |_| {
+                                *sidebar_view.write() = SidebarView::FileExplorer;
+                            },
+                            "📁 Files"
+                        }
+                        
+                        // Source Control button
+                        button {
+                            style: format!("flex: 1; padding: 8px; background: {}; border: none; color: {}; font-size: 12px; cursor: pointer; transition: all 0.2s;",
+                                if *sidebar_view.read() == SidebarView::SourceControl { "#2D3336" } else { "transparent" },
+                                if *sidebar_view.read() == SidebarView::SourceControl { "#FFC107" } else { "#9CA3AF" }
+                            ),
+                            onclick: move |_| {
+                                *sidebar_view.write() = SidebarView::SourceControl;
+                            },
+                            "🔀 Source Control"
+                        }
+                    }
 
-                    // Scrollable file tree container
+                    // Scrollable content container
                     div {
                         class: "file-tree-container",
                         style: "flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0 10px;",
                         
-                        div {
-                            class: "explorer-header",
-                            style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-top: 10px;",
-                            
-                            div {
-                                class: "sidebar-section-title",
-                                style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px; margin: 0;",
-                                "EXPLORER"
-                            }
+                        // Show different content based on active view
+                        match *sidebar_view.read() {
+                            SidebarView::FileExplorer => rsx! {
+                                div {
+                                    class: "explorer-header",
+                                    style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-top: 10px;",
+                                    
+                                    div {
+                                        class: "sidebar-section-title",
+                                        style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px; margin: 0;",
+                                        "EXPLORER"
+                                    }
                             
                             div {
                                 class: "explorer-toolbar",
@@ -2556,11 +2720,183 @@ fn App() -> Element {
                             }
                         }
 
-                        if file_tree.read().is_empty() {
-                            div {
-                                class: "sidebar-item",
-                                style: "color: #858585; font-style: italic;",
-                                "No files in directory"
+                                if file_tree.read().is_empty() {
+                                    div {
+                                        class: "sidebar-item",
+                                        style: "color: #858585; font-style: italic;",
+                                        "No files in directory"
+                                    }
+                                }
+                            },
+                            SidebarView::SourceControl => rsx! {
+                                // Source Control View
+                                div {
+                                    class: "source-control-header",
+                                    style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-top: 10px;",
+                                    
+                                    div {
+                                        class: "sidebar-section-title",
+                                        style: "background: linear-gradient(to right, #FFC107, #FFD54F); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; font-size: 12px; margin: 0;",
+                                        "SOURCE CONTROL"
+                                    }
+                                }
+                                
+                                // Git repository info
+                                if let Some(branch_info) = git_state.branch_info.read().as_ref() {
+                                    div {
+                                        style: "padding: 8px; background: #1A1F21; border-radius: 4px; margin-bottom: 12px;",
+                                        
+                                        div {
+                                            style: "display: flex; align-items: center; gap: 8px;",
+                                            
+                                            span {
+                                                style: "color: #FFC107; font-size: 14px;",
+                                                "🔀"
+                                            }
+                                            
+                                            span {
+                                                style: "color: #FFFFFF; font-weight: 600;",
+                                                "{branch_info.name}"
+                                            }
+                                            
+                                            if branch_info.ahead > 0 || branch_info.behind > 0 {
+                                                span {
+                                                    style: "color: #9CA3AF; font-size: 11px; margin-left: auto;",
+                                                    {
+                                                        if branch_info.ahead > 0 && branch_info.behind > 0 {
+                                                            format!("↑{} ↓{}", branch_info.ahead, branch_info.behind)
+                                                        } else if branch_info.ahead > 0 {
+                                                            format!("↑{}", branch_info.ahead)
+                                                        } else {
+                                                            format!("↓{}", branch_info.behind)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Changes section
+                                    div {
+                                        style: "margin-top: 16px;",
+                                        
+                                        div {
+                                            style: "color: #9CA3AF; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;",
+                                            "Changes"
+                                        }
+                                        
+                                        // Show file statuses from git_state
+                                        if git_state.file_statuses.read().is_empty() {
+                                            div {
+                                                style: "color: #858585; font-style: italic; padding: 12px; text-align: center;",
+                                                "No changes detected"
+                                            }
+                                        } else {
+                                            for (path, status) in git_state.file_statuses.read().iter() {
+                                                {
+                                                    let file_path_str = path.to_string_lossy().to_string();
+                                                    let file_path_for_click = file_path_str.clone();
+                                                    let file_path_for_click_inner = file_path_str.clone();
+                                                    let mut open_tabs = open_tabs.clone();
+                                                    let mut active_tab = active_tab.clone();
+                                                    let mut selected_file = selected_file.clone();
+                                                    let mut tab_contents = tab_contents.clone();
+                                                    let mut file_content = file_content.clone();
+                                                    let mut current_view = current_view.clone();
+                                                    
+                                                    rsx! {
+                                                        div {
+                                                            style: "padding: 6px 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.1s ease;",
+                                                            class: "git-status-item",
+                                                            onclick: move |_| {
+                                                                // Open the file when clicked
+                                                                let file_path_to_open = file_path_for_click_inner.clone();
+                                                                spawn(async move {
+                                                                    if let Ok(content) = tokio::fs::read_to_string(&file_path_to_open).await {
+                                                                        // Add to open tabs if not already open
+                                                                        if !open_tabs.read().contains(&file_path_to_open) {
+                                                                            open_tabs.write().push(file_path_to_open.clone());
+                                                                        }
+                                                                        
+                                                                        // Update tab contents
+                                                                        tab_contents.write().insert(file_path_to_open.clone(), content.clone());
+                                                                        
+                                                                        // Switch to this tab
+                                                                        *active_tab.write() = file_path_to_open.clone();
+                                                                        *selected_file.write() = Some(file_path_to_open.clone());
+                                                                        *file_content.write() = content;
+                                                                        *current_view.write() = "code".to_string();
+                                                                    }
+                                                                });
+                                                            },
+                                                            
+                                                            // Status indicator
+                                                            span {
+                                                                style: format!("color: {}; font-weight: bold; width: 16px; text-align: center;",
+                                                                    match status.status_type {
+                                                                        hive_ai::desktop::git::StatusType::Modified => "#FFB800",
+                                                                        hive_ai::desktop::git::StatusType::Added => "#4CAF50",
+                                                                        hive_ai::desktop::git::StatusType::Deleted => "#F44336",
+                                                                        hive_ai::desktop::git::StatusType::Renamed => "#2196F3",
+                                                                        hive_ai::desktop::git::StatusType::Untracked => "#9CA3AF",
+                                                                        hive_ai::desktop::git::StatusType::Copied => "#2196F3",
+                                                                        hive_ai::desktop::git::StatusType::Ignored => "#6B737C",
+                                                                        hive_ai::desktop::git::StatusType::Conflicted => "#F44336",
+                                                                    }
+                                                                ),
+                                                                match status.status_type {
+                                                                    hive_ai::desktop::git::StatusType::Modified => "M",
+                                                                    hive_ai::desktop::git::StatusType::Added => "A",
+                                                                    hive_ai::desktop::git::StatusType::Deleted => "D",
+                                                                    hive_ai::desktop::git::StatusType::Renamed => "R",
+                                                                    hive_ai::desktop::git::StatusType::Untracked => "U",
+                                                                    hive_ai::desktop::git::StatusType::Copied => "C",
+                                                                    hive_ai::desktop::git::StatusType::Ignored => "!",
+                                                                    hive_ai::desktop::git::StatusType::Conflicted => "⚠",
+                                                                }
+                                                            }
+                                                            
+                                                            // File name  
+                                                            span {
+                                                                style: "color: #E0E0E0; font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                                                                title: "{file_path_str}",
+                                                                "{path.file_name().unwrap_or_default().to_string_lossy()}"
+                                                            }
+                                                            
+                                                            // Staged indicator
+                                                            if status.is_staged {
+                                                                span {
+                                                                    style: "color: #4CAF50; font-size: 10px; margin-left: auto;",
+                                                                    "●"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Commit section
+                                    div {
+                                        style: "margin-top: 16px; padding-top: 16px; border-top: 1px solid #2D3336;",
+                                        
+                                        textarea {
+                                            style: "width: 100%; min-height: 60px; background: #1A1F21; border: 1px solid #2D3336; color: #FFFFFF; padding: 8px; border-radius: 4px; resize: vertical;",
+                                            placeholder: "Commit message...",
+                                        }
+                                        
+                                        button {
+                                            style: "width: 100%; margin-top: 8px; padding: 8px; background: #FFC107; color: #000000; border: none; border-radius: 4px; font-weight: 600; cursor: pointer;",
+                                            "Commit"
+                                        }
+                                    }
+                                } else {
+                                    div {
+                                        style: "color: #858585; font-style: italic; padding: 20px; text-align: center;",
+                                        "No repository detected"
+                                    }
+                                }
                             }
                         }
                     }

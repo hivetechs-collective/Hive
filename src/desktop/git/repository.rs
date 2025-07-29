@@ -150,4 +150,23 @@ impl GitRepository {
     pub fn is_bare(&self) -> bool {
         self.repo.is_bare()
     }
+    
+    /// Get file statuses
+    pub fn file_statuses(&self) -> Result<Vec<(PathBuf, git2::Status)>> {
+        let mut opts = StatusOptions::new();
+        opts.include_untracked(true);
+        
+        let statuses = self.repo.statuses(Some(&mut opts))?;
+        let mut result = Vec::new();
+        
+        for entry in statuses.iter() {
+            if let Some(path) = entry.path() {
+                let path = self.path.join(path);
+                let status = entry.status();
+                result.push((path, status));
+            }
+        }
+        
+        Ok(result)
+    }
 }
