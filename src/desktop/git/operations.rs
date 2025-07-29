@@ -282,6 +282,7 @@ pub enum GitOperation {
     Push,
     Pull,
     Fetch,
+    Sync, // Pull then Push (VS Code style)
     DiscardChanges(PathBuf),
 }
 
