@@ -17,6 +17,9 @@ pub struct DiffViewerProps {
     /// Callback when stage/unstage is clicked
     #[props(default)]
     pub on_stage: Option<EventHandler<(usize, bool)>>, // (line_number, is_staged)
+    /// Callback when view mode changes
+    #[props(default)]
+    pub on_view_mode_change: Option<EventHandler<DiffViewMode>>,
 }
 
 /// Diff viewer component that shows file changes
@@ -44,6 +47,11 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
                         } else { 
                             "padding: 4px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer;" 
                         },
+                        onclick: move |_| {
+                            if let Some(handler) = &props.on_view_mode_change {
+                                handler.call(DiffViewMode::SideBySide);
+                            }
+                        },
                         "Side by Side"
                     }
                     
@@ -52,6 +60,11 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
                             "padding: 4px 12px; background: #094771; color: white; border: none; border-radius: 3px; cursor: pointer;" 
                         } else { 
                             "padding: 4px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer;" 
+                        },
+                        onclick: move |_| {
+                            if let Some(handler) = &props.on_view_mode_change {
+                                handler.call(DiffViewMode::Inline);
+                            }
                         },
                         "Inline"
                     }

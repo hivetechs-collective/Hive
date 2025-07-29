@@ -10,7 +10,7 @@ use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 // Git imports
-use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff};
+use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations};
 // use hive_ai::desktop::diff_viewer::DiffViewer;
 
 /// Analytics data structure for the dashboard
@@ -2781,6 +2781,83 @@ fn App() -> Element {
                                         }
                                     }
                                     
+                                    // Git operations toolbar
+                                    {
+                                        let repo_path = git_state.active_repo.read().as_ref().map(|r| r.path.clone());
+                                        let file_statuses = git_state.file_statuses.read();
+                                        let staged_count = file_statuses.values().filter(|s| s.is_staged).count();
+                                        let unstaged_count = file_statuses.values().filter(|s| !s.is_staged).count();
+                                        let current_branch = git_state.branch_info.read().as_ref().map(|b| b.name.clone());
+                                        
+                                        rsx! {
+                                            GitToolbar {
+                                                repo_path: repo_path,
+                                                staged_count: staged_count,
+                                                unstaged_count: unstaged_count,
+                                                current_branch: current_branch,
+                                                on_operation: EventHandler::new({
+                                                    let git_state = git_state.clone();
+                                                    move |operation: GitOperation| {
+                                                        let git_state = git_state.clone();
+                                                        spawn(async move {
+                                                            // Handle git operations
+                                                            if let Some(repo_info) = git_state.active_repo.read().as_ref() {
+                                                                match GitOperations::new(&repo_info.path) {
+                                                                    Ok(git_ops) => {
+                                                                        let result = match &operation {
+                                                                            GitOperation::StageAll => git_ops.stage_all(),
+                                                                            GitOperation::UnstageAll => git_ops.unstage_all(),
+                                                                            GitOperation::Commit(message) => {
+                                                                                git_ops.commit(&message).map(|_| ())
+                                                                            },
+                                                                            GitOperation::Push => {
+                                                                                if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
+                                                                                    git_ops.push(&remote, &branch)
+                                                                                } else {
+                                                                                    Err(anyhow::anyhow!("No remote or branch configured"))
+                                                                                }
+                                                                            },
+                                                                            GitOperation::Pull => {
+                                                                                if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
+                                                                                    git_ops.pull(&remote, &branch)
+                                                                                } else {
+                                                                                    Err(anyhow::anyhow!("No remote or branch configured"))
+                                                                                }
+                                                                            },
+                                                                            GitOperation::Fetch => {
+                                                                                if let Ok(remote) = git_ops.get_default_remote() {
+                                                                                    git_ops.fetch(&remote)
+                                                                                } else {
+                                                                                    Err(anyhow::anyhow!("No remote configured"))
+                                                                                }
+                                                                            },
+                                                                            GitOperation::Stage(path) => git_ops.stage_file(path),
+                                                                            GitOperation::Unstage(path) => git_ops.unstage_file(path),
+                                                                            GitOperation::DiscardChanges(path) => git_ops.discard_file_changes(path),
+                                                                        };
+                                                                        
+                                                                        match result {
+                                                                            Ok(_) => {
+                                                                                tracing::info!("Git operation successful: {:?}", operation);
+                                                                                // TODO: Refresh git state
+                                                                            },
+                                                                            Err(e) => {
+                                                                                tracing::error!("Git operation failed: {:?} - {}", operation, e);
+                                                                            }
+                                                                        }
+                                                                    },
+                                                                    Err(e) => {
+                                                                        tracing::error!("Failed to create git operations: {}", e);
+                                                                    }
+                                                                }
+                                                            }
+                                                        });
+                                                    }
+                                                })
+                                            }
+                                        }
+                                    }
+                                    
                                     // Changes section
                                     div {
                                         style: "margin-top: 16px;",
@@ -3179,6 +3256,12 @@ fn App() -> Element {
                                             view_mode: *diff_view_mode.read(),
                                             file_path: file_path.to_string(),
                                             on_stage: None,
+                                            on_view_mode_change: Some(EventHandler::new({
+                                                let mut diff_view_mode = diff_view_mode.clone();
+                                                move |mode| {
+                                                    *diff_view_mode.write() = mode;
+                                                }
+                                            })),
                                         }
                                     )
                                 }
