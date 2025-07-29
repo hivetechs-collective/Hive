@@ -41,6 +41,7 @@ pub mod response_coordinator;
 pub mod terminal_registry;
 pub mod terminal_buffer;
 pub mod git;
+pub mod diff_viewer;
 
 // Re-export commonly used styling components
 pub use dialogs::OperationConfirmationDialog;
