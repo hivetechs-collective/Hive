@@ -135,7 +135,7 @@ mcp_port = 7778
 
 ## Development Status
 
-This is a Rust reimplementation of the original TypeScript Hive AI project. Current status:
+This is a Rust reimplementation of the original TypeScript Hive AI project. Current status (Last updated: January 2025):
 
 - [x] Architecture design complete
 - [ ] Core parsing engine
