@@ -3359,9 +3359,7 @@ fn App() -> Element {
                                 ),
                                 
                                 // TerminalTabs handles both the tab bar and terminal content
-                                TerminalTabs {
-                                    workspace_dir: current_dir.read().clone()
-                                }
+                                TerminalTabs {}
                             }
                         }
                     }

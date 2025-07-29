@@ -14,6 +14,7 @@ pub mod watcher;
 pub mod diff;
 pub mod operations;
 pub mod toolbar;
+pub mod context_manager;
 
 pub use repository::{GitRepository, RepositoryInfo};
 pub use branch::{BranchInfo, BranchType};
@@ -22,6 +23,7 @@ pub use watcher::{GitWatcher, GitEvent};
 pub use diff::{DiffResult, DiffHunk, DiffLine, DiffLineType, DiffViewMode, compute_diff, get_file_diff};
 pub use operations::{GitOperations, GitOperation, GitOperationResult};
 pub use toolbar::{GitToolbar, GitToolbarProps};
+pub use context_manager::{GitContextManager, GitContextEvent, use_git_context, provide_git_context};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;

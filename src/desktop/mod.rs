@@ -34,6 +34,7 @@ pub mod terminal_pty;
 pub mod terminal_tabs;
 // pub mod terminal_emulator; // Disabled - API incompatibilities
 pub mod terminal_xterm_simple;
+pub mod terminal_cwd_tracker;
 pub mod welcome_enhanced;
 pub mod resizable_panels;
 pub mod code_editor;
