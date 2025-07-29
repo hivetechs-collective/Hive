@@ -841,3 +841,7 @@ fn TerminalLineComponent(line: TerminalLine) -> Element {
         }
     }
 }
+
+pub fn use_terminal_cwd() -> Option<String> {
+    None
+}
