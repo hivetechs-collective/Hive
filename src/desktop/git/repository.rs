@@ -169,4 +169,18 @@ impl GitRepository {
         
         Ok(result)
     }
+    
+    /// Get the content of a file at HEAD
+    pub fn get_file_at_head(&self, relative_path: &Path) -> Result<String> {
+        let head = self.repo.head()?;
+        let tree = head.peel_to_tree()?;
+        let entry = tree.get_path(relative_path)?;
+        let blob = self.repo.find_blob(entry.id())?;
+        
+        let content = std::str::from_utf8(blob.content())
+            .context("File content is not valid UTF-8")?
+            .to_string();
+        
+        Ok(content)
+    }
 }

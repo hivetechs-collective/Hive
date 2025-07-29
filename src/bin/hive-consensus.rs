@@ -10,7 +10,8 @@ use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 // Git imports
-use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent};
+use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff};
+// use hive_ai::desktop::diff_viewer::DiffViewer;
 
 /// Analytics data structure for the dashboard
 #[derive(Debug, Clone, Default)]
@@ -990,6 +991,10 @@ fn App() -> Element {
         contents.insert("__welcome__".to_string(), String::new());
         contents
     });
+    
+    // Diff viewing state
+    let mut diff_tabs = use_signal(|| HashMap::<String, hive_ai::desktop::git::DiffResult>::new());
+    let mut diff_view_mode = use_signal(|| DiffViewMode::SideBySide);
     
     // Cursor position tracking for status bar
     let mut cursor_position = use_signal(|| (1, 1)); // (line, column)
@@ -2809,23 +2814,33 @@ fn App() -> Element {
                                                             style: "padding: 6px 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.1s ease;",
                                                             class: "git-status-item",
                                                             onclick: move |_| {
-                                                                // Open the file when clicked
+                                                                // Open diff view for the file
                                                                 let file_path_to_open = file_path_for_click_inner.clone();
+                                                                let mut diff_tabs = diff_tabs.clone();
+                                                                let repo_path = current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."));
+                                                                
                                                                 spawn(async move {
-                                                                    if let Ok(content) = tokio::fs::read_to_string(&file_path_to_open).await {
-                                                                        // Add to open tabs if not already open
-                                                                        if !open_tabs.read().contains(&file_path_to_open) {
-                                                                            open_tabs.write().push(file_path_to_open.clone());
+                                                                    // Generate diff for the file
+                                                                    match get_file_diff(&repo_path, &PathBuf::from(&file_path_to_open)).await {
+                                                                        Ok(diff_result) => {
+                                                                            // Create a special tab name for diffs
+                                                                            let diff_tab_name = format!("diff:{}", file_path_to_open);
+                                                                            
+                                                                            // Store the diff result
+                                                                            diff_tabs.write().insert(diff_tab_name.clone(), diff_result);
+                                                                            
+                                                                            // Add to open tabs if not already open
+                                                                            if !open_tabs.read().contains(&diff_tab_name) {
+                                                                                open_tabs.write().push(diff_tab_name.clone());
+                                                                            }
+                                                                            
+                                                                            // Switch to this diff tab
+                                                                            *active_tab.write() = diff_tab_name;
+                                                                            *current_view.write() = "diff".to_string();
                                                                         }
-                                                                        
-                                                                        // Update tab contents
-                                                                        tab_contents.write().insert(file_path_to_open.clone(), content.clone());
-                                                                        
-                                                                        // Switch to this tab
-                                                                        *active_tab.write() = file_path_to_open.clone();
-                                                                        *selected_file.write() = Some(file_path_to_open.clone());
-                                                                        *file_content.write() = content;
-                                                                        *current_view.write() = "code".to_string();
+                                                                        Err(e) => {
+                                                                            tracing::error!("Failed to generate diff: {}", e);
+                                                                        }
                                                                     }
                                                                 });
                                                             },
@@ -3030,6 +3045,13 @@ fn App() -> Element {
                                                 "Welcome".to_string()
                                             } else if tab == "__analytics__" {
                                                 "Analytics".to_string()
+                                            } else if tab.starts_with("diff:") {
+                                                // Show file name with diff indicator
+                                                let file_path = tab.strip_prefix("diff:").unwrap_or("");
+                                                let path = PathBuf::from(file_path);
+                                                format!("📊 {}", path.file_name()
+                                                    .and_then(|n| n.to_str())
+                                                    .unwrap_or("diff"))
                                             } else {
                                                 let path = PathBuf::from(&tab);
                                                 path.file_name()
@@ -3144,6 +3166,22 @@ fn App() -> Element {
                             WelcomeTab {
                                 show_welcome: show_welcome_dialog,
                                 on_action: handle_welcome_action,
+                            }
+                        } else if active_tab.read().starts_with("diff:") {
+                            // Show diff view
+                            if let Some(diff_result) = diff_tabs.read().get(&*active_tab.read()) {
+                                {
+                                    let active_tab_name = active_tab.read().clone();
+                                    let file_path = active_tab_name.strip_prefix("diff:").unwrap_or(&active_tab_name);
+                                    hive_ai::desktop::diff_viewer::DiffViewer(
+                                        hive_ai::desktop::diff_viewer::DiffViewerProps {
+                                            diff: diff_result.clone(),
+                                            view_mode: *diff_view_mode.read(),
+                                            file_path: file_path.to_string(),
+                                            on_stage: None,
+                                        }
+                                    )
+                                }
                             }
                         } else if !active_tab.read().is_empty() && *active_tab.read() != "__welcome__" {
                             // Show file content for the active tab with VS Code-style editor
