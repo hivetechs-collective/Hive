@@ -154,14 +154,36 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
             div {
                 style: "display: flex; gap: 8px; flex-wrap: wrap;",
                 
-                // Push button
+                // Sync button (VS Code style - pull + push)
                 button {
                     style: if has_repo {
-                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                        "padding: 6px 12px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; font-weight: 500;"
                     } else {
                         "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
                     },
                     disabled: !has_repo,
+                    title: "Sync Changes (Pull then Push)",
+                    onclick: {
+                        let on_operation = props.on_operation.clone();
+                        let branch = current_branch.clone();
+                        move |_| {
+                            on_operation.call(GitOperation::Sync);
+                            *operation_status.write() = Some(format!("Syncing with origin/{}...", branch));
+                        }
+                    },
+                    "🔄 Sync"
+                }
+                
+                // Push button
+                button {
+                    style: if has_repo {
+                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+                    } else {
+                        "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                    },
+                    disabled: !has_repo,
+                    title: "Push to Remote",
+                    onmouseover: move |_| {},
                     onclick: {
                         let on_operation = props.on_operation.clone();
                         let branch = current_branch.clone();
@@ -176,11 +198,12 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                 // Pull button
                 button {
                     style: if has_repo {
-                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
                     } else {
                         "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
                     },
                     disabled: !has_repo,
+                    title: "Pull from Remote",
                     onclick: {
                         let on_operation = props.on_operation.clone();
                         let branch = current_branch.clone();
@@ -195,11 +218,12 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                 // Fetch button
                 button {
                     style: if has_repo {
-                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                        "padding: 6px 12px; background: transparent; color: #cccccc; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
                     } else {
                         "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
                     },
                     disabled: !has_repo,
+                    title: "Fetch from Remote",
                     onclick: {
                         let on_operation = props.on_operation.clone();
                         move |_| {
