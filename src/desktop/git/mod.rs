@@ -12,12 +12,16 @@ pub mod branch;
 pub mod status;
 pub mod watcher;
 pub mod diff;
+pub mod operations;
+pub mod toolbar;
 
 pub use repository::{GitRepository, RepositoryInfo};
 pub use branch::{BranchInfo, BranchType};
 pub use status::{FileStatus, StatusType, SyncStatus};
 pub use watcher::{GitWatcher, GitEvent};
 pub use diff::{DiffResult, DiffHunk, DiffLine, DiffLineType, DiffViewMode, compute_diff, get_file_diff};
+pub use operations::{GitOperations, GitOperation, GitOperationResult};
+pub use toolbar::{GitToolbar, GitToolbarProps};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
