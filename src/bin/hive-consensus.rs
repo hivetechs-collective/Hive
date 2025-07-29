@@ -2796,13 +2796,15 @@ fn App() -> Element {
                                             unstaged_count: unstaged_count,
                                             current_branch: current_branch,
                                             on_operation: EventHandler::new({
-                                                let mut git_context = git_context.clone();
+                                                let repo_path = current_dir.read().clone();
+                                                let mut git_state_for_refresh = git_state.clone();
                                                 move |operation: GitOperation| {
-                                                    let mut git_context = git_context.clone();
-                                                    spawn(async move {
-                                                        // Handle git operations
-                                                        if let Some(git_ops) = git_context.create_operations() {
-                                                            let result = match &operation {
+                                                    if let Some(repo_path) = repo_path.clone() {
+                                                        let mut git_state_clone = git_state_for_refresh.clone();
+                                                        spawn(async move {
+                                                            // Handle git operations
+                                                            if let Ok(git_ops) = GitOperations::new(&repo_path) {
+                                                                let result = match &operation {
                                                                         GitOperation::StageAll => git_ops.stage_all(),
                                                                         GitOperation::UnstageAll => git_ops.unstage_all(),
                                                                         GitOperation::Commit(message) => {
@@ -2852,15 +2854,53 @@ fn App() -> Element {
                                                             match result {
                                                                 Ok(_) => {
                                                                     tracing::info!("Git operation successful: {:?}", operation);
-                                                                    // Refresh git context
-                                                                    git_context.refresh().await;
+                                                                    // Refresh git state
+                                                                    if let Ok(repo) = GitRepository::open(&repo_path) {
+                                                                        // Update file statuses
+                                                                        match repo.file_statuses() {
+                                                                            Ok(statuses) => {
+                                                                                let mut status_map = std::collections::HashMap::new();
+                                                                                for (path, git_status) in statuses {
+                                                                                    let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                                                        hive_ai::desktop::git::StatusType::Modified
+                                                                                    } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                                                        hive_ai::desktop::git::StatusType::Added
+                                                                                    } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                                                        hive_ai::desktop::git::StatusType::Deleted
+                                                                                    } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                                                        hive_ai::desktop::git::StatusType::Renamed
+                                                                                    } else if git_status.is_wt_new() {
+                                                                                        hive_ai::desktop::git::StatusType::Untracked
+                                                                                    } else {
+                                                                                        continue;
+                                                                                    };
+                                                                                    
+                                                                                    let file_status = hive_ai::desktop::git::FileStatus {
+                                                                                        path: path.clone(),
+                                                                                        status_type,
+                                                                                        is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                    };
+                                                                                    status_map.insert(path, file_status);
+                                                                                }
+                                                                                git_state_clone.file_statuses.set(status_map);
+                                                                                tracing::info!("✅ Refreshed git file statuses after operation");
+                                                                            }
+                                                                            Err(e) => {
+                                                                                tracing::warn!("Failed to refresh git status: {}", e);
+                                                                            }
+                                                                        }
+                                                                    }
                                                                 },
                                                                 Err(e) => {
                                                                     tracing::error!("Git operation failed: {:?} - {}", operation, e);
                                                                 }
                                                             }
-                                                        }
-                                                    });
+                                                            }
+                                                        });
+                                                    }
                                                 }
                                             })
                                         }
