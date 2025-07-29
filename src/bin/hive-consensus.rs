@@ -1802,16 +1802,29 @@ fn App() -> Element {
                                 // Also update git_state directly for UI components that read from it
                                 if let Ok(repo) = GitRepository::open(&folder_path) {
                                     if let Ok(branch_name) = repo.current_branch() {
+                                        // Get ahead/behind counts
+                                        let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
+                                        let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
+                                        
                                         let branch_info = hive_ai::desktop::git::BranchInfo {
                                             name: branch_name,
                                             branch_type: hive_ai::desktop::git::BranchType::Local,
                                             is_current: true,
-                                            upstream: None,
-                                            ahead: 0,
-                                            behind: 0,
+                                            upstream: repo.upstream_branch().unwrap_or(None),
+                                            ahead,
+                                            behind,
                                             last_commit: None,
                                         };
                                         git_state_clone.branch_info.set(Some(branch_info));
+                                        
+                                        // Update sync status
+                                        let sync_status = hive_ai::desktop::git::SyncStatus {
+                                            ahead,
+                                            behind,
+                                            has_upstream,
+                                            is_syncing: false,
+                                        };
+                                        git_state_clone.sync_status.set(sync_status);
                                     }
                                     
                                     // Get file statuses
@@ -1888,12 +1901,83 @@ fn App() -> Element {
                                             *active_git_watcher_clone.write() = Some(watcher);
                                             
                                             // Spawn task to handle git events
-                                            let mut git_context_for_events = git_context_clone.clone();
+                                            let mut git_state_for_events = git_state_clone.clone();
+                                            let repo_path_for_events = repo_path.clone();
                                             spawn(async move {
                                                 while let Some(event) = event_rx.recv().await {
                                                     tracing::info!("Received git event: {:?}", event);
-                                                    // Just refresh the git context on any change
-                                                    git_context_for_events.refresh().await;
+                                                    
+                                                    // Update git state based on event type
+                                                    match event {
+                                                        GitEvent::StatusChanged => {
+                                                            // Refresh file statuses
+                                                            if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
+                                                                if let Ok(statuses) = repo.file_statuses() {
+                                                                    let mut status_map = std::collections::HashMap::new();
+                                                                    for (path, git_status) in statuses {
+                                                                        let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                                            hive_ai::desktop::git::StatusType::Modified
+                                                                        } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                                            hive_ai::desktop::git::StatusType::Added
+                                                                        } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                                            hive_ai::desktop::git::StatusType::Deleted
+                                                                        } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                                            hive_ai::desktop::git::StatusType::Renamed
+                                                                        } else if git_status.is_wt_new() {
+                                                                            hive_ai::desktop::git::StatusType::Untracked
+                                                                        } else {
+                                                                            continue;
+                                                                        };
+                                                                        
+                                                                        let file_status = hive_ai::desktop::git::FileStatus {
+                                                                            path: path.clone(),
+                                                                            status_type,
+                                                                            is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                      git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                      git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                      git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                        };
+                                                                        status_map.insert(path, file_status);
+                                                                    }
+                                                                    git_state_for_events.file_statuses.set(status_map);
+                                                                    tracing::info!("✅ Updated file statuses from git watcher");
+                                                                }
+                                                            }
+                                                        }
+                                                        GitEvent::BranchChanged | GitEvent::RemoteChanged => {
+                                                            // Update branch info and sync status
+                                                            if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
+                                                                if let Ok(branch_name) = repo.current_branch() {
+                                                                    // Get ahead/behind counts
+                                                                    let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
+                                                                    let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
+                                                                    
+                                                                    let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                                        name: branch_name,
+                                                                        branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                                        is_current: true,
+                                                                        upstream: repo.upstream_branch().unwrap_or(None),
+                                                                        ahead,
+                                                                        behind,
+                                                                        last_commit: None,
+                                                                    };
+                                                                    git_state_for_events.branch_info.set(Some(branch_info));
+                                                                    
+                                                                    // Update sync status
+                                                                    let sync_status = hive_ai::desktop::git::SyncStatus {
+                                                                        ahead,
+                                                                        behind,
+                                                                        has_upstream,
+                                                                        is_syncing: false,
+                                                                    };
+                                                                    git_state_for_events.sync_status.set(sync_status);
+                                                                    
+                                                                    tracing::info!("✅ Updated branch info and sync status: ahead={}, behind={}", ahead, behind);
+                                                                }
+                                                            }
+                                                        }
+                                                        _ => {}
+                                                    }
                                                 }
                                             });
                                         }
@@ -2224,16 +2308,29 @@ fn App() -> Element {
                                     // Also update git_state directly for UI components that read from it
                                     if let Ok(repo) = GitRepository::open(&folder_path) {
                                         if let Ok(branch_name) = repo.current_branch() {
+                                            // Get ahead/behind counts
+                                            let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
+                                            let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
+                                            
                                             let branch_info = hive_ai::desktop::git::BranchInfo {
                                                 name: branch_name,
                                                 branch_type: hive_ai::desktop::git::BranchType::Local,
                                                 is_current: true,
-                                                upstream: None,
-                                                ahead: 0,
-                                                behind: 0,
+                                                upstream: repo.upstream_branch().unwrap_or(None),
+                                                ahead,
+                                                behind,
                                                 last_commit: None,
                                             };
                                             git_state_clone.branch_info.set(Some(branch_info));
+                                            
+                                            // Update sync status
+                                            let sync_status = hive_ai::desktop::git::SyncStatus {
+                                                ahead,
+                                                behind,
+                                                has_upstream,
+                                                is_syncing: false,
+                                            };
+                                            git_state_clone.sync_status.set(sync_status);
                                         }
                                         
                                         // Get file statuses
@@ -2310,12 +2407,83 @@ fn App() -> Element {
                                                 *active_git_watcher_clone.write() = Some(watcher);
                                                 
                                                 // Spawn task to handle git events
-                                                let mut git_context_for_events = git_context_clone.clone();
+                                                let mut git_state_for_events = git_state_clone.clone();
+                                                let repo_path_for_events = repo_path.clone();
                                                 spawn(async move {
                                                     while let Some(event) = event_rx.recv().await {
                                                         tracing::info!("Received git event: {:?}", event);
-                                                        // Just refresh the git context on any change
-                                                        git_context_for_events.refresh().await;
+                                                        
+                                                        // Update git state based on event type
+                                                        match event {
+                                                            GitEvent::StatusChanged => {
+                                                                // Refresh file statuses
+                                                                if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
+                                                                    if let Ok(statuses) = repo.file_statuses() {
+                                                                        let mut status_map = std::collections::HashMap::new();
+                                                                        for (path, git_status) in statuses {
+                                                                            let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                                                hive_ai::desktop::git::StatusType::Modified
+                                                                            } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                                                hive_ai::desktop::git::StatusType::Added
+                                                                            } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                                                hive_ai::desktop::git::StatusType::Deleted
+                                                                            } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                                                hive_ai::desktop::git::StatusType::Renamed
+                                                                            } else if git_status.is_wt_new() {
+                                                                                hive_ai::desktop::git::StatusType::Untracked
+                                                                            } else {
+                                                                                continue;
+                                                                            };
+                                                                            
+                                                                            let file_status = hive_ai::desktop::git::FileStatus {
+                                                                                path: path.clone(),
+                                                                                status_type,
+                                                                                is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                          git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                          git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                            };
+                                                                            status_map.insert(path, file_status);
+                                                                        }
+                                                                        git_state_for_events.file_statuses.set(status_map);
+                                                                        tracing::info!("✅ Updated file statuses from git watcher");
+                                                                    }
+                                                                }
+                                                            }
+                                                            GitEvent::BranchChanged | GitEvent::RemoteChanged => {
+                                                                // Update branch info and sync status
+                                                                if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
+                                                                    if let Ok(branch_name) = repo.current_branch() {
+                                                                        // Get ahead/behind counts
+                                                                        let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
+                                                                        let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
+                                                                        
+                                                                        let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                                            name: branch_name,
+                                                                            branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                                            is_current: true,
+                                                                            upstream: repo.upstream_branch().unwrap_or(None),
+                                                                            ahead,
+                                                                            behind,
+                                                                            last_commit: None,
+                                                                        };
+                                                                        git_state_for_events.branch_info.set(Some(branch_info));
+                                                                        
+                                                                        // Update sync status
+                                                                        let sync_status = hive_ai::desktop::git::SyncStatus {
+                                                                            ahead,
+                                                                            behind,
+                                                                            has_upstream,
+                                                                            is_syncing: false,
+                                                                        };
+                                                                        git_state_for_events.sync_status.set(sync_status);
+                                                                        
+                                                                        tracing::info!("✅ Updated branch info and sync status: ahead={}, behind={}", ahead, behind);
+                                                                    }
+                                                                }
+                                                            }
+                                                            _ => {}
+                                                        }
                                                     }
                                                 });
                                             }
@@ -4022,7 +4190,42 @@ fn App() -> Element {
                     style: "color: #000; font-weight: 600;",
                     div {
                         class: "git-branch",
-                        style: "display: flex; align-items: center; gap: 5px;",
+                        style: "display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: background-color 0.2s;",
+                        onclick: move |_| {
+                            // Show git status menu
+                            let branch_info = git_state.branch_info.read();
+                            let sync_status = git_state.sync_status.read();
+                            
+                            if branch_info.is_some() {
+                                let repo_path = current_dir.read().clone();
+                                if let Some(repo_path) = repo_path {
+                                    let git_state_for_menu = git_state.clone();
+                                    spawn(async move {
+                                        // Create a context menu for git actions
+                                        let menu_items = vec![
+                                            "Sync Changes",
+                                            "Pull from Remote", 
+                                            "Push to Remote",
+                                            "Fetch",
+                                            "Create Branch...",
+                                            "Checkout Branch...",
+                                            "View History",
+                                        ];
+                                        
+                                        // For now, just log the click
+                                        // TODO: Implement proper context menu
+                                        tracing::info!("Git status bar clicked - would show menu with items: {:?}", menu_items);
+                                    });
+                                }
+                            }
+                        },
+                        onmouseenter: move |_| {
+                            // TODO: Add hover effect
+                        },
+                        onmouseleave: move |_| {
+                            // TODO: Remove hover effect  
+                        },
+                        
                         span { style: "color: #FFC107; font-weight: 600; font-size: 14px;", "⎇" }
                         span { 
                             style: "color: #000; font-weight: 700;", 
@@ -4592,17 +4795,31 @@ fn FileTreeItem(
                     spawn(async move {
                         if let Ok(repo) = GitRepository::open(&git_path) {
                             if let Ok(branch_name) = repo.current_branch() {
+                                // Get ahead/behind counts
+                                let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
+                                let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
+                                
                                 let branch_info = hive_ai::desktop::git::BranchInfo {
                                     name: branch_name,
                                     branch_type: hive_ai::desktop::git::BranchType::Local,
                                     is_current: true,
-                                    upstream: None,
-                                    ahead: 0,
-                                    behind: 0,
+                                    upstream: repo.upstream_branch().unwrap_or(None),
+                                    ahead,
+                                    behind,
                                     last_commit: None,
                                 };
                                 git_state_clone.branch_info.set(Some(branch_info));
-                                tracing::info!("✅ Updated git branch info for directory");
+                                
+                                // Update sync status
+                                let sync_status = hive_ai::desktop::git::SyncStatus {
+                                    ahead,
+                                    behind,
+                                    has_upstream,
+                                    is_syncing: false,
+                                };
+                                git_state_clone.sync_status.set(sync_status);
+                                
+                                tracing::info!("✅ Updated git branch info for directory: ahead={}, behind={}", ahead, behind);
                             }
                             
                             // Get file statuses

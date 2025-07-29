@@ -137,7 +137,7 @@ mcp_port = 7778
 
 This is a Rust reimplementation of the original TypeScript Hive AI project. Current status (Last updated: January 2025):
 
-_Testing git integration - January 29, 2025 at 11:45 AM_
+_Testing source control panel - January 29, 2025 at 11:47 AM_
 
 - [x] Architecture design complete
 - [ ] Core parsing engine

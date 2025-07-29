@@ -107,6 +107,15 @@ impl SyncStatus {
             return "⟳".to_string();
         }
         
-        format!("↓{} ↑{}", self.behind, self.ahead)
+        // VS Code style: only show non-zero counts
+        let mut parts = Vec::new();
+        if self.behind > 0 {
+            parts.push(format!("↓{}", self.behind));
+        }
+        if self.ahead > 0 {
+            parts.push(format!("↑{}", self.ahead));
+        }
+        
+        parts.join(" ")
     }
 }
