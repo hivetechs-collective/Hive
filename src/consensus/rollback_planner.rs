@@ -1278,8 +1278,11 @@ mod tests {
     #[tokio::test]
     async fn test_rollback_plan_generation() {
         // Create test instances
-        let knowledge_synthesizer = Arc::new(KnowledgeSynthesizer::new(None));
-        let dependency_generator = Arc::new(DependencyGraphGenerator::new(None, None));
+        let python_config = crate::ai_helpers::python_models::PythonModelConfig::default();
+        let python_service = Arc::new(crate::ai_helpers::python_models::PythonModelService::new(python_config).await.unwrap());
+        let knowledge_synthesizer = Arc::new(KnowledgeSynthesizer::new(python_service.clone()).await.unwrap());
+        let pattern_recognizer = Arc::new(crate::ai_helpers::pattern_recognizer::PatternRecognizer::new(python_service).await.unwrap());
+        let dependency_generator = Arc::new(DependencyGraphGenerator::new(Some(pattern_recognizer), None));
         let planner = RollbackPlanner::new(knowledge_synthesizer, dependency_generator, None);
         
         // Create test operations
@@ -1303,13 +1306,14 @@ mod tests {
         assert!(plan.estimated_duration_ms > 0);
     }
     
-    #[test]
-    fn test_reverse_operation() {
-        let planner = RollbackPlanner::new(
-            Arc::new(KnowledgeSynthesizer::new(None)),
-            Arc::new(DependencyGraphGenerator::new(None, None)),
-            None
-        );
+    #[tokio::test]
+    async fn test_reverse_operation() {
+        let python_config = crate::ai_helpers::python_models::PythonModelConfig::default();
+        let python_service = Arc::new(crate::ai_helpers::python_models::PythonModelService::new(python_config).await.unwrap());
+        let knowledge_synthesizer = Arc::new(KnowledgeSynthesizer::new(python_service.clone()).await.unwrap());
+        let pattern_recognizer = Arc::new(crate::ai_helpers::pattern_recognizer::PatternRecognizer::new(python_service).await.unwrap());
+        let dependency_generator = Arc::new(DependencyGraphGenerator::new(Some(pattern_recognizer), None));
+        let planner = RollbackPlanner::new(knowledge_synthesizer, dependency_generator, None);
         
         // Test create -> delete
         let create_op = FileOperation::Create {

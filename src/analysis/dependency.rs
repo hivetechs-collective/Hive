@@ -879,9 +879,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_cycle_severity() {
-        let analyzer = DependencyAnalyzer::new();
+    #[tokio::test]
+    async fn test_cycle_severity() {
+        let analyzer = DependencyAnalyzer::new().await.unwrap();
 
         assert_eq!(analyzer.calculate_cycle_severity(2, &[]), Severity::Medium);
 

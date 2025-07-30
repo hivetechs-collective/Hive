@@ -828,7 +828,7 @@ mod tests {
                 risk: 35.0 
             },
             recommendations: vec![],
-            groups: crate::consensus::operation_intelligence::OperationGroups {
+            groups: crate::consensus::operation_analysis::OperationGroups {
                 create_operations: vec![],
                 update_operations: vec![],
                 delete_operations: vec![],

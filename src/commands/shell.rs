@@ -517,14 +517,16 @@ mod tests {
 
     #[test]
     fn test_shell_selection_conversion() {
-        assert_eq!(ShellSelection::Bash.into(), Some(ShellType::Bash));
-        assert_eq!(ShellSelection::Zsh.into(), Some(ShellType::Zsh));
-        assert_eq!(ShellSelection::Fish.into(), Some(ShellType::Fish));
-        assert_eq!(
-            ShellSelection::Powershell.into(),
-            Some(ShellType::PowerShell)
-        );
-        assert_eq!(ShellSelection::Elvish.into(), Some(ShellType::Elvish));
+        let bash: Option<ShellType> = ShellSelection::Bash.into();
+        assert_eq!(bash, Some(ShellType::Bash));
+        let zsh: Option<ShellType> = ShellSelection::Zsh.into();
+        assert_eq!(zsh, Some(ShellType::Zsh));
+        let fish: Option<ShellType> = ShellSelection::Fish.into();
+        assert_eq!(fish, Some(ShellType::Fish));
+        let ps: Option<ShellType> = ShellSelection::Powershell.into();
+        assert_eq!(ps, Some(ShellType::PowerShell));
+        let elvish: Option<ShellType> = ShellSelection::Elvish.into();
+        assert_eq!(elvish, Some(ShellType::Elvish));
 
         let all_selection: Option<ShellType> = ShellSelection::All.into();
         assert_eq!(all_selection, None);

@@ -2625,7 +2625,7 @@ mod tests {
 
         let pipeline = ConsensusPipeline::new(config, profile, None);
         let result = pipeline
-            .run("What is Rust?", None)
+            .run("What is Rust?", None, None)
             .await
             .expect("Pipeline should run successfully");
 

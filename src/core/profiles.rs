@@ -1300,10 +1300,16 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    #[test]
-    fn test_template_creation() {
+    #[tokio::test]
+    async fn test_template_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let db = DatabaseManager::new(temp_dir.path().join("test.db")).unwrap();
+        let db_config = crate::core::database::DatabaseConfig {
+            path: temp_dir.path().join("test.db"),
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
+        };
+        let db = DatabaseManager::new(db_config).await.unwrap();
         let manager = ExpertTemplateManager::new(db);
 
         assert!(!manager.get_templates().is_empty());
@@ -1312,10 +1318,16 @@ mod tests {
         assert!(manager.get_template("budget-optimizer").is_some());
     }
 
-    #[test]
-    fn test_recommendations() {
+    #[tokio::test]
+    async fn test_recommendations() {
         let temp_dir = TempDir::new().unwrap();
-        let db = DatabaseManager::new(temp_dir.path().join("test.db")).unwrap();
+        let db_config = crate::core::database::DatabaseConfig {
+            path: temp_dir.path().join("test.db"),
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
+        };
+        let db = DatabaseManager::new(db_config).await.unwrap();
         let manager = ExpertTemplateManager::new(db);
 
         let beginner_recs = manager.get_recommendations(&ExpertLevel::Beginner);

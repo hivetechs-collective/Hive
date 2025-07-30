@@ -595,7 +595,7 @@ mod tests {
         // This would be a more comprehensive test in production
         // For now, just test that we can create the structure
         let config = BannerConfig {
-            consensus_profile: "balanced".to_string(),
+            consensus_profile: Some("balanced".to_string()),
             model_count: 323,
             conversation_count: 0,
             internet_connected: false,
@@ -603,7 +603,7 @@ mod tests {
             memory_usage_mb: 25.0,
         };
 
-        assert_eq!(config.consensus_profile, "balanced");
+        assert_eq!(config.consensus_profile, Some("balanced".to_string()));
         assert_eq!(config.model_count, 323);
     }
 }

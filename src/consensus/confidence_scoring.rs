@@ -785,7 +785,7 @@ mod tests {
             repository_path: PathBuf::from("/test"),
             user_question: "Create test".to_string(),
             consensus_response: "Creating test file".to_string(),
-            timestamp: chrono::Utc::now(),
+            timestamp: std::time::SystemTime::now(),
             session_id: "test-session".to_string(),
         };
         
