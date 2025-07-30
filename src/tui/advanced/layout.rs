@@ -28,6 +28,13 @@ pub struct MainLayoutChunks {
     pub status_bar: Rect,
 }
 
+/// Title bar layout chunks
+pub struct TitleBarChunks {
+    pub menu_bar: Rect,
+    pub repository_selector: Rect,
+    pub title: Rect,
+}
+
 /// Content area layout chunks
 pub struct ContentLayoutChunks {
     pub explorer: Rect,
@@ -65,6 +72,25 @@ impl LayoutManager {
             title_bar: chunks[0],
             main_content: chunks[1],
             status_bar: chunks[2],
+        }
+    }
+
+    /// Calculate title bar layout
+    pub fn get_title_bar_layout(&self, area: Rect) -> TitleBarChunks {
+        // Split title bar horizontally into three sections
+        let horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(25),  // Repository selector
+                Constraint::Min(0),      // Title (flexible)
+                Constraint::Length(20),  // Menu shortcuts or status
+            ])
+            .split(area);
+
+        TitleBarChunks {
+            repository_selector: horizontal_chunks[0],
+            title: horizontal_chunks[1],
+            menu_bar: horizontal_chunks[2],
         }
     }
 
