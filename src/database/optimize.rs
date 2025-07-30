@@ -639,14 +639,14 @@ mod tests {
         let config = DatabaseOptimizationConfig::default();
         let db = OptimizedDatabase::new(db_path, config).await.unwrap();
 
-        let empty_params: Vec<rusqlite::types::Value> = vec![];
+        let no_params: &[&dyn rusqlite::ToSql] = &[];
         let queries = vec![
             (
                 "CREATE TABLE IF NOT EXISTS batch_test (id INTEGER)",
-                empty_params.as_slice(),
+                no_params,
             ),
-            ("INSERT INTO batch_test (id) VALUES (1)", empty_params.as_slice()),
-            ("INSERT INTO batch_test (id) VALUES (2)", empty_params.as_slice()),
+            ("INSERT INTO batch_test (id) VALUES (1)", no_params),
+            ("INSERT INTO batch_test (id) VALUES (2)", no_params),
         ];
 
         let start = Instant::now();

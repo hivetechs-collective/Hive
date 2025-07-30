@@ -490,7 +490,8 @@ fn write_to_xterm(terminal_id: &str, text: &str) {
     add_to_terminal_buffer(terminal_id, text);
     
     // Convert bytes to base64 to avoid any encoding issues
-    let base64_text = base64::encode(text.as_bytes());
+    use base64::Engine;
+    let base64_text = base64::engine::general_purpose::STANDARD.encode(text.as_bytes());
     
     // Queue the output to be processed later for this specific terminal
     if let Ok(mut queues) = OUTPUT_QUEUES.lock() {

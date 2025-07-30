@@ -681,7 +681,7 @@ pub struct OperationStats {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{KnowledgeIndexer, IndexedRepository, FileClassification, IndexedFile, RepositoryPrediction};
     
     #[tokio::test]
     async fn test_indexer_creation() {

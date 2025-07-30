@@ -19,7 +19,6 @@ use crate::ai_helpers::{
     KnowledgeSynthesizer,
 };
 use crate::consensus::repository_context::RepositoryContextManager;
-use crate::consensus::types::Stage;
 
 /// Represents the AI's autonomous decision about how to handle a user query
 #[derive(Debug, Clone)]
