@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 use anyhow::{Result, Context};
 use tracing::{info, warn, debug};
 
-use super::{GitRepository, GitOperations, RepositoryInfo, BranchInfo, BranchType, FileStatus, StatusType};
+use super::{GitRepository, GitOperations, RepositoryInfo, BranchInfo, BranchType, FileStatus, StatusType, get_optimized_git_manager};
 
 /// Git context manager that shares state between terminal and GUI
 #[derive(Clone)]
@@ -107,7 +107,7 @@ impl GitContextManager {
         None
     }
     
-    /// Activate a repository and update all related state
+    /// Activate a repository and update all related state with optimizations
     async fn activate_repository(&mut self, repo: Arc<GitRepository>) {
         info!("Activating repository at {:?}", repo.path());
         
@@ -137,43 +137,59 @@ impl GitContextManager {
             self.active_branch_info.set(Some(branch_info));
         }
         
-        // Get file statuses
-        match repo.file_statuses() {
-                Ok(statuses) => {
-                    let mut status_map = HashMap::new();
-                    for (path, git_status) in statuses {
-                        // Convert git2::Status to our StatusType
-                        let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                            StatusType::Modified
-                        } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                            StatusType::Added
-                        } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                            StatusType::Deleted
-                        } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                            StatusType::Renamed
-                        } else if git_status.is_wt_new() {
-                            StatusType::Untracked
-                        } else {
-                            continue; // Skip other statuses
-                        };
-                        
-                        let file_status = FileStatus {
-                            path: path.clone(),
-                            status_type,
-                            is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
-                                      git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                      git_status.contains(git2::Status::INDEX_DELETED) ||
-                                      git_status.contains(git2::Status::INDEX_RENAMED),
-                        };
-                        status_map.insert(path, file_status);
+        // Get file statuses with optimization
+        let repo_path = repo.path();
+        let manager = get_optimized_git_manager();
+        
+        match manager.get_file_statuses_batched(repo_path).await {
+            Ok(statuses) => {
+                self.process_file_statuses(statuses);
+            }
+            Err(_) => {
+                // Fallback to synchronous version
+                match repo.file_statuses() {
+                    Ok(statuses) => {
+                        self.process_file_statuses(statuses);
                     }
-                    self.file_statuses.set(status_map);
-                }
-                Err(e) => {
-                    warn!("Failed to get repository status: {}", e);
-                    self.file_statuses.set(HashMap::new());
+                    Err(e) => {
+                        warn!("Failed to get repository status: {}", e);
+                        self.file_statuses.set(HashMap::new());
+                    }
                 }
             }
+        }
+    }
+    
+    /// Process file statuses and convert to our internal format
+    fn process_file_statuses(&mut self, statuses: Vec<(PathBuf, git2::Status)>) {
+        let mut status_map = HashMap::new();
+        for (path, git_status) in statuses {
+            // Convert git2::Status to our StatusType
+            let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                StatusType::Modified
+            } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                StatusType::Added
+            } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                StatusType::Deleted
+            } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                StatusType::Renamed
+            } else if git_status.is_wt_new() {
+                StatusType::Untracked
+            } else {
+                continue; // Skip other statuses
+            };
+            
+            let file_status = FileStatus {
+                path: path.clone(),
+                status_type,
+                is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
+                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                          git_status.contains(git2::Status::INDEX_DELETED) ||
+                          git_status.contains(git2::Status::INDEX_RENAMED),
+            };
+            status_map.insert(path, file_status);
+        }
+        self.file_statuses.set(status_map);
     }
     
     /// Clear the active repository state
