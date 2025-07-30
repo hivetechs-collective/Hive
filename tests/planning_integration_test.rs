@@ -1,7 +1,7 @@
 //! Integration tests for the planning engine
 
-use hive_ai::consensus::engine::ConsensusEngine;
-use hive_ai::planning::{ModeType, PlanningContext, PlanningEngine};
+use crate::consensus::engine::ConsensusEngine;
+use crate::planning::{ModeType, PlanningContext, PlanningEngine};
 
 #[tokio::test]
 async fn test_planning_engine_creation() {
@@ -43,7 +43,7 @@ async fn test_mode_detection() {
 
 #[tokio::test]
 async fn test_task_decomposition() {
-    use hive_ai::planning::TaskDecomposer;
+    use crate::planning::TaskDecomposer;
 
     let consensus_engine = ConsensusEngine::new().await.unwrap();
     let decomposer = TaskDecomposer::new();
@@ -65,7 +65,7 @@ async fn test_task_decomposition() {
 
 #[tokio::test]
 async fn test_risk_analysis() {
-    use hive_ai::planning::RiskAnalyzer;
+    use crate::planning::RiskAnalyzer;
 
     let analyzer = RiskAnalyzer::new();
     let context = PlanningContext::default();
@@ -79,7 +79,7 @@ async fn test_risk_analysis() {
 
 #[tokio::test]
 async fn test_timeline_estimation() {
-    use hive_ai::planning::{DependencyResolver, Task, TimelineEstimator};
+    use crate::planning::{DependencyResolver, Task, TimelineEstimator};
 
     let timeline_estimator = TimelineEstimator::new();
     let dependency_resolver = DependencyResolver::new();
@@ -90,8 +90,8 @@ async fn test_timeline_estimation() {
             id: "task1".to_string(),
             title: "Setup project".to_string(),
             description: "Initialize project structure".to_string(),
-            task_type: hive_ai::planning::types::TaskType::Implementation,
-            priority: hive_ai::planning::types::Priority::High,
+            task_type: crate::planning::types::TaskType::Implementation,
+            priority: crate::planning::types::Priority::High,
             estimated_duration: chrono::Duration::hours(2),
             dependencies: vec![],
             required_skills: vec!["rust".to_string()],
@@ -103,8 +103,8 @@ async fn test_timeline_estimation() {
             id: "task2".to_string(),
             title: "Implement core".to_string(),
             description: "Build core functionality".to_string(),
-            task_type: hive_ai::planning::types::TaskType::Implementation,
-            priority: hive_ai::planning::types::Priority::High,
+            task_type: crate::planning::types::TaskType::Implementation,
+            priority: crate::planning::types::Priority::High,
             estimated_duration: chrono::Duration::hours(8),
             dependencies: vec!["task1".to_string()],
             required_skills: vec!["rust".to_string()],
@@ -129,7 +129,7 @@ async fn test_timeline_estimation() {
 
 #[tokio::test]
 async fn test_collaborative_planning() {
-    use hive_ai::planning::CollaborativePlanner;
+    use crate::planning::CollaborativePlanner;
 
     let planner = CollaborativePlanner::new();
 
@@ -139,7 +139,7 @@ async fn test_collaborative_planning() {
 
 #[tokio::test]
 async fn test_repository_intelligence() {
-    use hive_ai::planning::RepositoryIntelligence;
+    use crate::planning::RepositoryIntelligence;
     use std::path::Path;
 
     let mut repo_intel = RepositoryIntelligence::new().await.unwrap();

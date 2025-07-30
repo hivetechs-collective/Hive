@@ -1,7 +1,7 @@
 // Integration tests for the 4-stage consensus pipeline
 // Verifies behavior matches TypeScript implementation
 
-use hive::{initialize, ConsensusEngine};
+use crate::{initialize, ConsensusEngine};
 use std::sync::Arc;
 
 #[tokio::test]
@@ -10,7 +10,7 @@ async fn test_consensus_basic_query() {
     initialize().await.expect("Failed to initialize");
 
     // Create consensus engine
-    let db = Arc::new(hive::core::Database::memory().await.unwrap());
+    let db = Arc::new(crate::core::Database::memory().await.unwrap());
     let engine = ConsensusEngine::new(db).await.unwrap();
 
     // Test basic query
@@ -35,7 +35,7 @@ async fn test_consensus_basic_query() {
 async fn test_consensus_with_temporal_context() {
     initialize().await.expect("Failed to initialize");
 
-    let db = Arc::new(hive::core::Database::memory().await.unwrap());
+    let db = Arc::new(crate::core::Database::memory().await.unwrap());
     let engine = ConsensusEngine::new(db).await.unwrap();
 
     // Query that should trigger temporal context
@@ -55,7 +55,7 @@ async fn test_consensus_with_temporal_context() {
 async fn test_consensus_with_semantic_context() {
     initialize().await.expect("Failed to initialize");
 
-    let db = Arc::new(hive::core::Database::memory().await.unwrap());
+    let db = Arc::new(crate::core::Database::memory().await.unwrap());
     let engine = ConsensusEngine::new(db).await.unwrap();
 
     let semantic_context = "Repository: hive-ai
@@ -77,12 +77,12 @@ Purpose: AI-powered codebase intelligence";
 
 #[tokio::test]
 async fn test_consensus_streaming() {
-    use hive::consensus::{Stage, StreamingCallbacks};
+    use crate::consensus::{Stage, StreamingCallbacks};
     use std::sync::atomic::{AtomicU32, Ordering};
 
     initialize().await.expect("Failed to initialize");
 
-    let db = Arc::new(hive::core::Database::memory().await.unwrap());
+    let db = Arc::new(crate::core::Database::memory().await.unwrap());
     let engine = ConsensusEngine::new(db).await.unwrap();
 
     // Track streaming events
@@ -106,7 +106,7 @@ async fn test_consensus_streaming() {
         fn on_stage_complete(
             &self,
             _stage: Stage,
-            _result: &hive::consensus::types::StageResult,
+            _result: &crate::consensus::types::StageResult,
         ) -> anyhow::Result<()> {
             self.stages_completed.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -134,7 +134,7 @@ async fn test_consensus_streaming() {
 async fn test_consensus_profiles() {
     initialize().await.expect("Failed to initialize");
 
-    let db = Arc::new(hive::core::Database::memory().await.unwrap());
+    let db = Arc::new(crate::core::Database::memory().await.unwrap());
     let engine = ConsensusEngine::new(db).await.unwrap();
 
     // Test different profiles
@@ -155,7 +155,7 @@ async fn test_consensus_profiles() {
 async fn test_consensus_error_handling() {
     initialize().await.expect("Failed to initialize");
 
-    let db = Arc::new(hive::core::Database::memory().await.unwrap());
+    let db = Arc::new(crate::core::Database::memory().await.unwrap());
     let engine = ConsensusEngine::new(db).await.unwrap();
 
     // Test with empty query (should still handle gracefully)
@@ -169,7 +169,7 @@ async fn test_consensus_error_handling() {
 
 #[test]
 fn test_temporal_detection() {
-    use hive::consensus::temporal::TemporalContextProvider;
+    use crate::consensus::temporal::TemporalContextProvider;
 
     let provider = TemporalContextProvider::default();
 

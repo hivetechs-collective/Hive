@@ -117,33 +117,6 @@ impl EditorPanel {
         }
     }
 
-    /// Open file in new tab
-    pub async fn open_file(&mut self, path: impl AsRef<Path>) -> Result<()> {
-        let path = path.as_ref();
-        let content = fs::read_to_string(path)?;
-        let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-        let language = FileLanguage::from_path(path);
-
-        let tab = EditorTab {
-            title: path
-                .file_name()
-                .unwrap_or_else(|| path.as_os_str())
-                .to_string_lossy()
-                .to_string(),
-            path: Some(path.to_path_buf()),
-            lines,
-            cursor: (0, 0),
-            scroll_offset: 0,
-            is_modified: false,
-            language,
-            selection: None,
-        };
-
-        self.tabs.push(tab);
-        self.active_tab = self.tabs.len() - 1;
-
-        Ok(())
-    }
 
     /// Save current tab
     pub async fn save_current_tab(&mut self) -> Result<()> {
@@ -199,6 +172,70 @@ impl EditorPanel {
         self.tabs.clear();
         self.tabs.push(EditorTab::new_empty());
         self.active_tab = 0;
+    }
+
+    /// Open a file in the editor (async)
+    pub async fn open_file<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
+        let path = path.as_ref().to_path_buf();
+        
+        // Check if file is already open
+        for (i, tab) in self.tabs.iter().enumerate() {
+            if tab.path.as_ref() == Some(&path) {
+                // Switch to existing tab
+                self.active_tab = i;
+                return Ok(());
+            }
+        }
+        
+        // Read file content
+        let content = async_fs::read_to_string(&path).await?;
+        let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+        
+        // Create new tab
+        let title = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("Untitled")
+            .to_string();
+            
+        // Detect language from file extension
+        let language = FileLanguage::from_path(&path);
+        
+        let tab = EditorTab {
+            title,
+            path: Some(path),
+            lines,
+            cursor: (0, 0),
+            scroll_offset: 0,
+            is_modified: false,
+            language,
+            selection: None,
+        };
+        
+        // Add tab and switch to it
+        self.tabs.push(tab);
+        self.active_tab = self.tabs.len() - 1;
+        
+        Ok(())
+    }
+    
+    /// Go to a specific line number (1-indexed)
+    pub fn goto_line(&mut self, line_number: usize) {
+        if let Some(tab) = self.current_tab_mut() {
+            let line_index = line_number.saturating_sub(1);
+            if line_index < tab.lines.len() {
+                tab.cursor.0 = line_index;
+                tab.cursor.1 = 0; // Move to beginning of line
+                
+                // Adjust scroll to make line visible
+                let visible_height = 20; // Approximate visible lines
+                if line_index < tab.scroll_offset {
+                    tab.scroll_offset = line_index;
+                } else if line_index >= tab.scroll_offset + visible_height {
+                    tab.scroll_offset = line_index.saturating_sub(visible_height - 1);
+                }
+            }
+        }
     }
 
     /// Render the editor panel

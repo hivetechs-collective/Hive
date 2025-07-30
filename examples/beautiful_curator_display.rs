@@ -2,8 +2,8 @@
 // Demonstrates the enhanced visual presentation of consensus results
 
 use chrono::Utc;
-use hive_ai::consensus::formatted_result::*;
-use hive_ai::consensus::types::*;
+use crate::consensus::formatted_result::*;
+use crate::consensus::types::*;
 
 fn main() {
     // Create sample metadata (simulating a real consensus run)

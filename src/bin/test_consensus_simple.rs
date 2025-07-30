@@ -1,8 +1,8 @@
 //! Simple test to see what's happening with consensus storage
 
 use anyhow::Result;
-use hive_ai::consensus::engine::ConsensusEngine;
-use hive_ai::core::database::{get_database, initialize_database, DatabaseConfig};
+use hive::consensus::engine::ConsensusEngine;
+use hive::core::database::{get_database, initialize_database, DatabaseConfig};
 use std::path::PathBuf;
 use rusqlite::OptionalExtension;
 
@@ -10,7 +10,7 @@ use rusqlite::OptionalExtension;
 async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt()
-        .with_env_filter("info,hive_ai::consensus::pipeline=debug")
+        .with_env_filter("info,hive::consensus::pipeline=debug")
         .init();
     
     println!("🐝 Simple Consensus Test");

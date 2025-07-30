@@ -1,6 +1,6 @@
 //! Test terminal cleaning functionality
 
-use hive_ai::desktop::terminal_buffer::TerminalBuffer;
+use hive::desktop::terminal_buffer::TerminalBuffer;
 
 fn main() {
     println!("Testing terminal buffer cleaning...\n");

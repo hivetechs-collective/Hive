@@ -1,7 +1,7 @@
 use anyhow::Result;
-use hive_ai::consensus::engine::ConsensusEngine;
-use hive_ai::consensus::streaming::{ProgressInfo, StreamingCallbacks};
-use hive_ai::consensus::types::{Stage, StageResult};
+use hive::consensus::engine::ConsensusEngine;
+use hive::consensus::streaming::{ProgressInfo, StreamingCallbacks};
+use hive::consensus::types::{Stage, StageResult};
 use std::sync::Arc;
 
 struct TestStreamingCallbacks;
@@ -53,7 +53,7 @@ async fn main() -> Result<()> {
     println!("Starting streaming test...");
 
     // Create database
-    use hive_ai::core::database::{DatabaseConfig, DatabaseManager};
+    use hive::core::database::{DatabaseConfig, DatabaseManager};
     let db = Arc::new(DatabaseManager::new(DatabaseConfig::default()).await?);
 
     // Create consensus engine

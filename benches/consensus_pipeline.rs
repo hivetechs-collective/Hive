@@ -2,8 +2,8 @@
 //! Measures performance of the 4-stage consensus pipeline against TypeScript baseline
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use hive_ai::consensus::{ConsensusEngine, ConsensusProfile, ConsensusRequest};
-use hive_ai::core::config::HiveConfig;
+use hive::consensus::{ConsensusEngine, ConsensusProfile, ConsensusRequest};
+use hive::core::config::HiveConfig;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 

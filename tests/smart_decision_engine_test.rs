@@ -1,13 +1,13 @@
 // Unit tests for Smart Decision Engine
-use hive_ai::consensus::smart_decision_engine::{
+use crate::consensus::smart_decision_engine::{
     SmartDecisionEngine, UserPreferences, ExecutionDecision, CustomRule, RuleAction,
     DecisionMetrics, UserDecision, UserChoice,
 };
-use hive_ai::consensus::operation_analysis::{
+use crate::consensus::operation_analysis::{
     AutoAcceptMode, OperationContext, OperationAnalysis, UnifiedScore,
     ActionRecommendation, ActionPriority, RecommendedAction,
 };
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
@@ -38,20 +38,20 @@ fn create_minimal_analysis(confidence: f32, risk: f32) -> OperationAnalysis {
         },
         unified_score: UnifiedScore { confidence, risk },
         recommendations: vec![],
-        groups: hive_ai::consensus::operation_analysis::OperationGroups {
+        groups: crate::consensus::operation_analysis::OperationGroups {
             create_operations: vec![],
             update_operations: vec![],
             delete_operations: vec![],
             move_operations: vec![],
         },
-        component_scores: hive_ai::consensus::operation_analysis::ComponentScores {
+        component_scores: crate::consensus::operation_analysis::ComponentScores {
             knowledge_indexer: None,
             context_retriever: None,
             pattern_recognizer: None,
             quality_analyzer: None,
             knowledge_synthesizer: None,
         },
-        scoring_factors: hive_ai::consensus::operation_analysis::ScoringFactors {
+        scoring_factors: crate::consensus::operation_analysis::ScoringFactors {
             historical_success: None,
             pattern_safety: None,
             conflict_probability: None,

@@ -1,24 +1,24 @@
 // Integration tests for AI Helper Coordination
 // Tests the complete AI helper ecosystem working together
 
-use hive_ai::ai_helpers::{
+use crate::ai_helpers::{
     AIHelperEcosystem, ProcessedKnowledge,
     KnowledgeIndexer, ContextRetriever, PatternRecognizer,
     QualityAnalyzer, KnowledgeSynthesizer,
     ChromaVectorStore, PythonModelService, PythonModelConfig,
     IntelligentContextOrchestrator,
 };
-use hive_ai::consensus::types::Stage;
-use hive_ai::consensus::operation_analysis::{
+use crate::consensus::types::Stage;
+use crate::consensus::operation_analysis::{
     OperationAnalysis as OpAnalysis, OperationContext, UnifiedScore,
 };
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
-use hive_ai::consensus::operation_intelligence::OperationIntelligenceCoordinator;
-use hive_ai::consensus::smart_decision_engine::{
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_intelligence::OperationIntelligenceCoordinator;
+use crate::consensus::smart_decision_engine::{
     SmartDecisionEngine, UserPreferences, ExecutionDecision,
 };
-use hive_ai::consensus::operation_analysis::AutoAcceptMode;
-use hive_ai::core::database::DatabaseManager;
+use crate::consensus::operation_analysis::AutoAcceptMode;
+use crate::core::database::DatabaseManager;
 use std::sync::Arc;
 use std::path::PathBuf;
 use std::collections::HashMap;
@@ -137,7 +137,7 @@ Key implementation details:
                 Stage::Validator => {
                     // Validator should look for edge cases
                     assert!(stage_context.patterns.iter().any(|p| 
-                        matches!(p.pattern_type, hive_ai::ai_helpers::PatternType::Contradiction)
+                        matches!(p.pattern_type, crate::ai_helpers::PatternType::Contradiction)
                     ) || !stage_context.patterns.is_empty());
                 }
                 _ => {}
@@ -388,7 +388,7 @@ mod tests {
             context: context.clone(),
             unified_score,
             recommendations: vec![],
-            groups: hive_ai::consensus::operation_analysis::OperationGroups {
+            groups: crate::consensus::operation_analysis::OperationGroups {
                 create_operations: vec![operations[0].clone()],
                 update_operations: vec![operations[1].clone()],
                 delete_operations: vec![],
@@ -458,7 +458,7 @@ mod tests {
                 risk: 95.0, // Very high risk
             },
             recommendations: vec![],
-            groups: hive_ai::consensus::operation_analysis::OperationGroups {
+            groups: crate::consensus::operation_analysis::OperationGroups {
                 create_operations: vec![],
                 update_operations: vec![],
                 delete_operations: operations,

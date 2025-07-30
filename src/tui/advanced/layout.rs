@@ -11,10 +11,14 @@ pub struct LayoutManager {
     show_terminal: bool,
     /// Show consensus panel
     show_consensus: bool,
+    /// Show problems panel
+    show_problems: bool,
     /// Terminal panel height percentage
     terminal_height_percent: u16,
     /// Consensus panel width percentage
     consensus_width_percent: u16,
+    /// Problems panel height percentage
+    problems_height_percent: u16,
 }
 
 /// Main layout chunks for advanced TUI
@@ -30,6 +34,7 @@ pub struct ContentLayoutChunks {
     pub editor: Rect,
     pub terminal: Rect,
     pub consensus: Rect,
+    pub problems: Rect,
 }
 
 impl LayoutManager {
@@ -38,8 +43,10 @@ impl LayoutManager {
         Self {
             show_terminal: true,
             show_consensus: true,
+            show_problems: true,
             terminal_height_percent: 30,
             consensus_width_percent: 25,
+            problems_height_percent: 25,
         }
     }
 
@@ -85,17 +92,31 @@ impl LayoutManager {
             Rect::default()
         };
 
-        // Split main area horizontally (explorer | editor/terminal)
+        // Split main area horizontally (explorer+problems | editor/terminal)
         let main_horizontal = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(25), // Explorer
+                Constraint::Percentage(25), // Explorer + Problems
                 Constraint::Percentage(75), // Editor/Terminal
             ])
             .split(main_area);
 
-        let explorer_area = main_horizontal[0];
+        let left_panel_area = main_horizontal[0];
         let editor_terminal_area = main_horizontal[1];
+
+        // Split left panel vertically (explorer | problems)
+        let (explorer_area, problems_area) = if self.show_problems {
+            let left_vertical = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Percentage(100 - self.problems_height_percent),
+                    Constraint::Percentage(self.problems_height_percent),
+                ])
+                .split(left_panel_area);
+            (left_vertical[0], left_vertical[1])
+        } else {
+            (left_panel_area, Rect::default())
+        };
 
         // Split editor/terminal area vertically if terminal is shown
         let (editor_area, terminal_area) = if self.show_terminal {
@@ -116,6 +137,7 @@ impl LayoutManager {
             editor: editor_area,
             terminal: terminal_area,
             consensus: consensus_area,
+            problems: problems_area,
         }
     }
 
@@ -129,6 +151,11 @@ impl LayoutManager {
         self.show_consensus = !self.show_consensus;
     }
 
+    /// Toggle problems panel visibility
+    pub fn toggle_problems(&mut self) {
+        self.show_problems = !self.show_problems;
+    }
+
     /// Set terminal height percentage
     pub fn set_terminal_height(&mut self, percentage: u16) {
         self.terminal_height_percent = percentage.clamp(10, 80);
@@ -139,6 +166,11 @@ impl LayoutManager {
         self.consensus_width_percent = percentage.clamp(15, 50);
     }
 
+    /// Set problems height percentage
+    pub fn set_problems_height(&mut self, percentage: u16) {
+        self.problems_height_percent = percentage.clamp(10, 50);
+    }
+
     /// Check if terminal is visible
     pub fn terminal_visible(&self) -> bool {
         self.show_terminal
@@ -147,6 +179,11 @@ impl LayoutManager {
     /// Check if consensus panel is visible
     pub fn consensus_visible(&self) -> bool {
         self.show_consensus
+    }
+
+    /// Check if problems panel is visible
+    pub fn problems_visible(&self) -> bool {
+        self.show_problems
     }
 }
 

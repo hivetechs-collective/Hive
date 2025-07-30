@@ -1,8 +1,8 @@
 //! OpenRouter API Integration Tests
 //! Real API validation with actual OpenRouter service
 
-use hive_ai::providers::openrouter::{client::OpenRouterClient, models::ModelInfo};
-use hive_ai::consensus::{engine::ConsensusEngine, types::*};
+use crate::providers::openrouter::{client::OpenRouterClient, models::ModelInfo};
+use crate::consensus::{engine::ConsensusEngine, types::*};
 use std::collections::HashMap;
 use std::env;
 use tokio;
@@ -103,10 +103,10 @@ async fn test_real_consensus_request() -> Result<()> {
     let client = OpenRouterClient::new(&api_key.unwrap())?;
 
     // Test simple completion request
-    let request = hive_ai::providers::openrouter::types::CompletionRequest {
+    let request = crate::providers::openrouter::types::CompletionRequest {
         model: "anthropic/claude-3-haiku".to_string(),
         messages: vec![
-            hive_ai::providers::openrouter::types::Message {
+            crate::providers::openrouter::types::Message {
                 role: "user".to_string(),
                 content: "What is 2+2? Respond with just the number.".to_string(),
             }
@@ -157,10 +157,10 @@ async fn test_streaming_response() -> Result<()> {
 
     let client = OpenRouterClient::new(&api_key.unwrap())?;
 
-    let request = hive_ai::providers::openrouter::types::CompletionRequest {
+    let request = crate::providers::openrouter::types::CompletionRequest {
         model: "anthropic/claude-3-haiku".to_string(),
         messages: vec![
-            hive_ai::providers::openrouter::types::Message {
+            crate::providers::openrouter::types::Message {
                 role: "user".to_string(),
                 content: "Count from 1 to 5, one number per line.".to_string(),
             }
@@ -235,10 +235,10 @@ async fn test_rate_limiting_and_errors() -> Result<()> {
     let client = OpenRouterClient::new(&api_key.unwrap())?;
 
     // Test with invalid model (should handle gracefully)
-    let invalid_request = hive_ai::providers::openrouter::types::CompletionRequest {
+    let invalid_request = crate::providers::openrouter::types::CompletionRequest {
         model: "nonexistent/invalid-model".to_string(),
         messages: vec![
-            hive_ai::providers::openrouter::types::Message {
+            crate::providers::openrouter::types::Message {
                 role: "user".to_string(),
                 content: "Test".to_string(),
             }
@@ -290,10 +290,10 @@ async fn test_cost_calculation() -> Result<()> {
     let client = OpenRouterClient::new(&api_key.unwrap())?;
 
     // Test with known model and token counts
-    let request = hive_ai::providers::openrouter::types::CompletionRequest {
+    let request = crate::providers::openrouter::types::CompletionRequest {
         model: "anthropic/claude-3-haiku".to_string(),
         messages: vec![
-            hive_ai::providers::openrouter::types::Message {
+            crate::providers::openrouter::types::Message {
                 role: "user".to_string(),
                 content: "Respond with exactly 10 words: The quick brown fox jumps over the lazy dog.".to_string(),
             }
@@ -319,7 +319,7 @@ async fn test_cost_calculation() -> Result<()> {
     let mut cost_comparisons = Vec::new();
 
     for (model, expected_range) in models_to_test {
-        let model_request = hive_ai::providers::openrouter::types::CompletionRequest {
+        let model_request = crate::providers::openrouter::types::CompletionRequest {
             model: model.to_string(),
             messages: request.messages.clone(),
             temperature: request.temperature,

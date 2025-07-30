@@ -1,9 +1,9 @@
 // Unit tests for Operation History Database
-use hive_ai::consensus::operation_history::{
+use crate::consensus::operation_history::{
     OperationHistoryDatabase, OperationStatistics,
 };
-use hive_ai::consensus::operation_intelligence::{OperationOutcome, OperationContext};
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_intelligence::{OperationOutcome, OperationContext};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -103,7 +103,7 @@ async fn test_search_operations() {
     let (db, _temp) = create_test_db().await;
     
     // Search in empty database
-    let filters = hive_ai::consensus::operation_history::OperationFilters {
+    let filters = crate::consensus::operation_history::OperationFilters {
         operation_type: None,
         file_path_pattern: None,
         success_only: None,

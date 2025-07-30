@@ -2,7 +2,7 @@
 //!
 //! Tests for the complete MCP implementation with advanced features
 
-use hive_ai::integration::mcp::{
+use crate::integration::mcp::{
     start_mcp_server, AdvancedToolRegistry, McpServer, PerformanceManager, PromptManager,
     SamplingManager, SubscriptionManager,
 };
@@ -28,9 +28,9 @@ async fn test_mcp_server_startup() {
 
 #[tokio::test]
 async fn test_advanced_tool_registry() {
-    let config = std::sync::Arc::new(hive_ai::core::config::Config::default());
+    let config = std::sync::Arc::new(crate::core::config::Config::default());
     let consensus_engine = std::sync::Arc::new(tokio::sync::RwLock::new(
-        hive_ai::consensus::engine::ConsensusEngine::new(config.clone())
+        crate::consensus::engine::ConsensusEngine::new(config.clone())
             .await
             .unwrap(),
     ));
@@ -67,7 +67,7 @@ async fn test_prompt_manager() {
     );
     params.insert("language".to_string(), json!("rust"));
 
-    let context = hive_ai::integration::mcp::PromptContext {
+    let context = crate::integration::mcp::PromptContext {
         language: Some("rust".to_string()),
         project_path: None,
         user_preferences: std::collections::HashMap::new(),
@@ -87,11 +87,11 @@ async fn test_prompt_manager() {
 
 #[tokio::test]
 async fn test_sampling_manager() {
-    let config = hive_ai::integration::mcp::sampling::SamplingConfig::default();
+    let config = crate::integration::mcp::sampling::SamplingConfig::default();
     let sampling_manager = SamplingManager::new(config);
 
     // Test sample creation
-    let request = hive_ai::integration::mcp::SampleRequest {
+    let request = crate::integration::mcp::SampleRequest {
         method: "consensus".to_string(),
         prompt: "Test prompt".to_string(),
         arguments: std::collections::HashMap::new(),
@@ -126,8 +126,8 @@ async fn test_subscription_manager() {
     assert!(result.is_ok());
 
     // Test subscription creation
-    let request = hive_ai::integration::mcp::SubscriptionRequest {
-        resource_type: hive_ai::integration::mcp::subscriptions::ResourceType::File,
+    let request = crate::integration::mcp::SubscriptionRequest {
+        resource_type: crate::integration::mcp::subscriptions::ResourceType::File,
         resource_path: "/tmp/test.txt".to_string(),
         filters: None,
         client_id: client_id.clone(),
@@ -145,7 +145,7 @@ async fn test_subscription_manager() {
 
 #[tokio::test]
 async fn test_performance_manager() {
-    let config = hive_ai::integration::mcp::PerformanceConfig::default();
+    let config = crate::integration::mcp::PerformanceConfig::default();
     let performance_manager = PerformanceManager::new(config);
 
     // Start monitoring
@@ -171,16 +171,16 @@ async fn test_tool_execution_flow() {
     // This test simulates the complete flow of tool execution
     // with performance monitoring, caching, and prompt management
 
-    let config = std::sync::Arc::new(hive_ai::core::config::Config::default());
+    let config = std::sync::Arc::new(crate::core::config::Config::default());
     let consensus_engine = std::sync::Arc::new(tokio::sync::RwLock::new(
-        hive_ai::consensus::engine::ConsensusEngine::new(config.clone())
+        crate::consensus::engine::ConsensusEngine::new(config.clone())
             .await
             .unwrap(),
     ));
 
     // Create tool registry with all advanced features
     let tool_registry =
-        hive_ai::integration::mcp::tools::ToolRegistry::new(consensus_engine, config).await;
+        crate::integration::mcp::tools::ToolRegistry::new(consensus_engine, config).await;
 
     assert!(tool_registry.is_ok());
 
@@ -259,7 +259,7 @@ async fn test_real_time_subscriptions() {
 
 #[tokio::test]
 async fn test_performance_optimizations() {
-    let config = hive_ai::integration::mcp::PerformanceConfig {
+    let config = crate::integration::mcp::PerformanceConfig {
         cache_enabled: true,
         cache_max_size: 100,
         cache_ttl_seconds: 60,

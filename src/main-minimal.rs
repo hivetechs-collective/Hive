@@ -1,6 +1,6 @@
 //! Hive AI CLI - Minimal test version
 
-use hive_ai::core::{initialize_default_logging, HiveError};
+use hive::core::{initialize_default_logging, HiveError};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -10,11 +10,11 @@ async fn main() -> Result<(), HiveError> {
 
     // Show a simple startup message
     println!("🐝 Hive AI - Rust Implementation");
-    println!("Version: {}", hive_ai::VERSION);
+    println!("Version: {}", hive::VERSION);
     println!("✅ Foundation infrastructure loaded successfully!");
 
     // Test error handling
-    let workspace = hive_ai::core::Workspace::new(PathBuf::from(".")).await?;
+    let workspace = hive::core::Workspace::new(PathBuf::from(".")).await?;
     println!("📁 Workspace initialized: {}", workspace.root.display());
 
     // Test basic functionality
@@ -36,7 +36,7 @@ async fn test_error_handling() -> Result<(), HiveError> {
 }
 
 async fn test_logging() {
-    use hive_ai::core::logging::{PerfTimer, ErrorTracker, AnalyticsLogger};
+    use hive::core::logging::{PerfTimer, ErrorTracker, AnalyticsLogger};
     use tracing::{info, warn, error};
 
     // Test structured logging

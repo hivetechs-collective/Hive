@@ -1,7 +1,7 @@
 //! Integration tests for CLI functionality
 
-use hive_ai::cli::{args::Cli, check_tui_capabilities, should_launch_tui};
-use hive_ai::core::config::{create_default_config, get_hive_config_dir, HiveConfig};
+use crate::cli::{args::Cli, check_tui_capabilities, should_launch_tui};
+use crate::core::config::{create_default_config, get_hive_config_dir, HiveConfig};
 use tempfile::TempDir;
 use tokio;
 

@@ -2,8 +2,8 @@
 //! Measures database performance against TypeScript baseline and targets
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use hive_ai::core::database::{Conversation, ConversationMetadata, HiveDatabase};
-use hive_ai::core::memory::{MemoryCluster, ThematicMemory};
+use hive::core::database::{Conversation, ConversationMetadata, HiveDatabase};
+use hive::core::memory::{MemoryCluster, ThematicMemory};
 use std::time::Duration;
 use tempfile::tempdir;
 use tokio::runtime::Runtime;

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use tokio::time::{timeout, Duration};
 
-use hive::ai_helpers::{
+use crate::ai_helpers::{
     AIHelperEcosystem, 
     IndexedKnowledge, 
     ProcessedKnowledge,
@@ -16,7 +16,7 @@ use hive::ai_helpers::{
     InsightType,
     Severity,
 };
-use hive::core::database::DatabaseManager;
+use crate::core::database::DatabaseManager;
 
 /// Test the complete AI helper ecosystem flow
 #[tokio::test]
@@ -126,7 +126,7 @@ fn validate_processed_knowledge(processed: &ProcessedKnowledge) -> Result<()> {
 async fn test_stage_contexts(helpers: &AIHelperEcosystem, question: &str) -> Result<()> {
     println!("🎭 Testing stage-specific context preparation...");
     
-    use hive::consensus::types::Stage;
+    use crate::consensus::types::Stage;
     
     let stages = [Stage::Generator, Stage::Refiner, Stage::Validator, Stage::Curator];
     

@@ -2,10 +2,12 @@
 //! 
 //! Core functionality for interacting with git repositories
 
-use git2::{Repository, RepositoryOpenFlags, StatusOptions};
+use git2::{Repository, RepositoryOpenFlags, StatusOptions, Oid};
 use std::path::{Path, PathBuf};
 use anyhow::{Result, Context};
 use tracing::{info, warn, error};
+use super::{BranchInfo, BranchType, CommitInfo};
+use std::str::FromStr;
 
 /// Information about a git repository
 #[derive(Debug, Clone, PartialEq)]
@@ -182,5 +184,207 @@ impl GitRepository {
             .to_string();
         
         Ok(content)
+    }
+    
+    /// Checkout a branch
+    pub fn checkout_branch(&self, branch_name: &str) -> Result<()> {
+        let branch_ref = format!("refs/heads/{}", branch_name);
+        
+        // Try to find the branch
+        let branch = if let Ok(reference) = self.repo.find_reference(&branch_ref) {
+            self.repo.reference_to_annotated_commit(&reference)?
+        } else {
+            // Try remote branches
+            let remote_ref = format!("refs/remotes/origin/{}", branch_name);
+            if let Ok(reference) = self.repo.find_reference(&remote_ref) {
+                // Create local branch from remote
+                let commit = self.repo.reference_to_annotated_commit(&reference)?;
+                let commit_obj = self.repo.find_commit(commit.id())?;
+                self.repo.branch(branch_name, &commit_obj, false)?;
+                
+                // Set upstream
+                let mut branch = self.repo.find_branch(branch_name, git2::BranchType::Local)?;
+                branch.set_upstream(Some(&format!("origin/{}", branch_name)))?;
+                
+                self.repo.reference_to_annotated_commit(&self.repo.find_reference(&branch_ref)?)?
+            } else {
+                return Err(anyhow::anyhow!("Branch '{}' not found", branch_name));
+            }
+        };
+        
+        // Checkout the branch
+        let object = self.repo.find_object(branch.id(), None)?;
+        self.repo.checkout_tree(&object, None)?;
+        self.repo.set_head(&branch_ref)?;
+        
+        info!("Checked out branch: {}", branch_name);
+        Ok(())
+    }
+    
+    /// List all branches (local and remote)
+    pub fn list_branches(&self) -> Result<Vec<BranchInfo>> {
+        let mut branches = Vec::new();
+        
+        // Get current branch name for comparison
+        let current_branch = self.current_branch().unwrap_or_default();
+        
+        // List local branches
+        for branch in self.repo.branches(Some(git2::BranchType::Local))? {
+            let (branch, _) = branch?;
+            if let Some(name) = branch.name()? {
+                let is_current = name == current_branch;
+                
+                // Get ahead/behind counts if this branch has an upstream
+                let (ahead, behind) = if let Ok(upstream) = branch.upstream() {
+                    if let Some(upstream_oid) = upstream.get().target() {
+                        if let Some(local_oid) = branch.get().target() {
+                            if let Ok((ahead, behind)) = self.repo.graph_ahead_behind(local_oid, upstream_oid) {
+                                (ahead, behind)
+                            } else {
+                                (0, 0)
+                            }
+                        } else {
+                            (0, 0)
+                        }
+                    } else {
+                        (0, 0)
+                    }
+                } else {
+                    (0, 0)
+                };
+                
+                branches.push(BranchInfo {
+                    name: name.to_string(),
+                    branch_type: BranchType::Local,
+                    is_current,
+                    upstream: branch.upstream().ok().and_then(|u| u.name().ok().flatten().map(|s| s.to_string())),
+                    ahead,
+                    behind,
+                    last_commit: None,
+                });
+            }
+        }
+        
+        // List remote branches
+        for branch in self.repo.branches(Some(git2::BranchType::Remote))? {
+            let (branch, _) = branch?;
+            if let Some(name) = branch.name()? {
+                // Skip HEAD references
+                if name.ends_with("/HEAD") {
+                    continue;
+                }
+                
+                branches.push(BranchInfo {
+                    name: name.to_string(),
+                    branch_type: BranchType::Remote,
+                    is_current: false,
+                    upstream: None,
+                    ahead: 0,
+                    behind: 0,
+                    last_commit: None,
+                });
+            }
+        }
+        
+        Ok(branches)
+    }
+    
+    /// Create a new branch from a reference
+    pub fn create_branch(&self, branch_name: &str, from_ref: &str) -> Result<()> {
+        // Validate branch name
+        super::validate_branch_name(branch_name)?;
+        
+        // Find the commit to branch from
+        let commit = if from_ref == "HEAD" {
+            let head = self.repo.head()?;
+            self.repo.find_commit(head.target().context("HEAD has no target")?)?
+        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/heads/{}", from_ref)) {
+            self.repo.find_commit(reference.target().context("Reference has no target")?)?
+        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/remotes/{}", from_ref)) {
+            self.repo.find_commit(reference.target().context("Reference has no target")?)?
+        } else if let Ok(oid) = git2::Oid::from_str(from_ref) {
+            self.repo.find_commit(oid)?
+        } else {
+            return Err(anyhow::anyhow!("Could not find reference '{}'", from_ref));
+        };
+        
+        // Create the branch
+        self.repo.branch(branch_name, &commit, false)?;
+        info!("Created branch '{}' from '{}'", branch_name, from_ref);
+        
+        Ok(())
+    }
+    
+    /// Delete a branch
+    pub fn delete_branch(&self, branch_name: &str) -> Result<()> {
+        // Find the branch
+        let mut branch = self.repo.find_branch(branch_name, git2::BranchType::Local)
+            .context("Branch not found")?;
+        
+        // Check if it's the current branch
+        if branch.is_head() {
+            return Err(anyhow::anyhow!("Cannot delete the current branch"));
+        }
+        
+        // Delete the branch
+        branch.delete()?;
+        info!("Deleted branch '{}'", branch_name);
+        
+        Ok(())
+    }
+    
+    /// Fetch all remotes
+    pub fn fetch_all(&self) -> Result<()> {
+        let remotes = self.repo.remotes()?;
+        
+        for i in 0..remotes.len() {
+            if let Some(remote_name) = remotes.get(i) {
+                info!("Fetching remote '{}'", remote_name);
+                let mut remote = self.repo.find_remote(remote_name)?;
+                
+                // Fetch with default options
+                let mut fetch_options = git2::FetchOptions::new();
+                remote.fetch(&[] as &[&str], Some(&mut fetch_options), None)?;
+            }
+        }
+        
+        info!("Fetched all remotes");
+        Ok(())
+    }
+    
+    /// Get commit info for a branch
+    pub fn get_branch_commit(&self, branch_name: &str) -> Result<super::CommitInfo> {
+        // Find the branch reference
+        let reference = if let Ok(reference) = self.repo.find_reference(&format!("refs/heads/{}", branch_name)) {
+            reference
+        } else if let Ok(reference) = self.repo.find_reference(&format!("refs/remotes/{}", branch_name)) {
+            reference
+        } else {
+            return Err(anyhow::anyhow!("Branch '{}' not found", branch_name));
+        };
+        
+        // Get the commit
+        let oid = reference.target().context("Reference has no target")?;
+        let commit = self.repo.find_commit(oid)?;
+        
+        // Extract commit info
+        let hash = commit.id().to_string();
+        let hash_short = hash[..7].to_string();
+        let message = commit.summary().unwrap_or("").to_string();
+        let author = commit.author().name().unwrap_or("Unknown").to_string();
+        
+        // Convert git time to chrono DateTime
+        let time = commit.time();
+        let timestamp = time.seconds() + (time.offset_minutes() as i64 * 60);
+        let date = chrono::DateTime::from_timestamp(timestamp, 0)
+            .unwrap_or_else(chrono::Utc::now);
+        
+        Ok(super::CommitInfo {
+            hash,
+            hash_short,
+            message,
+            author,
+            date,
+        })
     }
 }

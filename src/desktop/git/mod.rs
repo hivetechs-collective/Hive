@@ -15,28 +15,51 @@ pub mod diff;
 pub mod operations;
 pub mod toolbar;
 pub mod context_manager;
+pub mod status_menu;
+pub mod repository_selector;
+pub mod multi_repo_manager;
 
 pub use repository::{GitRepository, RepositoryInfo};
-pub use branch::{BranchInfo, BranchType};
+pub use branch::{BranchInfo, BranchType, BranchFilter, BranchSort, CommitInfo, sort_branches, validate_branch_name};
 pub use status::{FileStatus, StatusType, SyncStatus};
 pub use watcher::{GitWatcher, GitEvent};
 pub use diff::{DiffResult, DiffHunk, DiffLine, DiffLineType, DiffViewMode, compute_diff, get_file_diff};
-pub use operations::{GitOperations, GitOperation, GitOperationResult};
-pub use toolbar::{GitToolbar, GitToolbarProps};
+pub use operations::{GitOperations, GitOperation, GitOperationResult, GitOperationProgress, ProgressCallback, CancellationToken};
+pub use toolbar::{GitToolbar, GitToolbarProps, OperationState};
 pub use context_manager::{GitContextManager, GitContextEvent, use_git_context, provide_git_context};
+pub use status_menu::{GitStatusMenu, GitStatusMenuProps};
+pub use repository_selector::{
+    RepositorySelector, RepositoryInfo as RepoSelectorInfo, RepositoryStatus as RepoStatus,
+    RepositorySelectorState, UpstreamStatus, REPOSITORY_SELECTOR_STYLES
+};
+pub use multi_repo_manager::{MultiRepoManager, RepositoriesSummary};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Global git state for the application
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct GitState {
     pub repositories: Signal<Vec<RepositoryInfo>>,
     pub active_repo: Signal<Option<RepositoryInfo>>,
     pub branch_info: Signal<Option<BranchInfo>>,
     pub file_statuses: Signal<HashMap<PathBuf, FileStatus>>,
     pub sync_status: Signal<SyncStatus>,
+}
+
+impl GitState {
+    /// Create a new GitState instance
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Refresh the git status for the given repository path
+    pub async fn refresh_status(&self, _repo_path: &PathBuf) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Implementation would refresh git status for the repository
+        // For now, this is a stub that doesn't fail compilation
+        Ok(())
+    }
 }
 
 impl Default for GitState {

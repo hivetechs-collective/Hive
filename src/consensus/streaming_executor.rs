@@ -320,7 +320,8 @@ mod tests {
         
         // Create mocks
         let file_executor = Arc::new(FileOperationExecutor::new(temp_dir.path().to_path_buf()));
-        let ai_helpers = Arc::new(AIHelperEcosystem::new().await.unwrap());
+        let db = Arc::new(crate::core::database::DatabaseManager::new(crate::core::database::DatabaseConfig::default()).await.unwrap());
+        let ai_helpers = Arc::new(AIHelperEcosystem::new(db).await.unwrap());
         let auto_accept = Arc::new(AtomicBool::new(true));
         let (tx, mut rx) = mpsc::unbounded_channel();
         
@@ -360,7 +361,8 @@ mod tests {
         
         // Create mocks
         let file_executor = Arc::new(FileOperationExecutor::new(temp_dir.path().to_path_buf()));
-        let ai_helpers = Arc::new(AIHelperEcosystem::new().await.unwrap());
+        let db = Arc::new(crate::core::database::DatabaseManager::new(crate::core::database::DatabaseConfig::default()).await.unwrap());
+        let ai_helpers = Arc::new(AIHelperEcosystem::new(db).await.unwrap());
         let auto_accept = Arc::new(AtomicBool::new(false)); // Confirmation required
         let (tx, mut rx) = mpsc::unbounded_channel();
         

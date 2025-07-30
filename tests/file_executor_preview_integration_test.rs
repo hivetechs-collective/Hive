@@ -1,16 +1,16 @@
 // Integration tests for File Executor with Preview Generation
-use hive_ai::consensus::{
+use crate::consensus::{
     FileOperationExecutor, ExecutorConfig, SmartDecisionEngine,
     OperationIntelligenceCoordinator, OperationContext as ConsensusOperationContext,
     operation_intelligence::OperationContext as IntelligenceOperationContext,
     operation_analysis::AutoAcceptMode,
 };
-use hive_ai::ai_helpers::{
+use crate::ai_helpers::{
     KnowledgeIndexer, ContextRetriever, PatternRecognizer,
     QualityAnalyzer, KnowledgeSynthesizer,
 };
-use hive_ai::memory::{MemoryManager, MemoryConfig};
-use hive_ai::core::database::Database;
+use crate::memory::{MemoryManager, MemoryConfig};
+use crate::core::database::Database;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use tokio;

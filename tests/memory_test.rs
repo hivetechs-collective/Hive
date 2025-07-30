@@ -1,7 +1,7 @@
 //! Test the memory module in isolation
 
 use anyhow::Result;
-use hive_ai::memory::{
+use crate::memory::{
     ContextRetriever, EmbeddingEngine, KnowledgeGraph, MemoryAnalyzer, MemoryIntelligence,
     PatternLearner, SimilarityMetric, VectorStore,
 };
@@ -59,7 +59,7 @@ async fn test_vector_store() -> Result<()> {
 
 #[tokio::test]
 async fn test_knowledge_graph() -> Result<()> {
-    use hive_ai::memory::{Entity, EntityType, RelationType, Relationship};
+    use crate::memory::{Entity, EntityType, RelationType, Relationship};
 
     let mut graph = KnowledgeGraph::new();
 

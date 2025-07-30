@@ -1,6 +1,6 @@
 //! Integration tests for transformation module
 
-use hive_ai::transformation::*;
+use crate::transformation::*;
 use std::path::PathBuf;
 
 #[test]

@@ -3,11 +3,11 @@
 //! Comprehensive performance testing to verify 10-40x improvement targets
 //! and validate optimization strategies.
 
-use hive_ai::migration::{
+use crate::migration::{
     database_impl::{ProductionDatabase, BatchConfig},
     performance::{PerformanceOptimizer, PerformanceConfig, BatchStrategy, DiskIOStrategy},
 };
-use hive_ai::core::error::HiveError;
+use crate::core::error::HiveError;
 use rusqlite::Connection;
 use std::path::PathBuf;
 use std::time::Instant;

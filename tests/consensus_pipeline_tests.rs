@@ -13,7 +13,7 @@ use chrono::Utc;
 use std::sync::Arc;
 use tokio::time::{timeout, Duration};
 
-use hive_ai::consensus::{
+use crate::consensus::{
     stages::{ConsensusStage, CuratorStage, GeneratorStage, RefinerStage, ValidatorStage},
     streaming::{ConsensusMetrics, ConsoleCallbacks, EnhancedProgressTracker},
     types::{ContextInjectionStrategy, RetryPolicy, Stage},

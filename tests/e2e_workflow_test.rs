@@ -1,21 +1,21 @@
 // End-to-End Workflow Tests for AI-Enhanced Auto-Accept System
 // Tests complete workflows from user input to operation execution
 
-use hive_ai::consensus::operation_analysis::{
+use crate::consensus::operation_analysis::{
     OperationAnalysis, OperationContext, UnifiedScore, 
     AutoAcceptMode, OperationGroups, ActionRecommendation,
     ActionPriority, RecommendedAction,
 };
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
-use hive_ai::consensus::smart_decision_engine::{
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::smart_decision_engine::{
     SmartDecisionEngine, UserPreferences, ExecutionDecision,
     CustomRule, RuleAction, UserDecision, UserChoice,
 };
-use hive_ai::consensus::operation_history::OperationHistoryDatabase;
-use hive_ai::consensus::operation_intelligence::{
+use crate::consensus::operation_history::OperationHistoryDatabase;
+use crate::consensus::operation_intelligence::{
     OperationIntelligenceCoordinator, OperationOutcome,
 };
-use hive_ai::ai_helpers::*;
+use crate::ai_helpers::*;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::collections::HashMap;

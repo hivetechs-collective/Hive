@@ -1,9 +1,9 @@
 //! Consensus Pipeline Integration Tests with OpenRouter API
 //! Tests the complete 4-stage consensus pipeline with real API integration
 
-use hive_ai::consensus::{ConsensusEngine, ConsensusProfile, ConsensusRequest, ConsensusStage};
-use hive_ai::core::config::{HiveConfig, OpenRouterConfig};
-use hive_ai::providers::openrouter::{OpenRouterClient, OpenRouterModel};
+use crate::consensus::{ConsensusEngine, ConsensusProfile, ConsensusRequest, ConsensusStage};
+use crate::core::config::{HiveConfig, OpenRouterConfig};
+use crate::providers::openrouter::{OpenRouterClient, OpenRouterModel};
 use serial_test::serial;
 use std::time::{Duration, Instant};
 use tokio;

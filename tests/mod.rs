@@ -355,7 +355,7 @@ pub mod utils {
 
     /// Create test database with sample data
     pub async fn create_test_database(path: &Path) -> Result<()> {
-        let db = hive_ai::core::database::HiveDatabase::new(path).await?;
+        let db = crate::core::database::HiveDatabase::new(path).await?;
 
         // Initialize with test schema
         db.initialize().await?;

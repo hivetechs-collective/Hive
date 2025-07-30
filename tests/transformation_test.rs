@@ -1,6 +1,6 @@
 //! Tests for the transformation engine
 
-use hive_ai::transformation::{simple_transform_code, TransformationRequest};
+use crate::transformation::{simple_transform_code, TransformationRequest};
 use std::path::Path;
 
 #[tokio::test]
@@ -37,7 +37,7 @@ fn main() {
     assert!(!preview.transformation.changes.is_empty());
     assert_eq!(
         preview.impact.risk_level,
-        hive_ai::transformation::RiskLevel::Low
+        crate::transformation::RiskLevel::Low
     );
 }
 

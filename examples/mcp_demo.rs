@@ -2,7 +2,7 @@
 //!
 //! This example demonstrates the MCP server functionality
 
-use hive_ai::integration::mcp::protocol::*;
+use crate::integration::mcp::protocol::*;
 use serde_json::json;
 
 fn main() {
