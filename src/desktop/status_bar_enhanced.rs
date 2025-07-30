@@ -76,6 +76,17 @@ impl Default for StatusBarState {
             items: vec![
                 // Left side items
                 StatusBarItem {
+                    id: "repository-selector".to_string(),
+                    text: "hive".to_string(), // Default repository name
+                    tooltip: Some("Select Repository".to_string()),
+                    icon: Some("folder".to_string()),
+                    alignment: StatusBarAlignment::Left,
+                    priority: 110, // Highest priority - appears first
+                    on_click: None,
+                    background_color: None,
+                    foreground_color: None,
+                },
+                StatusBarItem {
                     id: "git-branch".to_string(),
                     text: "main".to_string(),
                     tooltip: Some("Git: main (click to checkout branch)".to_string()),
@@ -211,6 +222,7 @@ pub fn EnhancedStatusBar(
     state: Signal<StatusBarState>,
     on_item_click: EventHandler<String>,
     on_git_branch_click: Option<EventHandler<()>>,
+    on_repository_selector_click: Option<EventHandler<()>>,
 ) -> Element {
     let status_state = state.read();
     
@@ -247,8 +259,15 @@ pub fn EnhancedStatusBar(
                     StatusBarItemComponent {
                         item: item.clone(),
                         on_click: {
-                            // Special handling for git-branch item
-                            if item.id == "git-branch" {
+                            // Special handling for specific items
+                            if item.id == "repository-selector" {
+                                if let Some(ref handler) = on_repository_selector_click {
+                                    handler.clone()
+                                } else {
+                                    let id = item.id.clone();
+                                    EventHandler::new(move |_| on_item_click.call(id.clone()))
+                                }
+                            } else if item.id == "git-branch" {
                                 if let Some(ref handler) = on_git_branch_click {
                                     handler.clone()
                                 } else {
@@ -308,6 +327,7 @@ fn StatusBarItemComponent(
     // Map icon names to codicons
     let icon_class = item.icon.as_ref().map(|icon| {
         match icon.as_str() {
+            "folder" => "codicon-folder",
             "source-control" => "codicon-source-control",
             "sync" => "codicon-sync",
             "error" => "codicon-error",
@@ -407,6 +427,13 @@ impl StatusBarState {
         if let Some(item) = self.items.iter_mut().find(|i| i.id == "git-sync") {
             item.text = format!("↓{} ↑{}", behind, ahead);
             item.tooltip = Some("Synchronize Changes".to_string());
+        }
+    }
+    
+    pub fn update_repository_selector(&mut self, name: &str, path: &str) {
+        if let Some(item) = self.items.iter_mut().find(|i| i.id == "repository-selector") {
+            item.text = name.to_string();
+            item.tooltip = Some(format!("Repository: {} ({})", name, path));
         }
     }
 }
@@ -559,5 +586,13 @@ pub const STATUS_BAR_STYLES: &str = r#"
 .status-bar-item:focus {
     outline: 1px solid var(--hivetechs-yellow, #FFC107);
     outline-offset: -1px;
+}
+
+/* Repository selector special styling */
+.status-bar-item[title*="Repository"] {
+    font-weight: 600;
+    padding-right: 10px;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    margin-right: 10px;
 }
 "#;
