@@ -312,18 +312,18 @@ impl ProblemsState {
     }
 
     /// Update problems from git conflicts
-    pub fn update_git_problems(&mut self, conflicts: &[super::super::git::FileStatus]) {
+    pub fn update_git_problems(&mut self, file_statuses: &std::collections::HashMap<std::path::PathBuf, super::super::git::FileStatus>) {
         // Clear existing git problems
         self.clear_source(&ProblemSource::Git);
         
         // Add conflict problems
-        for conflict in conflicts.iter().filter(|f| f.status_type == super::super::git::StatusType::Conflicted) {
+        for (path, status) in file_statuses.iter().filter(|(_, status)| status.status_type == super::super::git::StatusType::Conflicted) {
             let problem = ProblemItem::new(
                 ProblemSeverity::Error,
                 ProblemSource::Git,
-                format!("Merge conflict in {}", conflict.path.display()),
+                format!("Merge conflict in {}", path.display()),
             )
-            .with_location(conflict.path.clone(), 1, 1);
+            .with_location(path.clone(), 1, 1);
             
             self.add_problem(problem);
         }

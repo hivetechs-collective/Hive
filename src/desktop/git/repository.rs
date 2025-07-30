@@ -27,15 +27,11 @@ pub struct GitRepository {
     path: PathBuf,
 }
 
-/// Global optimized git manager instance
-static GLOBAL_GIT_MANAGER: OnceLock<Arc<OptimizedGitManager>> = OnceLock::new();
-
-/// Get or initialize the global optimized git manager
+/// Get or initialize a new optimized git manager
+/// Note: Each manager instance is independent to avoid thread safety issues
 pub fn get_optimized_git_manager() -> Arc<OptimizedGitManager> {
-    GLOBAL_GIT_MANAGER.get_or_init(|| {
-        let config = PerformanceConfig::default();
-        Arc::new(OptimizedGitManager::new(config))
-    }).clone()
+    let config = PerformanceConfig::default();
+    Arc::new(OptimizedGitManager::new(config))
 }
 
 /// Get performance statistics from the global git manager

@@ -180,12 +180,14 @@ impl GitContextManager {
             };
             
             let file_status = FileStatus {
-                path: path.clone(),
                 status_type,
-                is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
-                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                          git_status.contains(git2::Status::INDEX_DELETED) ||
-                          git_status.contains(git2::Status::INDEX_RENAMED),
+                has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                  git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                  git_status.contains(git2::Status::INDEX_DELETED) ||
+                                  git_status.contains(git2::Status::INDEX_RENAMED),
+                has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                    git_status.contains(git2::Status::WT_MODIFIED) ||
+                                    git_status.contains(git2::Status::WT_DELETED),
             };
             status_map.insert(path, file_status);
         }
