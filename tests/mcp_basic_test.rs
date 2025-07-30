@@ -1,6 +1,6 @@
 //! Basic MCP protocol tests
 
-use hive_ai::integration::mcp::protocol::*;
+use crate::integration::mcp::protocol::*;
 
 #[test]
 fn test_mcp_protocol_constants() {

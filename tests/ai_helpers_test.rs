@@ -1,5 +1,5 @@
 // Unit tests for AI Helpers
-use hive_ai::ai_helpers::{
+use crate::ai_helpers::{
     KnowledgeIndexer, IndexedOperation, OperationSimilarity, OperationSuccessPrediction,
     ContextRetriever, OperationContextAnalysis, OperationPrecedent,
     PatternRecognizer, SafetyPatternAnalysis, OperationSafetyPattern,
@@ -11,8 +11,8 @@ use hive_ai::ai_helpers::{
     KnowledgeIndexerScore, ContextRetrieverScore, PatternRecognizerScore,
     QualityAnalyzerScore, KnowledgeSynthesizerScore,
 };
-use hive_ai::consensus::operation_intelligence::{OperationContext, OperationOutcome};
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_intelligence::{OperationContext, OperationOutcome};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -370,7 +370,7 @@ mod parallel_processor_tests {
         let analyzer = Arc::new(QualityAnalyzer::new(python_service.clone()).await.unwrap());
         let synthesizer = Arc::new(KnowledgeSynthesizer::new(python_service).await.unwrap());
         
-        let indexed = hive_ai::ai_helpers::IndexedKnowledge {
+        let indexed = crate::ai_helpers::IndexedKnowledge {
             id: "test".to_string(),
             content: "Test content".to_string(),
             embedding: vec![0.1, 0.2, 0.3],

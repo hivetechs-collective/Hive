@@ -29,6 +29,7 @@ pub mod state;
 pub mod status_bar_enhanced;
 pub mod profile_service;
 pub mod styles;
+pub mod problems;
 pub mod terminal;
 pub mod terminal_pty;
 pub mod terminal_tabs;
@@ -50,6 +51,10 @@ pub use menu_bar::{MenuAction, MenuBar};
 pub use styles::components::{
     ButtonVariant, FileTreeItem, IconSize, PanelStyle, StatusBarItem, VsCodeButton, VsCodePanel,
     VsCodeTab,
+};
+pub use problems::{
+    ProblemsPanel, ProblemItem, ProblemSeverity, ProblemSource, ProblemsState,
+    PROBLEMS_PANEL_STYLES,
 };
 pub use styles::theme::{use_theme, Theme, ThemeProvider, ThemeSwitcher};
 

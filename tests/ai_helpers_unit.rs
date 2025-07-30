@@ -1,5 +1,5 @@
 // Unit tests for AI Helpers
-use hive_ai::ai_helpers::{
+use crate::ai_helpers::{
     knowledge_indexer::{KnowledgeIndexer, IndexerConfig},
     context_retriever::{ContextRetriever, ContextQuery},
     pattern_recognizer::PatternRecognizer,
@@ -8,9 +8,9 @@ use hive_ai::ai_helpers::{
     ChromaVectorStore,
     python_models::PythonModelService,
 };
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
-use hive_ai::consensus::operation_analysis::OperationContext;
-use hive_ai::consensus::operation_intelligence::{OperationOutcome, UserFeedback, QualityMetrics as OpQualityMetrics};
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_analysis::OperationContext;
+use crate::consensus::operation_intelligence::{OperationOutcome, UserFeedback, QualityMetrics as OpQualityMetrics};
 use std::sync::Arc;
 use std::path::PathBuf;
 use std::time::{SystemTime, Duration};

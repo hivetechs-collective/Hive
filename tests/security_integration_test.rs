@@ -1,6 +1,6 @@
 //! Integration tests for the security and trust management system
 
-use hive_ai::{
+use crate::{
     FileOperations, SecureFileAccess, SecurityConfig, SecurityConfigManager, SecurityPolicy,
     TrustDecision, TrustLevel, TrustManager,
 };
@@ -35,7 +35,7 @@ async fn test_trust_persistence() {
         let mut manager = TrustManager::new(temp_dir.path(), policy.clone())
             .await
             .unwrap();
-        let trust_entry = hive_ai::core::security::TrustEntry {
+        let trust_entry = crate::core::security::TrustEntry {
             path: test_path.clone(),
             level: TrustLevel::Trusted,
             timestamp: chrono::Utc::now(),
@@ -137,7 +137,7 @@ async fn test_config_json_serialization() {
 /// Test production vs development configuration profiles
 #[tokio::test]
 async fn test_configuration_profiles() {
-    use hive_ai::core::security_config::SecurityConfigUtils;
+    use crate::core::security_config::SecurityConfigUtils;
 
     let prod_config = SecurityConfigUtils::production_config();
     let dev_config = SecurityConfigUtils::development_config();
@@ -209,7 +209,7 @@ async fn test_trust_entry_metadata() {
     let test_path = temp_dir.path().join("metadata_test");
     tokio::fs::create_dir(&test_path).await.unwrap();
 
-    let trust_entry = hive_ai::core::security::TrustEntry {
+    let trust_entry = crate::core::security::TrustEntry {
         path: test_path.clone(),
         level: TrustLevel::Trusted,
         timestamp: chrono::Utc::now(),

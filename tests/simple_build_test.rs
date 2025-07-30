@@ -3,7 +3,7 @@
 #[test]
 fn test_security_modules_compile() {
     // Just check that our modules compile correctly
-    use hive_ai::{
+    use crate::{
         SecureFileAccess, SecurityConfig, SecurityPolicy, TrustDecision, TrustLevel, TrustManager,
     };
 

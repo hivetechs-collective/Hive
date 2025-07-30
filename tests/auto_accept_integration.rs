@@ -1,9 +1,9 @@
 // Integration tests for AI-Enhanced Auto-Accept System
 // These tests verify the auto-accept decision logic without requiring actual Python services
 
-use hive_ai::consensus::operation_analysis::{AutoAcceptMode, OperationContext as AnalysisContext};
-use hive_ai::consensus::smart_decision_engine::{SmartDecisionEngine, UserPreferences, ExecutionDecision};
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_analysis::{AutoAcceptMode, OperationContext as AnalysisContext};
+use crate::consensus::smart_decision_engine::{SmartDecisionEngine, UserPreferences, ExecutionDecision};
+use crate::consensus::stages::file_aware_curator::FileOperation;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
@@ -21,8 +21,8 @@ fn create_default_preferences() -> UserPreferences {
 }
 
 /// Helper to create test operation analysis
-fn create_test_analysis(confidence: f32, risk: f32) -> hive_ai::consensus::operation_analysis::OperationAnalysis {
-    hive_ai::consensus::operation_analysis::OperationAnalysis {
+fn create_test_analysis(confidence: f32, risk: f32) -> crate::consensus::operation_analysis::OperationAnalysis {
+    crate::consensus::operation_analysis::OperationAnalysis {
         operations: vec![],
         context: AnalysisContext {
             repository_path: PathBuf::from("/test"),
@@ -32,22 +32,22 @@ fn create_test_analysis(confidence: f32, risk: f32) -> hive_ai::consensus::opera
             session_id: "test".to_string(),
             git_commit: None,
         },
-        unified_score: hive_ai::consensus::operation_analysis::UnifiedScore { confidence, risk },
+        unified_score: crate::consensus::operation_analysis::UnifiedScore { confidence, risk },
         recommendations: vec![],
-        groups: hive_ai::consensus::operation_analysis::OperationGroups {
+        groups: crate::consensus::operation_analysis::OperationGroups {
             create_operations: vec![],
             update_operations: vec![],
             delete_operations: vec![],
             move_operations: vec![],
         },
-        component_scores: hive_ai::consensus::operation_analysis::ComponentScores {
+        component_scores: crate::consensus::operation_analysis::ComponentScores {
             knowledge_indexer: None,
             context_retriever: None,
             pattern_recognizer: None,
             quality_analyzer: None,
             knowledge_synthesizer: None,
         },
-        scoring_factors: hive_ai::consensus::operation_analysis::ScoringFactors {
+        scoring_factors: crate::consensus::operation_analysis::ScoringFactors {
             historical_success: None,
             pattern_safety: None,
             conflict_probability: None,

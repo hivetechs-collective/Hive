@@ -1,8 +1,8 @@
 //! Test consensus cost tracking
 
 use anyhow::Result;
-use hive_ai::consensus::engine::ConsensusEngine;
-use hive_ai::core::database::{get_database, initialize_database, DatabaseConfig};
+use hive::consensus::engine::ConsensusEngine;
+use hive::core::database::{get_database, initialize_database, DatabaseConfig};
 use std::path::PathBuf;
 
 #[tokio::main]

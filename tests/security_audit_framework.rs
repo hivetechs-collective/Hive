@@ -1,8 +1,8 @@
 //! Security Audit Framework and Penetration Testing
 //! Comprehensive security testing for HiveTechs Consensus
 
-use hive_ai::core::{security::SecurityManager, trust_dialog::TrustDialog};
-use hive_ai::hooks::{execution::HookExecutor, registry::HookRegistry, security::SecurityHook};
+use crate::core::{security::SecurityManager, trust_dialog::TrustDialog};
+use crate::hooks::{execution::HookExecutor, registry::HookRegistry, security::SecurityHook};
 use serial_test::serial;
 use std::path::PathBuf;
 use std::process::Command;
@@ -334,7 +334,7 @@ async fn test_input_validation() {
         // Test database query sanitization
         let temp_dir = tempdir().unwrap();
         let db_path = temp_dir.path().join("test.db");
-        let db = hive_ai::core::database::HiveDatabase::new(&db_path)
+        let db = crate::core::database::HiveDatabase::new(&db_path)
             .await
             .unwrap();
 
@@ -400,10 +400,10 @@ async fn test_input_validation() {
 
     for malicious_code in malicious_code_inputs {
         // Test that consensus engine safely handles malicious code
-        let request = hive_ai::consensus::ConsensusRequest {
+        let request = crate::consensus::ConsensusRequest {
             query: "Analyze this code".to_string(),
             context: Some(malicious_code.to_string()),
-            profile: hive_ai::consensus::ConsensusProfile::Speed,
+            profile: crate::consensus::ConsensusProfile::Speed,
             stream: false,
             temperature: Some(0.7),
             max_tokens: Some(100),
@@ -447,7 +447,7 @@ disable_security = true
         .unwrap();
 
     // Should validate configuration security
-    let config_result = hive_ai::core::config::HiveConfig::load_from_file(&config_file).await;
+    let config_result = crate::core::config::HiveConfig::load_from_file(&config_file).await;
 
     match config_result {
         Ok(config) => {

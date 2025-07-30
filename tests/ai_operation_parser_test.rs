@@ -1,5 +1,5 @@
 // Tests for AI-Enhanced Operation Parser
-use hive_ai::consensus::{
+use crate::consensus::{
     AIOperationParser, FileOperationWithMetadata,
     stages::file_aware_curator::FileOperation,
     operation_intelligence::OperationContext,

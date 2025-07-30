@@ -3,11 +3,67 @@
 //! Provides functionality for staging, committing, pushing, pulling, and other git operations
 
 use anyhow::{Result, Context};
-use git2::{Repository, Signature, ObjectType, Oid};
+use git2::{Repository, Signature, ObjectType, Oid, RemoteCallbacks, PushOptions, FetchOptions};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tracing::{info, warn, error};
 
 use super::GitRepository;
+
+/// Async wrapper for git fetch operation
+pub async fn fetch(repo_path: &Path) -> Result<()> {
+    let repo_path = repo_path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let ops = GitOperations::new(&repo_path)?;
+        ops.fetch("origin").context("Failed to fetch from origin")
+    })
+    .await?
+}
+
+/// Async wrapper for git pull operation
+pub async fn pull(repo_path: &Path) -> Result<()> {
+    let repo_path = repo_path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let repo = Repository::discover(&repo_path)?;
+        let head = repo.head()?;
+        if let Some(branch_name) = head.shorthand() {
+            let ops = GitOperations::new(&repo_path)?;
+            ops.pull("origin", branch_name).context("Failed to pull from origin")
+        } else {
+            Err(anyhow::anyhow!("Unable to determine current branch"))
+        }
+    })
+    .await?
+}
+
+/// Async wrapper for git push operation
+pub async fn push(repo_path: &Path) -> Result<()> {
+    let repo_path = repo_path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let repo = Repository::discover(&repo_path)?;
+        let head = repo.head()?;
+        if let Some(branch_name) = head.shorthand() {
+            let ops = GitOperations::new(&repo_path)?;
+            ops.push("origin", branch_name).context("Failed to push to origin")
+        } else {
+            Err(anyhow::anyhow!("Unable to determine current branch"))
+        }
+    })
+    .await?
+}
+
+/// Async wrapper for git push with upstream operation
+pub async fn push_with_upstream(repo_path: &Path, branch_name: &str) -> Result<()> {
+    let repo_path = repo_path.to_path_buf();
+    let branch_name = branch_name.to_string();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let ops = GitOperations::new(&repo_path)?;
+        ops.push_with_upstream("origin", &branch_name)
+            .context("Failed to push with upstream to origin")
+    })
+    .await?
+}
 
 /// Git operations service for performing git actions
 pub struct GitOperations {
@@ -133,17 +189,65 @@ impl GitOperations {
         Ok(commit_id)
     }
     
-    /// Push to remote
-    pub fn push(&self, remote_name: &str, branch_name: &str) -> Result<()> {
+    /// Push to remote with progress callback and cancellation support
+    pub fn push_with_progress(
+        &self, 
+        remote_name: &str, 
+        branch_name: &str,
+        progress_callback: Option<ProgressCallback>,
+        cancel_token: Option<CancellationToken>,
+    ) -> Result<()> {
         let mut remote = self.repo.find_remote(remote_name)?;
         let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
         
-        let mut callbacks = git2::RemoteCallbacks::new();
+        // Create progress tracking state
+        let progress_state = Arc::new(Mutex::new((0usize, 0usize)));
+        let progress_state_clone = progress_state.clone();
+        
+        let mut callbacks = RemoteCallbacks::new();
         callbacks.credentials(|_url, username_from_url, _allowed_types| {
             git2::Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
         });
         
-        let mut push_opts = git2::PushOptions::new();
+        // Set up push transfer progress callback
+        if let Some(ref callback) = progress_callback {
+            let callback_clone = callback.clone();
+            callbacks.push_transfer_progress(move |current, total, bytes| {
+                if let Ok(mut state) = progress_state_clone.lock() {
+                    *state = (current, total);
+                    callback_clone(GitOperationProgress {
+                        operation: "Push".to_string(),
+                        current,
+                        total,
+                        message: format!("Pushing objects: {}/{}", current, total),
+                        bytes_transferred: Some(bytes),
+                    });
+                }
+            });
+        }
+        
+        // Set up pack progress callback
+        if let Some(ref callback) = progress_callback {
+            let callback_clone = callback.clone();
+            callbacks.pack_progress(move |stage, current, total| {
+                callback_clone(GitOperationProgress {
+                    operation: "Push".to_string(),
+                    current: current as usize,
+                    total: total as usize,
+                    message: format!("{:?}: {}/{}", stage, current, total),
+                    bytes_transferred: None,
+                });
+            });
+        }
+        
+        // Check for cancellation
+        if let Some(ref token) = cancel_token {
+            if token.is_cancelled() {
+                return Err(anyhow::anyhow!("Operation cancelled"));
+            }
+        }
+        
+        let mut push_opts = PushOptions::new();
         push_opts.remote_callbacks(callbacks);
         
         remote.push(&[&refspec], Some(&mut push_opts))?;
@@ -152,18 +256,76 @@ impl GitOperations {
         Ok(())
     }
     
-    /// Pull from remote
-    pub fn pull(&self, remote_name: &str, branch_name: &str) -> Result<()> {
-        // Fetch first
+    /// Push to remote (convenience method without progress)
+    pub fn push(&self, remote_name: &str, branch_name: &str) -> Result<()> {
+        self.push_with_progress(remote_name, branch_name, None, None)
+    }
+    
+    /// Push branch to remote and set upstream tracking
+    pub fn push_with_upstream(&self, remote_name: &str, branch_name: &str) -> Result<()> {
+        // First push the branch
         let mut remote = self.repo.find_remote(remote_name)?;
-        let refspec = format!("refs/heads/{}:refs/remotes/{}/{}", branch_name, remote_name, branch_name);
+        let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
         
-        let mut callbacks = git2::RemoteCallbacks::new();
+        let mut callbacks = RemoteCallbacks::new();
         callbacks.credentials(|_url, username_from_url, _allowed_types| {
             git2::Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
         });
         
-        let mut fetch_opts = git2::FetchOptions::new();
+        let mut push_options = PushOptions::new();
+        push_options.remote_callbacks(callbacks);
+        
+        remote.push(&[&refspec], Some(&mut push_options))?;
+        
+        // Set up branch tracking
+        let mut branch = self.repo.find_branch(branch_name, git2::BranchType::Local)?;
+        let upstream_name = format!("{}/{}", remote_name, branch_name);
+        branch.set_upstream(Some(&upstream_name))?;
+        
+        info!("Pushed and set upstream for {} to {}/{}", branch_name, remote_name, branch_name);
+        Ok(())
+    }
+    
+    /// Pull from remote with progress callback and cancellation support
+    pub fn pull_with_progress(
+        &self, 
+        remote_name: &str, 
+        branch_name: &str,
+        progress_callback: Option<ProgressCallback>,
+        cancel_token: Option<CancellationToken>,
+    ) -> Result<()> {
+        // Fetch first
+        let mut remote = self.repo.find_remote(remote_name)?;
+        let refspec = format!("refs/heads/{}:refs/remotes/{}/{}", branch_name, remote_name, branch_name);
+        
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(|_url, username_from_url, _allowed_types| {
+            git2::Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
+        });
+        
+        // Set up fetch transfer progress callback
+        if let Some(ref callback) = progress_callback {
+            let callback_clone = callback.clone();
+            callbacks.transfer_progress(move |stats| {
+                callback_clone(GitOperationProgress {
+                    operation: "Pull".to_string(),
+                    current: stats.indexed_objects() as usize,
+                    total: stats.total_objects() as usize,
+                    message: format!("Receiving objects: {}/{}", stats.indexed_objects(), stats.total_objects()),
+                    bytes_transferred: Some(stats.received_bytes()),
+                });
+                true
+            });
+        }
+        
+        // Check for cancellation
+        if let Some(ref token) = cancel_token {
+            if token.is_cancelled() {
+                return Err(anyhow::anyhow!("Operation cancelled"));
+            }
+        }
+        
+        let mut fetch_opts = FetchOptions::new();
         fetch_opts.remote_callbacks(callbacks);
         
         remote.fetch(&[&refspec], Some(&mut fetch_opts), None)?;
@@ -182,22 +344,59 @@ impl GitOperations {
         Ok(())
     }
     
-    /// Fetch from remote
-    pub fn fetch(&self, remote_name: &str) -> Result<()> {
+    /// Pull from remote (convenience method without progress)
+    pub fn pull(&self, remote_name: &str, branch_name: &str) -> Result<()> {
+        self.pull_with_progress(remote_name, branch_name, None, None)
+    }
+    
+    /// Fetch from remote with progress callback and cancellation support
+    pub fn fetch_with_progress(
+        &self, 
+        remote_name: &str,
+        progress_callback: Option<ProgressCallback>,
+        cancel_token: Option<CancellationToken>,
+    ) -> Result<()> {
         let mut remote = self.repo.find_remote(remote_name)?;
         
-        let mut callbacks = git2::RemoteCallbacks::new();
+        let mut callbacks = RemoteCallbacks::new();
         callbacks.credentials(|_url, username_from_url, _allowed_types| {
             git2::Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
         });
         
-        let mut fetch_opts = git2::FetchOptions::new();
+        // Set up fetch transfer progress callback
+        if let Some(ref callback) = progress_callback {
+            let callback_clone = callback.clone();
+            callbacks.transfer_progress(move |stats| {
+                callback_clone(GitOperationProgress {
+                    operation: "Fetch".to_string(),
+                    current: stats.indexed_objects() as usize,
+                    total: stats.total_objects() as usize,
+                    message: format!("Receiving objects: {}/{}", stats.indexed_objects(), stats.total_objects()),
+                    bytes_transferred: Some(stats.received_bytes()),
+                });
+                true
+            });
+        }
+        
+        // Check for cancellation
+        if let Some(ref token) = cancel_token {
+            if token.is_cancelled() {
+                return Err(anyhow::anyhow!("Operation cancelled"));
+            }
+        }
+        
+        let mut fetch_opts = FetchOptions::new();
         fetch_opts.remote_callbacks(callbacks);
         
         remote.fetch(&[] as &[&str], Some(&mut fetch_opts), None)?;
         
         info!("Fetched from {}", remote_name);
         Ok(())
+    }
+    
+    /// Fetch from remote (convenience method without progress)
+    pub fn fetch(&self, remote_name: &str) -> Result<()> {
+        self.fetch_with_progress(remote_name, None, None)
     }
     
     /// Discard changes in a file
@@ -269,6 +468,50 @@ impl GitOperations {
             Ok("HEAD".to_string())
         }
     }
+    
+    /// Sync operation (pull then push) with progress
+    pub fn sync_with_progress(
+        &self,
+        remote_name: &str,
+        branch_name: &str,
+        progress_callback: Option<ProgressCallback>,
+        cancel_token: Option<CancellationToken>,
+    ) -> Result<()> {
+        // First pull
+        if let Some(ref callback) = progress_callback {
+            callback(GitOperationProgress {
+                operation: "Sync".to_string(),
+                current: 0,
+                total: 2,
+                message: "Pulling changes from remote...".to_string(),
+                bytes_transferred: None,
+            });
+        }
+        
+        self.pull_with_progress(remote_name, branch_name, progress_callback.clone(), cancel_token.clone())?;
+        
+        // Check for cancellation
+        if let Some(ref token) = cancel_token {
+            if token.is_cancelled() {
+                return Err(anyhow::anyhow!("Operation cancelled"));
+            }
+        }
+        
+        // Then push
+        if let Some(ref callback) = progress_callback {
+            callback(GitOperationProgress {
+                operation: "Sync".to_string(),
+                current: 1,
+                total: 2,
+                message: "Pushing changes to remote...".to_string(),
+                bytes_transferred: None,
+            });
+        }
+        
+        self.push_with_progress(remote_name, branch_name, progress_callback, cancel_token)?;
+        
+        Ok(())
+    }
 }
 
 /// Git operation types for UI
@@ -284,6 +527,41 @@ pub enum GitOperation {
     Fetch,
     Sync, // Pull then Push (VS Code style)
     DiscardChanges(PathBuf),
+}
+
+/// Progress callback for long-running operations
+pub type ProgressCallback = Arc<dyn Fn(GitOperationProgress) + Send + Sync>;
+
+/// Progress information for git operations
+#[derive(Debug, Clone)]
+pub struct GitOperationProgress {
+    pub operation: String,
+    pub current: usize,
+    pub total: usize,
+    pub message: String,
+    pub bytes_transferred: Option<usize>,
+}
+
+/// Cancellation token for git operations
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    pub fn new() -> Self {
+        Self {
+            cancelled: Arc::new(AtomicBool::new(false)),
+        }
+    }
+    
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+    
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
 }
 
 /// Result of a git operation

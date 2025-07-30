@@ -1,5 +1,5 @@
 // Tests for Operation Preview Generator
-use hive_ai::consensus::{
+use crate::consensus::{
     AIOperationPreviewGenerator, AIPreviewConfig, 
     stages::file_aware_curator::FileOperation,
     operation_analysis::OperationContext,

@@ -1,6 +1,6 @@
 //! Integration tests for the security system
 
-use hive_ai::core::{
+use crate::core::{
     check_read_access, check_write_access, get_security_context, initialize_security,
     SecurityContext, TrustLevel,
 };
@@ -124,7 +124,7 @@ async fn test_security_event_logging() {
     let has_trust_decision = events.iter().any(|e| {
         matches!(
             e.event_type,
-            hive_ai::core::SecurityEventType::TrustDecision
+            crate::core::SecurityEventType::TrustDecision
         )
     });
     assert!(has_trust_decision);

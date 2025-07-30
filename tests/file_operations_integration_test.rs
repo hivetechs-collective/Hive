@@ -1,5 +1,5 @@
 // Integration tests for file operations without requiring API keys
-use hive_ai::consensus::{
+use crate::consensus::{
     FileOperationExecutor, ExecutorConfig, SmartDecisionEngine,
     OperationIntelligenceCoordinator, operation_analysis::{
         AutoAcceptMode, OperationContext as ConsensusOperationContext,
@@ -9,12 +9,12 @@ use hive_ai::consensus::{
     smart_decision_engine::UserPreferences,
     stages::file_aware_curator::FileOperation,
 };
-use hive_ai::ai_helpers::{
+use crate::ai_helpers::{
     KnowledgeIndexer, ContextRetriever, PatternRecognizer,
     QualityAnalyzer, KnowledgeSynthesizer,
 };
-use hive_ai::memory::{MemoryManager, MemoryConfig};
-use hive_ai::core::database::Database;
+use crate::memory::{MemoryManager, MemoryConfig};
+use crate::core::database::Database;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use tempfile::TempDir;

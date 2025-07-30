@@ -3,7 +3,7 @@
 //! Tests the complete migration system with real database operations
 //! and validates end-to-end functionality.
 
-use hive_ai::migration::{
+use crate::migration::{
     MigrationManager, MigrationConfig, MigrationType, ValidationLevel,
     database_impl::{ProductionDatabase, BatchConfig, MigrationStats},
     live_test::{LiveMigrationTester, LiveTestConfig, TestDatabaseSize, TestScenario},
@@ -11,7 +11,7 @@ use hive_ai::migration::{
     ui::{MigrationWizard, MigrationUIConfig, run_quick_migration},
     validation_suite::{ValidationSuite, ValidationSuiteConfig, run_quick_validation},
 };
-use hive_ai::core::error::HiveError;
+use crate::core::error::HiveError;
 use std::path::PathBuf;
 use tempfile::tempdir;
 use rusqlite::Connection;
@@ -331,7 +331,7 @@ mod tests {
 
         let results = suite.run_full_validation().await.unwrap();
 
-        assert_ne!(results.overall_status, hive_ai::migration::validation_suite::ValidationStatus::Failed);
+        assert_ne!(results.overall_status, crate::migration::validation_suite::ValidationStatus::Failed);
         assert!(results.total_tests_run > 0);
     }
 

@@ -5,11 +5,11 @@
 
 #[cfg(test)]
 mod tests {
-    use hive_ai::consensus::{
+    use crate::consensus::{
         ConsensusEngine, ConsensusConfig, ConsensusProfile,
         ModeDetector, ExecutionMode,
     };
-    use hive_ai::core::database::DatabaseManager;
+    use crate::core::database::DatabaseManager;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -34,7 +34,7 @@ mod tests {
     async fn test_direct_execution_path() {
         // Initialize database
         let db_path = std::env::temp_dir().join("test_claude_code.db");
-        let db_config = hive_ai::core::database::DatabaseConfig {
+        let db_config = crate::core::database::DatabaseConfig {
             path: db_path.clone(),
             max_connections: 1,
             connection_timeout: std::time::Duration::from_secs(5),
@@ -67,8 +67,8 @@ mod tests {
 
     #[test]
     fn test_inline_operation_parsing() {
-        use hive_ai::consensus::DirectExecutionHandler;
-        use hive_ai::consensus::direct_executor::InlineOperationParser;
+        use crate::consensus::DirectExecutionHandler;
+        use crate::consensus::direct_executor::InlineOperationParser;
         
         let mut parser = InlineOperationParser::new();
         

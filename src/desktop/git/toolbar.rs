@@ -4,8 +4,18 @@
 
 use dioxus::prelude::*;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use super::{GitOperations, GitOperation, GitOperationResult};
+use super::{GitOperations, GitOperation, GitOperationResult, GitOperationProgress, CancellationToken};
+
+/// State of a git operation
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationState {
+    Idle,
+    Running(GitOperation, String),
+    Success(String),
+    Error(String),
+}
 
 /// Props for the git toolbar component
 #[derive(Props, Clone, PartialEq)]
@@ -20,6 +30,9 @@ pub struct GitToolbarProps {
     pub current_branch: Option<String>,
     /// Callback when a git operation is performed
     pub on_operation: EventHandler<GitOperation>,
+    /// Optional callback for operation progress
+    #[props(optional)]
+    pub on_progress: Option<EventHandler<GitOperationProgress>>,
 }
 
 /// Git operations toolbar component
@@ -28,6 +41,9 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
     let mut commit_message = use_signal(|| String::new());
     let mut show_commit_input = use_signal(|| false);
     let mut operation_status = use_signal(|| None::<String>);
+    let mut is_pushing = use_signal(|| false);
+    let mut is_pulling = use_signal(|| false);
+    let mut is_syncing = use_signal(|| false);
     
     let repo_path = props.repo_path.clone();
     let has_repo = repo_path.is_some();
@@ -82,7 +98,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                                 let on_operation = props.on_operation.clone();
                                 move |_| {
                                     on_operation.call(GitOperation::StageAll);
-                                    *operation_status.write() = Some("Staging all changes...".to_string());
+                                    // Operation tracking handled by parent
                                 }
                             },
                             "+ Stage All"
@@ -110,7 +126,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                                         on_operation.call(GitOperation::Commit(message));
                                         *commit_message.write() = String::new();
                                         *show_commit_input.write() = false;
-                                        *operation_status.write() = Some("Creating commit...".to_string());
+                                        // Operation tracking handled by parent
                                     }
                                 }
                             }
@@ -131,7 +147,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                                         on_operation.call(GitOperation::Commit(message));
                                         *commit_message.write() = String::new();
                                         *show_commit_input.write() = false;
-                                        *operation_status.write() = Some("Creating commit...".to_string());
+                                        // Operation tracking handled by parent
                                     }
                                 }
                             },
@@ -161,17 +177,24 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     } else {
                         "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
                     },
-                    disabled: !has_repo,
+                    disabled: !has_repo || *is_syncing.read() || *is_pushing.read() || *is_pulling.read(),
                     title: "Sync Changes (Pull then Push)",
                     onclick: {
                         let on_operation = props.on_operation.clone();
                         let branch = current_branch.clone();
                         move |_| {
-                            on_operation.call(GitOperation::Sync);
-                            *operation_status.write() = Some(format!("Syncing with origin/{}...", branch));
+                            if !*is_syncing.read() {
+                                on_operation.call(GitOperation::Sync);
+                                *operation_status.write() = Some(format!("Syncing with origin/{}...", branch));
+                                is_syncing.set(true);
+                            }
                         }
                     },
-                    "🔄 Sync"
+                    if *is_syncing.read() {
+                        "🔄 Syncing..."
+                    } else {
+                        "🔄 Sync"
+                    }
                 }
                 
                 // Push button
@@ -181,18 +204,25 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     } else {
                         "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
                     },
-                    disabled: !has_repo,
+                    disabled: !has_repo || *is_pushing.read() || *is_syncing.read(),
                     title: "Push to Remote",
                     onmouseover: move |_| {},
                     onclick: {
                         let on_operation = props.on_operation.clone();
                         let branch = current_branch.clone();
                         move |_| {
-                            on_operation.call(GitOperation::Push);
-                            *operation_status.write() = Some(format!("Pushing to origin/{}...", branch));
+                            if !*is_pushing.read() {
+                                on_operation.call(GitOperation::Push);
+                                *operation_status.write() = Some(format!("Pushing to origin/{}...", branch));
+                                is_pushing.set(true);
+                            }
                         }
                     },
-                    "⬆ Push"
+                    if *is_pushing.read() {
+                        "⬆ Pushing..."
+                    } else {
+                        "⬆ Push"
+                    }
                 }
                 
                 // Pull button
@@ -202,17 +232,24 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     } else {
                         "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
                     },
-                    disabled: !has_repo,
+                    disabled: !has_repo || *is_pulling.read() || *is_syncing.read(),
                     title: "Pull from Remote",
                     onclick: {
                         let on_operation = props.on_operation.clone();
                         let branch = current_branch.clone();
                         move |_| {
-                            on_operation.call(GitOperation::Pull);
-                            *operation_status.write() = Some(format!("Pulling from origin/{}...", branch));
+                            if !*is_pulling.read() {
+                                on_operation.call(GitOperation::Pull);
+                                *operation_status.write() = Some(format!("Pulling from origin/{}...", branch));
+                                is_pulling.set(true);
+                            }
                         }
                     },
-                    "⬇ Pull"
+                    if *is_pulling.read() {
+                        "⬇ Pulling..."
+                    } else {
+                        "⬇ Pull"
+                    }
                 }
                 
                 // Fetch button

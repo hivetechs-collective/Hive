@@ -15,6 +15,7 @@ pub mod keybindings;
 pub mod layout;
 pub mod menu_bar;
 pub mod panels;
+pub mod problems;
 pub mod terminal;
 
 use self::dialogs::{DialogManager, DialogResult, DialogType};
@@ -40,6 +41,8 @@ pub struct AdvancedTuiApp {
     pub editor: editor::EditorPanel,
     /// Terminal panel
     pub terminal: terminal::TerminalPanel,
+    /// Problems panel
+    pub problems: problems::ProblemsPanel,
     /// Current theme
     pub theme: Theme,
     /// Accessibility manager
@@ -67,6 +70,7 @@ pub enum PanelType {
     Editor,
     Terminal,
     ConsensusProgress,
+    Problems,
 }
 
 impl AdvancedTuiApp {
@@ -81,6 +85,7 @@ impl AdvancedTuiApp {
             explorer: explorer::ExplorerPanel::new().await?,
             editor: editor::EditorPanel::new(),
             terminal: terminal::TerminalPanel::new()?,
+            problems: problems::ProblemsPanel::new(None),
             theme,
             accessibility,
             temporal,
@@ -176,6 +181,43 @@ impl AdvancedTuiApp {
             PanelType::ConsensusProgress => {
                 // Consensus panel is read-only, just navigate
                 false
+            }
+            PanelType::Problems => {
+                // Handle problems panel navigation
+                match key.code {
+                    KeyCode::Up => {
+                        self.problems.select_previous();
+                        true
+                    }
+                    KeyCode::Down => {
+                        self.problems.select_next();
+                        true
+                    }
+                    KeyCode::Enter => {
+                        // Navigate to selected problem
+                        if let Some(location) = self.problems.navigate_to_selected() {
+                            // Open file in editor and navigate to location
+                            self.editor.open_file(location.file_path).await.unwrap_or(());
+                            if let Some(line) = location.line {
+                                self.editor.goto_line(line);
+                            }
+                            self.active_panel = PanelType::Editor;
+                        }
+                        true
+                    }
+                    KeyCode::F(5) => {
+                        // Refresh problems
+                        let workspace_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                        self.problems.update_problems(&workspace_path).await.unwrap_or(());
+                        true
+                    }
+                    KeyCode::Tab => {
+                        // Cycle through problem filters
+                        // This will be handled by global keybindings
+                        false
+                    }
+                    _ => false
+                }
             }
         };
 
@@ -286,7 +328,7 @@ impl AdvancedTuiApp {
                 self.toggle_terminal();
                 Ok(true)
             }
-            // F1-F4 - Switch panels
+            // F1-F5 - Switch panels
             (KeyModifiers::NONE, KeyCode::F(1)) => {
                 self.active_panel = PanelType::Explorer;
                 Ok(true)
@@ -301,6 +343,10 @@ impl AdvancedTuiApp {
             }
             (KeyModifiers::NONE, KeyCode::F(4)) => {
                 self.active_panel = PanelType::ConsensusProgress;
+                Ok(true)
+            }
+            (KeyModifiers::NONE, KeyCode::F(5)) => {
+                self.active_panel = PanelType::Problems;
                 Ok(true)
             }
             // Ctrl+Q - Quit
@@ -360,7 +406,8 @@ impl AdvancedTuiApp {
             PanelType::Explorer => PanelType::Editor,
             PanelType::Editor => PanelType::Terminal,
             PanelType::Terminal => PanelType::ConsensusProgress,
-            PanelType::ConsensusProgress => PanelType::Explorer,
+            PanelType::ConsensusProgress => PanelType::Problems,
+            PanelType::Problems => PanelType::Explorer,
         };
     }
 
@@ -433,6 +480,11 @@ impl AdvancedTuiApp {
         if layout.consensus.width > 0 {
             self.render_consensus_panel(frame, layout.consensus);
         }
+
+        // Render problems panel (if visible)
+        if layout.problems.height > 0 {
+            self.problems.draw(frame, layout.problems);
+        }
     }
 
     /// Render status bar with current status and shortcuts
@@ -442,7 +494,7 @@ impl AdvancedTuiApp {
         use ratatui::widgets::{Block, Borders, Paragraph};
 
         let status_text = format!(
-            "F1:Explorer F2:Editor F3:Terminal F4:Consensus | Ctrl+P:Search Ctrl+Shift+P:Commands | {}",
+            "F1:Explorer F2:Editor F3:Terminal F4:Consensus F5:Problems | Ctrl+P:Search Ctrl+Shift+P:Commands | {}",
             self.get_current_status()
         );
 
@@ -548,13 +600,22 @@ impl AdvancedTuiApp {
             PanelType::Editor => "Editor",
             PanelType::Terminal => "Terminal",
             PanelType::ConsensusProgress => "Consensus",
+            PanelType::Problems => "Problems",
         }
     }
 
     /// Get current status for status bar
     fn get_current_status(&self) -> String {
+        let problems_summary = self.problems.get_summary();
+        let problems_text = if problems_summary.total > 0 {
+            format!("Problems: {}🔴 {}🟡", problems_summary.errors, problems_summary.warnings)
+        } else {
+            "No Problems".to_string()
+        };
+        
         format!(
-            "Theme: {} | Mode: {} | Time: {}",
+            "{} | Theme: {} | Mode: {} | Time: {}",
+            problems_text,
             self.theme.name(),
             if self.accessibility.screen_reader_mode() {
                 "Accessible"

@@ -1,6 +1,6 @@
 //! Integration tests for the hooks system
 
-use hive::{
+use crate::{
     hooks::{
         DispatcherConfig, EventBuilder, EventSource, EventType, HookEvent, HookPriority,
         HooksSystem,
@@ -144,7 +144,7 @@ async fn test_hook_priority_ordering() -> Result<()> {
 
 #[test]
 fn test_event_type_parsing() {
-    use hive::commands::hooks;
+    use crate::commands::hooks;
 
     // Test consensus events
     assert!(hooks::parse_event_type("before_consensus").is_ok());

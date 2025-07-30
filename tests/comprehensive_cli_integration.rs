@@ -1,9 +1,9 @@
 //! Comprehensive CLI Integration Tests
 //! Tests all CLI commands with real API integration where possible
 
-use hive_ai::cli::args::{AnalyzeSubcommand, Cli, Commands, MemorySubcommand, ModelsSubcommand};
-use hive_ai::core::config::{create_default_config, get_hive_config_dir, HiveConfig};
-use hive_ai::core::database::HiveDatabase;
+use crate::cli::args::{AnalyzeSubcommand, Cli, Commands, MemorySubcommand, ModelsSubcommand};
+use crate::core::config::{create_default_config, get_hive_config_dir, HiveConfig};
+use crate::core::database::HiveDatabase;
 use serial_test::serial;
 use std::path::PathBuf;
 use std::process::Command;

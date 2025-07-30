@@ -1,12 +1,12 @@
 // End-to-end tests for file operations through consensus pipeline
-use hive_ai::consensus::{
+use crate::consensus::{
     ConsensusEngine, ConsensusConfig, ConsensusProfile, ProfileType,
     ContextInjectionStrategy, RetryPolicy,
 };
-use hive_ai::core::database::Database;
-use hive_ai::core::api_keys::ApiKeyManager;
-use hive_ai::ai_helpers::AIHelperEcosystem;
-use hive_ai::memory::{MemoryManager, MemoryConfig};
+use crate::core::database::Database;
+use crate::core::api_keys::ApiKeyManager;
+use crate::ai_helpers::AIHelperEcosystem;
+use crate::memory::{MemoryManager, MemoryConfig};
 use std::path::PathBuf;
 use tempfile::TempDir;
 use tokio;

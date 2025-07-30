@@ -1,7 +1,7 @@
 //! Database Migration Testing and Validation Framework
 //! Tests migration from TypeScript database and validates data integrity
 
-use hive_ai::core::{database::HiveDatabase, migrations::MigrationEngine};
+use crate::core::{database::HiveDatabase, migrations::MigrationEngine};
 use serde_json::Value;
 use serial_test::serial;
 use std::path::PathBuf;

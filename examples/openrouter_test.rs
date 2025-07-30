@@ -1,7 +1,7 @@
 /// Example demonstrating OpenRouter integration
 ///
 /// Run with: cargo run --example openrouter_test
-use hive_ai::providers::openrouter::{
+use crate::providers::openrouter::{
     create_client, CostCalculator, ModelSelectionStrategy, ModelSelector, PerformanceTracker,
     TaskComplexity,
 };

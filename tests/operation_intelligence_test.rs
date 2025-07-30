@@ -1,12 +1,12 @@
 // Unit tests for Operation Intelligence Coordinator
-use hive_ai::consensus::operation_intelligence::{
+use crate::consensus::operation_intelligence::{
     OperationIntelligenceCoordinator, AutoAcceptMode, OperationAnalysis,
     OperationStatistics, AutoAcceptStatistics,
 };
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
-use hive_ai::consensus::operation_parser::{EnhancedFileOperation, OperationContext as ParseContext};
-use hive_ai::consensus::operation_analysis::{OperationContext, SystemContext};
-use hive_ai::ai_helpers::*;
+use crate::consensus::stages::file_aware_curator::FileOperation;
+use crate::consensus::operation_parser::{EnhancedFileOperation, OperationContext as ParseContext};
+use crate::consensus::operation_analysis::{OperationContext, SystemContext};
+use crate::ai_helpers::*;
 use std::sync::Arc;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -324,7 +324,7 @@ async fn test_learning_from_feedback() {
             &initial_analysis,
             true,
             None,
-            hive_ai::consensus::operation_analysis::UserFeedback {
+            crate::consensus::operation_analysis::UserFeedback {
                 satisfaction: Some(5), // Very satisfied
                 comments: Some("Perfect!".to_string()),
                 would_recommend: true,

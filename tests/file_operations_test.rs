@@ -1,6 +1,6 @@
 // Integration tests for file operation execution in consensus pipeline
 
-use hive_ai::core::config::Config;
+use crate::core::config::Config;
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -17,7 +17,7 @@ async fn test_file_operations_module_exists() {
 
 #[test] 
 fn test_file_operation_types() {
-    use hive_ai::consensus::stages::file_aware_curator::FileOperation;
+    use crate::consensus::stages::file_aware_curator::FileOperation;
     
     // Test that we can create different file operation types
     let create_op = FileOperation::Create {

@@ -4,16 +4,20 @@ use dioxus::document::eval;
 use dioxus::prelude::*;
 use rfd;
 use chrono::{Duration, Utc};
+use std::sync::Arc;
 
 // Terminal imports
-use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
-use hive_ai::desktop::terminal::use_terminal_cwd;
-use hive_ai::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_terminal_cwd_tracker};
-use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
+use hive::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
+use hive::desktop::terminal::use_terminal_cwd;
+use hive::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_terminal_cwd_tracker};
+use hive::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 // Git imports
-use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context};
-// use hive_ai::desktop::diff_viewer::DiffViewer;
+use hive::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken};
+// use hive::desktop::diff_viewer::DiffViewer;
+
+// Enhanced Status Bar imports
+use hive::desktop::status_bar_enhanced::{EnhancedStatusBar, StatusBarState, StatusBarItem, StatusBarAlignment};
 
 /// Analytics data structure for the dashboard
 #[derive(Debug, Clone, Default)]
@@ -91,7 +95,7 @@ mod analytics_helpers {
 
 /// Fetch real analytics data from the database
 async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Error + Send + Sync>> {
-    use hive_ai::core::database::get_database;
+    use hive::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -660,6 +664,10 @@ const DESKTOP_STYLES: &str = r#"
         align-items: center;
         gap: 5px;
     }
+    
+    .git-menu-item:hover {
+        background-color: #2A2A2A !important;
+    }
 
     /* Animations */
     @keyframes pulse {
@@ -813,9 +821,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
         // Initialize the database
-        let config = hive_ai::core::config::get_hive_config_dir();
+        let config = hive::core::config::get_hive_config_dir();
         let db_path = config.join("hive-ai.db");
-        let db_config = hive_ai::core::database::DatabaseConfig {
+        let db_config = hive::core::database::DatabaseConfig {
             path: db_path,
             max_connections: 10,
             connection_timeout: std::time::Duration::from_secs(5),
@@ -826,7 +834,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             synchronous: "NORMAL".to_string(),
             journal_mode: "WAL".to_string(),
         };
-        hive_ai::core::database::initialize_database(Some(db_config)).await?;
+        hive::core::database::initialize_database(Some(db_config)).await?;
         Ok::<(), anyhow::Error>(())
     })?;
 
@@ -855,23 +863,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-use hive_ai::desktop::assets::get_logo_html;
-use hive_ai::desktop::consensus_integration::{use_consensus_with_version, DesktopConsensusManager};
-use hive_ai::ide::ai_helper_broker::IDEAIHelperBroker;
-use hive_ai::desktop::dialogs::{
+use hive::desktop::assets::get_logo_html;
+use hive::desktop::consensus_integration::{use_consensus_with_version, DesktopConsensusManager};
+use hive::ide::ai_helper_broker::IDEAIHelperBroker;
+use hive::desktop::dialogs::{
     AboutDialog, CommandPalette, NoUpdatesDialog, OnboardingDialog, OperationConfirmationDialog,
     SettingsDialog, UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, WelcomeTab, DIALOG_STYLES,
 };
-use hive_ai::desktop::context_menu::{
+use hive::desktop::context_menu::{
     ContextMenu, ContextMenuAction, ContextMenuState, FileNameDialog, ConfirmDialog,
 };
-use hive_ai::desktop::file_system;
-use hive_ai::desktop::file_operations;
-use hive_ai::desktop::menu_bar::{MenuAction, MenuBar};
-use hive_ai::desktop::state::{FileItem, FileType};
-use hive_ai::desktop::code_editor::editor::CodeEditorComponent;
-use hive_ai::desktop::code_editor::renderer::EDITOR_STYLES;
-use hive_ai::desktop::components::{OperationStatus, parse_operations_from_content};
+use hive::desktop::file_system;
+use hive::desktop::file_operations;
+use hive::desktop::menu_bar::{MenuAction, MenuBar};
+use hive::desktop::state::{FileItem, FileType};
+use hive::desktop::code_editor::editor::CodeEditorComponent;
+use hive::desktop::code_editor::renderer::EDITOR_STYLES;
+use hive::desktop::components::{OperationStatus, parse_operations_from_content};
+use hive::desktop::status_bar_enhanced::{
+    STATUS_BAR_STYLES,
+};
 
 // Simple markdown to HTML converter
 mod markdown {
@@ -884,8 +895,8 @@ mod markdown {
         html_output
     }
 }
-use hive_ai::desktop::state::{AppState, ConsensusState, StageInfo};
-use hive_ai::consensus::stages::file_aware_curator::FileOperation;
+use hive::desktop::state::{AppState, ConsensusState, StageInfo};
+use hive::consensus::stages::file_aware_curator::FileOperation;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -893,7 +904,7 @@ fn App() -> Element {
     // Initialize database on first render
     use_effect(move || {
         spawn(async move {
-            use hive_ai::core::database::{initialize_database, DatabaseConfig};
+            use hive::core::database::{initialize_database, DatabaseConfig};
 
             // Initialize database with proper config
             let config = DatabaseConfig::default();
@@ -915,6 +926,11 @@ fn App() -> Element {
     let active_git_watcher = use_signal(|| None::<GitWatcher>);
     use_context_provider(|| active_git_watcher.clone());
     
+    // Git operation state tracking
+    let mut is_pushing = use_signal(|| false);
+    let mut is_pulling = use_signal(|| false);
+    let mut is_syncing = use_signal(|| false);
+    
     // Initialize git context manager
     let mut git_context = provide_git_context();
     
@@ -934,7 +950,7 @@ fn App() -> Element {
     let mut hive_key = use_signal(String::new);
     let mut anthropic_key = use_signal(String::new);
     let api_keys_version = use_signal(|| 0u32); // Track when API keys change
-    let mut api_config = use_signal(|| hive_ai::core::api_keys::ApiKeyConfig {
+    let mut api_config = use_signal(|| hive::core::api_keys::ApiKeyConfig {
         openrouter_key: None,
         hive_key: None,
         anthropic_key: None,
@@ -1017,11 +1033,189 @@ fn App() -> Element {
     });
     
     // Diff viewing state
-    let mut diff_tabs = use_signal(|| HashMap::<String, hive_ai::desktop::git::DiffResult>::new());
+    let mut diff_tabs = use_signal(|| HashMap::<String, hive::desktop::git::DiffResult>::new());
     let mut diff_view_mode = use_signal(|| DiffViewMode::SideBySide);
     
     // Cursor position tracking for status bar
     let mut cursor_position = use_signal(|| (1, 1)); // (line, column)
+    
+    // Enhanced status bar state
+    let mut status_bar_state = use_signal(|| StatusBarState::default());
+    
+    // Auto-fetch configuration
+    let auto_fetch_enabled = use_signal(|| true); // Enable auto-fetch by default
+    let auto_fetch_interval_minutes = use_signal(|| 5); // Fetch every 5 minutes
+    
+    // Status bar event handler for click actions
+    let handle_status_bar_click = {
+        let git_state = git_state.clone();
+        let current_dir = current_dir.clone();
+        let mut is_syncing = is_syncing.clone();
+        move |item_id: String| {
+            match item_id.as_str() {
+                "git-branch" => {
+                    // Show branch selector - reuse existing functionality
+                    tracing::info!("Branch selector clicked");
+                },
+                "git-sync" => {
+                    // Perform sync operation or publish branch
+                    if !*is_syncing.read() {
+                        *is_syncing.write() = true;
+                        let git_state = git_state.clone();
+                        let current_dir = current_dir.clone();
+                        let mut is_syncing = is_syncing.clone();
+                        spawn(async move {
+                            if let Some(repo_path) = current_dir.read().clone() {
+                                let sync_status = git_state.sync_status.read();
+                                
+                                if sync_status.has_upstream {
+                                    // Standard sync: fetch + pull + push
+                                    let _ = hive::desktop::git::operations::fetch(&repo_path).await;
+                                    let _ = hive::desktop::git::operations::pull(&repo_path).await;
+                                    let _ = hive::desktop::git::operations::push(&repo_path).await;
+                                } else {
+                                    // Branch has no upstream - attempt to publish
+                                    if let Some(branch_info) = git_state.branch_info.read().as_ref() {
+                                        let branch_name = &branch_info.name;
+                                        tracing::info!("Publishing branch '{}' to origin", branch_name);
+                                        
+                                        // Push branch with set-upstream
+                                        let result = hive::desktop::git::operations::push_with_upstream(
+                                            &repo_path, 
+                                            branch_name
+                                        ).await;
+                                        
+                                        match result {
+                                            Ok(_) => {
+                                                tracing::info!("✅ Successfully published branch '{}'", branch_name);
+                                            }
+                                            Err(e) => {
+                                                tracing::error!("❌ Failed to publish branch '{}': {}", branch_name, e);
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Refresh git status in both cases
+                                git_state.refresh_status(&repo_path).await;
+                            }
+                            *is_syncing.write() = false;
+                        });
+                    }
+                },
+                "problems" => {
+                    // Show problems panel
+                    tracing::info!("Problems panel clicked");
+                },
+                "warnings" => {
+                    // Show warnings panel
+                    tracing::info!("Warnings panel clicked");
+                },
+                "consensus-status" => {
+                    // Show consensus status
+                    tracing::info!("Consensus status clicked");
+                },
+                "cursor-position" => {
+                    // Go to line dialog
+                    tracing::info!("Go to line clicked");
+                },
+                _ => {
+                    tracing::info!("Status bar item clicked: {}", item_id);
+                }
+            }
+        }
+    };
+    
+    // Status bar state update effect - sync with git state
+    {
+        let mut status_bar_state = status_bar_state.clone();
+        let git_state = git_state.clone();
+        let cursor_position = cursor_position.clone();
+        let is_syncing = is_syncing.clone();
+        use_effect(move || {
+            // Update git branch info
+            if let Some(branch_info) = git_state.branch_info.read().as_ref() {
+                let mut state = status_bar_state.write();
+                
+                // Update branch name
+                state.update_item("git-branch", branch_info.name.clone());
+                
+                // Update sync status with better messaging
+                let sync_status = git_state.sync_status.read();
+                let (sync_text, tooltip) = if *is_syncing.read() {
+                    ("Syncing...".to_string(), "Synchronizing with remote".to_string())
+                } else if sync_status.has_upstream {
+                    let text = if sync_status.behind == 0 && sync_status.ahead == 0 {
+                        "✓".to_string() // Up to date
+                    } else {
+                        format!("↓{} ↑{}", sync_status.behind, sync_status.ahead)
+                    };
+                    let tooltip = format!("Behind: {}, Ahead: {} (click to sync)", sync_status.behind, sync_status.ahead);
+                    (text, tooltip)
+                } else {
+                    ("Publish".to_string(), "Click to publish this branch to remote".to_string())
+                };
+                
+                state.update_item("git-sync", sync_text);
+                
+                // Update tooltip for git-sync item
+                if let Some(item) = state.items.iter_mut().find(|i| i.id == "git-sync") {
+                    item.tooltip = Some(tooltip);
+                }
+            }
+            
+            // Update cursor position
+            let (line, col) = *cursor_position.read();
+            status_bar_state.write().update_item("cursor-position", format!("Ln {}, Col {}", line, col));
+            
+            // Update problems count
+            let file_statuses = git_state.file_statuses.read();
+            let conflict_count = file_statuses.values()
+                .filter(|status| status.status_type == hive::desktop::git::StatusType::Conflicted)
+                .count() as u32;
+            status_bar_state.write().update_problems(conflict_count, 0);
+        });
+    }
+    
+    // Auto-fetch effect
+    {
+        let auto_fetch_enabled = auto_fetch_enabled.clone();
+        let auto_fetch_interval_minutes = auto_fetch_interval_minutes.clone();
+        let current_dir = current_dir.clone();
+        let git_state = git_state.clone();
+        
+        use_effect(move || {
+            if *auto_fetch_enabled.read() {
+                let interval_ms = *auto_fetch_interval_minutes.read() as f64 * 60.0 * 1000.0;
+                let current_dir = current_dir.clone();
+                let git_state = git_state.clone();
+                
+                spawn(async move {
+                    let mut interval = tokio::time::interval(
+                        tokio::time::Duration::from_millis(interval_ms as u64)
+                    );
+                    interval.tick().await; // Skip first immediate tick
+                    
+                    loop {
+                        interval.tick().await;
+                        
+                        if let Some(repo_path) = current_dir.read().clone() {
+                            tracing::debug!("Auto-fetching git repository: {:?}", repo_path);
+                            
+                            // Perform background fetch
+                            if let Err(e) = hive::desktop::git::operations::fetch(&repo_path).await {
+                                tracing::warn!("Auto-fetch failed: {}", e);
+                            } else {
+                                // Update git state after successful fetch
+                                git_state.refresh_status(&repo_path).await;
+                                tracing::debug!("Auto-fetch completed successfully");
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    }
     
     // Tab overflow management
     let mut tab_scroll_offset = use_signal(|| 0usize);
@@ -1055,6 +1249,8 @@ fn App() -> Element {
     let mut show_settings_dialog = use_signal(|| false);
     let mut show_onboarding_dialog = use_signal(|| false);
     let show_upgrade_dialog = use_signal(|| false);
+    let mut show_git_menu = use_signal(|| false);
+    let mut git_menu_position = use_signal(|| (0i32, 0i32));
     let onboarding_current_step = use_signal(|| 1); // Persist onboarding step
     
     // Context menu and file operation dialogs
@@ -1197,7 +1393,7 @@ fn App() -> Element {
         let mut anthropic_key = anthropic_key.clone();
         move || {
             spawn(async move {
-                use hive_ai::core::api_keys::ApiKeyManager;
+                use hive::core::api_keys::ApiKeyManager;
                 if let Ok(config) = ApiKeyManager::load_from_database().await {
                     *api_config.write() = config.clone();
                     if let Some(key) = config.hive_key {
@@ -1223,7 +1419,7 @@ fn App() -> Element {
         let mut hive_key = hive_key.clone();
         let mut anthropic_key = anthropic_key.clone();
         spawn(async move {
-            use hive_ai::core::api_keys::ApiKeyManager;
+            use hive::core::api_keys::ApiKeyManager;
 
             // Check if API keys are configured
             if !ApiKeyManager::has_valid_keys().await.unwrap_or(false) {
@@ -1289,7 +1485,7 @@ fn App() -> Element {
                         // Wait a moment for the key to be saved to database
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-                        use hive_ai::subscription::conversation_gateway::ConversationGateway;
+                        use hive::subscription::conversation_gateway::ConversationGateway;
                         match ConversationGateway::new() {
                             Ok(gateway) => {
                                 // First validate the license to get user profile
@@ -1405,8 +1601,8 @@ fn App() -> Element {
                     }
 
                     // Load subscription info directly from D1, not local database
-                    use hive_ai::core::api_keys::ApiKeyManager;
-                    use hive_ai::subscription::conversation_gateway::ConversationGateway;
+                    use hive::core::api_keys::ApiKeyManager;
+                    use hive::subscription::conversation_gateway::ConversationGateway;
 
                     match ApiKeyManager::load_from_database().await {
                         Ok(config) => {
@@ -1514,8 +1710,8 @@ fn App() -> Element {
                     interval.tick().await;
 
                     // Use D1 as the only source of truth, same as initial load
-                    use hive_ai::core::api_keys::ApiKeyManager;
-                    use hive_ai::subscription::conversation_gateway::ConversationGateway;
+                    use hive::core::api_keys::ApiKeyManager;
+                    use hive::subscription::conversation_gateway::ConversationGateway;
 
                     match ApiKeyManager::load_from_database().await {
                         Ok(config) => {
@@ -1674,12 +1870,12 @@ fn App() -> Element {
                             file_tree.write().push(root_item);
                             
                             // Update AppState with current project information for repository context
-                            let project_info = hive_ai::desktop::state::ProjectInfo {
+                            let project_info = hive::desktop::state::ProjectInfo {
                                 name: root_name,
                                 path: current_dir_path.clone(),
                                 root_path: current_dir_path.clone(),
                                 language: None, // Will be detected by repository analyzer
-                                git_status: hive_ai::desktop::state::GitStatus::NotRepository,
+                                git_status: hive::desktop::state::GitStatus::NotRepository,
                                 git_branch: None,
                                 file_count: 0, // Will be updated later
                             };
@@ -1747,7 +1943,7 @@ fn App() -> Element {
         let app_state = app_state.clone();
         
         move || {
-            use hive_ai::desktop::ai_ui_events::process_ai_helper_events;
+            use hive::desktop::ai_ui_events::process_ai_helper_events;
             process_ai_helper_events(app_state);
         }
     });
@@ -1806,9 +2002,9 @@ fn App() -> Element {
                                         let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                         let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                         
-                                        let branch_info = hive_ai::desktop::git::BranchInfo {
+                                        let branch_info = hive::desktop::git::BranchInfo {
                                             name: branch_name,
-                                            branch_type: hive_ai::desktop::git::BranchType::Local,
+                                            branch_type: hive::desktop::git::BranchType::Local,
                                             is_current: true,
                                             upstream: repo.upstream_branch().unwrap_or(None),
                                             ahead,
@@ -1818,7 +2014,7 @@ fn App() -> Element {
                                         git_state_clone.branch_info.set(Some(branch_info));
                                         
                                         // Update sync status
-                                        let sync_status = hive_ai::desktop::git::SyncStatus {
+                                        let sync_status = hive::desktop::git::SyncStatus {
                                             ahead,
                                             behind,
                                             has_upstream,
@@ -1834,20 +2030,20 @@ fn App() -> Element {
                                             for (path, git_status) in statuses {
                                                 // Convert git2::Status to our StatusType
                                                 let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                    hive_ai::desktop::git::StatusType::Modified
+                                                    hive::desktop::git::StatusType::Modified
                                                 } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                    hive_ai::desktop::git::StatusType::Added
+                                                    hive::desktop::git::StatusType::Added
                                                 } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                    hive_ai::desktop::git::StatusType::Deleted
+                                                    hive::desktop::git::StatusType::Deleted
                                                 } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                    hive_ai::desktop::git::StatusType::Renamed
+                                                    hive::desktop::git::StatusType::Renamed
                                                 } else if git_status.is_wt_new() {
-                                                    hive_ai::desktop::git::StatusType::Untracked
+                                                    hive::desktop::git::StatusType::Untracked
                                                 } else {
                                                     continue; // Skip other statuses
                                                 };
                                                 
-                                                let file_status = hive_ai::desktop::git::FileStatus {
+                                                let file_status = hive::desktop::git::FileStatus {
                                                     path: path.clone(),
                                                     status_type,
                                                     is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -1916,20 +2112,20 @@ fn App() -> Element {
                                                                     let mut status_map = std::collections::HashMap::new();
                                                                     for (path, git_status) in statuses {
                                                                         let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                            hive_ai::desktop::git::StatusType::Modified
+                                                                            hive::desktop::git::StatusType::Modified
                                                                         } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                            hive_ai::desktop::git::StatusType::Added
+                                                                            hive::desktop::git::StatusType::Added
                                                                         } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                            hive_ai::desktop::git::StatusType::Deleted
+                                                                            hive::desktop::git::StatusType::Deleted
                                                                         } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                            hive_ai::desktop::git::StatusType::Renamed
+                                                                            hive::desktop::git::StatusType::Renamed
                                                                         } else if git_status.is_wt_new() {
-                                                                            hive_ai::desktop::git::StatusType::Untracked
+                                                                            hive::desktop::git::StatusType::Untracked
                                                                         } else {
                                                                             continue;
                                                                         };
                                                                         
-                                                                        let file_status = hive_ai::desktop::git::FileStatus {
+                                                                        let file_status = hive::desktop::git::FileStatus {
                                                                             path: path.clone(),
                                                                             status_type,
                                                                             is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -1952,9 +2148,9 @@ fn App() -> Element {
                                                                     let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                                                     let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                                                     
-                                                                    let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                                    let branch_info = hive::desktop::git::BranchInfo {
                                                                         name: branch_name,
-                                                                        branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                                        branch_type: hive::desktop::git::BranchType::Local,
                                                                         is_current: true,
                                                                         upstream: repo.upstream_branch().unwrap_or(None),
                                                                         ahead,
@@ -1964,7 +2160,7 @@ fn App() -> Element {
                                                                     git_state_for_events.branch_info.set(Some(branch_info));
                                                                     
                                                                     // Update sync status
-                                                                    let sync_status = hive_ai::desktop::git::SyncStatus {
+                                                                    let sync_status = hive::desktop::git::SyncStatus {
                                                                         ahead,
                                                                         behind,
                                                                         has_upstream,
@@ -2052,12 +2248,12 @@ fn App() -> Element {
                                     file_tree.write().push(root_item);
                                     
                                     // Update AppState with current project information for repository context
-                                    let project_info = hive_ai::desktop::state::ProjectInfo {
+                                    let project_info = hive::desktop::state::ProjectInfo {
                                         name: root_name.clone(),
                                         path: folder.path().to_path_buf(),
                                         root_path: folder.path().to_path_buf(),
                                         language: None, // Will be detected by repository analyzer
-                                        git_status: hive_ai::desktop::state::GitStatus::NotRepository,
+                                        git_status: hive::desktop::state::GitStatus::NotRepository,
                                         git_branch: None,
                                         file_count: 0, // Will be updated later
                                     };
@@ -2208,11 +2404,11 @@ fn App() -> Element {
                 let mut update_error_message = update_error_message.clone();
 
                 spawn(async move {
-                    use hive_ai::updates::{UpdateChannel, UpdateChecker};
+                    use hive::updates::{UpdateChannel, UpdateChecker};
 
                     println!("Checking for updates...");
                     let checker =
-                        UpdateChecker::new(hive_ai::VERSION.to_string(), UpdateChannel::Stable);
+                        UpdateChecker::new(hive::VERSION.to_string(), UpdateChannel::Stable);
 
                     match checker.check_for_updates().await {
                         Ok(Some(update)) => {
@@ -2231,7 +2427,7 @@ fn App() -> Element {
                             *show_update_available_dialog.write() = true;
                         }
                         Ok(None) => {
-                            println!("You're running the latest version ({})", hive_ai::VERSION);
+                            println!("You're running the latest version ({})", hive::VERSION);
                             *show_no_updates_dialog.write() = true;
                         }
                         Err(e) => {
@@ -2312,9 +2508,9 @@ fn App() -> Element {
                                             let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                             let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                             
-                                            let branch_info = hive_ai::desktop::git::BranchInfo {
+                                            let branch_info = hive::desktop::git::BranchInfo {
                                                 name: branch_name,
-                                                branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                branch_type: hive::desktop::git::BranchType::Local,
                                                 is_current: true,
                                                 upstream: repo.upstream_branch().unwrap_or(None),
                                                 ahead,
@@ -2324,7 +2520,7 @@ fn App() -> Element {
                                             git_state_clone.branch_info.set(Some(branch_info));
                                             
                                             // Update sync status
-                                            let sync_status = hive_ai::desktop::git::SyncStatus {
+                                            let sync_status = hive::desktop::git::SyncStatus {
                                                 ahead,
                                                 behind,
                                                 has_upstream,
@@ -2340,20 +2536,20 @@ fn App() -> Element {
                                                 for (path, git_status) in statuses {
                                                     // Convert git2::Status to our StatusType
                                                     let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                        hive_ai::desktop::git::StatusType::Modified
+                                                        hive::desktop::git::StatusType::Modified
                                                     } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                        hive_ai::desktop::git::StatusType::Added
+                                                        hive::desktop::git::StatusType::Added
                                                     } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                        hive_ai::desktop::git::StatusType::Deleted
+                                                        hive::desktop::git::StatusType::Deleted
                                                     } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                        hive_ai::desktop::git::StatusType::Renamed
+                                                        hive::desktop::git::StatusType::Renamed
                                                     } else if git_status.is_wt_new() {
-                                                        hive_ai::desktop::git::StatusType::Untracked
+                                                        hive::desktop::git::StatusType::Untracked
                                                     } else {
                                                         continue; // Skip other statuses
                                                     };
                                                     
-                                                    let file_status = hive_ai::desktop::git::FileStatus {
+                                                    let file_status = hive::desktop::git::FileStatus {
                                                         path: path.clone(),
                                                         status_type,
                                                         is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -2422,20 +2618,20 @@ fn App() -> Element {
                                                                         let mut status_map = std::collections::HashMap::new();
                                                                         for (path, git_status) in statuses {
                                                                             let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                                hive_ai::desktop::git::StatusType::Modified
+                                                                                hive::desktop::git::StatusType::Modified
                                                                             } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                                hive_ai::desktop::git::StatusType::Added
+                                                                                hive::desktop::git::StatusType::Added
                                                                             } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                                hive_ai::desktop::git::StatusType::Deleted
+                                                                                hive::desktop::git::StatusType::Deleted
                                                                             } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                                hive_ai::desktop::git::StatusType::Renamed
+                                                                                hive::desktop::git::StatusType::Renamed
                                                                             } else if git_status.is_wt_new() {
-                                                                                hive_ai::desktop::git::StatusType::Untracked
+                                                                                hive::desktop::git::StatusType::Untracked
                                                                             } else {
                                                                                 continue;
                                                                             };
                                                                             
-                                                                            let file_status = hive_ai::desktop::git::FileStatus {
+                                                                            let file_status = hive::desktop::git::FileStatus {
                                                                                 path: path.clone(),
                                                                                 status_type,
                                                                                 is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -2458,9 +2654,9 @@ fn App() -> Element {
                                                                         let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                                                         let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                                                         
-                                                                        let branch_info = hive_ai::desktop::git::BranchInfo {
+                                                                        let branch_info = hive::desktop::git::BranchInfo {
                                                                             name: branch_name,
-                                                                            branch_type: hive_ai::desktop::git::BranchType::Local,
+                                                                            branch_type: hive::desktop::git::BranchType::Local,
                                                                             is_current: true,
                                                                             upstream: repo.upstream_branch().unwrap_or(None),
                                                                             ahead,
@@ -2470,7 +2666,7 @@ fn App() -> Element {
                                                                         git_state_for_events.branch_info.set(Some(branch_info));
                                                                         
                                                                         // Update sync status
-                                                                        let sync_status = hive_ai::desktop::git::SyncStatus {
+                                                                        let sync_status = hive::desktop::git::SyncStatus {
                                                                             ahead,
                                                                             behind,
                                                                             has_upstream,
@@ -2558,12 +2754,12 @@ fn App() -> Element {
                                         file_tree.write().push(root_item);
                                         
                                         // Update AppState with current project information for repository context
-                                        let project_info = hive_ai::desktop::state::ProjectInfo {
+                                        let project_info = hive::desktop::state::ProjectInfo {
                                             name: root_name.clone(),
                                             path: folder.path().to_path_buf(),
                                             root_path: folder.path().to_path_buf(),
                                             language: None, // Will be detected by repository analyzer
-                                            git_status: hive_ai::desktop::state::GitStatus::NotRepository,
+                                            git_status: hive::desktop::state::GitStatus::NotRepository,
                                             git_branch: None,
                                             file_count: 0, // Will be updated later
                                         };
@@ -2604,6 +2800,7 @@ fn App() -> Element {
         // Inject comprehensive styles including all component styles
         style { "{DESKTOP_STYLES}" }
         style { "{DIALOG_STYLES}" }
+        style { "{STATUS_BAR_STYLES}" }
         style { "{EDITOR_STYLES}" }
 
         div {
@@ -2966,9 +3163,25 @@ fn App() -> Element {
                                             on_operation: EventHandler::new({
                                                 let repo_path = current_dir.read().clone();
                                                 let mut git_state_for_refresh = git_state.clone();
+                                                let mut is_pushing_ref = is_pushing.clone();
+                                                let mut is_pulling_ref = is_pulling.clone();
+                                                let mut is_syncing_ref = is_syncing.clone();
                                                 move |operation: GitOperation| {
                                                     if let Some(repo_path) = repo_path.clone() {
                                                         let mut git_state_clone = git_state_for_refresh.clone();
+                                                        let mut is_pushing_clone = is_pushing_ref.clone();
+                                                        let mut is_pulling_clone = is_pulling_ref.clone();
+                                                        let mut is_syncing_clone = is_syncing_ref.clone();
+                                                        
+                                                        // Create cancellation token for this operation
+                                                        let cancel_token = CancellationToken::new();
+                                                        
+                                                        // Create progress callback
+                                                        let progress_callback: ProgressCallback = Arc::new(move |progress| {
+                                                            tracing::info!("Git operation progress: {:?}", progress);
+                                                            // TODO: Update UI with progress
+                                                        });
+                                                        
                                                         spawn(async move {
                                                             // Handle git operations
                                                             if let Ok(git_ops) = GitOperations::new(&repo_path) {
@@ -2980,21 +3193,21 @@ fn App() -> Element {
                                                                         },
                                                                         GitOperation::Push => {
                                                                             if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
-                                                                                git_ops.push(&remote, &branch)
+                                                                                git_ops.push_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone()))
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote or branch configured"))
                                                                             }
                                                                         },
                                                                         GitOperation::Pull => {
                                                                             if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
-                                                                                git_ops.pull(&remote, &branch)
+                                                                                git_ops.pull_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone()))
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote or branch configured"))
                                                                             }
                                                                         },
                                                                         GitOperation::Fetch => {
                                                                             if let Ok(remote) = git_ops.get_default_remote() {
-                                                                                git_ops.fetch(&remote)
+                                                                                git_ops.fetch_with_progress(&remote, Some(progress_callback.clone()), Some(cancel_token.clone()))
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote configured"))
                                                                             }
@@ -3002,14 +3215,7 @@ fn App() -> Element {
                                                                         GitOperation::Sync => {
                                                                             // VS Code style sync: pull then push
                                                                             if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
-                                                                                // First pull
-                                                                                match git_ops.pull(&remote, &branch) {
-                                                                                    Ok(_) => {
-                                                                                        // Then push
-                                                                                        git_ops.push(&remote, &branch)
-                                                                                    },
-                                                                                    Err(e) => Err(e)
-                                                                                }
+                                                                                git_ops.sync_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone()))
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote or branch configured"))
                                                                             }
@@ -3019,6 +3225,14 @@ fn App() -> Element {
                                                                         GitOperation::DiscardChanges(path) => git_ops.discard_file_changes(path),
                                                                     };
                                                                     
+                                                            // Reset operation states
+                                                            match &operation {
+                                                                GitOperation::Push => is_pushing_clone.set(false),
+                                                                GitOperation::Pull => is_pulling_clone.set(false),
+                                                                GitOperation::Sync => is_syncing_clone.set(false),
+                                                                _ => {}
+                                                            }
+                                                            
                                                             match result {
                                                                 Ok(_) => {
                                                                     tracing::info!("Git operation successful: {:?}", operation);
@@ -3030,20 +3244,20 @@ fn App() -> Element {
                                                                                 let mut status_map = std::collections::HashMap::new();
                                                                                 for (path, git_status) in statuses {
                                                                                     let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                                        hive_ai::desktop::git::StatusType::Modified
+                                                                                        hive::desktop::git::StatusType::Modified
                                                                                     } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                                        hive_ai::desktop::git::StatusType::Added
+                                                                                        hive::desktop::git::StatusType::Added
                                                                                     } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                                        hive_ai::desktop::git::StatusType::Deleted
+                                                                                        hive::desktop::git::StatusType::Deleted
                                                                                     } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                                        hive_ai::desktop::git::StatusType::Renamed
+                                                                                        hive::desktop::git::StatusType::Renamed
                                                                                     } else if git_status.is_wt_new() {
-                                                                                        hive_ai::desktop::git::StatusType::Untracked
+                                                                                        hive::desktop::git::StatusType::Untracked
                                                                                     } else {
                                                                                         continue;
                                                                                     };
                                                                                     
-                                                                                    let file_status = hive_ai::desktop::git::FileStatus {
+                                                                                    let file_status = hive::desktop::git::FileStatus {
                                                                                         path: path.clone(),
                                                                                         status_type,
                                                                                         is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -3064,6 +3278,13 @@ fn App() -> Element {
                                                                 },
                                                                 Err(e) => {
                                                                     tracing::error!("Git operation failed: {:?} - {}", operation, e);
+                                                                    // Reset operation states on error too
+                                                                    match &operation {
+                                                                        GitOperation::Push => is_pushing_clone.set(false),
+                                                                        GitOperation::Pull => is_pulling_clone.set(false),
+                                                                        GitOperation::Sync => is_syncing_clone.set(false),
+                                                                        _ => {}
+                                                                    }
                                                                 }
                                                             }
                                                             }
@@ -3149,25 +3370,25 @@ fn App() -> Element {
                                                             span {
                                                                 style: format!("color: {}; font-weight: bold; width: 16px; text-align: center;",
                                                                     match status.status_type {
-                                                                        hive_ai::desktop::git::StatusType::Modified => "#FFB800",
-                                                                        hive_ai::desktop::git::StatusType::Added => "#4CAF50",
-                                                                        hive_ai::desktop::git::StatusType::Deleted => "#F44336",
-                                                                        hive_ai::desktop::git::StatusType::Renamed => "#2196F3",
-                                                                        hive_ai::desktop::git::StatusType::Untracked => "#9CA3AF",
-                                                                        hive_ai::desktop::git::StatusType::Copied => "#2196F3",
-                                                                        hive_ai::desktop::git::StatusType::Ignored => "#6B737C",
-                                                                        hive_ai::desktop::git::StatusType::Conflicted => "#F44336",
+                                                                        hive::desktop::git::StatusType::Modified => "#FFB800",
+                                                                        hive::desktop::git::StatusType::Added => "#4CAF50",
+                                                                        hive::desktop::git::StatusType::Deleted => "#F44336",
+                                                                        hive::desktop::git::StatusType::Renamed => "#2196F3",
+                                                                        hive::desktop::git::StatusType::Untracked => "#9CA3AF",
+                                                                        hive::desktop::git::StatusType::Copied => "#2196F3",
+                                                                        hive::desktop::git::StatusType::Ignored => "#6B737C",
+                                                                        hive::desktop::git::StatusType::Conflicted => "#F44336",
                                                                     }
                                                                 ),
                                                                 match status.status_type {
-                                                                    hive_ai::desktop::git::StatusType::Modified => "M",
-                                                                    hive_ai::desktop::git::StatusType::Added => "A",
-                                                                    hive_ai::desktop::git::StatusType::Deleted => "D",
-                                                                    hive_ai::desktop::git::StatusType::Renamed => "R",
-                                                                    hive_ai::desktop::git::StatusType::Untracked => "U",
-                                                                    hive_ai::desktop::git::StatusType::Copied => "C",
-                                                                    hive_ai::desktop::git::StatusType::Ignored => "!",
-                                                                    hive_ai::desktop::git::StatusType::Conflicted => "⚠",
+                                                                    hive::desktop::git::StatusType::Modified => "M",
+                                                                    hive::desktop::git::StatusType::Added => "A",
+                                                                    hive::desktop::git::StatusType::Deleted => "D",
+                                                                    hive::desktop::git::StatusType::Renamed => "R",
+                                                                    hive::desktop::git::StatusType::Untracked => "U",
+                                                                    hive::desktop::git::StatusType::Copied => "C",
+                                                                    hive::desktop::git::StatusType::Ignored => "!",
+                                                                    hive::desktop::git::StatusType::Conflicted => "⚠",
                                                                 }
                                                             }
                                                             
@@ -3475,8 +3696,8 @@ fn App() -> Element {
                                 {
                                     let active_tab_name = active_tab.read().clone();
                                     let file_path = active_tab_name.strip_prefix("diff:").unwrap_or(&active_tab_name);
-                                    hive_ai::desktop::diff_viewer::DiffViewer(
-                                        hive_ai::desktop::diff_viewer::DiffViewerProps {
+                                    hive::desktop::diff_viewer::DiffViewer(
+                                        hive::desktop::diff_viewer::DiffViewerProps {
                                             diff: diff_result.clone(),
                                             view_mode: *diff_view_mode.read(),
                                             file_path: file_path.to_string(),
@@ -3898,7 +4119,7 @@ fn App() -> Element {
 
                                             // Check what's actually missing
                                             spawn(async move {
-                                                use hive_ai::core::api_keys::ApiKeyManager;
+                                                use hive::core::api_keys::ApiKeyManager;
                                                 
                                                 let has_api_key = ApiKeyManager::has_valid_keys().await.unwrap_or(false);
                                                 if !has_api_key {
@@ -3942,7 +4163,7 @@ fn App() -> Element {
                                             
                                             // Extract terminal content using xterm.js
                                             spawn(async move {
-                                                use hive_ai::desktop::terminal_xterm_simple::get_xterm_content;
+                                                use hive::desktop::terminal_xterm_simple::get_xterm_content;
                                                 
                                                 // Get content from the active terminal (claude-code)
                                                 if let Some(content) = get_xterm_content("claude-code").await {
@@ -4069,7 +4290,7 @@ fn App() -> Element {
                                             // Get latest curator from database and send to terminal
                                             let _app_state_clone = app_state.clone();
                                             spawn(async move {
-                                                use hive_ai::core::database::get_database;
+                                                use hive::core::database::get_database;
                                                 
                                                 match get_database().await {
                                                     Ok(db) => {
@@ -4083,7 +4304,7 @@ fn App() -> Element {
                                                                 );
                                                                 
                                                                 // Send to terminal
-                                                                use hive_ai::desktop::terminal_registry::send_to_active_terminal;
+                                                                use hive::desktop::terminal_registry::send_to_active_terminal;
                                                                 if send_to_active_terminal(&formatted_content) {
                                                                     tracing::info!("✅ Sent curator result to Claude terminal");
                                                                 } else {
@@ -4181,94 +4402,10 @@ fn App() -> Element {
                 }
             }
 
-            // Status bar
-            div {
-                class: "status-bar",
-                style: "background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);",
-                div {
-                    class: "status-left",
-                    style: "color: #000; font-weight: 600;",
-                    div {
-                        class: "git-branch",
-                        style: "display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: background-color 0.2s;",
-                        onclick: move |_| {
-                            // Show git status menu
-                            let branch_info = git_state.branch_info.read();
-                            let sync_status = git_state.sync_status.read();
-                            
-                            if branch_info.is_some() {
-                                let repo_path = current_dir.read().clone();
-                                if let Some(repo_path) = repo_path {
-                                    let git_state_for_menu = git_state.clone();
-                                    spawn(async move {
-                                        // Create a context menu for git actions
-                                        let menu_items = vec![
-                                            "Sync Changes",
-                                            "Pull from Remote", 
-                                            "Push to Remote",
-                                            "Fetch",
-                                            "Create Branch...",
-                                            "Checkout Branch...",
-                                            "View History",
-                                        ];
-                                        
-                                        // For now, just log the click
-                                        // TODO: Implement proper context menu
-                                        tracing::info!("Git status bar clicked - would show menu with items: {:?}", menu_items);
-                                    });
-                                }
-                            }
-                        },
-                        onmouseenter: move |_| {
-                            // TODO: Add hover effect
-                        },
-                        onmouseleave: move |_| {
-                            // TODO: Remove hover effect  
-                        },
-                        
-                        span { style: "color: #FFC107; font-weight: 600; font-size: 14px;", "⎇" }
-                        span { 
-                            style: "color: #000; font-weight: 700;", 
-                            {
-                                git_state.branch_info.read()
-                                    .as_ref()
-                                    .map(|info| info.name.clone())
-                                    .unwrap_or_else(|| "No repository".to_string())
-                            }
-                        }
-                        // Show sync status if available
-                        {
-                            let branch_info = git_state.branch_info.read();
-                            let sync_status = git_state.sync_status.read();
-                            if branch_info.is_some() && sync_status.has_upstream {
-                                rsx! {
-                                    span { 
-                                        style: "color: #000; margin-left: 8px;", 
-                                        {sync_status.format()}
-                                    }
-                                }
-                            } else {
-                                rsx! {}
-                            }
-                        }
-                    }
-                    span { style: "color: #000;", " • " }
-                    span { style: "color: #000;", "✓ 0 problems" }
-                    span { style: "color: #000;", " • " }
-                    span { style: "color: #000; font-weight: 700;", "{subscription_display.read()}" }
-                }
-                div {
-                    class: "status-right",
-                    style: "color: #000; font-weight: 600;",
-                    {
-                        let (line, col) = *cursor_position.read();
-                        format!("Ln {}, Col {}", line, col)
-                    },
-                    span { style: "color: #000;", " • " },
-                    "UTF-8",
-                    span { style: "color: #000;", " • " },
-                    span { style: "color: #000; font-weight: 700;", "Rust" }
-                }
+            // Enhanced Status Bar
+            EnhancedStatusBar {
+                state: status_bar_state,
+                on_item_click: handle_status_bar_click,
             }
         }
 
@@ -4280,6 +4417,47 @@ fn App() -> Element {
             }
         }
 
+        // Git status menu (render at top level for proper positioning)
+        if *show_git_menu.read() {
+            GitStatusMenu {
+                repo_path: current_dir.read().clone(),
+                branch_info: git_state.branch_info.read().clone(),
+                visible: show_git_menu.clone(),
+                position: *git_menu_position.read(),
+                on_branch_selected: EventHandler::new({
+                    let current_dir = current_dir.clone();
+                    let git_state = git_state.clone();
+                    let git_context = git_context.clone();
+                    move |branch_name: String| {
+                        if let Some(repo_path) = current_dir.read().clone() {
+                            let git_state_clone = git_state.clone();
+                            let mut git_context_clone = git_context.clone();
+                            spawn(async move {
+                                if let Ok(repo) = GitRepository::open(&repo_path) {
+                                    match repo.checkout_branch(&branch_name) {
+                                        Ok(_) => {
+                                            tracing::info!("Switched to branch: {}", branch_name);
+                                            // Refresh git state
+                                            git_context_clone.refresh().await;
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Failed to switch branch: {}", e);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }),
+                on_create_branch: EventHandler::new({
+                    move |_| {
+                        // TODO: Show create branch dialog
+                        tracing::info!("Create branch clicked");
+                    }
+                }),
+            }
+        }
+        
         if *show_command_palette.read() {
             CommandPalette {
                 show_palette: show_command_palette.clone(),
@@ -4656,7 +4834,7 @@ fn App() -> Element {
                     on_approve: EventHandler::new({
                         let mut app_state = app_state.clone();
                         let consensus_manager = consensus_manager.clone();
-                        move |approved_operations: Vec<hive_ai::consensus::stages::file_aware_curator::FileOperation>| {
+                        move |approved_operations: Vec<hive::consensus::stages::file_aware_curator::FileOperation>| {
                             // Clear dialog state
                             app_state.write().show_operation_confirmation_dialog = false;
                             app_state.write().pending_operations = None;
@@ -4691,7 +4869,7 @@ fn App() -> Element {
                             tracing::info!("User rejected all pending operations");
                         }
                     }),
-                    theme: hive_ai::desktop::styles::theme::ThemeColors::dark_theme(),
+                    theme: hive::desktop::styles::theme::ThemeColors::dark_theme(),
                 }
             }
         }
@@ -4799,9 +4977,9 @@ fn FileTreeItem(
                                 let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                 let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                 
-                                let branch_info = hive_ai::desktop::git::BranchInfo {
+                                let branch_info = hive::desktop::git::BranchInfo {
                                     name: branch_name,
-                                    branch_type: hive_ai::desktop::git::BranchType::Local,
+                                    branch_type: hive::desktop::git::BranchType::Local,
                                     is_current: true,
                                     upstream: repo.upstream_branch().unwrap_or(None),
                                     ahead,
@@ -4811,7 +4989,7 @@ fn FileTreeItem(
                                 git_state_clone.branch_info.set(Some(branch_info));
                                 
                                 // Update sync status
-                                let sync_status = hive_ai::desktop::git::SyncStatus {
+                                let sync_status = hive::desktop::git::SyncStatus {
                                     ahead,
                                     behind,
                                     has_upstream,
@@ -4829,20 +5007,20 @@ fn FileTreeItem(
                                     for (path, git_status) in statuses {
                                         // Convert git2::Status to our StatusType
                                         let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                            hive_ai::desktop::git::StatusType::Modified
+                                            hive::desktop::git::StatusType::Modified
                                         } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                            hive_ai::desktop::git::StatusType::Added
+                                            hive::desktop::git::StatusType::Added
                                         } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                            hive_ai::desktop::git::StatusType::Deleted
+                                            hive::desktop::git::StatusType::Deleted
                                         } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                            hive_ai::desktop::git::StatusType::Renamed
+                                            hive::desktop::git::StatusType::Renamed
                                         } else if git_status.is_wt_new() {
-                                            hive_ai::desktop::git::StatusType::Untracked
+                                            hive::desktop::git::StatusType::Untracked
                                         } else {
                                             continue; // Skip other statuses
                                         };
                                         
-                                        let file_status = hive_ai::desktop::git::FileStatus {
+                                        let file_status = hive::desktop::git::FileStatus {
                                             path: path.clone(),
                                             status_type,
                                             is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -5021,16 +5199,16 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                         }
                         span {
                             style: match stage.status {
-                                hive_ai::desktop::state::StageStatus::Waiting => "color: #666666; font-size: 11px;",
-                                hive_ai::desktop::state::StageStatus::Running => "color: #FFC107; font-size: 11px;",
-                                hive_ai::desktop::state::StageStatus::Completed => "color: #4caf50; font-size: 11px;",
-                                hive_ai::desktop::state::StageStatus::Error => "color: #f44336; font-size: 11px;",
+                                hive::desktop::state::StageStatus::Waiting => "color: #666666; font-size: 11px;",
+                                hive::desktop::state::StageStatus::Running => "color: #FFC107; font-size: 11px;",
+                                hive::desktop::state::StageStatus::Completed => "color: #4caf50; font-size: 11px;",
+                                hive::desktop::state::StageStatus::Error => "color: #f44336; font-size: 11px;",
                             },
                             match stage.status {
-                                hive_ai::desktop::state::StageStatus::Waiting => "Waiting",
-                                hive_ai::desktop::state::StageStatus::Running => "Running",
-                                hive_ai::desktop::state::StageStatus::Completed => "Complete",
-                                hive_ai::desktop::state::StageStatus::Error => "Error",
+                                hive::desktop::state::StageStatus::Waiting => "Waiting",
+                                hive::desktop::state::StageStatus::Running => "Running",
+                                hive::desktop::state::StageStatus::Completed => "Complete",
+                                hive::desktop::state::StageStatus::Error => "Error",
                             }
                         }
                     }
@@ -5041,10 +5219,10 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                         div {
                             style: format!("background: {}; height: 100%; width: {}%; transition: width 0.3s;",
                                 match stage.status {
-                                    hive_ai::desktop::state::StageStatus::Waiting => "#666666",
-                                    hive_ai::desktop::state::StageStatus::Running => "#FFC107",
-                                    hive_ai::desktop::state::StageStatus::Completed => "#4caf50",
-                                    hive_ai::desktop::state::StageStatus::Error => "#f44336",
+                                    hive::desktop::state::StageStatus::Waiting => "#666666",
+                                    hive::desktop::state::StageStatus::Running => "#FFC107",
+                                    hive::desktop::state::StageStatus::Completed => "#4caf50",
+                                    hive::desktop::state::StageStatus::Error => "#f44336",
                                 },
                                 stage.progress
                             ),
@@ -5303,7 +5481,7 @@ fn ExecutiveDashboard(analytics_data: Signal<AnalyticsData>) -> Element {
 
 /// Fetch provider cost breakdown from database
 async fn fetch_provider_costs() -> Result<Vec<(String, f64, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-    use hive_ai::core::database::get_database;
+    use hive::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -5588,7 +5766,7 @@ fn PerformanceReport(analytics_data: Signal<AnalyticsData>) -> Element {
 
 /// Fetch model usage stats from database
 async fn fetch_model_stats() -> Result<Vec<(String, String, f64, u64, f64, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-    use hive_ai::core::database::get_database;
+    use hive::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -5632,7 +5810,7 @@ async fn fetch_model_stats() -> Result<Vec<(String, String, f64, u64, f64, f64)>
 
 /// Fetch recent conversations from database
 async fn fetch_recent_conversations() -> Result<Vec<(String, String, f64, String)>, Box<dyn std::error::Error + Send + Sync>> {
-    use hive_ai::core::database::get_database;
+    use hive::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -5671,7 +5849,7 @@ async fn fetch_recent_conversations() -> Result<Vec<(String, String, f64, String
 
 /// Fetch performance metrics from database
 async fn fetch_performance_metrics() -> Result<(f64, f64, f64, f64, f64, f64), Box<dyn std::error::Error + Send + Sync>> {
-    use hive_ai::core::database::get_database;
+    use hive::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -5961,7 +6139,7 @@ fn RealTimeActivity(analytics_data: Signal<AnalyticsData>) -> Element {
 
 /// Load the active profile from database for UI updates
 async fn load_active_profile_from_db() -> anyhow::Result<ActiveProfile> {
-    use hive_ai::core::database::get_database;
+    use hive::core::database::get_database;
     use rusqlite::OptionalExtension;
 
     let db = get_database().await?;
