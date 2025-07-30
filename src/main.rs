@@ -25,7 +25,7 @@ enum UIMode {
 
 #[derive(Parser)]
 #[command(name = "hive")]
-#[command(version = hive::VERSION)]
+#[command(version = hive_ai::VERSION)]
 #[command(about = "Lightning-fast codebase intelligence platform")]
 #[command(long_about = None)]
 struct Cli {
@@ -153,7 +153,7 @@ enum Commands {
     /// Installation management
     Install {
         #[command(flatten)]
-        args: hive::commands::install::InstallArgs,
+        args: hive_ai::commands::install::InstallArgs,
     },
 
     /// Run OpenRouter model maintenance
@@ -162,7 +162,7 @@ enum Commands {
     /// Migration from TypeScript
     Migrate {
         #[command(flatten)]
-        args: hive::commands::migrate::MigrateArgs,
+        args: hive_ai::commands::migrate::MigrateArgs,
     },
 
     /// Show version information
@@ -393,7 +393,7 @@ fn main() -> Result<()> {
 
     // Handle version command first
     if matches!(cli.command, Some(Commands::Version)) {
-        println!("Hive AI {}", hive::VERSION);
+        println!("Hive AI {}", hive_ai::VERSION);
         return Ok(());
     }
 
@@ -439,7 +439,7 @@ fn main() -> Result<()> {
         let runtime = tokio::runtime::Runtime::new()?;
         runtime.block_on(async {
             // Initialize the database
-            let db_config = hive::core::database::DatabaseConfig {
+            let db_config = hive_ai::core::database::DatabaseConfig {
                 path: config.database.path.clone(),
                 max_connections: config.database.connection_pool_size as u32,
                 connection_timeout: std::time::Duration::from_secs(5),
@@ -450,7 +450,7 @@ fn main() -> Result<()> {
                 synchronous: "NORMAL".to_string(),
                 journal_mode: "WAL".to_string(),
             };
-            hive::core::database::initialize_database(Some(db_config)).await?;
+            hive_ai::core::database::initialize_database(Some(db_config)).await?;
             Ok::<(), anyhow::Error>(())
         })?;
 
@@ -542,17 +542,17 @@ async fn execute_command(cli: &mut CliFramework, command: Commands) -> HiveResul
             execute_enterprise_command(cli, command).await?;
         }
         Commands::Install { args } => {
-            hive::commands::install::handle_install_command(args)
+            hive_ai::commands::install::handle_install_command(args)
                 .await
-                .map_err(|e| hive::core::error::HiveError::ConfigInvalid {
+                .map_err(|e| hive_ai::core::error::HiveError::ConfigInvalid {
                     message: e.to_string(),
                 })?;
         }
         Commands::Maintenance => {
-            hive::commands::maintenance::run_maintenance_command().await?;
+            hive_ai::commands::maintenance::run_maintenance_command().await?;
         }
         Commands::Migrate { args } => {
-            hive::commands::migrate::handle_migrate(args).await?;
+            hive_ai::commands::migrate::handle_migrate(args).await?;
         }
         Commands::Tui => {
             // This should not happen as TUI is handled above
