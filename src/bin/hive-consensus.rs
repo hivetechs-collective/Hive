@@ -13,7 +13,7 @@ use hive_ai::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_t
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 // Git imports
-use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken};
+use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration};
 // use hive_ai::desktop::diff_viewer::DiffViewer;
 
 // Enhanced Status Bar imports
@@ -922,7 +922,7 @@ fn App() -> Element {
     use_context_provider(|| app_state.clone());
     
     // Initialize git state
-    let git_state = use_git_state();
+    let mut git_state = use_git_state();
     let active_git_watcher = use_signal(|| None::<GitWatcher>);
     use_context_provider(|| active_git_watcher.clone());
     
@@ -1043,13 +1043,21 @@ fn App() -> Element {
     // Enhanced status bar state
     let mut status_bar_state = use_signal(|| StatusBarState::default());
     
+    // Initialize GitState to StatusBar integration
+    initialize_git_statusbar_integration(
+        git_state.clone(),
+        status_bar_state.clone(),
+        active_git_watcher.clone(),
+        current_dir.read().clone(),
+    );
+    
     // Auto-fetch configuration
     let auto_fetch_enabled = use_signal(|| true); // Enable auto-fetch by default
     let auto_fetch_interval_minutes = use_signal(|| 5); // Fetch every 5 minutes
     
     // Status bar event handler for click actions
     let handle_status_bar_click = {
-        let git_state = git_state.clone();
+        let mut git_state = git_state.clone();
         let current_dir = current_dir.clone();
         let mut is_syncing = is_syncing.clone();
         move |item_id: String| {
@@ -1062,7 +1070,7 @@ fn App() -> Element {
                     // Perform sync operation or publish branch
                     if !*is_syncing.read() {
                         *is_syncing.write() = true;
-                        let git_state = git_state.clone();
+                        let mut git_state = git_state.clone();
                         let current_dir = current_dir.clone();
                         let mut is_syncing = is_syncing.clone();
                         spawn(async move {
@@ -1101,6 +1109,8 @@ fn App() -> Element {
                                 git_state.refresh_status(&repo_path).await;
                             }
                             *is_syncing.write() = false;
+                            // Update sync status to show not syncing
+                            git_state.sync_status.write().is_syncing = false;
                         });
                     }
                 },
@@ -1127,54 +1137,27 @@ fn App() -> Element {
         }
     };
     
-    // Status bar state update effect - sync with git state
+    // Status bar state update effect - handle non-git items
     {
         let mut status_bar_state = status_bar_state.clone();
-        let git_state = git_state.clone();
         let cursor_position = cursor_position.clone();
-        let is_syncing = is_syncing.clone();
         use_effect(move || {
-            // Update git branch info
-            if let Some(branch_info) = git_state.branch_info.read().as_ref() {
-                let mut state = status_bar_state.write();
-                
-                // Update branch name
-                state.update_item("git-branch", branch_info.name.clone());
-                
-                // Update sync status with better messaging
-                let sync_status = git_state.sync_status.read();
-                let (sync_text, tooltip) = if *is_syncing.read() {
-                    ("Syncing...".to_string(), "Synchronizing with remote".to_string())
-                } else if sync_status.has_upstream {
-                    let text = if sync_status.behind == 0 && sync_status.ahead == 0 {
-                        "✓".to_string() // Up to date
-                    } else {
-                        format!("↓{} ↑{}", sync_status.behind, sync_status.ahead)
-                    };
-                    let tooltip = format!("Behind: {}, Ahead: {} (click to sync)", sync_status.behind, sync_status.ahead);
-                    (text, tooltip)
-                } else {
-                    ("Publish".to_string(), "Click to publish this branch to remote".to_string())
-                };
-                
-                state.update_item("git-sync", sync_text);
-                
-                // Update tooltip for git-sync item
-                if let Some(item) = state.items.iter_mut().find(|i| i.id == "git-sync") {
-                    item.tooltip = Some(tooltip);
-                }
-            }
-            
             // Update cursor position
             let (line, col) = *cursor_position.read();
             status_bar_state.write().update_item("cursor-position", format!("Ln {}, Col {}", line, col));
-            
-            // Update problems count
-            let file_statuses = git_state.file_statuses.read();
-            let conflict_count = file_statuses.values()
-                .filter(|status| status.status_type == hive_ai::desktop::git::StatusType::Conflicted)
-                .count() as u32;
-            status_bar_state.write().update_problems(conflict_count, 0);
+        });
+    }
+    
+    // Handle syncing status overlay
+    {
+        let mut git_state = git_state.clone();
+        let is_syncing = is_syncing.clone();
+        use_effect(move || {
+            if *is_syncing.read() {
+                // Update sync status to show syncing
+                let mut sync_status = git_state.sync_status.write();
+                sync_status.is_syncing = true;
+            }
         });
     }
     

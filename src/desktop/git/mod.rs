@@ -18,6 +18,7 @@ pub mod context_manager;
 pub mod status_menu;
 pub mod repository_selector;
 pub mod multi_repo_manager;
+pub mod statusbar_integration_fixed;
 
 pub use repository::{GitRepository, RepositoryInfo};
 pub use branch::{BranchInfo, BranchType, BranchFilter, BranchSort, CommitInfo, sort_branches, validate_branch_name};
@@ -33,6 +34,12 @@ pub use repository_selector::{
     RepositorySelectorState, UpstreamStatus, REPOSITORY_SELECTOR_STYLES
 };
 pub use multi_repo_manager::{MultiRepoManager, RepositoriesSummary};
+pub use statusbar_integration_fixed::{
+    initialize_git_statusbar_integration,
+    setup_git_statusbar_integration,
+    setup_git_watcher_integration,
+    setup_statusbar_event_subscription,
+};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
