@@ -222,3 +222,7 @@ identifier = "com.hivetechs.hive"
 [lib]
 name = "hive_ai"
 path = "src/lib.rs"
+
+[[example]]
+name = "event_bus_demo"
+path = "examples/event_bus_demo.rs"
