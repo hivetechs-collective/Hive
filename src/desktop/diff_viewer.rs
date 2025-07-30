@@ -3,7 +3,8 @@
 //! Displays file changes in side-by-side or inline view with syntax highlighting
 
 use dioxus::prelude::*;
-use crate::desktop::git::{DiffResult, DiffViewMode, DiffLineType};
+use crate::desktop::git::{DiffResult, DiffViewMode, DiffLineType, DiffAction, DiffActionState};
+use std::path::PathBuf;
 
 /// Props for the diff viewer component
 #[derive(Props, Clone, PartialEq)]
@@ -91,7 +92,7 @@ pub fn DiffViewer(props: DiffViewerProps) -> Element {
     }
 }
 
-/// Side-by-side diff view
+/// Side-by-side diff view (basic)
 #[component]
 fn SideBySideDiff(diff: DiffResult) -> Element {
     rsx! {
@@ -277,5 +278,22 @@ fn InlineDiff(diff: DiffResult) -> Element {
                 }
             }
         }
+    }
+}
+
+/// Legacy components for backward compatibility
+#[component]
+fn LegacySideBySideDiff(diff: DiffResult) -> Element {
+    // Use the basic side-by-side diff for legacy compatibility
+    rsx! {
+        SideBySideDiff { diff }
+    }
+}
+
+#[component]
+fn LegacyInlineDiff(diff: DiffResult) -> Element {
+    // Use the basic inline diff for legacy compatibility
+    rsx! {
+        InlineDiff { diff }
     }
 }

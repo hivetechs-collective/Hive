@@ -8,9 +8,9 @@ use std::path::PathBuf;
 /// File status in git
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileStatus {
-    pub path: PathBuf,
     pub status_type: StatusType,
-    pub is_staged: bool,
+    pub has_staged_changes: bool,
+    pub has_unstaged_changes: bool,
 }
 
 /// Type of file status
@@ -47,6 +47,11 @@ impl From<Status> for StatusType {
 }
 
 impl StatusType {
+    /// Convert from git2::Status for performance optimization integration
+    pub fn from_git2_status(status: git2::Status) -> Self {
+        Self::from(status)
+    }
+    
     /// Get the icon for this status type (VS Code style)
     pub fn icon(&self) -> &'static str {
         match self {

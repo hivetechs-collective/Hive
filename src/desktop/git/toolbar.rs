@@ -8,6 +8,8 @@ use std::sync::Arc;
 
 use super::{GitOperations, GitOperation, GitOperationResult, GitOperationProgress, CancellationToken};
 use super::commit_box::{CommitBox, CommitBoxProps};
+use super::performance_monitor::{PerformanceMonitor, PerformanceMonitorProps};
+use super::performance::{PerformanceStats};
 
 /// State of a git operation
 #[derive(Debug, Clone, PartialEq)]
@@ -39,6 +41,12 @@ pub struct GitToolbarProps {
     /// Optional callback for operation progress
     #[props(optional)]
     pub on_progress: Option<EventHandler<GitOperationProgress>>,
+    /// Optional performance statistics for monitoring
+    #[props(optional)]
+    pub performance_stats: Option<PerformanceStats>,
+    /// Whether to show performance monitoring inline
+    #[props(default = false)]
+    pub show_performance_monitor: bool,
 }
 
 /// Git operations toolbar component
@@ -217,6 +225,25 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                     "↻ Fetch"
                 }
                 
+                // Stash button
+                button {
+                    style: if has_repo {
+                        "padding: 6px 12px; background: transparent; color: #f0ad4e; border: 1px solid #f0ad4e; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+                    } else {
+                        "padding: 6px 12px; background: #3c3c3c; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: not-allowed; font-size: 12px; display: flex; align-items: center; gap: 4px;"
+                    },
+                    disabled: !has_repo,
+                    title: "Stash Changes",
+                    onclick: {
+                        let on_operation = props.on_operation.clone();
+                        move |_| {
+                            on_operation.call(GitOperation::StashSave("Quick stash".to_string()));
+                            operation_status.set(Some("Creating stash...".to_string()));
+                        }
+                    },
+                    "📦 Stash"
+                }
+                
                 // Discard all changes button (with confirmation)
                 if has_unstaged {
                     button {
@@ -234,6 +261,19 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
             div {
                 style: "margin-top: 12px; padding: 6px 8px; background: #1e1e1e; border-radius: 3px; font-size: 11px; color: #888;",
                 "Branch: {current_branch} • Staged: {staged_count} • Unstaged: {unstaged_count}"
+            }
+            
+            // Performance monitor (optional)
+            if props.show_performance_monitor {
+                if let Some(stats) = &props.performance_stats {
+                    div {
+                        style: "margin-top: 8px;",
+                        PerformanceMonitor {
+                            stats: stats.clone(),
+                            inline: true,
+                        }
+                    }
+                }
             }
         }
         

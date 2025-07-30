@@ -7,6 +7,7 @@
 //! - Integrated terminal
 //! - VS Code-like keybindings and navigation
 
+pub mod build_monitor;
 pub mod consensus;
 pub mod dialogs;
 pub mod editor;
