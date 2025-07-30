@@ -4,14 +4,14 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use hive::cli::banner::show_startup_banner;
-use hive::cli::tui_capabilities::TuiCapabilities;
-use hive::cli::CliFramework;
-use hive::core::config::{load_config, Config};
-use hive::core::error::HiveResult;
-use hive::core::initialize_default_logging;
-use hive::desktop::launch_desktop_app;
-use hive::tui::TuiFramework;
+use hive_ai::cli::banner::show_startup_banner;
+use hive_ai::cli::tui_capabilities::TuiCapabilities;
+use hive_ai::cli::CliFramework;
+use hive_ai::core::config::{load_config, Config};
+use hive_ai::core::error::HiveResult;
+use hive_ai::core::initialize_default_logging;
+use hive_ai::desktop::launch_desktop_app;
+use hive_ai::tui::TuiFramework;
 use std::env;
 use std::path::PathBuf;
 
