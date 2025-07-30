@@ -1,7 +1,7 @@
 //! Command-line tool to fix database schema mismatches
 
-use hive::core::db_migration::{fix_schema_mismatches, needs_migration};
-use hive::core::database::{get_database, initialize_database, DatabaseConfig};
+use hive_ai::core::db_migration::{fix_schema_mismatches, needs_migration};
+use hive_ai::core::database::{get_database, initialize_database, DatabaseConfig};
 use std::process;
 use std::ops::DerefMut;
 use std::path::PathBuf;
