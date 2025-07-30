@@ -14,10 +14,14 @@ use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 // Git imports
 use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
+use hive_ai::desktop::git::branch_menu::{BranchMenu, BranchOperation, BranchOperationResult};
 // use hive_ai::desktop::diff_viewer::DiffViewer;
 
 // Enhanced Status Bar imports
 use hive_ai::desktop::status_bar_enhanced::{EnhancedStatusBar, StatusBarState, StatusBarItem, StatusBarAlignment};
+
+// Event Bus imports
+use hive_ai::desktop::events::{event_bus, Event, EventType, EventPayload};
 
 /// Analytics data structure for the dashboard
 #[derive(Debug, Clone, Default)]
@@ -1041,6 +1045,9 @@ fn App() -> Element {
         SourceControl,
     }
     let mut sidebar_view = use_signal(|| SidebarView::FileExplorer);
+    
+    // Branch menu state
+    let mut show_branch_menu = use_signal(|| false);
 
     // API keys state (needed before consensus manager)
     let mut openrouter_key = use_signal(String::new);
@@ -1157,11 +1164,28 @@ fn App() -> Element {
         let mut git_state = git_state.clone();
         let current_dir = current_dir.clone();
         let mut is_syncing = is_syncing.clone();
+        let mut show_branch_menu = show_branch_menu.clone();
         move |item_id: String| {
             match item_id.as_str() {
                 "git-branch" => {
-                    // Show branch selector - reuse existing functionality
+                    // Show branch selector menu
                     tracing::info!("Branch selector clicked");
+                    *show_branch_menu.write() = true;
+                    
+                    // Emit menu visibility event
+                    let bus = event_bus();
+                    spawn(async move {
+                        let event = Event::new(
+                            EventType::MenuVisibilityChanged,
+                            EventPayload::MenuVisibility {
+                                menu_id: "branch-menu".to_string(),
+                                visible: true,
+                            }
+                        );
+                        bus.publish(event).await.unwrap_or_else(|e| {
+                            tracing::error!("Failed to publish menu visibility event: {}", e);
+                        });
+                    });
                 },
                 "git-sync" => {
                     // Perform sync operation or publish branch
@@ -4676,6 +4700,86 @@ fn App() -> Element {
                     }
                 }),
             }
+        }
+        
+        // Branch menu (render at top level for proper positioning)
+        if *show_branch_menu.read() {
+            BranchMenu {
+                repo_path: current_dir.read().clone(),
+                branch_info: git_state.branch_info.read().clone(),
+                visible: show_branch_menu.clone(),
+                position: (20, 30), // Position above the status bar (x=20 for left side, y=30 for above status bar)
+                on_branch_selected: EventHandler::new({
+                    let git_context = git_context.clone();
+                    let current_dir = current_dir.clone();
+                    move |branch_name: String| {
+                        if let Some(repo_path) = current_dir.read().clone() {
+                            let mut git_context_clone = git_context.clone();
+                            spawn(async move {
+                                if let Ok(repo) = GitRepository::open(&repo_path) {
+                                    match repo.checkout_branch(&branch_name) {
+                                        Ok(_) => {
+                                            tracing::info!("Switched to branch: {}", branch_name);
+                                            // Refresh git state
+                                            git_context_clone.refresh().await;
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("Failed to switch branch: {}", e);
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }),
+                on_operation_complete: EventHandler::new(move |result: BranchOperationResult| {
+                    match result.operation {
+                        BranchOperation::Checkout(ref branch) => {
+                            if result.success {
+                                tracing::info!("Successfully checked out branch: {}", branch);
+                            } else {
+                                tracing::error!("Failed to checkout branch: {}", result.message);
+                            }
+                        }
+                        _ => {
+                            tracing::info!("Branch operation completed: {:?}", result);
+                        }
+                    }
+                }),
+            }
+        }
+        
+        // Effect to emit event when branch menu visibility changes
+        {
+            let mut prev_show_branch_menu = use_signal(|| false);
+            let show_branch_menu = show_branch_menu.clone();
+            use_effect(move || {
+                let current = *show_branch_menu.read();
+                let previous = *prev_show_branch_menu.read();
+                
+                // Only emit event when visibility actually changes
+                if current != previous {
+                    *prev_show_branch_menu.write() = current;
+                    
+                    // Only emit event when hiding (showing is handled in the click handler)
+                    if !current && previous {
+                        // Emit menu hidden event
+                        let bus = event_bus();
+                        spawn(async move {
+                            let event = Event::new(
+                                EventType::MenuVisibilityChanged,
+                                EventPayload::MenuVisibility {
+                                    menu_id: "branch-menu".to_string(),
+                                    visible: false,
+                                }
+                            );
+                            bus.publish(event).await.unwrap_or_else(|e| {
+                                tracing::error!("Failed to publish menu visibility event: {}", e);
+                            });
+                        });
+                    }
+                }
+            });
         }
         
         if *show_command_palette.read() {

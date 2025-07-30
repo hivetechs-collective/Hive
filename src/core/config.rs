@@ -31,6 +31,7 @@ pub struct HiveConfig {
     pub analytics: AnalyticsConfig,
     pub database: DatabaseConfig,
     pub memory: MemoryConfig,
+    pub repository_discovery: RepositoryDiscoveryConfig,
 }
 
 /// Core directories configuration
@@ -163,6 +164,40 @@ pub struct LicenseConfig {
     pub tier: Option<String>,
 }
 
+/// Repository discovery configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepositoryDiscoveryConfig {
+    /// Scanning mode to use
+    pub scanning_mode: String,
+    
+    /// Directories to scan for repositories
+    pub scan_paths: Vec<PathBuf>,
+    
+    /// Maximum depth for recursive scanning
+    pub max_depth: usize,
+    
+    /// Whether to follow symlinks
+    pub follow_symlinks: bool,
+    
+    /// Patterns to exclude from scanning
+    pub exclude_patterns: Vec<String>,
+    
+    /// Maximum repositories to discover
+    pub max_repositories: Option<usize>,
+    
+    /// Cache settings
+    pub cache_enabled: bool,
+    pub cache_ttl_seconds: u64,
+    pub cache_max_entries: usize,
+    pub cache_persist: bool,
+    
+    /// Whether to extract detailed project information
+    pub extract_project_info: bool,
+    
+    /// Timeout for individual repository operations (seconds)
+    pub operation_timeout_seconds: u64,
+}
+
 impl Default for HiveConfig {
     fn default() -> Self {
         let hive_dir = get_hive_config_dir();
@@ -234,6 +269,36 @@ impl Default for HiveConfig {
                 context_window_size: 4096,
                 clustering_enabled: true,
                 embedding_model: "text-embedding-ada-002".to_string(),
+            },
+            repository_discovery: RepositoryDiscoveryConfig {
+                scanning_mode: "hybrid".to_string(),
+                scan_paths: vec![
+                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Developer"),
+                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Projects"),
+                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Code"),
+                    std::env::var("HOME").map(PathBuf::from).unwrap_or_default().join("Workspace"),
+                    PathBuf::from("."),
+                ],
+                max_depth: 3,
+                follow_symlinks: false,
+                exclude_patterns: vec![
+                    ".git".to_string(),
+                    "node_modules".to_string(),
+                    "target".to_string(),
+                    "build".to_string(),
+                    ".vscode".to_string(),
+                    ".idea".to_string(),
+                    "*.app".to_string(),
+                    "System Volume Information".to_string(),
+                    "$RECYCLE.BIN".to_string(),
+                ],
+                max_repositories: Some(100),
+                cache_enabled: true,
+                cache_ttl_seconds: 3600, // 1 hour
+                cache_max_entries: 500,
+                cache_persist: true,
+                extract_project_info: true,
+                operation_timeout_seconds: 10,
             },
         }
     }

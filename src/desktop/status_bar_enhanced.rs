@@ -210,6 +210,7 @@ impl Default for StatusBarState {
 pub fn EnhancedStatusBar(
     state: Signal<StatusBarState>,
     on_item_click: EventHandler<String>,
+    on_git_branch_click: Option<EventHandler<()>>,
 ) -> Element {
     let status_state = state.read();
     
@@ -246,8 +247,18 @@ pub fn EnhancedStatusBar(
                     StatusBarItemComponent {
                         item: item.clone(),
                         on_click: {
-                            let id = item.id.clone();
-                            move |_| on_item_click.call(id.clone())
+                            // Special handling for git-branch item
+                            if item.id == "git-branch" {
+                                if let Some(ref handler) = on_git_branch_click {
+                                    handler.clone()
+                                } else {
+                                    let id = item.id.clone();
+                                    EventHandler::new(move |_| on_item_click.call(id.clone()))
+                                }
+                            } else {
+                                let id = item.id.clone();
+                                EventHandler::new(move |_| on_item_click.call(id.clone()))
+                            }
                         },
                     }
                 }
@@ -383,6 +394,20 @@ impl StatusBarState {
     
     pub fn set_debug_status(&mut self) {
         self.background_color = Some("#CC6633".to_string()); // VS Code debug color
+    }
+    
+    pub fn update_git_branch(&mut self, branch: &str) {
+        if let Some(item) = self.items.iter_mut().find(|i| i.id == "git-branch") {
+            item.text = branch.to_string();
+            item.tooltip = Some(format!("Git: {} (click to checkout branch)", branch));
+        }
+    }
+    
+    pub fn update_git_sync_status(&mut self, ahead: u32, behind: u32) {
+        if let Some(item) = self.items.iter_mut().find(|i| i.id == "git-sync") {
+            item.text = format!("↓{} ↑{}", behind, ahead);
+            item.tooltip = Some("Synchronize Changes".to_string());
+        }
     }
 }
 
