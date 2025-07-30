@@ -1414,7 +1414,9 @@ fn App() -> Element {
                                 tracing::warn!("Auto-fetch failed: {}", e);
                             } else {
                                 // Update git state after successful fetch
-                                git_state.refresh_status(&repo_path).await;
+                                if let Err(e) = git_state.refresh_status(&repo_path).await {
+                                    tracing::warn!("Failed to refresh git status after fetch: {}", e);
+                                }
                                 tracing::debug!("Auto-fetch completed successfully");
                             }
                         }
