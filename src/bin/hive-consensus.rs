@@ -7,17 +7,17 @@ use chrono::{Duration, Utc};
 use std::sync::Arc;
 
 // Terminal imports
-use hive::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
-use hive::desktop::terminal::use_terminal_cwd;
-use hive::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_terminal_cwd_tracker};
-use hive::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
+use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
+use hive_ai::desktop::terminal::use_terminal_cwd;
+use hive_ai::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_terminal_cwd_tracker};
+use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 // Git imports
-use hive::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken};
-// use hive::desktop::diff_viewer::DiffViewer;
+use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken};
+// use hive_ai::desktop::diff_viewer::DiffViewer;
 
 // Enhanced Status Bar imports
-use hive::desktop::status_bar_enhanced::{EnhancedStatusBar, StatusBarState, StatusBarItem, StatusBarAlignment};
+use hive_ai::desktop::status_bar_enhanced::{EnhancedStatusBar, StatusBarState, StatusBarItem, StatusBarAlignment};
 
 /// Analytics data structure for the dashboard
 #[derive(Debug, Clone, Default)]
@@ -95,7 +95,7 @@ mod analytics_helpers {
 
 /// Fetch real analytics data from the database
 async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Error + Send + Sync>> {
-    use hive::core::database::get_database;
+    use hive_ai::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -863,24 +863,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-use hive::desktop::assets::get_logo_html;
-use hive::desktop::consensus_integration::{use_consensus_with_version, DesktopConsensusManager};
-use hive::ide::ai_helper_broker::IDEAIHelperBroker;
-use hive::desktop::dialogs::{
+use hive_ai::desktop::assets::get_logo_html;
+use hive_ai::desktop::consensus_integration::{use_consensus_with_version, DesktopConsensusManager};
+use hive_ai::ide::ai_helper_broker::IDEAIHelperBroker;
+use hive_ai::desktop::dialogs::{
     AboutDialog, CommandPalette, NoUpdatesDialog, OnboardingDialog, OperationConfirmationDialog,
     SettingsDialog, UpdateAvailableDialog, UpdateErrorDialog, UpgradeDialog, WelcomeAction, WelcomeTab, DIALOG_STYLES,
 };
-use hive::desktop::context_menu::{
+use hive_ai::desktop::context_menu::{
     ContextMenu, ContextMenuAction, ContextMenuState, FileNameDialog, ConfirmDialog,
 };
-use hive::desktop::file_system;
-use hive::desktop::file_operations;
-use hive::desktop::menu_bar::{MenuAction, MenuBar};
-use hive::desktop::state::{FileItem, FileType};
-use hive::desktop::code_editor::editor::CodeEditorComponent;
-use hive::desktop::code_editor::renderer::EDITOR_STYLES;
-use hive::desktop::components::{OperationStatus, parse_operations_from_content};
-use hive::desktop::status_bar_enhanced::{
+use hive_ai::desktop::file_system;
+use hive_ai::desktop::file_operations;
+use hive_ai::desktop::menu_bar::{MenuAction, MenuBar};
+use hive_ai::desktop::state::{FileItem, FileType};
+use hive_ai::desktop::code_editor::editor::CodeEditorComponent;
+use hive_ai::desktop::code_editor::renderer::EDITOR_STYLES;
+use hive_ai::desktop::components::{OperationStatus, parse_operations_from_content};
+use hive_ai::desktop::status_bar_enhanced::{
     STATUS_BAR_STYLES,
 };
 
@@ -895,8 +895,8 @@ mod markdown {
         html_output
     }
 }
-use hive::desktop::state::{AppState, ConsensusState, StageInfo};
-use hive::consensus::stages::file_aware_curator::FileOperation;
+use hive_ai::desktop::state::{AppState, ConsensusState, StageInfo};
+use hive_ai::consensus::stages::file_aware_curator::FileOperation;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -904,7 +904,7 @@ fn App() -> Element {
     // Initialize database on first render
     use_effect(move || {
         spawn(async move {
-            use hive::core::database::{initialize_database, DatabaseConfig};
+            use hive_ai::core::database::{initialize_database, DatabaseConfig};
 
             // Initialize database with proper config
             let config = DatabaseConfig::default();
@@ -1393,7 +1393,7 @@ fn App() -> Element {
         let mut anthropic_key = anthropic_key.clone();
         move || {
             spawn(async move {
-                use hive::core::api_keys::ApiKeyManager;
+                use hive_ai::core::api_keys::ApiKeyManager;
                 if let Ok(config) = ApiKeyManager::load_from_database().await {
                     *api_config.write() = config.clone();
                     if let Some(key) = config.hive_key {
@@ -1419,7 +1419,7 @@ fn App() -> Element {
         let mut hive_key = hive_key.clone();
         let mut anthropic_key = anthropic_key.clone();
         spawn(async move {
-            use hive::core::api_keys::ApiKeyManager;
+            use hive_ai::core::api_keys::ApiKeyManager;
 
             // Check if API keys are configured
             if !ApiKeyManager::has_valid_keys().await.unwrap_or(false) {
@@ -1485,7 +1485,7 @@ fn App() -> Element {
                         // Wait a moment for the key to be saved to database
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-                        use hive::subscription::conversation_gateway::ConversationGateway;
+                        use hive_ai::subscription::conversation_gateway::ConversationGateway;
                         match ConversationGateway::new() {
                             Ok(gateway) => {
                                 // First validate the license to get user profile
@@ -1601,8 +1601,8 @@ fn App() -> Element {
                     }
 
                     // Load subscription info directly from D1, not local database
-                    use hive::core::api_keys::ApiKeyManager;
-                    use hive::subscription::conversation_gateway::ConversationGateway;
+                    use hive_ai::core::api_keys::ApiKeyManager;
+                    use hive_ai::subscription::conversation_gateway::ConversationGateway;
 
                     match ApiKeyManager::load_from_database().await {
                         Ok(config) => {
@@ -1710,8 +1710,8 @@ fn App() -> Element {
                     interval.tick().await;
 
                     // Use D1 as the only source of truth, same as initial load
-                    use hive::core::api_keys::ApiKeyManager;
-                    use hive::subscription::conversation_gateway::ConversationGateway;
+                    use hive_ai::core::api_keys::ApiKeyManager;
+                    use hive_ai::subscription::conversation_gateway::ConversationGateway;
 
                     match ApiKeyManager::load_from_database().await {
                         Ok(config) => {
@@ -1943,7 +1943,7 @@ fn App() -> Element {
         let app_state = app_state.clone();
         
         move || {
-            use hive::desktop::ai_ui_events::process_ai_helper_events;
+            use hive_ai::desktop::ai_ui_events::process_ai_helper_events;
             process_ai_helper_events(app_state);
         }
     });
@@ -2404,7 +2404,7 @@ fn App() -> Element {
                 let mut update_error_message = update_error_message.clone();
 
                 spawn(async move {
-                    use hive::updates::{UpdateChannel, UpdateChecker};
+                    use hive_ai::updates::{UpdateChannel, UpdateChecker};
 
                     println!("Checking for updates...");
                     let checker =
@@ -4119,7 +4119,7 @@ fn App() -> Element {
 
                                             // Check what's actually missing
                                             spawn(async move {
-                                                use hive::core::api_keys::ApiKeyManager;
+                                                use hive_ai::core::api_keys::ApiKeyManager;
                                                 
                                                 let has_api_key = ApiKeyManager::has_valid_keys().await.unwrap_or(false);
                                                 if !has_api_key {
@@ -4163,7 +4163,7 @@ fn App() -> Element {
                                             
                                             // Extract terminal content using xterm.js
                                             spawn(async move {
-                                                use hive::desktop::terminal_xterm_simple::get_xterm_content;
+                                                use hive_ai::desktop::terminal_xterm_simple::get_xterm_content;
                                                 
                                                 // Get content from the active terminal (claude-code)
                                                 if let Some(content) = get_xterm_content("claude-code").await {
@@ -4290,7 +4290,7 @@ fn App() -> Element {
                                             // Get latest curator from database and send to terminal
                                             let _app_state_clone = app_state.clone();
                                             spawn(async move {
-                                                use hive::core::database::get_database;
+                                                use hive_ai::core::database::get_database;
                                                 
                                                 match get_database().await {
                                                     Ok(db) => {
@@ -4304,7 +4304,7 @@ fn App() -> Element {
                                                                 );
                                                                 
                                                                 // Send to terminal
-                                                                use hive::desktop::terminal_registry::send_to_active_terminal;
+                                                                use hive_ai::desktop::terminal_registry::send_to_active_terminal;
                                                                 if send_to_active_terminal(&formatted_content) {
                                                                     tracing::info!("✅ Sent curator result to Claude terminal");
                                                                 } else {
@@ -5481,7 +5481,7 @@ fn ExecutiveDashboard(analytics_data: Signal<AnalyticsData>) -> Element {
 
 /// Fetch provider cost breakdown from database
 async fn fetch_provider_costs() -> Result<Vec<(String, f64, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-    use hive::core::database::get_database;
+    use hive_ai::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -5766,7 +5766,7 @@ fn PerformanceReport(analytics_data: Signal<AnalyticsData>) -> Element {
 
 /// Fetch model usage stats from database
 async fn fetch_model_stats() -> Result<Vec<(String, String, f64, u64, f64, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-    use hive::core::database::get_database;
+    use hive_ai::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -5810,7 +5810,7 @@ async fn fetch_model_stats() -> Result<Vec<(String, String, f64, u64, f64, f64)>
 
 /// Fetch recent conversations from database
 async fn fetch_recent_conversations() -> Result<Vec<(String, String, f64, String)>, Box<dyn std::error::Error + Send + Sync>> {
-    use hive::core::database::get_database;
+    use hive_ai::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -5849,7 +5849,7 @@ async fn fetch_recent_conversations() -> Result<Vec<(String, String, f64, String
 
 /// Fetch performance metrics from database
 async fn fetch_performance_metrics() -> Result<(f64, f64, f64, f64, f64, f64), Box<dyn std::error::Error + Send + Sync>> {
-    use hive::core::database::get_database;
+    use hive_ai::core::database::get_database;
     
     match get_database().await {
         Ok(db) => {
@@ -6139,7 +6139,7 @@ fn RealTimeActivity(analytics_data: Signal<AnalyticsData>) -> Element {
 
 /// Load the active profile from database for UI updates
 async fn load_active_profile_from_db() -> anyhow::Result<ActiveProfile> {
-    use hive::core::database::get_database;
+    use hive_ai::core::database::get_database;
     use rusqlite::OptionalExtension;
 
     let db = get_database().await?;
