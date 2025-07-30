@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use anyhow::Result;
-use hive::{initialize, ConsensusEngine, SemanticIndex};
+use hive_ai::{initialize, ConsensusEngine, SemanticIndex};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -628,10 +628,10 @@ async fn main() -> Result<()> {
 
             match mode.as_str() {
                 "mcp" => {
-                    hive::integration::start_mcp_server(port).await?;
+                    hive_ai::integration::start_mcp_server(port).await?;
                 }
                 "lsp" => {
-                    hive::integration::start_lsp_server(port).await?;
+                    hive_ai::integration::start_lsp_server(port).await?;
                 }
                 _ => anyhow::bail!("Unknown server mode: {}", mode),
             }
