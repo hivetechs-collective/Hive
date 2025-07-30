@@ -26,6 +26,32 @@ pub struct ActiveProfileData {
 /// Global signal for profile state
 pub static ACTIVE_PROFILE_STATE: GlobalSignal<ProfileState> = Signal::global(|| ProfileState::Loading);
 
+/// Git operation states shared across components
+#[derive(Clone, Debug, PartialEq)]
+pub struct GitOperationState {
+    pub is_pushing: bool,
+    pub is_pulling: bool,
+    pub is_syncing: bool,
+    pub operation_status: Option<String>,
+}
+
+impl GitOperationState {
+    pub fn new() -> Self {
+        Self {
+            is_pushing: false,
+            is_pulling: false,
+            is_syncing: false,
+            operation_status: None,
+        }
+    }
+    
+    pub fn reset_all(&mut self) {
+        self.is_pushing = false;
+        self.is_pulling = false;
+        self.is_syncing = false;
+    }
+}
+
 /// Main application state
 #[derive(Clone, Debug, PartialEq)]
 pub struct AppState {
@@ -84,6 +110,9 @@ pub struct AppState {
     
     /// Show operation confirmation dialog
     pub show_operation_confirmation_dialog: bool,
+    
+    /// Git operation states
+    pub git_operations: GitOperationState,
 }
 
 impl Default for AppState {
@@ -117,6 +146,7 @@ impl AppState {
             repository_context_update_trigger: 0,
             pending_operations: None,
             show_operation_confirmation_dialog: false,
+            git_operations: GitOperationState::new(),
         }
     }
 
