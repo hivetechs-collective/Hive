@@ -10,14 +10,23 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error};
 use super::git::repository::RepositoryInfo;
 
+pub mod repository_discovery;
+pub use repository_discovery::{
+    RepositoryDiscoveryService, RepositoryMetadata, DiscoveryConfig,
+    ScanningMode, ProjectType, GitStatusInfo
+};
+
 /// Central workspace state management
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceState {
     /// Root path of the current workspace
     pub root_path: PathBuf,
     
-    /// All discovered repositories in the workspace
+    /// All discovered repositories in the workspace (basic info)
     pub repositories: Vec<RepositoryInfo>,
+    
+    /// Extended repository metadata from discovery service
+    pub repository_metadata: HashMap<PathBuf, RepositoryMetadata>,
     
     /// Currently active repository
     pub active_repository: Option<PathBuf>,
@@ -30,6 +39,9 @@ pub struct WorkspaceState {
     
     /// Recently opened workspaces
     pub recent_workspaces: Vec<PathBuf>,
+    
+    /// Last discovery scan timestamp
+    pub last_discovery_scan: Option<u64>,
 }
 
 /// State of an open file in the workspace
@@ -113,14 +125,16 @@ impl WorkspaceState {
         Self {
             root_path,
             repositories: Vec::new(),
+            repository_metadata: HashMap::new(),
             active_repository: None,
             open_files: HashMap::new(),
             workspace_settings: WorkspaceSettings::default(),
             recent_workspaces: Vec::new(),
+            last_discovery_scan: None,
         }
     }
     
-    /// Scan the workspace for git repositories
+    /// Scan the workspace for git repositories using basic discovery
     pub fn scan_for_repositories(&mut self) -> Result<()> {
         info!("Scanning workspace for repositories: {:?}", self.root_path);
         
@@ -140,6 +154,127 @@ impl WorkspaceState {
         }
         
         Ok(())
+    }
+    
+    /// Advanced repository discovery using the discovery service
+    pub async fn discover_repositories_advanced(
+        &mut self,
+        discovery_service: &RepositoryDiscoveryService,
+    ) -> Result<()> {
+        info!("Starting advanced repository discovery for workspace: {:?}", self.root_path);
+        
+        let start_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        // Discover repositories with full metadata
+        let discovered_metadata = discovery_service.discover_repositories().await?;
+        
+        info!("Advanced discovery found {} repositories with metadata", discovered_metadata.len());
+        
+        // Update state with discovered metadata
+        self.repository_metadata.clear();
+        self.repositories.clear();
+        
+        for metadata in discovered_metadata {
+            let path = metadata.basic_info.path.clone();
+            
+            // Add basic info to repositories list
+            self.repositories.push(metadata.basic_info.clone());
+            
+            // Store full metadata
+            self.repository_metadata.insert(path, metadata);
+        }
+        
+        // If we have repositories but no active one, set the first as active
+        if !self.repositories.is_empty() && self.active_repository.is_none() {
+            self.active_repository = Some(self.repositories[0].path.clone());
+        }
+        
+        // Update scan timestamp
+        self.last_discovery_scan = Some(start_time);
+        
+        info!("Advanced repository discovery completed: {} repositories", self.repositories.len());
+        Ok(())
+    }
+    
+    /// Refresh metadata for a specific repository
+    pub async fn refresh_repository_metadata(
+        &mut self,
+        repository_path: &Path,
+        discovery_service: &RepositoryDiscoveryService,
+    ) -> Result<()> {
+        info!("Refreshing metadata for repository: {:?}", repository_path);
+        
+        let metadata = discovery_service.refresh_repository(repository_path).await?;
+        
+        // Update the metadata
+        self.repository_metadata.insert(repository_path.to_path_buf(), metadata.clone());
+        
+        // Update basic info in repositories list if needed
+        if let Some(repo) = self.repositories.iter_mut().find(|r| r.path == repository_path) {
+            *repo = metadata.basic_info;
+        }
+        
+        Ok(())
+    }
+    
+    /// Get extended metadata for a repository
+    pub fn get_repository_metadata(&self, path: &Path) -> Option<&RepositoryMetadata> {
+        self.repository_metadata.get(path)
+    }
+    
+    /// Get all repositories with their metadata
+    pub fn get_repositories_with_metadata(&self) -> Vec<(&RepositoryInfo, Option<&RepositoryMetadata>)> {
+        self.repositories
+            .iter()
+            .map(|repo| {
+                let metadata = self.repository_metadata.get(&repo.path);
+                (repo, metadata)
+            })
+            .collect()
+    }
+    
+    /// Filter repositories by project type
+    pub fn filter_repositories_by_type(&self, project_type: ProjectType) -> Vec<&RepositoryMetadata> {
+        self.repository_metadata
+            .values()
+            .filter(|metadata| {
+                metadata.project_info
+                    .as_ref()
+                    .map(|info| info.project_type == project_type)
+                    .unwrap_or(false)
+            })
+            .collect()
+    }
+    
+    /// Get repositories sorted by various criteria
+    pub fn get_repositories_sorted_by_activity(&self) -> Vec<&RepositoryMetadata> {
+        let mut repos: Vec<&RepositoryMetadata> = self.repository_metadata.values().collect();
+        
+        repos.sort_by(|a, b| {
+            // Sort by last commit timestamp (most recent first)
+            let a_time = a.stats.last_commit.unwrap_or(0);
+            let b_time = b.stats.last_commit.unwrap_or(0);
+            b_time.cmp(&a_time)
+        });
+        
+        repos
+    }
+    
+    /// Check if discovery cache is stale and needs refresh
+    pub fn needs_discovery_refresh(&self, max_age_seconds: u64) -> bool {
+        if let Some(last_scan) = self.last_discovery_scan {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            
+            now - last_scan > max_age_seconds
+        } else {
+            true // Never scanned
+        }
     }
     
     /// Switch to a different repository
