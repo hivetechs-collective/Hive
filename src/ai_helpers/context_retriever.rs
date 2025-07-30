@@ -5,21 +5,19 @@
 //! for intelligent auto-accept decisions.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
-use uuid;
+use tracing::{debug, info};
 
 use crate::ai_helpers::{ChromaVectorStore, StageContext, Pattern, Insight};
 use crate::consensus::operation_intelligence::{OperationContext, OperationOutcome};
 use crate::consensus::stages::file_aware_curator::FileOperation;
 use crate::consensus::types::Stage;
 use crate::consensus::verification::RepositoryFacts;
-use super::python_models::{PythonModelService, ModelRequest, ModelResponse};
+use super::python_models::PythonModelService;
 
 /// Decision about whether to use repository context
 #[derive(Debug, Clone)]
@@ -566,7 +564,7 @@ impl ContextRetriever {
     /// Retrieve high-quality examples for Refiner
     async fn retrieve_quality_examples(
         &self,
-        question: &str,
+        _question: &str,
         limit: usize,
     ) -> Result<Vec<String>> {
         let knowledge_store_guard = self.knowledge_store.read().await;
@@ -697,43 +695,43 @@ impl ContextRetriever {
     }
     
     /// Find patterns relevant to the question
-    async fn find_relevant_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+    async fn find_relevant_patterns(&self, _question: &str) -> Result<Vec<Pattern>> {
         // TODO: Implement pattern matching with UniXcoder
         Ok(vec![])
     }
     
     /// Find improvement patterns
-    async fn find_improvement_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+    async fn find_improvement_patterns(&self, _question: &str) -> Result<Vec<Pattern>> {
         Ok(vec![])
     }
     
     /// Find contradiction patterns
-    async fn find_contradiction_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+    async fn find_contradiction_patterns(&self, _question: &str) -> Result<Vec<Pattern>> {
         Ok(vec![])
     }
     
     /// Find synthesis patterns
-    async fn find_synthesis_patterns(&self, question: &str) -> Result<Vec<Pattern>> {
+    async fn find_synthesis_patterns(&self, _question: &str) -> Result<Vec<Pattern>> {
         Ok(vec![])
     }
     
     /// Get relevant insights
-    async fn get_relevant_insights(&self, question: &str) -> Result<Vec<Insight>> {
+    async fn get_relevant_insights(&self, _question: &str) -> Result<Vec<Insight>> {
         Ok(vec![])
     }
     
     /// Get quality insights
-    async fn get_quality_insights(&self, question: &str) -> Result<Vec<Insight>> {
+    async fn get_quality_insights(&self, _question: &str) -> Result<Vec<Insight>> {
         Ok(vec![])
     }
     
     /// Get validation insights
-    async fn get_validation_insights(&self, question: &str) -> Result<Vec<Insight>> {
+    async fn get_validation_insights(&self, _question: &str) -> Result<Vec<Insight>> {
         Ok(vec![])
     }
     
     /// Get synthesis insights
-    async fn get_synthesis_insights(&self, question: &str) -> Result<Vec<Insight>> {
+    async fn get_synthesis_insights(&self, _question: &str) -> Result<Vec<Insight>> {
         Ok(vec![])
     }
     
@@ -1280,7 +1278,7 @@ impl ContextRetriever {
     async fn generate_context_warnings(
         &self,
         operation: &FileOperation,
-        context: &OperationContext,
+        _context: &OperationContext,
         similar_operations: &[OperationPrecedent],
     ) -> Result<Vec<String>> {
         let mut warnings = Vec::new();

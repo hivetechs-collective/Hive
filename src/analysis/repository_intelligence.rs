@@ -167,8 +167,7 @@ pub struct QualityReport {
 }
 
 /// Quality metrics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QualityMetrics {
     pub maintainability_index: f32,
     pub cyclomatic_complexity: f32,

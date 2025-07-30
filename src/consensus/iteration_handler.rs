@@ -526,7 +526,7 @@ mod tests {
                 )),
                 Arc::new(crate::consensus::openrouter::OpenRouterClient::new("test_key".to_string())),
                 Arc::new(crate::consensus::models::ModelManager::new(
-                    Arc::new(crate::consensus::openrouter::OpenRouterClient::new("test_key".to_string()))
+                    Some("test_key".to_string())
                 )),
             )),
             max_iterations: 10,

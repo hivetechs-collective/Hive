@@ -820,7 +820,7 @@ mod tests {
                 repository_path: PathBuf::from("/test"),
                 user_question: "Test".to_string(),
                 consensus_response: "Test response".to_string(),
-                timestamp: Utc::now(),
+                timestamp: std::time::SystemTime::now(),
                 session_id: "test".to_string(),
             },
             unified_score: UnifiedScore { 
