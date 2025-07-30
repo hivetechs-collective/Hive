@@ -821,9 +821,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
         // Initialize the database
-        let config = hive::core::config::get_hive_config_dir();
+        let config = hive_ai::core::config::get_hive_config_dir();
         let db_path = config.join("hive-ai.db");
-        let db_config = hive::core::database::DatabaseConfig {
+        let db_config = hive_ai::core::database::DatabaseConfig {
             path: db_path,
             max_connections: 10,
             connection_timeout: std::time::Duration::from_secs(5),
@@ -834,7 +834,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             synchronous: "NORMAL".to_string(),
             journal_mode: "WAL".to_string(),
         };
-        hive::core::database::initialize_database(Some(db_config)).await?;
+        hive_ai::core::database::initialize_database(Some(db_config)).await?;
         Ok::<(), anyhow::Error>(())
     })?;
 
@@ -950,7 +950,7 @@ fn App() -> Element {
     let mut hive_key = use_signal(String::new);
     let mut anthropic_key = use_signal(String::new);
     let api_keys_version = use_signal(|| 0u32); // Track when API keys change
-    let mut api_config = use_signal(|| hive::core::api_keys::ApiKeyConfig {
+    let mut api_config = use_signal(|| hive_ai::core::api_keys::ApiKeyConfig {
         openrouter_key: None,
         hive_key: None,
         anthropic_key: None,
@@ -1033,7 +1033,7 @@ fn App() -> Element {
     });
     
     // Diff viewing state
-    let mut diff_tabs = use_signal(|| HashMap::<String, hive::desktop::git::DiffResult>::new());
+    let mut diff_tabs = use_signal(|| HashMap::<String, hive_ai::desktop::git::DiffResult>::new());
     let mut diff_view_mode = use_signal(|| DiffViewMode::SideBySide);
     
     // Cursor position tracking for status bar
@@ -1070,9 +1070,9 @@ fn App() -> Element {
                                 
                                 if sync_status.has_upstream {
                                     // Standard sync: fetch + pull + push
-                                    let _ = hive::desktop::git::operations::fetch(&repo_path).await;
-                                    let _ = hive::desktop::git::operations::pull(&repo_path).await;
-                                    let _ = hive::desktop::git::operations::push(&repo_path).await;
+                                    let _ = hive_ai::desktop::git::operations::fetch(&repo_path).await;
+                                    let _ = hive_ai::desktop::git::operations::pull(&repo_path).await;
+                                    let _ = hive_ai::desktop::git::operations::push(&repo_path).await;
                                 } else {
                                     // Branch has no upstream - attempt to publish
                                     if let Some(branch_info) = git_state.branch_info.read().as_ref() {
@@ -1080,7 +1080,7 @@ fn App() -> Element {
                                         tracing::info!("Publishing branch '{}' to origin", branch_name);
                                         
                                         // Push branch with set-upstream
-                                        let result = hive::desktop::git::operations::push_with_upstream(
+                                        let result = hive_ai::desktop::git::operations::push_with_upstream(
                                             &repo_path, 
                                             branch_name
                                         ).await;
@@ -1171,7 +1171,7 @@ fn App() -> Element {
             // Update problems count
             let file_statuses = git_state.file_statuses.read();
             let conflict_count = file_statuses.values()
-                .filter(|status| status.status_type == hive::desktop::git::StatusType::Conflicted)
+                .filter(|status| status.status_type == hive_ai::desktop::git::StatusType::Conflicted)
                 .count() as u32;
             status_bar_state.write().update_problems(conflict_count, 0);
         });
@@ -1203,7 +1203,7 @@ fn App() -> Element {
                             tracing::debug!("Auto-fetching git repository: {:?}", repo_path);
                             
                             // Perform background fetch
-                            if let Err(e) = hive::desktop::git::operations::fetch(&repo_path).await {
+                            if let Err(e) = hive_ai::desktop::git::operations::fetch(&repo_path).await {
                                 tracing::warn!("Auto-fetch failed: {}", e);
                             } else {
                                 // Update git state after successful fetch
@@ -1870,12 +1870,12 @@ fn App() -> Element {
                             file_tree.write().push(root_item);
                             
                             // Update AppState with current project information for repository context
-                            let project_info = hive::desktop::state::ProjectInfo {
+                            let project_info = hive_ai::desktop::state::ProjectInfo {
                                 name: root_name,
                                 path: current_dir_path.clone(),
                                 root_path: current_dir_path.clone(),
                                 language: None, // Will be detected by repository analyzer
-                                git_status: hive::desktop::state::GitStatus::NotRepository,
+                                git_status: hive_ai::desktop::state::GitStatus::NotRepository,
                                 git_branch: None,
                                 file_count: 0, // Will be updated later
                             };
@@ -2002,9 +2002,9 @@ fn App() -> Element {
                                         let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                         let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                         
-                                        let branch_info = hive::desktop::git::BranchInfo {
+                                        let branch_info = hive_ai::desktop::git::BranchInfo {
                                             name: branch_name,
-                                            branch_type: hive::desktop::git::BranchType::Local,
+                                            branch_type: hive_ai::desktop::git::BranchType::Local,
                                             is_current: true,
                                             upstream: repo.upstream_branch().unwrap_or(None),
                                             ahead,
@@ -2014,7 +2014,7 @@ fn App() -> Element {
                                         git_state_clone.branch_info.set(Some(branch_info));
                                         
                                         // Update sync status
-                                        let sync_status = hive::desktop::git::SyncStatus {
+                                        let sync_status = hive_ai::desktop::git::SyncStatus {
                                             ahead,
                                             behind,
                                             has_upstream,
@@ -2030,20 +2030,20 @@ fn App() -> Element {
                                             for (path, git_status) in statuses {
                                                 // Convert git2::Status to our StatusType
                                                 let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                    hive::desktop::git::StatusType::Modified
+                                                    hive_ai::desktop::git::StatusType::Modified
                                                 } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                    hive::desktop::git::StatusType::Added
+                                                    hive_ai::desktop::git::StatusType::Added
                                                 } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                    hive::desktop::git::StatusType::Deleted
+                                                    hive_ai::desktop::git::StatusType::Deleted
                                                 } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                    hive::desktop::git::StatusType::Renamed
+                                                    hive_ai::desktop::git::StatusType::Renamed
                                                 } else if git_status.is_wt_new() {
-                                                    hive::desktop::git::StatusType::Untracked
+                                                    hive_ai::desktop::git::StatusType::Untracked
                                                 } else {
                                                     continue; // Skip other statuses
                                                 };
                                                 
-                                                let file_status = hive::desktop::git::FileStatus {
+                                                let file_status = hive_ai::desktop::git::FileStatus {
                                                     path: path.clone(),
                                                     status_type,
                                                     is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -2112,20 +2112,20 @@ fn App() -> Element {
                                                                     let mut status_map = std::collections::HashMap::new();
                                                                     for (path, git_status) in statuses {
                                                                         let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                            hive::desktop::git::StatusType::Modified
+                                                                            hive_ai::desktop::git::StatusType::Modified
                                                                         } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                            hive::desktop::git::StatusType::Added
+                                                                            hive_ai::desktop::git::StatusType::Added
                                                                         } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                            hive::desktop::git::StatusType::Deleted
+                                                                            hive_ai::desktop::git::StatusType::Deleted
                                                                         } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                            hive::desktop::git::StatusType::Renamed
+                                                                            hive_ai::desktop::git::StatusType::Renamed
                                                                         } else if git_status.is_wt_new() {
-                                                                            hive::desktop::git::StatusType::Untracked
+                                                                            hive_ai::desktop::git::StatusType::Untracked
                                                                         } else {
                                                                             continue;
                                                                         };
                                                                         
-                                                                        let file_status = hive::desktop::git::FileStatus {
+                                                                        let file_status = hive_ai::desktop::git::FileStatus {
                                                                             path: path.clone(),
                                                                             status_type,
                                                                             is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -2148,9 +2148,9 @@ fn App() -> Element {
                                                                     let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                                                     let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                                                     
-                                                                    let branch_info = hive::desktop::git::BranchInfo {
+                                                                    let branch_info = hive_ai::desktop::git::BranchInfo {
                                                                         name: branch_name,
-                                                                        branch_type: hive::desktop::git::BranchType::Local,
+                                                                        branch_type: hive_ai::desktop::git::BranchType::Local,
                                                                         is_current: true,
                                                                         upstream: repo.upstream_branch().unwrap_or(None),
                                                                         ahead,
@@ -2160,7 +2160,7 @@ fn App() -> Element {
                                                                     git_state_for_events.branch_info.set(Some(branch_info));
                                                                     
                                                                     // Update sync status
-                                                                    let sync_status = hive::desktop::git::SyncStatus {
+                                                                    let sync_status = hive_ai::desktop::git::SyncStatus {
                                                                         ahead,
                                                                         behind,
                                                                         has_upstream,
@@ -2248,12 +2248,12 @@ fn App() -> Element {
                                     file_tree.write().push(root_item);
                                     
                                     // Update AppState with current project information for repository context
-                                    let project_info = hive::desktop::state::ProjectInfo {
+                                    let project_info = hive_ai::desktop::state::ProjectInfo {
                                         name: root_name.clone(),
                                         path: folder.path().to_path_buf(),
                                         root_path: folder.path().to_path_buf(),
                                         language: None, // Will be detected by repository analyzer
-                                        git_status: hive::desktop::state::GitStatus::NotRepository,
+                                        git_status: hive_ai::desktop::state::GitStatus::NotRepository,
                                         git_branch: None,
                                         file_count: 0, // Will be updated later
                                     };
@@ -2408,7 +2408,7 @@ fn App() -> Element {
 
                     println!("Checking for updates...");
                     let checker =
-                        UpdateChecker::new(hive::VERSION.to_string(), UpdateChannel::Stable);
+                        UpdateChecker::new(hive_ai::VERSION.to_string(), UpdateChannel::Stable);
 
                     match checker.check_for_updates().await {
                         Ok(Some(update)) => {
@@ -2427,7 +2427,7 @@ fn App() -> Element {
                             *show_update_available_dialog.write() = true;
                         }
                         Ok(None) => {
-                            println!("You're running the latest version ({})", hive::VERSION);
+                            println!("You're running the latest version ({})", hive_ai::VERSION);
                             *show_no_updates_dialog.write() = true;
                         }
                         Err(e) => {
@@ -2508,9 +2508,9 @@ fn App() -> Element {
                                             let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                             let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                             
-                                            let branch_info = hive::desktop::git::BranchInfo {
+                                            let branch_info = hive_ai::desktop::git::BranchInfo {
                                                 name: branch_name,
-                                                branch_type: hive::desktop::git::BranchType::Local,
+                                                branch_type: hive_ai::desktop::git::BranchType::Local,
                                                 is_current: true,
                                                 upstream: repo.upstream_branch().unwrap_or(None),
                                                 ahead,
@@ -2520,7 +2520,7 @@ fn App() -> Element {
                                             git_state_clone.branch_info.set(Some(branch_info));
                                             
                                             // Update sync status
-                                            let sync_status = hive::desktop::git::SyncStatus {
+                                            let sync_status = hive_ai::desktop::git::SyncStatus {
                                                 ahead,
                                                 behind,
                                                 has_upstream,
@@ -2536,20 +2536,20 @@ fn App() -> Element {
                                                 for (path, git_status) in statuses {
                                                     // Convert git2::Status to our StatusType
                                                     let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                        hive::desktop::git::StatusType::Modified
+                                                        hive_ai::desktop::git::StatusType::Modified
                                                     } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                        hive::desktop::git::StatusType::Added
+                                                        hive_ai::desktop::git::StatusType::Added
                                                     } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                        hive::desktop::git::StatusType::Deleted
+                                                        hive_ai::desktop::git::StatusType::Deleted
                                                     } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                        hive::desktop::git::StatusType::Renamed
+                                                        hive_ai::desktop::git::StatusType::Renamed
                                                     } else if git_status.is_wt_new() {
-                                                        hive::desktop::git::StatusType::Untracked
+                                                        hive_ai::desktop::git::StatusType::Untracked
                                                     } else {
                                                         continue; // Skip other statuses
                                                     };
                                                     
-                                                    let file_status = hive::desktop::git::FileStatus {
+                                                    let file_status = hive_ai::desktop::git::FileStatus {
                                                         path: path.clone(),
                                                         status_type,
                                                         is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -2618,20 +2618,20 @@ fn App() -> Element {
                                                                         let mut status_map = std::collections::HashMap::new();
                                                                         for (path, git_status) in statuses {
                                                                             let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                                hive::desktop::git::StatusType::Modified
+                                                                                hive_ai::desktop::git::StatusType::Modified
                                                                             } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                                hive::desktop::git::StatusType::Added
+                                                                                hive_ai::desktop::git::StatusType::Added
                                                                             } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                                hive::desktop::git::StatusType::Deleted
+                                                                                hive_ai::desktop::git::StatusType::Deleted
                                                                             } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                                hive::desktop::git::StatusType::Renamed
+                                                                                hive_ai::desktop::git::StatusType::Renamed
                                                                             } else if git_status.is_wt_new() {
-                                                                                hive::desktop::git::StatusType::Untracked
+                                                                                hive_ai::desktop::git::StatusType::Untracked
                                                                             } else {
                                                                                 continue;
                                                                             };
                                                                             
-                                                                            let file_status = hive::desktop::git::FileStatus {
+                                                                            let file_status = hive_ai::desktop::git::FileStatus {
                                                                                 path: path.clone(),
                                                                                 status_type,
                                                                                 is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -2654,9 +2654,9 @@ fn App() -> Element {
                                                                         let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                                                         let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                                                         
-                                                                        let branch_info = hive::desktop::git::BranchInfo {
+                                                                        let branch_info = hive_ai::desktop::git::BranchInfo {
                                                                             name: branch_name,
-                                                                            branch_type: hive::desktop::git::BranchType::Local,
+                                                                            branch_type: hive_ai::desktop::git::BranchType::Local,
                                                                             is_current: true,
                                                                             upstream: repo.upstream_branch().unwrap_or(None),
                                                                             ahead,
@@ -2666,7 +2666,7 @@ fn App() -> Element {
                                                                         git_state_for_events.branch_info.set(Some(branch_info));
                                                                         
                                                                         // Update sync status
-                                                                        let sync_status = hive::desktop::git::SyncStatus {
+                                                                        let sync_status = hive_ai::desktop::git::SyncStatus {
                                                                             ahead,
                                                                             behind,
                                                                             has_upstream,
@@ -2754,12 +2754,12 @@ fn App() -> Element {
                                         file_tree.write().push(root_item);
                                         
                                         // Update AppState with current project information for repository context
-                                        let project_info = hive::desktop::state::ProjectInfo {
+                                        let project_info = hive_ai::desktop::state::ProjectInfo {
                                             name: root_name.clone(),
                                             path: folder.path().to_path_buf(),
                                             root_path: folder.path().to_path_buf(),
                                             language: None, // Will be detected by repository analyzer
-                                            git_status: hive::desktop::state::GitStatus::NotRepository,
+                                            git_status: hive_ai::desktop::state::GitStatus::NotRepository,
                                             git_branch: None,
                                             file_count: 0, // Will be updated later
                                         };
@@ -3244,20 +3244,20 @@ fn App() -> Element {
                                                                                 let mut status_map = std::collections::HashMap::new();
                                                                                 for (path, git_status) in statuses {
                                                                                     let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                                        hive::desktop::git::StatusType::Modified
+                                                                                        hive_ai::desktop::git::StatusType::Modified
                                                                                     } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                                        hive::desktop::git::StatusType::Added
+                                                                                        hive_ai::desktop::git::StatusType::Added
                                                                                     } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                                        hive::desktop::git::StatusType::Deleted
+                                                                                        hive_ai::desktop::git::StatusType::Deleted
                                                                                     } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                                        hive::desktop::git::StatusType::Renamed
+                                                                                        hive_ai::desktop::git::StatusType::Renamed
                                                                                     } else if git_status.is_wt_new() {
-                                                                                        hive::desktop::git::StatusType::Untracked
+                                                                                        hive_ai::desktop::git::StatusType::Untracked
                                                                                     } else {
                                                                                         continue;
                                                                                     };
                                                                                     
-                                                                                    let file_status = hive::desktop::git::FileStatus {
+                                                                                    let file_status = hive_ai::desktop::git::FileStatus {
                                                                                         path: path.clone(),
                                                                                         status_type,
                                                                                         is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -3370,25 +3370,25 @@ fn App() -> Element {
                                                             span {
                                                                 style: format!("color: {}; font-weight: bold; width: 16px; text-align: center;",
                                                                     match status.status_type {
-                                                                        hive::desktop::git::StatusType::Modified => "#FFB800",
-                                                                        hive::desktop::git::StatusType::Added => "#4CAF50",
-                                                                        hive::desktop::git::StatusType::Deleted => "#F44336",
-                                                                        hive::desktop::git::StatusType::Renamed => "#2196F3",
-                                                                        hive::desktop::git::StatusType::Untracked => "#9CA3AF",
-                                                                        hive::desktop::git::StatusType::Copied => "#2196F3",
-                                                                        hive::desktop::git::StatusType::Ignored => "#6B737C",
-                                                                        hive::desktop::git::StatusType::Conflicted => "#F44336",
+                                                                        hive_ai::desktop::git::StatusType::Modified => "#FFB800",
+                                                                        hive_ai::desktop::git::StatusType::Added => "#4CAF50",
+                                                                        hive_ai::desktop::git::StatusType::Deleted => "#F44336",
+                                                                        hive_ai::desktop::git::StatusType::Renamed => "#2196F3",
+                                                                        hive_ai::desktop::git::StatusType::Untracked => "#9CA3AF",
+                                                                        hive_ai::desktop::git::StatusType::Copied => "#2196F3",
+                                                                        hive_ai::desktop::git::StatusType::Ignored => "#6B737C",
+                                                                        hive_ai::desktop::git::StatusType::Conflicted => "#F44336",
                                                                     }
                                                                 ),
                                                                 match status.status_type {
-                                                                    hive::desktop::git::StatusType::Modified => "M",
-                                                                    hive::desktop::git::StatusType::Added => "A",
-                                                                    hive::desktop::git::StatusType::Deleted => "D",
-                                                                    hive::desktop::git::StatusType::Renamed => "R",
-                                                                    hive::desktop::git::StatusType::Untracked => "U",
-                                                                    hive::desktop::git::StatusType::Copied => "C",
-                                                                    hive::desktop::git::StatusType::Ignored => "!",
-                                                                    hive::desktop::git::StatusType::Conflicted => "⚠",
+                                                                    hive_ai::desktop::git::StatusType::Modified => "M",
+                                                                    hive_ai::desktop::git::StatusType::Added => "A",
+                                                                    hive_ai::desktop::git::StatusType::Deleted => "D",
+                                                                    hive_ai::desktop::git::StatusType::Renamed => "R",
+                                                                    hive_ai::desktop::git::StatusType::Untracked => "U",
+                                                                    hive_ai::desktop::git::StatusType::Copied => "C",
+                                                                    hive_ai::desktop::git::StatusType::Ignored => "!",
+                                                                    hive_ai::desktop::git::StatusType::Conflicted => "⚠",
                                                                 }
                                                             }
                                                             
@@ -3696,8 +3696,8 @@ fn App() -> Element {
                                 {
                                     let active_tab_name = active_tab.read().clone();
                                     let file_path = active_tab_name.strip_prefix("diff:").unwrap_or(&active_tab_name);
-                                    hive::desktop::diff_viewer::DiffViewer(
-                                        hive::desktop::diff_viewer::DiffViewerProps {
+                                    hive_ai::desktop::diff_viewer::DiffViewer(
+                                        hive_ai::desktop::diff_viewer::DiffViewerProps {
                                             diff: diff_result.clone(),
                                             view_mode: *diff_view_mode.read(),
                                             file_path: file_path.to_string(),
@@ -4834,7 +4834,7 @@ fn App() -> Element {
                     on_approve: EventHandler::new({
                         let mut app_state = app_state.clone();
                         let consensus_manager = consensus_manager.clone();
-                        move |approved_operations: Vec<hive::consensus::stages::file_aware_curator::FileOperation>| {
+                        move |approved_operations: Vec<hive_ai::consensus::stages::file_aware_curator::FileOperation>| {
                             // Clear dialog state
                             app_state.write().show_operation_confirmation_dialog = false;
                             app_state.write().pending_operations = None;
@@ -4869,7 +4869,7 @@ fn App() -> Element {
                             tracing::info!("User rejected all pending operations");
                         }
                     }),
-                    theme: hive::desktop::styles::theme::ThemeColors::dark_theme(),
+                    theme: hive_ai::desktop::styles::theme::ThemeColors::dark_theme(),
                 }
             }
         }
@@ -4977,9 +4977,9 @@ fn FileTreeItem(
                                 let (ahead, behind) = repo.ahead_behind().unwrap_or((0, 0));
                                 let has_upstream = repo.upstream_branch().unwrap_or(None).is_some();
                                 
-                                let branch_info = hive::desktop::git::BranchInfo {
+                                let branch_info = hive_ai::desktop::git::BranchInfo {
                                     name: branch_name,
-                                    branch_type: hive::desktop::git::BranchType::Local,
+                                    branch_type: hive_ai::desktop::git::BranchType::Local,
                                     is_current: true,
                                     upstream: repo.upstream_branch().unwrap_or(None),
                                     ahead,
@@ -4989,7 +4989,7 @@ fn FileTreeItem(
                                 git_state_clone.branch_info.set(Some(branch_info));
                                 
                                 // Update sync status
-                                let sync_status = hive::desktop::git::SyncStatus {
+                                let sync_status = hive_ai::desktop::git::SyncStatus {
                                     ahead,
                                     behind,
                                     has_upstream,
@@ -5007,20 +5007,20 @@ fn FileTreeItem(
                                     for (path, git_status) in statuses {
                                         // Convert git2::Status to our StatusType
                                         let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                            hive::desktop::git::StatusType::Modified
+                                            hive_ai::desktop::git::StatusType::Modified
                                         } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                            hive::desktop::git::StatusType::Added
+                                            hive_ai::desktop::git::StatusType::Added
                                         } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                            hive::desktop::git::StatusType::Deleted
+                                            hive_ai::desktop::git::StatusType::Deleted
                                         } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                            hive::desktop::git::StatusType::Renamed
+                                            hive_ai::desktop::git::StatusType::Renamed
                                         } else if git_status.is_wt_new() {
-                                            hive::desktop::git::StatusType::Untracked
+                                            hive_ai::desktop::git::StatusType::Untracked
                                         } else {
                                             continue; // Skip other statuses
                                         };
                                         
-                                        let file_status = hive::desktop::git::FileStatus {
+                                        let file_status = hive_ai::desktop::git::FileStatus {
                                             path: path.clone(),
                                             status_type,
                                             is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
@@ -5199,16 +5199,16 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                         }
                         span {
                             style: match stage.status {
-                                hive::desktop::state::StageStatus::Waiting => "color: #666666; font-size: 11px;",
-                                hive::desktop::state::StageStatus::Running => "color: #FFC107; font-size: 11px;",
-                                hive::desktop::state::StageStatus::Completed => "color: #4caf50; font-size: 11px;",
-                                hive::desktop::state::StageStatus::Error => "color: #f44336; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Waiting => "color: #666666; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Running => "color: #FFC107; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Completed => "color: #4caf50; font-size: 11px;",
+                                hive_ai::desktop::state::StageStatus::Error => "color: #f44336; font-size: 11px;",
                             },
                             match stage.status {
-                                hive::desktop::state::StageStatus::Waiting => "Waiting",
-                                hive::desktop::state::StageStatus::Running => "Running",
-                                hive::desktop::state::StageStatus::Completed => "Complete",
-                                hive::desktop::state::StageStatus::Error => "Error",
+                                hive_ai::desktop::state::StageStatus::Waiting => "Waiting",
+                                hive_ai::desktop::state::StageStatus::Running => "Running",
+                                hive_ai::desktop::state::StageStatus::Completed => "Complete",
+                                hive_ai::desktop::state::StageStatus::Error => "Error",
                             }
                         }
                     }
@@ -5219,10 +5219,10 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                         div {
                             style: format!("background: {}; height: 100%; width: {}%; transition: width 0.3s;",
                                 match stage.status {
-                                    hive::desktop::state::StageStatus::Waiting => "#666666",
-                                    hive::desktop::state::StageStatus::Running => "#FFC107",
-                                    hive::desktop::state::StageStatus::Completed => "#4caf50",
-                                    hive::desktop::state::StageStatus::Error => "#f44336",
+                                    hive_ai::desktop::state::StageStatus::Waiting => "#666666",
+                                    hive_ai::desktop::state::StageStatus::Running => "#FFC107",
+                                    hive_ai::desktop::state::StageStatus::Completed => "#4caf50",
+                                    hive_ai::desktop::state::StageStatus::Error => "#f44336",
                                 },
                                 stage.progress
                             ),
