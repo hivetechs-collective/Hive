@@ -1073,20 +1073,76 @@ fn App() -> Element {
                         let mut git_state = git_state.clone();
                         let current_dir = current_dir.clone();
                         let mut is_syncing = is_syncing.clone();
+                        let mut git_operation_status = git_operation_status.clone();
                         spawn(async move {
                             if let Some(repo_path) = current_dir.read().clone() {
                                 let sync_status = git_state.sync_status.read();
                                 
                                 if sync_status.has_upstream {
                                     // Standard sync: fetch + pull + push
-                                    let _ = hive_ai::desktop::git::operations::fetch(&repo_path).await;
-                                    let _ = hive_ai::desktop::git::operations::pull(&repo_path).await;
-                                    let _ = hive_ai::desktop::git::operations::push(&repo_path).await;
+                                    
+                                    // Step 1: Fetch
+                                    *git_operation_status.write() = Some("Fetching remote changes...".to_string());
+                                    match hive_ai::desktop::git::operations::fetch(&repo_path).await {
+                                        Ok(_) => {
+                                            tracing::info!("✅ Fetch completed successfully");
+                                            
+                                            // Step 2: Pull
+                                            *git_operation_status.write() = Some("Pulling remote changes...".to_string());
+                                            match hive_ai::desktop::git::operations::pull(&repo_path).await {
+                                                Ok(_) => {
+                                                    tracing::info!("✅ Pull completed successfully");
+                                                    
+                                                    // Step 3: Push
+                                                    *git_operation_status.write() = Some("Pushing local changes...".to_string());
+                                                    match hive_ai::desktop::git::operations::push(&repo_path).await {
+                                                        Ok(_) => {
+                                                            tracing::info!("✅ Push completed successfully");
+                                                            *git_operation_status.write() = Some("Sync completed successfully".to_string());
+                                                            
+                                                            // Clear status after a delay
+                                                            let mut git_operation_status_clear = git_operation_status.clone();
+                                                            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                                                            *git_operation_status_clear.write() = None;
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::error!("❌ Failed to push: {}", e);
+                                                            *git_operation_status.write() = Some(format!("Push failed: {}", e));
+                                                            
+                                                            // Clear error after a delay
+                                                            let mut git_operation_status_clear = git_operation_status.clone();
+                                                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                                            *git_operation_status_clear.write() = None;
+                                                        }
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    tracing::error!("❌ Failed to pull: {}", e);
+                                                    *git_operation_status.write() = Some(format!("Pull failed: {}", e));
+                                                    
+                                                    // Clear error after a delay
+                                                    let mut git_operation_status_clear = git_operation_status.clone();
+                                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                                    *git_operation_status_clear.write() = None;
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            tracing::error!("❌ Failed to fetch: {}", e);
+                                            *git_operation_status.write() = Some(format!("Fetch failed: {}", e));
+                                            
+                                            // Clear error after a delay
+                                            let mut git_operation_status_clear = git_operation_status.clone();
+                                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                            *git_operation_status_clear.write() = None;
+                                        }
+                                    }
                                 } else {
                                     // Branch has no upstream - attempt to publish
                                     if let Some(branch_info) = git_state.branch_info.read().as_ref() {
                                         let branch_name = &branch_info.name;
                                         tracing::info!("Publishing branch '{}' to origin", branch_name);
+                                        *git_operation_status.write() = Some(format!("Publishing branch '{}'...", branch_name));
                                         
                                         // Push branch with set-upstream
                                         let result = hive_ai::desktop::git::operations::push_with_upstream(
@@ -1097,16 +1153,44 @@ fn App() -> Element {
                                         match result {
                                             Ok(_) => {
                                                 tracing::info!("✅ Successfully published branch '{}'", branch_name);
+                                                *git_operation_status.write() = Some(format!("Branch '{}' published successfully", branch_name));
+                                                
+                                                // Clear status after a delay
+                                                let mut git_operation_status_clear = git_operation_status.clone();
+                                                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                                                *git_operation_status_clear.write() = None;
                                             }
                                             Err(e) => {
                                                 tracing::error!("❌ Failed to publish branch '{}': {}", branch_name, e);
+                                                *git_operation_status.write() = Some(format!("Failed to publish branch: {}", e));
+                                                
+                                                // Clear error after a delay
+                                                let mut git_operation_status_clear = git_operation_status.clone();
+                                                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                                *git_operation_status_clear.write() = None;
                                             }
                                         }
+                                    } else {
+                                        *git_operation_status.write() = Some("No branch information available".to_string());
+                                        
+                                        // Clear error after a delay
+                                        let mut git_operation_status_clear = git_operation_status.clone();
+                                        tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                                        *git_operation_status_clear.write() = None;
                                     }
                                 }
                                 
                                 // Refresh git status in both cases
-                                git_state.refresh_status(&repo_path).await;
+                                if let Err(e) = git_state.refresh_status(&repo_path).await {
+                                    tracing::warn!("Failed to refresh git status: {}", e);
+                                }
+                            } else {
+                                *git_operation_status.write() = Some("No repository selected".to_string());
+                                
+                                // Clear error after a delay
+                                let mut git_operation_status_clear = git_operation_status.clone();
+                                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                                *git_operation_status_clear.write() = None;
                             }
                             *is_syncing.write() = false;
                             // Update sync status to show not syncing
