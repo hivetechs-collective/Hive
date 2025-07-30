@@ -1168,22 +1168,14 @@ fn App() -> Element {
         move |item_id: String| {
             match item_id.as_str() {
                 "git-branch" => {
-                    // Show branch selector menu
-                    tracing::info!("Branch selector clicked");
-                    *show_branch_menu.write() = true;
+                    // Emit BranchMenuRequested event
+                    tracing::info!("Branch selector clicked - emitting BranchMenuRequested event");
                     
-                    // Emit menu visibility event
                     let bus = event_bus();
                     spawn(async move {
-                        let event = Event::new(
-                            EventType::MenuVisibilityChanged,
-                            EventPayload::MenuVisibility {
-                                menu_id: "branch-menu".to_string(),
-                                visible: true,
-                            }
-                        );
+                        let event = Event::empty(EventType::BranchMenuRequested);
                         bus.publish(event).await.unwrap_or_else(|e| {
-                            tracing::error!("Failed to publish menu visibility event: {}", e);
+                            tracing::error!("Failed to publish BranchMenuRequested event: {}", e);
                         });
                     });
                 },
@@ -4779,6 +4771,50 @@ fn App() -> Element {
                         });
                     }
                 }
+            });
+        }
+        
+        // Effect to listen for BranchMenuRequested events
+        {
+            let mut show_branch_menu = show_branch_menu.clone();
+            use_effect(move || {
+                let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+                
+                // Subscribe to branch menu events
+                spawn(async move {
+                    let bus = event_bus();
+                    bus.subscribe_async(EventType::BranchMenuRequested, move |event| {
+                        let tx = tx.clone();
+                        async move {
+                            if event.event_type == EventType::BranchMenuRequested {
+                                tracing::info!("Received BranchMenuRequested event - sending to UI");
+                                tx.send(()).unwrap_or_else(|e| {
+                                    tracing::error!("Failed to send branch menu event: {}", e);
+                                });
+                                
+                                // Also emit MenuVisibilityChanged event for consistency
+                                let visibility_event = Event::new(
+                                    EventType::MenuVisibilityChanged,
+                                    EventPayload::MenuVisibility {
+                                        menu_id: "branch-menu".to_string(),
+                                        visible: true,
+                                    }
+                                );
+                                event_bus().publish_async(visibility_event).await.unwrap_or_else(|e| {
+                                    tracing::error!("Failed to publish menu visibility event: {}", e);
+                                });
+                            }
+                            Ok(())
+                        }
+                    }).await;
+                });
+                
+                // Handle events in UI context
+                spawn(async move {
+                    while let Some(()) = rx.recv().await {
+                        *show_branch_menu.write() = true;
+                    }
+                });
             });
         }
         

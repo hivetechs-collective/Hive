@@ -43,6 +43,9 @@ pub enum EventType {
     
     /// Extension/plugin event
     ExtensionEvent,
+    
+    /// Branch menu has been requested (clicked in status bar)
+    BranchMenuRequested,
 }
 
 /// Event payload containing data specific to each event type
