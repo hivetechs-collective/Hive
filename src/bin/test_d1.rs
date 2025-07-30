@@ -1,5 +1,5 @@
 use anyhow::Result;
-use hive::subscription::conversation_gateway::ConversationGateway;
+use hive_ai::subscription::conversation_gateway::ConversationGateway;
 
 #[tokio::main]
 async fn main() -> Result<()> {
