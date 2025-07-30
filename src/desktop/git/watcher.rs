@@ -22,6 +22,8 @@ pub enum GitEvent {
     StatusChanged,
     RemoteChanged,
     ConfigChanged,
+    /// File-level status change with affected paths
+    FileStatusChanged(Vec<PathBuf>),
 }
 
 impl GitWatcher {
@@ -91,13 +93,26 @@ impl GitWatcher {
                         
                         match first_component.as_os_str().to_str()? {
                             "HEAD" | "refs" => return Some(GitEvent::BranchChanged),
-                            "index" | "objects" => return Some(GitEvent::StatusChanged),
+                            "index" => {
+                                // Index changes mean file status changed
+                                return Some(GitEvent::FileStatusChanged(vec![]))
+                            },
+                            "objects" => return Some(GitEvent::StatusChanged),
                             "config" => return Some(GitEvent::ConfigChanged),
                             "FETCH_HEAD" | "ORIG_HEAD" => return Some(GitEvent::RemoteChanged),
                             _ => {}
                         }
                     } else {
-                        // Working directory change
+                        // Working directory change - track specific files
+                        let mut changed_files = Vec::new();
+                        for path in &event.paths {
+                            if path.is_file() {
+                                changed_files.push(path.clone());
+                            }
+                        }
+                        if !changed_files.is_empty() {
+                            return Some(GitEvent::FileStatusChanged(changed_files));
+                        }
                         return Some(GitEvent::StatusChanged);
                     }
                 }

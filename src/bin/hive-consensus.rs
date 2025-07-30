@@ -13,7 +13,7 @@ use hive_ai::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_t
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 
 // Git imports
-use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration};
+use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
 // use hive_ai::desktop::diff_viewer::DiffViewer;
 
 // Enhanced Status Bar imports
@@ -805,6 +805,102 @@ const DESKTOP_STYLES: &str = r#"
     .editor-tab.active {
         border-bottom: 2px solid #FFC107;
     }
+    
+    /* File Explorer Git Status Styles */
+    .file-item {
+        display: flex;
+        align-items: center;
+        padding: 4px 8px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #cccccc;
+        transition: background-color 0.1s;
+        position: relative;
+    }
+    
+    .file-item:hover {
+        background: #2a2d2e;
+    }
+    
+    .file-item.selected {
+        background: #094771;
+        color: #ffffff;
+    }
+    
+    .file-item .git-status {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 0 4px;
+        min-width: 14px;
+        text-align: center;
+    }
+    
+    /* Git Status Colors */
+    .file-item[data-git-status="modified"] {
+        color: #e2c08d;
+    }
+    
+    .file-item[data-git-status="modified"] .git-status {
+        color: #e2c08d;
+    }
+    
+    .file-item[data-git-status="added"] {
+        color: #73c991;
+    }
+    
+    .file-item[data-git-status="added"] .git-status {
+        color: #73c991;
+    }
+    
+    .file-item[data-git-status="deleted"] {
+        color: #f48771;
+    }
+    
+    .file-item[data-git-status="deleted"] .git-status {
+        color: #f48771;
+    }
+    
+    .file-item[data-git-status="untracked"] {
+        color: #6c6c6c;
+    }
+    
+    .file-item[data-git-status="untracked"] .git-status {
+        color: #73c991;
+    }
+    
+    .file-item[data-git-status="renamed"] {
+        color: #5bb0b5;
+    }
+    
+    .file-item[data-git-status="renamed"] .git-status {
+        color: #5bb0b5;
+    }
+    
+    .file-item[data-git-status="ignored"] {
+        opacity: 0.5;
+    }
+    
+    .file-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .file-icon {
+        margin-right: 6px;
+        font-size: 16px;
+    }
+    
+    .expand-icon {
+        margin-right: 4px;
+        transition: transform 0.2s;
+    }
+    
+    .file-children {
+        margin-left: 20px;
+    }
 "#;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1049,6 +1145,7 @@ fn App() -> Element {
         status_bar_state.clone(),
         active_git_watcher.clone(),
         current_dir.read().clone(),
+        app_state.clone(),
     );
     
     // Auto-fetch configuration
@@ -1098,7 +1195,12 @@ fn App() -> Element {
                                                     match hive_ai::desktop::git::operations::push(&repo_path).await {
                                                         Ok(_) => {
                                                             tracing::info!("✅ Push completed successfully");
-                                                            *git_operation_status.write() = Some("Sync completed successfully".to_string());
+                                                            *git_operation_status.write() = Some("✅ Sync completed successfully - all changes pushed".to_string());
+                                                            
+                                                            // Refresh git status to update UI
+                                                            if let Err(e) = git_state.refresh_status(&repo_path).await {
+                                                                tracing::warn!("Failed to refresh git status after sync: {}", e);
+                                                            }
                                                             
                                                             // Clear status after a delay
                                                             let mut git_operation_status_clear = git_operation_status.clone();
@@ -1107,7 +1209,14 @@ fn App() -> Element {
                                                         }
                                                         Err(e) => {
                                                             tracing::error!("❌ Failed to push: {}", e);
-                                                            *git_operation_status.write() = Some(format!("Push failed: {}", e));
+                                                            let error_msg = if e.to_string().contains("rejected") {
+                                                                "❌ Push rejected - pull latest changes first".to_string()
+                                                            } else if e.to_string().contains("authentication") {
+                                                                "❌ Push failed - check your Git credentials".to_string()
+                                                            } else {
+                                                                format!("❌ Push failed: {}", e)
+                                                            };
+                                                            *git_operation_status.write() = Some(error_msg);
                                                             
                                                             // Clear error after a delay
                                                             let mut git_operation_status_clear = git_operation_status.clone();
@@ -1118,7 +1227,14 @@ fn App() -> Element {
                                                 }
                                                 Err(e) => {
                                                     tracing::error!("❌ Failed to pull: {}", e);
-                                                    *git_operation_status.write() = Some(format!("Pull failed: {}", e));
+                                                    let error_msg = if e.to_string().contains("conflict") {
+                                                        "❌ Pull failed - merge conflicts detected".to_string()
+                                                    } else if e.to_string().contains("uncommitted") {
+                                                        "❌ Pull failed - commit or stash your changes first".to_string()
+                                                    } else {
+                                                        format!("❌ Pull failed: {}", e)
+                                                    };
+                                                    *git_operation_status.write() = Some(error_msg);
                                                     
                                                     // Clear error after a delay
                                                     let mut git_operation_status_clear = git_operation_status.clone();
@@ -1129,7 +1245,14 @@ fn App() -> Element {
                                         }
                                         Err(e) => {
                                             tracing::error!("❌ Failed to fetch: {}", e);
-                                            *git_operation_status.write() = Some(format!("Fetch failed: {}", e));
+                                            let error_msg = if e.to_string().contains("could not read Username") || e.to_string().contains("authentication") {
+                                                "❌ Fetch failed - Git credentials not configured".to_string()
+                                            } else if e.to_string().contains("unable to access") || e.to_string().contains("network") {
+                                                "❌ Fetch failed - check your network connection".to_string()
+                                            } else {
+                                                format!("❌ Fetch failed: {}", e)
+                                            };
+                                            *git_operation_status.write() = Some(error_msg);
                                             
                                             // Clear error after a delay
                                             let mut git_operation_status_clear = git_operation_status.clone();
@@ -1153,7 +1276,12 @@ fn App() -> Element {
                                         match result {
                                             Ok(_) => {
                                                 tracing::info!("✅ Successfully published branch '{}'", branch_name);
-                                                *git_operation_status.write() = Some(format!("Branch '{}' published successfully", branch_name));
+                                                *git_operation_status.write() = Some(format!("✅ Branch '{}' published to remote", branch_name));
+                                                
+                                                // Refresh git status to update UI
+                                                if let Err(e) = git_state.refresh_status(&repo_path).await {
+                                                    tracing::warn!("Failed to refresh git status after publishing: {}", e);
+                                                }
                                                 
                                                 // Clear status after a delay
                                                 let mut git_operation_status_clear = git_operation_status.clone();
@@ -1162,7 +1290,14 @@ fn App() -> Element {
                                             }
                                             Err(e) => {
                                                 tracing::error!("❌ Failed to publish branch '{}': {}", branch_name, e);
-                                                *git_operation_status.write() = Some(format!("Failed to publish branch: {}", e));
+                                                let error_msg = if e.to_string().contains("authentication") || e.to_string().contains("could not read Username") {
+                                                    "❌ Publishing failed - configure Git credentials first".to_string()
+                                                } else if e.to_string().contains("permission") || e.to_string().contains("403") {
+                                                    "❌ Publishing failed - you don't have push access".to_string()
+                                                } else {
+                                                    format!("❌ Failed to publish branch: {}", e)
+                                                };
+                                                *git_operation_status.write() = Some(error_msg);
                                                 
                                                 // Clear error after a delay
                                                 let mut git_operation_status_clear = git_operation_status.clone();
@@ -1171,7 +1306,8 @@ fn App() -> Element {
                                             }
                                         }
                                     } else {
-                                        *git_operation_status.write() = Some("No branch information available".to_string());
+                                        tracing::warn!("No branch information available for publishing");
+                                        *git_operation_status.write() = Some("⚠️ Unable to determine current branch".to_string());
                                         
                                         // Clear error after a delay
                                         let mut git_operation_status_clear = git_operation_status.clone();
@@ -1185,13 +1321,16 @@ fn App() -> Element {
                                     tracing::warn!("Failed to refresh git status: {}", e);
                                 }
                             } else {
-                                *git_operation_status.write() = Some("No repository selected".to_string());
+                                tracing::warn!("Sync attempted with no repository selected");
+                                *git_operation_status.write() = Some("⚠️ No repository selected - please open a folder first".to_string());
                                 
                                 // Clear error after a delay
                                 let mut git_operation_status_clear = git_operation_status.clone();
-                                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                                 *git_operation_status_clear.write() = None;
                             }
+                            
+                            // Always reset syncing state
                             *is_syncing.write() = false;
                             // Update sync status to show not syncing
                             git_state.sync_status.write().is_syncing = false;
@@ -1989,7 +2128,9 @@ fn App() -> Element {
                 );
 
                 spawn(async move {
-                    let _ = eval.await;
+                    if let Err(e) = eval.await {
+                        tracing::error!("Failed to evaluate JavaScript: {:?}", e);
+                    }
                 });
             }
         }
@@ -2130,15 +2271,20 @@ fn App() -> Element {
                                         }
                                     }
                                     
-                                    // Set up file watcher
-                                    match GitWatcher::new(&folder_path) {
-                                        Ok((watcher, _receiver)) => {
-                                            active_git_watcher_clone.set(Some(watcher));
-                                        }
-                                        Err(e) => {
-                                            tracing::warn!("Failed to create git watcher: {}", e);
-                                        }
-                                    }
+                                    // Set up file watcher with app state for file explorer refresh
+                                    let app_state_for_watcher = app_state.clone();
+                                    let git_state_for_watcher = git_state_clone.clone();
+                                    let active_git_watcher_for_setup = active_git_watcher_clone.clone();
+                                    let folder_path_for_watcher = folder_path.clone();
+                                    
+                                    spawn(async move {
+                                        setup_git_watcher_integration(
+                                            git_state_for_watcher,
+                                            active_git_watcher_for_setup,
+                                            folder_path_for_watcher,
+                                            app_state_for_watcher,
+                                        );
+                                    });
                                 } else {
                                     git_state_clone.branch_info.set(None);
                                     git_state_clone.file_statuses.set(std::collections::HashMap::new());
