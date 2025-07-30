@@ -858,9 +858,11 @@ mod tests {
     #[tokio::test]
     async fn test_symbol_indexing() -> Result<()> {
         // Create test database
-        let config = DatabaseConfig {
+        let config = crate::core::database::DatabaseConfig {
             path: PathBuf::from(":memory:"),
-            ..Default::default()
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
         };
         let db = Arc::new(DatabaseManager::new(config).await?);
 

@@ -313,7 +313,7 @@ mod tests {
         let store = ChromaVectorStore {
             config: VectorStoreConfig::default(),
             client: Arc::new(RwLock::new(ChromaClient { documents: vec![] })),
-            search_cache: Arc::new(RwLock::new(lru::LruCache::new(100))),
+            search_cache: Arc::new(RwLock::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap()))),
         };
         
         let a = vec![1.0, 0.0, 0.0];

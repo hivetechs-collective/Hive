@@ -986,10 +986,10 @@ impl OperationHistoryDatabase {
 mod tests {
     use super::*;
     
-    #[test]
-    fn test_operation_history_creation() {
+    #[tokio::test]
+    async fn test_operation_history_creation() {
         // Test database creation and basic operations
-        let db = OperationHistoryDatabase::new(":memory:").unwrap();
+        let db = OperationHistoryDatabase::new(":memory:").await.unwrap();
         
         // Test getting empty statistics
         let stats = db.get_statistics().unwrap();

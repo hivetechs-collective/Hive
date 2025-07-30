@@ -168,6 +168,7 @@ pub struct QualityReport {
 
 /// Quality metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct QualityMetrics {
     pub maintainability_index: f32,
     pub cyclomatic_complexity: f32,
@@ -2967,9 +2968,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_quality_score_calculation() {
+        let db_config = crate::core::database::DatabaseConfig {
+            path: PathBuf::from(":memory:"),
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
+        };
+        let db_manager = DatabaseManager::new(db_config).await.unwrap();
         let analyzer = RepositoryAnalyzer::new(
             Arc::new(
-                SymbolIndexer::new(Arc::new(DatabaseManager::default()))
+                SymbolIndexer::new(Arc::new(db_manager))
                     .await
                     .unwrap(),
             ),

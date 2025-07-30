@@ -657,7 +657,7 @@ mod tests {
     fn test_config_file_detection() {
         let intelligence = RepositoryIntelligence {
             semantic_index: None,
-            analysis_engine: AnalysisEngine::new().unwrap(),
+            analysis_engine: AnalysisEngine::new(),
         };
 
         assert!(intelligence.is_config_file(Path::new("Cargo.toml")));
@@ -669,7 +669,7 @@ mod tests {
     fn test_language_detection() {
         let intelligence = RepositoryIntelligence {
             semantic_index: None,
-            analysis_engine: AnalysisEngine::new().unwrap(),
+            analysis_engine: AnalysisEngine::new(),
         };
 
         assert_eq!(

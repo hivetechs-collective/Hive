@@ -319,7 +319,10 @@ mod tests {
         let test_file = temp_dir.path().join("test.txt");
         
         // Create mocks
-        let file_executor = Arc::new(FileOperationExecutor::new(temp_dir.path().to_path_buf()));
+        let executor_config = crate::consensus::file_executor::ExecutorConfig::default();
+        let decision_engine = crate::consensus::smart_decision_engine::SmartDecisionEngine::new();
+        let intelligence_coordinator = crate::consensus::operation_intelligence::OperationIntelligenceCoordinator::new(ai_helpers.clone()).await.unwrap();
+        let file_executor = Arc::new(FileOperationExecutor::new(executor_config, decision_engine, intelligence_coordinator));
         let db = Arc::new(crate::core::database::DatabaseManager::new(crate::core::database::DatabaseConfig::default()).await.unwrap());
         let ai_helpers = Arc::new(AIHelperEcosystem::new(db).await.unwrap());
         let auto_accept = Arc::new(AtomicBool::new(true));
@@ -360,7 +363,10 @@ mod tests {
         let test_file = temp_dir.path().join("test.txt");
         
         // Create mocks
-        let file_executor = Arc::new(FileOperationExecutor::new(temp_dir.path().to_path_buf()));
+        let executor_config = crate::consensus::file_executor::ExecutorConfig::default();
+        let decision_engine = crate::consensus::smart_decision_engine::SmartDecisionEngine::new();
+        let intelligence_coordinator = crate::consensus::operation_intelligence::OperationIntelligenceCoordinator::new(ai_helpers.clone()).await.unwrap();
+        let file_executor = Arc::new(FileOperationExecutor::new(executor_config, decision_engine, intelligence_coordinator));
         let db = Arc::new(crate::core::database::DatabaseManager::new(crate::core::database::DatabaseConfig::default()).await.unwrap());
         let ai_helpers = Arc::new(AIHelperEcosystem::new(db).await.unwrap());
         let auto_accept = Arc::new(AtomicBool::new(false)); // Confirmation required

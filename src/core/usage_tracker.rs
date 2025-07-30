@@ -417,7 +417,13 @@ mod tests {
     #[tokio::test]
     async fn test_trial_period_calculation() {
         use crate::core::database::DatabaseManager;
-        let db_manager = DatabaseManager::in_memory().unwrap();
+        let db_config = crate::core::database::DatabaseConfig {
+            path: std::path::PathBuf::from(":memory:"),
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
+        };
+        let db_manager = DatabaseManager::new(db_config).await.unwrap();
         let tracker = UsageTracker::new(Arc::new(db_manager));
 
         // Test new user gets 7-day trial
@@ -440,7 +446,13 @@ mod tests {
     #[test]
     fn test_tier_parsing() {
         use crate::core::database::DatabaseManager;
-        let db_manager = DatabaseManager::in_memory().unwrap();
+        let db_config = crate::core::database::DatabaseConfig {
+            path: std::path::PathBuf::from(":memory:"),
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
+        };
+        let db_manager = DatabaseManager::new(db_config).await.unwrap();
         let tracker = UsageTracker::new(Arc::new(db_manager));
 
         assert_eq!(tracker.parse_tier("free"), LicenseTier::Free);

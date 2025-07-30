@@ -246,7 +246,14 @@ mod tests {
     
     #[test]
     fn test_extract_search_terms() {
-        let search = SemanticSearch::new(Arc::new(DatabaseManager::memory().unwrap()));
+        let db_config = crate::core::database::DatabaseConfig {
+            path: std::path::PathBuf::from(":memory:"),
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
+        };
+        let db = DatabaseManager::new(db_config).await.unwrap();
+        let search = SemanticSearch::new(Arc::new(db));
         
         let terms = search.extract_all_search_terms("discover what consensus is capable of");
         assert!(terms.contains(&"discover".to_string()));
@@ -259,7 +266,14 @@ mod tests {
     
     #[test]
     fn test_extract_code_identifiers() {
-        let search = SemanticSearch::new(Arc::new(DatabaseManager::memory().unwrap()));
+        let db_config = crate::core::database::DatabaseConfig {
+            path: std::path::PathBuf::from(":memory:"),
+            max_connections: 10,
+            enable_wal: false,
+            busy_timeout: 5000,
+        };
+        let db = DatabaseManager::new(db_config).await.unwrap();
+        let search = SemanticSearch::new(Arc::new(db));
         
         let identifiers = search.extract_code_identifiers("How does FileReader::read_file work?");
         assert!(identifiers.contains(&"fileReader::read_file".to_string()));
