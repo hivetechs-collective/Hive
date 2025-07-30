@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::{GitOperations, GitOperation, GitOperationResult, GitOperationProgress, CancellationToken};
+use super::commit_box::{CommitBox, CommitBoxProps};
 
 /// State of a git operation
 #[derive(Debug, Clone, PartialEq)]
@@ -43,8 +44,7 @@ pub struct GitToolbarProps {
 /// Git operations toolbar component
 #[component]
 pub fn GitToolbar(props: GitToolbarProps) -> Element {
-    let mut commit_message = use_signal(|| String::new());
-    let mut show_commit_input = use_signal(|| false);
+    let mut show_commit_box = use_signal(|| false);
     
     // Use the shared state signals from props
     let mut is_pushing = props.is_pushing;
@@ -77,9 +77,9 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
             div {
                 style: "margin-bottom: 12px;",
                 
-                // Commit input toggle
+                // Commit and stage buttons
                 div {
-                    style: "display: flex; align-items: center; gap: 8px; margin-bottom: 8px;",
+                    style: "display: flex; align-items: center; gap: 8px;",
                     
                     button {
                         style: if has_staged {
@@ -90,8 +90,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         disabled: !has_staged || !has_repo,
                         onclick: move |_| {
                             if has_staged {
-                                let current_value = *show_commit_input.read();
-                                *show_commit_input.write() = !current_value;
+                                *show_commit_box.write() = true;
                             }
                         },
                         "✓ Commit ({staged_count})"
@@ -105,69 +104,9 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                                 let on_operation = props.on_operation.clone();
                                 move |_| {
                                     on_operation.call(GitOperation::StageAll);
-                                    // Operation tracking handled by parent
                                 }
                             },
                             "+ Stage All"
-                        }
-                    }
-                }
-                
-                // Commit message input
-                if *show_commit_input.read() {
-                    div {
-                        style: "display: flex; gap: 8px;",
-                        
-                        input {
-                            style: "flex: 1; padding: 6px 8px; background: #3c3c3c; color: white; border: 1px solid #3e3e42; border-radius: 3px; font-size: 13px;",
-                            placeholder: "Commit message",
-                            value: "{commit_message.read()}",
-                            oninput: move |evt| {
-                                *commit_message.write() = evt.value();
-                            },
-                            onkeypress: {
-                                let on_operation = props.on_operation.clone();
-                                move |evt: dioxus::events::KeyboardEvent| {
-                                    if evt.key() == dioxus::events::Key::Enter && !commit_message.read().trim().is_empty() {
-                                        let message = commit_message.read().clone();
-                                        on_operation.call(GitOperation::Commit(message));
-                                        *commit_message.write() = String::new();
-                                        *show_commit_input.write() = false;
-                                        // Operation tracking handled by parent
-                                    }
-                                }
-                            }
-                        }
-                        
-                        button {
-                            style: if !commit_message.read().trim().is_empty() {
-                                "padding: 6px 12px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer;"
-                            } else {
-                                "padding: 6px 12px; background: #3c3c3c; color: #888; border: none; border-radius: 3px; cursor: not-allowed;"
-                            },
-                            disabled: commit_message.read().trim().is_empty(),
-                            onclick: {
-                                let on_operation = props.on_operation.clone();
-                                move |_| {
-                                    let message = commit_message.read().clone();
-                                    if !message.trim().is_empty() {
-                                        on_operation.call(GitOperation::Commit(message));
-                                        *commit_message.write() = String::new();
-                                        *show_commit_input.write() = false;
-                                        // Operation tracking handled by parent
-                                    }
-                                }
-                            },
-                            "Commit"
-                        }
-                        
-                        button {
-                            style: "padding: 6px 8px; background: transparent; color: #888; border: 1px solid #3e3e42; border-radius: 3px; cursor: pointer;",
-                            onclick: move |_| {
-                                *show_commit_input.write() = false;
-                                *commit_message.write() = String::new();
-                            },
-                            "Cancel"
                         }
                     }
                 }
@@ -295,6 +234,28 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
             div {
                 style: "margin-top: 12px; padding: 6px 8px; background: #1e1e1e; border-radius: 3px; font-size: 11px; color: #888;",
                 "Branch: {current_branch} • Staged: {staged_count} • Unstaged: {unstaged_count}"
+            }
+        }
+        
+        // Commit Box overlay
+        CommitBox {
+            visible: *show_commit_box.read(),
+            staged_count: staged_count,
+            on_commit: {
+                let on_operation = props.on_operation.clone();
+                let mut status_signal = operation_status.clone();
+                move |message: String| {
+                    let msg_display = if message.len() > 50 {
+                        format!("{}...", &message[..50])
+                    } else {
+                        message.clone()
+                    };
+                    on_operation.call(GitOperation::Commit(message));
+                    status_signal.set(Some(format!("Committed with message: {}", msg_display)));
+                }
+            },
+            on_close: move |_| {
+                *show_commit_box.write() = false;
             }
         }
     }

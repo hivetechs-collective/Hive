@@ -35,6 +35,9 @@ pub enum EventType {
     /// UI state change (theme, layout, etc.)
     UIStateChanged,
     
+    /// Menu visibility has changed (opened/closed)
+    MenuVisibilityChanged,
+    
     /// Configuration has been updated
     ConfigurationChanged,
     
@@ -110,6 +113,12 @@ pub enum EventPayload {
         component: String,
         property: String,
         value: serde_json::Value,
+    },
+    
+    /// Menu visibility changed payload
+    MenuVisibility {
+        menu_id: String,
+        visible: bool,
     },
     
     /// Configuration change

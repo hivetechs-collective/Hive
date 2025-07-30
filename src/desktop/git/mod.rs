@@ -19,6 +19,8 @@ pub mod status_menu;
 pub mod repository_selector;
 pub mod multi_repo_manager;
 pub mod statusbar_integration_fixed;
+pub mod branch_menu;
+pub mod commit_box;
 
 pub use repository::{GitRepository, RepositoryInfo};
 pub use branch::{BranchInfo, BranchType, BranchFilter, BranchSort, CommitInfo, sort_branches, validate_branch_name};
@@ -40,6 +42,8 @@ pub use statusbar_integration_fixed::{
     setup_git_watcher_integration,
     setup_statusbar_event_subscription,
 };
+pub use branch_menu::{BranchMenu, BranchOperation, BranchOperationResult};
+pub use commit_box::{CommitBox, CommitBoxProps, CommitTemplate, ConventionalType};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;

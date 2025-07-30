@@ -48,6 +48,13 @@ pub enum BranchOperation {
 /// Enhanced git branch menu component
 #[component]
 pub fn BranchMenu(props: BranchMenuProps) -> Element {
+    // Clone values to avoid ownership issues
+    let repo_path_for_effect = props.repo_path.clone();
+    let repo_path_for_dialog = props.repo_path.clone();
+    let repo_path_for_switch = props.repo_path.clone();
+    let repo_path_for_create = props.repo_path.clone();
+    let repo_path_for_delete = props.repo_path.clone();
+    
     // State management
     let mut branches = use_signal(|| Vec::<BranchInfo>::new());
     let mut filtered_branches = use_signal(|| Vec::<BranchInfo>::new());
@@ -323,7 +330,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                             color: white; border: 1px solid #464647; border-radius: 3px; \
                             cursor: pointer; font-size: 13px; transition: background 0.2s;",
                     onclick: {
-                        let repo_path = props.repo_path.clone();
+                        let repo_path = repo_path_for_switch.clone();
                         let on_operation = props.on_operation_complete.clone();
                         move |_| {
                             if let Some(path) = repo_path.as_ref() {
@@ -339,12 +346,12 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
         // Create branch dialog
         if *show_create_dialog.read() {
             CreateBranchDialog {
-                repo_path: props.repo_path.clone(),
+                repo_path: repo_path_for_dialog.clone(),
                 visible: show_create_dialog.clone(),
                 on_create: {
                     let on_operation = props.on_operation_complete.clone();
                     let mut branches_signal = branches.clone();
-                    let repo_path = props.repo_path.clone();
+                    let repo_path = repo_path_for_create.clone();
                     move |branch_name: String| {
                         on_operation.call(BranchOperationResult {
                             operation: BranchOperation::Create(branch_name.clone()),
@@ -373,7 +380,7 @@ pub fn BranchMenu(props: BranchMenuProps) -> Element {
                 visible: show_delete_confirmation.clone(),
                 on_confirm: {
                     let branch_name = branch_to_delete.clone();
-                    let repo_path = props.repo_path.clone();
+                    let repo_path = repo_path_for_delete.clone();
                     let on_operation = props.on_operation_complete.clone();
                     let mut branches_signal = branches.clone();
                     move |_| {
