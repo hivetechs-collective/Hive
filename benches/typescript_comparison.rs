@@ -2,9 +2,9 @@
 //! Comprehensive performance comparison against TypeScript baseline
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use hive::analysis::RepositoryIntelligence;
-use hive::consensus::ConsensusEngine;
-use hive::core::{config::HiveConfig, database::HiveDatabase};
+use hive_ai::analysis::RepositoryIntelligence;
+use hive_ai::consensus::ConsensusEngine;
+use hive_ai::core::{config::HiveConfig, database::HiveDatabase};
 use std::time::{Duration, Instant};
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
@@ -122,14 +122,14 @@ fn bench_memory_performance(c: &mut Criterion) {
 
             // Perform multiple operations that would use memory
             for i in 0..100 {
-                let conversation = hive::core::database::Conversation {
+                let conversation = hive_ai::core::database::Conversation {
                     id: format!("test-{}", i),
                     title: format!("Test Conversation {}", i),
                     messages: vec![
                         serde_json::json!({"role": "user", "content": "Test message"}),
                         serde_json::json!({"role": "assistant", "content": "Test response"}),
                     ],
-                    metadata: hive::core::database::ConversationMetadata {
+                    metadata: hive_ai::core::database::ConversationMetadata {
                         created_at: chrono::Utc::now(),
                         updated_at: chrono::Utc::now(),
                         tags: vec!["test".to_string()],
@@ -199,10 +199,10 @@ fn bench_comprehensive_comparison(c: &mut Criterion) {
                         "consensus_pipeline" => {
                             let config = HiveConfig::default();
                             let consensus = ConsensusEngine::new(config).await.unwrap();
-                            let request = hive::consensus::ConsensusRequest {
+                            let request = hive_ai::consensus::ConsensusRequest {
                                 query: "Test query".to_string(),
                                 context: Some("Test context".to_string()),
-                                profile: hive::consensus::ConsensusProfile::Speed,
+                                profile: hive_ai::consensus::ConsensusProfile::Speed,
                                 stream: false,
                                 temperature: Some(0.7),
                                 max_tokens: Some(100),
@@ -215,13 +215,13 @@ fn bench_comprehensive_comparison(c: &mut Criterion) {
                             let db_path = temp_dir.path().join("test.db");
                             let db = HiveDatabase::new(&db_path).await.unwrap();
 
-                            let conversation = hive::core::database::Conversation {
+                            let conversation = hive_ai::core::database::Conversation {
                                 id: "test".to_string(),
                                 title: "Test".to_string(),
                                 messages: vec![
                                     serde_json::json!({"role": "user", "content": "test"}),
                                 ],
-                                metadata: hive::core::database::ConversationMetadata {
+                                metadata: hive_ai::core::database::ConversationMetadata {
                                     created_at: chrono::Utc::now(),
                                     updated_at: chrono::Utc::now(),
                                     tags: vec![],
@@ -311,14 +311,14 @@ fn bench_end_to_end_workflow(c: &mut Criterion) {
             }
 
             // 3. Store conversation
-            let conversation = hive::core::database::Conversation {
+            let conversation = hive_ai::core::database::Conversation {
                 id: "workflow-test".to_string(),
                 title: "Workflow Test".to_string(),
                 messages: vec![
                     serde_json::json!({"role": "user", "content": "Analyze this codebase"}),
                     serde_json::json!({"role": "assistant", "content": "I can see this is a Rust project with basic functionality."}),
                 ],
-                metadata: hive::core::database::ConversationMetadata {
+                metadata: hive_ai::core::database::ConversationMetadata {
                     created_at: chrono::Utc::now(),
                     updated_at: chrono::Utc::now(),
                     tags: vec!["analysis".to_string(), "rust".to_string()],

@@ -2,10 +2,10 @@
 //! Measures repository analysis and code intelligence performance
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use hive::analysis::{
+use hive_ai::analysis::{
     DependencyAnalyzer, LanguageDetector, RepositoryIntelligence, SymbolIndex,
 };
-use hive::core::config::HiveConfig;
+use hive_ai::core::config::HiveConfig;
 use std::path::PathBuf;
 use std::time::Duration;
 use tempfile::tempdir;

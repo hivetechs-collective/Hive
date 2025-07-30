@@ -1,5 +1,5 @@
-use hive::consensus::maintenance::TemplateMaintenanceManager;
-use hive::core::database_simple::Database;
+use hive_ai::consensus::maintenance::TemplateMaintenanceManager;
+use hive_ai::core::database_simple::Database;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -10,7 +10,7 @@ async fn main() -> anyhow::Result<()> {
     let api_key = std::env::var("OPENROUTER_API_KEY")?;
 
     // Get database
-    let db_path = hive::core::config::get_hive_config_dir().join("hive-ai.db");
+    let db_path = hive_ai::core::config::get_hive_config_dir().join("hive-ai.db");
     let db = Arc::new(Database::new(&db_path, Default::default()).await?);
 
     // Run maintenance
