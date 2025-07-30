@@ -19,11 +19,12 @@ pub mod status_menu;
 pub mod repository_selector;
 pub mod repository_dropdown;
 pub mod multi_repo_manager;
+pub mod performance;
 pub mod statusbar_integration_fixed;
 pub mod branch_menu;
 pub mod commit_box;
 
-pub use repository::{GitRepository, RepositoryInfo};
+pub use repository::{GitRepository, RepositoryInfo, get_optimized_git_manager, get_git_performance_stats, log_performance_stats, clear_performance_caches};
 pub use branch::{BranchInfo, BranchType, BranchFilter, BranchSort, CommitInfo, sort_branches, validate_branch_name};
 pub use status::{FileStatus, StatusType, SyncStatus};
 pub use watcher::{GitWatcher, GitEvent};
@@ -38,6 +39,7 @@ pub use repository_selector::{
 };
 pub use repository_dropdown::{RepositoryDropdown, RepositoryDropdownProps, REPOSITORY_DROPDOWN_STYLES};
 pub use multi_repo_manager::{MultiRepoManager, RepositoriesSummary};
+pub use performance::{OptimizedGitManager, PerformanceConfig, PerformanceStats, PaginatedResult, BatchProcessor};
 pub use statusbar_integration_fixed::{
     initialize_git_statusbar_integration,
     setup_git_statusbar_integration,

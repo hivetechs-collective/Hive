@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 use std::path::PathBuf;
-use super::{GitRepository, BranchInfo, BranchType, BranchFilter, BranchSort, sort_branches, validate_branch_name};
+use super::{GitRepository, BranchInfo, BranchType, BranchFilter, BranchSort, sort_branches, validate_branch_name, get_optimized_git_manager};
 use tracing::{info, error};
 use anyhow::Result;
 
@@ -763,20 +763,57 @@ fn DeleteConfirmationDialog(
 
 /// Load branches with commit details
 async fn load_branches_with_details(repo_path: &PathBuf) -> Result<Vec<BranchInfo>> {
-    let path = repo_path.clone();
-    tokio::task::spawn_blocking(move || {
-        let repo = GitRepository::open(&path)?;
-        let mut branches = repo.list_branches()?;
-        
-        // Load last commit info for each branch
-        for branch in &mut branches {
-            if let Ok(commit_info) = repo.get_branch_commit(&branch.name) {
-                branch.last_commit = Some(commit_info);
+    // Try to use optimized manager first
+    let manager = get_optimized_git_manager();
+    match manager.get_branches_paginated(repo_path, 0).await {
+        Ok(paginated_result) => {
+            let mut branches = paginated_result.items;
+            
+            // Load last commit info for each branch using blocking task
+            let path = repo_path.clone();
+            let branch_names: Vec<String> = branches.iter().map(|b| b.name.clone()).collect();
+            
+            let commit_infos = tokio::task::spawn_blocking(move || -> Result<Vec<Option<super::CommitInfo>>> {
+                let repo = GitRepository::open(&path)?;
+                let mut results = Vec::new();
+                
+                for branch_name in &branch_names {
+                    match repo.get_branch_commit(branch_name) {
+                        Ok(commit_info) => results.push(Some(commit_info)),
+                        Err(_) => results.push(None),
+                    }
+                }
+                
+                Ok(results)
+            }).await??;
+            
+            // Apply commit info to branches
+            for (branch, commit_info) in branches.iter_mut().zip(commit_infos.iter()) {
+                branch.last_commit = commit_info.clone();
             }
+            
+            info!("Loaded {} branches using optimized manager", branches.len());
+            Ok(branches)
         }
-        
-        Ok(branches)
-    }).await?
+        Err(_) => {
+            // Fallback to original implementation
+            info!("Falling back to synchronous branch loading");
+            let path = repo_path.clone();
+            tokio::task::spawn_blocking(move || {
+                let repo = GitRepository::open(&path)?;
+                let mut branches = repo.list_branches()?;
+                
+                // Load last commit info for each branch
+                for branch in &mut branches {
+                    if let Ok(commit_info) = repo.get_branch_commit(&branch.name) {
+                        branch.last_commit = Some(commit_info);
+                    }
+                }
+                
+                Ok(branches)
+            }).await?
+        }
+    }
 }
 
 /// Apply filter and sort branches

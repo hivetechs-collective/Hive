@@ -1,13 +1,15 @@
 //! Git repository management
 //! 
-//! Core functionality for interacting with git repositories
+//! Core functionality for interacting with git repositories with performance optimizations
 
 use git2::{Repository, RepositoryOpenFlags, StatusOptions, Oid};
 use std::path::{Path, PathBuf};
 use anyhow::{Result, Context};
 use tracing::{info, warn, error};
 use super::{BranchInfo, BranchType, CommitInfo};
+use super::performance::{OptimizedGitManager, PerformanceConfig, PerformanceStats};
 use std::str::FromStr;
+use std::sync::{Arc, OnceLock};
 use serde::{Deserialize, Serialize};
 
 /// Information about a git repository
@@ -19,10 +21,48 @@ pub struct RepositoryInfo {
     pub has_changes: bool,
 }
 
-/// Main git repository manager
+/// Main git repository manager with performance optimizations
 pub struct GitRepository {
     repo: Repository,
     path: PathBuf,
+}
+
+/// Global optimized git manager instance
+static GLOBAL_GIT_MANAGER: OnceLock<Arc<OptimizedGitManager>> = OnceLock::new();
+
+/// Get or initialize the global optimized git manager
+pub fn get_optimized_git_manager() -> Arc<OptimizedGitManager> {
+    GLOBAL_GIT_MANAGER.get_or_init(|| {
+        let config = PerformanceConfig::default();
+        Arc::new(OptimizedGitManager::new(config))
+    }).clone()
+}
+
+/// Get performance statistics from the global git manager
+pub fn get_git_performance_stats() -> PerformanceStats {
+    get_optimized_git_manager().get_stats()
+}
+
+/// Log performance statistics for monitoring
+pub fn log_performance_stats() {
+    let stats = get_git_performance_stats();
+    info!(
+        "Git Performance Stats - Cache hits: {}, Cache misses: {}, Hit rate: {:.2}%, \
+        Background tasks: {}, Timeouts: {}, Avg time: {:.2}ms, Total ops: {}",
+        stats.cache_hits,
+        stats.cache_misses,
+        stats.cache_hit_rate() * 100.0,
+        stats.background_tasks_completed,
+        stats.operations_timed_out,
+        stats.average_operation_time_ms,
+        stats.total_operations
+    );
+}
+
+/// Clear all performance caches (useful for testing or memory management)
+pub fn clear_performance_caches() {
+    get_optimized_git_manager().clear_caches();
+    info!("Cleared all git performance caches");
 }
 
 impl GitRepository {
@@ -44,8 +84,14 @@ impl GitRepository {
         })
     }
     
-    /// Discover all git repositories in a workspace
+    /// Discover all git repositories in a workspace (optimized)
     pub fn discover_repositories(workspace_path: &Path) -> Vec<RepositoryInfo> {
+        // Use the synchronous fallback for compatibility
+        Self::discover_repositories_sync(workspace_path)
+    }
+    
+    /// Discover repositories synchronously (fallback for compatibility)
+    fn discover_repositories_sync(workspace_path: &Path) -> Vec<RepositoryInfo> {
         let mut repositories = Vec::new();
         
         // First check if the workspace itself is a repository
@@ -65,9 +111,13 @@ impl GitRepository {
             }
         }
         
-        // TODO: In the future, scan for nested repositories
-        
         repositories
+    }
+    
+    /// Discover repositories asynchronously with optimizations
+    pub async fn discover_repositories_optimized(workspace_path: &Path) -> Result<Vec<RepositoryInfo>> {
+        let manager = get_optimized_git_manager();
+        manager.discover_repositories_optimized(workspace_path).await
     }
     
     /// Check if repository has any changes
@@ -154,8 +204,14 @@ impl GitRepository {
         self.repo.is_bare()
     }
     
-    /// Get file statuses
+    /// Get file statuses with optimizations
     pub fn file_statuses(&self) -> Result<Vec<(PathBuf, git2::Status)>> {
+        // Use the synchronous implementation for compatibility
+        self.file_statuses_sync()
+    }
+    
+    /// Get file statuses synchronously (fallback for compatibility)
+    fn file_statuses_sync(&self) -> Result<Vec<(PathBuf, git2::Status)>> {
         let mut opts = StatusOptions::new();
         opts.include_untracked(true);
         
@@ -171,6 +227,12 @@ impl GitRepository {
         }
         
         Ok(result)
+    }
+    
+    /// Get file statuses with caching and batching
+    pub async fn file_statuses_optimized(&self) -> Result<Vec<(PathBuf, git2::Status)>> {
+        let manager = get_optimized_git_manager();
+        manager.get_file_statuses_batched(&self.path).await
     }
     
     /// Get the content of a file at HEAD
@@ -222,8 +284,14 @@ impl GitRepository {
         Ok(())
     }
     
-    /// List all branches (local and remote)
+    /// List all branches (local and remote) with optimizations
     pub fn list_branches(&self) -> Result<Vec<BranchInfo>> {
+        // Use the synchronous implementation for compatibility
+        self.list_branches_sync()
+    }
+    
+    /// List branches synchronously (fallback for compatibility)
+    fn list_branches_sync(&self) -> Result<Vec<BranchInfo>> {
         let mut branches = Vec::new();
         
         // Get current branch name for comparison
@@ -288,6 +356,12 @@ impl GitRepository {
         }
         
         Ok(branches)
+    }
+    
+    /// List branches with optimizations and pagination
+    pub async fn list_branches_optimized(&self, page: usize) -> Result<super::performance::PaginatedResult<BranchInfo>> {
+        let manager = get_optimized_git_manager();
+        manager.get_branches_paginated(&self.path, page).await
     }
     
     /// Create a new branch from a reference

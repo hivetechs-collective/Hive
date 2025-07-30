@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use tracing::{info, warn, error};
 
-use super::{GitRepository, BranchInfo};
+use super::{GitRepository, BranchInfo, get_optimized_git_manager};
 
 /// Repository information for the selector
 #[derive(Debug, Clone, PartialEq)]
@@ -71,9 +71,13 @@ impl RepositoryInfo {
         }
     }
 
-    /// Detect repository status
+    /// Detect repository status with optimizations
     async fn detect_status(repo: &GitRepository) -> RepositoryStatus {
-        match repo.file_statuses() {
+        let repo_path = repo.path();
+        
+        // Try to use optimized manager first
+        let manager = get_optimized_git_manager();
+        match manager.get_file_statuses_batched(repo_path).await {
             Ok(statuses) => {
                 // Check for conflicts first
                 if statuses.iter().any(|(_path, status)| status.is_conflicted()) {
@@ -84,7 +88,22 @@ impl RepositoryInfo {
                     RepositoryStatus::Clean
                 }
             }
-            Err(e) => RepositoryStatus::Error(e.to_string()),
+            Err(_) => {
+                // Fallback to synchronous version
+                match repo.file_statuses() {
+                    Ok(statuses) => {
+                        // Check for conflicts first
+                        if statuses.iter().any(|(_path, status)| status.is_conflicted()) {
+                            RepositoryStatus::HasConflicts
+                        } else if !statuses.is_empty() {
+                            RepositoryStatus::HasChanges
+                        } else {
+                            RepositoryStatus::Clean
+                        }
+                    }
+                    Err(e) => RepositoryStatus::Error(e.to_string()),
+                }
+            }
         }
     }
 
