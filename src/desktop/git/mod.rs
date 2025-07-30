@@ -17,6 +17,7 @@ pub mod toolbar;
 pub mod context_manager;
 pub mod status_menu;
 pub mod repository_selector;
+pub mod repository_dropdown;
 pub mod multi_repo_manager;
 pub mod statusbar_integration_fixed;
 pub mod branch_menu;
@@ -35,6 +36,7 @@ pub use repository_selector::{
     RepositorySelector, RepositoryInfo as RepoSelectorInfo, RepositoryStatus as RepoStatus,
     RepositorySelectorState, UpstreamStatus, REPOSITORY_SELECTOR_STYLES
 };
+pub use repository_dropdown::{RepositoryDropdown, RepositoryDropdownProps, REPOSITORY_DROPDOWN_STYLES};
 pub use multi_repo_manager::{MultiRepoManager, RepositoriesSummary};
 pub use statusbar_integration_fixed::{
     initialize_git_statusbar_integration,

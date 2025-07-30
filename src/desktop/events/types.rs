@@ -46,6 +46,9 @@ pub enum EventType {
     
     /// Branch menu has been requested (clicked in status bar)
     BranchMenuRequested,
+    
+    /// Repository selector has been clicked in status bar
+    RepositorySelectorRequested,
 }
 
 /// Event payload containing data specific to each event type
