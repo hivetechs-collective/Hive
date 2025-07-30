@@ -16,11 +16,18 @@ pub mod layout;
 pub mod menu_bar;
 pub mod panels;
 pub mod problems;
+pub mod repository_selector;
 pub mod terminal;
+
+#[cfg(test)]
+mod tests;
 
 use self::dialogs::{DialogManager, DialogResult, DialogType};
 use self::menu_bar::{MenuAction, MenuBar, MenuResult};
+use self::repository_selector::RepositorySelector;
 use crate::core::temporal::TemporalContext;
+use crate::desktop::events::{Event, EventBus};
+use crate::desktop::workspace::{WorkspaceState, RepositoryDiscoveryService};
 use crate::tui::accessibility::AccessibilityManager;
 use crate::tui::themes::Theme;
 use anyhow::Result;
@@ -30,6 +37,8 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     Frame,
 };
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Advanced TUI application state
 pub struct AdvancedTuiApp {
@@ -43,6 +52,8 @@ pub struct AdvancedTuiApp {
     pub terminal: terminal::TerminalPanel,
     /// Problems panel
     pub problems: problems::ProblemsPanel,
+    /// Repository selector component
+    pub repository_selector: RepositorySelector,
     /// Current theme
     pub theme: Theme,
     /// Accessibility manager
@@ -55,6 +66,12 @@ pub struct AdvancedTuiApp {
     menu_bar: MenuBar,
     /// Dialog manager
     dialog_manager: DialogManager,
+    /// Workspace state management
+    pub workspace_state: Arc<Mutex<WorkspaceState>>,
+    /// Repository discovery service
+    pub discovery_service: Option<Arc<RepositoryDiscoveryService>>,
+    /// Event bus for communication
+    pub event_bus: Arc<EventBus>,
     /// Should quit application
     should_quit: bool,
     /// Command palette state
@@ -71,6 +88,7 @@ pub enum PanelType {
     Terminal,
     ConsensusProgress,
     Problems,
+    RepositorySelector,
 }
 
 impl AdvancedTuiApp {
@@ -79,23 +97,42 @@ impl AdvancedTuiApp {
         let theme = Theme::default();
         let accessibility = AccessibilityManager::new();
         let temporal = TemporalContext::new();
-
-        Ok(Self {
+        
+        // Initialize workspace state with current directory
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let workspace_state = Arc::new(Mutex::new(WorkspaceState::new(current_dir.clone())));
+        
+        // Initialize event bus
+        let event_bus = Arc::new(EventBus::new());
+        
+        // Create repository selector
+        let repository_selector = RepositorySelector::new();
+        
+        let mut app = Self {
             active_panel: PanelType::Explorer,
             explorer: explorer::ExplorerPanel::new().await?,
             editor: editor::EditorPanel::new(),
             terminal: terminal::TerminalPanel::new()?,
             problems: problems::ProblemsPanel::new(None),
+            repository_selector,
             theme,
             accessibility,
             temporal,
             layout: layout::LayoutManager::new(),
             menu_bar: MenuBar::new(),
             dialog_manager: DialogManager::new(),
+            workspace_state,
+            discovery_service: None,
+            event_bus,
             should_quit: false,
             command_palette_open: false,
             quick_search_open: false,
-        })
+        };
+        
+        // Initialize workspace with repository discovery
+        app.initialize_workspace().await?;
+        
+        Ok(app)
     }
 
     /// Render the advanced TUI interface
@@ -218,6 +255,14 @@ impl AdvancedTuiApp {
                     }
                     _ => false
                 }
+            }
+            PanelType::RepositorySelector => {
+                // Handle repository selector events
+                if let Ok(Some(event)) = self.repository_selector.handle_key_event(key).await {
+                    // Repository changed event received
+                    self.handle_repository_change_event(event).await.unwrap_or(());
+                }
+                true
             }
         };
 
@@ -349,6 +394,14 @@ impl AdvancedTuiApp {
                 self.active_panel = PanelType::Problems;
                 Ok(true)
             }
+            // Ctrl+R - Toggle Repository Selector
+            (KeyModifiers::CONTROL, KeyCode::Char('r')) => {
+                self.repository_selector.toggle();
+                if self.repository_selector.is_open() {
+                    self.active_panel = PanelType::RepositorySelector;
+                }
+                Ok(true)
+            }
             // Ctrl+Q - Quit
             (KeyModifiers::CONTROL, KeyCode::Char('q')) => {
                 self.should_quit = true;
@@ -408,6 +461,7 @@ impl AdvancedTuiApp {
             PanelType::Terminal => PanelType::ConsensusProgress,
             PanelType::ConsensusProgress => PanelType::Problems,
             PanelType::Problems => PanelType::Explorer,
+            PanelType::RepositorySelector => PanelType::Explorer,
         };
     }
 
@@ -417,19 +471,27 @@ impl AdvancedTuiApp {
         use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Borders, Paragraph};
 
-        // Split title bar into menu area and title area
-        let chunks = Layout::default()
+        // Split title bar vertically for menu and content
+        let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(1), // Menu bar
-                Constraint::Length(1), // Title
+                Constraint::Length(1), // Title content
             ])
             .split(area);
 
         // Render menu bar
-        self.menu_bar.render(frame, chunks[0], &self.theme);
+        self.menu_bar.render(frame, vertical_chunks[0], &self.theme);
 
-        // Render title
+        // Get title bar layout for the content area
+        let title_layout = self.layout.get_title_bar_layout(vertical_chunks[1]);
+
+        // Render repository selector (compact view)
+        if !self.repository_selector.is_open() {
+            self.repository_selector.render(frame, title_layout.repository_selector, &self.theme);
+        }
+
+        // Render main title
         let title = format!(
             "🐝 HiveTechs Consensus | {} | {}",
             self.temporal.current_time_formatted(),
@@ -443,7 +505,10 @@ impl AdvancedTuiApp {
         .style(self.theme.title_bar_style())
         .alignment(ratatui::layout::Alignment::Center);
 
-        frame.render_widget(title_widget, chunks[1]);
+        frame.render_widget(title_widget, title_layout.title);
+        
+        // Optionally render menu shortcuts or other info in the right area
+        // (title_layout.menu_bar area is available for this)
     }
 
     /// Render main content area with panels
@@ -485,6 +550,18 @@ impl AdvancedTuiApp {
         if layout.problems.height > 0 {
             self.problems.draw(frame, layout.problems);
         }
+        
+        // Render repository selector dropdown if open (as overlay)
+        if self.repository_selector.is_open() {
+            // Position the dropdown in the explorer area but as an overlay
+            let selector_area = ratatui::layout::Rect {
+                x: layout.explorer.x + 1,
+                y: layout.explorer.y + 1,
+                width: (layout.explorer.width - 2).min(50),
+                height: (layout.explorer.height - 2).min(20),
+            };
+            self.repository_selector.render(frame, selector_area, &self.theme);
+        }
     }
 
     /// Render status bar with current status and shortcuts
@@ -494,7 +571,7 @@ impl AdvancedTuiApp {
         use ratatui::widgets::{Block, Borders, Paragraph};
 
         let status_text = format!(
-            "F1:Explorer F2:Editor F3:Terminal F4:Consensus F5:Problems | Ctrl+P:Search Ctrl+Shift+P:Commands | {}",
+            "F1:Explorer F2:Editor F3:Terminal F4:Consensus F5:Problems | Ctrl+R:Repository | Ctrl+P:Search Ctrl+Shift+P:Commands | {}",
             self.get_current_status()
         );
 
@@ -601,6 +678,7 @@ impl AdvancedTuiApp {
             PanelType::Terminal => "Terminal",
             PanelType::ConsensusProgress => "Consensus",
             PanelType::Problems => "Problems",
+            PanelType::RepositorySelector => "Repository",
         }
     }
 
@@ -636,5 +714,103 @@ impl AdvancedTuiApp {
         // TODO: Implement async event handling
         // For now, just return success
         Ok(())
+    }
+    
+    /// Initialize workspace with repository discovery
+    pub async fn initialize_workspace(&mut self) -> Result<()> {
+        // Scan for repositories in the workspace
+        {
+            let mut workspace = self.workspace_state.lock().await;
+            workspace.scan_for_repositories()?;
+        }
+        
+        // Update repository selector with discovered repositories
+        self.update_repository_selector().await?;
+        
+        // Set up event bus subscriptions
+        self.setup_event_subscriptions().await?;
+        
+        Ok(())
+    }
+    
+    /// Update repository selector from workspace state
+    pub async fn update_repository_selector(&mut self) -> Result<()> {
+        let workspace = self.workspace_state.lock().await;
+        self.repository_selector.update_from_workspace(&workspace);
+        Ok(())
+    }
+    
+    /// Setup event bus subscriptions
+    async fn setup_event_subscriptions(&mut self) -> Result<()> {
+        // Clone references for the closure
+        let workspace_state = self.workspace_state.clone();
+        
+        // Subscribe to repository change events
+        self.event_bus.subscribe_async(
+            crate::desktop::events::EventType::RepositoryChanged,
+            move |event| {
+                let workspace = workspace_state.clone();
+                async move {
+                    if let crate::desktop::events::EventPayload::RepositoryInfo { path, .. } = event.payload {
+                        let mut ws = workspace.lock().await;
+                        ws.switch_repository(path)?;
+                        tracing::info!("Repository switched via event bus");
+                    }
+                    Ok(())
+                }
+            },
+        ).await;
+        
+        Ok(())
+    }
+    
+    /// Handle repository change events from the repository selector
+    async fn handle_repository_change_event(&mut self, event: Event) -> Result<()> {
+        // Publish the event to the event bus
+        self.event_bus.publish_async(event).await?;
+        
+        // Update repository selector to reflect the change
+        self.update_repository_selector().await?;
+        
+        // Update explorer to show the new repository
+        if let Some(current_repo) = self.repository_selector.current_repository() {
+            self.explorer.set_root(current_repo.to_path_buf()).await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Initialize repository discovery service
+    pub async fn initialize_discovery_service(&mut self, workspace_root: std::path::PathBuf) -> Result<()> {
+        use crate::desktop::workspace::{DiscoveryConfig, ScanningMode};
+        
+        let mut config = DiscoveryConfig::default();
+        config.scan_paths = vec![workspace_root];
+        config.scanning_mode = ScanningMode::Deep;
+        
+        let discovery_service = RepositoryDiscoveryService::new(config);
+        self.discovery_service = Some(Arc::new(discovery_service));
+        
+        // Run advanced discovery if service is available
+        if let Some(service) = &self.discovery_service {
+            let mut workspace = self.workspace_state.lock().await;
+            workspace.discover_repositories_advanced(service).await?;
+            drop(workspace); // Release the lock
+            
+            // Update repository selector with the enhanced discovery results
+            self.update_repository_selector().await?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Get the current workspace state (read-only)
+    pub async fn get_workspace_state(&self) -> Arc<Mutex<WorkspaceState>> {
+        self.workspace_state.clone()
+    }
+    
+    /// Get the event bus for external subscribers
+    pub fn get_event_bus(&self) -> Arc<EventBus> {
+        self.event_bus.clone()
     }
 }
