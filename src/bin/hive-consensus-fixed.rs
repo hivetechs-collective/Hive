@@ -33,7 +33,7 @@ pub struct AnalyticsData {
 
 /// Fetch real analytics data from the database
 async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Error + Send + Sync>> {
-    use hive::core::database::get_database;
+    use hive_ai::core::database::get_database;
     use chrono::Datelike;
     
     match get_database().await {
