@@ -8,9 +8,10 @@ use anyhow::{Result, Context};
 use tracing::{info, warn, error};
 use super::{BranchInfo, BranchType, CommitInfo};
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 
 /// Information about a git repository
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RepositoryInfo {
     pub path: PathBuf,
     pub name: String,

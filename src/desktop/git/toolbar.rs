@@ -28,6 +28,11 @@ pub struct GitToolbarProps {
     pub unstaged_count: usize,
     /// Current branch name
     pub current_branch: Option<String>,
+    /// Shared git operation state signals
+    pub is_pushing: Signal<bool>,
+    pub is_pulling: Signal<bool>,
+    pub is_syncing: Signal<bool>,
+    pub operation_status: Signal<Option<String>>,
     /// Callback when a git operation is performed
     pub on_operation: EventHandler<GitOperation>,
     /// Optional callback for operation progress
@@ -40,10 +45,12 @@ pub struct GitToolbarProps {
 pub fn GitToolbar(props: GitToolbarProps) -> Element {
     let mut commit_message = use_signal(|| String::new());
     let mut show_commit_input = use_signal(|| false);
-    let mut operation_status = use_signal(|| None::<String>);
-    let mut is_pushing = use_signal(|| false);
-    let mut is_pulling = use_signal(|| false);
-    let mut is_syncing = use_signal(|| false);
+    
+    // Use the shared state signals from props
+    let mut is_pushing = props.is_pushing;
+    let mut is_pulling = props.is_pulling;
+    let mut is_syncing = props.is_syncing;
+    let mut operation_status = props.operation_status;
     
     let repo_path = props.repo_path.clone();
     let has_repo = repo_path.is_some();
@@ -185,7 +192,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         move |_| {
                             if !*is_syncing.read() {
                                 on_operation.call(GitOperation::Sync);
-                                *operation_status.write() = Some(format!("Syncing with origin/{}...", branch));
+                                operation_status.set(Some(format!("Syncing with origin/{}...", branch)));
                                 is_syncing.set(true);
                             }
                         }
@@ -213,7 +220,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         move |_| {
                             if !*is_pushing.read() {
                                 on_operation.call(GitOperation::Push);
-                                *operation_status.write() = Some(format!("Pushing to origin/{}...", branch));
+                                operation_status.set(Some(format!("Pushing to origin/{}...", branch)));
                                 is_pushing.set(true);
                             }
                         }
@@ -240,7 +247,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         move |_| {
                             if !*is_pulling.read() {
                                 on_operation.call(GitOperation::Pull);
-                                *operation_status.write() = Some(format!("Pulling from origin/{}...", branch));
+                                operation_status.set(Some(format!("Pulling from origin/{}...", branch)));
                                 is_pulling.set(true);
                             }
                         }
@@ -265,7 +272,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         let on_operation = props.on_operation.clone();
                         move |_| {
                             on_operation.call(GitOperation::Fetch);
-                            *operation_status.write() = Some("Fetching from origin...".to_string());
+                            operation_status.set(Some("Fetching from origin...".to_string()));
                         }
                     },
                     "↻ Fetch"
@@ -277,7 +284,7 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                         style: "padding: 6px 12px; background: transparent; color: #f48771; border: 1px solid #f48771; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;",
                         onclick: move |_| {
                             // Add confirmation dialog later
-                            *operation_status.write() = Some("Discarding all changes...".to_string());
+                            operation_status.set(Some("Discarding all changes...".to_string()));
                         },
                         "⟲ Discard All"
                     }

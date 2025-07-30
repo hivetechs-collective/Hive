@@ -44,6 +44,7 @@ pub mod terminal_registry;
 pub mod terminal_buffer;
 pub mod git;
 pub mod diff_viewer;
+pub mod workspace;
 
 // Re-export commonly used styling components
 pub use dialogs::OperationConfirmationDialog;
@@ -57,6 +58,7 @@ pub use problems::{
     PROBLEMS_PANEL_STYLES,
 };
 pub use styles::theme::{use_theme, Theme, ThemeProvider, ThemeSwitcher};
+pub use workspace::{WorkspaceState, FileState, WorkspaceSettings};
 
 use crate::core::config::Config as HiveConfig;
 use anyhow::Result;

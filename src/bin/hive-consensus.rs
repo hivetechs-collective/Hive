@@ -930,6 +930,7 @@ fn App() -> Element {
     let mut is_pushing = use_signal(|| false);
     let mut is_pulling = use_signal(|| false);
     let mut is_syncing = use_signal(|| false);
+    let mut git_operation_status = use_signal(|| None::<String>);
     
     // Initialize git context manager
     let mut git_context = provide_git_context();
@@ -3160,18 +3161,22 @@ fn App() -> Element {
                                             staged_count: staged_count,
                                             unstaged_count: unstaged_count,
                                             current_branch: current_branch,
+                                            is_pushing: is_pushing.clone(),
+                                            is_pulling: is_pulling.clone(),
+                                            is_syncing: is_syncing.clone(),
+                                            operation_status: git_operation_status.clone(),
                                             on_operation: EventHandler::new({
                                                 let repo_path = current_dir.read().clone();
                                                 let mut git_state_for_refresh = git_state.clone();
-                                                let mut is_pushing_ref = is_pushing.clone();
-                                                let mut is_pulling_ref = is_pulling.clone();
-                                                let mut is_syncing_ref = is_syncing.clone();
+                                                let is_pushing_handler = is_pushing.clone();
+                                                let is_pulling_handler = is_pulling.clone();
+                                                let is_syncing_handler = is_syncing.clone();
                                                 move |operation: GitOperation| {
                                                     if let Some(repo_path) = repo_path.clone() {
                                                         let mut git_state_clone = git_state_for_refresh.clone();
-                                                        let mut is_pushing_clone = is_pushing_ref.clone();
-                                                        let mut is_pulling_clone = is_pulling_ref.clone();
-                                                        let mut is_syncing_clone = is_syncing_ref.clone();
+                                                        let mut is_pushing_reset = is_pushing_handler.clone();
+                                                        let mut is_pulling_reset = is_pulling_handler.clone();
+                                                        let mut is_syncing_reset = is_syncing_handler.clone();
                                                         
                                                         // Create cancellation token for this operation
                                                         let cancel_token = CancellationToken::new();
@@ -3227,9 +3232,9 @@ fn App() -> Element {
                                                                     
                                                             // Reset operation states
                                                             match &operation {
-                                                                GitOperation::Push => is_pushing_clone.set(false),
-                                                                GitOperation::Pull => is_pulling_clone.set(false),
-                                                                GitOperation::Sync => is_syncing_clone.set(false),
+                                                                GitOperation::Push => is_pushing_reset.set(false),
+                                                                GitOperation::Pull => is_pulling_reset.set(false),
+                                                                GitOperation::Sync => is_syncing_reset.set(false),
                                                                 _ => {}
                                                             }
                                                             
@@ -3280,9 +3285,9 @@ fn App() -> Element {
                                                                     tracing::error!("Git operation failed: {:?} - {}", operation, e);
                                                                     // Reset operation states on error too
                                                                     match &operation {
-                                                                        GitOperation::Push => is_pushing_clone.set(false),
-                                                                        GitOperation::Pull => is_pulling_clone.set(false),
-                                                                        GitOperation::Sync => is_syncing_clone.set(false),
+                                                                        GitOperation::Push => is_pushing_reset.set(false),
+                                                                        GitOperation::Pull => is_pulling_reset.set(false),
+                                                                        GitOperation::Sync => is_syncing_reset.set(false),
                                                                         _ => {}
                                                                     }
                                                                 }
