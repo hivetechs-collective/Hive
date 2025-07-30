@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs;
+use git2::{Repository, StatusOptions};
 
 use super::state::{FileItem, FileType, GitFileStatus};
 
@@ -17,7 +18,11 @@ pub fn load_directory_tree<'a>(
     expanded_dirs: &'a HashMap<PathBuf, bool>,
     show_hidden: bool,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileItem>>> + Send + 'a>> {
-    Box::pin(async move { load_directory_tree_inner(root, expanded_dirs, show_hidden, 0).await })
+    Box::pin(async move {
+        // Try to open git repository for status information
+        let git_statuses = get_git_statuses_for_directory(root);
+        load_directory_tree_inner(root, expanded_dirs, show_hidden, 0, &git_statuses).await
+    })
 }
 
 /// Inner recursive function for loading directory tree
@@ -26,6 +31,7 @@ fn load_directory_tree_inner<'a>(
     expanded_dirs: &'a HashMap<PathBuf, bool>,
     show_hidden: bool,
     depth: usize,
+    git_statuses: &'a HashMap<PathBuf, GitFileStatus>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<FileItem>>> + Send + 'a>> {
     Box::pin(async move {
         let mut entries = Vec::new();
@@ -59,9 +65,12 @@ fn load_directory_tree_inner<'a>(
                 DateTime::<Utc>::from_timestamp(duration.as_secs() as i64, 0).unwrap()
             });
 
+            // Get git status for this file
+            let git_status = git_statuses.get(&path).cloned();
+            
             // Load children if directory is expanded
             let children = if is_directory && is_expanded {
-                load_directory_tree_inner(&path, expanded_dirs, show_hidden, depth + 1)
+                load_directory_tree_inner(&path, expanded_dirs, show_hidden, depth + 1, git_statuses)
                     .await
                     .unwrap_or_default()
             } else {
@@ -75,7 +84,7 @@ fn load_directory_tree_inner<'a>(
                 is_expanded,
                 children,
                 file_type,
-                git_status: None, // TODO: Implement git status detection
+                git_status,
                 size: if !is_directory {
                     Some(metadata.len())
                 } else {
@@ -116,11 +125,74 @@ pub async fn read_file_content(path: &Path) -> Result<String> {
     Ok(content)
 }
 
-/// Get git status for files (placeholder for now)
+/// Get git statuses for all files in a directory
+fn get_git_statuses_for_directory(root: &Path) -> HashMap<PathBuf, GitFileStatus> {
+    let mut statuses = HashMap::new();
+    
+    // Try to discover repository from the root path
+    if let Ok(repo) = Repository::discover(root) {
+        // Get the repository workdir to calculate relative paths
+        if let Some(workdir) = repo.workdir() {
+            // Configure status options
+            let mut opts = StatusOptions::new();
+            opts.include_untracked(true)
+                .include_ignored(false)
+                .include_unmodified(false);
+            
+            // Get all file statuses
+            if let Ok(git_statuses) = repo.statuses(Some(&mut opts)) {
+                for entry in git_statuses.iter() {
+                    if let Some(path_str) = entry.path() {
+                        let full_path = workdir.join(path_str);
+                        let status = entry.status();
+                        
+                        // Convert git2 status to our GitFileStatus
+                        let file_status = convert_git_status(status);
+                        if let Some(fs) = file_status {
+                            statuses.insert(full_path, fs);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    statuses
+}
+
+/// Convert git2::Status to GitFileStatus
+fn convert_git_status(status: git2::Status) -> Option<GitFileStatus> {
+    use git2::Status;
+    
+    // Priority order for status (most important first)
+    if status.contains(Status::INDEX_NEW) || status.contains(Status::WT_NEW) {
+        Some(GitFileStatus::Added)
+    } else if status.contains(Status::INDEX_DELETED) || status.contains(Status::WT_DELETED) {
+        Some(GitFileStatus::Deleted)
+    } else if status.contains(Status::INDEX_RENAMED) || status.contains(Status::WT_RENAMED) {
+        Some(GitFileStatus::Renamed)
+    } else if status.contains(Status::INDEX_MODIFIED) || status.contains(Status::WT_MODIFIED) {
+        Some(GitFileStatus::Modified)
+    } else if status.contains(Status::IGNORED) {
+        Some(GitFileStatus::Ignored)
+    } else if status.is_wt_new() {
+        Some(GitFileStatus::Untracked)
+    } else {
+        None
+    }
+}
+
+/// Get git status for a single file
 pub async fn get_git_status(path: &Path) -> Option<GitFileStatus> {
-    // TODO: Implement actual git status detection
-    // For now, return None
-    None
+    let path_buf = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let parent = path_buf.parent()?;
+        let statuses = get_git_statuses_for_directory(parent);
+        statuses.get(&path_buf).cloned()
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 impl FileType {
@@ -180,7 +252,8 @@ mod tests {
 
         // Test without hidden files
         let expanded = HashMap::new();
-        let entries = load_directory_tree_inner(root, &expanded, false)
+        let git_statuses = HashMap::new();
+        let entries = load_directory_tree_inner(root, &expanded, false, 0, &git_statuses)
             .await
             .unwrap();
 
@@ -189,7 +262,7 @@ mod tests {
         assert_eq!(entries[0].name, "src");
 
         // Test with hidden files
-        let entries = load_directory_tree_inner(root, &expanded, true)
+        let entries = load_directory_tree_inner(root, &expanded, true, 0, &git_statuses)
             .await
             .unwrap();
         assert_eq!(entries.len(), 4); // includes .gitignore

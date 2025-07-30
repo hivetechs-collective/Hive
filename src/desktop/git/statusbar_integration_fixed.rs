@@ -6,6 +6,7 @@ use dioxus::prelude::*;
 use crate::desktop::events::{event_bus, Event, EventType, EventPayload};
 use crate::desktop::git::{GitState, GitWatcher, GitEvent as GitWatcherEvent, SyncStatus};
 use crate::desktop::status_bar_enhanced::{StatusBarState, StatusBarItem};
+use crate::desktop::state::AppState;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -98,6 +99,7 @@ pub fn setup_git_watcher_integration(
     git_state: GitState,
     mut active_git_watcher: Signal<Option<GitWatcher>>,
     repo_path: PathBuf,
+    app_state: Signal<AppState>,
 ) {
     spawn(async move {
         match GitWatcher::new(&repo_path) {
@@ -116,6 +118,23 @@ pub fn setup_git_watcher_integration(
                             if let Err(e) = git_state.refresh_status(&repo_path).await {
                                 error!("Failed to refresh git status: {}", e);
                             }
+                        }
+                        GitWatcherEvent::FileStatusChanged(changed_files) => {
+                            // Refresh git status
+                            let repo_path = repo_path.clone();
+                            if let Err(e) = git_state.refresh_status(&repo_path).await {
+                                error!("Failed to refresh git status: {}", e);
+                            }
+                            
+                            // Trigger file explorer refresh to update git status indicators
+                            let mut app_state_clone = app_state.clone();
+                            spawn(async move {
+                                if let Err(e) = app_state_clone.write().file_explorer.refresh().await {
+                                    error!("Failed to refresh file explorer: {}", e);
+                                } else {
+                                    debug!("File explorer refreshed for {:?} changed files", changed_files.len());
+                                }
+                            });
                         }
                         GitWatcherEvent::RemoteChanged => {
                             debug!("Remote changed, consider fetching");
@@ -204,13 +223,14 @@ pub fn initialize_git_statusbar_integration(
     status_bar_state: Signal<StatusBarState>,
     active_git_watcher: Signal<Option<GitWatcher>>,
     repo_path: Option<PathBuf>,
+    app_state: Signal<AppState>,
 ) {
     // Setup reactive updates
     setup_git_statusbar_integration(git_state.clone(), status_bar_state);
     
     // Setup git watcher if we have a repo path
     if let Some(path) = repo_path {
-        setup_git_watcher_integration(git_state, active_git_watcher, path);
+        setup_git_watcher_integration(git_state, active_git_watcher, path, app_state);
     }
     
     // Setup event bus subscription
