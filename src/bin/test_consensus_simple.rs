@@ -10,7 +10,7 @@ use rusqlite::OptionalExtension;
 async fn main() -> Result<()> {
     // Initialize logging
     tracing_subscriber::fmt()
-        .with_env_filter("info,hive::consensus::pipeline=debug")
+        .with_env_filter("info,hive_ai::consensus::pipeline=debug")
         .init();
     
     println!("🐝 Simple Consensus Test");
