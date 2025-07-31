@@ -60,7 +60,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
     let has_changes = ui_state.read().has_changes;
 
     // Helper to update config and mark as changed
-    let update_config = move |update_fn: Box<dyn Fn(&mut PerformanceConfig)>| {
+    let mut update_config = move |update_fn: Box<dyn Fn(&mut PerformanceConfig)>| {
         ui_state.with_mut(|state| {
             update_fn(&mut state.config);
             state.has_changes = true;

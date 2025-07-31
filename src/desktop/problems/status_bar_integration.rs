@@ -32,7 +32,7 @@ pub fn ProblemsStatusBar(
     } else if total_warnings > 0 {
         ("⚠️", "#CCA700", format!("{} warning{}", total_warnings, if total_warnings == 1 { "" } else { "s" }))
     } else {
-        ("✅", "#4EC9B0", "No problems")
+        ("✅", "#4EC9B0", "No problems".to_string())
     };
 
     rsx! {

@@ -411,7 +411,7 @@ impl FocusManager {
 #[component]
 pub fn FocusableHunk(props: FocusableHunkProps) -> Element {
     let focus_manager = use_context::<Arc<FocusManager>>();
-    let is_focused = use_signal(|| false);
+    let mut is_focused = use_signal(|| false);
     
     rsx! {
         div {
@@ -456,7 +456,7 @@ pub struct FocusableHunkProps {
 #[component]
 pub fn FocusableLine(props: FocusableLineProps) -> Element {
     let focus_manager = use_context::<Arc<FocusManager>>();
-    let is_focused = use_signal(|| false);
+    let mut is_focused = use_signal(|| false);
     
     rsx! {
         div {

@@ -88,7 +88,8 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
                             title: "Preview Git Decorations",
                             style: "width: 24px; height: 24px; padding: 0; background: transparent; border: none; color: var(--vscode-foreground); cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center;",
                             onclick: move |_| {
-                                show_decoration_preview.set(!show_decoration_preview.read());
+                                let current_value = *show_decoration_preview.read();
+                                show_decoration_preview.set(!current_value);
                             },
                             i { 
                                 class: "fa-solid fa-eye",
