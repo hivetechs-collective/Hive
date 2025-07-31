@@ -47,7 +47,7 @@ pub fn handle_stash_shortcut(
             
             StashShortcutAction::QuickStash => {
                 spawn(async move {
-                    if let Some(callback) = status_callback {
+                    if let Some(ref callback) = status_callback {
                         callback("Creating quick stash...".to_string());
                     }
                     
@@ -56,17 +56,17 @@ pub fn handle_stash_shortcut(
                         stash.quick_stash()
                     }).await {
                         Ok(Ok(_)) => {
-                            if let Some(callback) = status_callback {
+                            if let Some(ref callback) = status_callback {
                                 callback("Quick stash created successfully".to_string());
                             }
                         }
                         Ok(Err(e)) => {
-                            if let Some(callback) = status_callback {
+                            if let Some(ref callback) = status_callback {
                                 callback(format!("Failed to create quick stash: {}", e));
                             }
                         }
                         Err(e) => {
-                            if let Some(callback) = status_callback {
+                            if let Some(ref callback) = status_callback {
                                 callback(format!("Task error: {}", e));
                             }
                         }
@@ -76,7 +76,7 @@ pub fn handle_stash_shortcut(
             
             StashShortcutAction::PopLatest => {
                 spawn(async move {
-                    if let Some(callback) = status_callback {
+                    if let Some(ref callback) = status_callback {
                         callback("Popping latest stash...".to_string());
                     }
                     
@@ -87,12 +87,12 @@ pub fn handle_stash_shortcut(
                     
                     match async_ops::pop_stash(&path, 0, opts).await {
                         Ok(_) => {
-                            if let Some(callback) = status_callback {
+                            if let Some(ref callback) = status_callback {
                                 callback("Popped latest stash successfully".to_string());
                             }
                         }
                         Err(e) => {
-                            if let Some(callback) = status_callback {
+                            if let Some(ref callback) = status_callback {
                                 callback(format!("Failed to pop stash: {}", e));
                             }
                         }
@@ -102,7 +102,7 @@ pub fn handle_stash_shortcut(
             
             StashShortcutAction::ApplyLatest => {
                 spawn(async move {
-                    if let Some(callback) = status_callback {
+                    if let Some(ref callback) = status_callback {
                         callback("Applying latest stash...".to_string());
                     }
                     
@@ -113,12 +113,12 @@ pub fn handle_stash_shortcut(
                     
                     match async_ops::apply_stash(&path, 0, opts).await {
                         Ok(_) => {
-                            if let Some(callback) = status_callback {
+                            if let Some(ref callback) = status_callback {
                                 callback("Applied latest stash successfully".to_string());
                             }
                         }
                         Err(e) => {
-                            if let Some(callback) = status_callback {
+                            if let Some(ref callback) = status_callback {
                                 callback(format!("Failed to apply stash: {}", e));
                             }
                         }

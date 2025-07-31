@@ -83,7 +83,7 @@ pub fn PerformanceMonitor(props: PerformanceMonitorProps) -> Element {
                     div {
                         style: "display: flex; gap: 8px;",
                         
-                        if let Some(on_clear_caches) = &props.on_clear_caches {
+                        if let Some(on_clear_caches) = props.on_clear_caches.clone() {
                             button {
                                 style: "padding: 4px 8px; background: #d73a49; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;",
                                 onclick: move |_| on_clear_caches.call(()),
@@ -91,7 +91,7 @@ pub fn PerformanceMonitor(props: PerformanceMonitorProps) -> Element {
                             }
                         }
                         
-                        if let Some(on_configure) = &props.on_configure {
+                        if let Some(on_configure) = props.on_configure.clone() {
                             button {
                                 style: "padding: 4px 8px; background: #0078d4; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;",
                                 onclick: move |_| on_configure.call(()),
@@ -294,7 +294,7 @@ pub fn PerformanceMonitor(props: PerformanceMonitorProps) -> Element {
                         "⚡ Git Performance"
                     }
                     
-                    if let Some(on_configure) = &props.on_configure {
+                    if let Some(on_configure) = props.on_configure.clone() {
                         button {
                             style: "padding: 4px 8px; background: #0078d4; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 11px;",
                             onclick: move |_| on_configure.call(()),
