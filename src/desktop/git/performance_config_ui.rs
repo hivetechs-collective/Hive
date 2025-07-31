@@ -122,7 +122,7 @@ pub fn PerformanceConfigUI(props: PerformanceConfigProps) -> Element {
                     }
                     
                     if props.modal_mode {
-                        if let Some(on_close) = &props.on_close {
+                        if let Some(on_close) = props.on_close.clone() {
                             button {
                                 style: "background: none; border: none; color: #cccccc; font-size: 18px; cursor: pointer; padding: 4px;",
                                 onclick: move |_| on_close.call(()),

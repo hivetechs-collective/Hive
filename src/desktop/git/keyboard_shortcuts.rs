@@ -413,6 +413,14 @@ pub fn FocusableHunk(props: FocusableHunkProps) -> Element {
     let focus_manager = use_context::<Arc<FocusManager>>();
     let mut is_focused = use_signal(|| false);
     
+    // Clone values for closures
+    let focus_manager_1 = focus_manager.clone();
+    let focus_manager_2 = focus_manager.clone();
+    let focus_manager_3 = focus_manager.clone();
+    let focus_manager_4 = focus_manager.clone();
+    let hunk_id_1 = props.hunk_id.clone();
+    let hunk_id_2 = props.hunk_id.clone();
+    
     rsx! {
         div {
             class: "focusable-hunk",
@@ -423,18 +431,18 @@ pub fn FocusableHunk(props: FocusableHunkProps) -> Element {
             tabindex: 0,
             onfocusin: move |_| {
                 is_focused.set(true);
-                focus_manager.set_focused_hunk(Some(props.hunk_id.clone()));
+                focus_manager_1.set_focused_hunk(Some(hunk_id_1.clone()));
             },
             onfocusout: move |_| {
                 is_focused.set(false);
-                focus_manager.set_focused_hunk(None);
+                focus_manager_2.set_focused_hunk(None);
             },
             onmouseenter: move |_| {
-                focus_manager.set_focused_hunk(Some(props.hunk_id.clone()));
+                focus_manager_3.set_focused_hunk(Some(hunk_id_2.clone()));
             },
             onmouseleave: move |_| {
                 if !is_focused() {
-                    focus_manager.set_focused_hunk(None);
+                    focus_manager_4.set_focused_hunk(None);
                 }
             },
             

@@ -26,7 +26,7 @@ pub fn ProblemsStatusBar(
     
     // Determine overall status
     let (status_icon, status_color, status_text) = if has_active_builds {
-        ("🔄", "#FFD700", "Building...")
+        ("🔄", "#FFD700", "Building...".to_string())
     } else if total_errors > 0 {
         ("❌", "#F48771", format!("{} error{}", total_errors, if total_errors == 1 { "" } else { "s" }))
     } else if total_warnings > 0 {
