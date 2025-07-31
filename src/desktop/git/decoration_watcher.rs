@@ -320,6 +320,24 @@ impl GitDecorationWatcher {
     }
 }
 
+impl Clone for GitDecorationWatcher {
+    fn clone(&self) -> Self {
+        // Create a new channel for the clone
+        let (event_sender, event_receiver) = mpsc::unbounded_channel();
+        
+        Self {
+            config: self.config.clone(),
+            event_receiver: Arc::new(RwLock::new(Some(event_receiver))),
+            event_sender,
+            fs_watcher: Arc::new(RwLock::new(None)), // Start with no watcher
+            repository_path: self.repository_path.clone(),
+            last_update: self.last_update.clone(),
+            decoration_manager: self.decoration_manager.clone(),
+            task_handle: Arc::new(RwLock::new(None)), // Start with no task
+        }
+    }
+}
+
 impl Drop for GitDecorationWatcher {
     fn drop(&mut self) {
         // Cleanup is handled by the async drop logic

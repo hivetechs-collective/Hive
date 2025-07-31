@@ -10,7 +10,7 @@ use crate::desktop::state::GitFileStatus;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for git decorations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GitDecorationConfig {
     /// Enable/disable git decorations
     pub enabled: bool,
@@ -46,7 +46,7 @@ impl Default for GitDecorationConfig {
 }
 
 /// Decoration style configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DecorationStyles {
     /// Colors for different git statuses
     pub modified_color: String,
@@ -443,6 +443,16 @@ pub fn use_git_decoration_manager() -> GitDecorationManager {
 impl From<GitFileStatus> for EnhancedGitStatus {
     fn from(status: GitFileStatus) -> Self {
         EnhancedGitStatus::new(status)
+    }
+}
+
+impl PartialEq for GitDecorationManager {
+    fn eq(&self, other: &Self) -> bool {
+        // Compare configuration values
+        self.config.read() == other.config.read() &&
+        // For simplicity, we'll consider managers equal if configs are equal
+        // In practice, you might want more sophisticated comparison
+        self.repo_root.read() == other.repo_root.read()
     }
 }
 

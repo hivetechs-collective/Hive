@@ -455,7 +455,7 @@ impl BatchProcessor {
                 };
                 
                 for action in actions {
-                    if let Err(e) = processor_clone.queue_action(action, PathBuf::from(&file_path_clone)).await {
+                    if let Err(e) = processor_clone.processor.queue_action(action, PathBuf::from(&file_path_clone)).await {
                         error!("Failed to queue batched action: {}", e);
                     }
                 }

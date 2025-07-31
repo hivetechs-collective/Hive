@@ -446,6 +446,9 @@ impl ProblemsUpdateManager {
                     _ if status_chars.chars().any(|c| c != ' ' && c != '?') => {
                         git_status.modified_files.push(workspace_path.join(file_path));
                     }
+                    _ => {
+                        // Ignore other status combinations
+                    }
                 }
             }
         }
