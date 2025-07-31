@@ -60,57 +60,60 @@ pub struct StashSaveOptions {
 /// Options for applying a stash
 #[derive(Debug, Clone, Default)]
 pub struct StashApplyOptions {
-    pub reinstanate_index: bool,
+    pub reinstate_index: bool,
     pub check_index: bool,
 }
 
 /// Git stash operations service
 pub struct GitStash {
-    repo: Repository,
     repo_path: PathBuf,
 }
 
 impl GitStash {
     /// Create a new GitStash instance
     pub fn new(repo_path: &Path) -> Result<Self> {
-        let repo = Repository::discover(repo_path)
-            .context("Failed to discover git repository")?;
-        
-        let repo_path = repo.workdir()
-            .unwrap_or_else(|| repo.path())
-            .to_path_buf();
-        
-        Ok(Self {
-            repo,
-            repo_path,
-        })
+        let repo_path = repo_path.to_path_buf();
+        Ok(Self { repo_path })
+    }
+    
+    /// Get a mutable repository instance
+    fn get_repo(&self) -> Result<Repository> {
+        Repository::discover(&self.repo_path)
+            .context("Failed to discover git repository")
     }
     
     /// List all stashes in the repository
     #[instrument(skip(self))]
-    pub fn list_stashes(&mut self) -> Result<Vec<StashInfo>> {
+    pub fn list_stashes(&self) -> Result<Vec<StashInfo>> {
         let mut stashes = Vec::new();
+        let mut repo = self.get_repo()?;
+        let mut stash_entries = Vec::new();
         
-        self.repo.stash_foreach(|index, message, oid| {
-            match self.get_stash_info(index, message, *oid) {
+        // First, collect all stash entries
+        repo.stash_foreach(|index, message, oid| {
+            stash_entries.push((index, message.to_string(), *oid));
+            true // Continue iteration
+        })?;
+        
+        // Then process each entry separately to avoid borrowing issues
+        for (index, message, oid) in stash_entries {
+            match self.get_stash_info(&repo, index, &message, oid) {
                 Ok(stash_info) => {
                     stashes.push(stash_info);
-                    true // Continue iteration
                 }
                 Err(e) => {
                     warn!("Failed to get stash info for index {}: {}", index, e);
-                    true // Continue iteration despite error
                 }
             }
-        })?;
+        }
         
         info!("Found {} stashes", stashes.len());
         Ok(stashes)
     }
     
     /// Get detailed information about a specific stash
-    fn get_stash_info(&self, index: usize, message: &str, oid: Oid) -> Result<StashInfo> {
-        let commit = self.repo.find_commit(oid)?;
+    fn get_stash_info(&self, repo: &Repository, index: usize, message: &str, oid: Oid) -> Result<StashInfo> {
+        let commit = repo.find_commit(oid)?;
         let author = commit.author();
         let timestamp = author.when().seconds() as u64;
         
@@ -136,7 +139,7 @@ impl GitStash {
         let has_untracked = commit.parent_count() > 2;
         
         // Get files changed and stats
-        let (files_changed, stats) = self.get_stash_changes(oid)?;
+        let (files_changed, stats) = self.get_stash_changes(repo, oid)?;
         
         Ok(StashInfo {
             index,
@@ -152,8 +155,8 @@ impl GitStash {
     }
     
     /// Get the changes in a stash
-    fn get_stash_changes(&self, stash_oid: Oid) -> Result<(Vec<String>, StashStats)> {
-        let stash_commit = self.repo.find_commit(stash_oid)?;
+    fn get_stash_changes(&self, repo: &Repository, stash_oid: Oid) -> Result<(Vec<String>, StashStats)> {
+        let stash_commit = repo.find_commit(stash_oid)?;
         
         // Get the stash tree and parent tree
         let stash_tree = stash_commit.tree()?;
@@ -167,7 +170,7 @@ impl GitStash {
         let mut stats = StashStats::default();
         
         if let Some(parent_tree) = parent_tree {
-            let diff = self.repo.diff_tree_to_tree(
+            let diff = repo.diff_tree_to_tree(
                 Some(&parent_tree),
                 Some(&stash_tree),
                 None,
@@ -202,8 +205,9 @@ impl GitStash {
     
     /// Save current changes as a stash
     #[instrument(skip(self), fields(message = ?opts.message))]
-    pub fn save_stash(&mut self, opts: StashSaveOptions) -> Result<Oid> {
-        let signature = self.get_signature()?;
+    pub fn save_stash(&self, opts: StashSaveOptions) -> Result<Oid> {
+        let mut repo = self.get_repo()?;
+        let signature = self.get_signature(&repo)?;
         let message = opts.message.as_deref().unwrap_or("WIP on branch");
         
         // Determine stash flags
@@ -218,15 +222,16 @@ impl GitStash {
             flags |= git2::StashFlags::KEEP_INDEX;
         }
         
-        let stash_oid = self.repo.stash_save2(&signature, Some(message), Some(flags))?;
+        let stash_oid = repo.stash_save2(&signature, Some(message), Some(flags))?;
         
         info!("Created stash: {} - {}", stash_oid, message);
         Ok(stash_oid)
     }
     
     /// Quick stash with default options
-    pub fn quick_stash(&mut self) -> Result<Oid> {
-        let current_branch = self.get_current_branch_name()?;
+    pub fn quick_stash(&self) -> Result<Oid> {
+        let repo = self.get_repo()?;
+        let current_branch = self.get_current_branch_name(&repo)?;
         let message = format!("WIP on {}", current_branch);
         
         self.save_stash(StashSaveOptions {
@@ -238,7 +243,8 @@ impl GitStash {
     
     /// Apply a stash by index
     #[instrument(skip(self), fields(index = %index))]
-    pub fn apply_stash(&mut self, index: usize, opts: StashApplyOptions) -> Result<()> {
+    pub fn apply_stash(&self, index: usize, opts: StashApplyOptions) -> Result<()> {
+        let mut repo = self.get_repo()?;
         let mut apply_opts = git2::StashApplyOptions::new();
         
         // Set progress callback
@@ -248,11 +254,11 @@ impl GitStash {
         });
         
         // Set apply flags
-        if opts.reinstanate_index {
+        if opts.reinstate_index {
             apply_opts.reinstantiate_index();
         }
         
-        self.repo.stash_apply(index, Some(&mut apply_opts))?;
+        repo.stash_apply(index, Some(&mut apply_opts))?;
         
         info!("Applied stash at index {}", index);
         Ok(())
@@ -260,7 +266,8 @@ impl GitStash {
     
     /// Pop a stash (apply and remove)
     #[instrument(skip(self), fields(index = %index))]
-    pub fn pop_stash(&mut self, index: usize, opts: StashApplyOptions) -> Result<()> {
+    pub fn pop_stash(&self, index: usize, opts: StashApplyOptions) -> Result<()> {
+        let mut repo = self.get_repo()?;
         let mut apply_opts = git2::StashApplyOptions::new();
         
         // Set progress callback
@@ -270,11 +277,11 @@ impl GitStash {
         });
         
         // Set apply flags
-        if opts.reinstanate_index {
+        if opts.reinstate_index {
             apply_opts.reinstantiate_index();
         }
         
-        self.repo.stash_pop(index, Some(&mut apply_opts))?;
+        repo.stash_pop(index, Some(&mut apply_opts))?;
         
         info!("Popped stash at index {}", index);
         Ok(())
@@ -282,22 +289,24 @@ impl GitStash {
     
     /// Drop a stash
     #[instrument(skip(self), fields(index = %index))]
-    pub fn drop_stash(&mut self, index: usize) -> Result<()> {
-        self.repo.stash_drop(index)?;
+    pub fn drop_stash(&self, index: usize) -> Result<()> {
+        let mut repo = self.get_repo()?;
+        repo.stash_drop(index)?;
         info!("Dropped stash at index {}", index);
         Ok(())
     }
     
     /// Show stash diff as text
-    pub fn show_stash_diff(&mut self, index: usize) -> Result<String> {
+    pub fn show_stash_diff(&self, index: usize) -> Result<String> {
         let stashes = self.list_stashes()?;
         if index >= stashes.len() {
             return Err(anyhow::anyhow!("Stash index {} not found", index));
         }
         
+        let repo = self.get_repo()?;
         let stash_info = &stashes[index];
         let stash_oid = Oid::from_str(&stash_info.oid)?;
-        let stash_commit = self.repo.find_commit(stash_oid)?;
+        let stash_commit = repo.find_commit(stash_oid)?;
         
         // Get the stash tree and parent tree
         let stash_tree = stash_commit.tree()?;
@@ -307,7 +316,7 @@ impl GitStash {
             None
         };
         
-        let diff = self.repo.diff_tree_to_tree(
+        let diff = repo.diff_tree_to_tree(
             parent_tree.as_ref(),
             Some(&stash_tree),
             None,
@@ -328,7 +337,7 @@ impl GitStash {
     }
     
     /// Get files changed in a stash
-    pub fn get_stash_files(&mut self, index: usize) -> Result<Vec<String>> {
+    pub fn get_stash_files(&self, index: usize) -> Result<Vec<String>> {
         let stashes = self.list_stashes()?;
         if index >= stashes.len() {
             return Err(anyhow::anyhow!("Stash index {} not found", index));
@@ -338,9 +347,10 @@ impl GitStash {
     }
     
     /// Check if there are any stashes
-    pub fn has_stashes(&mut self) -> bool {
+    pub fn has_stashes(&self) -> bool {
+        let Ok(mut repo) = self.get_repo() else { return false; };
         let mut has_any = false;
-        let _ = self.repo.stash_foreach(|_index, _message, _oid| {
+        let _ = repo.stash_foreach(|_index, _message, _oid| {
             has_any = true;
             false // Stop after first stash found
         });
@@ -348,9 +358,10 @@ impl GitStash {
     }
     
     /// Get the number of stashes
-    pub fn stash_count(&mut self) -> usize {
+    pub fn stash_count(&self) -> usize {
+        let Ok(mut repo) = self.get_repo() else { return 0; };
         let mut count = 0;
-        let _ = self.repo.stash_foreach(|_index, _message, _oid| {
+        let _ = repo.stash_foreach(|_index, _message, _oid| {
             count += 1;
             true // Continue counting
         });
@@ -358,14 +369,15 @@ impl GitStash {
     }
     
     /// Auto-stash before potentially destructive operations
-    pub fn auto_stash_if_needed(&mut self) -> Result<Option<Oid>> {
+    pub fn auto_stash_if_needed(&self) -> Result<Option<Oid>> {
+        let repo = self.get_repo()?;
         // Check if working directory is clean
-        if self.is_working_directory_clean()? {
+        if self.is_working_directory_clean(&repo)? {
             return Ok(None);
         }
         
         // Create auto-stash
-        let current_branch = self.get_current_branch_name()?;
+        let current_branch = self.get_current_branch_name(&repo)?;
         let message = format!("Auto-stash before operation on {}", current_branch);
         
         let stash_oid = self.save_stash(StashSaveOptions {
@@ -379,14 +391,14 @@ impl GitStash {
     }
     
     /// Check if working directory is clean
-    fn is_working_directory_clean(&self) -> Result<bool> {
-        let statuses = self.repo.statuses(None)?;
+    fn is_working_directory_clean(&self, repo: &Repository) -> Result<bool> {
+        let statuses = repo.statuses(None)?;
         Ok(statuses.is_empty())
     }
     
     /// Get current branch name
-    fn get_current_branch_name(&self) -> Result<String> {
-        let head = self.repo.head()?;
+    fn get_current_branch_name(&self, repo: &Repository) -> Result<String> {
+        let head = repo.head()?;
         if let Some(name) = head.shorthand() {
             Ok(name.to_string())
         } else {
@@ -395,9 +407,9 @@ impl GitStash {
     }
     
     /// Get git signature for commits
-    fn get_signature(&self) -> Result<git2::Signature> {
+    fn get_signature(&self, repo: &Repository) -> Result<git2::Signature> {
         // Try to get signature from config
-        if let Ok(config) = self.repo.config() {
+        if let Ok(config) = repo.config() {
             if let (Ok(name), Ok(email)) = (config.get_string("user.name"), config.get_string("user.email")) {
                 return Ok(git2::Signature::now(&name, &email)?);
             }

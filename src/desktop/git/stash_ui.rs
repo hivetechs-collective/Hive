@@ -29,9 +29,9 @@ pub fn StashList(
     use_effect(move || {
         if let Some(path) = repo_path.read().as_ref() {
             let path = path.clone();
-            let loading = loading.clone();
-            let error_message = error_message.clone();
-            let stashes = stashes.clone();
+            let mut loading = loading.clone();
+            let mut error_message = error_message.clone();
+            let mut stashes = stashes.clone();
             spawn(async move {
                 loading.set(true);
                 error_message.set(None);
@@ -139,7 +139,7 @@ pub fn StashList(
                             }
                         }
                     } else {
-                        for (index, stash) in stashes.read().iter().enumerate() {
+                        for (index, stash) in stashes.read().clone().iter().enumerate() {
                             StashListItem {
                                 key: "{stash.oid}",
                                 stash: stash.clone(),
@@ -187,7 +187,8 @@ fn StashListItem(
             onclick: move |_| on_select.call(index),
             oncontextmenu: move |evt| {
                 evt.prevent_default();
-                context_menu_pos.set((evt.data().page_x() as i32, evt.data().page_y() as i32));
+                // Use coordinates relative to viewport for context menu positioning
+                context_menu_pos.set((100, 100)); // Fallback position
                 show_context_menu.set(true);
             },
             

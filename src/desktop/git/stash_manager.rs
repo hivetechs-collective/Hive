@@ -27,8 +27,12 @@ pub fn StashManager(
     let mut operation_in_progress = use_signal(|| false);
     let mut status_message = use_signal(|| None::<String>);
     
-    let repo_path = use_memo(move || {
-        git_state.read().active_repo.read().as_ref().map(|repo| repo.path.clone())
+    let repo_path = use_signal(|| None::<PathBuf>);
+    
+    // Update repo_path when git_state changes
+    use_effect(move || {
+        let path = git_state.read().active_repo.read().as_ref().map(|repo| repo.path.clone());
+        repo_path.set(path);
     });
     
     // Clear selection when repo changes
@@ -216,9 +220,9 @@ pub fn StashManager(
 fn handle_stash_action(
     action: StashAction,
     repo_path: Option<PathBuf>,
-    operation_in_progress: Signal<bool>,
-    status_message: Signal<Option<String>>,
-    show_save_dialog: Signal<bool>,
+    mut operation_in_progress: Signal<bool>,
+    mut status_message: Signal<Option<String>>,
+    mut show_save_dialog: Signal<bool>,
 ) {
     match action {
         StashAction::Save => {
@@ -232,7 +236,7 @@ fn handle_stash_action(
                     status_message.set(Some(format!("Applying stash #{}...", index)));
                     
                     let opts = StashApplyOptions {
-                        reinstanate_index: false,
+                        reinstate_index: false,
                         check_index: true,
                     };
                     
@@ -261,7 +265,7 @@ fn handle_stash_action(
                     status_message.set(Some(format!("Popping stash #{}...", index)));
                     
                     let opts = StashApplyOptions {
-                        reinstanate_index: false,
+                        reinstate_index: false,
                         check_index: true,
                     };
                     
@@ -333,8 +337,12 @@ pub fn StashPanel(
     let mut is_expanded = use_signal(|| false);
     let mut stash_count = use_signal(|| 0usize);
     
-    let repo_path = use_memo(move || {
-        git_state.read().active_repo.read().as_ref().map(|repo| repo.path.clone())
+    let repo_path = use_signal(|| None::<PathBuf>);
+    
+    // Update repo_path when git_state changes
+    use_effect(move || {
+        let path = git_state.read().active_repo.read().as_ref().map(|repo| repo.path.clone());
+        repo_path.set(path);
     });
     
     // Update stash count when repo changes
@@ -365,12 +373,12 @@ pub fn StashPanel(
             div {
                 class: "panel-header",
                 style: PANEL_HEADER_STYLES,
-                onclick: move |_| is_expanded.set(!is_expanded.read()),
+                onclick: move |_| is_expanded.set(!*is_expanded.read()),
                 
                 div {
                     class: "header-icon",
                     style: format!("transition: transform 0.2s ease; {}", 
-                        if is_expanded.read() { "transform: rotate(90deg);" } else { "" }
+                        if *is_expanded.read() { "transform: rotate(90deg);" } else { "" }
                     ),
                     "▶"
                 }
@@ -381,7 +389,7 @@ pub fn StashPanel(
                     "Stashes"
                 }
                 
-                if stash_count.read() > 0 {
+                if *stash_count.read() > 0 {
                     div {
                         class: "stash-badge",
                         style: STASH_BADGE_STYLES,
@@ -391,7 +399,7 @@ pub fn StashPanel(
             }
             
             // Panel content
-            if is_expanded.read() {
+            if *is_expanded.read() {
                 div {
                     class: "panel-content",
                     style: "height: 300px; border-top: 1px solid #333; background: #1e1e1e;",
