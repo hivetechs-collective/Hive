@@ -8,7 +8,9 @@ use std::path::PathBuf;
 /// File status in git
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileStatus {
+    pub path: std::path::PathBuf,
     pub status_type: StatusType,
+    pub is_staged: bool,
     pub has_staged_changes: bool,
     pub has_unstaged_changes: bool,
 }

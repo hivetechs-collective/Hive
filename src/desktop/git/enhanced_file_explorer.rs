@@ -4,6 +4,7 @@
 
 use dioxus::prelude::*;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use crate::desktop::{
     file_explorer::FileExplorer,
     git::{
@@ -35,11 +36,14 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
     let decoration_manager = use_git_decoration_manager();
     let decoration_watcher = use_git_decoration_watcher(decoration_manager.clone());
     
+    // Clone watcher for use in the effect
+    let decoration_watcher_for_effect = decoration_watcher.clone();
+    
     // Start watching for git changes when project changes
     use_effect(move || {
         if let Some(project) = &app_state.read().current_project {
             let repo_path = project.root_path.clone();
-            let mut watcher = decoration_watcher.clone();
+            let mut watcher = decoration_watcher_for_effect.clone();
             spawn(async move {
                 if let Err(e) = watcher.start_watching(repo_path).await {
                     tracing::error!("Failed to start git decoration watcher: {}", e);
@@ -101,11 +105,14 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
                             class: "btn-icon",
                             title: "Refresh Git Status",
                             style: "width: 24px; height: 24px; padding: 0; background: transparent; border: none; color: var(--vscode-foreground); cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center;",
-                            onclick: move |_| {
+                            onclick: {
                                 let watcher = decoration_watcher.clone();
-                                spawn(async move {
-                                    watcher.trigger_update(DecorationEvent::ManualRefresh).await;
-                                });
+                                move |_| {
+                                    let watcher = watcher.clone();
+                                    spawn(async move {
+                                        watcher.trigger_update(DecorationEvent::ManualRefresh).await;
+                                    });
+                                }
                             },
                             i { 
                                 class: "fa-solid fa-arrows-rotate",
@@ -188,7 +195,7 @@ pub fn EnhancedFileExplorer(props: EnhancedFileExplorerProps) -> Element {
         // Configuration dialog
         if *show_decoration_config.read() {
             GitDecorationConfigUI {
-                decoration_manager: decoration_manager.clone(),
+                decoration_manager: Arc::new(Mutex::new(decoration_manager.clone())),
                 visible: true,
                 on_close: move |_| show_decoration_config.set(false),
             }
@@ -277,17 +284,20 @@ pub fn GitDecorationIntegration() -> Element {
     let app_state = use_context::<Signal<AppState>>();
 
     // Auto-start git watching when project is loaded
-    use_effect(move || {
-        if let Some(project) = &app_state.read().current_project {
-            let repo_path = project.root_path.clone();
-            let mut watcher = decoration_watcher.clone();
-            spawn(async move {
-                if let Err(e) = watcher.start_watching(repo_path).await {
-                    tracing::error!("Failed to initialize git decorations: {}", e);
-                } else {
-                    tracing::info!("Git decorations initialized successfully");
-                }
-            });
+    use_effect({
+        let decoration_watcher = decoration_watcher.clone();
+        move || {
+            if let Some(project) = &app_state.read().current_project {
+                let repo_path = project.root_path.clone();
+                let mut watcher = decoration_watcher.clone();
+                spawn(async move {
+                    if let Err(e) = watcher.start_watching(repo_path).await {
+                        tracing::error!("Failed to initialize git decorations: {}", e);
+                    } else {
+                        tracing::info!("Git decorations initialized successfully");
+                    }
+                });
+            }
         }
     });
 

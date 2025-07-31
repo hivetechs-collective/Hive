@@ -52,8 +52,8 @@ impl ProblemNavigationHandler {
 
     /// Set editor integration type
     pub fn set_editor_integration(&mut self, integration: EditorIntegration) {
-        self.editor_integration = Some(integration);
         info!("📝 Editor integration set to: {:?}", integration);
+        self.editor_integration = Some(integration);
     }
 
     /// Navigate to a problem location

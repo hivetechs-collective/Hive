@@ -397,6 +397,7 @@ impl DiffActionProcessor {
 }
 
 /// Batch processor for handling multiple similar operations efficiently
+#[derive(Clone)]
 pub struct BatchProcessor {
     processor: Arc<DiffActionProcessor>,
     pending_operations: Arc<Mutex<HashMap<String, Vec<DiffAction>>>>, // file_path -> actions

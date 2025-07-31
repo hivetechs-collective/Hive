@@ -3,23 +3,38 @@
 //! User interface for configuring git decoration appearance and behavior
 
 use dioxus::prelude::*;
+use std::sync::{Arc, Mutex};
 use crate::desktop::git::decorations::{GitDecorationConfig, DecorationStyles, GitDecorationManager};
 
 /// Props for the decoration config UI
-#[derive(Props, Clone, PartialEq)]
+#[derive(Props, Clone)]
 pub struct DecorationConfigProps {
     /// The decoration manager to configure
-    pub decoration_manager: GitDecorationManager,
+    pub decoration_manager: Arc<Mutex<GitDecorationManager>>,
     /// Whether the config panel is visible
     pub visible: bool,
     /// Callback when config panel should be closed
     pub on_close: EventHandler<()>,
 }
 
+impl PartialEq for DecorationConfigProps {
+    fn eq(&self, other: &Self) -> bool {
+        // Compare by Arc pointer equality and visible state
+        Arc::ptr_eq(&self.decoration_manager, &other.decoration_manager) 
+            && self.visible == other.visible
+    }
+}
+
 /// Git decoration configuration UI component
 #[component]
 pub fn GitDecorationConfigUI(props: DecorationConfigProps) -> Element {
-    let mut local_config = use_signal(|| props.decoration_manager.config.read().clone());
+    let mut local_config = use_signal(|| {
+        if let Ok(manager) = props.decoration_manager.try_lock() {
+            manager.config.read().clone()
+        } else {
+            GitDecorationConfig::default()
+        }
+    });
     
     if !props.visible {
         return rsx! { div {} };
@@ -393,7 +408,9 @@ pub fn GitDecorationConfigUI(props: DecorationConfigProps) -> Element {
                             class: "btn btn-primary",
                             style: "padding: 8px 16px; font-size: 13px;",
                             onclick: move |_| {
-                                props.decoration_manager.update_config(local_config.read().clone());
+                                if let Ok(mut manager) = props.decoration_manager.try_lock() {
+                                    manager.update_config(local_config.read().clone());
+                                }
                                 props.on_close.call(());
                             },
                             "Apply"

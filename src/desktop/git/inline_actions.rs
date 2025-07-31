@@ -257,6 +257,16 @@ pub fn EnhancedDiffHunk(props: EnhancedDiffHunkProps) -> Element {
     let mut processing_lines = use_signal(|| std::collections::HashSet::<String>::new());
     let mut processing_hunk = use_signal(|| false);
     
+    // Pre-process lines to extract IDs for use in closures
+    let lines_with_ids: Vec<(String, String, crate::desktop::git::DiffLine)> = props.hunk.lines.clone()
+        .into_iter()
+        .map(|line| {
+            let id_for_key = line.line_id.clone();
+            let id_for_processing = line.line_id.clone();
+            (id_for_key, id_for_processing, line)
+        })
+        .collect();
+    
     rsx! {
         div {
             class: "enhanced-diff-hunk",
@@ -292,96 +302,96 @@ pub fn EnhancedDiffHunk(props: EnhancedDiffHunkProps) -> Element {
                 }
             }
             
-            // Hunk lines with line-level actions
-            for line in &props.hunk.lines {
+            // Hunk lines with line-level actions  
+            for (line_id_for_key, line_id_for_processing, line) in lines_with_ids {
                 div {
-                    key: "{line.line_id}",
-                    class: "enhanced-diff-line",
-                    style: format!(
-                        "position: relative; display: flex; min-height: 20px; {}",
-                        match line.line_type {
-                            crate::desktop::git::DiffLineType::Added => "background-color: rgba(155, 185, 85, 0.2);",
-                            crate::desktop::git::DiffLineType::Deleted => "background-color: rgba(255, 97, 136, 0.2);",
-                            crate::desktop::git::DiffLineType::Modified => "background-color: rgba(97, 175, 239, 0.2);",
-                            crate::desktop::git::DiffLineType::Unchanged => "",
-                        }
-                    ),
-                    onmouseenter: move |_| {
-                        // Show line actions on hover
-                    },
-                    
-                    // Line type indicator
-                    span {
+                        key: "{line_id_for_key}",
+                        class: "enhanced-diff-line",
                         style: format!(
-                            "width: 20px; text-align: center; user-select: none; color: {};",
+                            "position: relative; display: flex; min-height: 20px; {}",
                             match line.line_type {
-                                crate::desktop::git::DiffLineType::Added => "#9bb955",
-                                crate::desktop::git::DiffLineType::Deleted => "#ff6188",
-                                _ => "transparent",
+                                crate::desktop::git::DiffLineType::Added => "background-color: rgba(155, 185, 85, 0.2);",
+                                crate::desktop::git::DiffLineType::Deleted => "background-color: rgba(255, 97, 136, 0.2);",
+                                crate::desktop::git::DiffLineType::Modified => "background-color: rgba(97, 175, 239, 0.2);",
+                                crate::desktop::git::DiffLineType::Unchanged => "",
                             }
                         ),
-                        match line.line_type {
-                            crate::desktop::git::DiffLineType::Added => "+",
-                            crate::desktop::git::DiffLineType::Deleted => "-",
-                            _ => " ",
-                        }
-                    }
-                    
-                    // Line numbers
-                    span {
-                        style: "color: #858585; width: 40px; text-align: right; padding-right: 8px; user-select: none;",
-                        if let Some(num) = line.original_line_number {
-                            "{num}"
-                        } else {
-                            ""
-                        }
-                    }
-                    
-                    span {
-                        style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
-                        if let Some(num) = line.modified_line_number {
-                            "{num}"
-                        } else {
-                            ""
-                        }
-                    }
-                    
-                    // Line content
-                    span {
-                        style: "flex: 1; white-space: pre; padding-right: 60px;", // Extra padding for action buttons
-                        "{line.content}"
-                    }
-                    
-                    // Line inline actions
-                    LineInlineActions {
-                        line: line.clone(),
-                        file_path: props.file_path.clone(),
-                        repo_path: props.repo_path.clone(),
-                        is_processing: processing_lines().contains(&line.line_id),
-                        on_action: move |action| {
-                            let line_id = line.line_id.clone();
-                            processing_lines.with_mut(|lines| {
-                                lines.insert(line_id.clone());
-                            });
-                            
-                            if let Some(handler) = &props.on_line_action {
-                                handler.call(action);
-                            }
-                            
-                            // Reset processing state after a delay
-                            spawn(async move {
-                                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                                processing_lines.with_mut(|lines| {
-                                    lines.remove(&line_id);
-                                });
-                            });
+                        onmouseenter: move |_| {
+                            // Show line actions on hover
                         },
+                        
+                        // Line type indicator
+                        span {
+                            style: format!(
+                                "width: 20px; text-align: center; user-select: none; color: {};",
+                                match line.line_type {
+                                    crate::desktop::git::DiffLineType::Added => "#9bb955",
+                                    crate::desktop::git::DiffLineType::Deleted => "#ff6188",
+                                    _ => "transparent",
+                                }
+                            ),
+                            match line.line_type {
+                                crate::desktop::git::DiffLineType::Added => "+",
+                                crate::desktop::git::DiffLineType::Deleted => "-",
+                                _ => " ",
+                            }
+                        }
+                        
+                        // Line numbers
+                        span {
+                            style: "color: #858585; width: 40px; text-align: right; padding-right: 8px; user-select: none;",
+                            if let Some(num) = line.original_line_number {
+                                "{num}"
+                            } else {
+                                ""
+                            }
+                        }
+                        
+                        span {
+                            style: "color: #858585; width: 40px; text-align: right; padding-right: 12px; user-select: none;",
+                            if let Some(num) = line.modified_line_number {
+                                "{num}"
+                            } else {
+                                ""
+                            }
+                        }
+                        
+                        // Line content
+                        span {
+                            style: "flex: 1; white-space: pre; padding-right: 60px;", // Extra padding for action buttons
+                            "{line.content}"
+                        }
+                        
+                        // Line inline actions
+                        LineInlineActions {
+                            line: line.clone(),
+                            file_path: props.file_path.clone(),
+                            repo_path: props.repo_path.clone(),
+                            is_processing: processing_lines().contains(&line_id_for_processing),
+                            on_action: move |action| {
+                                let line_id = line_id_for_processing.clone();
+                                processing_lines.with_mut(|lines| {
+                                    lines.insert(line_id.clone());
+                                });
+                                
+                                if let Some(handler) = &props.on_line_action {
+                                    handler.call(action);
+                                }
+                                
+                                // Reset processing state after a delay
+                                spawn(async move {
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                                    processing_lines.with_mut(|lines| {
+                                        lines.remove(&line_id);
+                                    });
+                                });
+                            },
+                        }
                     }
                 }
             }
         }
     }
-}
 
 /// Props for enhanced diff hunk component
 #[derive(Props, Clone, PartialEq)]

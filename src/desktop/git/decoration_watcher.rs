@@ -201,7 +201,7 @@ impl GitDecorationWatcher {
 
     /// Process a decoration event
     async fn process_event(
-        decoration_manager: &GitDecorationManager,
+        decoration_manager: &mut GitDecorationManager,
         repository_path: &Arc<RwLock<Option<PathBuf>>>,
         event: DecorationEvent,
     ) {
@@ -228,7 +228,7 @@ impl GitDecorationWatcher {
     }
 
     /// Update git status for all files in repository
-    async fn update_git_status(decoration_manager: &GitDecorationManager, repo_path: &Path) {
+    async fn update_git_status(decoration_manager: &mut GitDecorationManager, repo_path: &Path) {
         match Self::get_git_status_for_repo(repo_path).await {
             Ok(statuses) => {
                 decoration_manager.update_file_statuses(statuses);

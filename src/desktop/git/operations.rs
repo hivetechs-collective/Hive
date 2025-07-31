@@ -8,6 +8,7 @@ use git2::{Repository, Signature, ObjectType, Oid, RemoteCallbacks, PushOptions,
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::Mutex as TokioMutex;
 use std::time::Instant;
 use tracing::{info, warn, error, instrument};
 
@@ -23,10 +24,8 @@ pub async fn fetch(repo_path: &Path) -> Result<()> {
     let manager = get_optimized_git_manager();
     if let Ok(repo) = manager.get_repository(&repo_path).await {
         // Use the optimized fetch operation
-        let result = tokio::task::spawn_blocking(move || -> Result<()> {
-            let ops = GitOperations::new(&repo_path)?;
-            ops.fetch_with_progress("origin", None, None)
-        }).await?;
+        let ops = GitOperations::new(&repo_path)?;
+        let result = ops.fetch_with_progress("origin", None, None).await?;
         
         let elapsed = start_time.elapsed();
         info!("Optimized fetch completed in {:?}", elapsed);
@@ -37,13 +36,12 @@ pub async fn fetch(repo_path: &Path) -> Result<()> {
             log_performance_stats();
         }
         
-        result
+        Ok(result)
     } else {
         // Fallback to regular fetch
-        tokio::task::spawn_blocking(move || -> Result<()> {
-            let ops = GitOperations::new(&repo_path)?;
-            ops.fetch("origin").context("Failed to fetch from origin")
-        }).await?
+        let ops = GitOperations::new(&repo_path)?;
+        ops.fetch("origin").await.context("Failed to fetch from origin")?;
+        Ok(())
     }
 }
 
@@ -55,32 +53,30 @@ pub async fn pull(repo_path: &Path) -> Result<()> {
     // Try to use optimized manager first
     let manager = get_optimized_git_manager();
     if let Ok(repo) = manager.get_repository(&repo_path).await {
-        let result = tokio::task::spawn_blocking(move || -> Result<()> {
-            let repo = Repository::discover(&repo_path)?;
-            let head = repo.head()?;
-            if let Some(branch_name) = head.shorthand() {
-                let ops = GitOperations::new(&repo_path)?;
-                ops.pull_with_progress("origin", branch_name, None, None)
-            } else {
-                Err(anyhow::anyhow!("Unable to determine current branch"))
-            }
-        }).await?;
+        let repo = Repository::discover(&repo_path)?;
+        let head = repo.head()?;
+        let result = if let Some(branch_name) = head.shorthand() {
+            let ops = GitOperations::new(&repo_path)?;
+            ops.pull_with_progress("origin", branch_name, None, None).await?;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Unable to determine current branch"))
+        }?;
         
         let elapsed = start_time.elapsed();
         info!("Optimized pull completed in {:?}", elapsed);
-        result
+        Ok(result)
     } else {
         // Fallback to regular pull
-        tokio::task::spawn_blocking(move || -> Result<()> {
-            let repo = Repository::discover(&repo_path)?;
-            let head = repo.head()?;
-            if let Some(branch_name) = head.shorthand() {
-                let ops = GitOperations::new(&repo_path)?;
-                ops.pull("origin", branch_name).context("Failed to pull from origin")
-            } else {
-                Err(anyhow::anyhow!("Unable to determine current branch"))
-            }
-        }).await?
+        let repo = Repository::discover(&repo_path)?;
+        let head = repo.head()?;
+        if let Some(branch_name) = head.shorthand() {
+            let ops = GitOperations::new(&repo_path)?;
+            ops.pull("origin", branch_name).await.context("Failed to pull from origin")?;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Unable to determine current branch"))
+        }
     }
 }
 
@@ -92,32 +88,30 @@ pub async fn push(repo_path: &Path) -> Result<()> {
     // Try to use optimized manager first
     let manager = get_optimized_git_manager();
     if let Ok(repo) = manager.get_repository(&repo_path).await {
-        let result = tokio::task::spawn_blocking(move || -> Result<()> {
-            let repo = Repository::discover(&repo_path)?;
-            let head = repo.head()?;
-            if let Some(branch_name) = head.shorthand() {
-                let ops = GitOperations::new(&repo_path)?;
-                ops.push_with_progress("origin", branch_name, None, None)
-            } else {
-                Err(anyhow::anyhow!("Unable to determine current branch"))
-            }
-        }).await?;
+        let repo = Repository::discover(&repo_path)?;
+        let head = repo.head()?;
+        let result = if let Some(branch_name) = head.shorthand() {
+            let ops = GitOperations::new(&repo_path)?;
+            ops.push_with_progress("origin", branch_name, None, None).await?;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Unable to determine current branch"))
+        }?;
         
         let elapsed = start_time.elapsed();
         info!("Optimized push completed in {:?}", elapsed);
-        result
+        Ok(result)
     } else {
         // Fallback to regular push
-        tokio::task::spawn_blocking(move || -> Result<()> {
-            let repo = Repository::discover(&repo_path)?;
-            let head = repo.head()?;
-            if let Some(branch_name) = head.shorthand() {
-                let ops = GitOperations::new(&repo_path)?;
-                ops.push("origin", branch_name).context("Failed to push to origin")
-            } else {
-                Err(anyhow::anyhow!("Unable to determine current branch"))
-            }
-        }).await?
+        let repo = Repository::discover(&repo_path)?;
+        let head = repo.head()?;
+        if let Some(branch_name) = head.shorthand() {
+            let ops = GitOperations::new(&repo_path)?;
+            ops.push("origin", branch_name).await.context("Failed to push to origin")?;
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Unable to determine current branch"))
+        }
     }
 }
 
@@ -125,17 +119,15 @@ pub async fn push(repo_path: &Path) -> Result<()> {
 pub async fn push_with_upstream(repo_path: &Path, branch_name: &str) -> Result<()> {
     let repo_path = repo_path.to_path_buf();
     let branch_name = branch_name.to_string();
-    tokio::task::spawn_blocking(move || -> Result<()> {
-        let ops = GitOperations::new(&repo_path)?;
-        ops.push_with_upstream("origin", &branch_name)
-            .context("Failed to push with upstream to origin")
-    })
-    .await?
+    let ops = GitOperations::new(&repo_path)?;
+    ops.push_with_upstream("origin", &branch_name).await
+        .context("Failed to push with upstream to origin")?;
+    Ok(())
 }
 
 /// Git operations service for performing git actions with performance optimizations
 pub struct GitOperations {
-    repo: Repository,
+    repo: Arc<TokioMutex<Repository>>,
     repo_path: PathBuf,
     batch_processor: Option<BatchProcessor>,
 }
@@ -158,7 +150,7 @@ impl GitOperations {
         ));
         
         Ok(Self {
-            repo,
+            repo: Arc::new(TokioMutex::new(repo)),
             repo_path,
             batch_processor,
         })
@@ -174,7 +166,7 @@ impl GitOperations {
             .to_path_buf();
         
         Ok(Self {
-            repo,
+            repo: Arc::new(TokioMutex::new(repo)),
             repo_path,
             batch_processor: None,
         })
@@ -182,35 +174,47 @@ impl GitOperations {
     
     /// Stage a file for commit with optimizations
     #[instrument(skip(self), fields(file = %file_path.display()))]
-    pub fn stage_file(&self, file_path: &Path) -> Result<()> {
+    pub async fn stage_file(&self, file_path: &Path) -> Result<()> {
         let start_time = Instant::now();
+        let file_path = file_path.to_path_buf();
+        let repo_path = self.repo_path.clone();
+        let repo = self.repo.clone();
         
-        let relative_path = file_path.strip_prefix(&self.repo_path)
-            .context("File is not in repository")?;
-        
-        let mut index = self.repo.index()?;
-        index.add_path(relative_path)?;
-        index.write()?;
-        
-        let elapsed = start_time.elapsed();
-        info!("Staged file: {:?} in {:?}", relative_path, elapsed);
-        Ok(())
+        {
+            let relative_path = file_path.strip_prefix(&repo_path)
+                .context("File is not in repository")?;
+            
+            let repo = repo.lock().await;
+            let mut index = repo.index()?;
+            index.add_path(relative_path)?;
+            index.write()?;
+            
+            let elapsed = start_time.elapsed();
+            info!("Staged file: {:?} in {:?}", relative_path, elapsed);
+            Ok(())
+        }
     }
     
     /// Unstage a file
-    pub fn unstage_file(&self, file_path: &Path) -> Result<()> {
-        let relative_path = file_path.strip_prefix(&self.repo_path)
-            .context("File is not in repository")?;
+    pub async fn unstage_file(&self, file_path: &Path) -> Result<()> {
+        let file_path = file_path.to_path_buf();
+        let repo_path = self.repo_path.clone();
+        let repo = self.repo.clone();
         
-        // Get HEAD commit
-        let head = self.repo.head()?;
-        let head_commit = head.peel_to_commit()?;
-        let head_tree = head_commit.tree()?;
-        
-        // Reset the file to HEAD
-        let mut index = self.repo.index()?;
-        let entry = head_tree.get_path(relative_path)?;
-        index.add(&git2::IndexEntry {
+        {
+            let relative_path = file_path.strip_prefix(&repo_path)
+                .context("File is not in repository")?;
+            
+            let repo = repo.lock().await;
+            // Get HEAD commit
+            let head = repo.head()?;
+            let head_commit = head.peel_to_commit()?;
+            let head_tree = head_commit.tree()?;
+            
+            // Reset the file to HEAD
+            let mut index = repo.index()?;
+            let entry = head_tree.get_path(relative_path)?;
+            index.add(&git2::IndexEntry {
             ctime: git2::IndexTime::new(0, 0),
             mtime: git2::IndexTime::new(0, 0),
             dev: 0,
@@ -223,19 +227,21 @@ impl GitOperations {
             flags: 0,
             flags_extended: 0,
             path: relative_path.to_string_lossy().as_bytes().to_vec(),
-        })?;
-        index.write()?;
-        
-        info!("Unstaged file: {:?}", relative_path);
-        Ok(())
+            })?;
+            index.write()?;
+            
+            info!("Unstaged file: {:?}", relative_path);
+            Ok(())
+        }
     }
     
     /// Stage all changes with batch processing
     #[instrument(skip(self))]
-    pub fn stage_all(&self) -> Result<()> {
+    pub async fn stage_all(&self) -> Result<()> {
         let start_time = Instant::now();
         
-        let mut index = self.repo.index()?;
+        let repo = self.repo.lock().await;
+        let mut index = repo.index()?;
         index.add_all(&["*"], git2::IndexAddOption::DEFAULT, None)?;
         index.write()?;
         
@@ -262,19 +268,20 @@ impl GitOperations {
             // Fallback to sequential processing
             let mut results = Vec::new();
             for file_path in file_paths {
-                results.push(self.stage_file(&file_path));
+                results.push(self.stage_file(&file_path).await);
             }
             results
         }
     }
     
     /// Unstage all changes
-    pub fn unstage_all(&self) -> Result<()> {
-        let head = self.repo.head()?;
+    pub async fn unstage_all(&self) -> Result<()> {
+        let repo = self.repo.lock().await;
+        let head = repo.head()?;
         let head_commit = head.peel_to_commit()?;
         let head_tree = head_commit.tree()?;
         
-        let mut index = self.repo.index()?;
+        let mut index = repo.index()?;
         index.read_tree(&head_tree)?;
         index.write()?;
         
@@ -283,13 +290,14 @@ impl GitOperations {
     }
     
     /// Commit staged changes
-    pub fn commit(&self, message: &str) -> Result<Oid> {
-        let signature = self.get_signature()?;
-        let mut index = self.repo.index()?;
+    pub async fn commit(&self, message: &str) -> Result<Oid> {
+        let signature = self.get_signature().await?;
+        let repo = self.repo.lock().await;
+        let mut index = repo.index()?;
         let tree_id = index.write_tree()?;
-        let tree = self.repo.find_tree(tree_id)?;
+        let tree = repo.find_tree(tree_id)?;
         
-        let parent_commit = if let Ok(head) = self.repo.head() {
+        let parent_commit = if let Ok(head) = repo.head() {
             Some(head.peel_to_commit()?)
         } else {
             None
@@ -301,7 +309,7 @@ impl GitOperations {
             vec![]
         };
         
-        let commit_id = self.repo.commit(
+        let commit_id = repo.commit(
             Some("HEAD"),
             &signature,
             &signature,
@@ -315,14 +323,15 @@ impl GitOperations {
     }
     
     /// Push to remote with progress callback and cancellation support
-    pub fn push_with_progress(
+    pub async fn push_with_progress(
         &self, 
         remote_name: &str, 
         branch_name: &str,
         progress_callback: Option<ProgressCallback>,
         cancel_token: Option<CancellationToken>,
     ) -> Result<()> {
-        let mut remote = self.repo.find_remote(remote_name)?;
+        let repo = self.repo.lock().await;
+        let mut remote = repo.find_remote(remote_name)?;
         let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
         
         // Create progress tracking state
@@ -382,14 +391,15 @@ impl GitOperations {
     }
     
     /// Push to remote (convenience method without progress)
-    pub fn push(&self, remote_name: &str, branch_name: &str) -> Result<()> {
-        self.push_with_progress(remote_name, branch_name, None, None)
+    pub async fn push(&self, remote_name: &str, branch_name: &str) -> Result<()> {
+        self.push_with_progress(remote_name, branch_name, None, None).await
     }
     
     /// Push branch to remote and set upstream tracking
-    pub fn push_with_upstream(&self, remote_name: &str, branch_name: &str) -> Result<()> {
+    pub async fn push_with_upstream(&self, remote_name: &str, branch_name: &str) -> Result<()> {
         // First push the branch
-        let mut remote = self.repo.find_remote(remote_name)?;
+        let repo = self.repo.lock().await;
+        let mut remote = repo.find_remote(remote_name)?;
         let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
         
         let mut callbacks = RemoteCallbacks::new();
@@ -403,7 +413,7 @@ impl GitOperations {
         remote.push(&[&refspec], Some(&mut push_options))?;
         
         // Set up branch tracking
-        let mut branch = self.repo.find_branch(branch_name, git2::BranchType::Local)?;
+        let mut branch = repo.find_branch(branch_name, git2::BranchType::Local)?;
         let upstream_name = format!("{}/{}", remote_name, branch_name);
         branch.set_upstream(Some(&upstream_name))?;
         
@@ -412,7 +422,7 @@ impl GitOperations {
     }
     
     /// Pull from remote with progress callback and cancellation support
-    pub fn pull_with_progress(
+    pub async fn pull_with_progress(
         &self, 
         remote_name: &str, 
         branch_name: &str,
@@ -420,7 +430,8 @@ impl GitOperations {
         cancel_token: Option<CancellationToken>,
     ) -> Result<()> {
         // Fetch first
-        let mut remote = self.repo.find_remote(remote_name)?;
+        let repo = self.repo.lock().await;
+        let mut remote = repo.find_remote(remote_name)?;
         let refspec = format!("refs/heads/{}:refs/remotes/{}/{}", branch_name, remote_name, branch_name);
         
         let mut callbacks = RemoteCallbacks::new();
@@ -456,7 +467,7 @@ impl GitOperations {
         remote.fetch(&[&refspec], Some(&mut fetch_opts), None)?;
         
         // Now merge
-        let fetch_head = self.repo.fetchhead_foreach(|ref_name, remote_url, oid, is_merge| {
+        let fetch_head = repo.fetchhead_foreach(|ref_name, remote_url, oid, is_merge| {
             if is_merge {
                 info!("Merging {} from {:?}", oid, std::str::from_utf8(remote_url).unwrap_or("<invalid UTF-8>"));
                 true
@@ -470,18 +481,19 @@ impl GitOperations {
     }
     
     /// Pull from remote (convenience method without progress)
-    pub fn pull(&self, remote_name: &str, branch_name: &str) -> Result<()> {
-        self.pull_with_progress(remote_name, branch_name, None, None)
+    pub async fn pull(&self, remote_name: &str, branch_name: &str) -> Result<()> {
+        self.pull_with_progress(remote_name, branch_name, None, None).await
     }
     
     /// Fetch from remote with progress callback and cancellation support
-    pub fn fetch_with_progress(
+    pub async fn fetch_with_progress(
         &self, 
         remote_name: &str,
         progress_callback: Option<ProgressCallback>,
         cancel_token: Option<CancellationToken>,
     ) -> Result<()> {
-        let mut remote = self.repo.find_remote(remote_name)?;
+        let repo = self.repo.lock().await;
+        let mut remote = repo.find_remote(remote_name)?;
         
         let mut callbacks = RemoteCallbacks::new();
         callbacks.credentials(|_url, username_from_url, _allowed_types| {
@@ -520,22 +532,23 @@ impl GitOperations {
     }
     
     /// Fetch from remote (convenience method without progress)
-    pub fn fetch(&self, remote_name: &str) -> Result<()> {
-        self.fetch_with_progress(remote_name, None, None)
+    pub async fn fetch(&self, remote_name: &str) -> Result<()> {
+        self.fetch_with_progress(remote_name, None, None).await
     }
     
     /// Discard changes in a file
-    pub fn discard_file_changes(&self, file_path: &Path) -> Result<()> {
+    pub async fn discard_file_changes(&self, file_path: &Path) -> Result<()> {
         let relative_path = file_path.strip_prefix(&self.repo_path)
             .context("File is not in repository")?;
         
         // Get the file content from HEAD
-        let head = self.repo.head()?;
+        let repo = self.repo.lock().await;
+        let head = repo.head()?;
         let head_commit = head.peel_to_commit()?;
         let head_tree = head_commit.tree()?;
         
         if let Ok(entry) = head_tree.get_path(relative_path) {
-            let blob = self.repo.find_blob(entry.id())?;
+            let blob = repo.find_blob(entry.id())?;
             std::fs::write(file_path, blob.content())?;
             info!("Discarded changes in: {:?}", relative_path);
         } else {
@@ -550,9 +563,10 @@ impl GitOperations {
     }
     
     /// Get git signature for commits
-    fn get_signature(&self) -> Result<Signature> {
+    async fn get_signature(&self) -> Result<Signature> {
         // Try to get signature from config
-        if let Ok(config) = self.repo.config() {
+        let repo = self.repo.lock().await;
+        if let Ok(config) = repo.config() {
             if let (Ok(name), Ok(email)) = (config.get_string("user.name"), config.get_string("user.email")) {
                 return Ok(Signature::now(&name, &email)?);
             }
@@ -563,8 +577,9 @@ impl GitOperations {
     }
     
     /// Get the default remote name (usually "origin")
-    pub fn get_default_remote(&self) -> Result<String> {
-        let remotes = self.repo.remotes()?;
+    pub async fn get_default_remote(&self) -> Result<String> {
+        let repo = self.repo.lock().await;
+        let remotes = repo.remotes()?;
         
         // Look for "origin" first
         for i in 0..remotes.len() {
@@ -584,8 +599,9 @@ impl GitOperations {
     }
     
     /// Get current branch name
-    pub fn get_current_branch(&self) -> Result<String> {
-        let head = self.repo.head()?;
+    pub async fn get_current_branch(&self) -> Result<String> {
+        let repo = self.repo.lock().await;
+        let head = repo.head()?;
         
         if let Some(name) = head.shorthand() {
             Ok(name.to_string())
@@ -595,7 +611,7 @@ impl GitOperations {
     }
     
     /// Sync operation (pull then push) with progress
-    pub fn sync_with_progress(
+    pub async fn sync_with_progress(
         &self,
         remote_name: &str,
         branch_name: &str,
@@ -613,7 +629,7 @@ impl GitOperations {
             });
         }
         
-        self.pull_with_progress(remote_name, branch_name, progress_callback.clone(), cancel_token.clone())?;
+        self.pull_with_progress(remote_name, branch_name, progress_callback.clone(), cancel_token.clone()).await?;
         
         // Check for cancellation
         if let Some(ref token) = cancel_token {
@@ -633,7 +649,7 @@ impl GitOperations {
             });
         }
         
-        self.push_with_progress(remote_name, branch_name, progress_callback, cancel_token)?;
+        self.push_with_progress(remote_name, branch_name, progress_callback, cancel_token).await?;
         
         Ok(())
     }
