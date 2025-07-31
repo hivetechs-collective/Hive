@@ -436,6 +436,8 @@ impl BatchProcessor {
         let file_path_clone = file_path.clone();
         let debounce_delay = processor.config.debounce_delay;
         
+        // Clone what we need for the async block (avoiding the processor)
+        let processor_clone = self.clone();
         tokio::spawn(async move {
             tokio::time::sleep(debounce_delay).await;
             
@@ -453,7 +455,7 @@ impl BatchProcessor {
                 };
                 
                 for action in actions {
-                    if let Err(e) = processor.queue_action(action, PathBuf::from(&file_path_clone)).await {
+                    if let Err(e) = processor_clone.queue_action(action, PathBuf::from(&file_path_clone)).await {
                         error!("Failed to queue batched action: {}", e);
                     }
                 }

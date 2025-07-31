@@ -1,0 +1,389 @@
+/* Git Decoration Styles for VS Code-like appearance */
+
+/* File git decorations */
+.file-git-decoration {
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.file-git-decoration:hover {
+    opacity: 1.0;
+}
+
+/* Folder git decorations */
+.folder-git-decoration {
+    margin-left: 4px;
+    font-size: 10px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.folder-git-decoration:hover {
+    opacity: 1.0;
+}
+
+/* Git status classes for file tree items */
+.file-tree-item.git-modified {
+    border-left: 2px solid var(--git-modified-color, #e2c08d);
+}
+
+.file-tree-item.git-added {
+    border-left: 2px solid var(--git-added-color, #73c991);
+}
+
+.file-tree-item.git-deleted {
+    border-left: 2px solid var(--git-deleted-color, #f48771);
+    opacity: 0.6;
+}
+
+.file-tree-item.git-untracked {
+    border-left: 2px solid var(--git-untracked-color, #73c991);
+}
+
+.file-tree-item.git-renamed {
+    border-left: 2px solid var(--git-renamed-color, #75beff);
+}
+
+.file-tree-item.git-copied {
+    border-left: 2px solid var(--git-copied-color, #73c991);
+}
+
+.file-tree-item.git-ignored {
+    opacity: 0.5;
+    color: var(--git-ignored-color, #6b6b6b);
+}
+
+/* Conflict indicators */
+.file-tree-item.git-conflict {
+    border-left: 2px solid var(--git-conflict-color, #f44747);
+    background: rgba(244, 71, 71, 0.1);
+}
+
+.file-tree-item.git-conflict .file-name {
+    color: var(--git-conflict-color, #f44747);
+}
+
+/* Gutter decorations for editor */
+.gutter-decoration {
+    position: absolute;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    opacity: 0.8;
+}
+
+.gutter-decoration.modified {
+    background-color: var(--git-modified-color, #e2c08d);
+}
+
+.gutter-decoration.added {
+    background-color: var(--git-added-color, #73c991);
+}
+
+.gutter-decoration.deleted {
+    background-color: var(--git-deleted-color, #f48771);
+}
+
+/* Enhanced file explorer decorations */
+.enhanced-file-explorer .explorer-toolbar {
+    background: var(--vscode-sideBar-background);
+    border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.enhanced-file-explorer .git-decoration-controls button {
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.enhanced-file-explorer .git-decoration-controls button:hover {
+    background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.enhanced-file-explorer .decoration-status {
+    transition: background-color 0.3s ease;
+}
+
+/* Decoration preview panel */
+.decoration-preview-panel {
+    background: var(--vscode-sideBar-background);
+    border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+
+.decoration-preview .preview-items {
+    font-family: var(--vscode-font-family);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* Git statistics panel */
+.git-stats-panel {
+    background: var(--vscode-sideBar-background);
+    border-top: 1px solid var(--vscode-sideBar-border);
+    font-size: 11px;
+    color: var(--vscode-tab-inactiveForeground);
+}
+
+.git-stats .change-stats {
+    margin-top: 4px;
+}
+
+.git-stats .change-stats span {
+    font-weight: 500;
+}
+
+/* Configuration UI styles */
+.decoration-config-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(2px);
+}
+
+.decoration-config-panel {
+    background: var(--vscode-panel-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.decoration-config-panel h2 {
+    color: var(--vscode-foreground);
+    margin: 0;
+}
+
+.decoration-config-panel .config-section {
+    margin-bottom: 24px;
+}
+
+.decoration-config-panel .config-section h3 {
+    color: var(--vscode-foreground);
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.decoration-config-panel .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 4px 0;
+    transition: background-color 0.2s ease;
+}
+
+.decoration-config-panel .checkbox-label:hover {
+    background-color: var(--vscode-list-hoverBackground);
+    border-radius: 4px;
+    padding: 4px;
+    margin: 0 -4px;
+}
+
+.decoration-config-panel .checkbox-label input[type="checkbox"] {
+    accent-color: var(--vscode-checkbox-background);
+}
+
+.decoration-config-panel .checkbox-label span {
+    color: var(--vscode-foreground);
+    font-size: 13px;
+}
+
+/* Color input styles */
+.color-input-group label {
+    color: var(--vscode-foreground);
+    font-size: 13px;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.color-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.color-input-wrapper input[type="color"] {
+    width: 40px;
+    height: 32px;
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.color-input-wrapper input[type="text"] {
+    flex: 1;
+    padding: 6px;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-input-foreground);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* Slider styles */
+.slider-group label {
+    color: var(--vscode-foreground);
+    font-size: 13px;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.slider-group input[type="range"] {
+    width: 100%;
+    accent-color: var(--vscode-progressBar-background);
+}
+
+/* Select styles */
+.select-group label {
+    color: var(--vscode-foreground);
+    font-size: 13px;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.select-group select {
+    width: 100%;
+    padding: 6px;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-input-foreground);
+    border-radius: 4px;
+}
+
+/* Action buttons */
+.config-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 20px;
+    border-top: 1px solid var(--vscode-panel-border);
+}
+
+.config-actions .action-group {
+    display: flex;
+    gap: 8px;
+}
+
+.config-actions .btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.config-actions .btn-primary {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.config-actions .btn-primary:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+
+.config-actions .btn-secondary {
+    background: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+
+.config-actions .btn-secondary:hover {
+    background: var(--vscode-button-secondaryHoverBackground);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .decoration-config-panel {
+        margin: 20px;
+        max-width: calc(100vw - 40px);
+    }
+    
+    .color-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .config-actions {
+        flex-direction: column;
+    }
+    
+    .config-actions .action-group {
+        justify-content: center;
+    }
+}
+
+/* Animation for decoration updates */
+@keyframes decoration-update {
+    0% {
+        opacity: 0.5;
+        transform: scale(0.9);
+    }
+    50% {
+        opacity: 1.0;
+        transform: scale(1.1);
+    }
+    100% {
+        opacity: 0.8;
+        transform: scale(1.0);
+    }
+}
+
+.file-git-decoration.updating {
+    animation: decoration-update 0.3s ease-in-out;
+}
+
+.folder-git-decoration.updating {
+    animation: decoration-update 0.3s ease-in-out;
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+    .decoration-config-overlay {
+        background: rgba(0, 0, 0, 0.7);
+    }
+    
+    .decoration-config-panel {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+}
+
+/* High contrast theme support */
+@media (prefers-contrast: high) {
+    .file-git-decoration {
+        font-weight: 700;
+        opacity: 1.0;
+    }
+    
+    .folder-git-decoration {
+        font-weight: 700;
+        opacity: 1.0;
+    }
+    
+    .file-tree-item.git-modified {
+        border-left: 3px solid var(--git-modified-color, #e2c08d);
+    }
+    
+    .file-tree-item.git-added {
+        border-left: 3px solid var(--git-added-color, #73c991);
+    }
+    
+    .file-tree-item.git-deleted {
+        border-left: 3px solid var(--git-deleted-color, #f48771);
+    }
+    
+    .file-tree-item.git-conflict {
+        border-left: 3px solid var(--git-conflict-color, #f44747);
+        background: rgba(244, 71, 71, 0.2);
+    }
+}
