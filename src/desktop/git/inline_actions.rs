@@ -59,6 +59,11 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
     let mut is_hovered = use_signal(|| false);
     let is_visible = !props.show_on_hover || is_hovered();
     
+    // Clone values for closures
+    let hunk_id_1 = props.hunk.hunk_id.clone();
+    let hunk_id_2 = props.hunk.hunk_id.clone();
+    let hunk_id_3 = props.hunk.hunk_id.clone();
+    
     // Determine available actions based on hunk status
     let can_stage = !props.hunk.is_staged && props.hunk.is_stageable;
     let can_unstage = props.hunk.is_staged;
@@ -91,7 +96,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     title: "Stage hunk (Alt+S)",
                     onclick: move |_| {
                         if let Some(handler) = &props.on_action {
-                            handler.call(DiffAction::StageHunk(props.hunk.hunk_id.clone()));
+                            handler.call(DiffAction::StageHunk(hunk_id_1.clone()));
                         }
                     },
                     onmouseenter: move |_| {
@@ -115,7 +120,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     title: "Unstage hunk (Alt+U)",
                     onclick: move |_| {
                         if let Some(handler) = &props.on_action {
-                            handler.call(DiffAction::UnstageHunk(props.hunk.hunk_id.clone()));
+                            handler.call(DiffAction::UnstageHunk(hunk_id_2.clone()));
                         }
                     },
                     
@@ -136,7 +141,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
                     title: "Revert hunk changes (Alt+R)",
                     onclick: move |_| {
                         if let Some(handler) = &props.on_action {
-                            handler.call(DiffAction::RevertHunk(props.hunk.hunk_id.clone()));
+                            handler.call(DiffAction::RevertHunk(hunk_id_3.clone()));
                         }
                     },
                     
@@ -178,6 +183,10 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
     let mut is_hovered = use_signal(|| false);
     let is_visible = !props.show_on_hover || is_hovered();
     
+    // Clone values for closures
+    let line_id_1 = props.line.line_id.clone();
+    let line_id_2 = props.line.line_id.clone();
+    
     // Only show for stageable lines (added/deleted, not unchanged)
     let is_stageable = props.line.is_stageable && 
         matches!(props.line.line_type, crate::desktop::git::DiffLineType::Added | crate::desktop::git::DiffLineType::Deleted);
@@ -215,7 +224,7 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
                     title: "Stage line",
                     onclick: move |_| {
                         if let Some(handler) = &props.on_action {
-                            handler.call(DiffAction::StageLine(props.line.line_id.clone()));
+                            handler.call(DiffAction::StageLine(line_id_1.clone()));
                         }
                     },
                     
@@ -231,7 +240,7 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
                     title: "Unstage line",
                     onclick: move |_| {
                         if let Some(handler) = &props.on_action {
-                            handler.call(DiffAction::UnstageLine(props.line.line_id.clone()));
+                            handler.call(DiffAction::UnstageLine(line_id_2.clone()));
                         }
                     },
                     

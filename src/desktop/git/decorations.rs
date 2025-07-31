@@ -296,7 +296,7 @@ impl GitDecorationManager {
     }
 
     /// Update file statuses from git
-    pub fn update_file_statuses(&self, statuses: HashMap<PathBuf, EnhancedGitStatus>) {
+    pub fn update_file_statuses(&mut self, statuses: HashMap<PathBuf, EnhancedGitStatus>) {
         self.file_statuses.set(statuses.clone());
         
         // Update folder decorations
@@ -304,7 +304,7 @@ impl GitDecorationManager {
     }
 
     /// Update folder decorations based on file statuses
-    fn update_folder_decorations(&self, file_statuses: &HashMap<PathBuf, EnhancedGitStatus>) {
+    fn update_folder_decorations(&mut self, file_statuses: &HashMap<PathBuf, EnhancedGitStatus>) {
         let mut folder_decorations = HashMap::new();
 
         // Calculate folder decorations from file statuses
@@ -353,7 +353,7 @@ impl GitDecorationManager {
     }
 
     /// Update configuration
-    pub fn update_config(&self, config: GitDecorationConfig) {
+    pub fn update_config(&mut self, config: GitDecorationConfig) {
         self.config.set(config);
     }
 }
