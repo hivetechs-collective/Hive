@@ -2277,6 +2277,13 @@ fn App() -> Element {
                                                               git_status.contains(git2::Status::INDEX_MODIFIED) ||
                                                               git_status.contains(git2::Status::INDEX_DELETED) ||
                                                               git_status.contains(git2::Status::INDEX_RENAMED),
+                                                    has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                      git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                      git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                      git_status.contains(git2::Status::INDEX_RENAMED),
+                                                    has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                        git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                        git_status.contains(git2::Status::WT_DELETED),
                                                 };
                                                 status_map.insert(path, file_status);
                                             }
@@ -2364,6 +2371,13 @@ fn App() -> Element {
                                                                                       git_status.contains(git2::Status::INDEX_MODIFIED) ||
                                                                                       git_status.contains(git2::Status::INDEX_DELETED) ||
                                                                                       git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                            has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                              git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                              git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                              git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                            has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                                                git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                                                git_status.contains(git2::Status::WT_DELETED),
                                                                         };
                                                                         status_map.insert(path, file_status);
                                                                     }
@@ -2788,6 +2802,13 @@ fn App() -> Element {
                                                                   git_status.contains(git2::Status::INDEX_MODIFIED) ||
                                                                   git_status.contains(git2::Status::INDEX_DELETED) ||
                                                                   git_status.contains(git2::Status::INDEX_RENAMED),
+                                                        has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                          git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                          git_status.contains(git2::Status::INDEX_RENAMED),
+                                                        has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                            git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                            git_status.contains(git2::Status::WT_DELETED),
                                                     };
                                                     status_map.insert(path, file_status);
                                                 }
@@ -2870,6 +2891,13 @@ fn App() -> Element {
                                                                                           git_status.contains(git2::Status::INDEX_MODIFIED) ||
                                                                                           git_status.contains(git2::Status::INDEX_DELETED) ||
                                                                                           git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                                                    git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                                                    git_status.contains(git2::Status::WT_DELETED),
                                                                             };
                                                                             status_map.insert(path, file_status);
                                                                         }
@@ -3422,43 +3450,73 @@ fn App() -> Element {
                                                             // Handle git operations
                                                             if let Ok(git_ops) = GitOperations::new(&repo_path) {
                                                                 let result = match &operation {
-                                                                        GitOperation::StageAll => git_ops.stage_all(),
-                                                                        GitOperation::UnstageAll => git_ops.unstage_all(),
+                                                                        GitOperation::StageAll => git_ops.stage_all().await,
+                                                                        GitOperation::UnstageAll => git_ops.unstage_all().await,
                                                                         GitOperation::Commit(message) => {
-                                                                            git_ops.commit(&message).map(|_| ())
+                                                                            git_ops.commit(&message).await.map(|_| ())
                                                                         },
                                                                         GitOperation::Push => {
-                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
-                                                                                git_ops.push_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone()))
+                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
+                                                                                git_ops.push_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote or branch configured"))
                                                                             }
                                                                         },
                                                                         GitOperation::Pull => {
-                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
-                                                                                git_ops.pull_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone()))
+                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
+                                                                                git_ops.pull_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote or branch configured"))
                                                                             }
                                                                         },
                                                                         GitOperation::Fetch => {
-                                                                            if let Ok(remote) = git_ops.get_default_remote() {
-                                                                                git_ops.fetch_with_progress(&remote, Some(progress_callback.clone()), Some(cancel_token.clone()))
+                                                                            if let Ok(remote) = git_ops.get_default_remote().await {
+                                                                                git_ops.fetch_with_progress(&remote, Some(progress_callback.clone()), Some(cancel_token.clone())).await
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote configured"))
                                                                             }
                                                                         },
                                                                         GitOperation::Sync => {
                                                                             // VS Code style sync: pull then push
-                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote(), git_ops.get_current_branch()) {
-                                                                                git_ops.sync_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone()))
+                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
+                                                                                git_ops.sync_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
                                                                             } else {
                                                                                 Err(anyhow::anyhow!("No remote or branch configured"))
                                                                             }
                                                                         },
-                                                                        GitOperation::Stage(path) => git_ops.stage_file(path),
-                                                                        GitOperation::Unstage(path) => git_ops.unstage_file(path),
-                                                                        GitOperation::DiscardChanges(path) => git_ops.discard_file_changes(path),
+                                                                        GitOperation::Stage(path) => git_ops.stage_file(path).await,
+                                                                        GitOperation::Unstage(path) => git_ops.unstage_file(path).await,
+                                                                        GitOperation::DiscardChanges(path) => git_ops.discard_file_changes(path).await,
+                                                                        GitOperation::StashSave(message) => {
+                                                                            // TODO: Implement stash_save wrapper in GitOperations
+                                                                            tracing::warn!("Stash save not yet implemented: {}", message);
+                                                                            Ok(())
+                                                                        },
+                                                                        GitOperation::StashApply(stash_id) => {
+                                                                            // TODO: Implement stash_apply wrapper in GitOperations
+                                                                            tracing::warn!("Stash apply not yet implemented: {}", stash_id);
+                                                                            Ok(())
+                                                                        },
+                                                                        GitOperation::StashPop(stash_id) => {
+                                                                            // TODO: Implement stash_pop wrapper in GitOperations
+                                                                            tracing::warn!("Stash pop not yet implemented: {}", stash_id);
+                                                                            Ok(())
+                                                                        },
+                                                                        GitOperation::StashDrop(stash_id) => {
+                                                                            // TODO: Implement stash_drop wrapper in GitOperations
+                                                                            tracing::warn!("Stash drop not yet implemented: {}", stash_id);
+                                                                            Ok(())
+                                                                        },
+                                                                        GitOperation::StashList => {
+                                                                            // TODO: Implement stash_list wrapper in GitOperations
+                                                                            tracing::warn!("Stash list not yet implemented");
+                                                                            Ok(())
+                                                                        },
+                                                                        GitOperation::StashShow(stash_id) => {
+                                                                            // TODO: Implement stash_show wrapper in GitOperations
+                                                                            tracing::warn!("Stash show not yet implemented: {}", stash_id);
+                                                                            Ok(())
+                                                                        },
                                                                     };
                                                                     
                                                             // Reset operation states
@@ -3500,6 +3558,13 @@ fn App() -> Element {
                                                                                                   git_status.contains(git2::Status::INDEX_MODIFIED) ||
                                                                                                   git_status.contains(git2::Status::INDEX_DELETED) ||
                                                                                                   git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                        has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                                          git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                                          git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                        has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                                                            git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                                                            git_status.contains(git2::Status::WT_DELETED),
                                                                                     };
                                                                                     status_map.insert(path, file_status);
                                                                                 }
@@ -3937,6 +4002,7 @@ fn App() -> Element {
                                             diff: diff_result.clone(),
                                             view_mode: *diff_view_mode.read(),
                                             file_path: file_path.to_string(),
+                                            repo_path: current_dir.read().clone().unwrap_or_default().to_string_lossy().to_string(),
                                             on_stage: None,
                                             on_view_mode_change: Some(EventHandler::new({
                                                 let mut diff_view_mode = diff_view_mode.clone();
@@ -3944,6 +4010,9 @@ fn App() -> Element {
                                                     *diff_view_mode.write() = mode;
                                                 }
                                             })),
+                                            on_diff_action: None,
+                                            inline_actions_enabled: true,
+                                            keyboard_shortcuts_enabled: true,
                                         }
                                     )
                                 }
@@ -4995,6 +5064,10 @@ fn App() -> Element {
                                 tracing::error!("Failed to reveal in finder: {}", e);
                             }
                         }
+                        ContextMenuAction::ConfigureGitDecorations => {
+                            // TODO: Implement git decorations configuration
+                            tracing::info!("Git decorations configuration requested for {:?}", path);
+                        }
                     }
                 }
             }),
@@ -5387,6 +5460,13 @@ fn FileTreeItem(
                                                       git_status.contains(git2::Status::INDEX_MODIFIED) ||
                                                       git_status.contains(git2::Status::INDEX_DELETED) ||
                                                       git_status.contains(git2::Status::INDEX_RENAMED),
+                                            has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                              git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                              git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                              git_status.contains(git2::Status::INDEX_RENAMED),
+                                            has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                git_status.contains(git2::Status::WT_DELETED),
                                         };
                                         status_map.insert(path, file_status);
                                     }

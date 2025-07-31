@@ -215,6 +215,10 @@ path = "src/bin/test_consensus_simple.rs"
 name = "test-terminal-cleaning"
 path = "src/bin/test-terminal-cleaning.rs"
 
+[[bin]]
+name = "git-features-demo"
+path = "git_features_standalone.rs"
+
 [package.metadata.bundle]
 name = "Hive"
 identifier = "com.hivetechs.hive"

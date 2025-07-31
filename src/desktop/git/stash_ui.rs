@@ -139,21 +139,29 @@ pub fn StashList(
                             }
                         }
                     } else {
-                        for (index, stash) in stashes.read().clone().iter().enumerate() {
+                        for (index, stash) in stashes.read().iter().enumerate() {
                             StashListItem {
-                                key: "{stash.oid}",
+                                key: "{index}",
                                 stash: stash.clone(),
-                                index: index,
+                                index,
                                 is_selected: selected_stash.read().map_or(false, |sel| sel == index),
-                                on_select: move |idx| {
-                                    selected_stash.set(Some(idx));
-                                    if let Some(handler) = &on_stash_select {
-                                        handler.call(stash.clone());
+                                on_select: {
+                                    let mut selected_stash_clone = selected_stash;
+                                    let on_stash_select = on_stash_select.clone();
+                                    let stash_clone = stash.clone();
+                                    move |idx| {
+                                        selected_stash_clone.set(Some(idx));
+                                        if let Some(handler) = &on_stash_select {
+                                            handler.call(stash_clone.clone());
+                                        }
                                     }
                                 },
-                                on_action: move |action| {
-                                    if let Some(handler) = &on_stash_action {
-                                        handler.call(action);
+                                on_action: {
+                                    let on_stash_action = on_stash_action.clone();
+                                    move |action| {
+                                        if let Some(handler) = &on_stash_action {
+                                            handler.call(action);
+                                        }
                                     }
                                 }
                             }
@@ -167,7 +175,7 @@ pub fn StashList(
 
 /// Individual stash list item component
 #[component]
-fn StashListItem(
+pub fn StashListItem(
     stash: StashInfo,
     index: usize,
     is_selected: bool,

@@ -135,7 +135,11 @@ impl GitState {
         let mut status_map = HashMap::new();
         for (path, git_status) in file_statuses {
             let file_status = FileStatus {
+                path: path.clone(),
                 status_type: StatusType::from_git2_status(git_status),
+                is_staged: git_status.contains(git2::Status::INDEX_MODIFIED) 
+                    || git_status.contains(git2::Status::INDEX_NEW) 
+                    || git_status.contains(git2::Status::INDEX_DELETED),
                 has_staged_changes: git_status.contains(git2::Status::INDEX_MODIFIED) 
                     || git_status.contains(git2::Status::INDEX_NEW) 
                     || git_status.contains(git2::Status::INDEX_DELETED),

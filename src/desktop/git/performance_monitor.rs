@@ -367,11 +367,13 @@ pub fn PerformanceMonitor(props: PerformanceMonitorProps) -> Element {
 #[component]
 pub fn AutoRefreshPerformanceMonitor(props: PerformanceMonitorProps) -> Element {
     let mut last_update = use_signal(|| Instant::now());
-    let mut auto_stats = use_signal(|| props.stats.clone());
+    let initial_stats = props.stats.clone();
+    let mut auto_stats = use_signal(|| initial_stats.clone());
     
     // Auto-refresh every 5 seconds
     use_effect(move || {
         let interval = Duration::from_secs(5);
+        let stats_for_async = initial_stats.clone();
         
         spawn(async move {
             loop {
@@ -381,7 +383,7 @@ pub fn AutoRefreshPerformanceMonitor(props: PerformanceMonitorProps) -> Element 
                 if now.duration_since(*last_update.read()) >= interval {
                     // In a real implementation, you would fetch fresh stats here
                     // For now, we'll just use the provided stats
-                    *auto_stats.write() = props.stats.clone();
+                    *auto_stats.write() = stats_for_async.clone();
                     *last_update.write() = now;
                 }
             }
