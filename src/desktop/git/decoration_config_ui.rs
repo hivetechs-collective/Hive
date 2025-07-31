@@ -31,10 +31,9 @@ pub fn GitDecorationConfigUI(props: DecorationConfigProps) -> Element {
         div {
             class: "decoration-config-overlay",
             style: "position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;",
-            onclick: move |evt| {
-                if evt.target() == evt.current_target() {
-                    props.on_close.call(());
-                }
+            onclick: move |_evt| {
+                // Close overlay when clicking outside the panel
+                props.on_close.call(());
             },
 
             div {
