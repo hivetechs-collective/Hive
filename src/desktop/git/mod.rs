@@ -29,6 +29,9 @@ pub mod stash_manager;
 pub mod stash_shortcuts;
 pub mod performance_config_ui;
 pub mod performance_monitor;
+pub mod inline_actions;
+pub mod keyboard_shortcuts;
+pub mod action_processor;
 
 pub use repository::{GitRepository, RepositoryInfo, get_optimized_git_manager, get_git_performance_stats, log_performance_stats, clear_performance_caches};
 pub use branch::{BranchInfo, BranchType, BranchFilter, BranchSort, CommitInfo, sort_branches, validate_branch_name};
@@ -64,6 +67,9 @@ pub use stash_manager::{StashManager, StashPanel};
 pub use stash_shortcuts::{StashKeyboardHandler, StashShortcutsInfo, StashShortcutAction, handle_stash_shortcut};
 pub use performance_config_ui::{PerformanceConfigUI, PerformanceConfigProps, PerformancePresets};
 pub use performance_monitor::{PerformanceMonitor, PerformanceMonitorProps, AutoRefreshPerformanceMonitor, PerformanceGraph};
+pub use inline_actions::{HunkInlineActions, LineInlineActions, EnhancedDiffHunk, ActionTooltip};
+pub use keyboard_shortcuts::{ShortcutConfig, ShortcutManager, FocusManager, GlobalShortcutHandler, ShortcutHelpDialog, KeyCombination, ShortcutAction};
+pub use action_processor::{DiffActionProcessor, ExecutionResult, ProcessorConfig};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;

@@ -81,7 +81,7 @@ pub fn handle_stash_shortcut(
                     }
                     
                     let opts = StashApplyOptions {
-                        reinstanate_index: false,
+                        reinstate_index: false,
                         check_index: true,
                     };
                     
@@ -107,7 +107,7 @@ pub fn handle_stash_shortcut(
                     }
                     
                     let opts = StashApplyOptions {
-                        reinstanate_index: false,
+                        reinstate_index: false,
                         check_index: true,
                     };
                     
