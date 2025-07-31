@@ -17,6 +17,7 @@ pub enum ContextMenuAction {
     OpenInTerminal,
     CopyPath,
     RevealInFinder,
+    ConfigureGitDecorations,
 }
 
 #[derive(Clone, Debug)]

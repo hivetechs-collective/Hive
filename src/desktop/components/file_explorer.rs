@@ -5,6 +5,10 @@
 use dioxus::prelude::*;
 use std::path::{Path, PathBuf};
 use crate::desktop::state::{AppState, FileItem, FileType, GitFileStatus};
+use crate::desktop::git::{
+    GitDecorationManager, FileGitDecoration, use_git_decoration_manager,
+    GitDecorationWatcher, use_git_decoration_watcher, DecorationEvent
+};
 
 /// File Explorer with proper VS Code styling
 #[component]
@@ -12,6 +16,23 @@ pub fn FileExplorer() -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let mut search_query = use_signal(String::new);
     let mut show_hidden = use_signal(|| false);
+    
+    // Initialize git decoration system
+    let decoration_manager = use_git_decoration_manager();
+    let decoration_watcher = use_git_decoration_watcher(decoration_manager.clone());
+    
+    // Start watching for git changes if we have a project loaded
+    use_effect(move || {
+        if let Some(project) = &app_state.read().current_project {
+            let repo_path = project.root_path.clone();
+            let mut watcher = decoration_watcher.clone();
+            spawn(async move {
+                if let Err(e) = watcher.start_watching(repo_path).await {
+                    tracing::error!("Failed to start git decoration watcher: {}", e);
+                }
+            });
+        }
+    });
 
     rsx! {
         div {
@@ -190,6 +211,7 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
     let mut app_state = use_context::<Signal<AppState>>();
     let mut is_renaming = use_signal(|| false);
     let mut rename_value = use_signal(|| file.name.clone());
+    let decoration_manager = use_context::<GitDecorationManager>();
 
     let is_selected = {
         let state = app_state.read();
@@ -322,39 +344,11 @@ fn FileTreeItem(file: FileItem, depth: usize) -> Element {
                     }
                 }
 
-                // Git status indicator
-                if let Some(git_status) = &file.git_status {
-                    span {
-                        class: "git-indicator",
-                        style: "margin-left: 4px; font-size: 11px; font-weight: 600;",
-                        style: match git_status {
-                            GitFileStatus::Modified => "color: #e2c08d;",
-                            GitFileStatus::Added => "color: #73c991;",
-                            GitFileStatus::Deleted => "color: #f48771;",
-                            GitFileStatus::Untracked => "color: #73c991;",
-                            GitFileStatus::Renamed => "color: #75beff;",
-                            GitFileStatus::Copied => "color: #73c991;",
-                            GitFileStatus::Ignored => "color: #6b6b6b;",
-                        },
-                        title: match git_status {
-                            GitFileStatus::Modified => "Modified",
-                            GitFileStatus::Added => "Added",
-                            GitFileStatus::Deleted => "Deleted",
-                            GitFileStatus::Untracked => "Untracked",
-                            GitFileStatus::Renamed => "Renamed",
-                            GitFileStatus::Copied => "Copied",
-                            GitFileStatus::Ignored => "Ignored",
-                        },
-                        match git_status {
-                            GitFileStatus::Modified => "M",
-                            GitFileStatus::Added => "A",
-                            GitFileStatus::Deleted => "D",
-                            GitFileStatus::Untracked => "U",
-                            GitFileStatus::Renamed => "R",
-                            GitFileStatus::Copied => "C",
-                            GitFileStatus::Ignored => "",
-                        }
-                    }
+                // Git decoration using new system
+                FileGitDecoration {
+                    file_path: file.path.clone(),
+                    is_directory: file.is_directory,
+                    decoration_manager: decoration_manager.clone(),
                 }
             }
 

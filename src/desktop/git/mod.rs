@@ -32,6 +32,11 @@ pub mod performance_monitor;
 pub mod inline_actions;
 pub mod keyboard_shortcuts;
 pub mod action_processor;
+pub mod decorations;
+pub mod decoration_watcher;
+pub mod decoration_config_ui;
+pub mod enhanced_file_explorer;
+pub mod decoration_styles;
 
 pub use repository::{GitRepository, RepositoryInfo, get_optimized_git_manager, get_git_performance_stats, log_performance_stats, clear_performance_caches};
 pub use branch::{BranchInfo, BranchType, BranchFilter, BranchSort, CommitInfo, sort_branches, validate_branch_name};
@@ -70,6 +75,23 @@ pub use performance_monitor::{PerformanceMonitor, PerformanceMonitorProps, AutoR
 pub use inline_actions::{HunkInlineActions, LineInlineActions, EnhancedDiffHunk, ActionTooltip};
 pub use keyboard_shortcuts::{ShortcutConfig, ShortcutManager, FocusManager, GlobalShortcutHandler, ShortcutHelpDialog, KeyCombination, ShortcutAction};
 pub use action_processor::{DiffActionProcessor, ExecutionResult, ProcessorConfig};
+pub use decorations::{
+    GitDecorationConfig, DecorationStyles, EnhancedGitStatus, FolderDecoration, 
+    GitDecorationManager, FileGitDecoration, EditorGutterDecorations, use_git_decoration_manager
+};
+pub use decoration_watcher::{
+    GitDecorationWatcher, DecorationEvent, DecorationWatcherConfig, use_git_decoration_watcher
+};
+pub use decoration_config_ui::{GitDecorationConfigUI, GitDecorationPreview};
+pub use enhanced_file_explorer::{
+    EnhancedFileExplorer, GitDecorationIntegration, use_git_decorations
+};
+pub use decoration_styles::{
+    GitDecorationStyles, GitDecorationDynamicStyles, VSCodeGitThemeStyles,
+    get_git_decoration_styles, get_git_decoration_css_variables,
+    get_inline_git_status_style, get_git_status_class, get_conflict_class,
+    get_file_git_classes, get_vscode_git_theme_styles
+};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
