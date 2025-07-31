@@ -27,7 +27,7 @@ pub fn StashManager(
     let mut operation_in_progress = use_signal(|| false);
     let mut status_message = use_signal(|| None::<String>);
     
-    let repo_path = use_signal(|| None::<PathBuf>);
+    let mut repo_path = use_signal(|| None::<PathBuf>);
     
     // Update repo_path when git_state changes
     use_effect(move || {
@@ -89,7 +89,10 @@ pub fn StashManager(
                         class: "toolbar-btn",
                         style: TOOLBAR_BUTTON_STYLES,
                         title: "Toggle Preview Panel",
-                        onclick: move |_| show_preview.set(!*show_preview.read()),
+                        onclick: move |_| {
+                            let current_value = *show_preview.read();
+                            show_preview.set(!current_value);
+                        },
                         if *show_preview.read() { "📋" } else { "📄" }
                     }
                     
@@ -337,7 +340,7 @@ pub fn StashPanel(
     let mut is_expanded = use_signal(|| false);
     let mut stash_count = use_signal(|| 0usize);
     
-    let repo_path = use_signal(|| None::<PathBuf>);
+    let mut repo_path = use_signal(|| None::<PathBuf>);
     
     // Update repo_path when git_state changes
     use_effect(move || {
@@ -373,7 +376,10 @@ pub fn StashPanel(
             div {
                 class: "panel-header",
                 style: PANEL_HEADER_STYLES,
-                onclick: move |_| is_expanded.set(!*is_expanded.read()),
+                onclick: move |_| {
+                    let current_value = *is_expanded.read();
+                    is_expanded.set(!current_value);
+                },
                 
                 div {
                     class: "header-icon",

@@ -56,7 +56,7 @@ pub struct LineActionsProps {
 /// Inline hunk actions component - shows stage/unstage/revert buttons for hunks
 #[component]
 pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
-    let is_hovered = use_signal(|| false);
+    let mut is_hovered = use_signal(|| false);
     let is_visible = !props.show_on_hover || is_hovered();
     
     // Determine available actions based on hunk status
@@ -175,7 +175,7 @@ pub fn HunkInlineActions(props: InlineActionsProps) -> Element {
 /// Inline line actions component - shows stage/unstage buttons for individual lines
 #[component]  
 pub fn LineInlineActions(props: LineActionsProps) -> Element {
-    let is_hovered = use_signal(|| false);
+    let mut is_hovered = use_signal(|| false);
     let is_visible = !props.show_on_hover || is_hovered();
     
     // Only show for stageable lines (added/deleted, not unchanged)
@@ -245,8 +245,8 @@ pub fn LineInlineActions(props: LineActionsProps) -> Element {
 /// Enhanced hunk component with inline actions support
 #[component]
 pub fn EnhancedDiffHunk(props: EnhancedDiffHunkProps) -> Element {
-    let processing_lines = use_signal(|| std::collections::HashSet::<String>::new());
-    let processing_hunk = use_signal(|| false);
+    let mut processing_lines = use_signal(|| std::collections::HashSet::<String>::new());
+    let mut processing_hunk = use_signal(|| false);
     
     rsx! {
         div {

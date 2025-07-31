@@ -448,11 +448,11 @@ impl From<GitFileStatus> for EnhancedGitStatus {
 
 impl PartialEq for GitDecorationManager {
     fn eq(&self, other: &Self) -> bool {
-        // Compare configuration values
-        self.config.read() == other.config.read() &&
+        // Compare configuration values by dereferencing the GenerationalRef
+        *self.config.read() == *other.config.read() &&
         // For simplicity, we'll consider managers equal if configs are equal
         // In practice, you might want more sophisticated comparison
-        self.repo_root.read() == other.repo_root.read()
+        *self.repo_root.read() == *other.repo_root.read()
     }
 }
 
