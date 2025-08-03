@@ -5,6 +5,7 @@ use dioxus::prelude::*;
 use rfd;
 use chrono::{Duration, Utc};
 use std::sync::Arc;
+use hive_ai::desktop::state::StageStatus;
 
 // Terminal imports
 use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
@@ -15,7 +16,7 @@ use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 // Git imports
 use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
 use hive_ai::desktop::git::branch_menu::{BranchMenu, BranchOperation, BranchOperationResult};
-// use hive_ai::desktop::diff_viewer::DiffViewer;
+use hive_ai::desktop::diff_viewer::DiffViewer;
 
 // Enhanced Status Bar imports
 use hive_ai::desktop::status_bar_enhanced::{EnhancedStatusBar, StatusBarState, StatusBarItem, StatusBarAlignment};
@@ -1023,7 +1024,7 @@ fn App() -> Element {
     
     // Initialize git state
     let mut git_state = use_git_state();
-    let active_git_watcher = use_signal(|| None::<GitWatcher>);
+    let mut active_git_watcher = use_signal(|| None::<GitWatcher>);
     use_context_provider(|| active_git_watcher.clone());
     
     // Git operation state tracking
@@ -1036,7 +1037,7 @@ fn App() -> Element {
     let mut git_context = provide_git_context();
     
     // Initialize terminal CWD tracker
-    let mut cwd_tracker = provide_terminal_cwd_tracker();
+    let cwd_tracker = provide_terminal_cwd_tracker();
     
     // Sidebar view state
     #[derive(Clone, Copy, PartialEq)]
@@ -1053,7 +1054,7 @@ fn App() -> Element {
     let mut openrouter_key = use_signal(String::new);
     let mut hive_key = use_signal(String::new);
     let mut anthropic_key = use_signal(String::new);
-    let api_keys_version = use_signal(|| 0u32); // Track when API keys change
+    let mut api_keys_version = use_signal(|| 0u32); // Track when API keys change
     let mut api_config = use_signal(|| hive_ai::core::api_keys::ApiKeyConfig {
         openrouter_key: None,
         hive_key: None,
@@ -1067,7 +1068,7 @@ fn App() -> Element {
     use_effect(move || {
         let version = *api_keys_version.read();
         tracing::info!("API keys version changed to {}, recreating consensus manager", version);
-        *consensus_manager.write() = use_consensus_with_version(version);
+        consensus_manager.set(use_consensus_with_version(version));
     });
 
     // State management
@@ -1076,11 +1077,11 @@ fn App() -> Element {
     let mut is_processing = use_signal(|| false);
     let mut is_cancelling = use_signal(|| false); // Track cancellation state
     let mut cancel_flag = use_signal(|| false); // Simple flag to stop streaming updates
-    let cancellation_flag = use_signal(|| std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))); // Atomic cancellation flag
+    let mut cancellation_flag = use_signal(|| std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))); // Atomic cancellation flag
     let mut consensus_task_handle = use_signal(|| None::<dioxus::prelude::Task>); // Track the running consensus task
     let mut selected_file = use_signal(|| Some("__welcome__".to_string()));
     let mut file_tree = use_signal(|| Vec::<FileItem>::new());
-    let expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
+    let mut expanded_dirs = use_signal(|| HashMap::<PathBuf, bool>::new());
     let mut current_dir = use_signal(|| None::<PathBuf>);
     let mut file_content = use_signal(String::new);
 
@@ -1105,7 +1106,7 @@ fn App() -> Element {
     // Create the IDE AI Broker when the app starts
     use_effect(move || {
         let current_dir = current_dir.clone();
-        let file_tree = file_tree.clone();
+        let mut file_tree = file_tree.clone();
         let selected_file = selected_file.clone();
         let mut ide_ai_broker = ide_ai_broker.clone();
         
@@ -1117,7 +1118,7 @@ fn App() -> Element {
                 selected_file
             ).await {
                 Ok(broker) => {
-                    *ide_ai_broker.write() = Some(broker);
+                    ide_ai_broker.set(Some(broker));
                     tracing::info!("✅ IDE AI Helper Broker initialized");
                 }
                 Err(e) => {
@@ -1156,15 +1157,15 @@ fn App() -> Element {
     );
     
     // Auto-fetch configuration
-    let auto_fetch_enabled = use_signal(|| true); // Enable auto-fetch by default
-    let auto_fetch_interval_minutes = use_signal(|| 5); // Fetch every 5 minutes
+    let mut auto_fetch_enabled = use_signal(|| true); // Enable auto-fetch by default
+    let mut auto_fetch_interval_minutes = use_signal(|| 5); // Fetch every 5 minutes
     
     // Status bar event handler for click actions
     let handle_status_bar_click = {
         let mut git_state = git_state.clone();
         let current_dir = current_dir.clone();
         let mut is_syncing = is_syncing.clone();
-        let mut show_branch_menu = show_branch_menu.clone();
+        let show_branch_menu = show_branch_menu.clone();
         move |item_id: String| {
             match item_id.as_str() {
                 "git-branch" => {
@@ -1173,7 +1174,7 @@ fn App() -> Element {
                     
                     let bus = event_bus();
                     spawn(async move {
-                        let event = Event::empty(EventType::BranchMenuRequested);
+                        let event = Event::new(EventType::BranchMenuRequested, EventPayload::Empty);
                         bus.publish(event).await.unwrap_or_else(|e| {
                             tracing::error!("Failed to publish BranchMenuRequested event: {}", e);
                         });
@@ -1182,7 +1183,7 @@ fn App() -> Element {
                 "git-sync" => {
                     // Perform sync operation or publish branch
                     if !*is_syncing.read() {
-                        *is_syncing.write() = true;
+                        is_syncing.set(true);
                         let mut git_state = git_state.clone();
                         let current_dir = current_dir.clone();
                         let mut is_syncing = is_syncing.clone();
@@ -1195,23 +1196,23 @@ fn App() -> Element {
                                     // Standard sync: fetch + pull + push
                                     
                                     // Step 1: Fetch
-                                    *git_operation_status.write() = Some("Fetching remote changes...".to_string());
+                                    git_operation_status.set(Some("Fetching remote changes...".to_string()));
                                     match hive_ai::desktop::git::operations::fetch(&repo_path).await {
                                         Ok(_) => {
                                             tracing::info!("✅ Fetch completed successfully");
                                             
                                             // Step 2: Pull
-                                            *git_operation_status.write() = Some("Pulling remote changes...".to_string());
+                                            git_operation_status.set(Some("Pulling remote changes...".to_string()));
                                             match hive_ai::desktop::git::operations::pull(&repo_path).await {
                                                 Ok(_) => {
                                                     tracing::info!("✅ Pull completed successfully");
                                                     
                                                     // Step 3: Push
-                                                    *git_operation_status.write() = Some("Pushing local changes...".to_string());
+                                                    git_operation_status.set(Some("Pushing local changes...".to_string()));
                                                     match hive_ai::desktop::git::operations::push(&repo_path).await {
                                                         Ok(_) => {
                                                             tracing::info!("✅ Push completed successfully");
-                                                            *git_operation_status.write() = Some("✅ Sync completed successfully - all changes pushed".to_string());
+                                                            git_operation_status.set(Some("✅ Sync completed successfully - all changes pushed".to_string()));
                                                             
                                                             // Refresh git status to update UI
                                                             if let Err(e) = git_state.refresh_status(&repo_path).await {
@@ -1221,7 +1222,7 @@ fn App() -> Element {
                                                             // Clear status after a delay
                                                             let mut git_operation_status_clear = git_operation_status.clone();
                                                             tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                                                            *git_operation_status_clear.write() = None;
+                                                            git_operation_status_clear.set(None);
                                                         }
                                                         Err(e) => {
                                                             tracing::error!("❌ Failed to push: {}", e);
@@ -1232,12 +1233,12 @@ fn App() -> Element {
                                                             } else {
                                                                 format!("❌ Push failed: {}", e)
                                                             };
-                                                            *git_operation_status.write() = Some(error_msg);
+                                                            git_operation_status.set(Some(error_msg));
                                                             
                                                             // Clear error after a delay
                                                             let mut git_operation_status_clear = git_operation_status.clone();
                                                             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                                                            *git_operation_status_clear.write() = None;
+                                                            git_operation_status_clear.set(None);
                                                         }
                                                     }
                                                 }
@@ -1250,12 +1251,12 @@ fn App() -> Element {
                                                     } else {
                                                         format!("❌ Pull failed: {}", e)
                                                     };
-                                                    *git_operation_status.write() = Some(error_msg);
+                                                    git_operation_status.set(Some(error_msg));
                                                     
                                                     // Clear error after a delay
                                                     let mut git_operation_status_clear = git_operation_status.clone();
                                                     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                                                    *git_operation_status_clear.write() = None;
+                                                    git_operation_status_clear.set(None);
                                                 }
                                             }
                                         }
@@ -1268,12 +1269,12 @@ fn App() -> Element {
                                             } else {
                                                 format!("❌ Fetch failed: {}", e)
                                             };
-                                            *git_operation_status.write() = Some(error_msg);
+                                            git_operation_status.set(Some(error_msg));
                                             
                                             // Clear error after a delay
                                             let mut git_operation_status_clear = git_operation_status.clone();
                                             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                                            *git_operation_status_clear.write() = None;
+                                            git_operation_status_clear.set(None);
                                         }
                                     }
                                 } else {
@@ -1281,7 +1282,7 @@ fn App() -> Element {
                                     if let Some(branch_info) = git_state.branch_info.read().as_ref() {
                                         let branch_name = &branch_info.name;
                                         tracing::info!("Publishing branch '{}' to origin", branch_name);
-                                        *git_operation_status.write() = Some(format!("Publishing branch '{}'...", branch_name));
+                                        git_operation_status.set(Some(format!("Publishing branch '{}'...", branch_name)));
                                         
                                         // Push branch with set-upstream
                                         let result = hive_ai::desktop::git::operations::push_with_upstream(
@@ -1292,7 +1293,7 @@ fn App() -> Element {
                                         match result {
                                             Ok(_) => {
                                                 tracing::info!("✅ Successfully published branch '{}'", branch_name);
-                                                *git_operation_status.write() = Some(format!("✅ Branch '{}' published to remote", branch_name));
+                                                git_operation_status.set(Some(format!("✅ Branch '{}' published to remote", branch_name)));
                                                 
                                                 // Refresh git status to update UI
                                                 if let Err(e) = git_state.refresh_status(&repo_path).await {
@@ -1302,7 +1303,7 @@ fn App() -> Element {
                                                 // Clear status after a delay
                                                 let mut git_operation_status_clear = git_operation_status.clone();
                                                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                                                *git_operation_status_clear.write() = None;
+                                                git_operation_status_clear.set(None);
                                             }
                                             Err(e) => {
                                                 tracing::error!("❌ Failed to publish branch '{}': {}", branch_name, e);
@@ -1313,22 +1314,22 @@ fn App() -> Element {
                                                 } else {
                                                     format!("❌ Failed to publish branch: {}", e)
                                                 };
-                                                *git_operation_status.write() = Some(error_msg);
+                                                git_operation_status.set(Some(error_msg));
                                                 
                                                 // Clear error after a delay
                                                 let mut git_operation_status_clear = git_operation_status.clone();
                                                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                                                *git_operation_status_clear.write() = None;
+                                                git_operation_status_clear.set(None);
                                             }
                                         }
                                     } else {
                                         tracing::warn!("No branch information available for publishing");
-                                        *git_operation_status.write() = Some("⚠️ Unable to determine current branch".to_string());
+                                        git_operation_status.set(Some("⚠️ Unable to determine current branch".to_string()));
                                         
                                         // Clear error after a delay
                                         let mut git_operation_status_clear = git_operation_status.clone();
                                         tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                                        *git_operation_status_clear.write() = None;
+                                        git_operation_status_clear.set(None);
                                     }
                                 }
                                 
@@ -1338,16 +1339,16 @@ fn App() -> Element {
                                 }
                             } else {
                                 tracing::warn!("Sync attempted with no repository selected");
-                                *git_operation_status.write() = Some("⚠️ No repository selected - please open a folder first".to_string());
+                                git_operation_status.set(Some("⚠️ No repository selected - please open a folder first".to_string()));
                                 
                                 // Clear error after a delay
                                 let mut git_operation_status_clear = git_operation_status.clone();
                                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-                                *git_operation_status_clear.write() = None;
+                                git_operation_status_clear.set(None);
                             }
                             
                             // Always reset syncing state
-                            *is_syncing.write() = false;
+                            is_syncing.set(false);
                             // Update sync status to show not syncing
                             git_state.sync_status.write().is_syncing = false;
                         });
@@ -1390,7 +1391,7 @@ fn App() -> Element {
     // Handle syncing status overlay
     {
         let mut git_state = git_state.clone();
-        let is_syncing = is_syncing.clone();
+        let mut is_syncing = is_syncing.clone();
         use_effect(move || {
             if *is_syncing.read() {
                 // Update sync status to show syncing
@@ -1405,13 +1406,13 @@ fn App() -> Element {
         let auto_fetch_enabled = auto_fetch_enabled.clone();
         let auto_fetch_interval_minutes = auto_fetch_interval_minutes.clone();
         let current_dir = current_dir.clone();
-        let git_state = git_state.clone();
+        let mut git_state = git_state.clone();
         
         use_effect(move || {
             if *auto_fetch_enabled.read() {
                 let interval_ms = *auto_fetch_interval_minutes.read() as f64 * 60.0 * 1000.0;
                 let current_dir = current_dir.clone();
-                let git_state = git_state.clone();
+                let mut git_state = git_state.clone();
                 
                 spawn(async move {
                     let mut interval = tokio::time::interval(
@@ -1457,11 +1458,11 @@ fn App() -> Element {
                 
                 // If active tab is before visible range, scroll left
                 if active_index < visible_start {
-                    *tab_scroll_offset.write() = active_index;
+                    tab_scroll_offset.set(active_index);
                 }
                 // If active tab is after visible range, scroll right
                 else if active_index >= visible_end {
-                    *tab_scroll_offset.write() = active_index.saturating_sub(max_visible_tabs - 1);
+                    tab_scroll_offset.set(active_index.saturating_sub(max_visible_tabs - 1));
                 }
             }
         }
@@ -1473,10 +1474,10 @@ fn App() -> Element {
     let mut show_command_palette = use_signal(|| false);
     let mut show_settings_dialog = use_signal(|| false);
     let mut show_onboarding_dialog = use_signal(|| false);
-    let show_upgrade_dialog = use_signal(|| false);
+    let mut show_upgrade_dialog = use_signal(|| false);
     let mut show_git_menu = use_signal(|| false);
     let mut git_menu_position = use_signal(|| (0i32, 0i32));
-    let onboarding_current_step = use_signal(|| 1); // Persist onboarding step
+    let mut onboarding_current_step = use_signal(|| 1); // Persist onboarding step
     
     // Context menu and file operation dialogs
     let mut context_menu_state = use_signal(|| ContextMenuState::default());
@@ -1498,7 +1499,7 @@ fn App() -> Element {
     // Analytics refresh effect - triggers when analytics_refresh_trigger changes
     use_effect({
         let mut analytics_data = analytics_data.clone();
-        let app_state = app_state.clone();
+        let mut app_state = app_state.clone();
         let mut last_analytics_trigger = last_analytics_trigger.clone();
         move || {
             let current_trigger = app_state.read().analytics_refresh_trigger;
@@ -1506,11 +1507,11 @@ fn App() -> Element {
             
             // Only fetch if the trigger actually changed
             if current_trigger != last_trigger {
-                *last_analytics_trigger.write() = current_trigger;
+                last_analytics_trigger.set(current_trigger);
                 spawn(async move {
                     match fetch_analytics_data().await {
                         Ok(data) => {
-                            *analytics_data.write() = data;
+                            analytics_data.set(data);
                             tracing::info!("Analytics data refreshed successfully (trigger: {})", current_trigger);
                         }
                         Err(e) => {
@@ -1549,25 +1550,25 @@ fn App() -> Element {
             "".to_string(),
         )
     }); // version, date, download_url, changelog_url
-    let update_error_message = use_signal(String::new);
+    let mut update_error_message = use_signal(String::new);
     
     // Terminal state
     let mut show_terminal = use_signal(|| true); // Terminal visible by default
     
     // Panel resizing state
-    let sidebar_width = use_signal(|| 250.0);
-    let chat_width = use_signal(|| 400.0);
-    let terminal_height = use_signal(|| 300.0);
+    let mut sidebar_width = use_signal(|| 250.0);
+    let mut chat_width = use_signal(|| 400.0);
+    let mut terminal_height = use_signal(|| 300.0);
 
     // Subscription state
-    let subscription_display = use_signal(|| String::from("Loading..."));
-    let error_shown = use_signal(|| false);
+    let mut subscription_display = use_signal(|| String::from("Loading..."));
+    let mut error_shown = use_signal(|| false);
 
     // Helper function to reload file tree
     let reload_file_tree = {
         let current_dir = current_dir.clone();
         let expanded_dirs = expanded_dirs.clone();
-        let file_tree = file_tree.clone();
+        let mut file_tree = file_tree.clone();
         move || {
             let current_dir = current_dir.clone();
             let expanded_dirs = expanded_dirs.clone();
@@ -1620,15 +1621,15 @@ fn App() -> Element {
             spawn(async move {
                 use hive_ai::core::api_keys::ApiKeyManager;
                 if let Ok(config) = ApiKeyManager::load_from_database().await {
-                    *api_config.write() = config.clone();
+                    api_config.set(config.clone());
                     if let Some(key) = config.hive_key {
-                        *hive_key.write() = key;
+                        hive_key.set(key);
                     }
                     if let Some(key) = config.openrouter_key {
-                        *openrouter_key.write() = key;
+                        openrouter_key.set(key);
                     }
                     if let Some(key) = config.anthropic_key {
-                        *anthropic_key.write() = key;
+                        anthropic_key.set(key);
                     }
                 }
             });
@@ -1648,19 +1649,19 @@ fn App() -> Element {
 
             // Check if API keys are configured
             if !ApiKeyManager::has_valid_keys().await.unwrap_or(false) {
-                *show_onboarding_dialog.write() = true;
+                show_onboarding_dialog.set(true);
             } else {
                 // Load existing key for settings
                 if let Ok(config) = ApiKeyManager::load_from_database().await {
-                    *api_config.write() = config.clone();
+                    api_config.set(config.clone());
                     if let Some(key) = config.openrouter_key {
-                        *openrouter_key.write() = key;
+                        openrouter_key.set(key);
                     }
                     if let Some(key) = config.hive_key {
-                        *hive_key.write() = key;
+                        hive_key.set(key);
                     }
                     if let Some(key) = config.anthropic_key {
-                        *anthropic_key.write() = key;
+                        anthropic_key.set(key);
                     }
                     
                     // Trigger consensus manager recreation since we have keys
@@ -1694,7 +1695,7 @@ fn App() -> Element {
 
     // Watch for license key changes and refresh subscription immediately
     use_effect({
-        let hive_key = hive_key.clone();
+        let mut hive_key = hive_key.clone();
         let mut subscription_display = subscription_display.clone();
         let mut show_upgrade_dialog = show_upgrade_dialog.clone();
         let mut error_shown = error_shown.clone();
@@ -1732,25 +1733,25 @@ fn App() -> Element {
                                                 let remaining = auth.remaining.unwrap_or(u32::MAX);
 
                                                 if limit == u32::MAX {
-                                                    *subscription_display.write() = format!(
+                                                    subscription_display.set(format!(
                                                         "{} | {} | Unlimited conversations",
                                                         email, tier
-                                                    );
+                                                    ));
                                                 } else if remaining == 0 {
-                                                    *subscription_display.write() = format!(
+                                                    subscription_display.set(format!(
                                                         "{} | {} | Daily limit reached ({}/{})",
                                                         email,
                                                         tier,
                                                         limit - remaining,
                                                         limit
-                                                    );
+                                                    ));
 
                                                     if !*error_shown.read() {
-                                                        *show_upgrade_dialog.write() = true;
-                                                        *error_shown.write() = true;
+                                                        show_upgrade_dialog.set(true);
+                                                        error_shown.set(true);
                                                     }
                                                 } else {
-                                                    *subscription_display.write() = format!("{} | {} | {} conversations remaining today", email, tier, remaining);
+                                                    subscription_display.set(format!("{} | {} | {} conversations remaining today", email, tier, remaining));
                                                 }
                                                 app_state.write().total_conversations_remaining =
                                                     Some(remaining);
@@ -1765,16 +1766,16 @@ fn App() -> Element {
                                                     // Parse the limit from error if possible, otherwise use default
                                                     let limit =
                                                         if tier == "FREE" { 10 } else { 50 }; // Adjust based on tier
-                                                    *subscription_display.write() = format!(
+                                                    subscription_display.set(format!(
                                                         "{} | {} | Daily limit reached ({}/{})",
                                                         email, tier, limit, limit
-                                                    );
+                                                    ));
                                                 } else {
                                                     // Some other error
-                                                    *subscription_display.write() = format!(
+                                                    subscription_display.set(format!(
                                                         "{} | {} | Limited access",
                                                         email, tier
-                                                    );
+                                                    ));
                                                 }
                                                 app_state.write().total_conversations_remaining =
                                                     Some(0);
@@ -1831,7 +1832,7 @@ fn App() -> Element {
 
                     match ApiKeyManager::load_from_database().await {
                         Ok(config) => {
-                            *api_config.write() = config.clone();
+                            api_config.set(config.clone());
                             if let Some(hive_key) = config.hive_key {
                                 match ConversationGateway::new() {
                                     Ok(gateway) => {
@@ -1855,19 +1856,19 @@ fn App() -> Element {
                                                             auth.remaining.unwrap_or(u32::MAX);
 
                                                         if limit == u32::MAX {
-                                                            *subscription_display.write() = format!(
+                                                            subscription_display.set(format!(
                                                                 "{} | {} | Unlimited conversations",
                                                                 email, tier
-                                                            );
+                                                            ));
                                                         } else if remaining == 0 {
-                                                            *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit - remaining, limit);
+                                                            subscription_display.set(format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit - remaining, limit));
 
                                                             if !*error_shown.read() {
-                                                                *show_upgrade_dialog.write() = true;
-                                                                *error_shown.write() = true;
+                                                                show_upgrade_dialog.set(true);
+                                                                error_shown.set(true);
                                                             }
                                                         } else {
-                                                            *subscription_display.write() = format!("{} | {} | {} conversations remaining today", email, tier, remaining);
+                                                            subscription_display.set(format!("{} | {} | {} conversations remaining today", email, tier, remaining));
                                                         }
                                                         app_state
                                                             .write()
@@ -1888,13 +1889,13 @@ fn App() -> Element {
                                                             } else {
                                                                 50
                                                             }; // Adjust based on tier
-                                                            *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit, limit);
+                                                            subscription_display.set(format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit, limit));
                                                         } else {
                                                             // Some other error
-                                                            *subscription_display.write() = format!(
+                                                            subscription_display.set(format!(
                                                                 "{} | {} | Limited access",
                                                                 email, tier
-                                                            );
+                                                            ));
                                                         }
                                                         app_state
                                                             .write()
@@ -1915,11 +1916,11 @@ fn App() -> Element {
                                     }
                                 }
                             } else {
-                                *subscription_display.write() = "No license configured".to_string();
+                                subscription_display.set("No license configured".to_string());
                             }
                         }
                         Err(_) => {
-                            *subscription_display.write() = "No license configured".to_string();
+                            subscription_display.set("No license configured".to_string());
                         }
                     }
                 }
@@ -1962,19 +1963,19 @@ fn App() -> Element {
                                                             auth.remaining.unwrap_or(u32::MAX);
 
                                                         if limit == u32::MAX {
-                                                            *subscription_display.write() = format!(
+                                                            subscription_display.set(format!(
                                                                 "{} | {} | Unlimited conversations",
                                                                 email, tier
-                                                            );
+                                                            ));
                                                         } else if remaining == 0 {
-                                                            *subscription_display.write() = format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit - remaining, limit);
+                                                            subscription_display.set(format!("{} | {} | Daily limit reached ({}/{})", email, tier, limit - remaining, limit));
 
                                                             if !*error_shown.read() {
-                                                                *show_upgrade_dialog.write() = true;
-                                                                *error_shown.write() = true;
+                                                                show_upgrade_dialog.set(true);
+                                                                error_shown.set(true);
                                                             }
                                                         } else {
-                                                            *subscription_display.write() = format!("{} | {} | {} conversations remaining today", email, tier, remaining);
+                                                            subscription_display.set(format!("{} | {} | {} conversations remaining today", email, tier, remaining));
                                                         }
                                                         app_state
                                                             .write()
@@ -2004,8 +2005,8 @@ fn App() -> Element {
                                                     // We already have the user info from validate_license_key
                                                     // Just ensure the upgrade dialog shows
                                                     if !*error_shown.read() {
-                                                        *show_upgrade_dialog.write() = true;
-                                                        *error_shown.write() = true;
+                                                        show_upgrade_dialog.set(true);
+                                                        error_shown.set(true);
                                                     }
                                                 } else if subscription_display.read().contains("@")
                                                 {
@@ -2027,7 +2028,7 @@ fn App() -> Element {
                                                             .trim()
                                                             .to_string()
                                                     };
-                                                    *subscription_display.write() = display;
+                                                    subscription_display.set(display);
                                                 }
                                             }
                                         }
@@ -2064,7 +2065,7 @@ fn App() -> Element {
                 if *initial_dir_loaded.read() {
                     return; // Already loaded
                 }
-                *initial_dir_loaded.write() = true;
+                initial_dir_loaded.set(true);
                 let expanded_map = expanded_dirs.read().clone();
                 
                 spawn(async move {
@@ -2127,7 +2128,7 @@ fn App() -> Element {
 
     // Monitor streaming content changes
     use_effect({
-        let app_state = app_state.clone();
+        let mut app_state = app_state.clone();
         let should_auto_scroll = should_auto_scroll.clone();
         move || {
             let current_length = app_state.read().consensus.streaming_content.len();
@@ -2156,7 +2157,7 @@ fn App() -> Element {
     
     // Update previous content length in a separate effect to avoid circular dependency
     use_effect({
-        let app_state = app_state.clone();
+        let mut app_state = app_state.clone();
         let mut previous_content_length = previous_content_length.clone();
         move || {
             let current_length = app_state.read().consensus.streaming_content.len();
@@ -2167,7 +2168,7 @@ fn App() -> Element {
     // Handle menu actions
     // Process AI Helper UI events
     use_effect({
-        let app_state = app_state.clone();
+        let mut app_state = app_state.clone();
         
         move || {
             use hive_ai::desktop::ai_ui_events::process_ai_helper_events;
@@ -2178,7 +2179,7 @@ fn App() -> Element {
     let handle_menu_action = {
         let mut git_state_clone = git_state.clone();
         let mut active_git_watcher_clone = active_git_watcher.clone();
-        let git_context = git_context.clone();
+        let mut git_context = git_context.clone();
         move |action: MenuAction| {
         match action {
             MenuAction::OpenFolder => {
@@ -2191,7 +2192,7 @@ fn App() -> Element {
                     let mut file_content = file_content.clone();
                     let git_state = git_state_clone.clone();
                     let active_git_watcher = active_git_watcher_clone.clone();
-                    let git_context = git_context.clone();
+                    let mut git_context = git_context.clone();
 
                     async move {
                         let current_path = current_dir.read().clone();
@@ -2204,11 +2205,11 @@ fn App() -> Element {
                         if let Some(folder) = dialog.pick_folder().await
                         {
                             // Update current directory
-                            *current_dir.write() = Some(folder.path().to_path_buf());
+                            current_dir.set(Some(folder.path().to_path_buf()));
 
                             // Clear selected file and content
-                            *selected_file.write() = None;
-                            *file_content.write() = String::new();
+                            selected_file.set(None);
+                            file_content.set(String::new());
 
                             // Clear expanded dirs for new folder
                             expanded_dirs.write().clear();
@@ -2333,7 +2334,7 @@ fn App() -> Element {
                                             tracing::info!("✅ Git watcher started for repository");
                                             
                                             // Store the watcher
-                                            *active_git_watcher_clone.write() = Some(watcher);
+                                            active_git_watcher_clone.set(Some(watcher));
                                             
                                             // Spawn task to handle git events
                                             let mut git_state_for_events = git_state_clone.clone();
@@ -2386,6 +2387,79 @@ fn App() -> Element {
                                                                 }
                                                             }
                                                         }
+                                                        GitEvent::FileStatusChanged(changed_files) => {
+                                                            // Update file statuses for specific changed files
+                                                            tracing::info!("📁 File status changed for {} files: {:?}", changed_files.len(), changed_files);
+                                                            
+                                                            if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
+                                                                if let Ok(all_statuses) = repo.file_statuses() {
+                                                                    let mut current_status_map = git_state_for_events.file_statuses.read().clone();
+                                                                    let mut updated = false;
+                                                                    
+                                                                    // Create a set of changed files for faster lookup
+                                                                    let changed_set: std::collections::HashSet<_> = changed_files.iter().collect();
+                                                                    
+                                                                    // Update statuses for changed files
+                                                                    for (path, git_status) in &all_statuses {
+                                                                        // Only process files that are in the changed list
+                                                                        if changed_set.contains(path) {
+                                                                            let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                                                hive_ai::desktop::git::StatusType::Modified
+                                                                            } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                                                hive_ai::desktop::git::StatusType::Added
+                                                                            } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                                                hive_ai::desktop::git::StatusType::Deleted
+                                                                            } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                                                hive_ai::desktop::git::StatusType::Renamed
+                                                                            } else if git_status.is_wt_new() {
+                                                                                hive_ai::desktop::git::StatusType::Untracked
+                                                                            } else {
+                                                                                // File is now clean, remove from status map
+                                                                                current_status_map.remove(path);
+                                                                                updated = true;
+                                                                                continue;
+                                                                            };
+                                                                            
+                                                                            tracing::debug!("📄 Updated status for {}: {:?}", path.display(), status_type);
+                                                                            
+                                                                            let file_status = hive_ai::desktop::git::FileStatus {
+                                                                                path: path.clone(),
+                                                                                status_type,
+                                                                                is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                          git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                          git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                                  git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                                                    git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                                                    git_status.contains(git2::Status::WT_DELETED),
+                                                                            };
+                                                                            current_status_map.insert(path.clone(), file_status);
+                                                                            updated = true;
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    // Also check for files that were deleted/moved and are no longer in git status
+                                                                    for changed_file in &changed_files {
+                                                                        if !all_statuses.iter().any(|(path, _)| path == changed_file) {
+                                                                            // File was deleted or is now clean
+                                                                            if current_status_map.remove(changed_file).is_some() {
+                                                                                updated = true;
+                                                                                tracing::debug!("🗑️ Removed status for deleted/clean file: {}", changed_file.display());
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    if updated {
+                                                                        git_state_for_events.file_statuses.set(current_status_map);
+                                                                        tracing::info!("✅ Updated file statuses for {} changed files", changed_files.len());
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                         GitEvent::BranchChanged | GitEvent::RemoteChanged => {
                                                             // Update branch info and sync status
                                                             if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
@@ -2418,7 +2492,11 @@ fn App() -> Element {
                                                                 }
                                                             }
                                                         }
-                                                        _ => {}
+                                                        GitEvent::ConfigChanged => {
+                                                            // Git configuration changed, refresh repository state
+                                                            tracing::info!("⚙️ Git configuration changed, refreshing repository state");
+                                                            // Could trigger a full refresh if needed
+                                                        }
                                                     }
                                                 }
                                             });
@@ -2429,7 +2507,7 @@ fn App() -> Element {
                                     }
                                 } else {
                                     tracing::info!("📄 No git repositories found in selected folder");
-                                    *active_git_watcher_clone.write() = None;
+                                    active_git_watcher_clone.set(None);
                                 }
                             });
                             
@@ -2449,7 +2527,7 @@ fn App() -> Element {
                             }
                             
                             // Update IDE AI Helper Broker repository context
-                            let ide_ai_broker = ide_ai_broker.clone();
+                            let mut ide_ai_broker = ide_ai_broker.clone();
                             spawn(async move {
                                 if let Some(broker) = ide_ai_broker.read().as_ref() {
                                     if let Err(e) = broker.update_repository_context().await {
@@ -2516,7 +2594,7 @@ fn App() -> Element {
                 });
             }
             MenuAction::About => {
-                *show_about_dialog.write() = true;
+                show_about_dialog.set(true);
             }
             MenuAction::OpenFile => {
                 spawn({
@@ -2536,19 +2614,19 @@ fn App() -> Element {
                             }
                             
                             // Set as active tab
-                            *active_tab.write() = path_string.clone();
-                            *selected_file.write() = Some(path_string.clone());
+                            active_tab.set(path_string.clone());
+                            selected_file.set(Some(path_string.clone()));
 
                             match file_system::read_file_content(file.path()).await {
                                 Ok(content) => {
                                     tab_contents.write().insert(path_string, content.clone());
-                                    *file_content.write() = content;
+                                    file_content.set(content);
                                 }
                                 Err(e) => {
                                     eprintln!("Error reading file: {}", e);
                                     let error_content = format!("// Error reading file: {}", e);
                                     tab_contents.write().insert(path_string, error_content.clone());
-                                    *file_content.write() = error_content;
+                                    file_content.set(error_content);
                                 }
                             }
                         }
@@ -2597,10 +2675,10 @@ fn App() -> Element {
             }
             MenuAction::CloseFolder => {
                 // Clear the current folder
-                *current_dir.write() = None;
+                current_dir.set(None);
                 file_tree.write().clear();
-                *selected_file.write() = Some("__welcome__".to_string());
-                *file_content.write() = String::new();
+                selected_file.set(Some("__welcome__".to_string()));
+                file_content.set(String::new());
                 // Also clear the app state's current project
                 app_state.write().current_project = None;
                 
@@ -2616,7 +2694,7 @@ fn App() -> Element {
                 active_git_watcher_clone.set(None);
             }
             MenuAction::CommandPalette => {
-                *show_command_palette.write() = true;
+                show_command_palette.set(true);
             }
             MenuAction::ChangeTheme => {
                 // TODO: Show theme selector
@@ -2624,12 +2702,12 @@ fn App() -> Element {
                 println!("Theme selector not yet implemented");
             }
             MenuAction::Settings => {
-                *show_settings_dialog.write() = true;
+                show_settings_dialog.set(true);
             }
             MenuAction::Welcome => {
-                *show_welcome_dialog.write() = true;
+                show_welcome_dialog.set(true);
                 // Set the selected file to show welcome in editor
-                *selected_file.write() = Some("__welcome__".to_string());
+                selected_file.set(Some("__welcome__".to_string()));
             }
             MenuAction::Documentation => {
                 // Open documentation in browser
@@ -2654,7 +2732,7 @@ fn App() -> Element {
 
                     println!("Checking for updates...");
                     let checker =
-                        UpdateChecker::new(hive_ai::VERSION.to_string(), UpdateChannel::Stable);
+                        UpdateChecker::new("2.0.2".to_string(), UpdateChannel::Stable);
 
                     match checker.check_for_updates().await {
                         Ok(Some(update)) => {
@@ -2664,22 +2742,22 @@ fn App() -> Element {
                                 update.release_date.format("%Y-%m-%d")
                             );
                             // Store update information and show dialog
-                            *update_info.write() = (
+                            update_info.set((
                                 update.version.clone(),
                                 update.release_date.format("%B %d, %Y").to_string(),
                                 update.download_url.clone(),
                                 update.changelog_url.clone(),
-                            );
-                            *show_update_available_dialog.write() = true;
+                            ));
+                            show_update_available_dialog.set(true);
                         }
                         Ok(None) => {
-                            println!("You're running the latest version ({})", hive_ai::VERSION);
-                            *show_no_updates_dialog.write() = true;
+                            println!("You're running the latest version ({})", "2.0.2");
+                            show_no_updates_dialog.set(true);
                         }
                         Err(e) => {
                             eprintln!("Failed to check for updates: {}", e);
-                            *update_error_message.write() = e.to_string();
-                            *show_update_error_dialog.write() = true;
+                            update_error_message.set(e.to_string());
+                            show_update_error_dialog.set(true);
                         }
                     }
                 });
@@ -2698,11 +2776,11 @@ fn App() -> Element {
         let mut file_content = file_content.clone();
         let mut show_welcome_dialog = show_welcome_dialog.clone();
         let current_dir = current_dir.clone();
-        let file_tree = file_tree.clone();
+        let mut file_tree = file_tree.clone();
         let expanded_dirs = expanded_dirs.clone();
-        let git_state = git_state.clone();
+        let mut git_state = git_state.clone();
         let active_git_watcher = active_git_watcher.clone();
-        let git_context = git_context.clone();
+        let mut git_context = git_context.clone();
 
         move |action: WelcomeAction| {
             match action {
@@ -2714,9 +2792,9 @@ fn App() -> Element {
                         let mut expanded_dirs = expanded_dirs.clone();
                         let mut selected_file = selected_file.clone();
                         let mut file_content = file_content.clone();
-                        let git_state = git_state.clone();
+                        let mut git_state = git_state.clone();
                         let active_git_watcher = active_git_watcher.clone();
-                        let git_context = git_context.clone();
+                        let mut git_context = git_context.clone();
 
                         async move {
                             let current_path = current_dir.read().clone();
@@ -2729,11 +2807,11 @@ fn App() -> Element {
                             if let Some(folder) = dialog.pick_folder().await
                             {
                                 // Update current directory
-                                *current_dir.write() = Some(folder.path().to_path_buf());
+                                current_dir.set(Some(folder.path().to_path_buf()));
 
                                 // Clear selected file and content
-                                *selected_file.write() = None;
-                                *file_content.write() = String::new();
+                                selected_file.set(None);
+                                file_content.set(String::new());
 
                                 // Clear expanded dirs for new folder
                                 expanded_dirs.write().clear();
@@ -2853,7 +2931,7 @@ fn App() -> Element {
                                                 tracing::info!("✅ Git watcher started for repository");
                                                 
                                                 // Store the watcher
-                                                *active_git_watcher_clone.write() = Some(watcher);
+                                                active_git_watcher_clone.set(Some(watcher));
                                                 
                                                 // Spawn task to handle git events
                                                 let mut git_state_for_events = git_state_clone.clone();
@@ -2906,6 +2984,79 @@ fn App() -> Element {
                                                                     }
                                                                 }
                                                             }
+                                                            GitEvent::FileStatusChanged(changed_files) => {
+                                                                // Update file statuses for specific changed files
+                                                                tracing::info!("📁 File status changed for {} files: {:?}", changed_files.len(), changed_files);
+                                                                
+                                                                if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
+                                                                    if let Ok(all_statuses) = repo.file_statuses() {
+                                                                        let mut current_status_map = git_state_for_events.file_statuses.read().clone();
+                                                                        let mut updated = false;
+                                                                        
+                                                                        // Create a set of changed files for faster lookup
+                                                                        let changed_set: std::collections::HashSet<_> = changed_files.iter().collect();
+                                                                        
+                                                                        // Update statuses for changed files
+                                                                        for (path, git_status) in &all_statuses {
+                                                                            // Only process files that are in the changed list
+                                                                            if changed_set.contains(path) {
+                                                                                let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
+                                                                                    hive_ai::desktop::git::StatusType::Modified
+                                                                                } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
+                                                                                    hive_ai::desktop::git::StatusType::Added
+                                                                                } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
+                                                                                    hive_ai::desktop::git::StatusType::Deleted
+                                                                                } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
+                                                                                    hive_ai::desktop::git::StatusType::Renamed
+                                                                                } else if git_status.is_wt_new() {
+                                                                                    hive_ai::desktop::git::StatusType::Untracked
+                                                                                } else {
+                                                                                    // File is now clean, remove from status map
+                                                                                    current_status_map.remove(path);
+                                                                                    updated = true;
+                                                                                    continue;
+                                                                                };
+                                                                                
+                                                                                tracing::debug!("📄 Updated status for {}: {:?}", path.display(), status_type);
+                                                                                
+                                                                                let file_status = hive_ai::desktop::git::FileStatus {
+                                                                                    path: path.clone(),
+                                                                                    status_type,
+                                                                                    is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                              git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                              git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                              git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                    has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
+                                                                                                      git_status.contains(git2::Status::INDEX_MODIFIED) ||
+                                                                                                      git_status.contains(git2::Status::INDEX_DELETED) ||
+                                                                                                      git_status.contains(git2::Status::INDEX_RENAMED),
+                                                                                    has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
+                                                                                                        git_status.contains(git2::Status::WT_MODIFIED) ||
+                                                                                                        git_status.contains(git2::Status::WT_DELETED),
+                                                                                };
+                                                                                current_status_map.insert(path.clone(), file_status);
+                                                                                updated = true;
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        // Also check for files that were deleted/moved and are no longer in git status
+                                                                        for changed_file in &changed_files {
+                                                                            if !all_statuses.iter().any(|(path, _)| path == changed_file) {
+                                                                                // File was deleted or is now clean
+                                                                                if current_status_map.remove(changed_file).is_some() {
+                                                                                    updated = true;
+                                                                                    tracing::debug!("🗑️ Removed status for deleted/clean file: {}", changed_file.display());
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        if updated {
+                                                                            git_state_for_events.file_statuses.set(current_status_map);
+                                                                            tracing::info!("✅ Updated file statuses for {} changed files", changed_files.len());
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
                                                             GitEvent::BranchChanged | GitEvent::RemoteChanged => {
                                                                 // Update branch info and sync status
                                                                 if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
@@ -2938,7 +3089,11 @@ fn App() -> Element {
                                                                     }
                                                                 }
                                                             }
-                                                            _ => {}
+                                                            GitEvent::ConfigChanged => {
+                                                                // Git configuration changed, refresh repository state
+                                                                tracing::info!("⚙️ Git configuration changed, refreshing repository state");
+                                                                // Could trigger a full refresh if needed
+                                                            }
                                                         }
                                                     }
                                                 });
@@ -2949,7 +3104,7 @@ fn App() -> Element {
                                         }
                                     } else {
                                         tracing::info!("📄 No git repositories found in selected folder");
-                                        *active_git_watcher_clone.write() = None;
+                                        active_git_watcher_clone.set(None);
                                     }
                                 });
                                 
@@ -2969,7 +3124,7 @@ fn App() -> Element {
                                 }
                                 
                                 // Update IDE AI Helper Broker repository context
-                                let ide_ai_broker = ide_ai_broker.clone();
+                                let mut ide_ai_broker = ide_ai_broker.clone();
                                 spawn(async move {
                                     if let Some(broker) = ide_ai_broker.read().as_ref() {
                                         if let Err(e) = broker.update_repository_context().await {
@@ -3041,9 +3196,9 @@ fn App() -> Element {
                 }
                 WelcomeAction::NewFile => {
                     // Create new untitled file
-                    *selected_file.write() = Some("untitled.txt".to_string());
-                    *file_content.write() = String::new();
-                    *show_welcome_dialog.write() = false;
+                    selected_file.set(Some("untitled.txt".to_string()));
+                    file_content.set(String::new());
+                    show_welcome_dialog.set(false);
                 }
             }
         }
@@ -3231,7 +3386,7 @@ fn App() -> Element {
                                 if *sidebar_view.read() == SidebarView::FileExplorer { "#FFC107" } else { "#9CA3AF" }
                             ),
                             onclick: move |_| {
-                                *sidebar_view.write() = SidebarView::FileExplorer;
+                                sidebar_view.set(SidebarView::FileExplorer);
                             },
                             "📁 Files"
                         }
@@ -3243,7 +3398,7 @@ fn App() -> Element {
                                 if *sidebar_view.read() == SidebarView::SourceControl { "#FFC107" } else { "#9CA3AF" }
                             ),
                             onclick: move |_| {
-                                *sidebar_view.write() = SidebarView::SourceControl;
+                                sidebar_view.set(SidebarView::SourceControl);
                             },
                             "🔀 Source Control"
                         }
@@ -3292,8 +3447,8 @@ fn App() -> Element {
                                             current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                                         };
                                         
-                                        *show_new_file_dialog.write() = true;
-                                        *dialog_target_path.write() = Some(target);
+                                        show_new_file_dialog.set(true);
+                                        dialog_target_path.set(Some(target));
                                     },
                                     span { style: "font-size: 14px;", "📄" }
                                     span { "New File" }
@@ -3320,8 +3475,8 @@ fn App() -> Element {
                                             current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."))
                                         };
                                         
-                                        *show_new_folder_dialog.write() = true;
-                                        *dialog_target_path.write() = Some(target);
+                                        show_new_folder_dialog.set(true);
+                                        dialog_target_path.set(Some(target));
                                     },
                                     span { style: "font-size: 14px;", "📁" }
                                     span { "New Folder" }
@@ -3436,6 +3591,7 @@ fn App() -> Element {
                                                         let mut is_pushing_reset = is_pushing_handler.clone();
                                                         let mut is_pulling_reset = is_pulling_handler.clone();
                                                         let mut is_syncing_reset = is_syncing_handler.clone();
+                                                        let mut operation_status_update = git_operation_status.clone();
                                                         
                                                         // Create cancellation token for this operation
                                                         let cancel_token = CancellationToken::new();
@@ -3477,11 +3633,64 @@ fn App() -> Element {
                                                                             }
                                                                         },
                                                                         GitOperation::Sync => {
-                                                                            // VS Code style sync: pull then push
+                                                                            // Enhanced VS Code style sync with proper error handling
+                                                                            tracing::info!("Starting sync operation");
+                                                                            
+                                                                            // Update operation status for user feedback
+                                                                            operation_status_update.set(Some("Initializing sync...".to_string()));
+                                                                            
                                                                             if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
-                                                                                git_ops.sync_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
+                                                                                // Update status during operation
+                                                                                operation_status_update.set(Some(format!("Syncing with origin/{}...", branch)));
+                                                                                
+                                                                                let sync_result = git_ops.sync_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await;
+                                                                                
+                                                                                // Update status based on result
+                                                                                match &sync_result {
+                                                                                    Ok(_) => {
+                                                                                        operation_status_update.set(Some("✅ Sync completed successfully".to_string()));
+                                                                                        // Clear status after delay
+                                                                                        let mut status_clear = operation_status_update.clone();
+                                                                                        spawn(async move {
+                                                                                            tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                                                                                            status_clear.set(None);
+                                                                                        });
+                                                                                    }
+                                                                                    Err(e) => {
+                                                                                        let error_msg = if e.to_string().contains("Nothing to commit") {
+                                                                                            "ℹ️ Repository is already up to date".to_string()
+                                                                                        } else if e.to_string().contains("Authentication") {
+                                                                                            "❌ Authentication failed - check credentials".to_string()
+                                                                                        } else if e.to_string().contains("Network") || e.to_string().contains("connection") {
+                                                                                            "❌ Network error - check connection".to_string()
+                                                                                        } else {
+                                                                                            format!("❌ Sync failed: {}", e)
+                                                                                        };
+                                                                                        operation_status_update.set(Some(error_msg));
+                                                                                        // Clear error after longer delay
+                                                                                        let mut status_clear = operation_status_update.clone();
+                                                                                        spawn(async move {
+                                                                                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                                                                            status_clear.set(None);
+                                                                                        });
+                                                                                    }
+                                                                                }
+                                                                                
+                                                                                sync_result
                                                                             } else {
-                                                                                Err(anyhow::anyhow!("No remote or branch configured"))
+                                                                                let error_msg = "❌ No remote or branch configured";
+                                                                                tracing::error!("{}", error_msg);
+                                                                                
+                                                                                // Update status with error
+                                                                                operation_status_update.set(Some(error_msg.to_string()));
+                                                                                // Clear error after delay
+                                                                                let mut status_clear = operation_status_update.clone();
+                                                                                spawn(async move {
+                                                                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                                                                    status_clear.set(None);
+                                                                                });
+                                                                                
+                                                                                Err(anyhow::anyhow!(error_msg))
                                                                             }
                                                                         },
                                                                         GitOperation::Stage(path) => git_ops.stage_file(path).await,
@@ -3519,11 +3728,20 @@ fn App() -> Element {
                                                                         },
                                                                     };
                                                                     
-                                                            // Reset operation states
+                                                            // Reset operation states - CRITICAL: Always reset regardless of success/failure
                                                             match &operation {
-                                                                GitOperation::Push => is_pushing_reset.set(false),
-                                                                GitOperation::Pull => is_pulling_reset.set(false),
-                                                                GitOperation::Sync => is_syncing_reset.set(false),
+                                                                GitOperation::Push => {
+                                                                    is_pushing_reset.set(false);
+                                                                    tracing::debug!("Reset pushing state to false");
+                                                                },
+                                                                GitOperation::Pull => {
+                                                                    is_pulling_reset.set(false);
+                                                                    tracing::debug!("Reset pulling state to false");
+                                                                },
+                                                                GitOperation::Sync => {
+                                                                    is_syncing_reset.set(false);
+                                                                    tracing::debug!("Reset syncing state to false");
+                                                                },
                                                                 _ => {}
                                                             }
                                                             
@@ -3579,15 +3797,72 @@ fn App() -> Element {
                                                                 },
                                                                 Err(e) => {
                                                                     tracing::error!("Git operation failed: {:?} - {}", operation, e);
-                                                                    // Reset operation states on error too
+                                                                    
+                                                                    // Ensure operation status is updated with error if not already done
+                                                                    if operation_status_update.read().is_none() {
+                                                                        let error_msg = match &operation {
+                                                                            GitOperation::Sync => format!("❌ Sync failed: {}", e),
+                                                                            GitOperation::Push => format!("❌ Push failed: {}", e),
+                                                                            GitOperation::Pull => format!("❌ Pull failed: {}", e),
+                                                                            _ => format!("❌ Operation failed: {}", e),
+                                                                        };
+                                                                        operation_status_update.set(Some(error_msg));
+                                                                        
+                                                                        // Clear error after delay
+                                                                        let mut status_clear = operation_status_update.clone();
+                                                                        spawn(async move {
+                                                                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                                                            status_clear.set(None);
+                                                                        });
+                                                                    }
+                                                                    
+                                                                    // CRITICAL: Always reset operation states on error too
                                                                     match &operation {
-                                                                        GitOperation::Push => is_pushing_reset.set(false),
-                                                                        GitOperation::Pull => is_pulling_reset.set(false),
-                                                                        GitOperation::Sync => is_syncing_reset.set(false),
+                                                                        GitOperation::Push => {
+                                                                            is_pushing_reset.set(false);
+                                                                            tracing::debug!("Reset pushing state to false (error)");
+                                                                        },
+                                                                        GitOperation::Pull => {
+                                                                            is_pulling_reset.set(false);
+                                                                            tracing::debug!("Reset pulling state to false (error)");
+                                                                        },
+                                                                        GitOperation::Sync => {
+                                                                            is_syncing_reset.set(false);
+                                                                            tracing::debug!("Reset syncing state to false (error)");
+                                                                        },
                                                                         _ => {}
                                                                     }
                                                                 }
                                                             }
+                                                            } else {
+                                                                tracing::error!("Failed to create GitOperations for repo: {:?}", repo_path);
+                                                                
+                                                                // Update status with initialization error
+                                                                operation_status_update.set(Some("❌ Failed to initialize git operations".to_string()));
+                                                                
+                                                                // CRITICAL: Reset operation states even on initialization failure
+                                                                match &operation {
+                                                                    GitOperation::Push => {
+                                                                        is_pushing_reset.set(false);
+                                                                        tracing::debug!("Reset pushing state to false (init failure)");
+                                                                    },
+                                                                    GitOperation::Pull => {
+                                                                        is_pulling_reset.set(false);
+                                                                        tracing::debug!("Reset pulling state to false (init failure)");
+                                                                    },
+                                                                    GitOperation::Sync => {
+                                                                        is_syncing_reset.set(false);
+                                                                        tracing::debug!("Reset syncing state to false (init failure)");
+                                                                    },
+                                                                    _ => {}
+                                                                }
+                                                                
+                                                                // Clear error after delay
+                                                                let mut status_clear = operation_status_update.clone();
+                                                                spawn(async move {
+                                                                    tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                                                                    status_clear.set(None);
+                                                                });
                                                             }
                                                         });
                                                     }
@@ -3639,11 +3914,15 @@ fn App() -> Element {
                                                                 // Open diff view for the file
                                                                 let file_path_to_open = file_path_for_click_inner.clone();
                                                                 let mut diff_tabs = diff_tabs.clone();
+                                                                let mut open_tabs = open_tabs.clone();
+                                                                let mut active_tab = active_tab.clone();
+                                                                let mut current_view = current_view.clone();
                                                                 let repo_path = current_dir.read().clone().unwrap_or_else(|| PathBuf::from("."));
                                                                 
                                                                 spawn(async move {
                                                                     // Generate diff for the file
-                                                                    match get_file_diff(&repo_path, &PathBuf::from(&file_path_to_open)).await {
+                                                                    let full_file_path = repo_path.join(&file_path_to_open);
+                                                                    match get_file_diff(&repo_path, &full_file_path).await {
                                                                         Ok(diff_result) => {
                                                                             // Create a special tab name for diffs
                                                                             let diff_tab_name = format!("diff:{}", file_path_to_open);
@@ -3657,8 +3936,8 @@ fn App() -> Element {
                                                                             }
                                                                             
                                                                             // Switch to this diff tab
-                                                                            *active_tab.write() = diff_tab_name;
-                                                                            *current_view.write() = "diff".to_string();
+                                                                            active_tab.set(diff_tab_name);
+                                                                            current_view.set("diff".to_string());
                                                                         }
                                                                         Err(e) => {
                                                                             tracing::error!("Failed to generate diff: {}", e);
@@ -3772,8 +4051,8 @@ fn App() -> Element {
                                 class: "action-btn",
                                 style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
                                 onclick: move |_| {
-                                    *active_tab.write() = "__analytics__".to_string();
-                                    *current_view.write() = "analytics".to_string();
+                                    active_tab.set("__analytics__".to_string());
+                                    current_view.set("analytics".to_string());
                                     if !open_tabs.read().contains(&"__analytics__".to_string()) {
                                         open_tabs.write().push("__analytics__".to_string());
                                     }
@@ -3800,7 +4079,7 @@ fn App() -> Element {
                                 class: "action-btn",
                                 style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
                                 onclick: move |_| {
-                                    *show_settings_dialog.write() = true;
+                                    show_settings_dialog.set(true);
                                 },
                                 span { style: "font-size: 14px;", "⚙️" }
                                 span { "Settings" }
@@ -3836,7 +4115,7 @@ fn App() -> Element {
                                 onclick: move |_| {
                                     let current_offset = tab_scroll_offset.read().clone();
                                     if current_offset > 0 {
-                                        *tab_scroll_offset.write() = current_offset - 1;
+                                        tab_scroll_offset.set(current_offset - 1);
                                     }
                                 },
                                 "‹"
@@ -3889,17 +4168,17 @@ fn App() -> Element {
                                                     class: if is_active { "editor-tab active" } else { "editor-tab" },
                                                     style: "min-width: 120px; max-width: 180px; flex-shrink: 0;", // Fixed tab width for consistency
                                                     onclick: move |_| {
-                                                        *active_tab.write() = tab_for_click.clone();
-                                                        *selected_file.write() = Some(tab_for_click.clone());
+                                                        active_tab.set(tab_for_click.clone());
+                                                        selected_file.set(Some(tab_for_click.clone()));
                                                         
                                                         // Update current view based on tab type
                                                         if tab_for_click == "__analytics__" {
-                                                            *current_view.write() = "analytics".to_string();
+                                                            current_view.set("analytics".to_string());
                                                         } else {
-                                                            *current_view.write() = "code".to_string();
+                                                            current_view.set("code".to_string());
                                                             // Update file_content from tab_contents
                                                             if let Some(content) = tab_contents.read().get(&tab_for_click) {
-                                                                *file_content.write() = content.clone();
+                                                                file_content.set(content.clone());
                                                             }
                                                         }
                                                     },
@@ -3923,21 +4202,21 @@ fn App() -> Element {
                                                                 let new_tab_count = open_tabs.read().len();
                                                                 let current_offset = tab_scroll_offset.read().clone();
                                                                 if current_offset > 0 && current_offset >= new_tab_count {
-                                                                    *tab_scroll_offset.write() = new_tab_count.saturating_sub(max_visible_tabs);
+                                                                    tab_scroll_offset.set(new_tab_count.saturating_sub(max_visible_tabs));
                                                                 }
                                                                 
                                                                 // If this was the active tab, switch to another
                                                                 if *active_tab.read() == tab_for_close {
                                                                     if let Some(first_tab) = open_tabs.read().first() {
-                                                                        *active_tab.write() = first_tab.clone();
-                                                                        *selected_file.write() = Some(first_tab.clone());
+                                                                        active_tab.set(first_tab.clone());
+                                                                        selected_file.set(Some(first_tab.clone()));
                                                                         
                                                                         if first_tab == "__analytics__" {
-                                                                            *current_view.write() = "analytics".to_string();
+                                                                            current_view.set("analytics".to_string());
                                                                         } else {
-                                                                            *current_view.write() = "code".to_string();
+                                                                            current_view.set("code".to_string());
                                                                             if let Some(content) = tab_contents.read().get(first_tab) {
-                                                                                *file_content.write() = content.clone();
+                                                                                file_content.set(content.clone());
                                                                             }
                                                                         }
                                                                     }
@@ -3966,7 +4245,7 @@ fn App() -> Element {
                                     let current_offset = tab_scroll_offset.read().clone();
                                     let total_tabs = open_tabs.read().len();
                                     if current_offset + max_visible_tabs < total_tabs {
-                                        *tab_scroll_offset.write() = current_offset + 1;
+                                        tab_scroll_offset.set(current_offset + 1);
                                     }
                                 },
                                 "›"
@@ -3994,29 +4273,39 @@ fn App() -> Element {
                         } else if active_tab.read().starts_with("diff:") {
                             // Show diff view
                             if let Some(diff_result) = diff_tabs.read().get(&*active_tab.read()) {
-                                {
-                                    let active_tab_name = active_tab.read().clone();
-                                    let file_path = active_tab_name.strip_prefix("diff:").unwrap_or(&active_tab_name);
-                                    hive_ai::desktop::diff_viewer::DiffViewer(
-                                        hive_ai::desktop::diff_viewer::DiffViewerProps {
-                                            diff: diff_result.clone(),
-                                            view_mode: *diff_view_mode.read(),
-                                            file_path: file_path.to_string(),
-                                            repo_path: current_dir.read().clone().unwrap_or_default().to_string_lossy().to_string(),
-                                            on_stage: None,
-                                            on_view_mode_change: Some(EventHandler::new({
-                                                let mut diff_view_mode = diff_view_mode.clone();
-                                                move |mode| {
-                                                    *diff_view_mode.write() = mode;
-                                                }
-                                            })),
-                                            on_diff_action: None,
-                                            inline_actions_enabled: true,
-                                            keyboard_shortcuts_enabled: true,
+                                DiffViewer {
+                                    diff: diff_result.clone(),
+                                    view_mode: *diff_view_mode.read(),
+                                    file_path: active_tab.read().strip_prefix("diff:").unwrap_or(&*active_tab.read()).to_string(),
+                                    repo_path: current_dir.read().clone().unwrap_or_default().to_string_lossy().to_string(),
+                                    on_stage: None,
+                                    on_view_mode_change: EventHandler::new({
+                                        let mut diff_view_mode = diff_view_mode.clone();
+                                        move |mode| {
+                                            diff_view_mode.set(mode);
                                         }
-                                    )
+                                    }),
+                                    on_diff_action: None,
+                                    inline_actions_enabled: true,
+                                    keyboard_shortcuts_enabled: true,
                                 }
-                            }
+                            } else {
+                                // Show loading state while diff is being generated
+                                div {
+                                        style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #6e7681;",
+                                        div {
+                                            style: "text-align: center;",
+                                            div {
+                                                style: "font-size: 18px; margin-bottom: 8px;",
+                                                "⏳ Loading diff..."
+                                            }
+                                            div {
+                                                style: "font-size: 14px;",
+                                                "Generating file differences"
+                                            }
+                                        }
+                                    }
+                                }
                         } else if !active_tab.read().is_empty() && *active_tab.read() != "__welcome__" {
                             // Show file content for the active tab with VS Code-style editor
                             if let Some(content) = tab_contents.read().get(&*active_tab.read()) {
@@ -4049,7 +4338,7 @@ fn App() -> Element {
                                     on_cursor_change: {
                                         let mut cursor_position = cursor_position.clone();
                                         move |(line, col): (usize, usize)| {
-                                            *cursor_position.write() = (line, col);
+                                            cursor_position.set((line, col));
                                             tracing::debug!("Cursor position updated: Ln {}, Col {}", line, col);
                                         }
                                     },
@@ -4065,7 +4354,7 @@ fn App() -> Element {
                             {
                                 let (line, col) = *cursor_position.read();
                                 if line != 1 || col != 1 {
-                                    *cursor_position.write() = (1, 1);
+                                    cursor_position.set((1, 1));
                                 }
                             }
                             div {
@@ -4194,12 +4483,12 @@ fn App() -> Element {
                                 match eval.await {
                                     Ok(result) => {
                                         if let Some(is_at_bottom) = result.as_bool() {
-                                            *should_auto_scroll.write() = is_at_bottom;
+                                            should_auto_scroll.set(is_at_bottom);
                                         }
                                     }
                                     Err(_) => {
                                         // Default to auto-scroll if we can't detect position
-                                        *should_auto_scroll.write() = true;
+                                        should_auto_scroll.set(true);
                                     }
                                 }
                             });
@@ -4249,7 +4538,7 @@ fn App() -> Element {
                             placeholder: "Ask Hive anything...",
                             disabled: *is_processing.read(),
                             rows: "3",
-                            oninput: move |evt| *input_value.write() = evt.value().clone(),
+                            oninput: move |evt| input_value.set(evt.value().clone()),
                             onkeydown: {
                                 let consensus_manager = consensus_manager.clone();
                                 let mut app_state_for_toggle = app_state.clone();
@@ -4286,10 +4575,10 @@ fn App() -> Element {
                                         app_state_ref.write().consensus.streaming_content.clear();
 
                                         // Re-enable auto-scroll for new query
-                                        *should_auto_scroll_ref.write() = true;
+                                        should_auto_scroll_ref.set(true);
 
                                         // Reset content length tracker to ensure scrolling works
-                                        *previous_content_length_ref.write() = 0;
+                                        previous_content_length_ref.set(0);
 
                                         // Start processing
                                         is_processing_ref.set(true);
@@ -4301,7 +4590,7 @@ fn App() -> Element {
                                             let mut is_processing = is_processing_ref.clone();
                                             let mut app_state = app_state_ref.clone();
                                             let mut show_upgrade_dialog = show_upgrade_dialog_ref.clone();
-                                            let ide_ai_broker = ide_ai_broker_ref.clone();
+                                            let mut ide_ai_broker = ide_ai_broker_ref.clone();
                                             let mut is_cancelling = is_cancelling_ref.clone();
                                             let cancellation_flag_clone = cancellation_flag.read().clone();
 
@@ -4361,7 +4650,7 @@ fn App() -> Element {
                                                         
                                                         // Set final response
                                                         let html = markdown::to_html(&final_response);
-                                                        *current_response.write() = html;
+                                                        current_response.set(html);
                                                     }
                                                     Err(e) => {
                                                         let error_msg = e.to_string();
@@ -4374,7 +4663,7 @@ fn App() -> Element {
                                                            full_error_chain.contains("Cancelled") {
                                                             // Don't show error for cancellation - it's expected behavior
                                                             tracing::info!("Consensus was cancelled by user");
-                                                            *current_response.write() = String::new(); // Clear response area
+                                                            current_response.set(String::new()); // Clear response area
                                                             is_cancelling.set(false); // Reset cancelling state
                                                         } else {
                                                             // Debug: Log the full error to understand the structure
@@ -4392,11 +4681,11 @@ fn App() -> Element {
                                                                full_error_chain.contains("Failed to authorize with D1") {
                                                                 // Show upgrade dialog for subscription limit errors
                                                                 tracing::info!("Detected subscription limit error, showing upgrade dialog");
-                                                                *show_upgrade_dialog.write() = true;
-                                                                *current_response.write() = String::new(); // Clear response area
+                                                                show_upgrade_dialog.set(true);
+                                                                current_response.set(String::new()); // Clear response area
                                                             } else {
                                                                 // Show technical errors normally
-                                                                *current_response.write() = format!("<div class='error'>❌ Error: {}</div>", e);
+                                                                current_response.set(format!("<div class='error'>❌ Error: {}</div>", e));
                                                             }
                                                         }
                                                     }
@@ -4416,10 +4705,10 @@ fn App() -> Element {
                                             });
                                             
                                             // Store the task handle
-                                            *consensus_task_handle.write() = Some(task);
+                                            consensus_task_handle.set(Some(task));
                                         } else {
                                             // Show error if consensus engine not initialized
-                                            *current_response_ref.write() = "<div class='error'>⚠️ Consensus engine not initialized. This usually means no profile is configured. Click Settings to configure a profile.</div>".to_string();
+                                            current_response_ref.set("<div class='error'>⚠️ Consensus engine not initialized. This usually means no profile is configured. Click Settings to configure a profile.</div>".to_string());
                                             is_processing_ref.set(false);
 
                                             // Check what's actually missing
@@ -4429,10 +4718,10 @@ fn App() -> Element {
                                                 let has_api_key = ApiKeyManager::has_valid_keys().await.unwrap_or(false);
                                                 if !has_api_key {
                                                     // Show onboarding for API key
-                                                    *show_onboarding_dialog.write() = true;
+                                                    show_onboarding_dialog.set(true);
                                                 } else {
                                                     // API key exists but no profile - show settings
-                                                    *show_settings_dialog.write() = true;
+                                                    show_settings_dialog.set(true);
                                                 }
                                             });
                                         }
@@ -4523,7 +4812,7 @@ fn App() -> Element {
                                                     if response.len() > 50 {
                                                         // Update the input_value signal directly
                                                         tracing::info!("📌 Current input value: '{}'", input_value.read());
-                                                        *input_value.write() = response.clone();
+                                                        input_value.set(response.clone());
                                                         tracing::info!("✅ Updated input value: '{}'", input_value.read());
                                                         
                                                         // Also update app state
@@ -4731,11 +5020,11 @@ fn App() -> Element {
                 position: *git_menu_position.read(),
                 on_branch_selected: EventHandler::new({
                     let current_dir = current_dir.clone();
-                    let git_state = git_state.clone();
-                    let git_context = git_context.clone();
+                    let mut git_state = git_state.clone();
+                    let mut git_context = git_context.clone();
                     move |branch_name: String| {
                         if let Some(repo_path) = current_dir.read().clone() {
-                            let git_state_clone = git_state.clone();
+                            let mut git_state_clone = git_state.clone();
                             let mut git_context_clone = git_context.clone();
                             spawn(async move {
                                 if let Ok(repo) = GitRepository::open(&repo_path) {
@@ -4771,7 +5060,7 @@ fn App() -> Element {
                 visible: show_branch_menu.clone(),
                 position: (20, 30), // Position above the status bar (x=20 for left side, y=30 for above status bar)
                 on_branch_selected: EventHandler::new({
-                    let git_context = git_context.clone();
+                    let mut git_context = git_context.clone();
                     let current_dir = current_dir.clone();
                     move |branch_name: String| {
                         if let Some(repo_path) = current_dir.read().clone() {
@@ -4820,7 +5109,7 @@ fn App() -> Element {
                 
                 // Only emit event when visibility actually changes
                 if current != previous {
-                    *prev_show_branch_menu.write() = current;
+                    prev_show_branch_menu.set(current);
                     
                     // Only emit event when hiding (showing is handled in the click handler)
                     if !current && previous {
@@ -4881,7 +5170,7 @@ fn App() -> Element {
                 // Handle events in UI context
                 spawn(async move {
                     while let Some(()) = rx.recv().await {
-                        *show_branch_menu.write() = true;
+                        show_branch_menu.set(true);
                     }
                 });
             });
@@ -4994,19 +5283,19 @@ fn App() -> Element {
                 let current_dir = current_dir.clone();
                 let mut file_tree = file_tree.clone();
                 move |(action, path): (ContextMenuAction, PathBuf)| {
-                    *dialog_target_path.write() = Some(path.clone());
+                    dialog_target_path.set(Some(path.clone()));
                     match action {
                         ContextMenuAction::NewFile => {
-                            *show_new_file_dialog.write() = true;
+                            show_new_file_dialog.set(true);
                         }
                         ContextMenuAction::NewFolder => {
-                            *show_new_folder_dialog.write() = true;
+                            show_new_folder_dialog.set(true);
                         }
                         ContextMenuAction::Rename => {
-                            *show_rename_dialog.write() = true;
+                            show_rename_dialog.set(true);
                         }
                         ContextMenuAction::Delete => {
-                            *show_delete_confirm.write() = true;
+                            show_delete_confirm.set(true);
                         }
                         ContextMenuAction::Cut => {
                             context_menu_state.write().set_clipboard(path, true);
@@ -5094,7 +5383,7 @@ fn App() -> Element {
                         return; // Don't close dialog if filename is empty
                     }
                     
-                    *show_new_file_dialog.write() = false;
+                    show_new_file_dialog.set(false);
                     
                     if let Some(target_path) = dialog_target_path.read().as_ref() {
                         let parent_dir = if target_path.is_dir() { 
@@ -5125,7 +5414,7 @@ fn App() -> Element {
             on_cancel: EventHandler::new({
                 let mut show_new_file_dialog = show_new_file_dialog.clone();
                 move |_| {
-                    *show_new_file_dialog.write() = false;
+                    show_new_file_dialog.set(false);
                 }
             }),
         }
@@ -5150,7 +5439,7 @@ fn App() -> Element {
                         return; // Don't close dialog if foldername is empty
                     }
                     
-                    *show_new_folder_dialog.write() = false;
+                    show_new_folder_dialog.set(false);
                     
                     if let Some(target_path) = dialog_target_path.read().as_ref() {
                         let parent_dir = if target_path.is_dir() { 
@@ -5176,7 +5465,7 @@ fn App() -> Element {
             on_cancel: EventHandler::new({
                 let mut show_new_folder_dialog = show_new_folder_dialog.clone();
                 move |_| {
-                    *show_new_folder_dialog.write() = false;
+                    show_new_folder_dialog.set(false);
                 }
             }),
         }
@@ -5195,7 +5484,7 @@ fn App() -> Element {
                 let mut show_rename_dialog = show_rename_dialog.clone();
                 let dialog_target_path = dialog_target_path.clone();
                 move |new_name| {
-                    *show_rename_dialog.write() = false;
+                    show_rename_dialog.set(false);
                     
                     if let Some(old_path) = dialog_target_path.read().as_ref() {
                         let new_path = old_path.parent().unwrap_or(old_path).join(&new_name);
@@ -5214,7 +5503,7 @@ fn App() -> Element {
             on_cancel: EventHandler::new({
                 let mut show_rename_dialog = show_rename_dialog.clone();
                 move |_| {
-                    *show_rename_dialog.write() = false;
+                    show_rename_dialog.set(false);
                 }
             }),
         }
@@ -5234,7 +5523,7 @@ fn App() -> Element {
                 let mut show_delete_confirm = show_delete_confirm.clone();
                 let dialog_target_path = dialog_target_path.clone();
                 move |_| {
-                    *show_delete_confirm.write() = false;
+                    show_delete_confirm.set(false);
                     
                     if let Some(path) = dialog_target_path.read().as_ref() {
                         let path = path.clone();
@@ -5251,7 +5540,7 @@ fn App() -> Element {
             on_cancel: EventHandler::new({
                 let mut show_delete_confirm = show_delete_confirm.clone();
                 move |_| {
-                    *show_delete_confirm.write() = false;
+                    show_delete_confirm.set(false);
                 }
             }),
         }
@@ -5327,7 +5616,7 @@ fn FileTreeItem(
     ide_ai_broker: Signal<Option<IDEAIHelperBroker>>,
 ) -> Element {
     let git_state = use_context::<GitState>();
-    let active_git_watcher = use_context::<Signal<Option<GitWatcher>>>();
+    let mut active_git_watcher = use_context::<Signal<Option<GitWatcher>>>();
     
     let file_path = file.path.clone();
     let file_path_for_context = file_path.clone(); // Clone for context menu
@@ -5394,11 +5683,11 @@ fn FileTreeItem(
                     tracing::info!("📁 User clicked directory: {}", file_path_for_click.display());
                     
                     // Update current directory (this will trigger git context update via use_effect)
-                    *current_dir.write() = Some(file_path_for_click.clone());
+                    current_dir.set(Some(file_path_for_click.clone()));
                     
                     // Clear selected file when changing directories
-                    *selected_file.write() = None;
-                    *file_content.write() = String::new();
+                    selected_file.set(None);
+                    file_content.set(String::new());
                     
                     // Update git state directly for immediate UI update
                     let mut git_state_clone = git_state.clone();
@@ -5498,7 +5787,7 @@ fn FileTreeItem(
                     }
                     
                     // Update IDE AI Helper Broker repository context
-                    let ide_ai_broker = ide_ai_broker.clone();
+                    let mut ide_ai_broker = ide_ai_broker.clone();
                     spawn(async move {
                         if let Some(broker) = ide_ai_broker.read().as_ref() {
                             if let Err(e) = broker.update_repository_context().await {
@@ -5519,8 +5808,8 @@ fn FileTreeItem(
                     }
                     
                     // Set as active tab
-                    *active_tab.write() = path_string.clone();
-                    *selected_file.write() = Some(path_string.clone());
+                    active_tab.set(path_string.clone());
+                    selected_file.set(Some(path_string.clone()));
 
                     // Load file content immediately
                     let mut tab_contents = tab_contents.clone();
@@ -5532,13 +5821,13 @@ fn FileTreeItem(
                             Ok(content) => {
                                 println!("File content loaded immediately, {} bytes", content.len());
                                 tab_contents.write().insert(path_string_for_spawn, content.clone());
-                                *file_content.write() = content;
+                                file_content.set(content);
                             }
                             Err(e) => {
                                 println!("Error reading file immediately: {}", e);
                                 let error_content = format!("// Error reading file: {}", e);
                                 tab_contents.write().insert(path_string_for_spawn, error_content.clone());
-                                *file_content.write() = error_content;
+                                file_content.set(error_content);
                             }
                         }
                     });
@@ -5639,16 +5928,16 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                         }
                         span {
                             style: match stage.status {
-                                hive_ai::desktop::state::StageStatus::Waiting => "color: #666666; font-size: 11px;",
-                                hive_ai::desktop::state::StageStatus::Running => "color: #FFC107; font-size: 11px;",
-                                hive_ai::desktop::state::StageStatus::Completed => "color: #4caf50; font-size: 11px;",
-                                hive_ai::desktop::state::StageStatus::Error => "color: #f44336; font-size: 11px;",
+                                StageStatus::Waiting => "color: #666666; font-size: 11px;",
+                                StageStatus::Running => "color: #FFC107; font-size: 11px;",
+                                StageStatus::Completed => "color: #4caf50; font-size: 11px;",
+                                StageStatus::Error => "color: #f44336; font-size: 11px;",
                             },
                             match stage.status {
-                                hive_ai::desktop::state::StageStatus::Waiting => "Waiting",
-                                hive_ai::desktop::state::StageStatus::Running => "Running",
-                                hive_ai::desktop::state::StageStatus::Completed => "Complete",
-                                hive_ai::desktop::state::StageStatus::Error => "Error",
+                                StageStatus::Waiting => "Waiting",
+                                StageStatus::Running => "Running",
+                                StageStatus::Completed => "Complete",
+                                StageStatus::Error => "Error",
                             }
                         }
                     }
@@ -5659,10 +5948,10 @@ fn ConsensusProgressDisplay(consensus_state: ConsensusState) -> Element {
                         div {
                             style: format!("background: {}; height: 100%; width: {}%; transition: width 0.3s;",
                                 match stage.status {
-                                    hive_ai::desktop::state::StageStatus::Waiting => "#666666",
-                                    hive_ai::desktop::state::StageStatus::Running => "#FFC107",
-                                    hive_ai::desktop::state::StageStatus::Completed => "#4caf50",
-                                    hive_ai::desktop::state::StageStatus::Error => "#f44336",
+                                    StageStatus::Waiting => "#666666",
+                                    StageStatus::Running => "#FFC107",
+                                    StageStatus::Completed => "#4caf50",
+                                    StageStatus::Error => "#f44336",
                                 },
                                 stage.progress
                             ),
@@ -5720,7 +6009,7 @@ fn AnalyticsView(analytics_data: Signal<AnalyticsData>) -> Element {
                     style: "display: flex; gap: 10px; flex-wrap: wrap;",
                     
                     button {
-                        onclick: move |_| *current_report.write() = "executive".to_string(),
+                        onclick: move |_| current_report.set("executive".to_string()),
                         style: format!("padding: 8px 16px; border-radius: 6px; border: 1px solid {}; background: {}; color: {}; cursor: pointer; transition: all 0.3s;",
                             if *current_report.read() == "executive" { "#FFC107" } else { "#3e3e42" },
                             if *current_report.read() == "executive" { "#FFC107" } else { "transparent" },
@@ -5729,7 +6018,7 @@ fn AnalyticsView(analytics_data: Signal<AnalyticsData>) -> Element {
                     }
                     
                     button {
-                        onclick: move |_| *current_report.write() = "cost".to_string(),
+                        onclick: move |_| current_report.set("cost".to_string()),
                         style: format!("padding: 8px 16px; border-radius: 6px; border: 1px solid {}; background: {}; color: {}; cursor: pointer; transition: all 0.3s;",
                             if *current_report.read() == "cost" { "#FFC107" } else { "#3e3e42" },
                             if *current_report.read() == "cost" { "#FFC107" } else { "transparent" },
@@ -5738,7 +6027,7 @@ fn AnalyticsView(analytics_data: Signal<AnalyticsData>) -> Element {
                     }
                     
                     button {
-                        onclick: move |_| *current_report.write() = "performance".to_string(),
+                        onclick: move |_| current_report.set("performance".to_string()),
                         style: format!("padding: 8px 16px; border-radius: 6px; border: 1px solid {}; background: {}; color: {}; cursor: pointer; transition: all 0.3s;",
                             if *current_report.read() == "performance" { "#FFC107" } else { "#3e3e42" },
                             if *current_report.read() == "performance" { "#FFC107" } else { "transparent" },
@@ -5747,7 +6036,7 @@ fn AnalyticsView(analytics_data: Signal<AnalyticsData>) -> Element {
                     }
                     
                     button {
-                        onclick: move |_| *current_report.write() = "models".to_string(),
+                        onclick: move |_| current_report.set("models".to_string()),
                         style: format!("padding: 8px 16px; border-radius: 6px; border: 1px solid {}; background: {}; color: {}; cursor: pointer; transition: all 0.3s;",
                             if *current_report.read() == "models" { "#FFC107" } else { "#3e3e42" },
                             if *current_report.read() == "models" { "#FFC107" } else { "transparent" },
@@ -5756,7 +6045,7 @@ fn AnalyticsView(analytics_data: Signal<AnalyticsData>) -> Element {
                     }
                     
                     button {
-                        onclick: move |_| *current_report.write() = "realtime".to_string(),
+                        onclick: move |_| current_report.set("realtime".to_string()),
                         style: format!("padding: 8px 16px; border-radius: 6px; border: 1px solid {}; background: {}; color: {}; cursor: pointer; transition: all 0.3s;",
                             if *current_report.read() == "realtime" { "#FFC107" } else { "#3e3e42" },
                             if *current_report.read() == "realtime" { "#FFC107" } else { "transparent" },
