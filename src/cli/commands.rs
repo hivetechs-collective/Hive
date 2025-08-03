@@ -18,6 +18,7 @@ use crate::migration::{
 };
 use anyhow::Result;
 use console::style;
+use crate::core::error::HiveError;
 use rusqlite::params;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -2946,8 +2947,9 @@ async fn handle_interactive(mode: String, no_tui: bool) -> Result<()> {
         println!("📟 {} CLI mode (TUI disabled)", style("Using simple").dim());
     }
 
-    // This would delegate to the interactive module
-    crate::cli::interactive::start_interactive_mode(mode, !no_tui).await?;
+    // Interactive mode removed - GUI only
+    eprintln!("Interactive CLI mode has been removed. Please use the GUI with --desktop flag.");
+    return Err(HiveError::config_invalid("Interactive CLI mode not available in GUI-only build").into());
 
     Ok(())
 }
