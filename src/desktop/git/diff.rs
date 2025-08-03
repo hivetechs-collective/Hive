@@ -307,8 +307,21 @@ pub async fn get_file_diff_with_context(
     // Get the repository
     let repo = GitRepository::open(repo_path)?;
     
+    // Check if file exists
+    if !file_path.exists() {
+        tracing::error!("File does not exist: {:?}", file_path);
+        return Err(anyhow::anyhow!("File does not exist: {:?}", file_path));
+    }
+    
     // Read current file content
-    let current_content = fs::read_to_string(file_path).await?;
+    let current_content = match fs::read_to_string(file_path).await {
+        Ok(content) => content,
+        Err(e) => {
+            // Log the error and return a more informative error
+            tracing::error!("Failed to read file {:?}: {}", file_path, e);
+            return Err(anyhow::anyhow!("Failed to read file {:?}: {}", file_path, e));
+        }
+    };
     
     // Get relative path for git
     let relative_path = file_path.strip_prefix(repo_path)

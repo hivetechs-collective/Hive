@@ -1,0 +1,6 @@
+This is a test file to check if the git integration detects changes.
+I'll modify this file to test the diff viewer functionality.
+
+Line 3: Original content
+Line 4: More content
+Line 5: End of file
