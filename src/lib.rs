@@ -21,7 +21,6 @@ pub mod hooks;
 pub mod ide;
 pub mod install;
 pub mod integration;
-pub mod interactive_tui;
 pub mod memory;
 pub mod migration;
 pub mod modes;
@@ -32,7 +31,6 @@ pub mod shell;
 pub mod startup;
 pub mod subscription;
 pub mod transformation;
-pub mod tui;
 pub mod updates;
 
 // Version constant
@@ -48,4 +46,3 @@ pub use core::{
 // Re-export major subsystems
 pub use cli::CliFramework;
 pub use desktop::launch_desktop_app;
-pub use tui::TuiFramework;

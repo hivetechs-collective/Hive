@@ -9,11 +9,7 @@ pub mod banner;
 pub mod commands;
 pub mod completions;
 pub mod framework;
-pub mod interactive;
 pub mod trust;
-pub mod tui_capabilities;
-pub mod tui_commands;
-pub mod tui_themes;
 
 pub use args::{Cli, Commands};
 pub use banner::print_banner;
@@ -25,22 +21,14 @@ use std::env;
 
 /// Check if TUI should be launched based on terminal capabilities
 pub async fn should_launch_tui() -> bool {
-    use tui_capabilities::{TuiLauncher, TuiMode};
-
-    match TuiLauncher::should_launch_tui() {
-        Ok(TuiMode::Enhanced) | Ok(TuiMode::Simple) => true,
-        _ => false,
-    }
+    // TUI functionality removed - GUI only
+    false
 }
 
 /// Check TUI capabilities synchronously
 pub fn check_tui_capabilities() -> bool {
-    use tui_capabilities::TuiCapabilities;
-
-    match TuiCapabilities::detect() {
-        Ok(capabilities) => capabilities.supports_simple_tui(),
-        Err(_) => false,
-    }
+    // TUI functionality removed - GUI only
+    false
 }
 
 /// Initialize CLI system
