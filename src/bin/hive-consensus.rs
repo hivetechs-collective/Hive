@@ -1777,6 +1777,47 @@ fn App() -> Element {
     let mut sidebar_width = use_signal(|| 250.0);
     let mut chat_width = use_signal(|| 400.0);
     let mut terminal_height = use_signal(|| 300.0);
+    
+    // ⚡ CRITICAL: Immediate LazyGit resize when panel width changes
+    use_effect({
+        let lazygit_width = lazygit_width.clone();
+        let lazygit_terminal_id = lazygit_terminal_id.clone();
+        move || {
+            let width = lazygit_width.read().clone();
+            let terminal_id_opt = lazygit_terminal_id.read().clone();
+            
+            // Only trigger if LazyGit is active and has a terminal
+            if let Some(terminal_id) = terminal_id_opt {
+                tracing::info!("⚡ LazyGit width changed to {}, triggering immediate resize", width);
+                
+                // Spawn async task to trigger immediate terminal resize
+                spawn(async move {
+                    // Small delay to ensure DOM has updated
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                    
+                    // Force aggressive refresh of LazyGit terminal
+                    use hive_ai::desktop::terminal_xterm_simple::resize_terminal_pty;
+                    
+                    // Calculate new terminal dimensions based on width
+                    let char_width = 8.0;  // Approximate character width
+                    let char_height = 16.0; // Approximate character height
+                    let panel_height = 600.0; // Approximate panel height
+                    
+                    let new_cols = (width / char_width) as u16;
+                    let new_rows = (panel_height / char_height) as u16;
+                    
+                    tracing::info!("⚡ Forcing LazyGit resize to {}x{} for width {}", new_cols, new_rows, width);
+                    
+                    // Trigger immediate PTY resize
+                    if resize_terminal_pty(&terminal_id, new_cols, new_rows) {
+                        tracing::info!("✅ LazyGit width resize successful");
+                    } else {
+                        tracing::warn!("⚠️ LazyGit width resize failed");
+                    }
+                });
+            }
+        }
+    });
 
     // Subscription state
     let mut subscription_display = use_signal(|| String::from("Loading..."));
