@@ -3,6 +3,7 @@
 //! Provides VS Code-style keyboard shortcuts for staging, reverting, and managing diffs
 
 use dioxus::prelude::*;
+use dioxus_signals::Signal;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use crate::desktop::git::{DiffAction, DiffHunk, DiffLine};
@@ -269,7 +270,11 @@ pub struct GlobalShortcutHandlerProps {
 /// Shortcut help dialog component
 #[component]
 pub fn ShortcutHelpDialog(props: ShortcutHelpDialogProps) -> Element {
-    let manager = use_context::<Arc<ShortcutManager>>();
+    // Try to use context, but provide a default if not available
+    let manager = match try_consume_context::<Signal<Arc<ShortcutManager>>>() {
+        Some(signal) => signal.read().clone(),
+        None => Arc::new(ShortcutManager::new(ShortcutConfig::default()))
+    };
     let shortcuts = manager.get_shortcuts_help();
     
     if !props.visible {
