@@ -20,7 +20,7 @@ use hive_ai::desktop::git_ui_wrapper::{LazyGitWrapper, ensure_lazygit_installed,
 use hive_ai::desktop::terminal_xterm_simple::resize_terminal_pty;
 
 // Git imports
-use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
+use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration, get_lazygit_file_statuses, get_lazygit_file_diff};
 use hive_ai::desktop::git::branch_menu::{BranchMenu, BranchOperation, BranchOperationResult};
 use hive_ai::desktop::diff_viewer::DiffViewer;
 
@@ -2510,48 +2510,14 @@ fn App() -> Element {
                                         git_state_clone.sync_status.set(sync_status);
                                     }
                                     
-                                    // Get file statuses
-                                    match repo.file_statuses() {
-                                        Ok(statuses) => {
-                                            let mut status_map = std::collections::HashMap::new();
-                                            for (path, git_status) in statuses {
-                                                // Convert git2::Status to our StatusType
-                                                let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                    hive_ai::desktop::git::StatusType::Modified
-                                                } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                    hive_ai::desktop::git::StatusType::Added
-                                                } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                    hive_ai::desktop::git::StatusType::Deleted
-                                                } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                    hive_ai::desktop::git::StatusType::Renamed
-                                                } else if git_status.is_wt_new() {
-                                                    hive_ai::desktop::git::StatusType::Untracked
-                                                } else {
-                                                    continue; // Skip other statuses
-                                                };
-                                                
-                                                let file_status = hive_ai::desktop::git::FileStatus {
-                                                    path: path.clone(),
-                                                    status_type,
-                                                    is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                              git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                              git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                              git_status.contains(git2::Status::INDEX_RENAMED),
-                                                    has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                                      git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                                      git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                                      git_status.contains(git2::Status::INDEX_RENAMED),
-                                                    has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
-                                                                        git_status.contains(git2::Status::WT_MODIFIED) ||
-                                                                        git_status.contains(git2::Status::WT_DELETED),
-                                                };
-                                                status_map.insert(path, file_status);
-                                            }
+                                    // Get file statuses using LazyGit data provider
+                                    match hive_ai::desktop::git::get_lazygit_file_statuses(&folder_path).await {
+                                        Ok(status_map) => {
                                             git_state_clone.file_statuses.set(status_map);
-                                            tracing::info!("✅ Updated git file statuses");
+                                            tracing::info!("✅ Updated git file statuses using LazyGit data provider");
                                         }
                                         Err(e) => {
-                                            tracing::warn!("Failed to get repository status: {}", e);
+                                            tracing::warn!("Failed to get repository status from LazyGit: {}", e);
                                             git_state_clone.file_statuses.set(std::collections::HashMap::new());
                                         }
                                     }
@@ -2605,44 +2571,14 @@ fn App() -> Element {
                                                     // Update git state based on event type
                                                     match event {
                                                         GitEvent::StatusChanged => {
-                                                            // Refresh file statuses
-                                                            if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
-                                                                if let Ok(statuses) = repo.file_statuses() {
-                                                                    let mut status_map = std::collections::HashMap::new();
-                                                                    for (path, git_status) in statuses {
-                                                                        let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                            hive_ai::desktop::git::StatusType::Modified
-                                                                        } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                            hive_ai::desktop::git::StatusType::Added
-                                                                        } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                            hive_ai::desktop::git::StatusType::Deleted
-                                                                        } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                            hive_ai::desktop::git::StatusType::Renamed
-                                                                        } else if git_status.is_wt_new() {
-                                                                            hive_ai::desktop::git::StatusType::Untracked
-                                                                        } else {
-                                                                            continue;
-                                                                        };
-                                                                        
-                                                                        let file_status = hive_ai::desktop::git::FileStatus {
-                                                                            path: path.clone(),
-                                                                            status_type,
-                                                                            is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                                                      git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                                                      git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                                                      git_status.contains(git2::Status::INDEX_RENAMED),
-                                                                            has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                                                              git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                                                              git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                                                              git_status.contains(git2::Status::INDEX_RENAMED),
-                                                                            has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
-                                                                                                git_status.contains(git2::Status::WT_MODIFIED) ||
-                                                                                                git_status.contains(git2::Status::WT_DELETED),
-                                                                        };
-                                                                        status_map.insert(path, file_status);
-                                                                    }
+                                                            // Refresh file statuses using LazyGit data provider
+                                                            match hive_ai::desktop::git::get_lazygit_file_statuses(&repo_path_for_events).await {
+                                                                Ok(status_map) => {
                                                                     git_state_for_events.file_statuses.set(status_map);
-                                                                    tracing::info!("✅ Updated file statuses from git watcher");
+                                                                    tracing::info!("✅ Updated file statuses from git watcher using LazyGit");
+                                                                }
+                                                                Err(e) => {
+                                                                    tracing::warn!("Failed to refresh git status from LazyGit: {}", e);
                                                                 }
                                                             }
                                                         }
@@ -2650,8 +2586,8 @@ fn App() -> Element {
                                                             // Update file statuses for specific changed files
                                                             tracing::info!("📁 File status changed for {} files: {:?}", changed_files.len(), changed_files);
                                                             
-                                                            if let Ok(repo) = GitRepository::open(&repo_path_for_events) {
-                                                                if let Ok(all_statuses) = repo.file_statuses() {
+                                                            match hive_ai::desktop::git::get_lazygit_file_statuses(&repo_path_for_events).await {
+                                                                Ok(all_statuses) => {
                                                                     let mut current_status_map = git_state_for_events.file_statuses.read().clone();
                                                                     let mut updated = false;
                                                                     
@@ -2659,51 +2595,18 @@ fn App() -> Element {
                                                                     let changed_set: std::collections::HashSet<_> = changed_files.iter().collect();
                                                                     
                                                                     // Update statuses for changed files
-                                                                    for (path, git_status) in &all_statuses {
+                                                                    for (path, file_status) in &all_statuses {
                                                                         // Only process files that are in the changed list
                                                                         if changed_set.contains(path) {
-                                                                            let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                                                hive_ai::desktop::git::StatusType::Modified
-                                                                            } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                                                hive_ai::desktop::git::StatusType::Added
-                                                                            } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                                                hive_ai::desktop::git::StatusType::Deleted
-                                                                            } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                                                hive_ai::desktop::git::StatusType::Renamed
-                                                                            } else if git_status.is_wt_new() {
-                                                                                hive_ai::desktop::git::StatusType::Untracked
-                                                                            } else {
-                                                                                // File is now clean, remove from status map
-                                                                                current_status_map.remove(path);
-                                                                                updated = true;
-                                                                                continue;
-                                                                            };
-                                                                            
-                                                                            tracing::debug!("📄 Updated status for {}: {:?}", path.display(), status_type);
-                                                                            
-                                                                            let file_status = hive_ai::desktop::git::FileStatus {
-                                                                                path: path.clone(),
-                                                                                status_type,
-                                                                                is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                                                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                                                          git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                                                          git_status.contains(git2::Status::INDEX_RENAMED),
-                                                                                has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                                                                  git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                                                                  git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                                                                  git_status.contains(git2::Status::INDEX_RENAMED),
-                                                                                has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
-                                                                                                    git_status.contains(git2::Status::WT_MODIFIED) ||
-                                                                                                    git_status.contains(git2::Status::WT_DELETED),
-                                                                            };
-                                                                            current_status_map.insert(path.clone(), file_status);
+                                                                            tracing::debug!("📄 Updated status for {}: {:?}", path.display(), file_status.status_type);
+                                                                            current_status_map.insert(path.clone(), file_status.clone());
                                                                             updated = true;
                                                                         }
                                                                     }
                                                                     
                                                                     // Also check for files that were deleted/moved and are no longer in git status
                                                                     for changed_file in &changed_files {
-                                                                        if !all_statuses.iter().any(|(path, _)| path == changed_file) {
+                                                                        if !all_statuses.contains_key(changed_file) {
                                                                             // File was deleted or is now clean
                                                                             if current_status_map.remove(changed_file).is_some() {
                                                                                 updated = true;
@@ -2714,8 +2617,11 @@ fn App() -> Element {
                                                                     
                                                                     if updated {
                                                                         git_state_for_events.file_statuses.set(current_status_map);
-                                                                        tracing::info!("✅ Updated file statuses for {} changed files", changed_files.len());
+                                                                        tracing::info!("✅ Updated file statuses for {} changed files using LazyGit", changed_files.len());
                                                                     }
+                                                                }
+                                                                Err(e) => {
+                                                                    tracing::warn!("Failed to get file statuses from LazyGit: {}", e);
                                                                 }
                                                             }
                                                         }
@@ -3112,48 +3018,14 @@ fn App() -> Element {
                                             git_state_clone.sync_status.set(sync_status);
                                         }
                                         
-                                        // Get file statuses
-                                        match repo.file_statuses() {
-                                            Ok(statuses) => {
-                                                let mut status_map = std::collections::HashMap::new();
-                                                for (path, git_status) in statuses {
-                                                    // Convert git2::Status to our StatusType
-                                                    let status_type = if git_status.contains(git2::Status::WT_MODIFIED) || git_status.contains(git2::Status::INDEX_MODIFIED) {
-                                                        hive_ai::desktop::git::StatusType::Modified
-                                                    } else if git_status.contains(git2::Status::WT_NEW) || git_status.contains(git2::Status::INDEX_NEW) {
-                                                        hive_ai::desktop::git::StatusType::Added
-                                                    } else if git_status.contains(git2::Status::WT_DELETED) || git_status.contains(git2::Status::INDEX_DELETED) {
-                                                        hive_ai::desktop::git::StatusType::Deleted
-                                                    } else if git_status.contains(git2::Status::WT_RENAMED) || git_status.contains(git2::Status::INDEX_RENAMED) {
-                                                        hive_ai::desktop::git::StatusType::Renamed
-                                                    } else if git_status.is_wt_new() {
-                                                        hive_ai::desktop::git::StatusType::Untracked
-                                                    } else {
-                                                        continue; // Skip other statuses
-                                                    };
-                                                    
-                                                    let file_status = hive_ai::desktop::git::FileStatus {
-                                                        path: path.clone(),
-                                                        status_type,
-                                                        is_staged: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                                  git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                                  git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                                  git_status.contains(git2::Status::INDEX_RENAMED),
-                                                        has_staged_changes: git_status.contains(git2::Status::INDEX_NEW) ||
-                                                                          git_status.contains(git2::Status::INDEX_MODIFIED) ||
-                                                                          git_status.contains(git2::Status::INDEX_DELETED) ||
-                                                                          git_status.contains(git2::Status::INDEX_RENAMED),
-                                                        has_unstaged_changes: git_status.contains(git2::Status::WT_NEW) ||
-                                                                            git_status.contains(git2::Status::WT_MODIFIED) ||
-                                                                            git_status.contains(git2::Status::WT_DELETED),
-                                                    };
-                                                    status_map.insert(path, file_status);
-                                                }
+                                        // Get file statuses using LazyGit data provider
+                                        match hive_ai::desktop::git::get_lazygit_file_statuses(&folder_path).await {
+                                            Ok(status_map) => {
                                                 git_state_clone.file_statuses.set(status_map);
-                                                tracing::info!("✅ Updated git file statuses");
+                                                tracing::info!("✅ Updated git file statuses using LazyGit data provider");
                                             }
                                             Err(e) => {
-                                                tracing::warn!("Failed to get repository status: {}", e);
+                                                tracing::warn!("Failed to get repository status from LazyGit: {}", e);
                                                 git_state_clone.file_statuses.set(std::collections::HashMap::new());
                                             }
                                         }
@@ -4368,7 +4240,7 @@ fn App() -> Element {
                                                                 spawn(async move {
                                                                     // Generate diff for the file
                                                                     let full_file_path = repo_path.join(&file_path_to_open);
-                                                                    match get_file_diff(&repo_path, &full_file_path).await {
+                                                                    match hive_ai::desktop::git::get_lazygit_file_diff(&repo_path, &full_file_path).await {
                                                                         Ok(diff_result) => {
                                                                             // Create a special tab name for diffs
                                                                             let diff_tab_name = format!("diff:{}", file_path_to_open);

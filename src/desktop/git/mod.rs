@@ -18,6 +18,7 @@ pub mod context_manager;
 pub mod lazygit_controller;
 pub mod lazygit_updater;
 pub mod lazygit_updater_db;
+pub mod lazygit_data_provider;
 pub mod status_menu;
 pub mod repository_selector;
 pub mod repository_dropdown;
@@ -100,6 +101,9 @@ pub use lazygit_updater::{LazyGitUpdater, initialize_lazygit_updater, force_upda
 pub use lazygit_updater_db::{
     LazyGitUpdaterDB, initialize_lazygit_updater_db, force_update_lazygit_db,
     get_lazygit_update_history
+};
+pub use lazygit_data_provider::{
+    LazyGitDataProvider, get_lazygit_file_statuses, get_lazygit_file_diff
 };
 
 use dioxus::prelude::*;
