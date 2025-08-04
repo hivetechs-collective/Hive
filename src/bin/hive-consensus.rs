@@ -3476,113 +3476,6 @@ fn App() -> Element {
                 class: "main-content",
                 style: "position: relative; display: flex; flex: 1; overflow: hidden;",
 
-                // LazyGit Panel (far left) - NEW!
-                if *show_lazygit.read() {
-                    div {
-                        class: "lazygit-panel",
-                        style: format!("background: #0A0E0F; border-right: 1px solid #2D3336; display: flex; flex-direction: column; height: 100%; width: {}px; position: relative;", 
-                            lazygit_width.read()
-                        ),
-                        
-                        // LazyGit header
-                        div {
-                            class: "lazygit-header",
-                            style: "background: #181E21; border-bottom: 1px solid #2D3336; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;",
-                            
-                            div {
-                                style: "display: flex; align-items: center; gap: 8px;",
-                                span {
-                                    style: "font-size: 18px;",
-                                    "🔀"
-                                }
-                                span {
-                                    style: "color: #FFC107; font-weight: 600; font-size: 14px;",
-                                    "LazyGit"
-                                }
-                            }
-                            
-                            // Close button
-                            button {
-                                style: "background: transparent; border: none; color: #9CA3AF; cursor: pointer; padding: 4px; font-size: 16px;",
-                                title: "Hide LazyGit Panel",
-                                onclick: move |_| {
-                                    show_lazygit.set(false);
-                                },
-                                "×"
-                            }
-                        }
-                        
-                        // LazyGit terminal container
-                        div {
-                            class: "lazygit-terminal-container",
-                            style: "flex: 1; overflow: hidden; position: relative;",
-                            key: "{lazygit_update_counter}",  // Force re-render when directory changes
-                            tabindex: "0",  // Make the container focusable
-                            onclick: move |_| {
-                                // Focus the LazyGit terminal when clicked
-                                tracing::info!("LazyGit panel clicked - focusing terminal");
-                            },
-                            
-                            {
-                                // Compute values outside rsx
-                                let terminal_id_opt = lazygit_terminal_id.read().clone();
-                                let current_path = current_dir.read().as_ref()
-                                    .cloned()
-                                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-                                let git_root_opt = find_git_root(&current_path);
-                                
-                                rsx! {
-                                    if let Some(terminal_id) = terminal_id_opt {
-                                        if let Some(git_root) = git_root_opt {
-                                            div {
-                                                key: "{terminal_id}",  // Use terminal ID as key to force recreation
-                                                style: "width: 100%; height: 100%;",
-                                                TerminalXterm {
-                                                    terminal_id: terminal_id.clone(),
-                                                    initial_directory: Some(git_root.to_string_lossy().to_string()),
-                                                    command: Some("lazygit".to_string()),
-                                                    args: vec![]  // LazyGit will use the initial_directory
-                                                }
-                                            }
-                                        } else {
-                                            // Not in a git repository
-                                            div {
-                                                style: "display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #9CA3AF; padding: 20px; text-align: center;",
-                                                div {
-                                                    style: "font-size: 18px; margin-bottom: 10px;",
-                                                    "⚠️ Not a Git Repository"
-                                                }
-                                                div {
-                                                    style: "font-size: 14px; color: #6B737C;",
-                                                    "The current directory is not inside a Git repository."
-                                                }
-                                                div {
-                                                    style: "font-size: 12px; color: #6B737C; margin-top: 20px;",
-                                                    "Initialize a repository with: git init"
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        div {
-                                            style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #9CA3AF;",
-                                            "Initializing LazyGit..."
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Resize divider between LazyGit and sidebar
-                    ResizableDivider {
-                        direction: ResizeDirection::Horizontal,
-                        size: lazygit_width,
-                        min_size: 200.0,
-                        max_size: 600.0,
-                        invert_drag: false,
-                    }
-                }
-
                 // Sidebar (left)
                 div {
                     class: "sidebar",
@@ -4411,6 +4304,113 @@ fn App() -> Element {
                     min_size: 150.0,
                     max_size: 500.0,
                     invert_drag: false,  // Dragging right increases sidebar width
+                }
+
+                // LazyGit Panel (second from left after sidebar)
+                if *show_lazygit.read() {
+                    div {
+                        class: "lazygit-panel",
+                        style: format!("background: #0A0E0F; border-right: 1px solid #2D3336; display: flex; flex-direction: column; height: 100%; width: {}px; position: relative;", 
+                            lazygit_width.read()
+                        ),
+                        
+                        // LazyGit header
+                        div {
+                            class: "lazygit-header",
+                            style: "background: #181E21; border-bottom: 1px solid #2D3336; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;",
+                            
+                            div {
+                                style: "display: flex; align-items: center; gap: 8px;",
+                                span {
+                                    style: "font-size: 18px;",
+                                    "🔀"
+                                }
+                                span {
+                                    style: "color: #FFC107; font-weight: 600; font-size: 14px;",
+                                    "LazyGit"
+                                }
+                            }
+                            
+                            // Close button
+                            button {
+                                style: "background: transparent; border: none; color: #9CA3AF; cursor: pointer; padding: 4px; font-size: 16px;",
+                                title: "Hide LazyGit Panel",
+                                onclick: move |_| {
+                                    show_lazygit.set(false);
+                                },
+                                "×"
+                            }
+                        }
+                        
+                        // LazyGit terminal container
+                        div {
+                            class: "lazygit-terminal-container",
+                            style: "flex: 1; overflow: hidden; position: relative;",
+                            key: "{lazygit_update_counter}",  // Force re-render when directory changes
+                            tabindex: "0",  // Make the container focusable
+                            onclick: move |_| {
+                                // Focus the LazyGit terminal when clicked
+                                tracing::info!("LazyGit panel clicked - focusing terminal");
+                            },
+                            
+                            {
+                                // Compute values outside rsx
+                                let terminal_id_opt = lazygit_terminal_id.read().clone();
+                                let current_path = current_dir.read().as_ref()
+                                    .cloned()
+                                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+                                let git_root_opt = find_git_root(&current_path);
+                                
+                                rsx! {
+                                    if let Some(terminal_id) = terminal_id_opt {
+                                        if let Some(git_root) = git_root_opt {
+                                            div {
+                                                key: "{terminal_id}",  // Use terminal ID as key to force recreation
+                                                style: "width: 100%; height: 100%;",
+                                                TerminalXterm {
+                                                    terminal_id: terminal_id.clone(),
+                                                    initial_directory: Some(git_root.to_string_lossy().to_string()),
+                                                    command: Some("lazygit".to_string()),
+                                                    args: vec![]  // LazyGit will use the initial_directory
+                                                }
+                                            }
+                                        } else {
+                                            // Not in a git repository
+                                            div {
+                                                style: "display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #9CA3AF; padding: 20px; text-align: center;",
+                                                div {
+                                                    style: "font-size: 18px; margin-bottom: 10px;",
+                                                    "⚠️ Not a Git Repository"
+                                                }
+                                                div {
+                                                    style: "font-size: 14px; color: #6B737C;",
+                                                    "The current directory is not inside a Git repository."
+                                                }
+                                                div {
+                                                    style: "font-size: 12px; color: #6B737C; margin-top: 20px;",
+                                                    "Initialize a repository with: git init"
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        div {
+                                            style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #9CA3AF;",
+                                            "Initializing LazyGit..."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Resize divider between LazyGit and sidebar
+                    ResizableDivider {
+                        direction: ResizeDirection::Horizontal,
+                        size: lazygit_width,
+                        min_size: 200.0,
+                        max_size: 600.0,
+                        invert_drag: false,
+                    }
                 }
 
                 // Code editor area (center) - now split between editor and terminal
