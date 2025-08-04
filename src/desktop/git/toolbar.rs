@@ -248,9 +248,14 @@ pub fn GitToolbar(props: GitToolbarProps) -> Element {
                 if has_unstaged {
                     button {
                         style: "padding: 6px 12px; background: transparent; color: #f48771; border: 1px solid #f48771; border-radius: 3px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;",
-                        onclick: move |_| {
-                            // Add confirmation dialog later
-                            operation_status.set(Some("Discarding all changes...".to_string()));
+                        onclick: {
+                            let on_operation = props.on_operation.clone();
+                            move |_| {
+                                // TODO: Add confirmation dialog
+                                // For now, just call the discard all operation through LazyGit
+                                on_operation.call(GitOperation::DiscardAll);
+                                operation_status.set(Some("Discarding all changes...".to_string()));
+                            }
                         },
                         "⟲ Discard All"
                     }

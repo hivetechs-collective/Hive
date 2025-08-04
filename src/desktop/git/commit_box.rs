@@ -151,6 +151,10 @@ pub fn CommitBox(props: CommitBoxProps) -> Element {
             div {
                 class: "commit-box",
                 style: "background: #252526; border: 1px solid #3e3e42; border-radius: 6px; padding: 20px; width: 600px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);",
+                onclick: move |e: Event<dioxus::events::MouseData>| {
+                    // Prevent clicks inside the commit box from closing it
+                    e.stop_propagation();
+                },
                 
                 // Header
                 div {
