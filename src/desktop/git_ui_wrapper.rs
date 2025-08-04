@@ -1,28 +1,28 @@
-//! GitUI CLI Wrapper for Portal Architecture
+//! LazyGit CLI Wrapper for Portal Architecture
 //! 
-//! This module provides a zero-maintenance Git integration by wrapping GitUI
+//! This module provides a zero-maintenance Git integration by wrapping LazyGit
 //! as a CLI tool in our Portal architecture.
 
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// GitUI wrapper that provides full Git functionality with zero code maintenance
-pub struct GitUIWrapper;
+/// LazyGit wrapper that provides full Git functionality with zero code maintenance
+pub struct LazyGitWrapper;
 
-impl GitUIWrapper {
+impl LazyGitWrapper {
     pub fn new() -> Self {
         Self
     }
 
     /// Get the name displayed in the UI
     pub fn name(&self) -> &str {
-        "GitUI"
+        "LazyGit"
     }
 
     /// Get the command to execute
     pub fn command(&self) -> &str {
-        "gitui"
+        "lazygit"
     }
 
     /// Get the command for health check
@@ -45,48 +45,52 @@ impl GitUIWrapper {
         "🔀"
     }
 
-    /// Get environment variables for GitUI
+    /// Get environment variables for LazyGit
     pub fn get_env_vars(&self) -> HashMap<String, String> {
         let mut env = HashMap::new();
-        // GitUI respects standard Git environment variables
-        // We can add custom theme settings here if needed
-        env.insert("GITUI_THEME".to_string(), "dark".to_string());
+        // LazyGit respects standard Git environment variables
+        // Configure for better terminal UI experience
+        env.insert("TERM".to_string(), "xterm-256color".to_string());
+        env.insert("COLORTERM".to_string(), "truecolor".to_string());
+        // LazyGit config directory
+        env.insert("XDG_CONFIG_HOME".to_string(), 
+                  std::env::var("HOME").unwrap_or_default() + "/.config");
         env
     }
 
-    /// Get startup arguments for GitUI
+    /// Get startup arguments for LazyGit
     pub fn get_args(&self) -> Vec<String> {
-        // GitUI supports various command line arguments
-        // For now, we'll use default behavior
+        // LazyGit can be configured with custom config paths
+        // For side-pane usage, we might want to customize behavior
         vec![]
     }
 }
 
-/// Check if GitUI is installed on the system
-pub fn ensure_gitui_installed() -> Result<()> {
-    if which::which("gitui").is_err() {
+/// Check if LazyGit is installed on the system
+pub fn ensure_lazygit_installed() -> Result<()> {
+    if which::which("lazygit").is_err() {
         #[cfg(target_os = "windows")]
-        let install_cmd = "winget install gitui";
+        let install_cmd = "scoop install lazygit";
         
         #[cfg(target_os = "macos")]
-        let install_cmd = "brew install gitui";
+        let install_cmd = "brew install lazygit";
         
         #[cfg(target_os = "linux")]
-        let install_cmd = "cargo install gitui";
+        let install_cmd = "sudo apt install lazygit  # or check your distro's package manager";
         
         return Err(anyhow::anyhow!(
-            "GitUI not found. Please install it using: {}",
+            "LazyGit not found. Please install it using: {}",
             install_cmd
         ));
     }
     Ok(())
 }
 
-/// Get GitUI version information
-pub async fn get_gitui_version() -> Result<String> {
+/// Get LazyGit version information
+pub async fn get_lazygit_version() -> Result<String> {
     use tokio::process::Command;
     
-    let output = Command::new("gitui")
+    let output = Command::new("lazygit")
         .arg("--version")
         .output()
         .await?;
@@ -94,7 +98,7 @@ pub async fn get_gitui_version() -> Result<String> {
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
-        Err(anyhow::anyhow!("Failed to get GitUI version"))
+        Err(anyhow::anyhow!("Failed to get LazyGit version"))
     }
 }
 
