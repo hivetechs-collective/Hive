@@ -16,7 +16,7 @@ use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 use hive_ai::desktop::terminal_xterm_simple::TerminalXterm;
 
 // GitUI imports
-use hive_ai::desktop::git_ui_wrapper::{GitUIWrapper, ensure_gitui_installed};
+use hive_ai::desktop::git_ui_wrapper::{GitUIWrapper, ensure_gitui_installed, find_git_root};
 
 // Git imports
 use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
@@ -1562,26 +1562,54 @@ fn App() -> Element {
     let mut show_gitui = use_signal(|| true); // GitUI panel visible by default
     let mut gitui_terminal_id = use_signal(|| None::<String>); // GitUI terminal ID
     
-    // Initialize GitUI terminal
+    // Initialize GitUI terminal and watch for directory changes
     use_effect({
         let mut gitui_terminal_id = gitui_terminal_id.clone();
+        let current_dir = current_dir.clone();
         move || {
+            // Only proceed if GitUI panel is shown
+            if !show_gitui() {
+                return;
+            }
+            
             // Check if GitUI is installed
             spawn(async move {
                 match ensure_gitui_installed() {
                     Ok(_) => {
                         tracing::info!("✅ GitUI is installed and ready");
                         
-                        // Create a unique terminal ID for GitUI
-                        let terminal_id = format!("gitui-{}", Uuid::new_v4());
+                        // Get the current directory
+                        let current_path = current_dir.read().as_ref()
+                            .cloned()
+                            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
                         
-                        // Set the terminal ID so the TerminalXterm component can handle spawning
-                        gitui_terminal_id.set(Some(terminal_id.clone()));
-                        tracing::info!("✅ GitUI terminal ID set: {}", terminal_id);
+                        // Only create terminal if we're in a git repository
+                        if let Some(_git_root) = find_git_root(&current_path) {
+                            // Create a unique terminal ID for GitUI
+                            let terminal_id = format!("gitui-{}", Uuid::new_v4());
+                            
+                            // Clear any existing terminal first
+                            if let Some(old_id) = gitui_terminal_id.read().as_ref() {
+                                // Unregister the old terminal
+                                use hive_ai::desktop::terminal_registry::unregister_terminal;
+                                use hive_ai::desktop::terminal_buffer::unregister_terminal_buffer;
+                                unregister_terminal(old_id);
+                                unregister_terminal_buffer(old_id);
+                                tracing::info!("🔄 Cleared old GitUI terminal: {}", old_id);
+                            }
+                            
+                            // Set the new terminal ID
+                            gitui_terminal_id.set(Some(terminal_id.clone()));
+                            tracing::info!("✅ GitUI terminal ID set: {}", terminal_id);
+                        } else {
+                            // Not in a git repository, clear terminal ID
+                            gitui_terminal_id.set(None);
+                            tracing::info!("⚠️ Not in a git repository, GitUI not available");
+                        }
                     }
                     Err(e) => {
                         tracing::warn!("GitUI not installed: {}", e);
-                        // TODO: Show installation dialog
+                        gitui_terminal_id.set(None);
                     }
                 }
             });
@@ -3420,17 +3448,47 @@ fn App() -> Element {
                             class: "gitui-terminal-container",
                             style: "flex: 1; overflow: hidden; position: relative;",
                             
-                            if let Some(terminal_id) = gitui_terminal_id.read().as_ref() {
-                                TerminalXterm {
-                                    terminal_id: terminal_id.clone(),
-                                    initial_directory: current_dir.read().as_ref().map(|p| p.to_string_lossy().to_string()),
-                                    command: Some("gitui".to_string()),
-                                    args: vec![]
-                                }
-                            } else {
-                                div {
-                                    style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #9CA3AF;",
-                                    "Initializing GitUI..."
+                            {
+                                // Compute values outside rsx
+                                let terminal_id_opt = gitui_terminal_id.read().clone();
+                                let current_path = current_dir.read().as_ref()
+                                    .cloned()
+                                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+                                let git_root_opt = find_git_root(&current_path);
+                                
+                                rsx! {
+                                    if let Some(terminal_id) = terminal_id_opt {
+                                        if let Some(git_root) = git_root_opt {
+                                            TerminalXterm {
+                                                terminal_id: terminal_id.clone(),
+                                                initial_directory: Some(git_root.to_string_lossy().to_string()),
+                                                command: Some("gitui".to_string()),
+                                                args: vec![]  // GitUI will use the initial_directory
+                                            }
+                                        } else {
+                                            // Not in a git repository
+                                            div {
+                                                style: "display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #9CA3AF; padding: 20px; text-align: center;",
+                                                div {
+                                                    style: "font-size: 18px; margin-bottom: 10px;",
+                                                    "⚠️ Not a Git Repository"
+                                                }
+                                                div {
+                                                    style: "font-size: 14px; color: #6B737C;",
+                                                    "The current directory is not inside a Git repository."
+                                                }
+                                                div {
+                                                    style: "font-size: 12px; color: #6B737C; margin-top: 20px;",
+                                                    "Initialize a repository with: git init"
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        div {
+                                            style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #9CA3AF;",
+                                            "Initializing GitUI..."
+                                        }
+                                    }
                                 }
                             }
                         }

@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use std::collections::HashMap;
+use std::path::Path;
 
 /// GitUI wrapper that provides full Git functionality with zero code maintenance
 pub struct GitUIWrapper;
@@ -95,6 +96,60 @@ pub async fn get_gitui_version() -> Result<String> {
     } else {
         Err(anyhow::anyhow!("Failed to get GitUI version"))
     }
+}
+
+/// Check if a directory is a valid git repository
+pub fn is_git_repository(path: &Path) -> bool {
+    // Check if .git directory exists
+    let git_dir = path.join(".git");
+    if git_dir.exists() {
+        return true;
+    }
+    
+    // Also check parent directories in case we're in a subdirectory
+    if let Some(parent) = path.parent() {
+        // But only check up to 5 levels to avoid excessive checking
+        let mut current = parent;
+        let mut levels = 0;
+        while levels < 5 {
+            if current.join(".git").exists() {
+                return true;
+            }
+            match current.parent() {
+                Some(p) => current = p,
+                None => break,
+            }
+            levels += 1;
+        }
+    }
+    
+    false
+}
+
+/// Find the git repository root from a given path
+pub fn find_git_root(path: &Path) -> Option<std::path::PathBuf> {
+    // Check if current directory is git root
+    if path.join(".git").exists() {
+        return Some(path.to_path_buf());
+    }
+    
+    // Check parent directories
+    if let Some(parent) = path.parent() {
+        let mut current = parent;
+        let mut levels = 0;
+        while levels < 10 {  // Reasonable limit to avoid excessive checking
+            if current.join(".git").exists() {
+                return Some(current.to_path_buf());
+            }
+            match current.parent() {
+                Some(p) => current = p,
+                None => break,
+            }
+            levels += 1;
+        }
+    }
+    
+    None
 }
 
 /// Spawn GitUI in a specific directory
