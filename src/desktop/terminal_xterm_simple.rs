@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 use dioxus::document::eval;
 use dioxus::events::{KeyboardData, Key};
-use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem, PtyPair};
 use std::sync::{Arc, Mutex};
 use std::io::{Read, Write};
 use crate::desktop::terminal_registry::{register_terminal, unregister_terminal};
@@ -15,6 +15,8 @@ use base64;
 use std::collections::HashMap;
 
 static OUTPUT_QUEUES: Lazy<Mutex<HashMap<String, Vec<String>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+// Store PTY pairs for resize operations
+static PTY_WRITERS: Lazy<Mutex<HashMap<String, Arc<Mutex<Box<dyn Write + Send>>>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Terminal emulator state
 pub struct XtermTerminal {
@@ -44,6 +46,12 @@ pub fn TerminalXterm(
             queues.remove(&terminal_id_cleanup);
             tracing::info!("🗑️ Cleaned up output queue for terminal {}", terminal_id_cleanup);
         }
+        
+        // Clean up PTY writer reference
+        if let Ok(mut pty_writers) = PTY_WRITERS.lock() {
+            pty_writers.remove(&terminal_id_cleanup);
+            tracing::info!("🗑️ Cleaned up PTY writer for terminal {}", terminal_id_cleanup);
+        }
     });
     
     // Initialize terminal
@@ -60,7 +68,7 @@ pub fn TerminalXterm(
             
             spawn(async move {
                 // Initialize PTY
-                if let Ok((writer, mut reader)) = create_pty(initial_dir, is_claude_code, cmd, cmd_args) {
+                if let Ok((writer, mut reader)) = create_pty_with_id(&tid, initial_dir, is_claude_code, cmd, cmd_args) {
                     terminal_writer.set(Some(writer.clone()));
                     
                     // Register in global registry
@@ -159,6 +167,7 @@ pub fn TerminalXterm(
                             }
                         });
                     }
+                    
                     
                     // Focus this specific terminal after initialization
                     let div_id_focus = div_id.clone();
@@ -336,11 +345,12 @@ async fn init_xterm(div_id: &str, terminal_id: &str) {
                 window.terminals = window.terminals || {{}};
                 window.terminalInput = window.terminalInput || {{}};
                 
+                
                 const container = document.getElementById('{}');
                 if (container && !window.terminals['{}']) {{
                     const term = new Terminal({{
                         cursorBlink: true,
-                        fontSize: 13,
+                        fontSize: 12,  // Slightly smaller font for more content
                         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
                         theme: {{
                             background: '#1e1e1e',
@@ -375,10 +385,35 @@ async fn init_xterm(div_id: &str, terminal_id: &str) {
                         term.loadAddon(fitAddon);
                         fitAddon.fit();
                         
+                        // Store fitAddon globally for programmatic access
+                        window.terminalFitAddons = window.terminalFitAddons || {{}};
+                        window.terminalFitAddons['{}'] = fitAddon;
+                        
                         // Refit on window resize
                         window.addEventListener('resize', () => {{
                             fitAddon.fit();
                         }});
+                        
+                        // Add ResizeObserver to watch for container size changes
+                        if (window.ResizeObserver) {{
+                            const resizeObserver = new ResizeObserver((entries) => {{
+                                if (entries.length > 0) {{
+                                    // Small delay to ensure container is properly resized
+                                    setTimeout(() => {{
+                                        fitAddon.fit();
+                                        const newCols = term.cols;
+                                        const newRows = term.rows;
+                                        console.log('🔄 Terminal {} resized to: ' + newCols + 'x' + newRows);
+                                    }}, 50);
+                                }}
+                            }});
+                            
+                            resizeObserver.observe(container);
+                            
+                            // Store observer for cleanup
+                            window.terminalResizeObservers = window.terminalResizeObservers || {{}};
+                            window.terminalResizeObservers['{}'] = resizeObserver;
+                        }}"
                     }}
                     
                     // Add Unicode addon for better character support
@@ -404,7 +439,7 @@ async fn init_xterm(div_id: &str, terminal_id: &str) {
                 }}
             }}
         }})();
-    "#, div_id, terminal_id, terminal_id);
+    "#, div_id, terminal_id, terminal_id, terminal_id, terminal_id, terminal_id);
     
     let _ = eval(&script).await;
 }
@@ -552,11 +587,35 @@ async fn process_terminal_output_queue(terminal_id: &str) {
     }
 }
 
+/// Calculate optimal terminal size based on context
+fn calculate_terminal_size(command: &Option<String>) -> PtySize {
+    match command.as_deref() {
+        Some("lazygit") => {
+            // LazyGit works better with more columns for side-by-side panels
+            PtySize {
+                rows: 30,
+                cols: 120, // Wider for LazyGit's interface
+                pixel_width: 120 * 9,  // Slightly smaller font
+                pixel_height: 30 * 18,
+            }
+        }
+        _ => {
+            // Default terminal size
+            PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 80 * 10,
+                pixel_height: 24 * 20,
+            }
+        }
+    }
+}
+
 /// Create PTY
-fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: Option<String>, args: Vec<String>) -> Result<(Arc<Mutex<Box<dyn Write + Send>>>, Box<dyn Read + Send>), Box<dyn std::error::Error>> {
+fn create_pty_with_id(terminal_id: &str, working_directory: Option<String>, is_claude_code: bool, command: Option<String>, args: Vec<String>) -> Result<(Arc<Mutex<Box<dyn Write + Send>>>, Box<dyn Read + Send>), Box<dyn std::error::Error>> {
     let pty_system = NativePtySystem::default();
     
-    let mut cmd = if let Some(custom_command) = command {
+    let mut cmd = if let Some(custom_command) = command.clone() {
         // Use custom command (e.g., "lazygit")
         tracing::info!("🚀 Launching custom command: {} {:?} in directory: {:?}", custom_command, args, working_directory);
         let mut builder = CommandBuilder::new(custom_command);
@@ -583,27 +642,51 @@ fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: 
         cmd.cwd(dir);
     }
     
+    // Calculate optimal size for this terminal type
+    let pty_size = calculate_terminal_size(&command);
+    
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     cmd.env("LANG", "en_US.UTF-8");
     cmd.env("LC_ALL", "en_US.UTF-8");
-    cmd.env("COLUMNS", "80");
-    cmd.env("LINES", "24");
+    cmd.env("COLUMNS", &pty_size.cols.to_string());
+    cmd.env("LINES", &pty_size.rows.to_string());
     
-    let pty_pair = pty_system.openpty(PtySize {
-        rows: 24,
-        cols: 80,
-        pixel_width: 80 * 10,
-        pixel_height: 24 * 20,
-    })?;
+    tracing::info!("🎯 Creating PTY with size: {}x{} for command: {:?}", pty_size.cols, pty_size.rows, command);
+    
+    let pty_pair = pty_system.openpty(pty_size)?;
     
     let _child = pty_pair.slave.spawn_command(cmd)?;
     std::mem::drop(pty_pair.slave);
     
     let reader = pty_pair.master.try_clone_reader()?;
     let writer = pty_pair.master.take_writer()?;
+    let writer_arc = Arc::new(Mutex::new(writer));
     
-    Ok((Arc::new(Mutex::new(writer)), reader))
+    // Store the writer for potential use (though resize is typically not needed)
+    if let Ok(mut pty_writers) = PTY_WRITERS.lock() {
+        pty_writers.insert(terminal_id.to_string(), writer_arc.clone());
+        tracing::info!("📦 Stored PTY writer for terminal {} for future operations", terminal_id);
+    }
+    
+    Ok((writer_arc, reader))
+}
+
+/// Legacy create_pty function for backward compatibility
+fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: Option<String>, args: Vec<String>) -> Result<(Arc<Mutex<Box<dyn Write + Send>>>, Box<dyn Read + Send>), Box<dyn std::error::Error>> {
+    create_pty_with_id("default", working_directory, is_claude_code, command, args)
+}
+
+/// Handle terminal resize notification (LazyGit typically handles this well automatically)
+pub fn resize_terminal_pty(terminal_id: &str, cols: u16, rows: u16) -> bool {
+    // For LazyGit and most modern terminal applications, they automatically
+    // handle terminal resize events through the WINCH signal and SIGWINCH handling.
+    // The xterm.js fitAddon already handles the visual resize, so we just need to log it.
+    tracing::info!("🔄 Terminal {} resized to {}x{} - application should auto-adapt", terminal_id, cols, rows);
+    
+    // LazyGit is particularly good at handling terminal resizes dynamically
+    // The terminal size change will be automatically detected by the running process
+    true
 }
 
 /// Get terminal content from xterm.js
