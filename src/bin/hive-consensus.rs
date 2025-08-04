@@ -1593,34 +1593,36 @@ fn App() -> Element {
             // Set a new timer with debounce
             let timer_handle = spawn(async move {
                 // Wait for directory changes to settle
-                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 
                 // Check if LazyGit is installed
                 match ensure_lazygit_installed() {
                     Ok(_) => {
                         tracing::info!("✅ LazyGit is installed and ready");
                         
-                        // Clear any existing terminal first
-                        if let Some(old_id) = lazygit_terminal_id.read().as_ref() {
-                            // Send quit command to LazyGit before clearing
-                            use hive_ai::desktop::terminal_registry::{send_to_terminal, unregister_terminal};
-                            use hive_ai::desktop::terminal_buffer::unregister_terminal_buffer;
+                        // Check if we're in a git repository
+                        if let Some(git_root) = find_git_root(&current_path) {
+                            tracing::info!("🔍 Found git repository for LazyGit at: {:?}", git_root);
                             
-                            // Send 'q' to quit LazyGit gracefully
-                            if send_to_terminal(old_id, "q") {
-                                tracing::info!("📤 Sent quit command to LazyGit");
+                            // Always create a new terminal when directory changes
+                            // This ensures LazyGit launches in the correct directory
+                            
+                            // Clear any existing terminal first
+                            if let Some(old_id) = lazygit_terminal_id.read().as_ref() {
+                                use hive_ai::desktop::terminal_registry::{send_to_terminal, unregister_terminal};
+                                use hive_ai::desktop::terminal_buffer::unregister_terminal_buffer;
+                                
+                                // Send 'q' to quit LazyGit gracefully
+                                send_to_terminal(old_id, "q");
+                                
+                                // Give LazyGit time to exit cleanly
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                                
+                                unregister_terminal(old_id);
+                                unregister_terminal_buffer(old_id);
+                                tracing::info!("🔄 Cleared old LazyGit terminal: {}", old_id);
                             }
                             
-                            // Give LazyGit time to exit cleanly
-                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                            
-                            unregister_terminal(old_id);
-                            unregister_terminal_buffer(old_id);
-                            tracing::info!("🔄 Cleared old LazyGit terminal: {}", old_id);
-                        }
-                        
-                        // Only create terminal if we're in a git repository
-                        if let Some(_git_root) = find_git_root(&current_path) {
                             // Create a unique terminal ID for LazyGit
                             let terminal_id = format!("lazygit-{}", Uuid::new_v4());
                             
@@ -1630,11 +1632,16 @@ fn App() -> Element {
                             // Increment update counter to force terminal re-render
                             lazygit_update_counter.set(lazygit_update_counter() + 1);
                             
-                            tracing::info!("✅ LazyGit terminal ID set: {} for path: {:?}", terminal_id, current_path);
+                            tracing::info!("✅ Created new LazyGit terminal: {} for git repository: {:?}", terminal_id, git_root);
+                            tracing::info!("🎯 LazyGit will launch in directory: {:?}", git_root);
                         } else {
-                            // Not in a git repository, clear terminal ID
-                            lazygit_terminal_id.set(None);
-                            tracing::info!("⚠️ Not in a git repository, LazyGit not available for: {:?}", current_path);
+                            // Not in a git repository, clear terminal ID if it exists
+                            if lazygit_terminal_id.read().is_some() {
+                                lazygit_terminal_id.set(None);
+                                tracing::info!("⚠️ Not in a git repository, cleared LazyGit for: {:?}", current_path);
+                            } else {
+                                tracing::info!("⚠️ Not in a git repository, LazyGit not available for: {:?}", current_path);
+                            }
                         }
                     }
                     Err(e) => {
@@ -3497,11 +3504,15 @@ fn App() -> Element {
                                 rsx! {
                                     if let Some(terminal_id) = terminal_id_opt {
                                         if let Some(git_root) = git_root_opt {
-                                            TerminalXterm {
-                                                terminal_id: terminal_id.clone(),
-                                                initial_directory: Some(git_root.to_string_lossy().to_string()),
-                                                command: Some("lazygit".to_string()),
-                                                args: vec![]  // LazyGit will use the initial_directory
+                                            div {
+                                                key: "{terminal_id}",  // Use terminal ID as key to force recreation
+                                                style: "width: 100%; height: 100%;",
+                                                TerminalXterm {
+                                                    terminal_id: terminal_id.clone(),
+                                                    initial_directory: Some(git_root.to_string_lossy().to_string()),
+                                                    command: Some("lazygit".to_string()),
+                                                    args: vec![]  // LazyGit will use the initial_directory
+                                                }
                                             }
                                         } else {
                                             // Not in a git repository

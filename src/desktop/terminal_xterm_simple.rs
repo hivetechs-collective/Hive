@@ -557,8 +557,8 @@ fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: 
     let pty_system = NativePtySystem::default();
     
     let mut cmd = if let Some(custom_command) = command {
-        // Use custom command (e.g., "gitui")
-        tracing::info!("🚀 Launching custom command: {} {:?}", custom_command, args);
+        // Use custom command (e.g., "lazygit")
+        tracing::info!("🚀 Launching custom command: {} {:?} in directory: {:?}", custom_command, args, working_directory);
         let mut builder = CommandBuilder::new(custom_command);
         for arg in args {
             builder.arg(arg);
