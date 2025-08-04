@@ -1712,10 +1712,10 @@ fn App() -> Element {
                 // Wait for directory changes to settle
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 
-                // Check if LazyGit is installed
-                match ensure_lazygit_installed() {
-                    Ok(_) => {
-                        tracing::info!("✅ LazyGit is installed and ready");
+                // Check if LazyGit is installed (now async)
+                match ensure_lazygit_installed().await {
+                    Ok(lazygit_path) => {
+                        tracing::info!("✅ LazyGit is installed and ready at: {:?}", lazygit_path);
                         
                         // Check if we're in a git repository
                         if let Some(git_root) = find_git_root(&current_path) {
