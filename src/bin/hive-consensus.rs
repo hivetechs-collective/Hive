@@ -3984,47 +3984,106 @@ fn App() -> Element {
                                                             // Handle git operations
                                                             if let Ok(git_ops) = GitOperations::new(&repo_path) {
                                                                 let result = match &operation {
-                                                                        GitOperation::StageAll => git_ops.stage_all().await,
-                                                                        GitOperation::UnstageAll => git_ops.unstage_all().await,
+                                                                        GitOperation::StageAll => {
+                                                                            // Use LazyGit for staging
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                controller.stage_all().await
+                                                                            } else {
+                                                                                git_ops.stage_all().await
+                                                                            }
+                                                                        },
+                                                                        GitOperation::UnstageAll => {
+                                                                            // Use LazyGit for unstaging
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                controller.unstage_all().await
+                                                                            } else {
+                                                                                git_ops.unstage_all().await
+                                                                            }
+                                                                        },
                                                                         GitOperation::Commit(message) => {
-                                                                            git_ops.commit(&message).await.map(|_| ())
+                                                                            // Use LazyGit for commit operation
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                
+                                                                                match controller.commit(&message).await {
+                                                                                    Ok(_) => {
+                                                                                        tracing::info!("✅ Commit successful via LazyGit");
+                                                                                        
+                                                                                        // Give LazyGit a moment to process
+                                                                                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                                                                                        
+                                                                                        // Refresh LazyGit to update the display
+                                                                                        let _ = controller.refresh().await;
+                                                                                        
+                                                                                        Ok(())
+                                                                                    }
+                                                                                    Err(e) => {
+                                                                                        tracing::error!("Failed to commit via LazyGit: {}", e);
+                                                                                        Err(e)
+                                                                                    }
+                                                                                }
+                                                                            } else {
+                                                                                // Fallback to direct git operations if LazyGit not available
+                                                                                git_ops.commit(&message).await.map(|_| ())
+                                                                            }
                                                                         },
                                                                         GitOperation::Push => {
-                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
-                                                                                git_ops.push_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
+                                                                            // Use LazyGit for push operation
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                controller.push().await
                                                                             } else {
-                                                                                Err(anyhow::anyhow!("No remote or branch configured"))
+                                                                                // Fallback to direct git operations if LazyGit not available
+                                                                                if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
+                                                                                    git_ops.push_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
+                                                                                } else {
+                                                                                    Err(anyhow::anyhow!("No remote or branch configured"))
+                                                                                }
                                                                             }
                                                                         },
                                                                         GitOperation::Pull => {
-                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
-                                                                                git_ops.pull_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
+                                                                            // Use LazyGit for pull operation
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                controller.pull().await
                                                                             } else {
-                                                                                Err(anyhow::anyhow!("No remote or branch configured"))
+                                                                                // Fallback to direct git operations if LazyGit not available
+                                                                                if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
+                                                                                    git_ops.pull_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await
+                                                                                } else {
+                                                                                    Err(anyhow::anyhow!("No remote or branch configured"))
+                                                                                }
                                                                             }
                                                                         },
                                                                         GitOperation::Fetch => {
-                                                                            if let Ok(remote) = git_ops.get_default_remote().await {
-                                                                                git_ops.fetch_with_progress(&remote, Some(progress_callback.clone()), Some(cancel_token.clone())).await
+                                                                            // Use LazyGit for fetch operation
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                controller.fetch().await
                                                                             } else {
-                                                                                Err(anyhow::anyhow!("No remote configured"))
+                                                                                // Fallback to direct git operations if LazyGit not available
+                                                                                if let Ok(remote) = git_ops.get_default_remote().await {
+                                                                                    git_ops.fetch_with_progress(&remote, Some(progress_callback.clone()), Some(cancel_token.clone())).await
+                                                                                } else {
+                                                                                    Err(anyhow::anyhow!("No remote configured"))
+                                                                                }
                                                                             }
                                                                         },
                                                                         GitOperation::Sync => {
-                                                                            // Enhanced VS Code style sync with proper error handling
-                                                                            tracing::info!("Starting sync operation");
+                                                                            // Use LazyGit for sync operation
+                                                                            tracing::info!("Starting sync operation via LazyGit");
                                                                             
                                                                             // Update operation status for user feedback
-                                                                            operation_status_update.set(Some("Initializing sync...".to_string()));
+                                                                            operation_status_update.set(Some("Syncing via LazyGit...".to_string()));
                                                                             
-                                                                            if let (Ok(remote), Ok(branch)) = (git_ops.get_default_remote().await, git_ops.get_current_branch().await) {
-                                                                                // Update status during operation
-                                                                                operation_status_update.set(Some(format!("Syncing with origin/{}...", branch)));
+                                                                            // Use LazyGit controller instead of direct git operations
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
                                                                                 
-                                                                                let sync_result = git_ops.sync_with_progress(&remote, &branch, Some(progress_callback.clone()), Some(cancel_token.clone())).await;
-                                                                                
-                                                                                // Update status based on result
-                                                                                match &sync_result {
+                                                                                // LazyGit sync is pull then push
+                                                                                match controller.sync().await {
                                                                                     Ok(_) => {
                                                                                         operation_status_update.set(Some("✅ Sync completed successfully".to_string()));
                                                                                         // Clear status after delay
@@ -4033,30 +4092,22 @@ fn App() -> Element {
                                                                                             tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
                                                                                             status_clear.set(None);
                                                                                         });
+                                                                                        Ok(())
                                                                                     }
                                                                                     Err(e) => {
-                                                                                        let error_msg = if e.to_string().contains("Nothing to commit") {
-                                                                                            "ℹ️ Repository is already up to date".to_string()
-                                                                                        } else if e.to_string().contains("Authentication") {
-                                                                                            "❌ Authentication failed - check credentials".to_string()
-                                                                                        } else if e.to_string().contains("Network") || e.to_string().contains("connection") {
-                                                                                            "❌ Network error - check connection".to_string()
-                                                                                        } else {
-                                                                                            format!("❌ Sync failed: {}", e)
-                                                                                        };
-                                                                                        operation_status_update.set(Some(error_msg));
+                                                                                        let error_msg = format!("❌ Sync failed: {}", e);
+                                                                                        operation_status_update.set(Some(error_msg.clone()));
                                                                                         // Clear error after longer delay
                                                                                         let mut status_clear = operation_status_update.clone();
                                                                                         spawn(async move {
                                                                                             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
                                                                                             status_clear.set(None);
                                                                                         });
+                                                                                        Err(anyhow::anyhow!(error_msg))
                                                                                     }
                                                                                 }
-                                                                                
-                                                                                sync_result
                                                                             } else {
-                                                                                let error_msg = "❌ No remote or branch configured";
+                                                                                let error_msg = "❌ LazyGit terminal not available";
                                                                                 tracing::error!("{}", error_msg);
                                                                                 
                                                                                 // Update status with error
@@ -4074,10 +4125,27 @@ fn App() -> Element {
                                                                         GitOperation::Stage(path) => git_ops.stage_file(path).await,
                                                                         GitOperation::Unstage(path) => git_ops.unstage_file(path).await,
                                                                         GitOperation::DiscardChanges(path) => git_ops.discard_file_changes(path).await,
+                                                                        GitOperation::DiscardAll => {
+                                                                            // Use LazyGit for discard all operation
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                controller.discard_all().await
+                                                                            } else {
+                                                                                // Fallback - not implemented yet
+                                                                                tracing::warn!("LazyGit not available for discard all");
+                                                                                Err(anyhow::anyhow!("Discard all requires LazyGit"))
+                                                                            }
+                                                                        },
                                                                         GitOperation::StashSave(message) => {
-                                                                            // TODO: Implement stash_save wrapper in GitOperations
-                                                                            tracing::warn!("Stash save not yet implemented: {}", message);
-                                                                            Ok(())
+                                                                            // Use LazyGit for stash save operation
+                                                                            if let Some(terminal_id) = lazygit_terminal_id.read().clone() {
+                                                                                let controller = hive_ai::desktop::git::LazyGitController::new(terminal_id);
+                                                                                controller.stash_save(&message).await
+                                                                            } else {
+                                                                                // TODO: Implement fallback stash_save wrapper in GitOperations
+                                                                                tracing::warn!("LazyGit not available for stash save: {}", message);
+                                                                                Ok(())
+                                                                            }
                                                                         },
                                                                         GitOperation::StashApply(stash_id) => {
                                                                             // TODO: Implement stash_apply wrapper in GitOperations
@@ -4370,21 +4438,6 @@ fn App() -> Element {
                                             }
                                                 }
                                             }
-                                        }
-                                    }
-                                    
-                                    // Commit section
-                                    div {
-                                        style: "margin-top: 16px; padding-top: 16px; border-top: 1px solid #2D3336;",
-                                        
-                                        textarea {
-                                            style: "width: 100%; min-height: 60px; background: #1A1F21; border: 1px solid #2D3336; color: #FFFFFF; padding: 8px; border-radius: 4px; resize: vertical;",
-                                            placeholder: "Commit message...",
-                                        }
-                                        
-                                        button {
-                                            style: "width: 100%; margin-top: 8px; padding: 8px; background: #FFC107; color: #000000; border: none; border-radius: 4px; font-weight: 600; cursor: pointer;",
-                                            "Commit"
                                         }
                                     }
                                 } else {

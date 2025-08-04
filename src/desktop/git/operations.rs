@@ -668,6 +668,7 @@ pub enum GitOperation {
     Fetch,
     Sync, // Pull then Push (VS Code style)
     DiscardChanges(PathBuf),
+    DiscardAll,  // Discard all changes in working directory
     // Stash operations
     StashSave(String),      // Save stash with message
     StashApply(usize),      // Apply stash by index
