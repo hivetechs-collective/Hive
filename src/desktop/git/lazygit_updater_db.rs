@@ -14,6 +14,7 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 use crate::core::database::{get_database, DatabaseManager};
 use rusqlite::{params, OptionalExtension};
+use std::sync::Arc;
 
 const GITHUB_API_URL: &str = "https://api.github.com/repos/jesseduffield/lazygit/releases/latest";
 const UPDATE_CHECK_INTERVAL_HOURS: i64 = 24;
@@ -34,7 +35,7 @@ struct GitHubAsset {
 /// LazyGit updater using the unified database
 pub struct LazyGitUpdaterDB {
     install_dir: PathBuf,
-    db: DatabaseManager,
+    db: Arc<DatabaseManager>,
 }
 
 impl LazyGitUpdaterDB {
