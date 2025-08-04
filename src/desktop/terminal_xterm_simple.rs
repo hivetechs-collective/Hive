@@ -398,21 +398,36 @@ async fn init_xterm(div_id: &str, terminal_id: &str) {
                             const containerRect = container.getBoundingClientRect();
                             console.log(`📐 Initial container size: ${{containerRect.width}}x${{containerRect.height}}`);
                             
-                            // Force immediate fit to container
+                            // FORCE MAXIMUM SIZE: Override any constraints and use full container
+                            // Calculate terminal dimensions manually to ensure full height usage
+                            const charWidth = 8;  // Approximate character width
+                            const charHeight = 16; // Approximate character height  
+                            const maxCols = Math.floor(containerRect.width / charWidth);
+                            const maxRows = Math.floor(containerRect.height / charHeight);
+                            
+                            console.log(`🎯 FORCING maximum terminal size: ${{maxCols}}x${{maxRows}} (container: ${{containerRect.width}}x${{containerRect.height}})`);
+                            
+                            // Force fit to container first
                             fitAddon.fit();
                             
-                            const newCols = term.cols;
-                            const newRows = term.rows;
-                            console.log(`🎯 Initial terminal size: ${{newCols}}x${{newRows}}`);
+                            // Then get actual terminal size after fit
+                            const actualCols = term.cols;
+                            const actualRows = term.rows;
+                            console.log(`📊 Terminal after fit: ${{actualCols}}x${{actualRows}}`);
                             
-                            // Immediately resize PTY to match actual container
+                            // Use the larger of calculated vs actual to maximize space usage
+                            const finalCols = Math.max(actualCols, maxCols);
+                            const finalRows = Math.max(actualRows, maxRows);
+                            console.log(`🚀 FINAL terminal size: ${{finalCols}}x${{finalRows}}`);
+                            
+                            // Immediately resize PTY to maximum calculated size
                             window.dioxus.postMessage({{
                                 method: 'resize_pty',
                                 terminal_id: '{}',
-                                cols: newCols,
-                                rows: newRows
+                                cols: finalCols,
+                                rows: finalRows
                             }});
-                            console.log(`📡 Sent initial PTY resize: ${{newCols}}x${{newRows}}`);
+                            console.log(`📡 Sent MAXIMUM PTY resize: ${{finalCols}}x${{finalRows}}`);
                         }}); // Use requestAnimationFrame for immediate DOM-ready processing
                         
                         // IMMEDIATE resize when container size changes - no delays
@@ -424,6 +439,12 @@ async fn init_xterm(div_id: &str, terminal_id: &str) {
                                 
                                 console.log(`⚡ IMMEDIATE resize: ${{width}}x${{height}}`);
                                 
+                                // FORCE MAXIMUM SIZE: Calculate manually to override constraints
+                                const charWidth = 8;  // Approximate character width
+                                const charHeight = 16; // Approximate character height  
+                                const maxCols = Math.floor(width / charWidth);
+                                const maxRows = Math.floor(height / charHeight);
+                                
                                 // Calculate terminal size immediately (no setTimeout!)
                                 const oldCols = term.cols;
                                 const oldRows = term.rows;
@@ -431,20 +452,24 @@ async fn init_xterm(div_id: &str, terminal_id: &str) {
                                 // Force immediate fit - no delays
                                 fitAddon.fit();
                                 
-                                const newCols = term.cols;
-                                const newRows = term.rows;
+                                const actualCols = term.cols;
+                                const actualRows = term.rows;
                                 
-                                console.log(`⚡ IMMEDIATE terminal: ${{oldCols}}x${{oldRows}} → ${{newCols}}x${{newRows}}`);
+                                // Use maximum possible size to fill container completely
+                                const finalCols = Math.max(actualCols, maxCols);
+                                const finalRows = Math.max(actualRows, maxRows);
+                                
+                                console.log(`⚡ MAXIMUM resize: ${{oldCols}}x${{oldRows}} → ${{finalCols}}x${{finalRows}} (calculated: ${{maxCols}}x${{maxRows}}, actual: ${{actualCols}}x${{actualRows}})`);
                                 
                                 // Immediately notify Rust - no delays, no batching
-                                if (oldCols !== newCols || oldRows !== newRows) {{
+                                if (oldCols !== finalCols || oldRows !== finalRows) {{
                                     window.dioxus.postMessage({{
                                         method: 'resize_pty',
                                         terminal_id: '{}',
-                                        cols: newCols,
-                                        rows: newRows
+                                        cols: finalCols,
+                                        rows: finalRows
                                     }});
-                                    console.log(`⚡ IMMEDIATE PTY resize: ${{newCols}}x${{newRows}}`);
+                                    console.log(`⚡ IMMEDIATE MAXIMUM PTY resize: ${{finalCols}}x${{finalRows}}`);
                                 }}
                             }});
                             resizeObserver.observe(container);
