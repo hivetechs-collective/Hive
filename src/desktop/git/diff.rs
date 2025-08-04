@@ -257,7 +257,14 @@ pub fn compute_diff_with_context(original: &str, modified: &str, file_path: Opti
                 }
                 
                 line_counter += 1;
-                let hunk_id = current_hunk.as_ref().unwrap().hunk_id.clone();
+                
+                // Extract hunk_id before the mutable borrow
+                let hunk_id = if let Some(ref hunk) = current_hunk {
+                    hunk.hunk_id.clone()
+                } else {
+                    String::new() // This shouldn't happen given the check above
+                };
+                
                 hunk_lines.push(DiffLine {
                     line_type: DiffLineType::Added,
                     original_line_number: None,

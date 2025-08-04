@@ -7,6 +7,11 @@ use dioxus::prelude::*;
 use std::collections::HashMap;
 use crate::desktop::state::AppState;
 use crate::desktop::consensus_integration::DesktopConsensusManager;
+use crate::desktop::ai_cli_updater::{AiCliUpdaterDB, AuthStatus};
+use crate::desktop::ai_cli_registry::get_enabled_ai_tools;
+use crate::desktop::ai_cli_controller::{AiCliController, AiCliEvent, ToolStatus as ControllerToolStatus};
+use std::sync::Arc;
+use tokio::sync::mpsc;
 
 /// Terminal tab data
 #[derive(Clone, Debug)]
@@ -16,6 +21,29 @@ pub struct TerminalTab {
     pub icon: String,
     pub is_active: bool,
     pub working_directory: String,
+}
+
+/// AI tool tab data
+#[derive(Clone, Debug, PartialEq)]
+pub struct AiToolTab {
+    pub id: String,
+    pub name: String,
+    pub icon: String,
+    pub command: String,
+    pub status: ToolStatus,
+    pub terminal_id: Option<String>,
+    pub auth_status: AuthStatus,
+}
+
+/// Tool status
+#[derive(Clone, Debug, PartialEq)]
+pub enum ToolStatus {
+    Available,      // Can be installed
+    Installing,     // Currently installing
+    Ready,          // Installed and ready
+    Starting,       // Terminal starting
+    Running,        // Terminal active
+    Error(String),  // Installation/run error
 }
 
 /// Terminal tabs manager component
@@ -30,14 +58,151 @@ pub fn TerminalTabs() -> Element {
     let mut tab_scroll_offset = use_signal(|| 0usize);
     let max_visible_tabs = 6; // Maximum number of tabs to display before scrolling
     
-    // Create initial terminal on mount
-    use_effect(move || {
-        tracing::info!("🔍 TerminalTabs component mounted - checking terminals");
-        if terminals.read().is_empty() {
-            tracing::info!("📝 Creating initial terminal");
-            create_new_terminal(&mut terminals, &mut active_terminal_id, &mut terminal_counter, &mut tab_scroll_offset, max_visible_tabs);
-        } else {
-            tracing::info!("✅ Terminals already exist: {}", terminals.read().len());
+    // AI tools state
+    let mut ai_tools = use_signal(|| Vec::<AiToolTab>::new());
+    let mut ai_tools_expanded = use_signal(|| true);
+    let ai_cli_controller = use_signal(|| Option::<Arc<AiCliController>>::None);
+    let ai_event_rx = use_signal(|| Option::<mpsc::UnboundedReceiver<AiCliEvent>>::None);
+    
+    // Initialize AI tools on component creation
+    {
+        // Create initial tool tabs immediately
+        let tools = get_enabled_ai_tools();
+        let mut tool_tabs = Vec::new();
+        
+        for tool in tools {
+            tool_tabs.push(AiToolTab {
+                id: tool.id,
+                name: tool.name,
+                icon: tool.icon,
+                command: tool.command,
+                status: ToolStatus::Available, // Will be updated by controller
+                terminal_id: None,
+                auth_status: tool.auth_status,
+            });
+        }
+        
+        ai_tools.set(tool_tabs);
+    }
+    
+    // Create initial terminal on mount - separate effect for terminal creation
+    use_effect({
+        let mut terminals = terminals.clone();
+        let mut active_terminal_id = active_terminal_id.clone();
+        let mut terminal_counter = terminal_counter.clone();
+        let mut tab_scroll_offset = tab_scroll_offset.clone();
+        
+        move || {
+            tracing::info!("🔍 TerminalTabs component mounted - checking terminals");
+            if terminals.read().is_empty() {
+                tracing::info!("📝 Creating initial terminal");
+                create_new_terminal(&mut terminals, &mut active_terminal_id, &mut terminal_counter, &mut tab_scroll_offset, max_visible_tabs);
+            } else {
+                tracing::info!("✅ Terminals already exist: {}", terminals.read().len());
+            }
+        }
+    });
+    
+    // Initialize AI CLI controller - separate effect
+    use_effect({
+        let ai_tools = ai_tools.clone();
+        let ai_cli_controller = ai_cli_controller.clone();
+        let ai_event_rx = ai_event_rx.clone();
+        
+        move || {
+            tracing::info!("🤖 Initializing AI CLI tools");
+            
+            // Initialize AI CLI controller using Dioxus spawn
+            let mut ai_tools_clone = ai_tools.clone();
+            let mut ai_cli_controller_signal = ai_cli_controller.clone();
+            let mut ai_event_rx_signal = ai_event_rx.clone();
+            
+            dioxus::prelude::spawn(async move {
+                // Create event channel
+                let (event_tx, event_rx) = mpsc::unbounded_channel();
+                
+                // Store receiver first
+                ai_event_rx_signal.set(Some(event_rx));
+                
+                // Create controller
+                match AiCliController::new(event_tx).await {
+                    Ok(controller) => {
+                        let controller_arc = Arc::new(controller);
+                        
+                        // Get initial tool status
+                        let tool_ids: Vec<String> = ai_tools_clone.read()
+                            .iter()
+                            .map(|t| t.id.clone())
+                            .collect();
+                        
+                        // Check status of all tools
+                        for tool_id in tool_ids {
+                            if let Ok(status) = controller_arc.check_tool_status(&tool_id).await {
+                                // Update tool status
+                                let mut tools = ai_tools_clone.write();
+                                if let Some(tool) = tools.iter_mut().find(|t| t.id == tool_id) {
+                                    tool.status = match status {
+                                        ControllerToolStatus::Available => ToolStatus::Available,
+                                        ControllerToolStatus::Ready => ToolStatus::Ready,
+                                        ControllerToolStatus::Error(e) => ToolStatus::Error(e),
+                                        _ => tool.status.clone(),
+                                    };
+                                }
+                            }
+                        }
+                        
+                        // Store controller
+                        ai_cli_controller_signal.set(Some(controller_arc));
+                        
+                        tracing::info!("✅ AI CLI controller initialized");
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ Failed to initialize AI CLI controller: {}", e);
+                    }
+                }
+            });
+        }
+    });
+    
+    // Process AI CLI events - separate effect
+    use_effect({
+        let ai_tools = ai_tools.clone();
+        let ai_event_rx = ai_event_rx.clone();
+        
+        move || {
+            let mut ai_tools = ai_tools.clone();
+            let mut ai_event_rx = ai_event_rx.clone();
+            
+            dioxus::prelude::spawn(async move {
+                if let Some(mut rx) = ai_event_rx.write().take() {
+                    while let Some(event) = rx.recv().await {
+                    match event {
+                        AiCliEvent::ToolStatusChanged { tool_id, status } => {
+                            tracing::info!("📊 Tool status changed: {} -> {:?}", tool_id, status);
+                            
+                            let mut tools = ai_tools.write();
+                            if let Some(tool) = tools.iter_mut().find(|t| t.id == tool_id) {
+                                tool.status = match status {
+                                    ControllerToolStatus::Available => ToolStatus::Available,
+                                    ControllerToolStatus::Installing => ToolStatus::Installing,
+                                    ControllerToolStatus::Ready => ToolStatus::Ready,
+                                    ControllerToolStatus::Starting => ToolStatus::Starting,
+                                    ControllerToolStatus::Running => ToolStatus::Running,
+                                    ControllerToolStatus::Error(e) => ToolStatus::Error(e),
+                                };
+                            }
+                        }
+                        AiCliEvent::InstallationProgress { tool_id, message } => {
+                            tracing::info!("📦 Installation progress for {}: {}", tool_id, message);
+                        }
+                        AiCliEvent::InstallationComplete { tool_id, success, error } => {
+                            tracing::info!("✅ Installation complete for {}: success={}, error={:?}", 
+                                tool_id, success, error);
+                        }
+                    }
+                    }
+                }
+            });
         }
     });
 
@@ -122,6 +287,66 @@ pub fn TerminalTabs() -> Element {
         background: #1e1e1e;
         overflow: hidden;
     ";
+    
+    let ai_tools_section_style = "
+        background: #252526;
+        border-bottom: 1px solid #1e1e1e;
+        padding: 8px;
+    ";
+    
+    let ai_tools_header_style = "
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: #cccccc;
+        font-size: 13px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        cursor: pointer;
+        user-select: none;
+        margin-bottom: 8px;
+    ";
+    
+    let ai_tool_button_style = |status: &ToolStatus| format!(
+        "
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        margin: 2px 4px;
+        background: {};
+        color: {};
+        border: 1px solid {};
+        border-radius: 4px;
+        cursor: {};
+        font-size: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        transition: all 0.2s ease;
+        ",
+        match status {
+            ToolStatus::Ready => "#007acc",
+            ToolStatus::Available => "#3c3c3c",
+            ToolStatus::Installing => "#d79922",
+            ToolStatus::Running => "#4ec9b0",
+            ToolStatus::Error(_) => "#f44747",
+            _ => "#3c3c3c",
+        },
+        match status {
+            ToolStatus::Error(_) => "#ffffff",
+            _ => "#cccccc",
+        },
+        match status {
+            ToolStatus::Ready => "#0098ff",
+            ToolStatus::Available => "#5a5a5a",
+            ToolStatus::Installing => "#f0ab00",
+            ToolStatus::Running => "#6edcd2",
+            ToolStatus::Error(_) => "#ff6b6b",
+            _ => "#5a5a5a",
+        },
+        match status {
+            ToolStatus::Installing => "wait",
+            _ => "pointer",
+        }
+    );
 
     // Debug log render
     tracing::info!("🎨 TerminalTabs rendering with {} terminals", terminals.read().len());
@@ -129,6 +354,126 @@ pub fn TerminalTabs() -> Element {
     rsx! {
         div {
             style: "display: flex; flex-direction: column; height: 100%;",
+
+            // AI Tools Section
+            if ai_tools.read().len() > 0 {
+                div {
+                    style: "{ai_tools_section_style}",
+                    
+                    // Collapsible header
+                    div {
+                        style: "{ai_tools_header_style}",
+                        onclick: move |_| {
+                            let current = *ai_tools_expanded.read();
+                            ai_tools_expanded.set(!current);
+                        },
+                        
+                        // Chevron icon
+                        span {
+                            style: "font-size: 10px; transition: transform 0.2s;",
+                            style: if *ai_tools_expanded.read() { 
+                                "transform: rotate(90deg);" 
+                            } else { 
+                                "transform: rotate(0deg);" 
+                            },
+                            "▶"
+                        }
+                        
+                        span { "AI CLI Tools" }
+                        
+                        // Tool count
+                        span {
+                            style: "margin-left: auto; opacity: 0.6; font-size: 11px;",
+                            "{ai_tools.read().len()}"
+                        }
+                    }
+                    
+                    // Tool buttons (only show when expanded)
+                    if *ai_tools_expanded.read() {
+                        div {
+                            style: "display: flex; flex-wrap: wrap;",
+                            
+                            for tool in ai_tools.read().iter() {
+                                button {
+                                    key: "{tool.id}",
+                                    style: "{ai_tool_button_style(&tool.status)}",
+                                    disabled: matches!(tool.status, ToolStatus::Installing),
+                                    onclick: {
+                                        let tool_id = tool.id.clone();
+                                        let mut ai_tools = ai_tools.clone();
+                                        let ai_cli_controller = ai_cli_controller.clone();
+                                        let mut terminals = terminals.clone();
+                                        let mut active_terminal_id = active_terminal_id.clone();
+                                        let mut terminal_counter = terminal_counter.clone();
+                                        let mut tab_scroll_offset = tab_scroll_offset.clone();
+                                        move |_| {
+                                            activate_ai_tool(
+                                                &tool_id,
+                                                &mut ai_tools,
+                                                &ai_cli_controller,
+                                                &mut terminals,
+                                                &mut active_terminal_id,
+                                                &mut terminal_counter,
+                                                &mut tab_scroll_offset,
+                                                max_visible_tabs,
+                                            );
+                                        }
+                                    },
+                                    
+                                    // Tool icon
+                                    span { "{tool.icon}" }
+                                    
+                                    // Tool name
+                                    span { "{tool.name}" }
+                                    
+                                    // Status indicator
+                                    match &tool.status {
+                                        ToolStatus::Installing => rsx! {
+                                            span {
+                                                style: "margin-left: 4px; animation: spin 1s linear infinite;",
+                                                "⏳"
+                                            }
+                                        },
+                                        ToolStatus::Error(msg) => rsx! {
+                                            span {
+                                                style: "margin-left: 4px;",
+                                                title: "{msg}",
+                                                "❌"
+                                            }
+                                        },
+                                        ToolStatus::Running => rsx! {
+                                            span {
+                                                style: "margin-left: 4px; color: #4ec9b0;",
+                                                "●"
+                                            }
+                                        },
+                                        _ => rsx! {}
+                                    }
+                                    
+                                    // Auth status indicator
+                                    match &tool.auth_status {
+                                        AuthStatus::Required { instructions } => rsx! {
+                                            span {
+                                                style: "margin-left: 4px; opacity: 0.7;",
+                                                title: "{instructions}",
+                                                "🔐"
+                                            }
+                                        },
+                                        AuthStatus::Invalid { error } => rsx! {
+                                            span {
+                                                style: "margin-left: 4px; color: #f44747;",
+                                                title: "{error}",
+                                                "⚠️"
+                                            }
+                                        },
+                                        _ => rsx! {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Tab bar with scroll controls
             div {
@@ -372,7 +717,7 @@ fn create_new_terminal(
     tab_scroll_offset: &mut Signal<usize>,
     max_visible_tabs: usize,
 ) {
-    let count = *terminal_counter.read();
+    let count = terminal_counter.peek().clone();
     let (id, title, icon) = if count == 1 {
         // First terminal is always Claude Code
         ("claude-code".to_string(), "Claude Code".to_string(), "🤖".to_string())
@@ -491,5 +836,100 @@ fn close_terminal(
         } else {
             active_terminal_id.set(None);
         }
+    }
+}
+
+/// Activate an AI tool - install if needed, then launch in terminal
+fn activate_ai_tool(
+    tool_id: &str,
+    ai_tools: &mut Signal<Vec<AiToolTab>>,
+    ai_cli_controller: &Signal<Option<Arc<AiCliController>>>,
+    terminals: &mut Signal<HashMap<String, TerminalTab>>,
+    active_terminal_id: &mut Signal<Option<String>>,
+    terminal_counter: &mut Signal<u32>,
+    tab_scroll_offset: &mut Signal<usize>,
+    max_visible_tabs: usize,
+) {
+    tracing::info!("🚀 Activating AI tool: {}", tool_id);
+    
+    // Find the tool
+    let tool_index = ai_tools.read().iter().position(|t| t.id == tool_id);
+    if tool_index.is_none() {
+        tracing::error!("Tool not found: {}", tool_id);
+        return;
+    }
+    
+    let tool = ai_tools.read()[tool_index.unwrap()].clone();
+    
+    // If tool is already running, switch to its terminal
+    if let ToolStatus::Running = tool.status {
+        if let Some(terminal_id) = &tool.terminal_id {
+            set_active_terminal(terminals, active_terminal_id, terminal_id, tab_scroll_offset, max_visible_tabs);
+            return;
+        }
+    }
+    
+    // If tool is not ready, install it first
+    if !matches!(tool.status, ToolStatus::Ready) {
+        // Get controller
+        let controller = ai_cli_controller.read().clone();
+        if controller.is_none() {
+            tracing::error!("AI CLI controller not initialized");
+            return;
+        }
+        
+        let controller = controller.unwrap();
+        let tool_id_clone = tool_id.to_string();
+        
+        // Install tool using Dioxus spawn
+        dioxus::prelude::spawn(async move {
+            tracing::info!("📦 Starting installation for tool: {}", tool_id_clone);
+            
+            if let Err(e) = controller.install_tool(tool_id_clone.clone()).await {
+                tracing::error!("❌ Failed to install tool {}: {}", tool_id_clone, e);
+            }
+        });
+        
+        return;
+    }
+    
+    // Tool is ready, create a terminal for it
+    let terminal_id = format!("ai-tool-{}", tool_id);
+    let title = tool.name.clone();
+    let icon = tool.icon.clone();
+    
+    // Create new terminal tab
+    let new_terminal = TerminalTab {
+        id: terminal_id.clone(),
+        title,
+        icon,
+        is_active: true,
+        working_directory: std::env::current_dir()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+    };
+    
+    // Deactivate all other terminals
+    for (_, terminal) in terminals.write().iter_mut() {
+        terminal.is_active = false;
+    }
+    
+    terminals.write().insert(terminal_id.clone(), new_terminal);
+    active_terminal_id.set(Some(terminal_id.clone()));
+    
+    // Update tool status
+    {
+        let mut tools = ai_tools.write();
+        if let Some(tool) = tools.iter_mut().find(|t| t.id == tool_id) {
+            tool.status = ToolStatus::Running;
+            tool.terminal_id = Some(terminal_id);
+        }
+    }
+    
+    // Scroll to show the new tab if necessary
+    let terminal_count = terminals.read().len();
+    if terminal_count > max_visible_tabs {
+        *tab_scroll_offset.write() = terminal_count.saturating_sub(max_visible_tabs);
     }
 }

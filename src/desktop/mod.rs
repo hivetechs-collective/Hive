@@ -3,6 +3,9 @@
 //! 100% Rust implementation providing professional development experience
 
 pub mod activity_bar;
+pub mod ai_cli_controller;
+pub mod ai_cli_registry;
+pub mod ai_cli_updater;
 pub mod ai_ui_events;
 pub mod assets;
 pub mod chat;
