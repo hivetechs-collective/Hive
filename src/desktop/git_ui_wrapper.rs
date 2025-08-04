@@ -152,9 +152,36 @@ pub fn find_git_root(path: &Path) -> Option<std::path::PathBuf> {
     None
 }
 
+/// Configure git safe directory if needed
+pub fn ensure_safe_directory(path: &Path) -> Result<()> {
+    use std::process::Command;
+    
+    // Try to run a simple git command to check if the directory is trusted
+    let output = Command::new("git")
+        .arg("status")
+        .current_dir(path)
+        .output()?;
+    
+    // If the output contains "dubious ownership" error, add it as safe
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("dubious ownership") || stderr.contains("fatal: detected dubious ownership") {
+        // Add the directory as safe
+        Command::new("git")
+            .args(&["config", "--global", "--add", "safe.directory", path.to_str().unwrap_or("*")])
+            .output()?;
+        
+        tracing::info!("Added {} as safe directory for git", path.display());
+    }
+    
+    Ok(())
+}
+
 /// Spawn GitUI in a specific directory
 pub fn spawn_gitui_with_dir(working_dir: &std::path::Path) -> Result<()> {
     use std::process::Command;
+    
+    // Ensure the directory is trusted by git
+    let _ = ensure_safe_directory(working_dir);
     
     Command::new("gitui")
         .current_dir(working_dir)
