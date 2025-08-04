@@ -6,12 +6,17 @@ use rfd;
 use chrono::{Duration, Utc};
 use std::sync::Arc;
 use hive_ai::desktop::state::StageStatus;
+use uuid::Uuid;
 
 // Terminal imports
 use hive_ai::desktop::terminal_tabs::{TerminalTabs, TerminalTab};
 use hive_ai::desktop::terminal::use_terminal_cwd;
 use hive_ai::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_terminal_cwd_tracker};
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
+use hive_ai::desktop::terminal_xterm_simple::TerminalXterm;
+
+// GitUI imports
+use hive_ai::desktop::git_ui_wrapper::{GitUIWrapper, ensure_gitui_installed};
 
 // Git imports
 use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
@@ -1554,8 +1559,37 @@ fn App() -> Element {
     
     // Terminal state
     let mut show_terminal = use_signal(|| true); // Terminal visible by default
+    let mut show_gitui = use_signal(|| true); // GitUI panel visible by default
+    let mut gitui_terminal_id = use_signal(|| None::<String>); // GitUI terminal ID
+    
+    // Initialize GitUI terminal
+    use_effect({
+        let mut gitui_terminal_id = gitui_terminal_id.clone();
+        move || {
+            // Check if GitUI is installed
+            spawn(async move {
+                match ensure_gitui_installed() {
+                    Ok(_) => {
+                        tracing::info!("✅ GitUI is installed and ready");
+                        
+                        // Create a unique terminal ID for GitUI
+                        let terminal_id = format!("gitui-{}", Uuid::new_v4());
+                        
+                        // Set the terminal ID so the TerminalXterm component can handle spawning
+                        gitui_terminal_id.set(Some(terminal_id.clone()));
+                        tracing::info!("✅ GitUI terminal ID set: {}", terminal_id);
+                    }
+                    Err(e) => {
+                        tracing::warn!("GitUI not installed: {}", e);
+                        // TODO: Show installation dialog
+                    }
+                }
+            });
+        }
+    });
     
     // Panel resizing state
+    let mut gitui_width = use_signal(|| 300.0);  // New GitUI panel width
     let mut sidebar_width = use_signal(|| 250.0);
     let mut chat_width = use_signal(|| 400.0);
     let mut terminal_height = use_signal(|| 300.0);
@@ -3320,6 +3354,18 @@ fn App() -> Element {
                         
                         tracing::info!("🖥️ Terminal toggled: {}", if !current { "shown" } else { "hidden" });
                     }
+                    
+                    // Check for Ctrl+G or Cmd+G to toggle GitUI panel
+                    if modifier_pressed && evt.key() == Key::Character("g".to_string()) {
+                        evt.stop_propagation();
+                        evt.prevent_default();
+                        
+                        // Toggle GitUI panel visibility
+                        let current = *show_gitui.read();
+                        show_gitui.set(!current);
+                        
+                        tracing::info!("🔀 GitUI panel toggled: {}", if !current { "shown" } else { "hidden" });
+                    }
                 }
             },
 
@@ -3332,6 +3378,73 @@ fn App() -> Element {
             div {
                 class: "main-content",
                 style: "position: relative; display: flex; flex: 1; overflow: hidden;",
+
+                // GitUI Panel (far left) - NEW!
+                if *show_gitui.read() {
+                    div {
+                        class: "gitui-panel",
+                        style: format!("background: #0A0E0F; border-right: 1px solid #2D3336; display: flex; flex-direction: column; height: 100%; width: {}px; position: relative;", 
+                            gitui_width.read()
+                        ),
+                        
+                        // GitUI header
+                        div {
+                            class: "gitui-header",
+                            style: "background: #181E21; border-bottom: 1px solid #2D3336; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;",
+                            
+                            div {
+                                style: "display: flex; align-items: center; gap: 8px;",
+                                span {
+                                    style: "font-size: 18px;",
+                                    "🔀"
+                                }
+                                span {
+                                    style: "color: #FFC107; font-weight: 600; font-size: 14px;",
+                                    "GitUI"
+                                }
+                            }
+                            
+                            // Close button
+                            button {
+                                style: "background: transparent; border: none; color: #9CA3AF; cursor: pointer; padding: 4px; font-size: 16px;",
+                                title: "Hide GitUI Panel",
+                                onclick: move |_| {
+                                    show_gitui.set(false);
+                                },
+                                "×"
+                            }
+                        }
+                        
+                        // GitUI terminal container
+                        div {
+                            class: "gitui-terminal-container",
+                            style: "flex: 1; overflow: hidden; position: relative;",
+                            
+                            if let Some(terminal_id) = gitui_terminal_id.read().as_ref() {
+                                TerminalXterm {
+                                    terminal_id: terminal_id.clone(),
+                                    initial_directory: current_dir.read().as_ref().map(|p| p.to_string_lossy().to_string()),
+                                    command: Some("gitui".to_string()),
+                                    args: vec![]
+                                }
+                            } else {
+                                div {
+                                    style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #9CA3AF;",
+                                    "Initializing GitUI..."
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Resize divider between GitUI and sidebar
+                    ResizableDivider {
+                        direction: ResizeDirection::Horizontal,
+                        size: gitui_width,
+                        min_size: 200.0,
+                        max_size: 600.0,
+                        invert_drag: false,
+                    }
+                }
 
                 // Sidebar (left)
                 div {
@@ -4072,6 +4185,19 @@ fn App() -> Element {
                                 },
                                 span { style: "font-size: 14px;", "🧠" }
                                 span { "Memory" }
+                            }
+                            
+                            // GitUI button (show when hidden)
+                            if !*show_gitui.read() {
+                                button {
+                                    class: "action-btn",
+                                    style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
+                                    onclick: move |_| {
+                                        show_gitui.set(true);
+                                    },
+                                    span { style: "font-size: 14px;", "🔀" }
+                                    span { "GitUI" }
+                                }
                             }
                             
                             // Settings button

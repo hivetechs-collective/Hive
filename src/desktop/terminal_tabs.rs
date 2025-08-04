@@ -356,7 +356,9 @@ fn TerminalInstance(terminal_id: String, working_directory: String) -> Element {
             style: "height: 100%; width: 100%;",
             TerminalXterm {
                 terminal_id: terminal_id.clone(),
-                initial_directory: Some(working_directory)
+                initial_directory: Some(working_directory),
+                command: None,
+                args: vec![]
             }
         }
     }
