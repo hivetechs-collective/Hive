@@ -17,6 +17,7 @@ use hive_ai::desktop::terminal_xterm_simple::TerminalXterm;
 
 // LazyGit imports
 use hive_ai::desktop::git_ui_wrapper::{LazyGitWrapper, ensure_lazygit_installed, find_git_root};
+use hive_ai::desktop::terminal_xterm_simple::resize_terminal_pty;
 
 // Git imports
 use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
@@ -1564,6 +1565,122 @@ fn App() -> Element {
     let mut lazygit_update_counter = use_signal(|| 0u32); // Force LazyGit terminal refresh
     let mut lazygit_update_timer = use_signal(|| None::<Task>); // Debounce timer
     
+    // PTY resize requests from JavaScript
+    let mut pty_resize_requests = use_signal(|| Vec::<(String, u16, u16)>::new());
+    
+    // Monitor PTY resize requests and execute them IMMEDIATELY
+    use_effect({
+        let mut pty_resize_requests = pty_resize_requests.clone();
+        move || {
+            spawn(async move {
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await; // 1ms for immediate response
+                    
+                    let requests = {
+                        let mut reqs = pty_resize_requests.write();
+                        if !reqs.is_empty() {
+                            let pending = reqs.clone();
+                            reqs.clear();
+                            pending
+                        } else {
+                            Vec::new()
+                        }
+                    };
+                    
+                    for (terminal_id, cols, rows) in requests {
+                        tracing::info!("🔧 Processing PTY resize: {} -> {}x{}", terminal_id, cols, rows);
+                        resize_terminal_pty(&terminal_id, cols, rows);
+                    }
+                }
+            });
+        }
+    });
+
+    // Direct PTY resize handler - no polling, immediate response
+    use_effect({
+        let mut pty_resize_requests = pty_resize_requests.clone();
+        move || {
+            spawn(async move {
+                // Set up immediate JavaScript callback for PTY resize
+                let script = r#"
+                    if (!window.dioxus_pty_resize_handler) {
+                        // Direct callback function that immediately processes resize
+                        window.dioxus_pty_resize_handler = function(terminal_id, cols, rows) {
+                            console.log('⚡ IMMEDIATE PTY resize:', terminal_id, cols + 'x' + rows);
+                            
+                            // Call Rust resize function immediately - no queuing, no delays
+                            window.rust_pty_resize_callback(terminal_id, cols, rows);
+                        };
+                        
+                        // Override postMessage for immediate processing
+                        if (!window.dioxus) window.dioxus = {};
+                        window.dioxus.postMessage = function(data) {
+                            if (data.method === 'resize_pty') {
+                                // Process immediately, no queuing
+                                window.dioxus_pty_resize_handler(data.terminal_id, data.cols, data.rows);
+                            }
+                        };
+                        
+                        console.log('⚡ IMMEDIATE PTY resize handler installed');
+                    }
+                "#;
+                
+                let _ = eval(&script).await;
+            });
+        }
+    });
+    
+    // Set up Rust callback for immediate PTY resize  
+    use_effect({
+        let mut pty_resize_requests = pty_resize_requests.clone();
+        move || {
+            spawn(async move {
+                let callback_script = r#"
+                    window.rust_pty_resize_callback = function(terminal_id, cols, rows) {
+                        console.log('🚀 Rust callback triggered:', terminal_id, cols + 'x' + rows);
+                        // Add to immediate processing queue
+                        if (!window.immediate_pty_requests) window.immediate_pty_requests = [];
+                        window.immediate_pty_requests.push({terminal_id, cols, rows});
+                    };
+                "#;
+                
+                let _ = eval(&callback_script).await;
+                
+                // Fast polling for immediate requests (much faster than before)
+                loop {
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await; // 1ms polling for immediate response
+                    
+                    let check_script = r#"
+                        if (window.immediate_pty_requests && window.immediate_pty_requests.length > 0) {
+                            const requests = JSON.stringify(window.immediate_pty_requests);
+                            window.immediate_pty_requests = [];
+                            requests;
+                        } else {
+                            null;
+                        }
+                    "#;
+                    
+                    if let Ok(result) = eval(&check_script).await {
+                        if let Some(json_str) = result.as_str() {
+                            if let Ok(requests_data) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+                                for req_data in requests_data {
+                                    if let (Some(terminal_id), Some(cols), Some(rows)) = (
+                                        req_data.get("terminal_id").and_then(|v| v.as_str()),
+                                        req_data.get("cols").and_then(|v| v.as_u64()),
+                                        req_data.get("rows").and_then(|v| v.as_u64()),
+                                    ) {
+                                        let mut reqs = pty_resize_requests.write();
+                                        reqs.push((terminal_id.to_string(), cols as u16, rows as u16));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+
     // Initialize LazyGit terminal and watch for directory changes with debouncing
     use_effect({
         let mut lazygit_terminal_id = lazygit_terminal_id.clone();
