@@ -6,7 +6,7 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::desktop::git::initialize_lazygit_updater;
+use crate::desktop::git::initialize_lazygit_updater_db;
 
 /// LazyGit wrapper that provides full Git functionality with zero code maintenance
 pub struct LazyGitWrapper;
@@ -69,8 +69,9 @@ impl LazyGitWrapper {
 
 /// Check if LazyGit is installed and get the path to it
 /// This will automatically download and update LazyGit if needed
+/// Uses the database to track update checks every 24 hours
 pub async fn ensure_lazygit_installed() -> Result<PathBuf> {
-    initialize_lazygit_updater().await
+    initialize_lazygit_updater_db().await
 }
 
 /// Legacy sync version for backward compatibility

@@ -17,6 +17,7 @@ pub mod toolbar;
 pub mod context_manager;
 pub mod lazygit_controller;
 pub mod lazygit_updater;
+pub mod lazygit_updater_db;
 pub mod status_menu;
 pub mod repository_selector;
 pub mod repository_dropdown;
@@ -96,6 +97,10 @@ pub use decoration_styles::{
 };
 pub use lazygit_controller::{LazyGitController, LazyGitPanel, is_lazygit_available};
 pub use lazygit_updater::{LazyGitUpdater, initialize_lazygit_updater, force_update_lazygit};
+pub use lazygit_updater_db::{
+    LazyGitUpdaterDB, initialize_lazygit_updater_db, force_update_lazygit_db,
+    get_lazygit_update_history
+};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
