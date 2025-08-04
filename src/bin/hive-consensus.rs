@@ -1561,16 +1561,26 @@ fn App() -> Element {
     let mut show_terminal = use_signal(|| true); // Terminal visible by default
     let mut show_gitui = use_signal(|| true); // GitUI panel visible by default
     let mut gitui_terminal_id = use_signal(|| None::<String>); // GitUI terminal ID
+    let mut gitui_update_counter = use_signal(|| 0u32); // Force GitUI terminal refresh
     
     // Initialize GitUI terminal and watch for directory changes
     use_effect({
         let mut gitui_terminal_id = gitui_terminal_id.clone();
         let current_dir = current_dir.clone();
+        let show_gitui = show_gitui.clone();
+        let mut gitui_update_counter = gitui_update_counter.clone();
         move || {
             // Only proceed if GitUI panel is shown
             if !show_gitui() {
                 return;
             }
+            
+            // Get the current directory to trigger reactivity
+            let current_path = current_dir.read().as_ref()
+                .cloned()
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            
+            tracing::info!("🔍 Directory changed, updating GitUI for: {:?}", current_path);
             
             // Check if GitUI is installed
             spawn(async move {
@@ -1578,33 +1588,35 @@ fn App() -> Element {
                     Ok(_) => {
                         tracing::info!("✅ GitUI is installed and ready");
                         
-                        // Get the current directory
-                        let current_path = current_dir.read().as_ref()
-                            .cloned()
-                            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+                        // Clear any existing terminal first
+                        if let Some(old_id) = gitui_terminal_id.read().as_ref() {
+                            // Unregister the old terminal
+                            use hive_ai::desktop::terminal_registry::unregister_terminal;
+                            use hive_ai::desktop::terminal_buffer::unregister_terminal_buffer;
+                            unregister_terminal(old_id);
+                            unregister_terminal_buffer(old_id);
+                            tracing::info!("🔄 Cleared old GitUI terminal: {}", old_id);
+                        }
                         
                         // Only create terminal if we're in a git repository
                         if let Some(_git_root) = find_git_root(&current_path) {
+                            // Add a small delay to prevent rapid terminal recreations
+                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            
                             // Create a unique terminal ID for GitUI
                             let terminal_id = format!("gitui-{}", Uuid::new_v4());
                             
-                            // Clear any existing terminal first
-                            if let Some(old_id) = gitui_terminal_id.read().as_ref() {
-                                // Unregister the old terminal
-                                use hive_ai::desktop::terminal_registry::unregister_terminal;
-                                use hive_ai::desktop::terminal_buffer::unregister_terminal_buffer;
-                                unregister_terminal(old_id);
-                                unregister_terminal_buffer(old_id);
-                                tracing::info!("🔄 Cleared old GitUI terminal: {}", old_id);
-                            }
-                            
                             // Set the new terminal ID
                             gitui_terminal_id.set(Some(terminal_id.clone()));
-                            tracing::info!("✅ GitUI terminal ID set: {}", terminal_id);
+                            
+                            // Increment update counter to force terminal re-render
+                            gitui_update_counter.set(gitui_update_counter() + 1);
+                            
+                            tracing::info!("✅ GitUI terminal ID set: {} for path: {:?}", terminal_id, current_path);
                         } else {
                             // Not in a git repository, clear terminal ID
                             gitui_terminal_id.set(None);
-                            tracing::info!("⚠️ Not in a git repository, GitUI not available");
+                            tracing::info!("⚠️ Not in a git repository, GitUI not available for: {:?}", current_path);
                         }
                     }
                     Err(e) => {
@@ -3447,6 +3459,7 @@ fn App() -> Element {
                         div {
                             class: "gitui-terminal-container",
                             style: "flex: 1; overflow: hidden; position: relative;",
+                            key: "{gitui_update_counter}",  // Force re-render when directory changes
                             
                             {
                                 // Compute values outside rsx
