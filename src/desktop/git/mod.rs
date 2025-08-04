@@ -15,6 +15,7 @@ pub mod diff;
 pub mod operations;
 pub mod toolbar;
 pub mod context_manager;
+pub mod lazygit_controller;
 pub mod status_menu;
 pub mod repository_selector;
 pub mod repository_dropdown;
@@ -92,6 +93,7 @@ pub use decoration_styles::{
     get_inline_git_status_style, get_git_status_class, get_conflict_class,
     get_file_git_classes, get_vscode_git_theme_styles
 };
+pub use lazygit_controller::{LazyGitController, LazyGitPanel, is_lazygit_available};
 
 use dioxus::prelude::*;
 use std::collections::HashMap;
