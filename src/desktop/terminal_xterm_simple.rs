@@ -26,6 +26,8 @@ pub struct XtermTerminal {
 pub fn TerminalXterm(
     terminal_id: String,
     initial_directory: Option<String>,
+    #[props(default = None)] command: Option<String>,
+    #[props(default = vec![])] args: Vec<String>,
 ) -> Element {
     let mut terminal_writer = use_signal(|| None::<Arc<Mutex<Box<dyn Write + Send>>>>);
     let mut is_initialized = use_signal(|| false);
@@ -53,10 +55,12 @@ pub fn TerminalXterm(
             let div_id = div_id_init.clone();
             let initial_dir = initial_directory.clone();
             let is_claude_code = tid == "claude-code";
+            let cmd = command.clone();
+            let cmd_args = args.clone();
             
             spawn(async move {
                 // Initialize PTY
-                if let Ok((writer, mut reader)) = create_pty(initial_dir, is_claude_code) {
+                if let Ok((writer, mut reader)) = create_pty(initial_dir, is_claude_code, cmd, cmd_args) {
                     terminal_writer.set(Some(writer.clone()));
                     
                     // Register in global registry
@@ -549,10 +553,18 @@ async fn process_terminal_output_queue(terminal_id: &str) {
 }
 
 /// Create PTY
-fn create_pty(working_directory: Option<String>, is_claude_code: bool) -> Result<(Arc<Mutex<Box<dyn Write + Send>>>, Box<dyn Read + Send>), Box<dyn std::error::Error>> {
+fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: Option<String>, args: Vec<String>) -> Result<(Arc<Mutex<Box<dyn Write + Send>>>, Box<dyn Read + Send>), Box<dyn std::error::Error>> {
     let pty_system = NativePtySystem::default();
     
-    let mut cmd = if is_claude_code {
+    let mut cmd = if let Some(custom_command) = command {
+        // Use custom command (e.g., "gitui")
+        tracing::info!("🚀 Launching custom command: {} {:?}", custom_command, args);
+        let mut builder = CommandBuilder::new(custom_command);
+        for arg in args {
+            builder.arg(arg);
+        }
+        builder
+    } else if is_claude_code {
         // For Claude Code terminal, use bash with a special prompt
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
         tracing::info!("🤖 Launching shell for Claude Code terminal with instructions");

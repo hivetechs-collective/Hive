@@ -44,6 +44,7 @@ pub mod terminal_registry;
 pub mod terminal_buffer;
 pub mod git;
 pub mod diff_viewer;
+pub mod git_ui_wrapper;
 pub mod workspace;
 
 // Re-export commonly used styling components
