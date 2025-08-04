@@ -15,8 +15,8 @@ use hive_ai::desktop::terminal_cwd_tracker::{provide_terminal_cwd_tracker, use_t
 use hive_ai::desktop::resizable_panels::{ResizableDivider, ResizeDirection};
 use hive_ai::desktop::terminal_xterm_simple::TerminalXterm;
 
-// GitUI imports
-use hive_ai::desktop::git_ui_wrapper::{GitUIWrapper, ensure_gitui_installed, find_git_root};
+// LazyGit imports
+use hive_ai::desktop::git_ui_wrapper::{LazyGitWrapper, ensure_lazygit_installed, find_git_root};
 
 // Git imports
 use hive_ai::desktop::git::{GitState, use_git_state, GitRepository, GitWatcher, GitEvent, DiffViewMode, get_file_diff, GitToolbar, GitOperation, GitOperations, provide_git_context, use_git_context, GitStatusMenu, GitOperationProgress, ProgressCallback, CancellationToken, initialize_git_statusbar_integration, setup_git_watcher_integration};
@@ -1559,21 +1559,21 @@ fn App() -> Element {
     
     // Terminal state
     let mut show_terminal = use_signal(|| true); // Terminal visible by default
-    let mut show_gitui = use_signal(|| true); // GitUI panel visible by default
-    let mut gitui_terminal_id = use_signal(|| None::<String>); // GitUI terminal ID
-    let mut gitui_update_counter = use_signal(|| 0u32); // Force GitUI terminal refresh
-    let mut gitui_update_timer = use_signal(|| None::<Task>); // Debounce timer
+    let mut show_lazygit = use_signal(|| true); // LazyGit panel visible by default  
+    let mut lazygit_terminal_id = use_signal(|| None::<String>); // LazyGit terminal ID
+    let mut lazygit_update_counter = use_signal(|| 0u32); // Force LazyGit terminal refresh
+    let mut lazygit_update_timer = use_signal(|| None::<Task>); // Debounce timer
     
-    // Initialize GitUI terminal and watch for directory changes with debouncing
+    // Initialize LazyGit terminal and watch for directory changes with debouncing
     use_effect({
-        let mut gitui_terminal_id = gitui_terminal_id.clone();
+        let mut lazygit_terminal_id = lazygit_terminal_id.clone();
         let current_dir = current_dir.clone();
-        let show_gitui = show_gitui.clone();
-        let mut gitui_update_counter = gitui_update_counter.clone();
-        let mut gitui_update_timer = gitui_update_timer.clone();
+        let show_lazygit = show_lazygit.clone();
+        let mut lazygit_update_counter = lazygit_update_counter.clone();
+        let mut lazygit_update_timer = lazygit_update_timer.clone();
         move || {
-            // Only proceed if GitUI panel is shown
-            if !show_gitui() {
+            // Only proceed if LazyGit panel is shown
+            if !show_lazygit() {
                 return;
             }
             
@@ -1582,12 +1582,12 @@ fn App() -> Element {
                 .cloned()
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
             
-            tracing::info!("🔍 Directory changed, scheduling GitUI update for: {:?}", current_path);
+            tracing::info!("🔍 Directory changed, scheduling LazyGit update for: {:?}", current_path);
             
             // Cancel any existing timer
-            if let Some(handle) = gitui_update_timer.write().take() {
+            if let Some(handle) = lazygit_update_timer.write().take() {
                 handle.cancel();
-                tracing::info!("⏱️ Cancelled previous GitUI update timer");
+                tracing::info!("⏱️ Cancelled previous LazyGit update timer");
             }
             
             // Set a new timer with debounce
@@ -1595,61 +1595,61 @@ fn App() -> Element {
                 // Wait for directory changes to settle
                 tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                 
-                // Check if GitUI is installed
-                match ensure_gitui_installed() {
+                // Check if LazyGit is installed
+                match ensure_lazygit_installed() {
                     Ok(_) => {
-                        tracing::info!("✅ GitUI is installed and ready");
+                        tracing::info!("✅ LazyGit is installed and ready");
                         
                         // Clear any existing terminal first
-                        if let Some(old_id) = gitui_terminal_id.read().as_ref() {
-                            // Send quit command to GitUI before clearing
+                        if let Some(old_id) = lazygit_terminal_id.read().as_ref() {
+                            // Send quit command to LazyGit before clearing
                             use hive_ai::desktop::terminal_registry::{send_to_terminal, unregister_terminal};
                             use hive_ai::desktop::terminal_buffer::unregister_terminal_buffer;
                             
-                            // Send 'q' to quit GitUI gracefully
+                            // Send 'q' to quit LazyGit gracefully
                             if send_to_terminal(old_id, "q") {
-                                tracing::info!("📤 Sent quit command to GitUI");
+                                tracing::info!("📤 Sent quit command to LazyGit");
                             }
                             
-                            // Give GitUI time to exit cleanly
+                            // Give LazyGit time to exit cleanly
                             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                             
                             unregister_terminal(old_id);
                             unregister_terminal_buffer(old_id);
-                            tracing::info!("🔄 Cleared old GitUI terminal: {}", old_id);
+                            tracing::info!("🔄 Cleared old LazyGit terminal: {}", old_id);
                         }
                         
                         // Only create terminal if we're in a git repository
                         if let Some(_git_root) = find_git_root(&current_path) {
-                            // Create a unique terminal ID for GitUI
-                            let terminal_id = format!("gitui-{}", Uuid::new_v4());
+                            // Create a unique terminal ID for LazyGit
+                            let terminal_id = format!("lazygit-{}", Uuid::new_v4());
                             
                             // Set the new terminal ID
-                            gitui_terminal_id.set(Some(terminal_id.clone()));
+                            lazygit_terminal_id.set(Some(terminal_id.clone()));
                             
                             // Increment update counter to force terminal re-render
-                            gitui_update_counter.set(gitui_update_counter() + 1);
+                            lazygit_update_counter.set(lazygit_update_counter() + 1);
                             
-                            tracing::info!("✅ GitUI terminal ID set: {} for path: {:?}", terminal_id, current_path);
+                            tracing::info!("✅ LazyGit terminal ID set: {} for path: {:?}", terminal_id, current_path);
                         } else {
                             // Not in a git repository, clear terminal ID
-                            gitui_terminal_id.set(None);
-                            tracing::info!("⚠️ Not in a git repository, GitUI not available for: {:?}", current_path);
+                            lazygit_terminal_id.set(None);
+                            tracing::info!("⚠️ Not in a git repository, LazyGit not available for: {:?}", current_path);
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("GitUI not installed: {}", e);
-                        gitui_terminal_id.set(None);
+                        tracing::warn!("LazyGit not installed: {}", e);
+                        lazygit_terminal_id.set(None);
                     }
                 }
             });
             
-            gitui_update_timer.set(Some(timer_handle));
+            lazygit_update_timer.set(Some(timer_handle));
         }
     });
     
     // Panel resizing state
-    let mut gitui_width = use_signal(|| 300.0);  // New GitUI panel width
+    let mut lazygit_width = use_signal(|| 300.0);  // New LazyGit panel width
     let mut sidebar_width = use_signal(|| 250.0);
     let mut chat_width = use_signal(|| 400.0);
     let mut terminal_height = use_signal(|| 300.0);
@@ -3415,16 +3415,16 @@ fn App() -> Element {
                         tracing::info!("🖥️ Terminal toggled: {}", if !current { "shown" } else { "hidden" });
                     }
                     
-                    // Check for Ctrl+G or Cmd+G to toggle GitUI panel
-                    if modifier_pressed && evt.key() == Key::Character("g".to_string()) {
+                    // Check for Ctrl+L or Cmd+L to toggle LazyGit panel
+                    if modifier_pressed && evt.key() == Key::Character("l".to_string()) {
                         evt.stop_propagation();
                         evt.prevent_default();
                         
-                        // Toggle GitUI panel visibility
-                        let current = *show_gitui.read();
-                        show_gitui.set(!current);
+                        // Toggle LazyGit panel visibility
+                        let current = *show_lazygit.read();
+                        show_lazygit.set(!current);
                         
-                        tracing::info!("🔀 GitUI panel toggled: {}", if !current { "shown" } else { "hidden" });
+                        tracing::info!("🔀 LazyGit panel toggled: {}", if !current { "shown" } else { "hidden" });
                     }
                 }
             },
@@ -3439,17 +3439,17 @@ fn App() -> Element {
                 class: "main-content",
                 style: "position: relative; display: flex; flex: 1; overflow: hidden;",
 
-                // GitUI Panel (far left) - NEW!
-                if *show_gitui.read() {
+                // LazyGit Panel (far left) - NEW!
+                if *show_lazygit.read() {
                     div {
-                        class: "gitui-panel",
+                        class: "lazygit-panel",
                         style: format!("background: #0A0E0F; border-right: 1px solid #2D3336; display: flex; flex-direction: column; height: 100%; width: {}px; position: relative;", 
-                            gitui_width.read()
+                            lazygit_width.read()
                         ),
                         
-                        // GitUI header
+                        // LazyGit header
                         div {
-                            class: "gitui-header",
+                            class: "lazygit-header",
                             style: "background: #181E21; border-bottom: 1px solid #2D3336; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;",
                             
                             div {
@@ -3460,35 +3460,35 @@ fn App() -> Element {
                                 }
                                 span {
                                     style: "color: #FFC107; font-weight: 600; font-size: 14px;",
-                                    "GitUI"
+                                    "LazyGit"
                                 }
                             }
                             
                             // Close button
                             button {
                                 style: "background: transparent; border: none; color: #9CA3AF; cursor: pointer; padding: 4px; font-size: 16px;",
-                                title: "Hide GitUI Panel",
+                                title: "Hide LazyGit Panel",
                                 onclick: move |_| {
-                                    show_gitui.set(false);
+                                    show_lazygit.set(false);
                                 },
                                 "×"
                             }
                         }
                         
-                        // GitUI terminal container
+                        // LazyGit terminal container
                         div {
-                            class: "gitui-terminal-container",
+                            class: "lazygit-terminal-container",
                             style: "flex: 1; overflow: hidden; position: relative;",
-                            key: "{gitui_update_counter}",  // Force re-render when directory changes
+                            key: "{lazygit_update_counter}",  // Force re-render when directory changes
                             tabindex: "0",  // Make the container focusable
                             onclick: move |_| {
-                                // Focus the GitUI terminal when clicked
-                                tracing::info!("GitUI panel clicked - focusing terminal");
+                                // Focus the LazyGit terminal when clicked
+                                tracing::info!("LazyGit panel clicked - focusing terminal");
                             },
                             
                             {
                                 // Compute values outside rsx
-                                let terminal_id_opt = gitui_terminal_id.read().clone();
+                                let terminal_id_opt = lazygit_terminal_id.read().clone();
                                 let current_path = current_dir.read().as_ref()
                                     .cloned()
                                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
@@ -3500,8 +3500,8 @@ fn App() -> Element {
                                             TerminalXterm {
                                                 terminal_id: terminal_id.clone(),
                                                 initial_directory: Some(git_root.to_string_lossy().to_string()),
-                                                command: Some("gitui".to_string()),
-                                                args: vec![]  // GitUI will use the initial_directory
+                                                command: Some("lazygit".to_string()),
+                                                args: vec![]  // LazyGit will use the initial_directory
                                             }
                                         } else {
                                             // Not in a git repository
@@ -3524,7 +3524,7 @@ fn App() -> Element {
                                     } else {
                                         div {
                                             style: "display: flex; align-items: center; justify-content: center; height: 100%; color: #9CA3AF;",
-                                            "Initializing GitUI..."
+                                            "Initializing LazyGit..."
                                         }
                                     }
                                 }
@@ -3532,10 +3532,10 @@ fn App() -> Element {
                         }
                     }
                     
-                    // Resize divider between GitUI and sidebar
+                    // Resize divider between LazyGit and sidebar
                     ResizableDivider {
                         direction: ResizeDirection::Horizontal,
-                        size: gitui_width,
+                        size: lazygit_width,
                         min_size: 200.0,
                         max_size: 600.0,
                         invert_drag: false,
@@ -4283,16 +4283,16 @@ fn App() -> Element {
                                 span { "Memory" }
                             }
                             
-                            // GitUI button (show when hidden)
-                            if !*show_gitui.read() {
+                            // LazyGit button (show when hidden)
+                            if !*show_lazygit.read() {
                                 button {
                                     class: "action-btn",
                                     style: "background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #cccccc; padding: 8px 12px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; transition: all 0.2s ease;",
                                     onclick: move |_| {
-                                        show_gitui.set(true);
+                                        show_lazygit.set(true);
                                     },
                                     span { style: "font-size: 14px;", "🔀" }
-                                    span { "GitUI" }
+                                    span { "LazyGit" }
                                 }
                             }
                             
