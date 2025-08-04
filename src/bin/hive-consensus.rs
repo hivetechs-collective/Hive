@@ -1562,13 +1562,15 @@ fn App() -> Element {
     let mut show_gitui = use_signal(|| true); // GitUI panel visible by default
     let mut gitui_terminal_id = use_signal(|| None::<String>); // GitUI terminal ID
     let mut gitui_update_counter = use_signal(|| 0u32); // Force GitUI terminal refresh
+    let mut gitui_update_timer = use_signal(|| None::<Task>); // Debounce timer
     
-    // Initialize GitUI terminal and watch for directory changes
+    // Initialize GitUI terminal and watch for directory changes with debouncing
     use_effect({
         let mut gitui_terminal_id = gitui_terminal_id.clone();
         let current_dir = current_dir.clone();
         let show_gitui = show_gitui.clone();
         let mut gitui_update_counter = gitui_update_counter.clone();
+        let mut gitui_update_timer = gitui_update_timer.clone();
         move || {
             // Only proceed if GitUI panel is shown
             if !show_gitui() {
@@ -1580,19 +1582,38 @@ fn App() -> Element {
                 .cloned()
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
             
-            tracing::info!("🔍 Directory changed, updating GitUI for: {:?}", current_path);
+            tracing::info!("🔍 Directory changed, scheduling GitUI update for: {:?}", current_path);
             
-            // Check if GitUI is installed
-            spawn(async move {
+            // Cancel any existing timer
+            if let Some(handle) = gitui_update_timer.write().take() {
+                handle.cancel();
+                tracing::info!("⏱️ Cancelled previous GitUI update timer");
+            }
+            
+            // Set a new timer with debounce
+            let timer_handle = spawn(async move {
+                // Wait for directory changes to settle
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                
+                // Check if GitUI is installed
                 match ensure_gitui_installed() {
                     Ok(_) => {
                         tracing::info!("✅ GitUI is installed and ready");
                         
                         // Clear any existing terminal first
                         if let Some(old_id) = gitui_terminal_id.read().as_ref() {
-                            // Unregister the old terminal
-                            use hive_ai::desktop::terminal_registry::unregister_terminal;
+                            // Send quit command to GitUI before clearing
+                            use hive_ai::desktop::terminal_registry::{send_to_terminal, unregister_terminal};
                             use hive_ai::desktop::terminal_buffer::unregister_terminal_buffer;
+                            
+                            // Send 'q' to quit GitUI gracefully
+                            if send_to_terminal(old_id, "q") {
+                                tracing::info!("📤 Sent quit command to GitUI");
+                            }
+                            
+                            // Give GitUI time to exit cleanly
+                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                            
                             unregister_terminal(old_id);
                             unregister_terminal_buffer(old_id);
                             tracing::info!("🔄 Cleared old GitUI terminal: {}", old_id);
@@ -1600,9 +1621,6 @@ fn App() -> Element {
                         
                         // Only create terminal if we're in a git repository
                         if let Some(_git_root) = find_git_root(&current_path) {
-                            // Add a small delay to prevent rapid terminal recreations
-                            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-                            
                             // Create a unique terminal ID for GitUI
                             let terminal_id = format!("gitui-{}", Uuid::new_v4());
                             
@@ -1625,6 +1643,8 @@ fn App() -> Element {
                     }
                 }
             });
+            
+            gitui_update_timer.set(Some(timer_handle));
         }
     });
     
@@ -3460,6 +3480,11 @@ fn App() -> Element {
                             class: "gitui-terminal-container",
                             style: "flex: 1; overflow: hidden; position: relative;",
                             key: "{gitui_update_counter}",  // Force re-render when directory changes
+                            tabindex: "0",  // Make the container focusable
+                            onclick: move |_| {
+                                // Focus the GitUI terminal when clicked
+                                tracing::info!("GitUI panel clicked - focusing terminal");
+                            },
                             
                             {
                                 // Compute values outside rsx
