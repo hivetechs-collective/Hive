@@ -12,7 +12,7 @@ use uuid;
 
 use crate::consensus::memory::authoritative_store::CuratedFact;
 use crate::consensus::types::{ConsensusProfile, StageResult};
-use crate::core::database::{DatabaseManager, ConsensusProfile as DbProfile};
+use crate::core::database::{DatabaseManager, ConsensusProfile as DbProfile, current_timestamp};
 use rusqlite::OptionalExtension;
 
 /// Commands that can be sent to the database actor
@@ -437,8 +437,8 @@ impl DatabaseActor {
         conn.execute(
             "INSERT OR REPLACE INTO conversations 
              (id, user_id, consensus_profile_id, created_at, updated_at)
-             VALUES (?1, ?2, ?3, datetime('now'), datetime('now'))",
-            rusqlite::params![id, user_id, profile_id],
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![id, user_id, profile_id, current_timestamp(), current_timestamp()],
         )?;
         
         Ok(())
@@ -452,9 +452,9 @@ impl DatabaseActor {
              SET total_cost = COALESCE(total_cost, 0.0) + ?2,
                  total_tokens_input = COALESCE(total_tokens_input, 0) + ?3,
                  total_tokens_output = COALESCE(total_tokens_output, 0) + ?4,
-                 updated_at = datetime('now')
+                 updated_at = ?5
              WHERE id = ?1",
-            rusqlite::params![conversation_id, cost, tokens_in, tokens_out],
+            rusqlite::params![conversation_id, cost, tokens_in, tokens_out, current_timestamp()],
         )?;
         
         Ok(())
