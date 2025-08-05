@@ -61,7 +61,7 @@ pub fn TerminalXterm(
             let tid = terminal_id_init.clone();
             let div_id = div_id_init.clone();
             let initial_dir = initial_directory.clone();
-            let is_claude_code = tid == "claude-code";
+            let is_claude_code = false; // Removed special Claude Code terminal behavior
             let cmd = command.clone();
             let cmd_args = args.clone();
             
@@ -136,42 +136,7 @@ pub fn TerminalXterm(
                     is_initialized.set(true);
                     tracing::info!("🚀 Terminal ready immediately - accepting input");
                     
-                    // For Claude Code terminal, show usage instructions after shell loads
-                    if is_claude_code {
-                        let writer_for_help = terminal_writer.read().clone();
-                        spawn(async move {
-                            // Wait for shell to be ready
-                            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-                            
-                            // Send a clear command first to avoid interference
-                            if let Some(writer_ref) = writer_for_help.as_ref() {
-                                if let Ok(mut w) = writer_ref.lock() {
-                                    let _ = w.write_all(b"clear\r");
-                                    let _ = w.flush();
-                                }
-                            }
-                            
-                            // Wait a bit more for clear to process
-                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                            
-                            // Send help using printf for proper ANSI handling
-                            if let Some(writer_ref) = writer_for_help.as_ref() {
-                                if let Ok(mut w) = writer_ref.lock() {
-                                    // Use printf to properly handle ANSI escape sequences
-                                    let help_commands = vec![
-                                        "printf '\\033[38;2;137;180;250m🤖 Claude Code Terminal\\033[0m\\n'\r",
-                                        "printf '\\033[38;2;166;227;161mType:\\033[0m claude \"your prompt\" to ask Claude\\n'\r",
-                                        "printf '\\033[38;2;186;187;241mExample:\\033[0m claude \"explain this code\"\\n'\r",
-                                    ];
-                                    
-                                    for cmd in help_commands {
-                                        let _ = w.write_all(cmd.as_bytes());
-                                    }
-                                    let _ = w.flush();
-                                }
-                            }
-                        });
-                    }
+                    // Removed special Claude Code terminal help text
                     
                     // Focus this specific terminal after initialization
                     let div_id_focus = div_id.clone();
@@ -229,21 +194,7 @@ pub fn TerminalXterm(
                     let input_str = String::from_utf8_lossy(&input);
                     tracing::debug!("⌨️ Sending keyboard input: {:?}", input_str);
                     
-                    // Check if this is the Claude Code terminal and user pressed Enter
-                    if terminal_id_for_input == "claude-code" && input == b"\r" {
-                        // Check if the current command contains "claude"
-                        let tid_check = terminal_id_for_input.clone();
-                        spawn(async move {
-                            if let Some(content) = get_xterm_content(&tid_check).await {
-                                let lines: Vec<&str> = content.lines().collect();
-                                if let Some(last_line) = lines.last() {
-                                    if last_line.contains("claude") && !last_line.contains("claude ") {
-                                        tracing::warn!("⚠️ Detected 'claude' command without arguments - this may freeze the terminal");
-                                    }
-                                }
-                            }
-                        });
-                    }
+                    // Removed special Claude Code command detection
                     
                     // Send input to terminal immediately
                     if let Ok(mut w) = writer.lock() {
@@ -718,14 +669,6 @@ fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: 
         for arg in args {
             builder.arg(arg);
         }
-        builder
-    } else if is_claude_code {
-        // For Claude Code terminal, use bash with a special prompt
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
-        tracing::info!("🤖 Launching shell for Claude Code terminal with instructions");
-        let mut builder = CommandBuilder::new(shell);
-        // Add a helpful prompt for Claude Code usage
-        builder.env("PS1", "claude> ");
         builder
     } else {
         // For regular terminals, use the shell
