@@ -111,14 +111,14 @@ pub fn TerminalXterm(
                                     break;
                                 }
                                 Ok(n) => {
-                                    tracing::info!("PTY read {} bytes", n);
+                                    tracing::trace!("PTY read {} bytes", n);
                                     if let Ok(text) = String::from_utf8(buf[..n].to_vec()) {
-                                        tracing::debug!("PTY text (UTF-8): {:?}", text);
+                                        tracing::trace!("PTY text (UTF-8): {:?}", text);
                                         write_to_xterm(&tid_output, &text);
                                     } else {
                                         // Handle non-UTF8 data
                                         let text = String::from_utf8_lossy(&buf[..n]);
-                                        tracing::debug!("PTY text (lossy): {:?}", text);
+                                        tracing::trace!("PTY text (lossy): {:?}", text);
                                         write_to_xterm(&tid_output, &text);
                                     }
                                 }
@@ -582,8 +582,8 @@ fn keyboard_to_bytes(event: &Event<KeyboardData>) -> Option<Vec<u8>> {
 
 /// Write output to xterm (called from blocking thread)
 fn write_to_xterm(terminal_id: &str, text: &str) {
-    tracing::info!("📤 PTY output for {}: {} bytes", terminal_id, text.len());
-    tracing::debug!("PTY text content: {:?}", text);
+    tracing::trace!("📤 PTY output for {}: {} bytes", terminal_id, text.len());
+    tracing::trace!("PTY text content: {:?}", text);
     
     // Add to terminal buffer for Send to Consensus functionality
     add_to_terminal_buffer(terminal_id, text);
@@ -617,7 +617,7 @@ async fn process_terminal_output_queue(terminal_id: &str) {
     };
     
     if !items.is_empty() {
-        tracing::info!("🔄 Processing {} output items for terminal {}", items.len(), terminal_id);
+        tracing::trace!("🔄 Processing {} output items for terminal {}", items.len(), terminal_id);
     }
     
     for base64_text in items {

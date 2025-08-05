@@ -232,7 +232,7 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
         let result_clone = result.clone();
         
         // Spawn task to save data to avoid blocking
-        spawn(async move {
+        tokio::spawn(async move {
             // Add to completed stages
             {
                 let mut completed = stages_completed.lock().await;
@@ -495,7 +495,7 @@ impl StreamingCallbacks for DualChannelCallbacks {
         let result_clone = result.clone();
         
         // Spawn task to save data to avoid blocking
-        spawn(async move {
+        tokio::spawn(async move {
             // Add to completed stages
             {
                 let mut completed = stages_completed.lock().await;
@@ -724,8 +724,11 @@ pub async fn process_consensus_events(
 
                 // If this is the Curator stage (final stage), trigger analytics refresh
                 if matches!(stage, ConsensusStage::Curator) {
+                    // Analytics refresh will happen after a short delay to ensure DB saves complete
+                    // We can't use tokio::spawn with Signals (they're not Send), so we'll increment 
+                    // the trigger immediately and let the analytics system handle the timing
                     state.analytics_refresh_trigger += 1;
-                    tracing::info!("Consensus completed - triggered analytics refresh");
+                    tracing::info!("Consensus completed - triggered analytics refresh (DB saves will complete soon)");
                 }
             }
             ConsensusUIEvent::StageError { stage, error } => {
@@ -769,8 +772,27 @@ pub async fn process_consensus_events(
                 let mut state = app_state.write();
                 // Store raw markdown for AI Helper processing
                 state.consensus.raw_streaming_content = total_content.clone();
-                // Convert markdown to HTML for UI rendering
-                state.consensus.streaming_content = markdown::to_html(&total_content);
+                
+                // Debounce HTML conversion to reduce UI updates
+                // Only convert to HTML every 100ms or when content length changes significantly
+                let should_update_html = {
+                    let current_len = total_content.len();
+                    let last_len = state.consensus.last_html_update_len;
+                    let now = std::time::Instant::now();
+                    let time_since_last = now.duration_since(state.consensus.last_html_update_time);
+                    
+                    // Update if: 100ms passed OR content grew by 500+ chars OR it's the first update
+                    time_since_last >= std::time::Duration::from_millis(100) ||
+                    current_len > last_len + 500 ||
+                    last_len == 0
+                };
+                
+                if should_update_html {
+                    // Convert markdown to HTML for UI rendering
+                    state.consensus.streaming_content = markdown::to_html(&total_content);
+                    state.consensus.last_html_update_time = std::time::Instant::now();
+                    state.consensus.last_html_update_len = total_content.len();
+                }
             }
             ConsensusUIEvent::D1Authorization { total_remaining } => {
                 // Update app state with D1 authorization info
