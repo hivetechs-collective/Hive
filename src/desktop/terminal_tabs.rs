@@ -4,6 +4,7 @@
 //! allowing users to create, switch between, and manage multiple terminals.
 
 use dioxus::prelude::*;
+use dioxus::document::eval;
 use std::collections::HashMap;
 use crate::desktop::state::AppState;
 use crate::desktop::consensus_integration::DesktopConsensusManager;
@@ -660,14 +661,14 @@ pub fn TerminalTabs() -> Element {
             div {
                 style: "{terminal_container_style}",
                 
-                // Render all terminals but only display the active one
+                // Render all terminals but only show the active one
                 for (id, terminal) in terminals.read().iter() {
                     div {
                         key: "{id}",
                         style: if Some(id) == active_terminal_id.read().as_ref() {
-                            "display: block; height: 100%; width: 100%;"
+                            "position: relative; height: 100%; width: 100%; visibility: visible; z-index: 1;"
                         } else {
-                            "display: none;"
+                            "position: absolute; top: 0; left: 0; height: 100%; width: 100%; visibility: hidden; z-index: 0;"
                         },
                         TerminalInstance {
                             terminal_id: id.clone(),
@@ -770,6 +771,36 @@ fn set_active_terminal(
             terminal.is_active = true;
         }
         active_terminal_id.set(Some(terminal_id.to_string()));
+        
+        // Refresh the terminal to fix rendering issues when switching
+        let terminal_id_refresh = terminal_id.to_string();
+        spawn(async move {
+            // Small delay to ensure DOM update completes
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            
+            let refresh_script = format!(r#"
+                if (window.terminals && window.terminals['{}']) {{
+                    const term = window.terminals['{}'];
+                    // Force xterm.js to refresh its rendering
+                    term.refresh(0, term.rows - 1);
+                    // Ensure fit addon recalculates dimensions
+                    if (term._addonManager && term._addonManager._addons) {{
+                        const fitAddon = Object.values(term._addonManager._addons)
+                            .find(addon => addon.instance && addon.instance.fit);
+                        if (fitAddon && fitAddon.instance.fit) {{
+                            fitAddon.instance.fit();
+                        }}
+                    }}
+                    // Scroll to bottom to show latest content
+                    term.scrollToBottom();
+                    console.log('🔄 Refreshed terminal: {}');
+                }}
+            "#, terminal_id_refresh, terminal_id_refresh, terminal_id_refresh);
+            
+            if let Err(e) = eval(&refresh_script).await {
+                tracing::warn!("Failed to refresh terminal {}: {}", terminal_id_refresh, e);
+            }
+        });
         
         // Ensure active tab is visible
         let mut terminal_ids: Vec<String> = terminals.read().keys().cloned().collect();
