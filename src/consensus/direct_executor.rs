@@ -288,10 +288,10 @@ impl DirectExecutionHandler {
         let (analytics, token_usage) = if let Some(usage_data) = &usage {
             // Calculate cost using the database
             let cost = if let Ok(db) = crate::core::database::get_database().await {
-                match db.calculate_cost_for_model(
+                match db.calculate_model_cost(
                     model, 
-                    usage_data.prompt_tokens as i64, 
-                    usage_data.completion_tokens as i64
+                    usage_data.prompt_tokens, 
+                    usage_data.completion_tokens
                 ).await {
                     Ok(cost) => cost,
                     Err(e) => {
@@ -313,6 +313,16 @@ impl DirectExecutionHandler {
                 quality_score: 1.0, // Direct mode doesn't have quality scoring
                 error_count: 0,
                 fallback_used: false,
+                rate_limit_hit: false,
+                retry_count: 0,
+                start_time: chrono::Utc::now() - chrono::Duration::seconds(duration as i64),
+                end_time: chrono::Utc::now(),
+                memory_usage: None,
+                features: crate::consensus::types::AnalyticsFeatures {
+                    streaming: true,
+                    routing_variant: "direct".to_string(),
+                    optimization_applied: Some(true),
+                },
             };
             
             let token_usage = crate::consensus::types::TokenUsage {
@@ -462,13 +472,13 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
                     match ai_file_executor.execute_curator_operations(operations).await {
                         Ok(report) => {
                             if report.success {
-                                tracing::info!("🤖 AI Helper successfully executed {} operations", 
+                                tracing::debug!("🤖 AI Helper successfully executed {} operations", 
                                              report.operations_completed);
                                 if !report.files_created.is_empty() {
-                                    tracing::info!("📄 Created files: {:?}", report.files_created);
+                                    tracing::debug!("📄 Created files: {:?}", report.files_created);
                                 }
                                 if !report.files_modified.is_empty() {
-                                    tracing::info!("✏️ Modified files: {:?}", report.files_modified);
+                                    tracing::debug!("✏️ Modified files: {:?}", report.files_modified);
                                 }
                             } else {
                                 tracing::warn!("⚠️ AI Helper execution had errors: {:?}", report.errors);

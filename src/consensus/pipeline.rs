@@ -1221,10 +1221,10 @@ impl ConsensusPipeline {
             
             // Calculate total cost from usage data if available
             let total_cost = if let (Some(usage), Some(db)) = (usage_data.as_ref(), self.database.as_ref()) {
-                match db.calculate_cost_for_model(
+                match db.calculate_model_cost(
                     &model,
-                    usage.prompt_tokens as i64,
-                    usage.completion_tokens as i64,
+                    usage.prompt_tokens,
+                    usage.completion_tokens,
                 ).await {
                     Ok(cost) => cost,
                     Err(e) => {

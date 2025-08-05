@@ -511,6 +511,9 @@ pub struct ConsensusState {
     pub streaming_content: String,
     pub raw_streaming_content: String,  // Raw markdown before HTML conversion
     pub active_profile_name: String,
+    // Debouncing fields for UI updates
+    pub last_html_update_time: std::time::Instant,
+    pub last_html_update_len: usize,
 }
 
 impl ConsensusState {
@@ -531,6 +534,8 @@ impl ConsensusState {
             streaming_content: String::new(),
             raw_streaming_content: String::new(),
             active_profile_name: "No profile".to_string(),
+            last_html_update_time: std::time::Instant::now(),
+            last_html_update_len: 0,
         }
     }
 
@@ -543,6 +548,8 @@ impl ConsensusState {
         self.estimated_cost = 0.0;
         self.streaming_content.clear();
         self.raw_streaming_content.clear();
+        self.last_html_update_time = std::time::Instant::now();
+        self.last_html_update_len = 0;
         tracing::info!("🚀 ConsensusState::start_consensus() - is_running set to true");
     }
 

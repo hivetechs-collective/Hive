@@ -124,114 +124,113 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
             
             let connection = db.get_connection()?;
             
-            // Comprehensive analytics queries
+            // Comprehensive analytics queries - OPTIMIZED with single aggregated query
             let analytics = tokio::task::spawn_blocking(move || -> Result<AnalyticsData, Box<dyn std::error::Error + Send + Sync>> {
-                // Total metrics
-                let total_queries: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations",
-                    [],
-                    |row| row.get(0)
-                ).unwrap_or(0);
+                // Single aggregated query to get all metrics at once
+                let query = r#"
+                    WITH metrics AS (
+                        SELECT 
+                            -- Total metrics
+                            COUNT(*) as total_queries,
+                            COALESCE(SUM(total_cost), 0.0) as total_cost,
+                            COUNT(CASE WHEN total_cost > 0 THEN 1 END) as conversations_with_cost,
+                            COALESCE(SUM(total_tokens_input), 0) as total_tokens_input,
+                            COALESCE(SUM(total_tokens_output), 0) as total_tokens_output,
+                            
+                            -- Today's metrics
+                            COUNT(CASE WHEN created_at >= ?1 THEN 1 END) as today_queries,
+                            COALESCE(SUM(CASE WHEN created_at >= ?1 THEN total_cost END), 0.0) as today_cost,
+                            
+                            -- Yesterday's metrics  
+                            COUNT(CASE WHEN created_at >= ?2 AND created_at < ?1 THEN 1 END) as yesterday_queries,
+                            COALESCE(SUM(CASE WHEN created_at >= ?2 AND created_at < ?1 THEN total_cost END), 0.0) as yesterday_cost,
+                            
+                            -- This week's metrics
+                            COUNT(CASE WHEN created_at >= ?3 THEN 1 END) as week_queries,
+                            COALESCE(SUM(CASE WHEN created_at >= ?3 THEN total_cost END), 0.0) as week_cost,
+                            COUNT(CASE WHEN created_at >= ?3 AND total_cost > 0 THEN 1 END) as week_successful,
+                            
+                            -- Last week's metrics
+                            COUNT(CASE WHEN created_at >= ?4 AND created_at < ?3 THEN 1 END) as last_week_queries,
+                            COALESCE(SUM(CASE WHEN created_at >= ?4 AND created_at < ?3 THEN total_cost END), 0.0) as last_week_cost,
+                            COUNT(CASE WHEN created_at >= ?4 AND created_at < ?3 AND total_cost > 0 THEN 1 END) as last_week_successful,
+                            
+                            -- Response time calculations
+                            AVG(CASE WHEN end_time IS NOT NULL AND start_time IS NOT NULL 
+                                THEN CAST((julianday(end_time) - julianday(start_time)) * 86400 AS REAL) END) as avg_response_time,
+                            AVG(CASE WHEN created_at >= ?3 AND end_time IS NOT NULL AND start_time IS NOT NULL 
+                                THEN CAST((julianday(end_time) - julianday(start_time)) * 86400 AS REAL) END) as week_avg_response_time,
+                            AVG(CASE WHEN created_at >= ?4 AND created_at < ?3 AND end_time IS NOT NULL AND start_time IS NOT NULL 
+                                THEN CAST((julianday(end_time) - julianday(start_time)) * 86400 AS REAL) END) as last_week_avg_response_time
+                        FROM conversations
+                    ),
+                    recent AS (
+                        SELECT COALESCE(total_cost, 0.0) as most_recent_cost 
+                        FROM conversations 
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    )
+                    SELECT 
+                        m.*,
+                        COALESCE(r.most_recent_cost, 0.0) as most_recent_cost
+                    FROM metrics m
+                    CROSS JOIN recent r
+                "#;
                 
-                let total_cost: f64 = connection.query_row(
-                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations",
-                    [],
-                    |row| row.get(0)
-                ).unwrap_or(0.0);
+                let row = connection.query_row(
+                    query,
+                    rusqlite::params![&today_start_str, &yesterday_start_str, &week_start_str, &last_week_start_str],
+                    |row| {
+                        Ok((
+                            // Basic metrics
+                            row.get::<_, u64>(0)?,  // total_queries
+                            row.get::<_, f64>(1)?,  // total_cost
+                            row.get::<_, u64>(2)?,  // conversations_with_cost
+                            row.get::<_, u64>(3)?,  // total_tokens_input
+                            row.get::<_, u64>(4)?,  // total_tokens_output
+                            // Today
+                            row.get::<_, u64>(5)?,  // today_queries
+                            row.get::<_, f64>(6)?,  // today_cost
+                            // Yesterday
+                            row.get::<_, u64>(7)?,  // yesterday_queries
+                            row.get::<_, f64>(8)?,  // yesterday_cost
+                            // This week
+                            row.get::<_, u64>(9)?,  // week_queries
+                            row.get::<_, f64>(10)?, // week_cost
+                            row.get::<_, u64>(11)?, // week_successful
+                            // Last week
+                            row.get::<_, u64>(12)?, // last_week_queries
+                            row.get::<_, f64>(13)?, // last_week_cost
+                            row.get::<_, u64>(14)?, // last_week_successful
+                            // Response times
+                            row.get::<_, Option<f64>>(15)?, // avg_response_time
+                            row.get::<_, Option<f64>>(16)?, // week_avg_response_time
+                            row.get::<_, Option<f64>>(17)?, // last_week_avg_response_time
+                            // Most recent
+                            row.get::<_, f64>(18)?, // most_recent_cost
+                        ))
+                    }
+                )?;
                 
-                let conversations_with_cost: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE total_cost > 0",
-                    [],
-                    |row| row.get(0)
-                ).unwrap_or(0);
+                let (
+                    total_queries, total_cost, conversations_with_cost, total_tokens_input, total_tokens_output,
+                    today_queries, today_cost, yesterday_queries, yesterday_cost,
+                    week_queries, week_cost, week_successful,
+                    last_week_queries, last_week_cost, last_week_successful,
+                    avg_response_time_opt, week_avg_response_time_opt, last_week_avg_response_time_opt,
+                    most_recent_cost
+                ) = row;
                 
-                // Token totals
-                let (total_tokens_input, total_tokens_output): (u64, u64) = connection.query_row(
-                    "SELECT COALESCE(SUM(total_tokens_input), 0), COALESCE(SUM(total_tokens_output), 0) FROM conversations",
-                    [],
-                    |row| Ok((row.get(0)?, row.get(1)?))
-                ).unwrap_or((0, 0));
-                
-                // Most recent cost
-                let most_recent_cost: f64 = connection.query_row(
-                    "SELECT COALESCE(total_cost, 0.0) FROM conversations ORDER BY created_at DESC LIMIT 1",
-                    [],
-                    |row| row.get(0)
-                ).unwrap_or(0.0);
-                
-                // Today's metrics
-                let today_queries: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1",
-                    [&today_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0);
-                
-                let today_cost: f64 = connection.query_row(
-                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations WHERE created_at >= ?1",
-                    [&today_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0.0);
-                
-                // Yesterday's metrics
-                let yesterday_queries: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND created_at < ?2",
-                    [&yesterday_start_str, &today_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0);
-                
-                let yesterday_cost: f64 = connection.query_row(
-                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations WHERE created_at >= ?1 AND created_at < ?2",
-                    [&yesterday_start_str, &today_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0.0);
-                
-                // This week's metrics
-                let week_queries: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1",
-                    [&week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0);
-                
-                let week_cost: f64 = connection.query_row(
-                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations WHERE created_at >= ?1",
-                    [&week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0.0);
-                
-                // Last week's metrics
-                let last_week_queries: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND created_at < ?2",
-                    [&last_week_start_str, &week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0);
-                
-                let last_week_cost: f64 = connection.query_row(
-                    "SELECT COALESCE(SUM(total_cost), 0.0) FROM conversations WHERE created_at >= ?1 AND created_at < ?2",
-                    [&last_week_start_str, &week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0.0);
+                // Handle optional response times with fallback
+                let avg_response_time = avg_response_time_opt.unwrap_or(2.3);
+                let this_week_avg_time = week_avg_response_time_opt.unwrap_or(avg_response_time);
+                let last_week_avg_time = last_week_avg_response_time_opt.unwrap_or(avg_response_time);
                 
                 // Calculate success rate: conversations with cost tracking data
                 let success_rate = analytics_helpers::calculate_percentage(
                     conversations_with_cost as f64, 
                     total_queries as f64
                 );
-                
-                // Calculate average response time from conversations table (end_time - start_time)
-                let avg_response_time: f64 = connection.query_row(
-                    "SELECT AVG(CAST((julianday(end_time) - julianday(start_time)) * 86400 AS REAL))
-                     FROM conversations 
-                     WHERE end_time IS NOT NULL AND start_time IS NOT NULL",
-                    [],
-                    |row| row.get(0)
-                ).unwrap_or_else(|_| {
-                    // Fallback: calculate from cost_tracking duration
-                    connection.query_row(
-                        "SELECT AVG(duration_ms) / 1000.0 FROM cost_tracking WHERE duration_ms > 0",
-                        [],
-                        |row| row.get(0)
-                    ).unwrap_or(2.3)
-                });
                 
                 // Calculate trends
                 let queries_trend = if yesterday_queries > 0 {
@@ -251,20 +250,8 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
                 };
                 
                 // Success rate trend (compare this week to last week)
-                let this_week_successful: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND total_cost > 0",
-                    [&week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0);
-                
-                let last_week_successful: u64 = connection.query_row(
-                    "SELECT COUNT(*) FROM conversations WHERE created_at >= ?1 AND created_at < ?2 AND total_cost > 0",
-                    [&last_week_start_str, &week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(0);
-                
                 let this_week_success_rate = analytics_helpers::calculate_percentage(
-                    this_week_successful as f64, 
+                    week_successful as f64, 
                     week_queries as f64
                 );
                 
@@ -274,23 +261,6 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
                 );
                 
                 let success_rate_trend = this_week_success_rate - last_week_success_rate;
-                
-                // Response time trend (compare this week vs last week)
-                let this_week_avg_time: f64 = connection.query_row(
-                    "SELECT AVG(CAST((julianday(end_time) - julianday(start_time)) * 86400 AS REAL))
-                     FROM conversations 
-                     WHERE created_at >= ?1 AND end_time IS NOT NULL AND start_time IS NOT NULL",
-                    [&week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(avg_response_time);
-                
-                let last_week_avg_time: f64 = connection.query_row(
-                    "SELECT AVG(CAST((julianday(end_time) - julianday(start_time)) * 86400 AS REAL))
-                     FROM conversations 
-                     WHERE created_at >= ?1 AND created_at < ?2 AND end_time IS NOT NULL AND start_time IS NOT NULL",
-                    [&last_week_start_str, &week_start_str],
-                    |row| row.get(0)
-                ).unwrap_or(avg_response_time);
                 
                 let response_time_trend = if last_week_avg_time > 0.0 {
                     this_week_avg_time - last_week_avg_time  // Negative means improvement (faster)
@@ -1515,6 +1485,12 @@ fn App() -> Element {
             if current_trigger != last_trigger {
                 last_analytics_trigger.set(current_trigger);
                 spawn(async move {
+                    // Add a small delay if this refresh was triggered by consensus completion
+                    // This ensures database saves are complete before querying
+                    if current_trigger > 0 {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+                    }
+                    
                     match fetch_analytics_data().await {
                         Ok(data) => {
                             analytics_data.set(data);
@@ -5198,39 +5174,55 @@ fn App() -> Element {
                                             tracing::info!("🤖 Send to Claude clicked");
                                             
                                             // Get latest curator from database and send to terminal
+                                            // Use tokio::task::spawn_blocking for the terminal write to avoid blocking UI
                                             let _app_state_clone = app_state.clone();
                                             spawn(async move {
                                                 use hive_ai::core::database::get_database;
                                                 
-                                                match get_database().await {
+                                                // First, fetch the curator result asynchronously
+                                                let curator_data = match get_database().await {
                                                     Ok(db) => {
                                                         match db.get_latest_curator_result().await {
                                                             Ok(Some((curator_content, timestamp))) => {
                                                                 // Format the curator result for terminal
-                                                                let formatted_content = format!(
+                                                                Some(format!(
                                                                     "# Consensus Curator Result\n# Generated: {}\n# ---\n{}\n",
                                                                     timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
                                                                     curator_content
-                                                                );
-                                                                
-                                                                // Send to terminal
-                                                                use hive_ai::desktop::terminal_registry::send_to_active_terminal;
-                                                                if send_to_active_terminal(&formatted_content) {
-                                                                    tracing::info!("✅ Sent curator result to Claude terminal");
-                                                                } else {
-                                                                    tracing::error!("❌ Failed to send curator result to terminal");
-                                                                }
+                                                                ))
                                                             }
                                                             Ok(None) => {
                                                                 tracing::warn!("⚠️ No curator results found in database");
+                                                                None
                                                             }
                                                             Err(e) => {
                                                                 tracing::error!("❌ Failed to fetch curator result: {}", e);
+                                                                None
                                                             }
                                                         }
                                                     }
                                                     Err(e) => {
                                                         tracing::error!("❌ Failed to get database: {}", e);
+                                                        None
+                                                    }
+                                                };
+                                                
+                                                // If we have data, send it to terminal in a non-blocking way
+                                                if let Some(formatted_content) = curator_data {
+                                                    // Use spawn_blocking to avoid blocking the async runtime
+                                                    match tokio::task::spawn_blocking(move || {
+                                                        use hive_ai::desktop::terminal_registry::send_to_active_terminal;
+                                                        send_to_active_terminal(&formatted_content)
+                                                    }).await {
+                                                        Ok(true) => {
+                                                            tracing::info!("✅ Sent curator result to Claude terminal");
+                                                        }
+                                                        Ok(false) => {
+                                                            tracing::error!("❌ Failed to send curator result to terminal");
+                                                        }
+                                                        Err(e) => {
+                                                            tracing::error!("❌ Task failed to send to terminal: {}", e);
+                                                        }
                                                     }
                                                 }
                                             });

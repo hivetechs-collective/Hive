@@ -95,33 +95,62 @@ pub fn extract_claude_response(content: &str) -> Option<String> {
 
 /// Send text to a terminal by ID
 pub fn send_to_terminal(id: &str, text: &str) -> bool {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        if let Some(info) = registry.get(id) {
-            if let Some(writer) = &info.writer {
-                if let Ok(mut w) = writer.lock() {
-                    // Write the text to the terminal
-                    if let Ok(_) = w.write_all(text.as_bytes()) {
-                        let _ = w.flush();
-                        return true;
-                    }
-                }
+    // Try to get writer without holding registry lock for long
+    let writer_arc = {
+        match TERMINAL_REGISTRY.try_lock() {
+            Ok(registry) => {
+                registry.get(id).and_then(|info| info.writer.clone())
+            }
+            Err(_) => {
+                tracing::warn!("⚠️ Terminal registry is locked, skipping send");
+                return false;
             }
         }
+    };
+    
+    // If we got a writer, try to write to it
+    if let Some(writer) = writer_arc {
+        match writer.try_lock() {
+            Ok(mut w) => {
+                // Write the text to the terminal
+                if let Ok(_) = w.write_all(text.as_bytes()) {
+                    let _ = w.flush();
+                    true
+                } else {
+                    false
+                }
+            }
+            Err(_) => {
+                tracing::warn!("⚠️ Terminal writer is locked, skipping send");
+                false
+            }
+        }
+    } else {
+        false
     }
-    false
 }
 
 /// Send text to the active terminal
 pub fn send_to_active_terminal(text: &str) -> bool {
-    if let Ok(registry) = TERMINAL_REGISTRY.lock() {
-        // For now, just send to the first terminal
-        if let Some((id, _)) = registry.iter().next() {
-            let id = id.clone();
-            drop(registry); // Release lock before calling send_to_terminal
-            return send_to_terminal(&id, text);
+    // Try to get terminal ID without holding lock for long
+    let terminal_id = {
+        match TERMINAL_REGISTRY.try_lock() {
+            Ok(registry) => {
+                registry.iter().next().map(|(id, _)| id.clone())
+            }
+            Err(_) => {
+                tracing::warn!("⚠️ Terminal registry is locked, skipping send");
+                return false;
+            }
         }
+    };
+    
+    // Send to terminal if we found one
+    if let Some(id) = terminal_id {
+        send_to_terminal(&id, text)
+    } else {
+        false
     }
-    false
 }
 
 
