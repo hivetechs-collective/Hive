@@ -1475,6 +1475,25 @@ fn App() -> Element {
     // Track the last analytics trigger value to prevent infinite loops
     let mut last_analytics_trigger = use_signal(|| 0u32);
     
+    // Initial analytics fetch on mount
+    use_effect({
+        let mut analytics_data = analytics_data.clone();
+        move || {
+            spawn(async move {
+                tracing::info!("🚀 Initial analytics fetch on mount");
+                match fetch_analytics_data().await {
+                    Ok(data) => {
+                        analytics_data.set(data);
+                        tracing::info!("✅ Initial analytics data loaded successfully");
+                    }
+                    Err(e) => {
+                        tracing::error!("❌ Failed to fetch initial analytics data: {}", e);
+                    }
+                }
+            });
+        }
+    });
+    
     // Analytics refresh effect - triggers when analytics_refresh_trigger changes
     use_effect({
         let mut analytics_data = analytics_data.clone();
