@@ -337,6 +337,12 @@ impl DirectExecutionHandler {
         };
         
         // Signal completion with proper data
+        tracing::info!("🔍 Direct mode: Calling on_stage_complete with conversation_id: {}, cost: {}, model: {}", 
+            conversation_id,
+            analytics.as_ref().map(|a| a.cost).unwrap_or(0.0),
+            model
+        );
+        
         callbacks.on_stage_complete(Stage::Generator, &StageResult {
             stage_id: crate::core::database::generate_id(),
             stage_name: "Direct Execution".to_string(),
@@ -348,6 +354,8 @@ impl DirectExecutionHandler {
             usage: token_usage,
             analytics,
         })?;
+        
+        tracing::info!("✅ Direct mode: on_stage_complete called successfully");
         
         Ok((response_content, usage))
     }
@@ -512,6 +520,8 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
                 *guard = Some(usage_data);
             });
         }
+        // NOTE: We don't forward completion here because the DirectExecutionHandler
+        // will call callbacks.on_stage_complete directly with the full StageResult
     }
 }
 
