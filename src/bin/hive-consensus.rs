@@ -268,6 +268,9 @@ async fn fetch_analytics_data() -> Result<AnalyticsData, Box<dyn std::error::Err
                     0.0
                 };
                 
+                tracing::info!("📊 Analytics data fetched - Today: {} queries, ${:.4} cost | Total: {} queries, ${:.4} cost", 
+                    today_queries, today_cost, total_queries, total_cost);
+                
                 Ok(AnalyticsData {
                     total_queries,
                     total_cost,
