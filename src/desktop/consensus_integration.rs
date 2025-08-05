@@ -243,6 +243,9 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
             if let Ok(db) = crate::core::database::get_database().await {
                 // If this is the first stage, create the conversation
                 if stage_clone == Stage::Generator {
+                    tracing::info!("💾 Creating conversation in database: id={}, question={}", 
+                        conversation_id, question);
+                    
                     if let Err(e) = db.store_conversation_with_cost(
                         &conversation_id,
                         None, // user_id
@@ -252,11 +255,16 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
                         0,
                     ).await {
                         tracing::error!("Failed to create conversation: {}", e);
+                    } else {
+                        tracing::info!("✅ Conversation created successfully in database");
                     }
                 }
                 
                 // Store cost tracking for this stage
                 if let Some(analytics) = &result_clone.analytics {
+                    tracing::info!("💰 Storing cost tracking: conversation_id={}, model={}, cost=${:.6}, stage={:?}", 
+                        conversation_id, result_clone.model, analytics.cost, stage_clone);
+                    
                     // Get model internal ID
                     match db.get_model_internal_id(&result_clone.model).await {
                         Ok(model_id) => {
@@ -267,6 +275,8 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
                                 (0, 0)
                             };
                             
+                            tracing::info!("📊 Tokens: input={}, output={}", input_tokens, output_tokens);
+                            
                             if let Err(e) = db.store_cost_tracking(
                                 &conversation_id,
                                 model_id,
@@ -275,6 +285,8 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
                                 analytics.cost,
                             ).await {
                                 tracing::error!("Failed to store cost tracking: {}", e);
+                            } else {
+                                tracing::info!("✅ Cost tracking stored successfully");
                             }
                         }
                         Err(e) => {
@@ -297,6 +309,8 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
                     ).await {
                         tracing::error!("Failed to update conversation cost: {}", e);
                     }
+                } else {
+                    tracing::warn!("⚠️ No analytics data available for stage {:?} - skipping cost tracking", stage_clone);
                 }
                 
                 // If this is the curator stage, we're done
@@ -506,6 +520,9 @@ impl StreamingCallbacks for DualChannelCallbacks {
             if let Ok(db) = crate::core::database::get_database().await {
                 // If this is the first stage, create the conversation
                 if stage_clone == Stage::Generator {
+                    tracing::info!("💾 Creating conversation in database: id={}, question={}", 
+                        conversation_id, question);
+                    
                     if let Err(e) = db.store_conversation_with_cost(
                         &conversation_id,
                         None, // user_id
@@ -515,11 +532,16 @@ impl StreamingCallbacks for DualChannelCallbacks {
                         0,
                     ).await {
                         tracing::error!("Failed to create conversation: {}", e);
+                    } else {
+                        tracing::info!("✅ Conversation created successfully in database");
                     }
                 }
                 
                 // Store cost tracking for this stage
                 if let Some(analytics) = &result_clone.analytics {
+                    tracing::info!("💰 Storing cost tracking: conversation_id={}, model={}, cost=${:.6}, stage={:?}", 
+                        conversation_id, result_clone.model, analytics.cost, stage_clone);
+                    
                     // Get model internal ID
                     match db.get_model_internal_id(&result_clone.model).await {
                         Ok(model_id) => {
@@ -530,6 +552,8 @@ impl StreamingCallbacks for DualChannelCallbacks {
                                 (0, 0)
                             };
                             
+                            tracing::info!("📊 Tokens: input={}, output={}", input_tokens, output_tokens);
+                            
                             if let Err(e) = db.store_cost_tracking(
                                 &conversation_id,
                                 model_id,
@@ -538,6 +562,8 @@ impl StreamingCallbacks for DualChannelCallbacks {
                                 analytics.cost,
                             ).await {
                                 tracing::error!("Failed to store cost tracking: {}", e);
+                            } else {
+                                tracing::info!("✅ Cost tracking stored successfully");
                             }
                         }
                         Err(e) => {
@@ -560,6 +586,8 @@ impl StreamingCallbacks for DualChannelCallbacks {
                     ).await {
                         tracing::error!("Failed to update conversation cost: {}", e);
                     }
+                } else {
+                    tracing::warn!("⚠️ No analytics data available for stage {:?} - skipping cost tracking", stage_clone);
                 }
                 
                 // If this is the curator stage, we're done
