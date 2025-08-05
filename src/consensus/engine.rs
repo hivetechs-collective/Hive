@@ -722,6 +722,17 @@ impl ConsensusEngine {
         self.ai_helpers.read().await.clone()
     }
     
+    /// Get pipeline configuration (for lock-free pipeline creation)
+    pub async fn get_pipeline_config(&self) -> (Option<String>, ConsensusProfile, Option<Arc<DatabaseManager>>, Option<Arc<RepositoryContextManager>>, Option<Arc<AIHelperEcosystem>>) {
+        let api_key = self.openrouter_api_key.clone();
+        let profile = self.current_profile.read().await.clone();
+        let database = self.database.clone();
+        let repo_context = self.repository_context.read().await.clone();
+        let ai_helpers = self.ai_helpers.read().await.clone();
+        
+        (api_key, profile, database, repo_context, ai_helpers)
+    }
+    
     /// Clear cached profile to force reload from database on next use
     pub async fn clear_cached_profile(&self) {
         tracing::info!("🧹 Clearing cached profile to force database reload on next consensus");

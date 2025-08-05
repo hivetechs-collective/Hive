@@ -5,9 +5,10 @@
 
 use crate::consensus::{
     engine::ConsensusEngine,
+    pipeline::ConsensusPipeline,
+    types::{ConsensusConfig, Stage},
     repository_context::RepositoryContextManager,
     streaming::{ProgressInfo, StreamingCallbacks},
-    types::Stage,
     cancellation::{CancellationToken, CancellationReason},
 };
 use crate::core::api_keys::ApiKeyManager;
@@ -907,15 +908,59 @@ impl DesktopConsensusManager {
         // Clone cancellation token manager to clear it when done
         let token_manager = self.current_cancellation_token.clone();
 
-        // Process consensus directly without spawning (database connections aren't Send)
+        // Process consensus with minimal lock holding
         let result = {
-            let engine = engine.lock().await;
+            // Create a new pipeline for this request to avoid lock contention
+            // The engine only needs to be locked briefly to get configuration
+            let (api_key, profile, database, repo_context, ai_helpers) = {
+                let engine = engine.lock().await;
+                engine.get_pipeline_config().await
+            }; // Lock released here!
 
-            // D1 authorization is now sent immediately when received in the pipeline
-            // No need to check here as it would be outdated by the time consensus completes
+            // Create a fresh pipeline without holding the engine lock
+            let config = ConsensusConfig {
+                enable_streaming: true,
+                show_progress: true,
+                timeout_seconds: 300,
+                retry_policy: crate::consensus::types::RetryPolicy::default(),
+                context_injection: crate::consensus::types::ContextInjectionStrategy::Smart,
+            };
+            
+            let mut pipeline = ConsensusPipeline::new(
+                config,
+                profile,
+                api_key,
+            );
 
-            let result = engine
-                .process_with_callbacks_and_cancellation(&query, None, callbacks_clone, user_id, cancellation_token_clone)
+            // Configure the pipeline
+            if let Some(db) = database {
+                pipeline = pipeline.with_database(db);
+            }
+
+            if let Some(repo_ctx) = repo_context {
+                pipeline = pipeline.with_repository_context(repo_ctx);
+            }
+
+            if let Some(helpers) = ai_helpers {
+                pipeline = pipeline.with_ai_helpers(helpers);
+            }
+
+            // Initialize consensus memory for AI helpers
+            if let Err(e) = pipeline.initialize_consensus_memory().await {
+                tracing::warn!("Failed to initialize consensus memory: {}", e);
+            }
+            
+            // Initialize mode detection for AI-based routing
+            pipeline = pipeline.with_mode_detection().await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("Failed to initialize mode detection: {}, continuing without it", e);
+                    panic!("Mode detection initialization failed - this should not happen as with_mode_detection always returns Ok(self)")
+                });
+
+            // Now process without holding any locks
+            let result = pipeline
+                .with_callbacks(callbacks_clone)
+                .run_with_cancellation(&query, None, user_id.clone(), cancellation_token_clone)
                 .await;
 
             // Clear the cancellation token when done
