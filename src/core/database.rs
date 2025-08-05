@@ -519,6 +519,55 @@ impl DatabaseManager {
         Ok(())
     }
     
+    /// Store cost tracking for a stage
+    pub async fn store_cost_tracking(
+        &self,
+        conversation_id: &str,
+        model_id: i64,
+        tokens_input: u32,
+        tokens_output: u32,
+        total_cost: f64,
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+        
+        conn.execute(
+            "INSERT INTO cost_tracking 
+             (conversation_id, model_id, tokens_input, tokens_output, cost_input, cost_output, total_cost, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+            params![
+                conversation_id,
+                model_id,
+                tokens_input,
+                tokens_output,
+                0.0, // We'll calculate individual costs if needed
+                0.0,
+                total_cost
+            ],
+        )?;
+
+        tracing::info!(
+            "💰 Stored cost tracking for conversation {} - model_id: {}, cost: ${:.6}",
+            conversation_id,
+            model_id,
+            total_cost
+        );
+
+        Ok(())
+    }
+
+    /// Get model internal ID from OpenRouter ID
+    pub async fn get_model_internal_id(&self, openrouter_id: &str) -> Result<i64> {
+        let conn = self.get_connection()?;
+        
+        let internal_id: i64 = conn.query_row(
+            "SELECT internal_id FROM openrouter_models WHERE openrouter_id = ?1",
+            params![openrouter_id],
+            |row| row.get(0),
+        ).context(format!("Model not found: {}", openrouter_id))?;
+        
+        Ok(internal_id)
+    }
+    
     /// Get the most recent curator result from multiple possible tables
     pub async fn get_latest_curator_result(&self) -> Result<Option<(String, chrono::DateTime<chrono::Utc>)>> {
         let conn = self.get_connection()?;

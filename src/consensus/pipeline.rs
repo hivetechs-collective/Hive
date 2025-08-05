@@ -1178,14 +1178,23 @@ impl ConsensusPipeline {
             // Create callbacks that will handle cancellation
             let callbacks = self.callbacks.clone();
             
-            let result_text = direct_handler.handle_request(
+            let (result_text, usage_data) = direct_handler.handle_request(
                 question,
                 Some(&direct_context),
                 callbacks,
+                conversation_id,
             ).await?;
             
-            // Learn from direct execution
+            // Learn from direct execution - note that proper usage/analytics are already
+            // sent via callbacks in DirectExecutionHandler
             if let Some(ai_helpers) = &self.ai_helpers {
+                // Create token usage from captured data
+                let token_usage = usage_data.as_ref().map(|u| TokenUsage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                    total_tokens: u.total_tokens,
+                });
+                
                 let stage_result = StageResult {
                     stage_id: Uuid::new_v4().to_string(),
                     stage_name: "direct".to_string(),
@@ -1194,8 +1203,8 @@ impl ConsensusPipeline {
                     model: model.clone(),
                     conversation_id: conversation_id.to_string(),
                     timestamp: Utc::now(),
-                    usage: None,
-                    analytics: None,
+                    usage: token_usage,
+                    analytics: None, // Analytics are already sent via callbacks
                 };
                 
                 if let Err(e) = ai_helpers.learn_from_stage_completion(&stage_result).await {
@@ -1210,6 +1219,23 @@ impl ConsensusPipeline {
                 tracing::info!("Recording direct mode execution in database");
             }
             
+            // Calculate total cost from usage data if available
+            let total_cost = if let (Some(usage), Some(db)) = (usage_data.as_ref(), self.database.as_ref()) {
+                match db.calculate_cost_for_model(
+                    &model,
+                    usage.prompt_tokens as i64,
+                    usage.completion_tokens as i64,
+                ).await {
+                    Ok(cost) => cost,
+                    Err(e) => {
+                        tracing::error!("Failed to calculate direct mode cost: {}", e);
+                        0.0
+                    }
+                }
+            } else {
+                0.0
+            };
+            
             Ok(ConsensusResult {
                 success: true,
                 result: Some(result_text),
@@ -1217,7 +1243,7 @@ impl ConsensusPipeline {
                 stages: vec![],
                 conversation_id: conversation_id.to_string(),
                 total_duration: start_time.elapsed().as_secs_f64(),
-                total_cost: 0.0,
+                total_cost,
             })
         } else {
             // Fallback to creating a simple direct execution

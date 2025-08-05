@@ -71,11 +71,25 @@ pub enum ConsensusUIEvent {
 pub struct DesktopStreamingCallbacks {
     event_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
     auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>,
+    conversation_id: String,
+    question: String,
+    stages_completed: Arc<Mutex<Vec<(Stage, crate::consensus::types::StageResult)>>>,
 }
 
 impl DesktopStreamingCallbacks {
-    pub fn new(event_sender: mpsc::UnboundedSender<ConsensusUIEvent>, auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>) -> Self {
-        Self { event_sender, auto_accept_enabled }
+    pub fn new(
+        event_sender: mpsc::UnboundedSender<ConsensusUIEvent>, 
+        auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>,
+        conversation_id: String,
+        question: String,
+    ) -> Self {
+        Self { 
+            event_sender, 
+            auto_accept_enabled,
+            conversation_id,
+            question,
+            stages_completed: Arc::new(Mutex::new(Vec::new())),
+        }
     }
 }
 
@@ -84,6 +98,9 @@ pub struct DualChannelCallbacks {
     stream_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
     internal_sender: mpsc::UnboundedSender<ConsensusUIEvent>,
     auto_accept_enabled: Arc<std::sync::atomic::AtomicBool>,
+    conversation_id: String,
+    question: String,
+    stages_completed: Arc<Mutex<Vec<(Stage, crate::consensus::types::StageResult)>>>,
 }
 
 impl StreamingCallbacks for DesktopStreamingCallbacks {
@@ -206,6 +223,88 @@ impl StreamingCallbacks for DesktopStreamingCallbacks {
             tracing::error!("💰 ERROR: No analytics cost data available for stage result");
             0.0 // This should not happen in normal operation
         };
+
+        // Save stage completion data
+        let stages_completed = self.stages_completed.clone();
+        let conversation_id = self.conversation_id.clone();
+        let question = self.question.clone();
+        let stage_clone = stage.clone();
+        let result_clone = result.clone();
+        
+        // Spawn task to save data to avoid blocking
+        spawn(async move {
+            // Add to completed stages
+            {
+                let mut completed = stages_completed.lock().await;
+                completed.push((stage_clone, result_clone.clone()));
+            }
+            
+            // Save to database
+            if let Ok(db) = crate::core::database::get_database().await {
+                // If this is the first stage, create the conversation
+                if stage_clone == Stage::Generator {
+                    if let Err(e) = db.store_conversation_with_cost(
+                        &conversation_id,
+                        None, // user_id
+                        &question,
+                        0.0, // initial cost, will be updated
+                        0,   // initial tokens
+                        0,
+                    ).await {
+                        tracing::error!("Failed to create conversation: {}", e);
+                    }
+                }
+                
+                // Store cost tracking for this stage
+                if let Some(analytics) = &result_clone.analytics {
+                    // Get model internal ID
+                    match db.get_model_internal_id(&result_clone.model).await {
+                        Ok(model_id) => {
+                            // Get token counts from usage if available
+                            let (input_tokens, output_tokens) = if let Some(usage) = &result_clone.usage {
+                                (usage.prompt_tokens, usage.completion_tokens)
+                            } else {
+                                (0, 0)
+                            };
+                            
+                            if let Err(e) = db.store_cost_tracking(
+                                &conversation_id,
+                                model_id,
+                                input_tokens,
+                                output_tokens,
+                                analytics.cost,
+                            ).await {
+                                tracing::error!("Failed to store cost tracking: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to get model internal ID for {}: {}", result_clone.model, e);
+                        }
+                    }
+                    
+                    // Update conversation totals
+                    let (input_tokens, output_tokens) = if let Some(usage) = &result_clone.usage {
+                        (usage.prompt_tokens, usage.completion_tokens)
+                    } else {
+                        (0, 0)
+                    };
+                    
+                    if let Err(e) = db.update_conversation_cost(
+                        &conversation_id,
+                        analytics.cost,
+                        input_tokens,
+                        output_tokens,
+                    ).await {
+                        tracing::error!("Failed to update conversation cost: {}", e);
+                    }
+                }
+                
+                // If this is the curator stage, we're done
+                if stage_clone == Stage::Curator {
+                    tracing::info!("✅ Consensus pipeline complete, saved to database");
+                }
+            }
+        });
 
         let _ = self.event_sender.send(ConsensusUIEvent::StageCompleted {
             stage: consensus_stage,
@@ -387,6 +486,88 @@ impl StreamingCallbacks for DualChannelCallbacks {
             tracing::error!("💰 ERROR: No analytics cost data available for stage result");
             0.0 // This should not happen in normal operation
         };
+
+        // Save stage completion data (same as DesktopStreamingCallbacks)
+        let stages_completed = self.stages_completed.clone();
+        let conversation_id = self.conversation_id.clone();
+        let question = self.question.clone();
+        let stage_clone = stage.clone();
+        let result_clone = result.clone();
+        
+        // Spawn task to save data to avoid blocking
+        spawn(async move {
+            // Add to completed stages
+            {
+                let mut completed = stages_completed.lock().await;
+                completed.push((stage_clone, result_clone.clone()));
+            }
+            
+            // Save to database
+            if let Ok(db) = crate::core::database::get_database().await {
+                // If this is the first stage, create the conversation
+                if stage_clone == Stage::Generator {
+                    if let Err(e) = db.store_conversation_with_cost(
+                        &conversation_id,
+                        None, // user_id
+                        &question,
+                        0.0, // initial cost, will be updated
+                        0,   // initial tokens
+                        0,
+                    ).await {
+                        tracing::error!("Failed to create conversation: {}", e);
+                    }
+                }
+                
+                // Store cost tracking for this stage
+                if let Some(analytics) = &result_clone.analytics {
+                    // Get model internal ID
+                    match db.get_model_internal_id(&result_clone.model).await {
+                        Ok(model_id) => {
+                            // Get token counts from usage if available
+                            let (input_tokens, output_tokens) = if let Some(usage) = &result_clone.usage {
+                                (usage.prompt_tokens, usage.completion_tokens)
+                            } else {
+                                (0, 0)
+                            };
+                            
+                            if let Err(e) = db.store_cost_tracking(
+                                &conversation_id,
+                                model_id,
+                                input_tokens,
+                                output_tokens,
+                                analytics.cost,
+                            ).await {
+                                tracing::error!("Failed to store cost tracking: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Failed to get model internal ID for {}: {}", result_clone.model, e);
+                        }
+                    }
+                    
+                    // Update conversation totals
+                    let (input_tokens, output_tokens) = if let Some(usage) = &result_clone.usage {
+                        (usage.prompt_tokens, usage.completion_tokens)
+                    } else {
+                        (0, 0)
+                    };
+                    
+                    if let Err(e) = db.update_conversation_cost(
+                        &conversation_id,
+                        analytics.cost,
+                        input_tokens,
+                        output_tokens,
+                    ).await {
+                        tracing::error!("Failed to update conversation cost: {}", e);
+                    }
+                }
+                
+                // If this is the curator stage, we're done
+                if stage_clone == Stage::Curator {
+                    tracing::info!("✅ Consensus pipeline complete, saved to database");
+                }
+            }
+        });
 
         let event = ConsensusUIEvent::StageCompleted {
             stage: consensus_stage,
@@ -880,11 +1061,17 @@ impl DesktopConsensusManager {
             self.app_state.read().auto_accept
         ));
         
+        // Generate conversation ID
+        let conversation_id = crate::core::database::generate_id();
+        
         // Create callbacks that send to both channels
         let callbacks = Arc::new(DualChannelCallbacks {
             stream_sender: tx_stream,
             internal_sender: tx_internal,
             auto_accept_enabled,
+            conversation_id: conversation_id.clone(),
+            question: query.to_string(),
+            stages_completed: Arc::new(Mutex::new(Vec::new())),
         });
 
         // Create cancellation token for this consensus operation
