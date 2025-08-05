@@ -183,7 +183,8 @@ impl DirectExecutionHandler {
         request: &str,
         context: Option<&str>,
         callbacks: Arc<dyn StreamingCallbacks>,
-    ) -> Result<String> {
+        conversation_id: &str,
+    ) -> Result<(String, Option<crate::consensus::openrouter::Usage>)> {
         // Build messages for the generator
         let mut messages = self.generator.build_messages(request, None, context)?;
         
@@ -251,13 +252,20 @@ impl DirectExecutionHandler {
         let executor_ref = self.executor.clone();
         let ai_executor_ref = self.ai_file_executor.clone();
         
+        // Create a wrapper to capture usage data
+        let usage_capture = Arc::new(tokio::sync::Mutex::new(None));
+        let usage_capture_ref = usage_capture.clone();
+        
         let streaming_callbacks = DirectStreamingCallbacks {
             inner: callbacks_ref,
             parser: parser_ref,
             executor: executor_ref,
             ai_file_executor: ai_executor_ref,
             stage: Stage::Generator,
+            usage_capture: usage_capture_ref,
         };
+        
+        let start_time = std::time::Instant::now();
         
         // Stream the response from the generator
         let response_content = self.client
@@ -268,20 +276,70 @@ impl DirectExecutionHandler {
             )
             .await?;
         
-        // Signal completion
+        let duration = start_time.elapsed().as_secs_f64();
+        
+        // Get the captured usage data
+        let usage = {
+            let guard = usage_capture.lock().await;
+            guard.clone()
+        };
+        
+        // Calculate cost if we have usage data
+        let (analytics, token_usage) = if let Some(usage_data) = &usage {
+            // Calculate cost using the database
+            let cost = if let Ok(db) = crate::core::database::get_database().await {
+                match db.calculate_cost_for_model(
+                    model, 
+                    usage_data.prompt_tokens as i64, 
+                    usage_data.completion_tokens as i64
+                ).await {
+                    Ok(cost) => cost,
+                    Err(e) => {
+                        tracing::error!("Failed to calculate cost: {}", e);
+                        0.0
+                    }
+                }
+            } else {
+                0.0
+            };
+            
+            let analytics = crate::consensus::types::StageAnalytics {
+                duration,
+                cost,
+                input_cost: 0.0, // We don't break this down for now
+                output_cost: 0.0,
+                provider: "openrouter".to_string(),
+                model_internal_id: model.clone(),
+                quality_score: 1.0, // Direct mode doesn't have quality scoring
+                error_count: 0,
+                fallback_used: false,
+            };
+            
+            let token_usage = crate::consensus::types::TokenUsage {
+                prompt_tokens: usage_data.prompt_tokens,
+                completion_tokens: usage_data.completion_tokens,
+                total_tokens: usage_data.total_tokens,
+            };
+            
+            (Some(analytics), Some(token_usage))
+        } else {
+            (None, None)
+        };
+        
+        // Signal completion with proper data
         callbacks.on_stage_complete(Stage::Generator, &StageResult {
-            stage_id: "direct".to_string(),
+            stage_id: crate::core::database::generate_id(),
             stage_name: "Direct Execution".to_string(),
             question: request.to_string(),
             answer: response_content.clone(),
             model: model.clone(),
-            conversation_id: "direct".to_string(),
+            conversation_id: conversation_id.to_string(),
             timestamp: chrono::Utc::now(),
-            usage: None, // Would need to track this
-            analytics: None, // Would need to track this
+            usage: token_usage,
+            analytics,
         })?;
         
-        Ok(response_content)
+        Ok((response_content, usage))
     }
 
     /// Check if this request is about file operations
@@ -374,6 +432,7 @@ struct DirectStreamingCallbacks {
     executor: Arc<StreamingOperationExecutor>,
     ai_file_executor: Arc<AIConsensusFileExecutor>,
     stage: Stage,
+    usage_capture: Arc<tokio::sync::Mutex<Option<crate::consensus::openrouter::Usage>>>,
 }
 
 impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbacks {
@@ -434,8 +493,15 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
         let _ = self.inner.on_error(self.stage, error);
     }
     
-    fn on_complete(&self, _final_content: String, _usage: Option<crate::consensus::openrouter::Usage>) {
-        // Completion is handled in the main handler
+    fn on_complete(&self, _final_content: String, usage: Option<crate::consensus::openrouter::Usage>) {
+        // Capture usage data
+        if let Some(usage_data) = usage {
+            let usage_capture = self.usage_capture.clone();
+            tokio::spawn(async move {
+                let mut guard = usage_capture.lock().await;
+                *guard = Some(usage_data);
+            });
+        }
     }
 }
 
