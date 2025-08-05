@@ -56,19 +56,28 @@ pub fn TerminalXterm(
     // Initialize terminal
     let terminal_id_init = terminal_id.clone();
     let div_id_init = terminal_div_id.clone();
-    use_effect(move || {
-        if !is_initialized() {
-            let tid = terminal_id_init.clone();
-            let div_id = div_id_init.clone();
-            let initial_dir = initial_directory.clone();
-            let is_claude_code = false; // Removed special Claude Code terminal behavior
-            let cmd = command.clone();
-            let cmd_args = args.clone();
+    use_effect({
+        let is_initialized = is_initialized.clone();
+        let terminal_writer = terminal_writer.clone();
+        
+        move || {
+            let current_initialized = is_initialized.read().clone();
+            tracing::info!("🔍 Terminal {} initialization check: initialized={}", terminal_id_init, current_initialized);
+            
+            if !current_initialized {
+                let tid = terminal_id_init.clone();
+                let div_id = div_id_init.clone();
+                let initial_dir = initial_directory.clone();
+                let is_claude_code = false; // Removed special Claude Code terminal behavior
+                let cmd = command.clone();
+                let cmd_args = args.clone();
+                let is_initialized_task = is_initialized.clone();
+                let terminal_writer_task = terminal_writer.clone();
             
             spawn(async move {
                 // Initialize PTY
                 if let Ok((writer, mut reader, pty_handle)) = create_pty(initial_dir, is_claude_code, cmd, cmd_args) {
-                    terminal_writer.set(Some(writer.clone()));
+                    terminal_writer_task.set(Some(writer.clone()));
                     
                     // Store PTY handle for resizing
                     if let Ok(mut pty_handles) = PTY_HANDLES.lock() {
@@ -133,8 +142,8 @@ pub fn TerminalXterm(
                     });
                     
                     // Mark as initialized immediately - don't wait for shell prompt
-                    is_initialized.set(true);
-                    tracing::info!("🚀 Terminal ready immediately - accepting input");
+                    is_initialized_task.set(true);
+                    tracing::info!("🚀 Terminal {} ready immediately - accepting input", tid);
                     
                     // Removed special Claude Code terminal help text
                     
@@ -167,6 +176,7 @@ pub fn TerminalXterm(
                     });
                 }
             });
+            }
         }
     });
     
@@ -178,21 +188,22 @@ pub fn TerminalXterm(
         
         move |evt: Event<KeyboardData>| {
             // Log immediately to verify events are being received
-            tracing::info!("🎹 Keyboard event received: key={:?}, ready={}", evt.key(), is_initialized());
+            let ready = is_initialized();
+            tracing::info!("🎹 Terminal {} keyboard event: key={:?}, ready={}", terminal_id_for_input, evt.key(), ready);
             
             // Only prevent default to stop browser behavior
             evt.prevent_default();
             
             // Only process input if terminal is ready
-            if !is_initialized() {
-                tracing::warn!("⏳ Terminal not ready yet, ignoring input");
+            if !ready {
+                tracing::warn!("⏳ Terminal {} not ready yet, ignoring input", terminal_id_for_input);
                 return;
             }
             
             if let Some(writer) = terminal_writer.read().as_ref() {
                 if let Some(input) = keyboard_to_bytes(&evt) {
                     let input_str = String::from_utf8_lossy(&input);
-                    tracing::debug!("⌨️ Sending keyboard input: {:?}", input_str);
+                    tracing::info!("⌨️ Terminal {} sending keyboard input: {:?}", terminal_id_for_input, input_str);
                     
                     // Removed special Claude Code command detection
                     
@@ -202,7 +213,7 @@ pub fn TerminalXterm(
                             Ok(_) => {
                                 match w.flush() {
                                     Ok(_) => {
-                                        tracing::debug!("✅ Keyboard input sent and flushed successfully");
+                                        tracing::info!("✅ Terminal {} keyboard input sent and flushed successfully", terminal_id_for_input);
                                     }
                                     Err(e) => {
                                         tracing::error!("❌ Failed to flush after keyboard input: {}", e);
@@ -212,9 +223,13 @@ pub fn TerminalXterm(
                             Err(e) => tracing::error!("❌ Failed to send keyboard input: {}", e),
                         }
                     } else {
-                        tracing::error!("❌ Failed to acquire writer lock for keyboard input");
+                        tracing::error!("❌ Terminal {} failed to acquire writer lock for keyboard input", terminal_id_for_input);
                     }
+                } else {
+                    tracing::warn!("❌ Terminal {} has no writer available for keyboard input", terminal_id_for_input);
                 }
+            } else {
+                tracing::warn!("❌ Terminal {} writer not initialized yet", terminal_id_for_input);
             }
         }
     };
