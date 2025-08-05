@@ -463,14 +463,16 @@ impl DatabaseManager {
         conn.execute(
             "INSERT OR REPLACE INTO conversations 
              (id, user_id, title, total_cost, total_tokens_input, total_tokens_output, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 conversation_id,
                 user_id,
                 title,
                 total_cost,
                 total_tokens_input,
-                total_tokens_output
+                total_tokens_output,
+                current_timestamp(),
+                current_timestamp()
             ],
         )?;
 
@@ -498,13 +500,14 @@ impl DatabaseManager {
              SET total_cost = COALESCE(total_cost, 0.0) + ?2,
                  total_tokens_input = COALESCE(total_tokens_input, 0) + ?3,
                  total_tokens_output = COALESCE(total_tokens_output, 0) + ?4,
-                 updated_at = datetime('now')
+                 updated_at = ?5
              WHERE id = ?1",
             params![
                 conversation_id,
                 additional_cost,
                 additional_input_tokens,
-                additional_output_tokens
+                additional_output_tokens,
+                current_timestamp()
             ],
         )?;
 
@@ -533,7 +536,7 @@ impl DatabaseManager {
         conn.execute(
             "INSERT INTO cost_tracking 
              (conversation_id, model_id, tokens_input, tokens_output, cost_input, cost_output, total_cost, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 conversation_id,
                 model_id,
@@ -541,7 +544,8 @@ impl DatabaseManager {
                 tokens_output,
                 0.0, // We'll calculate individual costs if needed
                 0.0,
-                total_cost
+                total_cost,
+                current_timestamp()
             ],
         )?;
 
