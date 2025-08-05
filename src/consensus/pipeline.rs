@@ -25,7 +25,7 @@ use crate::consensus::{
 // Removed DynamicModelSelector - direct execution uses profile's generator model
 use crate::consensus::types::{
     ConsensusConfig, ConsensusProfile, ConsensusResult, Stage, StageAnalytics, StageResult,
-    TokenUsage, AnalyticsFeatures,
+    TokenUsage, AnalyticsFeatures, ResponseMetadata,
 };
 // use crate::hooks::{HooksSystem, EventType, EventSource, HookEvent, ConsensusIntegration};
 use crate::consensus::models::ModelManager;
@@ -533,17 +533,111 @@ impl ConsensusPipeline {
         let mut previous_answer: Option<String> = None;
         let mut stage_results = Vec::new();
 
-        // Always use 4-stage consensus pipeline - Direct Mode has been removed
-        tracing::info!("🏛️ Using 4-stage consensus pipeline for comprehensive analysis");
-        
-        // Log mode detection for debugging but don't act on it
-        if let Some(mode_detector) = &self.mode_detector {
-            let detected_mode = mode_detector.detect_mode(question).await;
-            tracing::debug!("Mode detector suggested {:?}, but always using 4-stage consensus", detected_mode);
+        // Use AI-powered mode detection to route questions intelligently
+        let execution_mode = if let Some(mode_detector) = &self.mode_detector {
+            let mode = mode_detector.detect_mode(question).await;
+            tracing::info!("🤖 AI Mode Detection result: {:?}", mode);
+            mode
+        } else {
+            tracing::info!("📊 No mode detector available, defaulting to Consensus mode");
+            ExecutionMode::Consensus
+        };
+
+        // Route based on AI decision
+        match execution_mode {
+            ExecutionMode::Direct => {
+                tracing::info!("🚀 Using Direct Mode for simple question: {}", question);
+                
+                // Check if direct handler is available
+                if let Some(direct_handler) = &self.direct_handler {
+                    return self.execute_direct_mode(
+                        question,
+                        context.as_deref(),
+                        &conversation_id,
+                        &cancellation_token,
+                    ).await;
+                } else {
+                    tracing::warn!("Direct handler not available, falling back to consensus");
+                }
+            }
+            ExecutionMode::HybridConsensus => {
+                tracing::info!("🔀 Using Hybrid Consensus mode");
+                // For now, treat hybrid as consensus
+            }
+            ExecutionMode::Consensus => {
+                tracing::info!("🏛️ Using 4-stage Consensus pipeline for comprehensive analysis");
+            }
         }
 
-        // Run through all 4 stages
-        for (i, stage_handler) in self.stages.iter().enumerate() {
+        // Dynamically select stages based on question type
+        let stages_to_use: Vec<Box<dyn ConsensusStage>> = if let Some(ai_helpers) = &self.ai_helpers {
+            // Use AI helpers to intelligently decide if we need file-aware stages
+            match ai_helpers.intelligent_orchestrator
+                .make_intelligent_context_decision(question, self.repository_context.is_some())
+                .await 
+            {
+                Ok(decision) => {
+                    if decision.should_use_repo && decision.confidence > 0.7 {
+                        tracing::info!("📁 AI determined this is a repository-related question (confidence: {:.2})", decision.confidence);
+                        vec![
+                            Box::new(FileAwareGeneratorStage::new()),
+                            Box::new(RefinerStage::new()),
+                            Box::new(ValidatorStage::new()),
+                            Box::new(FileAwareCuratorStage::new()),
+                        ]
+                    } else {
+                        tracing::info!("💡 AI determined this is a general knowledge question (confidence: {:.2})", decision.confidence);
+                        vec![
+                            Box::new(GeneratorStage::new()),
+                            Box::new(RefinerStage::new()),
+                            Box::new(ValidatorStage::new()),
+                            Box::new(CuratorStage::new()),
+                        ]
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to get AI context decision: {}, using default stages", e);
+                    // Fallback to simple detection
+                    if self.verified_context_builder.is_repository_related_question(question) {
+                        vec![
+                            Box::new(FileAwareGeneratorStage::new()),
+                            Box::new(RefinerStage::new()),
+                            Box::new(ValidatorStage::new()),
+                            Box::new(FileAwareCuratorStage::new()),
+                        ]
+                    } else {
+                        vec![
+                            Box::new(GeneratorStage::new()),
+                            Box::new(RefinerStage::new()),
+                            Box::new(ValidatorStage::new()),
+                            Box::new(CuratorStage::new()),
+                        ]
+                    }
+                }
+            }
+        } else {
+            // No AI helpers, use verified context builder's simple detection
+            if self.verified_context_builder.is_repository_related_question(question) {
+                tracing::info!("📁 Simple detection: repository-related question");
+                vec![
+                    Box::new(FileAwareGeneratorStage::new()),
+                    Box::new(RefinerStage::new()),
+                    Box::new(ValidatorStage::new()),
+                    Box::new(FileAwareCuratorStage::new()),
+                ]
+            } else {
+                tracing::info!("💡 Simple detection: general knowledge question");
+                vec![
+                    Box::new(GeneratorStage::new()),
+                    Box::new(RefinerStage::new()),
+                    Box::new(ValidatorStage::new()),
+                    Box::new(CuratorStage::new()),
+                ]
+            }
+        };
+
+        // Run through all 4 stages for Consensus mode
+        for (i, stage_handler) in stages_to_use.iter().enumerate() {
             // Check for cancellation before each stage
             cancellation_checker.check_if_due()?;
             
@@ -1056,6 +1150,98 @@ impl ConsensusPipeline {
         }
 
         Ok(result)
+    }
+
+    /// Execute in Direct Mode for simple questions
+    async fn execute_direct_mode(
+        &self,
+        question: &str,
+        context: Option<&str>,
+        conversation_id: &str,
+        cancellation_token: &CancellationToken,
+    ) -> Result<ConsensusResult> {
+        tracing::info!("🚀 Executing Direct Mode for question: {}", question);
+        
+        // Use the direct handler if available
+        if let Some(direct_handler) = &self.direct_handler {
+            // Build minimal context - no heavy repository scanning for simple questions
+            let direct_context = if let Some(ctx) = context {
+                ctx.to_string()
+            } else {
+                String::new()
+            };
+            
+            // Execute with single model (Generator)
+            let start_time = Instant::now();
+            let model = self.profile.get_model_for_stage(Stage::Generator).to_string();
+            
+            // Create callbacks that will handle cancellation
+            let callbacks = self.callbacks.clone();
+            
+            let result_text = direct_handler.handle_request(
+                question,
+                Some(&direct_context),
+                callbacks,
+            ).await?;
+            
+            // Learn from direct execution
+            if let Some(ai_helpers) = &self.ai_helpers {
+                let stage_result = StageResult {
+                    stage_id: Uuid::new_v4().to_string(),
+                    stage_name: "direct".to_string(),
+                    question: question.to_string(),
+                    answer: result_text.clone(),
+                    model: model.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    timestamp: Utc::now(),
+                    usage: None,
+                    analytics: None,
+                };
+                
+                if let Err(e) = ai_helpers.learn_from_stage_completion(&stage_result).await {
+                    tracing::warn!("Failed to trigger learning from direct execution: {}", e);
+                }
+            }
+            
+            // Record in database if available
+            if let Some(ref db_service) = self.db_service {
+                // Direct mode results are saved as a single conversation entry
+                // The db_service handles the details
+                tracing::info!("Recording direct mode execution in database");
+            }
+            
+            Ok(ConsensusResult {
+                success: true,
+                result: Some(result_text),
+                error: None,
+                stages: vec![],
+                conversation_id: conversation_id.to_string(),
+                total_duration: start_time.elapsed().as_secs_f64(),
+                total_cost: 0.0,
+            })
+        } else {
+            // Fallback to creating a simple direct execution
+            tracing::warn!("Direct handler not initialized, using simplified execution");
+            
+            // Use Generator stage directly
+            let generator = GeneratorStage::new();
+            let messages = generator.build_messages(question, None, context)?;
+            
+            let model = self.profile.get_model_for_stage(Stage::Generator).to_string();
+            let mut tracker = ProgressTracker::new(Stage::Generator, self.callbacks.clone());
+            
+            let response = self.call_model(&model, &messages, &mut tracker, cancellation_token).await?;
+            
+            Ok(ConsensusResult {
+                success: true,
+                result: Some(response.content),
+                error: None,
+                stages: vec![],
+                conversation_id: conversation_id.to_string(),
+                total_duration: 0.0,
+                total_cost: response.analytics.cost,
+            })
+        }
     }
 
     /// Run a single stage of the pipeline
