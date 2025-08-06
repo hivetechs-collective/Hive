@@ -13,9 +13,12 @@ use crate::desktop::terminal_buffer::{register_terminal_buffer, add_to_terminal_
 use once_cell::sync::Lazy;
 use base64;
 use std::collections::HashMap;
+use tokio::sync::Notify;
 
 static OUTPUT_QUEUES: Lazy<Mutex<HashMap<String, Vec<String>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 static PTY_HANDLES: Lazy<Mutex<HashMap<String, Arc<Mutex<Box<dyn MasterPty + Send>>>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+// Event-driven notification system to replace polling
+static OUTPUT_NOTIFIERS: Lazy<Mutex<HashMap<String, Arc<Notify>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Terminal emulator state
 pub struct XtermTerminal {
@@ -51,6 +54,12 @@ pub fn TerminalXterm(
             queues.remove(&terminal_id_cleanup);
             tracing::info!("🗑️ Cleaned up output queue for terminal {}", terminal_id_cleanup);
         }
+        
+        // Clean up the notifier for this terminal
+        if let Ok(mut notifiers) = OUTPUT_NOTIFIERS.lock() {
+            notifiers.remove(&terminal_id_cleanup);
+            tracing::info!("🗑️ Cleaned up output notifier for terminal {}", terminal_id_cleanup);
+        }
     });
     
     // Initialize terminal
@@ -71,8 +80,8 @@ pub fn TerminalXterm(
                 let is_claude_code = false; // Removed special Claude Code terminal behavior
                 let cmd = command.clone();
                 let cmd_args = args.clone();
-                let is_initialized_task = is_initialized.clone();
-                let terminal_writer_task = terminal_writer.clone();
+                let mut is_initialized_task = is_initialized.clone();
+                let mut terminal_writer_task = terminal_writer.clone();
             
             spawn(async move {
                 // Initialize PTY
@@ -98,12 +107,22 @@ pub fn TerminalXterm(
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     init_xterm(&div_id, &tid).await;
                     
-                    // Start the output processor for this specific terminal
+                    // Create or get notifier for this terminal
+                    let notifier = {
+                        let mut notifiers = OUTPUT_NOTIFIERS.lock().unwrap();
+                        notifiers.entry(tid.clone())
+                            .or_insert_with(|| Arc::new(Notify::new()))
+                            .clone()
+                    };
+                    
+                    // Start the output processor for this specific terminal (event-driven, not polling!)
                     let tid_processor = tid.clone();
                     spawn(async move {
-                        tracing::info!("🔄 Starting output processor for terminal {}", tid_processor);
+                        tracing::info!("🔄 Starting event-driven output processor for terminal {}", tid_processor);
                         loop {
-                            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                            // Wait for notification that output is available
+                            notifier.notified().await;
+                            // Process any queued output
                             process_terminal_output_queue(&tid_processor).await;
                         }
                     });
@@ -565,6 +584,14 @@ fn write_to_xterm(terminal_id: &str, text: &str) {
         tracing::debug!("📥 Queued output for {}, queue size: {}", terminal_id, queue.len());
     } else {
         tracing::error!("❌ Failed to lock output queues");
+    }
+    
+    // Notify the processor that output is available (event-driven!)
+    if let Ok(notifiers) = OUTPUT_NOTIFIERS.lock() {
+        if let Some(notifier) = notifiers.get(terminal_id) {
+            notifier.notify_one();
+            tracing::trace!("🔔 Notified output processor for terminal {}", terminal_id);
+        }
     }
 }
 
