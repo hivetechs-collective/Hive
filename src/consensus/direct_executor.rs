@@ -469,37 +469,50 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
             let executor = self.executor.clone();
             let ai_file_executor = self.ai_file_executor.clone();
             
-            // Spawn a task to handle parsing and AI-powered execution
-            tokio::spawn(async move {
-                let mut parser_guard = parser.lock().await;
-                if let Some(operation) = parser_guard.parse_chunk(&chunk) {
-                    // Convert to vector for AI executor
-                    let operations = vec![operation.clone()];
-                    
-                    // Use AI-powered execution for intelligent file operations
-                    match ai_file_executor.execute_curator_operations(operations).await {
-                        Ok(report) => {
-                            if report.success {
-                                tracing::debug!("🤖 AI Helper successfully executed {} operations", 
-                                             report.operations_completed);
-                                if !report.files_created.is_empty() {
-                                    tracing::debug!("📄 Created files: {:?}", report.files_created);
+            // CRITICAL FIX: Don't spawn uncontrolled tasks during consensus
+            // These were accumulating and causing CPU overload
+            if !crate::consensus::pipeline::CONSENSUS_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+                // Only spawn execution tasks when consensus is NOT running
+                tokio::spawn(async move {
+                    let mut parser_guard = parser.lock().await;
+                    if let Some(operation) = parser_guard.parse_chunk(&chunk) {
+                        // Convert to vector for AI executor
+                        let operations = vec![operation.clone()];
+                        
+                        // Use AI-powered execution for intelligent file operations
+                        match ai_file_executor.execute_curator_operations(operations).await {
+                            Ok(report) => {
+                                if report.success {
+                                    tracing::debug!("🤖 AI Helper successfully executed {} operations", 
+                                                 report.operations_completed);
+                                    if !report.files_created.is_empty() {
+                                        tracing::debug!("📄 Created files: {:?}", report.files_created);
+                                    }
+                                    if !report.files_modified.is_empty() {
+                                        tracing::debug!("✏️ Modified files: {:?}", report.files_modified);
+                                    }
+                                } else {
+                                    tracing::warn!("⚠️ AI Helper execution had errors: {:?}", report.errors);
                                 }
-                                if !report.files_modified.is_empty() {
-                                    tracing::debug!("✏️ Modified files: {:?}", report.files_modified);
-                                }
-                            } else {
-                                tracing::warn!("⚠️ AI Helper execution had errors: {:?}", report.errors);
+                            }
+                            Err(e) => {
+                                tracing::error!("❌ AI Helper execution failed: {}", e);
+                                // Fallback to basic executor if AI fails
+                                let _ = executor.execute_inline(operation, None).await;
                             }
                         }
-                        Err(e) => {
-                            tracing::error!("❌ AI Helper execution failed: {}", e);
-                            // Fallback to basic executor if AI fails
-                            let _ = executor.execute_inline(operation, None).await;
-                        }
                     }
-                }
-            });
+                });
+            } else {
+                // During consensus, just parse and log - don't execute
+                // Use a minimal async block just for parsing
+                tokio::spawn(async move {
+                    let mut parser_guard = parser.lock().await;
+                    if let Some(operation) = parser_guard.parse_chunk(&chunk) {
+                        tracing::debug!("📝 Parsed operation during consensus (execution deferred): {:?}", operation);
+                    }
+                });
+            }
         }
     }
     
