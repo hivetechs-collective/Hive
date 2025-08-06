@@ -810,9 +810,10 @@ pub async fn process_consensus_events(
                     let now = std::time::Instant::now();
                     let time_since_last = now.duration_since(state.consensus.last_html_update_time);
                     
-                    // Update if: 100ms passed OR content grew by 500+ chars OR it's the first update
-                    time_since_last >= std::time::Duration::from_millis(100) ||
-                    current_len > last_len + 500 ||
+                    // Update if: 500ms passed OR content grew by 1000+ chars OR it's the first update
+                    // Increased thresholds to reduce HTML conversion frequency during streaming
+                    time_since_last >= std::time::Duration::from_millis(500) ||
+                    current_len > last_len + 1000 ||
                     last_len == 0
                 };
                 
