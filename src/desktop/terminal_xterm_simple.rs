@@ -122,6 +122,13 @@ pub fn TerminalXterm(
                         loop {
                             // Wait for notification that output is available
                             notifier.notified().await;
+                            
+                            // Check if consensus is running - if so, skip processing
+                            if crate::consensus::pipeline::CONSENSUS_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+                                tracing::trace!("⏸️ Terminal {} output processing paused during consensus", tid_processor);
+                                continue;
+                            }
+                            
                             // Process any queued output
                             process_terminal_output_queue(&tid_processor).await;
                         }

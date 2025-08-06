@@ -41,8 +41,12 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Instant, SystemTime};
 use uuid::Uuid;
+
+// Global flag to indicate consensus is running - other systems should pause
+pub static CONSENSUS_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// The main consensus pipeline orchestrator
 pub struct ConsensusPipeline {
@@ -315,8 +319,18 @@ impl ConsensusPipeline {
         context: Option<String>,
         user_id: Option<String>,
     ) -> Result<ConsensusResult> {
+        // Set global consensus flag to pause non-essential processes
+        CONSENSUS_ACTIVE.store(true, Ordering::SeqCst);
+        tracing::info!("⏸️ Pausing non-essential processes for consensus focus mode");
+        
         let cancellation_token = CancellationToken::new();
-        self.run_with_cancellation(question, context, user_id, cancellation_token).await
+        let result = self.run_with_cancellation(question, context, user_id, cancellation_token).await;
+        
+        // Clear consensus flag to resume normal operations
+        CONSENSUS_ACTIVE.store(false, Ordering::SeqCst);
+        tracing::info!("▶️ Resuming normal operations after consensus");
+        
+        result
     }
 
     /// Run the full consensus pipeline with cancellation support
@@ -638,6 +652,12 @@ impl ConsensusPipeline {
 
         // Run through all 4 stages for Consensus mode
         for (i, stage_handler) in stages_to_use.iter().enumerate() {
+            // Add a small delay between stages to prevent UI update cascade
+            if i > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                tracing::debug!("⏱️ Stage transition buffer applied");
+            }
+            
             // Check for cancellation before each stage
             cancellation_checker.check_if_due()?;
             

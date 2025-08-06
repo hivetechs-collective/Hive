@@ -60,6 +60,12 @@ impl GitWatcher {
         loop {
             match rx.recv_timeout(Duration::from_millis(100)) {
                 Ok(Ok(event)) => {
+                    // Skip processing if consensus is running
+                    if crate::consensus::pipeline::CONSENSUS_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
+                        debug!("⏸️ Git watcher paused during consensus");
+                        continue;
+                    }
+                    
                     // Debounce events (100ms)
                     if last_event_time.elapsed() < Duration::from_millis(100) {
                         continue;
