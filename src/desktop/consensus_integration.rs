@@ -19,7 +19,8 @@ use dioxus::prelude::*;
 use rusqlite::OptionalExtension;
 use std::sync::Arc;
 use std::path::PathBuf;
-use tokio::{sync::{mpsc, Mutex}, spawn};
+use std::time::{Duration, Instant};
+use tokio::{sync::{mpsc, Mutex, RwLock}, spawn};
 
 /// Events sent from callbacks to UI
 #[derive(Debug, Clone)]
@@ -1123,6 +1124,9 @@ impl DesktopConsensusManager {
             question: query.to_string(),
             stages_completed: Arc::new(Mutex::new(Vec::new())),
         });
+        
+        // Wrap callbacks with batching to reduce UI update frequency
+        let batched_callbacks = Arc::new(BatchedStreamingCallbacks::new(callbacks.clone()));
 
         // Create cancellation token for this consensus operation
         let cancellation_token = CancellationToken::new();
@@ -1136,7 +1140,7 @@ impl DesktopConsensusManager {
         // Clone what we need for the async task
         let engine = self.engine.clone();
         let query = query.to_string();
-        let callbacks_clone = callbacks.clone();
+        let callbacks_clone = batched_callbacks.clone();
         let cancellation_token_clone = cancellation_token.clone();
 
         // Get user_id from app state
@@ -1599,3 +1603,116 @@ pub fn use_consensus_with_version(api_keys_version: u32) -> Option<DesktopConsen
     let result = resource.read().as_ref().and_then(|r| r.as_ref().cloned());
     result
 }
+
+/// Batched streaming callbacks that accumulate chunks and send updates at a controlled rate
+struct BatchedStreamingCallbacks {
+    inner: Arc<dyn StreamingCallbacks>,
+    update_interval: Duration,
+    last_update: Arc<RwLock<Instant>>,
+    pending_content: Arc<RwLock<HashMap<Stage, String>>>,
+    accumulated_content: Arc<RwLock<HashMap<Stage, String>>>,
+}
+
+impl BatchedStreamingCallbacks {
+    fn new(inner: Arc<dyn StreamingCallbacks>) -> Self {
+        Self {
+            inner,
+            update_interval: Duration::from_millis(100), // 10 FPS for UI updates
+            last_update: Arc::new(RwLock::new(Instant::now())),
+            pending_content: Arc::new(RwLock::new(HashMap::new())),
+            accumulated_content: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+    
+    async fn should_send_update(&self) -> bool {
+        let last = self.last_update.read().await;
+        last.elapsed() >= self.update_interval
+    }
+    
+    async fn flush_updates(&self, stage: Stage) -> Result<()> {
+        let mut pending = self.pending_content.write().await;
+        let accumulated = self.accumulated_content.read().await;
+        
+        if let Some(chunk) = pending.remove(&stage) {
+            if let Some(total) = accumulated.get(&stage) {
+                // Send the batched update
+                self.inner.on_stage_chunk(stage, &chunk, total)?;
+                
+                // Update last send time
+                let mut last = self.last_update.write().await;
+                *last = Instant::now();
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl StreamingCallbacks for BatchedStreamingCallbacks {
+    fn on_profile_loaded(&self, profile_name: &str, models: &[String]) -> Result<()> {
+        self.inner.on_profile_loaded(profile_name, models)
+    }
+    
+    fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
+        // Clear accumulated content for new stage
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            let mut accumulated = self.accumulated_content.write().await;
+            accumulated.remove(&stage);
+            let mut pending = self.pending_content.write().await;
+            pending.remove(&stage);
+        });
+        
+        self.inner.on_stage_start(stage, model)
+    }
+    
+    fn on_stage_chunk(&self, stage: Stage, chunk: &str, total_content: &str) -> Result<()> {
+        // Accumulate content
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            let mut accumulated = self.accumulated_content.write().await;
+            accumulated.insert(stage, total_content.to_string());
+            
+            let mut pending = self.pending_content.write().await;
+            let existing = pending.entry(stage).or_insert_with(String::new);
+            existing.push_str(chunk);
+            
+            // Check if we should send an update
+            if self.should_send_update().await {
+                self.flush_updates(stage).await.ok();
+            }
+        });
+        
+        Ok(())
+    }
+    
+    fn on_stage_progress(&self, stage: Stage, progress: ProgressInfo) -> Result<()> {
+        // Progress updates can go through immediately (they're already infrequent)
+        self.inner.on_stage_progress(stage, progress)
+    }
+    
+    fn on_stage_complete(&self, stage: Stage, result: &crate::consensus::types::StageResult) -> Result<()> {
+        // Flush any pending updates for this stage
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            self.flush_updates(stage).await.ok();
+        });
+        
+        self.inner.on_stage_complete(stage, result)
+    }
+    
+    fn on_error(&self, stage: Stage, error: &anyhow::Error) -> Result<()> {
+        self.inner.on_error(stage, error)
+    }
+    
+    fn on_d1_authorization(&self, remaining: u32) -> Result<()> {
+        self.inner.on_d1_authorization(remaining)
+    }
+    
+    fn on_analytics_refresh(&self) -> Result<()> {
+        self.inner.on_analytics_refresh()
+    }
+}
+
+use std::collections::HashMap;
