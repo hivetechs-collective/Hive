@@ -3458,7 +3458,7 @@ fn App() -> Element {
                             
                             // Show cancelling message immediately
                             app_state.write().consensus.streaming_content = 
-                                "⏸ Cancelling consensus...".to_string();
+                                "<div style='color: #FF6B6B; font-weight: bold;'>⏸ Cancelling consensus...</div>".to_string();
                             
                             tracing::info!("🛑 Ctrl+C pressed - cancelling consensus");
                             
@@ -3494,7 +3494,7 @@ fn App() -> Element {
                             
                             // Show immediate feedback
                             app_state.write().consensus.streaming_content = 
-                                "✅ Cancelled via Ctrl+C - ready for new query".to_string();
+                                "<div style='color: #4CAF50; font-weight: bold;'>✅ Cancelled via Ctrl+C - ready for new query</div>".to_string();
                             
                             tracing::info!("✅ Cancellation flag set via Ctrl+C");
                         }
@@ -4873,10 +4873,7 @@ fn App() -> Element {
                         if !app_state.read().consensus.streaming_content.is_empty() && !*cancel_flag.read() {
                             div {
                                 class: "response-content",
-                                // PERFORMANCE: Display raw markdown as preformatted text
-                                // Avoid expensive HTML conversion during streaming
-                                style: "white-space: pre-wrap; font-family: system-ui, -apple-system, sans-serif;",
-                                "{app_state.read().consensus.streaming_content}"
+                                dangerous_inner_html: "{app_state.read().consensus.streaming_content}"
                             }
                         } else if !current_response.read().is_empty() && !*cancel_flag.read() {
                             // Show final response if no streaming content
@@ -5372,7 +5369,7 @@ fn App() -> Element {
                                             
                                             // Show immediate feedback
                                             app_state.write().consensus.streaming_content = 
-                                                "✅ Cancelled - ready for new query".to_string();
+                                                "<div style='color: #4CAF50; font-weight: bold;'>✅ Cancelled - ready for new query</div>".to_string();
                                             
                                             tracing::info!("✅ Cancellation flag set and UI reset complete");
                                         },
