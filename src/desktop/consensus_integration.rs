@@ -702,8 +702,9 @@ pub async fn process_consensus_events(
                     .consensus
                     .raw_streaming_content
                     .push_str(&format!("## 📝 {} Stage\n\n", stage_name));
-                // Also update HTML version for display
-                state.consensus.streaming_content = markdown::to_html(&state.consensus.raw_streaming_content);
+                // PERFORMANCE FIX: Skip HTML conversion during stage transitions
+                // Just use raw markdown to avoid expensive conversion
+                state.consensus.streaming_content = state.consensus.raw_streaming_content.clone();
 
                 let stage_index = match stage {
                     ConsensusStage::Generator => 0,
@@ -817,8 +818,10 @@ pub async fn process_consensus_events(
                 };
                 
                 if should_update_html {
-                    // Convert markdown to HTML for UI rendering
-                    state.consensus.streaming_content = markdown::to_html(&total_content);
+                    // PERFORMANCE FIX: Skip HTML conversion during streaming
+                    // The markdown::to_html function is extremely expensive and causes CPU overheating
+                    // Instead, store raw markdown and let the UI handle it
+                    state.consensus.streaming_content = total_content.clone();
                     state.consensus.last_html_update_time = std::time::Instant::now();
                     state.consensus.last_html_update_len = total_content.len();
                 }
