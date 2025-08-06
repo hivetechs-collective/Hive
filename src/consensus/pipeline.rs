@@ -323,6 +323,9 @@ impl ConsensusPipeline {
         CONSENSUS_ACTIVE.store(true, Ordering::SeqCst);
         tracing::info!("⏸️ Pausing non-essential processes for consensus focus mode");
         
+        // Give background tasks time to pause - this prevents race conditions
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        
         let cancellation_token = CancellationToken::new();
         let result = self.run_with_cancellation(question, context, user_id, cancellation_token).await;
         

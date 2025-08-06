@@ -125,7 +125,7 @@ pub fn TerminalXterm(
                             
                             // Check if consensus is running - if so, skip processing
                             if crate::consensus::pipeline::CONSENSUS_ACTIVE.load(std::sync::atomic::Ordering::Relaxed) {
-                                tracing::trace!("⏸️ Terminal {} output processing paused during consensus", tid_processor);
+                                // Terminal output paused during consensus - no need to log repeatedly
                                 continue;
                             }
                             
@@ -146,14 +146,14 @@ pub fn TerminalXterm(
                                     break;
                                 }
                                 Ok(n) => {
-                                    tracing::trace!("PTY read {} bytes", n);
+                                    // Removed excessive trace logging - was causing performance issues
                                     if let Ok(text) = String::from_utf8(buf[..n].to_vec()) {
-                                        tracing::trace!("PTY text (UTF-8): {:?}", text);
+                                        // Removed trace log - was causing performance issues during consensus
                                         write_to_xterm(&tid_output, &text);
                                     } else {
                                         // Handle non-UTF8 data
                                         let text = String::from_utf8_lossy(&buf[..n]);
-                                        tracing::trace!("PTY text (lossy): {:?}", text);
+                                        // Removed trace log - was causing performance issues
                                         write_to_xterm(&tid_output, &text);
                                     }
                                 }
@@ -574,8 +574,8 @@ fn keyboard_to_bytes(event: &Event<KeyboardData>) -> Option<Vec<u8>> {
 
 /// Write output to xterm (called from blocking thread)
 fn write_to_xterm(terminal_id: &str, text: &str) {
-    tracing::trace!("📤 PTY output for {}: {} bytes", terminal_id, text.len());
-    tracing::trace!("PTY text content: {:?}", text);
+    // Removed excessive trace logging that was causing performance issues
+    // Only log errors and important events, not every byte of output
     
     // Add to terminal buffer for Send to Consensus functionality
     add_to_terminal_buffer(terminal_id, text);
@@ -597,7 +597,7 @@ fn write_to_xterm(terminal_id: &str, text: &str) {
     if let Ok(notifiers) = OUTPUT_NOTIFIERS.lock() {
         if let Some(notifier) = notifiers.get(terminal_id) {
             notifier.notify_one();
-            tracing::trace!("🔔 Notified output processor for terminal {}", terminal_id);
+            // Removed trace log - notification happens frequently during output
         }
     }
 }
@@ -617,7 +617,7 @@ async fn process_terminal_output_queue(terminal_id: &str) {
     };
     
     if !items.is_empty() {
-        tracing::trace!("🔄 Processing {} output items for terminal {}", items.len(), terminal_id);
+        // Removed trace log - was logging every output processing cycle
     }
     
     for base64_text in items {
