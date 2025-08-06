@@ -1623,29 +1623,6 @@ impl BatchedStreamingCallbacks {
             accumulated_content: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
-    async fn should_send_update(&self) -> bool {
-        let last = self.last_update.read().await;
-        last.elapsed() >= self.update_interval
-    }
-    
-    async fn flush_updates(&self, stage: Stage) -> Result<()> {
-        let mut pending = self.pending_content.write().await;
-        let accumulated = self.accumulated_content.read().await;
-        
-        if let Some(chunk) = pending.remove(&stage) {
-            if let Some(total) = accumulated.get(&stage) {
-                // Send the batched update
-                self.inner.on_stage_chunk(stage, &chunk, total)?;
-                
-                // Update last send time
-                let mut last = self.last_update.write().await;
-                *last = Instant::now();
-            }
-        }
-        
-        Ok(())
-    }
 }
 
 #[async_trait::async_trait]
@@ -1656,33 +1633,49 @@ impl StreamingCallbacks for BatchedStreamingCallbacks {
     
     fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
         // Clear accumulated content for new stage
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async {
-            let mut accumulated = self.accumulated_content.write().await;
+        // Use try_write to avoid blocking in sync context
+        if let Ok(mut accumulated) = self.accumulated_content.try_write() {
             accumulated.remove(&stage);
-            let mut pending = self.pending_content.write().await;
+        }
+        if let Ok(mut pending) = self.pending_content.try_write() {
             pending.remove(&stage);
-        });
+        }
         
         self.inner.on_stage_start(stage, model)
     }
     
     fn on_stage_chunk(&self, stage: Stage, chunk: &str, total_content: &str) -> Result<()> {
-        // Accumulate content
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async {
-            let mut accumulated = self.accumulated_content.write().await;
+        // Accumulate content using try_write to avoid blocking
+        if let Ok(mut accumulated) = self.accumulated_content.try_write() {
             accumulated.insert(stage, total_content.to_string());
-            
-            let mut pending = self.pending_content.write().await;
+        }
+        
+        if let Ok(mut pending) = self.pending_content.try_write() {
             let existing = pending.entry(stage).or_insert_with(String::new);
             existing.push_str(chunk);
-            
-            // Check if we should send an update
-            if self.should_send_update().await {
-                self.flush_updates(stage).await.ok();
+        }
+        
+        // Check if we should send an update based on time
+        if let Ok(last) = self.last_update.try_read() {
+            if last.elapsed() >= self.update_interval {
+                // Try to flush updates
+                if let Ok(mut pending) = self.pending_content.try_write() {
+                    if let Ok(accumulated) = self.accumulated_content.try_read() {
+                        if let Some(chunk) = pending.remove(&stage) {
+                            if let Some(total) = accumulated.get(&stage) {
+                                // Send the batched update
+                                self.inner.on_stage_chunk(stage, &chunk, total)?;
+                                
+                                // Update last send time
+                                if let Ok(mut last_mut) = self.last_update.try_write() {
+                                    *last_mut = Instant::now();
+                                }
+                            }
+                        }
+                    }
+                }
             }
-        });
+        }
         
         Ok(())
     }
@@ -1694,10 +1687,16 @@ impl StreamingCallbacks for BatchedStreamingCallbacks {
     
     fn on_stage_complete(&self, stage: Stage, result: &crate::consensus::types::StageResult) -> Result<()> {
         // Flush any pending updates for this stage
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async {
-            self.flush_updates(stage).await.ok();
-        });
+        if let Ok(mut pending) = self.pending_content.try_write() {
+            if let Ok(accumulated) = self.accumulated_content.try_read() {
+                if let Some(chunk) = pending.remove(&stage) {
+                    if let Some(total) = accumulated.get(&stage) {
+                        // Send final update for this stage
+                        let _ = self.inner.on_stage_chunk(stage, &chunk, total);
+                    }
+                }
+            }
+        }
         
         self.inner.on_stage_complete(stage, result)
     }
