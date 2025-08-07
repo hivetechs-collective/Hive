@@ -86,18 +86,16 @@ pub fn TerminalTabs() -> Element {
         ai_tools.set(tool_tabs);
     }
     
-    // Create initial terminal on mount - separate effect for terminal creation
+    // Don't create initial terminal on mount - start with no terminals
+    // This avoids the display bug with the first terminal
     use_effect({
-        let mut terminals = terminals.clone();
-        let mut active_terminal_id = active_terminal_id.clone();
-        let mut terminal_counter = terminal_counter.clone();
-        let mut tab_scroll_offset = tab_scroll_offset.clone();
+        let terminals = terminals.clone();
         
         move || {
             tracing::info!("🔍 TerminalTabs component mounted - checking terminals");
             if terminals.read().is_empty() {
-                tracing::info!("📝 Creating initial terminal");
-                create_new_terminal(&mut terminals, &mut active_terminal_id, &mut terminal_counter, &mut tab_scroll_offset, max_visible_tabs);
+                tracing::info!("📝 Starting with no terminals - user can open with Ctrl+T or + button");
+                // Don't create any initial terminals
             } else {
                 tracing::info!("✅ Terminals already exist: {}", terminals.read().len());
             }
