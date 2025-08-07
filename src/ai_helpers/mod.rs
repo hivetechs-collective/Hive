@@ -243,34 +243,72 @@ struct HelperState {
 impl AIHelperEcosystem {
     /// Create a new AI Helper Ecosystem
     pub async fn new(database: Arc<crate::core::database::DatabaseManager>) -> Result<Self> {
+        tracing::info!("🚀 Initializing AI Helper Ecosystem (moving heavy work to background threads)");
+        
         // First, ensure all required models are downloaded
-        Self::ensure_models_available().await?;
+        // This is I/O heavy so move to blocking thread pool
+        let models_result = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(Self::ensure_models_available())
+        }).await??;
         
-        // Initialize Python model service
+        // Initialize Python model service on a background thread
+        // This involves starting Python processes which is CPU-intensive
         let python_config = PythonModelConfig::default();
-        let python_service = Arc::new(PythonModelService::new(python_config).await?);
+        let python_service = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(PythonModelService::new(python_config))
+        }).await??;
+        let python_service = Arc::new(python_service);
         
-        // Initialize vector store
-        let vector_store = Arc::new(ChromaVectorStore::new().await?);
+        // Initialize vector store on background thread
+        // This may involve network I/O or disk access
+        let vector_store = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(ChromaVectorStore::new())
+        }).await??;
+        let vector_store = Arc::new(vector_store);
         
-        // Initialize helpers with Python service
-        let knowledge_indexer = Arc::new(KnowledgeIndexer::new(
-            vector_store.clone(),
-            python_service.clone(),
-        ).await?);
-        let context_retriever = Arc::new(ContextRetriever::new(
-            vector_store.clone(),
-            python_service.clone(),
-        ).await?);
-        let pattern_recognizer = Arc::new(PatternRecognizer::new(
-            python_service.clone(),
-        ).await?);
-        let quality_analyzer = Arc::new(QualityAnalyzer::new(
-            python_service.clone(),
-        ).await?);
-        let knowledge_synthesizer = Arc::new(KnowledgeSynthesizer::new(
-            python_service.clone(),
-        ).await?);
+        // Initialize helpers with Python service on background threads
+        let vs_clone = vector_store.clone();
+        let ps_clone = python_service.clone();
+        let knowledge_indexer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(KnowledgeIndexer::new(
+                vs_clone,
+                ps_clone,
+            ))
+        }).await??;
+        let knowledge_indexer = Arc::new(knowledge_indexer);
+        let vs_clone2 = vector_store.clone();
+        let ps_clone2 = python_service.clone();
+        let context_retriever = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(ContextRetriever::new(
+                vs_clone2,
+                ps_clone2,
+            ))
+        }).await??;
+        let context_retriever = Arc::new(context_retriever);
+        
+        let ps_clone3 = python_service.clone();
+        let pattern_recognizer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(PatternRecognizer::new(
+                ps_clone3,
+            ))
+        }).await??;
+        let pattern_recognizer = Arc::new(pattern_recognizer);
+        
+        let ps_clone4 = python_service.clone();
+        let quality_analyzer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(QualityAnalyzer::new(
+                ps_clone4,
+            ))
+        }).await??;
+        let quality_analyzer = Arc::new(quality_analyzer);
+        
+        let ps_clone5 = python_service.clone();
+        let knowledge_synthesizer = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(KnowledgeSynthesizer::new(
+                ps_clone5,
+            ))
+        }).await??;
+        let knowledge_synthesizer = Arc::new(knowledge_synthesizer);
         
         // Create intelligent context orchestrator coordinating all AI helpers
         let intelligent_orchestrator = Arc::new(IntelligentContextOrchestrator::new(
@@ -312,11 +350,16 @@ impl AIHelperEcosystem {
             quality_analyzer.clone(),
         ));
         
-        // Create continuous learner
-        let continuous_learner = Arc::new(ContinuousLearner::new(
-            vector_store.clone(),
-            python_service.clone(),
-        ).await?);
+        // Create continuous learner on background thread
+        let vs_clone_final = vector_store.clone();
+        let ps_clone_final = python_service.clone();
+        let continuous_learner = tokio::task::spawn_blocking(move || {
+            tokio::runtime::Handle::current().block_on(ContinuousLearner::new(
+                vs_clone_final,
+                ps_clone_final,
+            ))
+        }).await??;
+        let continuous_learner = Arc::new(continuous_learner);
         
         Ok(Self {
             knowledge_indexer,
