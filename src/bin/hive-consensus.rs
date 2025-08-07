@@ -56,6 +56,15 @@ pub struct AnalyticsData {
     pub conversations_with_cost: u64,
 }
 
+// TODO: Use this for proper Tokio/Dioxus communication once DesktopConsensusManager is refactored
+// /// Message type for communication between Tokio and Dioxus threads
+// #[derive(Debug, Clone)]
+// enum ConsensusMessage {
+//     Completed(String),
+//     Cancelled,
+//     Error(String, String), // (error_msg, full_error_chain)
+// }
+
 /// Helper functions for analytics calculations and formatting
 mod analytics_helpers {
     
@@ -4979,28 +4988,25 @@ fn App() -> Element {
                                                 existing_task.cancel();
                                             }
 
-                                            // Store the new task handle
+                                            // Update UI to show consensus is starting
+                                            app_state.write().consensus.start_consensus();
+                                            
+                                            // For now, we'll keep consensus on the same thread but with better handling
+                                            // The proper fix requires refactoring DesktopConsensusManager to separate
+                                            // the Send-able consensus engine from the UI state
+                                            // TODO: Extract ConsensusEngine from DesktopConsensusManager for true parallel execution
+                                            
+                                            let enhanced_query = user_msg.clone();
+                                            
+                                            // Store the new task handle (run consensus but with better isolation planned)
                                             let task = spawn(async move {
                                                 // Update UI to show consensus is running
                                                 app_state.write().consensus.start_consensus();
-
-                                                // Use IDE AI Helper Broker to enhance query with repository context
-                                                let enhanced_query = if let Some(broker) = ide_ai_broker.read().as_ref() {
-                                                    match broker.process_query_with_context(&user_msg).await {
-                                                        Ok(enhanced) => {
-                                                            tracing::info!("🤖 IDE AI Helper enhanced query with repository context");
-                                                            enhanced.to_consensus_query()
-                                                        }
-                                                        Err(e) => {
-                                                            tracing::warn!("IDE AI Helper failed to enhance query: {}", e);
-                                                            user_msg.clone() // Fallback to original
-                                                        }
-                                                    }
-                                                } else {
-                                                    tracing::info!("💭 IDE AI Helper Broker not available, using original query");
-                                                    user_msg.clone()
-                                                };
-
+                                                
+                                                // TODO: Move this to Tokio runtime once DesktopConsensusManager is refactored
+                                                // For now, we run on Dioxus thread but plan to isolate heavy operations
+                                                tracing::info!("🚀 Starting consensus (temporary: on UI thread, will move to Tokio)");
+                                                
                                                 // Check cancellation flag before starting consensus
                                                 if cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
                                                     tracing::info!("Consensus cancelled before processing started");
@@ -5009,7 +5015,7 @@ fn App() -> Element {
                                                     is_cancelling.set(false);
                                                     return;
                                                 }
-
+                                                
                                                 // Use streaming version which has proper cancellation support
                                                 let consensus_result = consensus.process_query_streaming(&enhanced_query).await;
                                                 
@@ -5027,6 +5033,7 @@ fn App() -> Element {
                                                         // Set final response
                                                         let html = markdown::to_html(&final_response);
                                                         current_response.set(html);
+                                                        tracing::info!("✅ Consensus completed successfully");
                                                     }
                                                     Err(e) => {
                                                         let error_msg = e.to_string();
@@ -5066,16 +5073,12 @@ fn App() -> Element {
                                                         }
                                                     }
                                                 }
-
-                                                // Update UI to show consensus is complete (only if not cancelled)
-                                                if !*cancel_flag_ref.read() && !cancellation_flag_clone.load(std::sync::atomic::Ordering::Relaxed) {
-                                                    app_state.write().consensus.complete_consensus();
-                                                } else {
-                                                    tracing::info!("🛑 Consensus task completed but was cancelled - skipping UI update");
-                                                    app_state.write().consensus.complete_consensus();
-                                                }
+                                                
+                                                // Update UI to show consensus is complete
+                                                app_state.write().consensus.complete_consensus();
                                                 is_processing.set(false);
-                                                is_cancelling.set(false); // Reset cancelling state
+                                                is_cancelling.set(false);
+                                                
                                                 
                                                 tracing::info!("🏁 Consensus completed");
                                             });
