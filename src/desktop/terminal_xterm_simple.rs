@@ -107,6 +107,37 @@ pub fn TerminalXterm(
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     init_xterm(&div_id, &tid).await;
                     
+                    // CRITICAL FIX: Force immediate resize after xterm initialization
+                    // This prevents the terminal text from being smashed to the left
+                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                    let resize_script = format!(r#"
+                        if (window.terminals && window.terminals['{}']) {{
+                            const term = window.terminals['{}'];
+                            const container = document.getElementById('{}');
+                            if (container && window.FitAddon) {{
+                                // Force immediate fit to container
+                                const fitAddon = new window.FitAddon.FitAddon();
+                                term.loadAddon(fitAddon);
+                                fitAddon.fit();
+                                
+                                // Get the actual terminal size after fit
+                                const cols = term.cols || 160;
+                                const rows = term.rows || 50;
+                                
+                                // Send resize to PTY immediately
+                                window.dioxus.postMessage({{
+                                    method: 'resize_pty',
+                                    terminal_id: '{}',
+                                    cols: cols,
+                                    rows: rows
+                                }});
+                                
+                                console.log('🚀 Forced initial resize to ' + cols + 'x' + rows);
+                            }}
+                        }}
+                    "#, tid, tid, div_id, tid);
+                    let _ = dioxus::document::eval(&resize_script).await;
+                    
                     // Create or get notifier for this terminal
                     let notifier = {
                         let mut notifiers = OUTPUT_NOTIFIERS.lock().unwrap();
@@ -738,12 +769,13 @@ fn create_pty(working_directory: Option<String>, is_claude_code: bool, command: 
     // These hardcoded values (80x24) prevent LazyGit from using the full terminal size.
     // Instead, let the PTY size and dynamic resize system handle the dimensions.
     
-    // Create PTY with reasonable initial size - will be resized immediately to match container
+    // Create PTY with much larger initial size to prevent text being smashed to left
+    // This ensures the terminal starts with proper width even before resize events
     let pty_pair = pty_system.openpty(PtySize {
-        rows: 40,      // Larger initial size for better LazyGit display - resized immediately after DOM renders
-        cols: 120,     // Larger initial size for better LazyGit display - resized immediately after DOM renders  
-        pixel_width: 120 * 10,
-        pixel_height: 40 * 20,
+        rows: 50,      // Good default height
+        cols: 160,     // Wide default to prevent column-like display
+        pixel_width: 160 * 10,
+        pixel_height: 50 * 20,
     })?;
     
     let _child = pty_pair.slave.spawn_command(cmd)?;
