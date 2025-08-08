@@ -27,13 +27,37 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             greet,
             
-            // Bridge commands - thin wrappers to existing functionality
+            // Core consensus commands
             bridge::run_consensus,
             bridge::run_consensus_streaming,
-            bridge::get_profiles,
             bridge::get_analytics_data,
-            bridge::get_api_key_status,
-            bridge::save_api_key,
+            
+            // Profile management commands
+            bridge::profiles::get_available_profiles,
+            bridge::profiles::set_active_profile,
+            bridge::profiles::get_profile_config,
+            bridge::profiles::get_custom_profiles,
+            bridge::profiles::create_custom_profile,
+            bridge::profiles::delete_custom_profile,
+            
+            // Settings and API key commands
+            bridge::settings::get_settings,
+            bridge::settings::save_settings,
+            bridge::settings::get_api_keys_status,
+            bridge::settings::save_api_key_secure,
+            bridge::settings::validate_api_key,
+            bridge::settings::remove_api_key,
+            bridge::settings::get_api_usage,
+            
+            // Git integration commands
+            bridge::git::create_lazygit_terminal,
+            bridge::git::get_git_status,
+            bridge::git::get_current_branch,
+            bridge::git::get_branches,
+            bridge::git::switch_branch,
+            bridge::git::create_branch,
+            bridge::git::stage_files,
+            bridge::git::commit_changes,
             
             // Filesystem commands (keep existing)
             commands::filesystem::read_directory,

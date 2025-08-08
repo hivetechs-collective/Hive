@@ -1,6 +1,14 @@
 // Bridge module - Thin wrappers connecting Tauri to existing Hive functionality
 // NO business logic here - just calls to existing code
 
+// Include sub-modules from bridge directory
+#[path = "bridge/profiles.rs"]
+pub mod profiles;
+#[path = "bridge/settings.rs"]
+pub mod settings;
+#[path = "bridge/git.rs"]
+pub mod git;
+
 use tauri::{State, Window, Emitter};
 use serde::{Deserialize, Serialize};
 
@@ -29,11 +37,11 @@ use once_cell::sync::Lazy;
 type Result<T> = std::result::Result<T, String>;
 
 // Terminal management
-static TERMINALS: Lazy<Arc<Mutex<HashMap<String, TerminalInstance>>>> = 
+pub static TERMINALS: Lazy<Arc<Mutex<HashMap<String, TerminalInstance>>>> = 
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
-struct TerminalInstance {
-    pty: Arc<PtyProcess>,
+pub struct TerminalInstance {
+    pub pty: Arc<PtyProcess>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
