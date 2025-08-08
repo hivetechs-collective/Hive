@@ -10,6 +10,7 @@ let terminalVisible = true;
 window.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
   loadFileExplorer();
+  loadAllProfiles(); // Load ALL 10 presets + custom profiles
   logToTerminal("🐝 HiveTechs Consensus initialized");
   
   // Setup keyboard shortcuts
@@ -428,24 +429,115 @@ function escapeHtml(text) {
   return text.replace(/[&<>"']/g, m => map[m]);
 }
 
-// Phase 1: Profile Management Functions
-async function changeProfile(profileId) {
+// Phase 1: Profile Management Functions - REAL system with 10 presets + custom
+async function loadAllProfiles() {
   try {
-    await invoke("set_active_profile", { profileName: profileId });
+    // Get ALL profiles from backend (10 presets + unlimited custom)
+    const profiles = await invoke('get_available_profiles');
+    
+    const selector = document.getElementById('profileSelector');
+    selector.innerHTML = '';
+    
+    // Group profiles by category
+    const presetProfiles = profiles.filter(p => !p.is_custom);
+    const customProfiles = profiles.filter(p => p.is_custom);
+    
+    // Add the 10 preset profiles with proper icons
+    const profileIcons = {
+      'lightning-fast': '⚡',
+      'precision-architect': '🏗️',
+      'budget-optimizer': '💰',
+      'research-specialist': '🔬',
+      'debug-specialist': '🐛',
+      'balanced-generalist': '⚖️',
+      'enterprise-architect': '🏢',
+      'creative-innovator': '💡',
+      'teaching-assistant': '📚',
+      'security-auditor': '🔒'
+    };
+    
+    // Add preset profiles (all 10)
+    if (presetProfiles.length > 0) {
+      const presetGroup = document.createElement('optgroup');
+      presetGroup.label = 'Preset Profiles';
+      
+      for (const profile of presetProfiles) {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = `${profileIcons[profile.id] || '🔧'} ${profile.name}`;
+        option.title = profile.description;
+        if (profile.is_active) {
+          option.selected = true;
+        }
+        presetGroup.appendChild(option);
+      }
+      selector.appendChild(presetGroup);
+    }
+    
+    // Add custom profiles (unlimited)
+    if (customProfiles.length > 0) {
+      const customGroup = document.createElement('optgroup');
+      customGroup.label = 'Custom Profiles';
+      
+      for (const profile of customProfiles) {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = `⭐ ${profile.name}`;
+        option.title = profile.description;
+        if (profile.is_active) {
+          option.selected = true;
+        }
+        customGroup.appendChild(option);
+      }
+      selector.appendChild(customGroup);
+    }
+    
+    // Add option to create new custom profile
+    const createOption = document.createElement('option');
+    createOption.value = 'create_new';
+    createOption.textContent = '➕ Create Custom Profile...';
+    createOption.style.fontStyle = 'italic';
+    selector.appendChild(createOption);
+    
+    logToTerminal(`✅ Loaded ${profiles.length} profiles (${presetProfiles.length} presets, ${customProfiles.length} custom)`);
+  } catch (error) {
+    console.error('Failed to load profiles:', error);
+    logToTerminal(`❌ Failed to load profiles: ${error}`);
+    
+    // Fallback to basic profiles
+    const selector = document.getElementById('profileSelector');
+    selector.innerHTML = `
+      <option value="balanced-generalist">⚖️ Balanced</option>
+      <option value="lightning-fast">⚡ Speed</option>
+      <option value="precision-architect">🏗️ Quality</option>
+    `;
+  }
+}
+
+async function changeProfile(profileId) {
+  // Handle special case for creating new profile
+  if (profileId === 'create_new') {
+    openCreateProfileDialog();
+    return;
+  }
+  
+  try {
+    await invoke("set_active_profile", { profileId: profileId });
     logToTerminal(`✅ Profile changed to: ${profileId}`);
     
-    // Update UI to reflect profile change
-    const profileName = {
-      'speed': '⚡ Speed',
-      'balanced': '⚖️ Balanced', 
-      'quality': '🎨 Quality',
-      'consensus': '🧬 Consensus'
-    }[profileId] || profileId;
-    
-    // Could update consensus behavior here
+    // Get profile config to show details
+    const config = await invoke("get_profile_config", { profileId: profileId });
+    logToTerminal(`   Models: ${config.generator_model} → ${config.refiner_model} → ${config.validator_model} → ${config.curator_model}`);
   } catch (error) {
     logToTerminal(`❌ Error changing profile: ${error}`);
   }
+}
+
+function openCreateProfileDialog() {
+  // TODO: Open dialog to create custom profile
+  alert('Custom profile creation will be available in the Settings dialog');
+  // Reset selector to current active profile
+  loadAllProfiles();
 }
 
 // Phase 1: Settings Dialog Functions
@@ -809,6 +901,7 @@ window.selectProfile = selectProfile;
 window.showAnalyticsView = showAnalyticsView;
 
 // Phase 1 exports
+window.loadAllProfiles = loadAllProfiles;
 window.changeProfile = changeProfile;
 window.openSettings = openSettings;
 window.closeSettings = closeSettings;

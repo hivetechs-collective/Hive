@@ -1073,10 +1073,8 @@
             <!-- Profile Selector -->
             <div class="profile-selector" style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
               <select id="profileSelector" class="profile-dropdown" onchange="changeProfile(this.value)">
-                <option value="speed">⚡ Speed</option>
-                <option value="balanced" selected>⚖️ Balanced</option>
-                <option value="quality">✨ Quality</option>
-                <option value="consensus">🎯 Consensus</option>
+                <!-- Dynamically loaded: ALL 10 presets + unlimited custom profiles -->
+                <option value="loading">Loading profiles...</option>
               </select>
               
               <!-- Settings Button -->
