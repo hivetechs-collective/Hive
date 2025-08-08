@@ -43,11 +43,11 @@ fn main() {
             commands::filesystem::delete_file,
             commands::filesystem::get_file_info,
             
-            // Terminal commands (to be bridged)
-            commands::terminal::create_terminal,
-            commands::terminal::write_to_terminal,
-            commands::terminal::resize_terminal,
-            commands::terminal::close_terminal,
+            // Terminal commands (now bridged to existing PTY implementation)
+            bridge::create_terminal,
+            bridge::write_to_terminal,
+            bridge::resize_terminal,
+            bridge::close_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
