@@ -1150,8 +1150,12 @@ impl DesktopConsensusManager {
         // Clone cancellation token manager to clear it when done
         let token_manager = self.current_cancellation_token.clone();
 
-        // Process consensus with minimal lock holding
-        let result = {
+        // CRITICAL FIX: Spawn consensus processing on a separate Tokio thread
+        // This prevents the UI from freezing during consensus operations
+        let result = tokio::spawn(async move {
+            tracing::info!("🚀 PROJECT QUANTUM LEAP: Running consensus on separate thread - UI stays responsive!");
+            
+            // Process consensus with minimal lock holding
             // Create a new pipeline for this request to avoid lock contention
             // The engine only needs to be locked briefly to get configuration
             let (api_key, profile, database, repo_context, ai_helpers) = {
@@ -1215,7 +1219,7 @@ impl DesktopConsensusManager {
                 r.result
                     .unwrap_or_else(|| "No response received".to_string())
             })
-        };
+        }).await?; // Await the spawned task and handle JoinError
 
         // Process result
         match result {

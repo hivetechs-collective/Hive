@@ -1,0 +1,367 @@
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* VS Code-like color scheme */
+:root {
+  /* Dark theme colors */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d30;
+  --bg-quaternary: #3c3c3c;
+  
+  --border-color: #464647;
+  
+  --text-primary: #cccccc;
+  --text-secondary: #969696;
+  --text-tertiary: #808080;
+  
+  --accent-primary: #007acc;
+  --accent-hover: #1a8ad4;
+  --accent-active: #005a9e;
+  
+  --success: #4caf50;
+  --warning: #ff9800;
+  --error: #f44336;
+  --info: #2196f3;
+  
+  /* Activity bar */
+  --activity-bar-bg: #333333;
+  --activity-bar-fg: #cccccc;
+  --activity-bar-active: #ffffff;
+  
+  /* Status bar */
+  --status-bar-bg: #007acc;
+  --status-bar-fg: #ffffff;
+  
+  /* Terminal colors */
+  --terminal-bg: #1e1e1e;
+  --terminal-fg: #cccccc;
+  
+  /* Editor colors */
+  --editor-bg: #1e1e1e;
+  --editor-fg: #d4d4d4;
+  --editor-line-number: #858585;
+  --editor-selection: #264f78;
+  
+  /* Scrollbar */
+  --scrollbar-bg: transparent;
+  --scrollbar-thumb: #424242;
+  --scrollbar-thumb-hover: #4a4a4a;
+}
+
+/* Ant Design overrides for VS Code theme */
+.ant-layout {
+  background: var(--bg-primary) !important;
+}
+
+.ant-layout-sider {
+  background: var(--bg-secondary) !important;
+  border-right: 1px solid var(--border-color) !important;
+}
+
+.ant-layout-header {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 0 !important;
+  height: 35px !important;
+  line-height: 35px !important;
+}
+
+.ant-layout-footer {
+  background: var(--status-bar-bg) !important;
+  color: var(--status-bar-fg) !important;
+  padding: 0 10px !important;
+  height: 22px !important;
+  line-height: 22px !important;
+  font-size: 12px !important;
+}
+
+.ant-layout-content {
+  background: var(--bg-primary) !important;
+}
+
+/* Tabs styling */
+.ant-tabs {
+  color: var(--text-primary) !important;
+}
+
+.ant-tabs-tab {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-bottom: none !important;
+  color: var(--text-secondary) !important;
+}
+
+.ant-tabs-tab-active {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-tabs-nav {
+  background: var(--bg-secondary) !important;
+  margin: 0 !important;
+}
+
+.ant-tabs-content-holder {
+  background: var(--bg-primary) !important;
+}
+
+/* Tree styling for file explorer */
+.ant-tree {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  font-size: 13px !important;
+}
+
+.ant-tree-node-content-wrapper {
+  color: var(--text-primary) !important;
+}
+
+.ant-tree-node-content-wrapper:hover {
+  background: var(--bg-tertiary) !important;
+}
+
+.ant-tree-node-selected {
+  background: var(--bg-quaternary) !important;
+}
+
+/* Button styling */
+.ant-btn {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-btn:hover {
+  background: var(--bg-quaternary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+.ant-btn-primary {
+  background: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+}
+
+.ant-btn-primary:hover {
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+}
+
+/* Input styling */
+.ant-input,
+.ant-input-affix-wrapper {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-input:focus,
+.ant-input-affix-wrapper:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper-focused {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2) !important;
+}
+
+/* Card styling */
+.ant-card {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-card-head {
+  background: var(--bg-tertiary) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Modal styling */
+.ant-modal-content {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-modal-header {
+  background: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.ant-modal-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-modal-close {
+  color: var(--text-secondary) !important;
+}
+
+/* Progress bar styling */
+.ant-progress-text {
+  color: var(--text-primary) !important;
+}
+
+/* Custom classes */
+.activity-bar {
+  width: 48px;
+  background: var(--activity-bar-bg);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+}
+
+.activity-bar-item {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--activity-bar-fg);
+  cursor: pointer;
+  position: relative;
+}
+
+.activity-bar-item:hover {
+  color: var(--activity-bar-active);
+}
+
+.activity-bar-item.active {
+  color: var(--activity-bar-active);
+}
+
+.activity-bar-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--activity-bar-active);
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.status-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+}
+
+.resizable-panels {
+  display: flex;
+  height: 100%;
+  width: 100%;
+}
+
+.resizable-panel {
+  position: relative;
+  overflow: hidden;
+}
+
+.resize-handle {
+  position: absolute;
+  background: var(--border-color);
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.resize-handle:hover {
+  background: var(--accent-primary);
+}
+
+.resize-handle-vertical {
+  width: 1px;
+  height: 100%;
+  cursor: col-resize;
+  right: 0;
+  top: 0;
+}
+
+.resize-handle-horizontal {
+  width: 100%;
+  height: 1px;
+  cursor: row-resize;
+  bottom: 0;
+  left: 0;
+}
+
+/* Terminal styles */
+.terminal-container {
+  background: var(--terminal-bg);
+  color: var(--terminal-fg);
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.terminal-tabs {
+  display: flex;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  height: 35px;
+  align-items: center;
+}
+
+.terminal-tab {
+  padding: 0 15px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  border-right: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.terminal-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.terminal-content {
+  height: calc(100% - 35px);
+  padding: 5px;
+}
+
+/* Monaco Editor container */
+.editor-container {
+  height: 100%;
+  width: 100%;
+}
+
+/* File explorer icons */
+.file-icon {
+  margin-right: 5px;
+}
+
+.file-icon.folder {
+  color: #dcb67a;
+}
+
+.file-icon.file {
+  color: var(--text-secondary);
+}
+
+.file-icon.git-modified {
+  color: var(--warning);
+}
+
+.file-icon.git-added {
+  color: var(--success);
+}
+
+.file-icon.git-deleted {
+  color: var(--error);
+}
