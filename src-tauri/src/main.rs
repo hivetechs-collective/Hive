@@ -5,7 +5,6 @@ mod commands;
 mod state;
 
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -13,8 +12,13 @@ fn greet(name: &str) -> String {
 }
 
 fn main() {
-    // Initialize app state
-    let app_state = Arc::new(Mutex::new(state::AppState::new()));
+    // Initialize tracing
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
+    
+    // Initialize app state with database and consensus engine support
+    let app_state = Arc::new(state::AppState::new());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -29,6 +33,8 @@ fn main() {
             commands::consensus::get_active_profile,
             commands::consensus::set_active_profile,
             commands::consensus::get_profiles,
+            commands::consensus::save_profile,
+            commands::consensus::delete_profile,
             // Filesystem commands
             commands::filesystem::read_directory,
             commands::filesystem::read_file,
@@ -40,11 +46,19 @@ fn main() {
             commands::analytics::get_analytics_data,
             commands::analytics::get_cost_breakdown,
             commands::analytics::export_analytics,
+            commands::analytics::get_conversation_history,
+            commands::analytics::clear_conversation_history,
+            commands::analytics::get_model_usage_stats,
             // Settings commands
             commands::settings::get_settings,
             commands::settings::update_settings,
+            commands::settings::save_settings,
             commands::settings::get_api_key_status,
+            commands::settings::get_api_keys,
             commands::settings::set_api_key,
+            commands::settings::save_api_key,
+            commands::settings::clear_api_key,
+            commands::settings::validate_api_key,
             // Terminal commands
             commands::terminal::create_terminal,
             commands::terminal::write_to_terminal,

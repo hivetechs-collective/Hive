@@ -64,7 +64,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Additional utilities
 once_cell = "1.19"
 parking_lot = "0.12"
-uuid = { version = "1.6", features = ["v4"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+rusqlite = { version = "0.30", features = ["bundled"] }
+dirs = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
 
 [features]
 default = ["custom-protocol"]
