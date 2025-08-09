@@ -92,13 +92,12 @@ pub async fn create_lazygit_terminal(path: String, window: Window) -> Result<Ter
         }
     });
     
-    // Store terminal instance
-    let mut terminals = crate::bridge::TERMINALS.lock().await;
-    terminals.insert(id.clone(), crate::bridge::TerminalInstance { pty });
+    // TODO: Store terminal instance when reconnected to real PTY
+    // let mut terminals = crate::bridge::TERMINALS.lock().await;
+    // terminals.insert(id.clone(), pty);
     
     Ok(TerminalInfo {
         id,
-        title: format!("LazyGit - {}", git_root),
         rows: 40,
         cols: 120,
     })

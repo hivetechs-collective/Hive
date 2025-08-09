@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Input, Button, Progress, Space, Typography, Spin, message } from 'antd';
+import { Card, Input, Button, Progress, Space, Typography, Spin, message, Select } from 'antd';
 import { SendOutlined, StopOutlined } from '@ant-design/icons';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useConsensusStore } from '../stores/consensusStore';
+import { ProfileSelector } from './ProfileSelector';
 
 const { TextArea } = Input;
 const { Title, Text } = Typography;
@@ -28,8 +29,19 @@ export const ConsensusPanel: React.FC = () => {
   const [streamingContent, setStreamingContent] = useState<string>('');
   const [result, setResult] = useState<string>('');
   const resultRef = useRef<HTMLDivElement>(null);
+  
+  // Get profile state from store
+  const { profiles, activeProfile, loadProfiles, setActiveProfile } = useConsensusStore();
 
   const stages = ['Generator', 'Refiner', 'Validator', 'Curator'];
+
+  useEffect(() => {
+    // Load profiles on mount
+    loadProfiles().catch(err => {
+      console.error('Failed to load profiles:', err);
+      message.error('Failed to load consensus profiles');
+    });
+  }, []);
 
   useEffect(() => {
     // Listen for consensus progress events
@@ -87,6 +99,25 @@ export const ConsensusPanel: React.FC = () => {
     }
   };
 
+  const testDatabase = async () => {
+    try {
+      const result = await invoke<string>('test_database');
+      message.success(result);
+    } catch (error) {
+      message.error(`Database test failed: ${error}`);
+    }
+  };
+
+  const testProfiles = async () => {
+    try {
+      const profiles = await invoke<any[]>('get_profiles');
+      message.success(`Loaded ${profiles.length} profiles successfully!`);
+      console.log('Profiles:', profiles);
+    } catch (error) {
+      message.error(`Profile test failed: ${error}`);
+    }
+  };
+
   const handleCancel = async () => {
     try {
       await invoke('cancel_consensus');
@@ -103,11 +134,17 @@ export const ConsensusPanel: React.FC = () => {
 
   return (
     <Card 
-      title="Consensus Engine" 
+      title={
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Consensus Engine</span>
+          <ProfileSelector />
+        </div>
+      }
       style={{ margin: 16, height: 'calc(100% - 32px)' }}
       styles={{ body: { height: 'calc(100% - 60px)', display: 'flex', flexDirection: 'column' } }}
     >
       <Space direction="vertical" style={{ width: '100%', flex: 1 }} size="large">
+        
         {/* Query Input */}
         <div>
           <TextArea
@@ -137,22 +174,44 @@ export const ConsensusPanel: React.FC = () => {
                 Cancel
               </Button>
             )}
+            <Button
+              onClick={testDatabase}
+            >
+              Test Database
+            </Button>
+            <Button
+              onClick={testProfiles}
+            >
+              Test Profiles
+            </Button>
           </Space>
         </div>
 
         {/* Stage Progress */}
         {loading && (
-          <Card size="small" title="Progress">
+          <Card size="small" title="Consensus Pipeline Progress">
             <Space direction="vertical" style={{ width: '100%' }}>
-              {stages.map(stage => {
+              {stages.map((stage, index) => {
                 const progress = stageProgress[stage];
                 const isActive = currentStage === stage;
                 const isComplete = progress?.progress === 100;
                 
+                // Get the model for this stage from active profile
+                const modelKey = `${stage.toLowerCase()}_model` as keyof typeof activeProfile;
+                const modelName = activeProfile ? (activeProfile[modelKey] as string) : 'Selecting model...';
+                const shortModelName = modelName ? (modelName.split('/').pop() || modelName) : 'Selecting model...';
+                
                 return (
                   <div key={stage}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <Text strong={isActive}>{stage}</Text>
+                      <Space>
+                        <Text strong={isActive}>
+                          {index + 1}. {stage}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          [{shortModelName}]
+                        </Text>
+                      </Space>
                       <Space>
                         {progress && (
                           <>

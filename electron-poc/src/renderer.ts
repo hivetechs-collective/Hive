@@ -1,49 +1,14 @@
 /**
- * Hive Consensus - VS Code-like Electron Interface
- * Enhanced UI matching the Dioxus GUI design
+ * Hive Consensus - Exact Dioxus GUI Recreation
+ * Layout: Left Sidebar | LazyGit Panel | Center (with bottom Terminal) | Right Consensus Chat
  */
 
 import './index.css';
+import hiveLogo from './Hive-Logo-small.jpg';
 
-// Activity Bar Items (matching Dioxus structure)
-interface ActivityBarItem {
-  id: string;
-  title: string;
-  icon: string;
-  badge?: { value: string; isNumber: boolean };
-  enabled: boolean;
-}
-
-const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
-  {
-    id: 'explorer',
-    title: 'Explorer (Ctrl+Shift+E)', 
-    icon: '☰',
-    enabled: true
-  },
-  {
-    id: 'consensus',
-    title: 'Consensus Engine (Ctrl+Shift+C)',
-    icon: '◈', 
-    enabled: true
-  },
-  {
-    id: 'git',
-    title: 'Source Control (Ctrl+Shift+G)',
-    icon: '⎇',
-    enabled: true
-  },
-  {
-    id: 'terminal',
-    title: 'Terminal (Ctrl+`)',
-    icon: '▣',
-    enabled: true
-  }
-];
-
-// Create VS Code-like interface
+// Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
-<div class="vscode-workbench">
+<div class="hive-consensus-gui">
   <!-- Title Bar -->
   <div class="title-bar">
     <div class="title-bar-left">
@@ -55,180 +20,195 @@ document.body.innerHTML = `
     </div>
     <div class="title-bar-center">
       <div class="title-logo">
-        <svg width="24" height="24" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect width="64" height="64" rx="8" fill="#2A2A2A"/>
-          <g transform="translate(32, 32)" stroke="#FFC107" stroke-width="1.2" fill="none">
-            <line x1="-3" y1="-18" x2="-6" y2="-22"/>
-            <line x1="3" y1="-18" x2="6" y2="-22"/>
-            <path d="M -8 -18 L -8 -14 L -4 -12 L 0 -12 L 4 -12 L 8 -14 L 8 -18 L 4 -20 L 0 -20 L -4 -20 Z"/>
-            <line x1="-4" y1="-20" x2="-4" y2="-12"/>
-            <line x1="4" y1="-20" x2="4" y2="-12"/>
-            <g id="left-wing">
-              <path d="M -10 -10 L -22 -14 L -26 -10 L -26 -2 L -22 2 L -14 2 L -10 -2 Z"/>
-              <line x1="-14" y1="-10" x2="-18" y2="-6"/>
-              <line x1="-18" y1="-10" x2="-22" y2="-6"/>
-              <line x1="-14" y1="-6" x2="-18" y2="-2"/>
-              <line x1="-18" y1="-6" x2="-22" y2="-2"/>
-            </g>
-            <g id="right-wing">
-              <path d="M 10 -10 L 22 -14 L 26 -10 L 26 -2 L 22 2 L 14 2 L 10 -2 Z"/>
-              <line x1="14" y1="-10" x2="18" y2="-6"/>
-              <line x1="18" y1="-10" x2="22" y2="-6"/>
-              <line x1="14" y1="-6" x2="18" y2="-2"/>
-              <line x1="18" y1="-6" x2="22" y2="-2"/>
-            </g>
-            <path d="M -8 -12 L -10 -6 L -10 -2 L -8 2 L -4 4 L 0 4 L 4 4 L 8 2 L 10 -2 L 10 -6 L 8 -12"/>
-            <line x1="-8" y1="-8" x2="8" y2="-8"/>
-            <line x1="-8" y1="-4" x2="8" y2="-4"/>
-            <line x1="-8" y1="0" x2="8" y2="0"/>
-            <path d="M -8 2 L -10 8 L -8 14 L -6 18 L -2 20 L 0 20 L 2 20 L 6 18 L 8 14 L 10 8 L 8 2"/>
-            <line x1="-8" y1="6" x2="8" y2="6"/>
-            <line x1="-8" y1="10" x2="8" y2="10"/>
-            <line x1="-6" y1="14" x2="6" y2="14"/>
-            <path d="M -2 20 L 0 24 L 2 20"/>
-          </g>
-        </svg>
+        <img src="${hiveLogo}" alt="HiveTechs Logo" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px;" />
       </div>
       <span class="title-text">Hive Consensus - Day 0 Validation</span>
     </div>
     <div class="title-bar-right"></div>
   </div>
 
-  <!-- Main Content Area -->
-  <div class="main-container">
-    <!-- Activity Bar -->
-    <div class="activity-bar">
-      <div class="activity-bar-top">
-        ${ACTIVITY_BAR_ITEMS.map(item => `
-          <div class="activity-bar-item ${item.id === 'consensus' ? 'active' : ''}" 
-               data-id="${item.id}" 
-               title="${item.title}">
-            <div class="activity-bar-icon">${item.icon}</div>
-            ${item.badge ? `<div class="activity-badge">${item.badge.value}</div>` : ''}
-          </div>
-        `).join('')}
-      </div>
-      <div class="activity-bar-bottom">
-        <div class="activity-bar-item" data-id="settings" title="Settings">
-          <div class="activity-bar-icon">⚙️</div>
+  <!-- Main Content Area - Exact Dioxus Layout -->
+  <div class="main-content">
+    <!-- Left Sidebar with Logo and Control Buttons -->
+    <div class="sidebar" id="left-sidebar">
+      <!-- Logo Section at Top -->
+      <div class="logo-section">
+        <div class="gradient-line"></div>
+        <div class="logo-container">
+          <img src="${hiveLogo}" alt="HiveTechs Logo" 
+               style="width: 64px; height: 64px; object-fit: contain; border-radius: 8px;" 
+               class="hive-logo" />
+          <div class="logo-version">2.0.0</div>
         </div>
+      </div>
+
+      <!-- Git Panel -->
+      <div class="git-panel">
+        <div class="panel-header">SOURCE CONTROL</div>
+        <div class="git-info">
+          <div class="branch-info">
+            <span class="branch-icon">🔀</span>
+            <span class="branch-name">main</span>
+          </div>
+        </div>
+        <div class="git-buttons">
+          <button class="git-btn" title="Pull">↓</button>
+          <button class="git-btn" title="Push">↑</button>
+          <button class="git-btn" title="Sync">🔄</button>
+        </div>
+      </div>
+
+      <!-- Control Buttons Panel -->
+      <div class="control-panel">
+        <button class="control-btn" id="analytics-btn" data-panel="analytics">
+          <span class="control-icon">📊</span>
+          <span class="control-label">Analytics</span>
+        </button>
+        <button class="control-btn" id="settings-btn" data-panel="settings">
+          <span class="control-icon">⚙️</span>
+          <span class="control-label">Settings</span>
+        </button>
+        <button class="control-btn" id="memory-btn" data-panel="memory">
+          <span class="control-icon">🧠</span>
+          <span class="control-label">Memory</span>
+        </button>
       </div>
     </div>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <div class="sidebar-title" id="sidebar-title">CONSENSUS ENGINE</div>
-      </div>
-      <div class="sidebar-content" id="sidebar-content">
-        <!-- Consensus Panel -->
-        <div id="consensus-panel" class="panel">
-          <div class="section">
-            <div class="section-header">4-Stage Pipeline</div>
-            <div class="stage-pipeline">
-              <div class="stage" data-stage="generator">
-                <div class="stage-icon">🎯</div>
-                <div class="stage-name">Generator</div>
-                <div class="stage-status">Ready</div>
-              </div>
-              <div class="stage" data-stage="refiner">
-                <div class="stage-icon">✨</div>
-                <div class="stage-name">Refiner</div>
-                <div class="stage-status">Waiting</div>
-              </div>
-              <div class="stage" data-stage="validator">
-                <div class="stage-icon">✅</div>
-                <div class="stage-name">Validator</div>
-                <div class="stage-status">Waiting</div>
-              </div>
-              <div class="stage" data-stage="curator">
-                <div class="stage-icon">🎨</div>
-                <div class="stage-name">Curator</div>
-                <div class="stage-status">Waiting</div>
-              </div>
-            </div>
+    <!-- LazyGit Panel (Middle Left) -->
+    <div class="lazygit-panel" id="lazygit-panel">
+      <div class="panel-header">LAZYGIT</div>
+      <div class="lazygit-content">
+        <div class="lazygit-placeholder">
+          <div class="lazygit-status">
+            <div class="status-item">📁 /hive</div>
+            <div class="status-item">🌿 main</div>
+            <div class="status-item">✅ Clean</div>
           </div>
-          
-          <div class="section">
-            <div class="section-header">Actions</div>
-            <div class="action-buttons">
-              <button id="test-connection-btn" class="vscode-button primary">
-                <span class="button-icon">🔗</span>
-                Test Connection
-              </button>
-              <button id="run-consensus-btn" class="vscode-button primary">
-                <span class="button-icon">🚀</span>
-                Run Consensus
-              </button>
+          <div class="lazygit-files">
+            <div class="file-status">
+              <span class="file-icon">📄</span>
+              <span class="file-name">electron-poc/src/renderer.ts</span>
+              <span class="file-status-indicator modified">M</span>
             </div>
-          </div>
-
-          <div class="section">
-            <div class="section-header">Status</div>
-            <div id="status-indicator" class="status-indicator ready">
-              <div class="status-dot"></div>
-              <div class="status-text">Ready</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Explorer Panel (hidden by default) -->
-        <div id="explorer-panel" class="panel" style="display: none;">
-          <div class="section">
-            <div class="section-header">
-              EXPLORER
-              <div class="section-actions">
-                <button class="icon-button" title="New File">📄</button>
-                <button class="icon-button" title="New Folder">📁</button>
-                <button class="icon-button" title="Refresh">🔄</button>
-              </div>
-            </div>
-            <div class="file-tree">
-              <div class="file-item folder">
-                <span class="file-icon">📁</span>
-                <span class="file-name">hive-consensus</span>
-              </div>
-              <div class="file-item file" style="margin-left: 16px;">
-                <span class="file-icon">📄</span>
-                <span class="file-name">package.json</span>
-              </div>
-              <div class="file-item file" style="margin-left: 16px;">
-                <span class="file-icon">⚙️</span>
-                <span class="file-name">electron-poc</span>
-              </div>
+            <div class="file-status">
+              <span class="file-icon">📄</span>
+              <span class="file-name">electron-poc/src/index.css</span>
+              <span class="file-status-indicator modified">M</span>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Main Editor Area -->
-    <div class="editor-container">
+    <!-- Center Area (Tabs + Main Content + Terminal) -->
+    <div class="center-area" id="center-area">
       <!-- Tabs -->
       <div class="editor-tabs">
         <div class="tab active">
           <span class="tab-icon">🧠</span>
-          <span class="tab-name">Consensus Test</span>
+          <span class="tab-name">Day 0 Validation</span>
           <span class="tab-close">×</span>
         </div>
       </div>
       
-      <!-- Editor Content -->
-      <div class="editor-content">
-        <div class="results-container">
-          <div class="results-header">
-            <h3>Day 0 Validation Results</h3>
-            <div class="connection-status" id="connection-status">
-              <div class="connection-dot"></div>
-              <span>Backend: Connecting...</span>
+      <!-- Main Content Area (Above Terminal) -->
+      <div class="main-editor-area">
+        <div class="welcome-content">
+          <h2>Hive Consensus - Day 0 Validation</h2>
+          <div class="validation-status">
+            <div class="status-item">
+              <span class="status-icon">✅</span>
+              <span>Electron App Running</span>
+            </div>
+            <div class="status-item">
+              <span class="status-icon">✅</span>
+              <span>Rust Backend Connected</span>
+            </div>
+            <div class="status-item">
+              <span class="status-icon">✅</span>
+              <span>IPC Communication Working</span>
             </div>
           </div>
-          <div class="results-output" id="results-output">
-            <div class="log-entry">
-              <span class="timestamp">[${new Date().toLocaleTimeString()}]</span>
-              <span class="message">Initializing Hive Consensus validation...</span>
+          <div class="test-buttons">
+            <button id="test-connection-btn" class="action-button primary">
+              <span class="button-icon">🔗</span>
+              Test Connection
+            </button>
+            <button id="run-consensus-btn" class="action-button primary">
+              <span class="button-icon">🚀</span>
+              Run Consensus
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Terminal Section (Bottom, toggleable) -->
+      <div class="terminal-section" id="terminal-section">
+        <div class="terminal-header">
+          <span class="terminal-title">TERMINAL</span>
+          <div class="terminal-controls">
+            <button class="terminal-btn" id="toggle-terminal">−</button>
+          </div>
+        </div>
+        <div class="terminal-content" id="terminal-content">
+          <div id="terminal-output">
+            <div class="terminal-line">[${new Date().toLocaleTimeString()}] Hive Consensus initialized</div>
+            <div class="terminal-line">[${new Date().toLocaleTimeString()}] Backend server: http://localhost:8765</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel (Consensus Chat) -->
+    <div class="consensus-chat-panel" id="consensus-chat">
+      <!-- Progress Bars at Top -->
+      <div class="progress-section">
+        <div class="progress-header">
+          <img src="${hiveLogo}" alt="Hive" 
+               style="width: 20px; height: 20px; object-fit: contain; border-radius: 3px;" />
+          <span>Consensus Progress</span>
+        </div>
+        <div class="pipeline-stages">
+          <div class="stage" data-stage="generator">
+            <div class="stage-progress">
+              <div class="stage-label">Generator</div>
+              <div class="progress-bar"><div class="progress-fill"></div></div>
             </div>
           </div>
+          <div class="stage" data-stage="refiner">
+            <div class="stage-progress">
+              <div class="stage-label">Refiner</div>
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+            </div>
+          </div>
+          <div class="stage" data-stage="validator">
+            <div class="stage-progress">
+              <div class="stage-label">Validator</div>
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+            </div>
+          </div>
+          <div class="stage" data-stage="curator">
+            <div class="stage-progress">
+              <div class="stage-label">Curator</div>
+              <div class="progress-bar"><div class="progress-fill"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat Area -->
+      <div class="chat-area">
+        <div class="chat-header">CONSENSUS CHAT</div>
+        <div class="chat-content" id="chat-content">
+          <div class="chat-message system">
+            <div class="message-time">[${new Date().toLocaleTimeString()}]</div>
+            <div class="message-content">Hive Consensus ready for queries</div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <input type="text" id="chat-input" placeholder="Enter your question..." />
+          <button id="send-chat" class="send-btn">Send</button>
         </div>
       </div>
     </div>
@@ -269,117 +249,91 @@ let currentView = 'consensus';
 let isConnected = false;
 let isProcessing = false;
 
-// DOM elements
-const statusIndicator = document.getElementById('status-indicator')!;
-const statusText = statusIndicator.querySelector('.status-text')!;
-const resultsOutput = document.getElementById('results-output')!;
-const connectionStatus = document.getElementById('connection-status')!;
+// DOM elements - Updated for new layout
+const terminalOutput = document.getElementById('terminal-output')!;
 const backendStatus = document.getElementById('backend-status')!;
+const chatContent = document.getElementById('chat-content')!;
 
 // Utility functions
 function addLogEntry(message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') {
   const entry = document.createElement('div');
-  entry.className = `log-entry ${type}`;
-  entry.innerHTML = `
-    <span class="timestamp">[${new Date().toLocaleTimeString()}]</span>
-    <span class="message">${message}</span>
+  entry.className = `terminal-line ${type}`;
+  entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+  terminalOutput.appendChild(entry);
+  terminalOutput.scrollTop = terminalOutput.scrollHeight;
+}
+
+function addChatMessage(message: string, isSystem: boolean = false) {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `chat-message ${isSystem ? 'system' : 'user'}`;
+  messageDiv.innerHTML = `
+    <div class="message-time">[${new Date().toLocaleTimeString()}]</div>
+    <div class="message-content">${message}</div>
   `;
-  resultsOutput.appendChild(entry);
-  resultsOutput.scrollTop = resultsOutput.scrollHeight;
+  chatContent.appendChild(messageDiv);
+  chatContent.scrollTop = chatContent.scrollHeight;
 }
 
 function updateStatus(text: string, className: string) {
-  statusIndicator.className = `status-indicator ${className}`;
-  statusText.textContent = text;
+  // Update status in terminal instead of old status indicator
+  addLogEntry(`Status: ${text}`, className === 'error' ? 'error' : 'info');
 }
 
 function updateConnectionStatus(connected: boolean) {
   isConnected = connected;
-  const dot = connectionStatus.querySelector('.connection-dot')!;
-  const span = connectionStatus.querySelector('span')!;
   
   if (connected) {
-    dot.className = 'connection-dot connected';
-    span.textContent = 'Backend: Connected';
     backendStatus.textContent = 'Connected';
+    addLogEntry('✅ Backend connection established', 'info');
   } else {
-    dot.className = 'connection-dot connecting';
-    span.textContent = 'Backend: Connecting...';
     backendStatus.textContent = 'Connecting...';
+    addLogEntry('🔄 Connecting to backend...', 'info');
   }
 }
 
 function updateStageStatus(stage: string, status: 'ready' | 'running' | 'completed' | 'error') {
   const stageElement = document.querySelector(`[data-stage="${stage}"]`);
   if (stageElement) {
-    const statusElement = stageElement.querySelector('.stage-status')!;
-    stageElement.className = `stage ${status}`;
+    const progressFill = stageElement.querySelector('.progress-fill') as HTMLElement;
+    const stageLabel = stageElement.querySelector('.stage-label')!;
     
     switch (status) {
       case 'ready':
-        statusElement.textContent = 'Ready';
+        progressFill.style.width = '0%';
+        addLogEntry(`🔄 ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage ready`, 'info');
         break;
       case 'running':
-        statusElement.textContent = 'Running...';
+        progressFill.style.width = '50%';
+        addLogEntry(`⚡ ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage running...`, 'info');
         break;
       case 'completed':
-        statusElement.textContent = 'Completed';
+        progressFill.style.width = '100%';
+        addLogEntry(`✅ ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage completed`, 'info');
         break;
       case 'error':
-        statusElement.textContent = 'Error';
+        progressFill.style.width = '0%';
+        progressFill.style.background = '#F44336';
+        addLogEntry(`❌ ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage error`, 'error');
         break;
     }
   }
 }
 
-// Activity bar click handlers
-document.querySelectorAll('.activity-bar-item').forEach(item => {
-  item.addEventListener('click', () => {
-    const id = item.getAttribute('data-id');
-    if (!id) return;
-
-    // Update active state
-    document.querySelectorAll('.activity-bar-item').forEach(i => i.classList.remove('active'));
-    item.classList.add('active');
-
-    // Switch panels
-    switchToView(id);
-  });
+// Control panel button handlers
+document.getElementById('analytics-btn')?.addEventListener('click', () => {
+  addLogEntry('📊 Analytics panel clicked', 'info');
+  addChatMessage('Analytics functionality coming soon...', true);
 });
 
-function switchToView(viewId: string) {
-  currentView = viewId;
-  const sidebarTitle = document.getElementById('sidebar-title')!;
-  const consensusPanel = document.getElementById('consensus-panel')!;
-  const explorerPanel = document.getElementById('explorer-panel')!;
+document.getElementById('settings-btn')?.addEventListener('click', () => {
+  addLogEntry('⚙️ Settings panel clicked', 'info');
+  addChatMessage('Settings panel coming soon...', true);
+});
 
-  // Hide all panels
-  consensusPanel.style.display = 'none';
-  explorerPanel.style.display = 'none';
-
-  switch (viewId) {
-    case 'consensus':
-      sidebarTitle.textContent = 'CONSENSUS ENGINE';
-      consensusPanel.style.display = 'block';
-      break;
-    case 'explorer':
-      sidebarTitle.textContent = 'EXPLORER';
-      explorerPanel.style.display = 'block';
-      break;
-    case 'git':
-      sidebarTitle.textContent = 'SOURCE CONTROL';
-      addLogEntry('Source control panel coming soon...', 'info');
-      break;
-    case 'terminal':
-      sidebarTitle.textContent = 'TERMINAL';
-      addLogEntry('Terminal panel coming soon...', 'info');
-      break;
-    case 'settings':
-      sidebarTitle.textContent = 'SETTINGS';
-      addLogEntry('Settings panel coming soon...', 'info');
-      break;
-  }
-}
+document.getElementById('memory-btn')?.addEventListener('click', () => {
+  addLogEntry('🧠 Memory panel clicked', 'info');
+  addChatMessage('Memory management coming soon...', true);
+});
 
 // Button handlers (using IPC like before)
 document.getElementById('test-connection-btn')?.addEventListener('click', async () => {
@@ -431,6 +385,9 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
     updateStageStatus('curator', 'running');
   }, 1500);
   
+  // Add query to chat
+  addChatMessage("What is the capital of France?", false);
+  
   try {
     const result = await (window as any).backendAPI.runConsensus("What is the capital of France?");
     
@@ -440,6 +397,9 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
       addLogEntry(`🎯 Consensus completed in ${result.duration_ms}ms`, 'success');
       addLogEntry(`📝 Model: ${result.model_used}`, 'info');
       addLogEntry(`💬 Result: ${result.result.substring(0, 200)}${result.result.length > 200 ? '...' : ''}`, 'success');
+      
+      // Also show result in chat
+      addChatMessage(result.result, true);
     }, 2000);
     
   } catch (error) {
@@ -453,6 +413,70 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
     setTimeout(() => {
       isProcessing = false;
     }, 2500);
+  }
+});
+
+// Chat input handler
+document.getElementById('send-chat')?.addEventListener('click', async () => {
+  const chatInput = document.getElementById('chat-input') as HTMLInputElement;
+  const query = chatInput.value.trim();
+  
+  if (!query || isProcessing) return;
+  
+  chatInput.value = '';
+  addChatMessage(query, false);
+  
+  if (!isConnected) {
+    addChatMessage('Please connect to backend first', true);
+    return;
+  }
+  
+  isProcessing = true;
+  addLogEntry(`🚀 Running consensus for: "${query}"`, 'info');
+  
+  // Animate stages
+  updateStageStatus('generator', 'running');
+  setTimeout(() => {
+    updateStageStatus('generator', 'completed');
+    updateStageStatus('refiner', 'running');
+  }, 500);
+  setTimeout(() => {
+    updateStageStatus('refiner', 'completed');
+    updateStageStatus('validator', 'running');
+  }, 1000);
+  setTimeout(() => {
+    updateStageStatus('validator', 'completed');
+    updateStageStatus('curator', 'running');
+  }, 1500);
+  
+  try {
+    const result = await (window as any).backendAPI.runConsensus(query);
+    
+    setTimeout(() => {
+      updateStageStatus('curator', 'completed');
+      addLogEntry(`✅ Consensus completed for: "${query}"`, 'success');
+      addChatMessage(result.result, true);
+    }, 2000);
+    
+  } catch (error) {
+    updateStageStatus('generator', 'error');
+    updateStageStatus('refiner', 'ready');
+    updateStageStatus('validator', 'ready');
+    updateStageStatus('curator', 'ready');
+    addLogEntry(`❌ Consensus failed: ${error}`, 'error');
+    addChatMessage(`Error: ${error}`, true);
+  } finally {
+    setTimeout(() => {
+      isProcessing = false;
+    }, 2500);
+  }
+});
+
+// Enter key support for chat input
+document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById('send-chat')?.click();
   }
 });
 
@@ -476,7 +500,7 @@ setTimeout(async () => {
   }
 }, 1000);
 
-// Initialize default view
-switchToView('consensus');
+// Initialize the application
 addLogEntry('⚡ Hive Consensus Day 0 Validation started', 'info');
 addLogEntry('🔧 Click buttons above to test the Electron + Rust architecture', 'info');
+addChatMessage('Welcome to Hive Consensus! Try asking me a question.', true);

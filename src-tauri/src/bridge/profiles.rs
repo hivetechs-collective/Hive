@@ -21,6 +21,17 @@ pub struct ProfileInfo {
     pub tags: Vec<String>,
 }
 
+// React frontend expects this structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsensusProfile {
+    pub id: String,
+    pub name: String,
+    pub generator_model: String,
+    pub refiner_model: String,
+    pub validator_model: String,
+    pub curator_model: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileConfig {
     pub generator_model: String,
@@ -42,7 +53,7 @@ pub async fn get_available_profiles() -> Result<Vec<ProfileInfo>> {
     
     // Get current active profile from database
     let db = get_database().await.map_err(|e| e.to_string())?;
-    let conn = db.get_connection().await.map_err(|e| e.to_string())?;
+    let conn = db.get_connection().map_err(|e| e.to_string())?;
     
     let active_profile: Option<String> = conn.query_row(
         "SELECT value FROM settings WHERE key = 'active_profile'",
@@ -127,17 +138,20 @@ pub async fn get_available_profiles() -> Result<Vec<ProfileInfo>> {
 
 /// Set the active profile for consensus
 #[tauri::command]
-pub async fn set_active_profile(profile_id: String) -> Result<()> {
-    tracing::info!("Setting active profile to: {}", profile_id);
+pub async fn set_active_profile(profile_name: String) -> Result<()> {
+    // React frontend sends profileName parameter
+    let id = profile_name;
+    
+    tracing::info!("Setting active profile to: {}", id);
     
     // Store in database for persistence
     let db = get_database().await.map_err(|e| e.to_string())?;
-    let conn = db.get_connection().await.map_err(|e| e.to_string())?;
+    let conn = db.get_connection().map_err(|e| e.to_string())?;
     
     // Update or insert the active profile setting
     conn.execute(
         "INSERT OR REPLACE INTO settings (key, value) VALUES ('active_profile', ?1)",
-        params![profile_id],
+        params![id],
     ).map_err(|e| format!("Failed to save active profile: {}", e))?;
     
     // Update the consensus engine to use this profile
@@ -178,7 +192,7 @@ pub async fn get_profile_config(profile_id: String) -> Result<ProfileConfig> {
     
     // Check if it's a custom profile in database
     let db = get_database().await.map_err(|e| e.to_string())?;
-    let conn = db.get_connection().await.map_err(|e| e.to_string())?;
+    let conn = db.get_connection().map_err(|e| e.to_string())?;
     
     let result: std::result::Result<(String, f64, String, f64, String, f64, String, f64), _> = conn.query_row(
         "SELECT generator_model, generator_temp, refiner_model, refiner_temp, 
@@ -208,10 +222,139 @@ pub async fn get_profile_config(profile_id: String) -> Result<ProfileConfig> {
     }
 }
 
+/// Get all profiles (for React app compatibility - returns ConsensusProfile format)
+#[tauri::command]
+pub async fn get_profiles() -> Result<Vec<ConsensusProfile>> {
+    let profiles = get_available_profiles().await?;
+    let manager = ExpertProfileManager::new();
+    
+    let mut consensus_profiles = Vec::new();
+    
+    for profile in profiles {
+        // Get the model configuration for each profile
+        let (gen_model, ref_model, val_model, cur_model) = if let Some(template) = manager.get_template(&profile.id) {
+            // It's a preset profile - get actual models from template
+            (
+                template.fixed_models.as_ref()
+                    .map(|m| m.generator.clone())
+                    .unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string()),
+                template.fixed_models.as_ref()
+                    .map(|m| m.refiner.clone())
+                    .unwrap_or_else(|| "gpt-4o-2024-08-06".to_string()),
+                template.fixed_models.as_ref()
+                    .map(|m| m.validator.clone())
+                    .unwrap_or_else(|| "gemini-1.5-pro-002".to_string()),
+                template.fixed_models.as_ref()
+                    .map(|m| m.curator.clone())
+                    .unwrap_or_else(|| "deepseek-chat".to_string())
+            )
+        } else if profile.is_custom {
+            // Custom profile - get from database
+            let db = get_database().await.map_err(|e| e.to_string())?;
+            let conn = db.get_connection().map_err(|e| e.to_string())?;
+            
+            conn.query_row(
+                "SELECT generator_model, refiner_model, validator_model, curator_model 
+                 FROM custom_profiles WHERE id = ?1",
+                params![profile.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            ).unwrap_or_else(|_| (
+                "claude-3-5-sonnet-20241022".to_string(),
+                "gpt-4o-2024-08-06".to_string(),
+                "gemini-1.5-pro-002".to_string(),
+                "deepseek-chat".to_string()
+            ))
+        } else {
+            // Default models
+            (
+                "claude-3-5-sonnet-20241022".to_string(),
+                "gpt-4o-2024-08-06".to_string(),
+                "gemini-1.5-pro-002".to_string(),
+                "deepseek-chat".to_string()
+            )
+        };
+        
+        consensus_profiles.push(ConsensusProfile {
+            id: profile.id,
+            name: profile.name,
+            generator_model: gen_model,
+            refiner_model: ref_model,
+            validator_model: val_model,
+            curator_model: cur_model,
+        });
+    }
+    
+    Ok(consensus_profiles)
+}
+
+/// Get the active profile (for React app compatibility - returns ConsensusProfile format)
+#[tauri::command]
+pub async fn get_active_profile() -> Result<ConsensusProfile> {
+    let profiles = get_available_profiles().await?;
+    let manager = ExpertProfileManager::new();
+    
+    // Find the active profile
+    let active = profiles.into_iter()
+        .find(|p| p.is_active)
+        .ok_or_else(|| "No active profile found".to_string())?;
+    
+    // Get the model configuration
+    let (gen_model, ref_model, val_model, cur_model) = if let Some(template) = manager.get_template(&active.id) {
+        // It's a preset profile
+        (
+            template.fixed_models.as_ref()
+                .map(|m| m.generator.clone())
+                .unwrap_or_else(|| "claude-3-5-sonnet-20241022".to_string()),
+            template.fixed_models.as_ref()
+                .map(|m| m.refiner.clone())
+                .unwrap_or_else(|| "gpt-4o-2024-08-06".to_string()),
+            template.fixed_models.as_ref()
+                .map(|m| m.validator.clone())
+                .unwrap_or_else(|| "gemini-1.5-pro-002".to_string()),
+            template.fixed_models.as_ref()
+                .map(|m| m.curator.clone())
+                .unwrap_or_else(|| "deepseek-chat".to_string())
+        )
+    } else if active.is_custom {
+        // Custom profile - get from database
+        let db = get_database().await.map_err(|e| e.to_string())?;
+        let conn = db.get_connection().map_err(|e| e.to_string())?;
+        
+        conn.query_row(
+            "SELECT generator_model, refiner_model, validator_model, curator_model 
+             FROM custom_profiles WHERE id = ?1",
+            params![active.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        ).unwrap_or_else(|_| (
+            "claude-3-5-sonnet-20241022".to_string(),
+            "gpt-4o-2024-08-06".to_string(),
+            "gemini-1.5-pro-002".to_string(),
+            "deepseek-chat".to_string()
+        ))
+    } else {
+        // Default models
+        (
+            "claude-3-5-sonnet-20241022".to_string(),
+            "gpt-4o-2024-08-06".to_string(),
+            "gemini-1.5-pro-002".to_string(),
+            "deepseek-chat".to_string()
+        )
+    };
+    
+    Ok(ConsensusProfile {
+        id: active.id,
+        name: active.name,
+        generator_model: gen_model,
+        refiner_model: ref_model,
+        validator_model: val_model,
+        curator_model: cur_model,
+    })
+}
+
 /// Get all saved custom profiles from database
 #[tauri::command]
 pub async fn get_custom_profiles() -> Result<Vec<ProfileInfo>> {
-    let db = get_database()
+    let _db = get_database()
         .await
         .map_err(|e| format!("Failed to get database: {}", e))?;
     
@@ -228,7 +371,7 @@ pub async fn create_custom_profile(
     config: ProfileConfig,
 ) -> Result<ProfileInfo> {
     let db = get_database().await.map_err(|e| format!("Failed to get database: {}", e))?;
-    let conn = db.get_connection().await.map_err(|e| e.to_string())?;
+    let conn = db.get_connection().map_err(|e| e.to_string())?;
     
     let id = format!("custom_{}", uuid::Uuid::new_v4());
     
@@ -266,7 +409,7 @@ pub async fn delete_custom_profile(profile_id: String) -> Result<()> {
         return Err("Cannot delete built-in profiles".to_string());
     }
     
-    let db = get_database()
+    let _db = get_database()
         .await
         .map_err(|e| format!("Failed to get database: {}", e))?;
     

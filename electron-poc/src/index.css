@@ -1,40 +1,26 @@
-/* VS Code Theme Variables - Matching Dioxus GUI colors */
+/* Hive Consensus GUI - Exact Dioxus Layout Recreation */
 :root {
-  /* Base colors - matching Dioxus theme exactly */
-  --vscode-editor-background: #1e1e1e;
-  --vscode-editor-foreground: #cccccc;
-  --vscode-sideBar-background: #252526;
-  --vscode-activityBar-background: #2d2d30;
-  --vscode-statusBar-background: #007acc;
-  --vscode-titleBar-activeBackground: #3c3c3c;
+  /* Base Dioxus colors */
+  --background-primary: #0E1414;
+  --background-secondary: #181E21;
+  --background-tertiary: #1A1F21;
+  --border-color: #2D3336;
+  --text-primary: #FFFFFF;
+  --text-secondary: #CCCCCC;
+  --text-muted: #9CA3AF;
   
-  /* Panel separators and borders */
-  --vscode-panel-border: #3e3e42;
-  --vscode-widget-shadow: rgba(0,0,0,.36);
-  --vscode-scrollbar-shadow: #000;
-  
-  /* Hive specific colors */
-  --hivetechs-yellow: #FFC107;
-  --hivetechs-green: #4CAF50;
-  --hivetechs-blue: #2196F3;
-  --hivetechs-purple: #9C27B0;
-  --hivetechs-orange: #FF6B35;
-  
-  /* Interactive elements */
-  --vscode-button-background: #0e639c;
-  --vscode-button-hoverBackground: #1177bb;
-  --vscode-button-foreground: #ffffff;
-  --vscode-input-background: #3c3c3c;
-  --vscode-focusBorder: var(--hivetechs-yellow);
+  /* Hive brand colors */
+  --hive-yellow: #FFC107;
+  --hive-blue: #007BFF;
+  --hive-green: #4CAF50;
+  --hive-red: #F44336;
   
   /* Status colors */
-  --success-color: var(--hivetechs-green);
-  --error-color: #f44336;
-  --warning-color: #ff9800;
-  --info-color: var(--hivetechs-blue);
+  --status-modified: #FFC107;
+  --status-added: #4CAF50;
+  --status-deleted: #F44336;
 }
 
-/* Reset and base styles */
 * {
   margin: 0;
   padding: 0;
@@ -43,30 +29,30 @@
 
 body {
   font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-  background-color: var(--vscode-editor-background);
-  color: var(--vscode-editor-foreground);
+  background-color: var(--background-primary);
+  color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
   font-size: 13px;
 }
 
-/* VS Code Workbench Layout */
-.vscode-workbench {
+/* Main Container */
+.hive-consensus-gui {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background-color: var(--vscode-editor-background);
+  background-color: var(--background-primary);
 }
 
 /* Title Bar */
 .title-bar {
   height: 35px;
-  background-color: var(--vscode-titleBar-activeBackground);
+  background-color: var(--background-secondary);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  border-bottom: 1px solid #2d2d30;
+  border-bottom: 1px solid var(--border-color);
   font-size: 12px;
   user-select: none;
 }
@@ -76,7 +62,7 @@ body {
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  color: var(--vscode-editor-foreground);
+  color: var(--text-primary);
 }
 
 .title-logo {
@@ -86,7 +72,7 @@ body {
 }
 
 .title-text {
-  color: var(--hivetechs-yellow);
+  color: var(--hive-yellow);
   font-size: 13px;
 }
 
@@ -106,370 +92,248 @@ body {
 .window-control.minimize { background-color: #ffbd2e; }
 .window-control.maximize { background-color: #28ca42; }
 
-/* Main Container */
-.main-container {
+/* Main Content Layout */
+.main-content {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* Activity Bar */
-.activity-bar {
-  width: 48px;
-  background-color: var(--vscode-activityBar-background);
+/* Left Sidebar */
+.sidebar {
+  width: 280px;
+  background: var(--background-primary);
+  border-right: 1px solid var(--border-color);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 8px 0;
-  border-right: 1px solid var(--vscode-panel-border);
-  box-shadow: 2px 0 8px var(--vscode-widget-shadow);
+  position: relative;
   z-index: 35;
 }
 
-.activity-bar-top {
-  flex: 1;
+/* Logo Section */
+.logo-section {
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.activity-bar-bottom {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border-top: 1px solid #2d2d30;
-  padding-top: 8px;
-}
-
-.activity-bar-item {
+  align-items: center;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--border-color);
   position: relative;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background-color 0.1s ease;
-  border-radius: 4px;
 }
 
-.activity-bar-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+/* Logo glow animation */
+.hive-logo {
+  filter: drop-shadow(0 0 10px rgba(255, 193, 7, 0.5));
+  animation: glow 3s ease-in-out infinite;
 }
 
-.activity-bar-item.active {
-  background-color: rgba(255, 193, 7, 0.15);
-  border-left: 3px solid var(--hivetechs-yellow);
+@keyframes glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(255, 193, 7, 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(255, 193, 7, 0.8));
+  }
 }
 
-.activity-bar-icon {
-  font-size: 24px;
-  line-height: 1;
-}
-
-.activity-badge {
+.gradient-line {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background-color: var(--hivetechs-yellow);
-  color: #000;
-  font-size: 10px;
-  font-weight: bold;
-  border-radius: 10px;
-  min-width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(135deg, var(--hive-yellow) 0%, var(--hive-blue) 100%);
 }
 
-/* Sidebar */
-.sidebar {
-  width: 300px;
-  background-color: var(--vscode-sideBar-background);
-  border-right: 1px solid var(--vscode-panel-border);
-  box-shadow: 2px 0 8px var(--vscode-widget-shadow);
-  display: flex;
-  flex-direction: column;
-  z-index: 25;
+.logo-container {
+  text-align: center;
 }
 
-.sidebar-header {
-  height: 35px;
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--vscode-panel-border);
-  background-color: var(--vscode-sideBar-background);
-  box-shadow: 0 1px 0 var(--vscode-panel-border);
-}
-
-.sidebar-title {
+.logo-version {
+  color: var(--text-muted);
   font-size: 11px;
+  margin-top: 8px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #cccccc;
 }
 
-.sidebar-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 0;
+/* Git Panel */
+.git-panel {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-/* Panel Sections */
-.section {
-  margin-bottom: 1px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.section:last-child {
-  border-bottom: none;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
+.panel-header {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.8px;
-  color: #cccccc;
-  background-color: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  cursor: default;
-  user-select: none;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  background: linear-gradient(to right, var(--hive-yellow), #FFD54F);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-.section-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.icon-button {
-  background: none;
-  border: none;
-  color: #cccccc;
-  cursor: pointer;
-  padding: 2px;
-  font-size: 12px;
-  border-radius: 2px;
-  transition: background-color 0.1s ease;
-}
-
-.icon-button:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-/* 4-Stage Pipeline */
-.stage-pipeline {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background-color: rgba(0, 0, 0, 0.2);
-  margin: 0 8px 8px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.stage {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-  border-left: 3px solid transparent;
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  margin-bottom: 4px;
-}
-
-.stage:last-child {
-  margin-bottom: 0;
-}
-
-.stage.ready {
-  border-left-color: #666;
-}
-
-.stage.running {
-  border-left-color: var(--hivetechs-blue);
-  background-color: rgba(33, 150, 243, 0.1);
-  animation: pulse 1.5s infinite;
-}
-
-.stage.completed {
-  border-left-color: var(--success-color);
-  background-color: rgba(76, 175, 80, 0.1);
-}
-
-.stage.error {
-  border-left-color: var(--error-color);
-  background-color: rgba(244, 67, 54, 0.1);
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.stage-icon {
-  font-size: 16px;
-  width: 24px;
-  text-align: center;
-}
-
-.stage-name {
-  flex: 1;
-  font-weight: 500;
-  font-size: 12px;
-}
-
-.stage-status {
-  font-size: 10px;
-  opacity: 0.8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Action Buttons */
-.action-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  background-color: rgba(0, 0, 0, 0.1);
-  margin: 0 8px 8px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.vscode-button {
+.branch-info {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  background: linear-gradient(135deg, var(--vscode-button-background) 0%, #1177bb 100%);
-  color: var(--vscode-button-foreground);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 12px;
+  padding: 8px;
+  background: var(--background-tertiary);
   border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  width: 100%;
-  justify-content: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-.vscode-button:hover {
-  background: linear-gradient(135deg, var(--vscode-button-hoverBackground) 0%, #0e8dd6 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-}
-
-.vscode-button:active {
-  background: linear-gradient(135deg, #004578 0%, #0056a3 100%);
-  transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.vscode-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.button-icon {
+.branch-icon {
+  color: var(--hive-yellow);
   font-size: 14px;
 }
 
-/* Status Indicator */
-.status-indicator {
+.branch-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.git-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.git-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.git-btn:hover {
+  background: var(--background-tertiary);
+  color: var(--text-primary);
+}
+
+/* Control Panel */
+.control-panel {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 12px 16px;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-primary);
+}
+
+.control-btn:hover {
+  background: var(--background-tertiary);
+  border-color: var(--hive-yellow);
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+}
+
+.control-icon {
+  font-size: 16px;
+}
+
+.control-label {
   font-weight: 500;
-  margin: 0 8px 8px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(4px);
+  font-size: 12px;
 }
 
-.status-indicator.ready {
-  background-color: rgba(76, 175, 80, 0.1);
-  color: var(--success-color);
+/* LazyGit Panel */
+.lazygit-panel {
+  width: 350px;
+  background: #0A0E0F;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
 }
 
-.status-indicator.processing {
-  background-color: rgba(33, 150, 243, 0.1);
-  color: var(--hivetechs-blue);
+.lazygit-content {
+  flex: 1;
+  padding: 16px;
 }
 
-.status-indicator.success {
-  background-color: rgba(76, 175, 80, 0.1);
-  color: var(--success-color);
+.lazygit-status {
+  margin-bottom: 16px;
 }
 
-.status-indicator.error {
-  background-color: rgba(244, 67, 54, 0.1);
-  color: var(--error-color);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: currentColor;
-}
-
-/* File Tree */
-.file-tree {
-  padding: 0 16px;
-}
-
-.file-item {
+.status-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 0;
-  cursor: pointer;
-  border-radius: 3px;
+  padding: 4px 0;
   font-size: 12px;
-  transition: background-color 0.1s ease;
+  color: var(--text-secondary);
 }
 
-.file-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.lazygit-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  transition: background 0.2s ease;
+}
+
+.file-status:hover {
+  background: var(--background-secondary);
 }
 
 .file-icon {
   font-size: 14px;
-  width: 16px;
-  text-align: center;
 }
 
-/* Editor Container */
-.editor-container {
+.file-name {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.file-status-indicator {
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.file-status-indicator.modified {
+  background: var(--status-modified);
+  color: #000;
+}
+
+/* Center Area */
+.center-area {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--vscode-editor-background);
+  background: var(--background-primary);
 }
 
 /* Editor Tabs */
 .editor-tabs {
   height: 35px;
-  background-color: #2d2d30;
-  border-bottom: 1px solid #2d2d30;
+  background: #2d2d30;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   overflow-x: auto;
@@ -481,23 +345,23 @@ body {
   gap: 8px;
   padding: 0 16px;
   height: 100%;
-  background-color: transparent;
-  color: #969696;
+  background: transparent;
+  color: var(--text-muted);
   cursor: pointer;
-  border-right: 1px solid #2d2d30;
+  border-right: 1px solid var(--border-color);
   font-size: 12px;
-  min-width: 120px;
+  min-width: 140px;
   transition: all 0.1s ease;
 }
 
 .tab.active {
-  background-color: var(--vscode-editor-background);
-  color: #cccccc;
+  background: var(--background-primary);
+  color: var(--text-primary);
 }
 
 .tab:hover:not(.active) {
-  background-color: rgba(255, 255, 255, 0.05);
-  color: #cccccc;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
 }
 
 .tab-icon {
@@ -518,110 +382,276 @@ body {
   opacity: 1;
 }
 
-/* Editor Content */
-.editor-content {
+/* Main Editor Area */
+.main-editor-area {
   flex: 1;
-  overflow: hidden;
-  background-color: var(--vscode-editor-background);
+  background: var(--background-primary);
+  overflow: auto;
 }
 
-/* Results Container */
-.results-container {
-  height: 100%;
+.welcome-content {
+  padding: 40px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.welcome-content h2 {
+  color: var(--hive-yellow);
+  font-size: 24px;
+  margin-bottom: 24px;
+}
+
+.validation-status {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
+  padding: 20px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.validation-status .status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.status-icon {
+  font-size: 16px;
+}
+
+.test-buttons {
+  display: flex;
+  gap: 16px;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #0e639c 0%, #1177bb 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.action-button:hover {
+  background: linear-gradient(135deg, #1177bb 0%, #0e8dd6 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.button-icon {
+  font-size: 14px;
+}
+
+/* Terminal Section */
+.terminal-section {
+  height: 200px;
+  background: #1a1a1a;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-header {
+  height: 30px;
+  background: #2d2d30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.terminal-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.terminal-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+}
+
+.terminal-btn:hover {
+  color: var(--text-primary);
+}
+
+.terminal-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.terminal-line {
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+/* Right Panel (Consensus Chat) */
+.consensus-chat-panel {
+  width: 400px;
+  background: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-color);
+}
+
+/* Progress Section */
+.progress-section {
+  background: linear-gradient(135deg, var(--background-primary) 0%, var(--background-secondary) 100%);
+  border-bottom: 2px solid var(--hive-yellow);
   padding: 16px;
 }
 
-.results-header {
+.progress-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #2d2d30;
-}
-
-.results-header h3 {
-  color: var(--hivetechs-yellow);
-  font-size: 16px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
-.connection-status {
+.pipeline-stages {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stage-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stage-label {
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.connection-dot {
-  width: 6px;
+.progress-bar {
   height: 6px;
-  border-radius: 50%;
-  background-color: #666;
-  transition: background-color 0.2s ease;
+  background: var(--background-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
 }
 
-.connection-dot.connected {
-  background-color: var(--success-color);
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--hive-yellow) 0%, var(--hive-blue) 100%);
+  width: 0%;
+  transition: width 0.3s ease;
 }
 
-.connection-dot.connecting {
-  background-color: var(--warning-color);
-  animation: pulse 1s infinite;
+/* Chat Area */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Results Output */
-.results-output {
+.chat-header {
+  background: var(--background-secondary);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.chat-content {
   flex: 1;
   overflow-y: auto;
-  background-color: #0d1117;
-  border: 1px solid #2d2d30;
-  border-radius: 6px;
-  padding: 12px;
-  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
-  font-size: 11px;
-  line-height: 1.5;
+  padding: 16px;
 }
 
-.log-entry {
+.chat-message {
+  margin-bottom: 16px;
+}
+
+.message-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.message-content {
+  color: var(--text-primary);
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.chat-message.system .message-content {
+  color: var(--hive-yellow);
+}
+
+.chat-input-area {
   display: flex;
   gap: 8px;
-  margin-bottom: 4px;
-  padding: 2px 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--background-secondary);
 }
 
-.log-entry.success {
-  color: var(--success-color);
-}
-
-.log-entry.error {
-  color: var(--error-color);
-}
-
-.log-entry.warning {
-  color: var(--warning-color);
-}
-
-.log-entry.info {
-  color: var(--info-color);
-}
-
-.timestamp {
-  color: #666;
-  min-width: 80px;
-}
-
-.message {
+#chat-input {
   flex: 1;
+  padding: 8px 12px;
+  background: var(--background-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+#chat-input:focus {
+  outline: none;
+  border-color: var(--hive-yellow);
+}
+
+.send-btn {
+  padding: 8px 16px;
+  background: var(--hive-yellow);
+  color: #000;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.send-btn:hover {
+  background: #FFD54F;
+  transform: translateY(-1px);
 }
 
 /* Status Bar */
 .status-bar {
   height: 22px;
-  background-color: var(--vscode-statusBar-background);
+  background: #007acc;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -655,10 +685,25 @@ body {
   font-size: 12px;
 }
 
+/* Responsive */
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 240px;
+  }
+  
+  .lazygit-panel {
+    width: 300px;
+  }
+  
+  .consensus-chat-panel {
+    width: 350px;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -667,8 +712,7 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #424242;
-  border-radius: 5px;
-  border: 2px solid var(--vscode-editor-background);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -676,38 +720,5 @@ body {
 }
 
 ::-webkit-scrollbar-corner {
-  background: var(--vscode-editor-background);
-}
-
-/* Focus styles */
-button:focus,
-.activity-bar-item:focus {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: -1px;
-}
-
-/* Responsive adjustments */
-@media (max-width: 1200px) {
-  .sidebar {
-    width: 250px;
-  }
-}
-
-@media (max-width: 900px) {
-  .sidebar {
-    width: 200px;
-  }
-  
-  .activity-bar {
-    width: 40px;
-  }
-  
-  .activity-bar-item {
-    width: 40px;
-    height: 40px;
-  }
-  
-  .activity-bar-icon {
-    font-size: 20px;
-  }
+  background: var(--background-primary);
 }

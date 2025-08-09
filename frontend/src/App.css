@@ -4,6 +4,67 @@
   width: 100vw;
   display: flex;
   overflow: hidden;
+  background: #1e1e1e;
+  color: #cccccc;
+}
+
+/* Main Layout */
+.main-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #1e1e1e;
+}
+
+/* Activity Bar - VS Code style */
+.activity-bar {
+  width: 48px;
+  background: #333333;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px solid #1a1a1a;
+}
+
+.activity-bar-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+}
+
+.activity-bar-item {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #858585;
+  position: relative;
+}
+
+.activity-bar-item:hover {
+  color: #cccccc;
+}
+
+.activity-bar-item.active {
+  color: #ffffff;
+}
+
+.activity-bar-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #007acc;
 }
 
 .main-layout {

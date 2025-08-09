@@ -8,6 +8,10 @@ interface AppState {
   
   // API Keys
   hasApiKey: boolean;
+  apiKeys: {
+    openrouter: boolean;
+    hive: boolean;
+  };
   checkApiKeys: () => Promise<void>;
   setApiKey: (key: string) => Promise<void>;
   
@@ -41,13 +45,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   // API Keys
   hasApiKey: false,
+  apiKeys: {
+    openrouter: false,
+    hive: false,
+  },
   checkApiKeys: async () => {
     try {
-      const hasKey = await invoke<boolean>('get_api_key_status');
-      set({ hasApiKey: hasKey });
+      const status = await invoke<{
+        openrouter: { configured: boolean };
+        anthropic: { configured: boolean };
+        hive: { configured: boolean };
+      }>('get_api_keys_status');
+      set({ 
+        hasApiKey: status.openrouter.configured,
+        apiKeys: {
+          openrouter: status.openrouter.configured,
+          hive: status.hive.configured,
+        }
+      });
     } catch (error) {
       console.error('Failed to check API keys:', error);
-      set({ hasApiKey: false });
+      set({ 
+        hasApiKey: false,
+        apiKeys: { openrouter: false, hive: false }
+      });
     }
   },
   

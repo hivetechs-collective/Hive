@@ -11,9 +11,9 @@ fn main() {
             let window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
-                tauri::WebviewUrl::External("https://google.com".parse().unwrap())
+                tauri::WebviewUrl::External("http://localhost:5173".parse().unwrap())
             )
-            .title("Test Window")
+            .title("Hive Consensus")
             .inner_size(800.0, 600.0)
             .visible(true)
             .build()

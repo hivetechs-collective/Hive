@@ -1,5 +1,6 @@
 import type { Configuration } from 'webpack';
 import MonacoWebpackPlugin from 'monaco-editor-webpack-plugin';
+import CopyWebpackPlugin from 'copy-webpack-plugin';
 
 import { rules } from './webpack.rules';
 import { plugins } from './webpack.plugins';
@@ -14,6 +15,13 @@ plugins.push(new MonacoWebpackPlugin({
   languages: ['javascript', 'typescript', 'css', 'html', 'json'],
   features: ['!gotoSymbol'],
   globalAPI: true,
+}));
+
+// Add CopyWebpackPlugin to serve static files
+plugins.push(new CopyWebpackPlugin({
+  patterns: [
+    { from: 'public', to: '.', noErrorOnMissing: false }
+  ],
 }));
 
 export const rendererConfig: Configuration = {

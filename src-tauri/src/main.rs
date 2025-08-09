@@ -1,77 +1,74 @@
-// Prevents additional console window on Windows in release
+// SIMPLE WORKING TAURI APP - Start with database, add features incrementally
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod commands;
-mod bridge;
+use tauri::Manager;
 
+// Test command to verify database works
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! Welcome to Hive Consensus.", name)
+async fn test_database() -> Result<String, String> {
+    println!("Testing database connection...");
+    
+    // Initialize and test the REAL database
+    match hive_ai::core::database::get_database().await {
+        Ok(db) => {
+            println!("Database connected!");
+            // Try to get statistics to verify it's working
+            match db.get_statistics().await {
+                Ok(stats) => Ok(format!("Database connected! {} conversations, {} messages", 
+                    stats.conversation_count, stats.message_count)),
+                Err(e) => Ok(format!("Database connected but query failed: {}", e))
+            }
+        },
+        Err(e) => {
+            println!("Database error: {}", e);
+            Err(format!("Database error: {}", e))
+        }
+    }
+}
+
+// Get real profiles from the database
+#[tauri::command]
+async fn get_profiles() -> Result<Vec<serde_json::Value>, String> {
+    println!("Loading profiles...");
+    
+    use hive_ai::consensus::profiles::ExpertProfileManager;
+    
+    let manager = ExpertProfileManager::new();
+    let templates = manager.get_templates();
+    
+    println!("Found {} profiles", templates.len());
+    
+    let profiles: Vec<serde_json::Value> = templates.iter().map(|t| {
+        serde_json::json!({
+            "id": t.id,
+            "name": t.name,
+            "description": t.description,
+            "category": format!("{:?}", t.category),
+        })
+    }).collect();
+    
+    Ok(profiles)
 }
 
 fn main() {
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .init();
+    // Simple logging to console
+    println!("Starting Tauri app...");
     
-    // Initialize the existing database on startup
-    tauri::async_runtime::block_on(async {
-        if let Err(e) = bridge::init_database().await {
-            eprintln!("Failed to initialize database: {}", e);
-        }
-    });
-
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            println!("Setting up Tauri window...");
+            let window = app.get_webview_window("main").unwrap();
+            
+            // Don't auto-open dev tools - let the actual app show
+            // #[cfg(debug_assertions)]
+            // window.open_devtools();
+            
+            println!("Tauri setup complete");
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
-            greet,
-            
-            // Core consensus commands
-            bridge::run_consensus,
-            bridge::run_consensus_streaming,
-            bridge::get_analytics_data,
-            
-            // Profile management commands
-            bridge::profiles::get_available_profiles,
-            bridge::profiles::set_active_profile,
-            bridge::profiles::get_profile_config,
-            bridge::profiles::get_custom_profiles,
-            bridge::profiles::create_custom_profile,
-            bridge::profiles::delete_custom_profile,
-            
-            // Settings and API key commands
-            bridge::settings::get_settings,
-            bridge::settings::save_settings,
-            bridge::settings::get_api_keys_status,
-            bridge::settings::save_api_key_secure,
-            bridge::settings::validate_api_key,
-            bridge::settings::remove_api_key,
-            bridge::settings::get_api_usage,
-            
-            // Git integration commands
-            bridge::git::create_lazygit_terminal,
-            bridge::git::get_git_status,
-            bridge::git::get_current_branch,
-            bridge::git::get_branches,
-            bridge::git::switch_branch,
-            bridge::git::create_branch,
-            bridge::git::stage_files,
-            bridge::git::commit_changes,
-            
-            // Filesystem commands (keep existing)
-            commands::filesystem::read_directory,
-            commands::filesystem::read_file,
-            commands::filesystem::write_file,
-            commands::filesystem::create_directory,
-            commands::filesystem::delete_file,
-            commands::filesystem::get_file_info,
-            
-            // Terminal commands (now bridged to existing PTY implementation)
-            bridge::create_terminal,
-            bridge::write_to_terminal,
-            bridge::resize_terminal,
-            bridge::close_terminal,
+            test_database,
+            get_profiles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

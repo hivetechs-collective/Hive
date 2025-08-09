@@ -14,6 +14,7 @@ import { Terminal } from './components/Terminal';
 import { StatusBar } from './components/StatusBar';
 import { ActivityBar } from './components/ActivityBar';
 import { ResizablePanels } from './components/ResizablePanels';
+import { SettingsDialogEnhanced } from './components/SettingsDialogEnhanced';
 import { useAppStore } from './stores/appStore';
 import { useConsensusStore } from './stores/consensusStore';
 import './App.css';
@@ -23,12 +24,14 @@ const { Content } = Layout;
 function App() {
   const [activeView, setActiveView] = useState('explorer');
   const [activeTab, setActiveTab] = useState('consensus');
+  const [showSettings, setShowSettings] = useState(false);
   const { darkMode, checkApiKeys } = useAppStore();
   
   useEffect(() => {
     // Check API key status on startup
     checkApiKeys().catch(err => {
       message.warning('No API keys configured. Please add your OpenRouter API key in settings.');
+      setShowSettings(true); // Open settings if no API keys
     });
   }, []);
 
@@ -41,9 +44,18 @@ function App() {
       case 'analytics':
         return <div style={{ padding: 20, color: 'var(--text-primary)' }}>Analytics (Coming Soon)</div>;
       case 'settings':
-        return <div style={{ padding: 20, color: 'var(--text-primary)' }}>Settings (Coming Soon)</div>;
+        return <div style={{ padding: 20, color: 'var(--text-primary)' }}>Settings (use the gear icon)</div>;
       default:
         return null;
+    }
+  };
+  
+  // Handle settings button click
+  const handleViewChange = (view: string) => {
+    if (view === 'settings') {
+      setShowSettings(true);
+    } else {
+      setActiveView(view);
     }
   };
 
@@ -90,7 +102,7 @@ function App() {
       }}
     >
       <div className="app-container">
-        <ActivityBar activeView={activeView} onViewChange={setActiveView} />
+        <ActivityBar activeView={activeView} onViewChange={handleViewChange} />
         
         <Layout className="main-layout">
           <ResizablePanels
@@ -137,6 +149,11 @@ function App() {
           
           <StatusBar />
         </Layout>
+        
+        <SettingsDialogEnhanced 
+          visible={showSettings}
+          onClose={() => setShowSettings(false)}
+        />
       </div>
     </ConfigProvider>
   );
