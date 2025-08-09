@@ -813,22 +813,31 @@ export class SettingsModal {
           results.push('✅ Hive key is valid');
           if (result.licenseInfo) {
             results.push(`📊 Tier: ${result.licenseInfo.tier}`);
-            results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
             
-            // Only show usage if D1 provided it
+            // Show usage information based on what D1 provides
             if (result.licenseInfo.remaining !== undefined) {
+              // D1 provided remaining count
               if (result.licenseInfo.remaining === 'unlimited') {
                 results.push(`✅ Unlimited conversations`);
               } else {
                 if (result.licenseInfo.dailyUsed !== undefined) {
-                  results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}/${result.licenseInfo.dailyLimit}`);
+                  // Show both used and remaining
+                  results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}`);
+                  results.push(`✅ Remaining today: ${result.licenseInfo.remaining}`);
+                } else {
+                  // Only show remaining
+                  results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit || '?'}`);
+                  results.push(`✅ Remaining today: ${result.licenseInfo.remaining}`);
                 }
-                results.push(`✅ Remaining today: ${result.licenseInfo.remaining} conversations`);
               }
-            } else {
-              // D1 validation endpoint doesn't provide usage data
-              // Usage is tracked via pre/post conversation endpoints
-              results.push(`ℹ️ Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
+            } else if (result.licenseInfo.dailyUsed !== undefined && result.licenseInfo.dailyLimit !== undefined) {
+              // D1 provided used count and limit
+              const remaining = result.licenseInfo.dailyLimit - result.licenseInfo.dailyUsed;
+              results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}`);
+              results.push(`✅ Remaining today: ${remaining}`);
+            } else if (result.licenseInfo.dailyLimit !== undefined) {
+              // D1 only provided limit (no usage data from validation endpoint)
+              results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
             }
             
             if (result.licenseInfo.email) {
