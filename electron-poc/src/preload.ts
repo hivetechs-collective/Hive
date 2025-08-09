@@ -24,4 +24,6 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   saveProfile: (profile: any) => ipcRenderer.invoke('settings-save-profile', profile),
   saveAllSettings: (settings: any) => ipcRenderer.invoke('settings-save-all', settings),
   resetSettings: () => ipcRenderer.invoke('settings-reset'),
+  loadProfiles: () => ipcRenderer.invoke('settings-load-profiles'),
+  loadModels: () => ipcRenderer.invoke('settings-load-models'),
 });

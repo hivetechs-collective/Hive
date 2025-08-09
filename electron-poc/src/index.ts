@@ -418,6 +418,86 @@ ipcMain.handle('settings-save-all', async (_, settings) => {
   });
 });
 
+ipcMain.handle('settings-load-profiles', async () => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+
+    db.all(
+      'SELECT * FROM consensus_profiles ORDER BY profile_name',
+      [],
+      (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          // Map to expected format
+          const profiles = rows.map((row: any) => ({
+            id: row.id,
+            name: row.profile_name,
+            generator: row.generator_model,
+            refiner: row.refiner_model,
+            validator: row.validator_model,
+            curator: row.curator_model
+          }));
+          resolve(profiles);
+        }
+      }
+    );
+  });
+});
+
+ipcMain.handle('settings-load-models', async () => {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      reject('Database not initialized');
+      return;
+    }
+
+    // First check if openrouter_models table exists
+    db.get(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='openrouter_models'",
+      [],
+      (err, row) => {
+        if (err || !row) {
+          // Table doesn't exist, return empty array
+          resolve([]);
+          return;
+        }
+
+        // Load all active models from database
+        db.all(
+          `SELECT internal_id, openrouter_id, name, provider_name, description,
+                  context_window, pricing_input, pricing_output, is_active
+           FROM openrouter_models
+           WHERE is_active = 1
+           ORDER BY provider_name, name`,
+          [],
+          (err2, rows) => {
+            if (err2) {
+              reject(err2);
+            } else {
+              // Map to format expected by frontend
+              const models = rows.map((row: any) => ({
+                value: row.openrouter_id,
+                label: row.name,
+                provider: row.provider_name,
+                description: row.description,
+                contextWindow: row.context_window,
+                pricingInput: row.pricing_input,
+                pricingOutput: row.pricing_output,
+                internalId: row.internal_id
+              }));
+              resolve(models);
+            }
+          }
+        );
+      }
+    );
+  });
+});
+
 ipcMain.handle('settings-reset', async () => {
   return new Promise((resolve, reject) => {
     if (!db) {

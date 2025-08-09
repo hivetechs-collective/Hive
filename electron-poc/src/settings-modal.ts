@@ -12,8 +12,9 @@ interface ConsensusProfile {
   refiner: string;
   validator: string;
   curator: string;
-  category: 'Speed' | 'Quality' | 'Cost' | 'Research';
+  category: 'Speed' | 'Quality' | 'Cost' | 'Research' | 'Custom';
   isDefault?: boolean;
+  isCustom?: boolean;
 }
 
 // Predefined profiles matching Rust implementation
@@ -124,6 +125,92 @@ const EXPERT_PROFILES: ConsensusProfile[] = [
 export class SettingsModal {
   private selectedProfileId: string | null = null;
   private modalElement: HTMLElement | null = null;
+  private profileCreationModal: HTMLElement | null = null;
+  private availableModels: any[] = [];
+  private customProfiles: ConsensusProfile[] = [];
+
+  private createProfileCreationModal(): string {
+    return `
+      <div class="profile-creation-modal-overlay" id="profile-creation-modal-overlay" style="display: none;">
+        <div class="profile-creation-modal" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 8px; padding: 0; width: 800px; max-height: 80vh; overflow-y: auto;">
+          <div class="profile-creation-header" style="padding: 20px; border-bottom: 1px solid #3e3e42;">
+            <h2 style="margin: 0;">Create New Profile</h2>
+            <button class="close-btn" id="close-profile-creation" style="position: absolute; top: 20px; right: 20px; background: none; border: none; color: #ccc; font-size: 24px; cursor: pointer;">×</button>
+          </div>
+          
+          <div class="profile-tabs" style="display: flex; border-bottom: 1px solid #3e3e42; padding: 0 20px;">
+            <button class="tab-btn active" data-tab="templates" style="padding: 10px 20px; background: none; border: none; color: #fff; cursor: pointer; border-bottom: 2px solid #007acc;">🎯 Expert Templates</button>
+            <button class="tab-btn" data-tab="existing" style="padding: 10px 20px; background: none; border: none; color: #ccc; cursor: pointer; border-bottom: 2px solid transparent;">📋 Existing Profiles</button>
+            <button class="tab-btn" data-tab="custom" style="padding: 10px 20px; background: none; border: none; color: #ccc; cursor: pointer; border-bottom: 2px solid transparent;">🛠️ Custom Profile</button>
+          </div>
+          
+          <div class="tab-content" style="padding: 20px;">
+            <!-- Expert Templates Tab -->
+            <div id="templates-tab" class="tab-panel">
+              <p style="color: #ccc; margin-bottom: 20px;">Select an expert-configured template optimized for specific use cases:</p>
+              <div class="template-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                ${this.renderExpertTemplates()}
+              </div>
+              <div class="template-actions" style="margin-top: 20px; display: none;" id="template-actions">
+                <input type="text" id="profile-name-input" placeholder="Enter profile name" style="width: 100%; padding: 8px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #fff; margin-bottom: 10px;">
+                <button id="create-from-template" class="btn btn-primary" style="width: 100%;">Create Profile</button>
+              </div>
+            </div>
+            
+            <!-- Existing Profiles Tab -->
+            <div id="existing-tab" class="tab-panel" style="display: none;">
+              <p style="color: #ccc;">Your existing profiles:</p>
+              <div id="existing-profiles-list">
+                <!-- Will be populated dynamically -->
+              </div>
+              <p style="color: #888; margin-top: 20px; font-size: 12px;">Note: To use an existing profile, close this dialog and select it from the main profiles section.</p>
+            </div>
+            
+            <!-- Custom Profile Tab -->
+            <div id="custom-tab" class="tab-panel" style="display: none;">
+              <p style="color: #ccc; margin-bottom: 20px;">Build a custom 4-stage consensus pipeline by selecting models for each stage:</p>
+              <div class="custom-builder">
+                <div class="stage-selector" style="margin-bottom: 20px;">
+                  <label style="display: block; color: #ccc; margin-bottom: 5px;">Profile Name:</label>
+                  <input type="text" id="custom-profile-name" placeholder="My Custom Profile" style="width: 100%; padding: 8px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #fff;">
+                </div>
+                
+                <div class="stage-selector" style="margin-bottom: 20px;">
+                  <label style="display: block; color: #ccc; margin-bottom: 5px;">🎯 Generator (Stage 1):</label>
+                  <select id="generator-model" style="width: 100%; padding: 8px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #fff;">
+                    ${this.renderModelOptions('generator')}
+                  </select>
+                </div>
+                
+                <div class="stage-selector" style="margin-bottom: 20px;">
+                  <label style="display: block; color: #ccc; margin-bottom: 5px;">✨ Refiner (Stage 2):</label>
+                  <select id="refiner-model" style="width: 100%; padding: 8px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #fff;">
+                    ${this.renderModelOptions('refiner')}
+                  </select>
+                </div>
+                
+                <div class="stage-selector" style="margin-bottom: 20px;">
+                  <label style="display: block; color: #ccc; margin-bottom: 5px;">✅ Validator (Stage 3):</label>
+                  <select id="validator-model" style="width: 100%; padding: 8px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #fff;">
+                    ${this.renderModelOptions('validator')}
+                  </select>
+                </div>
+                
+                <div class="stage-selector" style="margin-bottom: 20px;">
+                  <label style="display: block; color: #ccc; margin-bottom: 5px;">🎨 Curator (Stage 4):</label>
+                  <select id="curator-model" style="width: 100%; padding: 8px; background: #3c3c3c; border: 1px solid #555; border-radius: 4px; color: #fff;">
+                    ${this.renderModelOptions('curator')}
+                  </select>
+                </div>
+                
+                <button id="create-custom-profile" class="btn btn-primary" style="width: 100%;">Create Custom Profile</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
 
   public createModal(): string {
     return `
@@ -184,6 +271,7 @@ export class SettingsModal {
               </div>
               
               <div class="button-group">
+                <button id="create-profile" class="btn btn-secondary">+ New Profile</button>
                 <button id="save-profile" class="btn btn-primary">Save Profile Selection</button>
               </div>
             </div>
@@ -202,12 +290,169 @@ export class SettingsModal {
     `;
   }
 
+  private renderExpertTemplates(): string {
+    const templates = [
+      { id: 'lightning-fast', name: '⚡ Lightning Fast', desc: 'Ultra-high-speed for rapid prototyping', models: { g: 'claude-3-haiku', r: 'gpt-3.5-turbo', v: 'gemini-flash', c: 'claude-3-haiku' } },
+      { id: 'balanced-performer', name: '🎯 Balanced Performer', desc: 'Optimal balance of speed, cost, and quality', models: { g: 'claude-3-sonnet', r: 'gpt-4-turbo', v: 'gemini-pro', c: 'claude-3-sonnet' } },
+      { id: 'precision-architect', name: '🏗️ Precision Architect', desc: 'Maximum quality for complex decisions', models: { g: 'gpt-4', r: 'claude-3-opus', v: 'gpt-4', c: 'claude-3-opus' } },
+      { id: 'budget-optimizer', name: '💰 Budget Optimizer', desc: 'Cost-efficient consensus', models: { g: 'gpt-3.5-turbo', r: 'claude-3-haiku', v: 'mistral-small', c: 'gpt-3.5-turbo' } },
+      { id: 'research-deep-dive', name: '🔬 Research Deep Dive', desc: 'Comprehensive analysis and research', models: { g: 'claude-3-opus', r: 'gpt-4', v: 'claude-3-opus', c: 'gpt-4' } },
+      { id: 'code-specialist', name: '💻 Code Specialist', desc: 'Optimized for software development', models: { g: 'deepseek-coder', r: 'codellama-70b', v: 'gpt-4-turbo', c: 'claude-3-sonnet' } },
+      { id: 'creative-innovator', name: '🎨 Creative Innovator', desc: 'High creativity for innovative solutions', models: { g: 'claude-3-opus', r: 'gpt-4', v: 'mistral-large', c: 'claude-3-opus' } },
+      { id: 'enterprise-grade', name: '🏢 Enterprise Grade', desc: 'Production-ready with reliability', models: { g: 'gpt-4', r: 'claude-3-opus', v: 'gpt-4', c: 'claude-3-opus' } },
+      { id: 'ml-ai-specialist', name: '🤖 ML/AI Specialist', desc: 'Specialized for machine learning', models: { g: 'claude-3-opus', r: 'gpt-4', v: 'gemini-pro', c: 'gpt-4' } },
+      { id: 'debugging-detective', name: '🔍 Debugging Detective', desc: 'Methodical debugging and troubleshooting', models: { g: 'gpt-4-turbo', r: 'claude-3-sonnet', v: 'gpt-4', c: 'claude-3-sonnet' } }
+    ];
+    
+    return templates.map(t => `
+      <div class="template-card" data-template-id="${t.id}" style="padding: 15px; background: #3c3c3c; border-radius: 6px; cursor: pointer; border: 2px solid transparent;">
+        <h4 style="margin: 0 0 5px 0; color: #fff;">${t.name}</h4>
+        <p style="margin: 0 0 10px 0; color: #aaa; font-size: 12px;">${t.desc}</p>
+        <div style="font-size: 11px; color: #888;">
+          <div>G: ${t.models.g}</div>
+          <div>R: ${t.models.r}</div>
+          <div>V: ${t.models.v}</div>
+          <div>C: ${t.models.c}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  private async loadModelsFromDatabase() {
+    try {
+      this.availableModels = await (window as any).settingsAPI.loadModels();
+      console.log(`Loaded ${this.availableModels.length} models from database`);
+    } catch (error) {
+      console.error('Failed to load models from database:', error);
+      this.availableModels = [];
+    }
+  }
+
+  private renderModelOptions(stage: string): string {
+    // Use models loaded from database, or fallback to basic set
+    let models = this.availableModels;
+    
+    if (!models || models.length === 0) {
+      // Fallback to basic set if database doesn't have models yet
+      models = [
+      // OpenAI Models
+      { value: 'gpt-4', label: 'GPT-4', provider: 'OpenAI' },
+      { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', provider: 'OpenAI' },
+      { value: 'gpt-4-32k', label: 'GPT-4 32K', provider: 'OpenAI' },
+      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', provider: 'OpenAI' },
+      { value: 'gpt-3.5-turbo-16k', label: 'GPT-3.5 Turbo 16K', provider: 'OpenAI' },
+      // Anthropic Models
+      { value: 'claude-3-opus', label: 'Claude 3 Opus', provider: 'Anthropic' },
+      { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet', provider: 'Anthropic' },
+      { value: 'claude-3-haiku', label: 'Claude 3 Haiku', provider: 'Anthropic' },
+      { value: 'claude-2.1', label: 'Claude 2.1', provider: 'Anthropic' },
+      { value: 'claude-2', label: 'Claude 2', provider: 'Anthropic' },
+      { value: 'claude-instant', label: 'Claude Instant', provider: 'Anthropic' },
+      // Google Models
+      { value: 'gemini-pro', label: 'Gemini Pro', provider: 'Google' },
+      { value: 'gemini-pro-vision', label: 'Gemini Pro Vision', provider: 'Google' },
+      { value: 'gemini-flash', label: 'Gemini Flash', provider: 'Google' },
+      { value: 'palm-2', label: 'PaLM 2', provider: 'Google' },
+      // Meta Models
+      { value: 'llama-3-70b', label: 'Llama 3 70B', provider: 'Meta' },
+      { value: 'llama-3-8b', label: 'Llama 3 8B', provider: 'Meta' },
+      { value: 'llama-2-70b', label: 'Llama 2 70B', provider: 'Meta' },
+      { value: 'llama-2-13b', label: 'Llama 2 13B', provider: 'Meta' },
+      { value: 'codellama-70b', label: 'CodeLlama 70B', provider: 'Meta' },
+      { value: 'codellama-34b', label: 'CodeLlama 34B', provider: 'Meta' },
+      // Mistral Models
+      { value: 'mistral-large', label: 'Mistral Large', provider: 'Mistral' },
+      { value: 'mistral-medium', label: 'Mistral Medium', provider: 'Mistral' },
+      { value: 'mistral-small', label: 'Mistral Small', provider: 'Mistral' },
+      { value: 'mixtral-8x7b', label: 'Mixtral 8x7B', provider: 'Mistral' },
+      { value: 'mixtral-8x22b', label: 'Mixtral 8x22B', provider: 'Mistral' },
+      // Cohere Models
+      { value: 'command-r-plus', label: 'Command R+', provider: 'Cohere' },
+      { value: 'command-r', label: 'Command R', provider: 'Cohere' },
+      { value: 'command', label: 'Command', provider: 'Cohere' },
+      // Specialized Models
+      { value: 'deepseek-coder', label: 'DeepSeek Coder', provider: 'DeepSeek' },
+      { value: 'wizardlm-2-8x22b', label: 'WizardLM 2 8x22B', provider: 'Microsoft' },
+      { value: 'wizardcoder-33b', label: 'WizardCoder 33B', provider: 'Microsoft' },
+      { value: 'phind-codellama-34b', label: 'Phind CodeLlama 34B', provider: 'Phind' },
+      { value: 'perplexity-online', label: 'Perplexity Online', provider: 'Perplexity' },
+      // Open Models
+      { value: 'nous-hermes-2-mixtral', label: 'Nous Hermes 2 Mixtral', provider: 'Nous' },
+      { value: 'dolphin-mixtral-8x7b', label: 'Dolphin Mixtral 8x7B', provider: 'Cognitive' },
+      { value: 'yi-34b', label: 'Yi 34B', provider: '01.AI' },
+      { value: 'qwen-72b', label: 'Qwen 72B', provider: 'Alibaba' },
+    ];
+    }
+    
+    // Group by provider
+    const grouped = models.reduce((acc: any, model: any) => {
+      const provider = model.provider || 'Unknown';
+      if (!acc[provider]) acc[provider] = [];
+      acc[provider].push(model);
+      return acc;
+    }, {} as Record<string, any[]>);
+    
+    let options = '<option value="">Select a model...</option>';
+    
+    // Add recommended models for each stage
+    const recommended = this.getRecommendedModels(stage);
+    if (recommended.length > 0) {
+      options += '<optgroup label="⭐ Recommended">';
+      recommended.forEach(model => {
+        options += `<option value="${model.value}">${model.label}</option>`;
+      });
+      options += '</optgroup>';
+    }
+    
+    // Add all models grouped by provider
+    Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).forEach(([provider, providerModels]) => {
+      options += `<optgroup label="${provider}">`;
+      (providerModels as any[]).forEach((model: any) => {
+        options += `<option value="${model.value}">${model.label}</option>`;
+      });
+      options += '</optgroup>';
+    });
+    
+    return options;
+  }
+
+  private getRecommendedModels(stage: string): Array<{value: string, label: string}> {
+    const recommendations: Record<string, Array<{value: string, label: string}>> = {
+      generator: [
+        { value: 'claude-3-opus', label: 'Claude 3 Opus' },
+        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+        { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
+      ],
+      refiner: [
+        { value: 'gpt-4', label: 'GPT-4' },
+        { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
+        { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+      ],
+      validator: [
+        { value: 'gpt-4', label: 'GPT-4' },
+        { value: 'claude-3-opus', label: 'Claude 3 Opus' },
+        { value: 'gemini-pro', label: 'Gemini Pro' },
+      ],
+      curator: [
+        { value: 'claude-3-opus', label: 'Claude 3 Opus' },
+        { value: 'gpt-4', label: 'GPT-4' },
+        { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
+      ],
+    };
+    
+    return recommendations[stage] || [];
+  }
+
   private renderProfiles(): string {
-    return EXPERT_PROFILES.map(profile => `
-      <div class="profile-card ${profile.isDefault ? 'selected' : ''}" data-profile-id="${profile.id}">
+    // Combine expert profiles with custom profiles
+    const allProfiles = [...EXPERT_PROFILES, ...this.customProfiles];
+    
+    return allProfiles.map(profile => `
+      <div class="profile-card" data-profile-id="${profile.id}">
         <h4>
           ${profile.name}
           ${profile.isDefault ? '<span class="profile-badge">DEFAULT</span>' : ''}
+          ${profile.isCustom ? '<span class="profile-badge" style="background: #28a745;">CUSTOM</span>' : ''}
         </h4>
         <div class="profile-description">${profile.description}</div>
         <div class="profile-models">
@@ -241,10 +486,25 @@ export class SettingsModal {
 
     this.modalElement = document.getElementById('settings-modal-overlay');
     
+    // Add profile creation modal
+    const profileCreationHTML = this.createProfileCreationModal();
+    const profileCreationContainer = document.createElement('div');
+    profileCreationContainer.innerHTML = profileCreationHTML;
+    parentElement.appendChild(profileCreationContainer.firstElementChild!);
+    
+    this.profileCreationModal = document.getElementById('profile-creation-modal-overlay');
+    
     // Don't set a default - load from database
     
     // Initialize event handlers
     this.setupEventHandlers();
+    this.setupProfileCreationHandlers();
+    
+    // Load models from database first
+    this.loadModelsFromDatabase().then(() => {
+      // Update model dropdowns if profile creation modal exists
+      this.updateModelDropdowns();
+    });
     
     // Load saved settings
     this.loadSettings();
@@ -320,13 +580,7 @@ export class SettingsModal {
     });
 
     // Profile selection
-    document.querySelectorAll('.profile-card').forEach(card => {
-      card.addEventListener('click', () => {
-        document.querySelectorAll('.profile-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        this.selectedProfileId = (card as HTMLElement).dataset.profileId || null;
-      });
-    });
+    this.attachProfileCardHandlers();
 
     // Test keys button
     document.getElementById('test-keys')?.addEventListener('click', () => {
@@ -352,6 +606,79 @@ export class SettingsModal {
     document.getElementById('reset-settings')?.addEventListener('click', () => {
       this.resetToDefaults();
     });
+
+    // Create profile button
+    document.getElementById('create-profile')?.addEventListener('click', () => {
+      this.showProfileCreationModal();
+    });
+  }
+
+  private setupProfileCreationHandlers() {
+    // Close button
+    document.getElementById('close-profile-creation')?.addEventListener('click', () => {
+      this.hideProfileCreationModal();
+    });
+
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        const tab = target.dataset.tab;
+        if (tab) {
+          // Update active tab
+          document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.remove('active');
+            (b as HTMLElement).style.borderBottomColor = 'transparent';
+            (b as HTMLElement).style.color = '#ccc';
+          });
+          target.classList.add('active');
+          target.style.borderBottomColor = '#007acc';
+          target.style.color = '#fff';
+          
+          // Show corresponding panel
+          document.querySelectorAll('.tab-panel').forEach(panel => {
+            (panel as HTMLElement).style.display = 'none';
+          });
+          document.getElementById(`${tab}-tab`)!.style.display = 'block';
+          
+          // Load existing profiles if needed
+          if (tab === 'existing') {
+            this.loadExistingProfiles();
+          }
+        }
+      });
+    });
+
+    // Template card selection
+    document.querySelectorAll('.template-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        // Deselect all cards
+        document.querySelectorAll('.template-card').forEach(c => {
+          (c as HTMLElement).style.borderColor = 'transparent';
+        });
+        
+        // Select this card
+        const target = e.currentTarget as HTMLElement;
+        target.style.borderColor = '#007acc';
+        
+        // Show name input
+        const actions = document.getElementById('template-actions');
+        if (actions) {
+          actions.style.display = 'block';
+          (document.getElementById('profile-name-input') as HTMLInputElement).focus();
+        }
+      });
+    });
+
+    // Create from template button
+    document.getElementById('create-from-template')?.addEventListener('click', () => {
+      this.createFromTemplate();
+    });
+
+    // Create custom profile button
+    document.getElementById('create-custom-profile')?.addEventListener('click', () => {
+      this.createCustomProfile();
+    });
   }
 
   public showModal() {
@@ -369,6 +696,9 @@ export class SettingsModal {
   private async loadSettings() {
     try {
       const settings = await (window as any).settingsAPI.loadSettings();
+      
+      // Load all profiles including custom ones
+      await this.loadAllProfiles();
       
       // Load API keys - they come from database
       if (settings.openrouterKey) {
@@ -390,45 +720,45 @@ export class SettingsModal {
 
       // Load selected profile from active_profile_id
       if (settings.activeProfileId || settings.activeProfileName) {
-        // Try to find a matching predefined profile
-        const matchingProfile = EXPERT_PROFILES.find(p => {
-          // Match by name (case-insensitive)
-          if (settings.activeProfileName) {
-            return p.name.toLowerCase() === settings.activeProfileName.toLowerCase();
-          }
-          return false;
-        });
+        // Try to find matching profile in all profiles (expert + custom)
+        const allProfiles = [...EXPERT_PROFILES, ...this.customProfiles];
+        const matchingProfile = allProfiles.find(p => 
+          p.id === settings.activeProfileId || 
+          p.name.toLowerCase() === settings.activeProfileName?.toLowerCase()
+        );
         
         if (matchingProfile) {
           this.selectedProfileId = matchingProfile.id;
+          // Update UI after profiles are rendered
+          setTimeout(() => {
+            document.querySelectorAll('.profile-card').forEach(card => {
+              if ((card as HTMLElement).dataset.profileId === matchingProfile.id) {
+                card.classList.add('selected');
+              } else {
+                card.classList.remove('selected');
+              }
+            });
+          }, 100);
+        }
+      } else if (settings.selectedProfile) {
+        // Fallback to old selectedProfile if exists
+        this.selectedProfileId = settings.selectedProfile;
+        setTimeout(() => {
           document.querySelectorAll('.profile-card').forEach(card => {
-            if ((card as HTMLElement).dataset.profileId === matchingProfile.id) {
+            if ((card as HTMLElement).dataset.profileId === settings.selectedProfile) {
               card.classList.add('selected');
             } else {
               card.classList.remove('selected');
             }
           });
-        } else if (settings.activeProfileName) {
-          // Custom profile is active, show a note
-          const profilesGrid = document.getElementById('profiles-grid');
-          if (profilesGrid) {
-            const note = document.createElement('div');
-            note.className = 'custom-profile-note';
-            note.style.cssText = 'padding: 10px; background: #3c3c3c; border-radius: 4px; margin-bottom: 10px; color: #ffcc00;';
-            note.textContent = `Currently using custom profile: "${settings.activeProfileName}". Select a profile below to change.`;
-            profilesGrid.parentElement?.insertBefore(note, profilesGrid);
-          }
-        }
-      } else if (settings.selectedProfile) {
-        // Fallback to old selectedProfile if exists
-        this.selectedProfileId = settings.selectedProfile;
-        document.querySelectorAll('.profile-card').forEach(card => {
-          if ((card as HTMLElement).dataset.profileId === settings.selectedProfile) {
-            card.classList.add('selected');
-          } else {
+        }, 100);
+      } else {
+        // No profile set at all - don't select any default
+        setTimeout(() => {
+          document.querySelectorAll('.profile-card').forEach(card => {
             card.classList.remove('selected');
-          }
-        });
+          });
+        }, 100);
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -616,6 +946,249 @@ export class SettingsModal {
       statusDiv.className = 'license-status invalid';
       statusDiv.textContent = '✗ Invalid or expired license key';
     }
+  }
+
+  private showProfileCreationModal() {
+    if (this.profileCreationModal) {
+      this.profileCreationModal.style.display = 'flex';
+      // Update model dropdowns when showing modal
+      this.updateModelDropdowns();
+    }
+  }
+
+  private updateModelDropdowns() {
+    // Update all model dropdowns with latest data from database
+    ['generator', 'refiner', 'validator', 'curator'].forEach(stage => {
+      const selectEl = document.getElementById(`${stage}-model`) as HTMLSelectElement;
+      if (selectEl) {
+        const currentValue = selectEl.value;
+        selectEl.innerHTML = this.renderModelOptions(stage);
+        // Restore previous selection if it still exists
+        if (currentValue && Array.from(selectEl.options).some(opt => opt.value === currentValue)) {
+          selectEl.value = currentValue;
+        }
+      }
+    });
+  }
+
+  private hideProfileCreationModal() {
+    if (this.profileCreationModal) {
+      this.profileCreationModal.style.display = 'none';
+    }
+  }
+
+  private async loadExistingProfiles() {
+    try {
+      const profiles = await (window as any).settingsAPI.loadProfiles();
+      const listEl = document.getElementById('existing-profiles-list');
+      if (listEl) {
+        if (profiles && profiles.length > 0) {
+          listEl.innerHTML = profiles.map((p: any) => `
+            <div class="existing-profile-card" style="padding: 10px; background: #3c3c3c; border-radius: 4px; margin-bottom: 10px;">
+              <h4 style="margin: 0; color: #fff;">${p.name}</h4>
+              <p style="margin: 5px 0 0 0; color: #aaa; font-size: 12px;">G: ${p.generator} | R: ${p.refiner} | V: ${p.validator} | C: ${p.curator}</p>
+            </div>
+          `).join('');
+        } else {
+          listEl.innerHTML = '<p style="color: #888;">No existing profiles found. Create one from templates or build a custom profile.</p>';
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load profiles:', error);
+    }
+  }
+
+  private async createFromTemplate() {
+    const selectedCard = document.querySelector('.template-card[style*="border-color: rgb(0, 122, 204)"]');
+    const nameInput = document.getElementById('profile-name-input') as HTMLInputElement;
+    
+    if (!selectedCard || !nameInput.value.trim()) {
+      this.showMessage('Please select a template and enter a profile name', 'error');
+      return;
+    }
+    
+    const templateId = (selectedCard as HTMLElement).dataset.templateId;
+    const profileName = nameInput.value.trim();
+    
+    // Get template models
+    const templates: Record<string, any> = {
+      'lightning-fast': { generator: 'claude-3-haiku', refiner: 'gpt-3.5-turbo', validator: 'gemini-flash', curator: 'claude-3-haiku', desc: 'Based on Lightning Fast template' },
+      'balanced-performer': { generator: 'claude-3-sonnet', refiner: 'gpt-4-turbo', validator: 'gemini-pro', curator: 'claude-3-sonnet', desc: 'Based on Balanced Performer template' },
+      'precision-architect': { generator: 'gpt-4', refiner: 'claude-3-opus', validator: 'gpt-4', curator: 'claude-3-opus', desc: 'Based on Precision Architect template' },
+      'budget-optimizer': { generator: 'gpt-3.5-turbo', refiner: 'claude-3-haiku', validator: 'mistral-small', curator: 'gpt-3.5-turbo', desc: 'Based on Budget Optimizer template' },
+      'research-deep-dive': { generator: 'claude-3-opus', refiner: 'gpt-4', validator: 'claude-3-opus', curator: 'gpt-4', desc: 'Based on Research Deep Dive template' },
+      'code-specialist': { generator: 'deepseek-coder', refiner: 'codellama-70b', validator: 'gpt-4-turbo', curator: 'claude-3-sonnet', desc: 'Based on Code Specialist template' },
+      'creative-innovator': { generator: 'claude-3-opus', refiner: 'gpt-4', validator: 'mistral-large', curator: 'claude-3-opus', desc: 'Based on Creative Innovator template' },
+      'enterprise-grade': { generator: 'gpt-4', refiner: 'claude-3-opus', validator: 'gpt-4', curator: 'claude-3-opus', desc: 'Based on Enterprise Grade template' },
+      'ml-ai-specialist': { generator: 'claude-3-opus', refiner: 'gpt-4', validator: 'gemini-pro', curator: 'gpt-4', desc: 'Based on ML/AI Specialist template' },
+      'debugging-detective': { generator: 'gpt-4-turbo', refiner: 'claude-3-sonnet', validator: 'gpt-4', curator: 'claude-3-sonnet', desc: 'Based on Debugging Detective template' },
+    };
+    
+    const template = templates[templateId!];
+    if (!template) return;
+    
+    try {
+      const profile = {
+        id: `${templateId}-${Date.now()}`,
+        name: profileName,
+        generator: template.generator,
+        refiner: template.refiner,
+        validator: template.validator,
+        curator: template.curator
+      };
+      
+      await (window as any).settingsAPI.saveProfile(profile);
+      this.showMessage(`Profile "${profileName}" created successfully!`, 'success');
+      
+      // Add the new custom profile to our local list
+      const customProfile: ConsensusProfile = {
+        ...profile,
+        description: template.desc,
+        category: 'Custom',
+        isCustom: true
+      };
+      this.customProfiles.push(customProfile);
+      
+      // Re-render the profiles grid
+      const profilesGrid = document.getElementById('profiles-grid');
+      if (profilesGrid) {
+        profilesGrid.innerHTML = this.renderProfiles();
+        // Re-attach event handlers
+        this.attachProfileCardHandlers();
+      }
+      
+      // Select the newly created profile
+      this.selectedProfileId = profile.id;
+      setTimeout(() => {
+        document.querySelectorAll('.profile-card').forEach(card => {
+          if ((card as HTMLElement).dataset.profileId === profile.id) {
+            card.classList.add('selected');
+          } else {
+            card.classList.remove('selected');
+          }
+        });
+      }, 100);
+      
+      // Close modal
+      setTimeout(() => {
+        this.hideProfileCreationModal();
+      }, 1000);
+    } catch (error) {
+      this.showMessage(`Failed to create profile: ${error}`, 'error');
+    }
+  }
+
+  private async createCustomProfile() {
+    const nameInput = document.getElementById('custom-profile-name') as HTMLInputElement;
+    const generatorSelect = document.getElementById('generator-model') as HTMLSelectElement;
+    const refinerSelect = document.getElementById('refiner-model') as HTMLSelectElement;
+    const validatorSelect = document.getElementById('validator-model') as HTMLSelectElement;
+    const curatorSelect = document.getElementById('curator-model') as HTMLSelectElement;
+    
+    if (!nameInput.value.trim() || !generatorSelect.value || !refinerSelect.value || !validatorSelect.value || !curatorSelect.value) {
+      this.showMessage('Please fill in all fields', 'error');
+      return;
+    }
+    
+    try {
+      const profile = {
+        id: `custom-${Date.now()}`,
+        name: nameInput.value.trim(),
+        generator: generatorSelect.value,
+        refiner: refinerSelect.value,
+        validator: validatorSelect.value,
+        curator: curatorSelect.value
+      };
+      
+      await (window as any).settingsAPI.saveProfile(profile);
+      this.showMessage(`Custom profile "${profile.name}" created successfully!`, 'success');
+      
+      // Add the new custom profile to our local list
+      const customProfile: ConsensusProfile = {
+        ...profile,
+        description: 'Custom profile created by user',
+        category: 'Custom',
+        isCustom: true
+      };
+      this.customProfiles.push(customProfile);
+      
+      // Re-render the profiles grid
+      const profilesGrid = document.getElementById('profiles-grid');
+      if (profilesGrid) {
+        profilesGrid.innerHTML = this.renderProfiles();
+        // Re-attach event handlers
+        this.attachProfileCardHandlers();
+      }
+      
+      // Select the newly created profile
+      this.selectedProfileId = profile.id;
+      setTimeout(() => {
+        document.querySelectorAll('.profile-card').forEach(card => {
+          if ((card as HTMLElement).dataset.profileId === profile.id) {
+            card.classList.add('selected');
+          } else {
+            card.classList.remove('selected');
+          }
+        });
+      }, 100);
+      
+      // Close modal
+      setTimeout(() => {
+        this.hideProfileCreationModal();
+      }, 1000);
+    } catch (error) {
+      this.showMessage(`Failed to create custom profile: ${error}`, 'error');
+    }
+  }
+
+
+  private async loadAllProfiles() {
+    try {
+      // Load all profiles from database
+      const profiles = await (window as any).settingsAPI.loadProfiles();
+      
+      // Separate custom profiles from predefined ones
+      this.customProfiles = [];
+      
+      for (const profile of profiles) {
+        // Check if it's not a predefined profile
+        const isPredefined = EXPERT_PROFILES.some(p => p.id === profile.id);
+        
+        if (!isPredefined) {
+          // It's a custom profile
+          this.customProfiles.push({
+            id: profile.id,
+            name: profile.name,
+            description: 'Custom profile created by user',
+            generator: profile.generator,
+            refiner: profile.refiner,
+            validator: profile.validator,
+            curator: profile.curator,
+            category: 'Custom',
+            isCustom: true
+          });
+        }
+      }
+      
+      // Re-render profiles grid if it exists
+      const profilesGrid = document.getElementById('profiles-grid');
+      if (profilesGrid) {
+        profilesGrid.innerHTML = this.renderProfiles();
+        this.attachProfileCardHandlers();
+      }
+    } catch (error) {
+      console.error('Failed to load profiles:', error);
+    }
+  }
+
+  private attachProfileCardHandlers() {
+    document.querySelectorAll('.profile-card').forEach(card => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.profile-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        this.selectedProfileId = (card as HTMLElement).dataset.profileId || null;
+      });
+    });
   }
 
   private showMessage(message: string, type: 'success' | 'error') {
