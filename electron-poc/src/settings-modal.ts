@@ -816,9 +816,22 @@ export class SettingsModal {
           if (result.licenseInfo) {
             results.push(`📊 Tier: ${result.licenseInfo.tier}`);
             results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
+            
+            // Only show usage if D1 provided it
             if (result.licenseInfo.remaining !== undefined) {
-              results.push(`📈 Remaining today: ${result.licenseInfo.remaining} conversations`);
+              if (result.licenseInfo.remaining === 'unlimited') {
+                results.push(`✅ Unlimited conversations`);
+              } else {
+                if (result.licenseInfo.dailyUsed !== undefined) {
+                  results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}/${result.licenseInfo.dailyLimit}`);
+                }
+                results.push(`✅ Remaining today: ${result.licenseInfo.remaining} conversations`);
+              }
+            } else {
+              // D1 didn't provide usage data
+              results.push(`ℹ️ Usage tracking starts with first conversation`);
             }
+            
             if (result.licenseInfo.email) {
               results.push(`📧 Account: ${result.licenseInfo.email}`);
             }
@@ -989,7 +1002,9 @@ export class SettingsModal {
       statusDiv.className = 'license-status valid';
       let statusText = `✓ Valid ${info.tier} license - ${info.dailyLimit} conversations/day`;
       
-      if (info.remaining !== undefined) {
+      if (info.dailyUsed !== undefined && info.remaining !== undefined) {
+        statusText += ` (${info.dailyUsed} used, ${info.remaining} remaining today)`;
+      } else if (info.remaining !== undefined) {
         statusText += ` (${info.remaining} remaining today)`;
       }
       

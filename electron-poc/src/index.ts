@@ -286,24 +286,58 @@ ipcMain.handle('settings-test-keys', async (_, { openrouterKey, hiveKey }) => {
           if (response.ok) {
             const data = await response.json();
             
+            // Log the D1 response to understand what fields are available
+            console.log('D1 validation response:', JSON.stringify(data, null, 2));
+            
             if (data.valid) {
               // Parse tier information
               const tier = data.tier || data.user?.subscription_tier || 'free';
               const dailyLimit = data.daily_limit || data.limits?.daily || 10;
-              const remaining = data.usage?.remaining || 0;
               const email = data.email || data.user?.email || '';
               const userId = data.user_id || data.user?.id || '';
               
-              result.hiveValid = true;
-              result.licenseInfo = {
+              // Check if D1 returned usage information
+              let remaining = undefined;
+              let dailyUsed = undefined;
+              
+              // D1 is the source of truth for usage - only use if provided
+              if (data.usage) {
+                // D1 returned usage info - this is authoritative
+                remaining = data.usage.remaining;
+                const limit = data.usage.limit || dailyLimit;
+                
+                // Calculate used from remaining (D1 tracks this)
+                if (remaining !== undefined && limit !== undefined) {
+                  // Handle "unlimited" case where remaining might be max value
+                  if (remaining === 4294967295 || remaining === 2147483647) {
+                    dailyUsed = 0;
+                    remaining = 'unlimited';
+                  } else {
+                    dailyUsed = Math.max(0, limit - remaining);
+                  }
+                }
+              }
+              
+              // Build license info object
+              const licenseInfo: any = {
                 valid: true,
                 tier: tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase(),
                 dailyLimit: dailyLimit,
-                remaining: remaining,
                 email: email,
                 userId: userId,
                 features: data.features || ['consensus']
               };
+              
+              // Only include usage data if D1 provided it
+              if (remaining !== undefined) {
+                licenseInfo.remaining = remaining;
+              }
+              if (dailyUsed !== undefined) {
+                licenseInfo.dailyUsed = dailyUsed;
+              }
+              
+              result.hiveValid = true;
+              result.licenseInfo = licenseInfo;
               
               // Store validated license info in database
               if (db) {
