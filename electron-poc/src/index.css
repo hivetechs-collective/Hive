@@ -1004,6 +1004,11 @@ body {
 .status-item:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
+.status-divider {
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0 5px;
+  user-select: none;
+}
 
 .status-icon {
   font-size: 12px;

@@ -214,6 +214,19 @@ document.body.innerHTML = `
   <div class="status-bar">
     <div class="status-bar-left">
       <div class="status-item">
+        <span class="status-icon">👤</span>
+        <span id="status-user">Not logged in</span>
+      </div>
+      <div class="status-item">
+        <span class="status-icon">📦</span>
+        <span id="status-plan">Free</span>
+      </div>
+      <div class="status-item">
+        <span class="status-icon">💬</span>
+        <span id="status-conversations">-- remaining</span>
+      </div>
+      <div class="status-divider">|</div>
+      <div class="status-item">
         <span class="status-icon">🌿</span>
         <span>main</span>
       </div>
@@ -504,6 +517,86 @@ addLogEntry('⚡ Hive Consensus Day 0 Validation started', 'info');
 addLogEntry('🔧 Click buttons above to test the Electron + Rust architecture', 'info');
 addChatMessage('Welcome to Hive Consensus! Try asking me a question.', true);
 
-// Initialize settings modal
-settingsModal = new SettingsModal();
+// Function to update status bar with license info
+async function updateStatusBar() {
+  try {
+    const settings = await (window as any).settingsAPI.load();
+    
+    const userElement = document.getElementById('status-user');
+    const planElement = document.getElementById('status-plan');
+    const conversationsElement = document.getElementById('status-conversations');
+    
+    if (settings.hiveKey) {
+      // Test the key to get license info
+      const result = await (window as any).settingsAPI.testKeys({
+        hiveKey: settings.hiveKey
+      });
+      
+      if (result.hiveValid && result.licenseInfo) {
+        // Update user display
+        if (userElement) {
+          const email = result.licenseInfo.email || 'Licensed User';
+          // Truncate email if too long for status bar
+          const displayEmail = email.length > 20 ? email.substring(0, 17) + '...' : email;
+          userElement.textContent = displayEmail;
+          userElement.title = email; // Full email in tooltip
+        }
+        
+        // Update plan display
+        if (planElement) {
+          planElement.textContent = result.licenseInfo.tier || 'Free';
+        }
+        
+        // Update conversations display
+        if (conversationsElement) {
+          if (result.licenseInfo.remaining !== undefined) {
+            if (result.licenseInfo.remaining === 'unlimited' || result.licenseInfo.remaining === 2147483647 || result.licenseInfo.remaining === 4294967295) {
+              conversationsElement.textContent = 'Unlimited';
+            } else {
+              conversationsElement.textContent = `${result.licenseInfo.remaining} remaining`;
+            }
+          } else if (result.licenseInfo.dailyUsed !== undefined && result.licenseInfo.dailyLimit) {
+            const remaining = result.licenseInfo.dailyLimit - result.licenseInfo.dailyUsed;
+            conversationsElement.textContent = `${remaining} remaining`;
+          } else if (result.licenseInfo.dailyLimit) {
+            conversationsElement.textContent = `${result.licenseInfo.dailyLimit} daily`;
+          } else {
+            conversationsElement.textContent = '-- remaining';
+          }
+        }
+      } else {
+        // Invalid license
+        if (userElement) userElement.textContent = 'Invalid license';
+        if (planElement) planElement.textContent = 'Free';
+        if (conversationsElement) conversationsElement.textContent = '-- remaining';
+      }
+    } else {
+      // No license key
+      if (userElement) userElement.textContent = 'Not logged in';
+      if (planElement) planElement.textContent = 'Free';
+      if (conversationsElement) conversationsElement.textContent = '-- remaining';
+    }
+  } catch (error) {
+    console.error('Failed to update status bar:', error);
+    // Set defaults on error
+    const userElement = document.getElementById('status-user');
+    const planElement = document.getElementById('status-plan');
+    const conversationsElement = document.getElementById('status-conversations');
+    
+    if (userElement) userElement.textContent = 'Not logged in';
+    if (planElement) planElement.textContent = 'Free';
+    if (conversationsElement) conversationsElement.textContent = '-- remaining';
+  }
+}
+
+// Initialize settings modal with callback to update status bar
+settingsModal = new SettingsModal(() => {
+  // Callback when settings are saved
+  updateStatusBar();
+});
 settingsModal.initializeModal(document.body);
+
+// Update status bar on startup
+setTimeout(() => {
+  updateStatusBar();
+}, 500);

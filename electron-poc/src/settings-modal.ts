@@ -129,6 +129,11 @@ export class SettingsModal {
   private availableModels: any[] = [];
   private customProfiles: ConsensusProfile[] = [];
   private notificationQueue: HTMLElement[] = [];
+  private onSettingsChanged: (() => void) | null = null;
+
+  constructor(onSettingsChanged?: () => void) {
+    this.onSettingsChanged = onSettingsChanged || null;
+  }
 
   private createProfileCreationModal(): string {
     return `
@@ -896,6 +901,11 @@ export class SettingsModal {
       }
       
       this.showMessage('API keys saved successfully!', 'success');
+      
+      // Update status bar when keys are saved
+      if (this.onSettingsChanged) {
+        this.onSettingsChanged();
+      }
     } catch (error) {
       this.showMessage(`Failed to save keys: ${error}`, 'error');
     }
@@ -934,6 +944,11 @@ export class SettingsModal {
       });
       
       this.showMessage('All settings saved successfully!', 'success');
+      
+      // Call the callback if provided
+      if (this.onSettingsChanged) {
+        this.onSettingsChanged();
+      }
       
       // Close modal after successful save
       setTimeout(() => {
@@ -1005,6 +1020,11 @@ export class SettingsModal {
       if (result.hiveValid && result.licenseInfo) {
         // Update the display with fresh data from D1
         this.updateLicenseStatus(result.licenseInfo);
+        
+        // Also update the main status bar
+        if (this.onSettingsChanged) {
+          this.onSettingsChanged();
+        }
       } else {
         // Key validation failed - show error
         this.updateLicenseStatus({ valid: false });
