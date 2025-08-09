@@ -44,6 +44,7 @@
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
     "monaco-editor": "^0.52.2",
-    "monaco-editor-webpack-plugin": "^7.1.0"
+    "monaco-editor-webpack-plugin": "^7.1.0",
+    "sqlite3": "^5.1.7"
   }
 }

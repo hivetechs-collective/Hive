@@ -5,6 +5,7 @@
 
 import './index.css';
 import hiveLogo from './Hive-Logo-small.jpg';
+import { SettingsModal } from './settings-modal';
 
 // Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
@@ -12,11 +13,6 @@ document.body.innerHTML = `
   <!-- Title Bar -->
   <div class="title-bar">
     <div class="title-bar-left">
-      <div class="window-controls">
-        <div class="window-control close"></div>
-        <div class="window-control minimize"></div>
-        <div class="window-control maximize"></div>
-      </div>
     </div>
     <div class="title-bar-center">
       <div class="title-logo">
@@ -248,6 +244,7 @@ document.body.innerHTML = `
 let currentView = 'consensus';
 let isConnected = false;
 let isProcessing = false;
+let settingsModal: SettingsModal | null = null;
 
 // DOM elements - Updated for new layout
 const terminalOutput = document.getElementById('terminal-output')!;
@@ -326,8 +323,10 @@ document.getElementById('analytics-btn')?.addEventListener('click', () => {
 });
 
 document.getElementById('settings-btn')?.addEventListener('click', () => {
-  addLogEntry('⚙️ Settings panel clicked', 'info');
-  addChatMessage('Settings panel coming soon...', true);
+  addLogEntry('⚙️ Opening settings...', 'info');
+  if (settingsModal) {
+    settingsModal.showModal();
+  }
 });
 
 document.getElementById('memory-btn')?.addEventListener('click', () => {
@@ -504,3 +503,7 @@ setTimeout(async () => {
 addLogEntry('⚡ Hive Consensus Day 0 Validation started', 'info');
 addLogEntry('🔧 Click buttons above to test the Electron + Rust architecture', 'info');
 addChatMessage('Welcome to Hive Consensus! Try asking me a question.', true);
+
+// Initialize settings modal
+settingsModal = new SettingsModal();
+settingsModal.initializeModal(document.body);

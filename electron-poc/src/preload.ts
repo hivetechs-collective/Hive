@@ -15,3 +15,13 @@ contextBridge.exposeInMainWorld('backendAPI', {
     return ipcRenderer.invoke('backend-health');
   }
 });
+
+// Settings API
+contextBridge.exposeInMainWorld('settingsAPI', {
+  loadSettings: () => ipcRenderer.invoke('settings-load'),
+  testKeys: (keys: any) => ipcRenderer.invoke('settings-test-keys', keys),
+  saveKeys: (keys: any) => ipcRenderer.invoke('settings-save-keys', keys),
+  saveProfile: (profile: any) => ipcRenderer.invoke('settings-save-profile', profile),
+  saveAllSettings: (settings: any) => ipcRenderer.invoke('settings-save-all', settings),
+  resetSettings: () => ipcRenderer.invoke('settings-reset'),
+});
