@@ -716,17 +716,10 @@ export class SettingsModal {
         input.setAttribute('data-actual-key', settings.hiveKey);
         input.value = this.maskApiKey(settings.hiveKey);
         input.setAttribute('data-masked', 'true');
-        this.validateHiveKey(settings.hiveKey);
         
-        // Show stored license information if available
-        if (settings.hiveTier || settings.hiveDailyLimit) {
-          this.updateLicenseStatus({
-            valid: true,
-            tier: settings.hiveTier || 'Free',
-            dailyLimit: settings.hiveDailyLimit || 10,
-            remaining: settings.hiveRemaining
-          });
-        }
+        // Automatically refresh usage from D1 when opening settings
+        // This also validates the key format and updates the display
+        this.refreshLicenseStatus(settings.hiveKey);
       }
 
       // Load selected profile from active_profile_id
@@ -828,8 +821,9 @@ export class SettingsModal {
                 results.push(`✅ Remaining today: ${result.licenseInfo.remaining} conversations`);
               }
             } else {
-              // D1 didn't provide usage data
-              results.push(`ℹ️ Usage tracking starts with first conversation`);
+              // D1 validation endpoint doesn't provide usage data
+              // Usage is tracked via pre/post conversation endpoints
+              results.push(`ℹ️ Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
             }
             
             if (result.licenseInfo.email) {
@@ -994,6 +988,37 @@ export class SettingsModal {
     }
   }
 
+  private async refreshLicenseStatus(hiveKey: string) {
+    const statusDiv = document.getElementById('license-status');
+    if (statusDiv) {
+      // Show loading state
+      statusDiv.className = 'license-status valid';
+      statusDiv.textContent = '🔄 Checking license status...';
+    }
+    
+    try {
+      // Silently test the key to get latest usage from D1
+      const result = await (window as any).settingsAPI.testKeys({
+        hiveKey: hiveKey
+      });
+      
+      if (result.hiveValid && result.licenseInfo) {
+        // Update the display with fresh data from D1
+        this.updateLicenseStatus(result.licenseInfo);
+      } else {
+        // Key validation failed - show error
+        this.updateLicenseStatus({ valid: false });
+      }
+    } catch (error) {
+      console.error('Failed to refresh license status:', error);
+      // Show cached status or error
+      this.updateLicenseStatus({ 
+        valid: false, 
+        error: 'Unable to check license status - check network connection' 
+      });
+    }
+  }
+
   private updateLicenseStatus(info: any) {
     const statusDiv = document.getElementById('license-status');
     if (!statusDiv) return;
@@ -1005,7 +1030,11 @@ export class SettingsModal {
       if (info.dailyUsed !== undefined && info.remaining !== undefined) {
         statusText += ` (${info.dailyUsed} used, ${info.remaining} remaining today)`;
       } else if (info.remaining !== undefined) {
-        statusText += ` (${info.remaining} remaining today)`;
+        if (info.remaining === 'unlimited') {
+          statusText = `✓ Valid ${info.tier} license - Unlimited conversations`;
+        } else {
+          statusText += ` (${info.remaining} remaining today)`;
+        }
       }
       
       if (info.email) {

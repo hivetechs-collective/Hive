@@ -279,7 +279,7 @@ ipcMain.handle('settings-test-keys', async (_, { openrouterKey, hiveKey }) => {
               client_id: 'hive-tools',
               session_token: upperKey,
               fingerprint: fingerprint,
-              nonce: Date.now().toString()
+              nonce: String(Date.now())
             })
           });
           
@@ -357,17 +357,20 @@ ipcMain.handle('settings-test-keys', async (_, { openrouterKey, hiveKey }) => {
                    ON CONFLICT(key) DO UPDATE SET
                    value = excluded.value,
                    updated_at = excluded.updated_at`,
-                  ['hive_daily_limit', dailyLimit.toString(), 0, userId || 'default', timestamp, timestamp]
+                  ['hive_daily_limit', String(dailyLimit), 0, userId || 'default', timestamp, timestamp]
                 );
                 
-                db.run(
-                  `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
-                   VALUES (?, ?, ?, ?, ?, ?)
-                   ON CONFLICT(key) DO UPDATE SET
-                   value = excluded.value,
-                   updated_at = excluded.updated_at`,
-                  ['hive_remaining', remaining.toString(), 0, userId || 'default', timestamp, timestamp]
-                );
+                // Only store remaining if D1 provided it
+                if (remaining !== undefined) {
+                  db.run(
+                    `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
+                     VALUES (?, ?, ?, ?, ?, ?)
+                     ON CONFLICT(key) DO UPDATE SET
+                     value = excluded.value,
+                     updated_at = excluded.updated_at`,
+                    ['hive_remaining', String(remaining), 0, userId || 'default', timestamp, timestamp]
+                  );
+                }
               }
             } else {
               result.hiveValid = false;
