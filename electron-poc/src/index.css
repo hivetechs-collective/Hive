@@ -863,6 +863,62 @@ body {
   gap: 8px;
 }
 
+/* Profile display */
+.profile-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.profile-label {
+  color: #9d9d9d;
+  font-weight: 500;
+}
+
+.profile-name {
+  color: #FFC107;
+  font-weight: 600;
+}
+
+/* Stage model names */
+.stage-model {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+/* Consensus stats */
+.consensus-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.consensus-stats .stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.consensus-stats .stat-label {
+  color: #9d9d9d;
+}
+
+.consensus-stats .stat-value {
+  color: #FFC107;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
 .stage-progress {
   display: flex;
   flex-direction: column;

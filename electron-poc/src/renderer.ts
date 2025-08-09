@@ -165,30 +165,48 @@ document.body.innerHTML = `
                style="width: 20px; height: 20px; object-fit: contain; border-radius: 3px;" />
           <span>Consensus Progress</span>
         </div>
+        <div class="profile-display" id="active-profile-display">
+          <span class="profile-label">Profile:</span>
+          <span class="profile-name" id="active-profile-name">Loading...</span>
+        </div>
         <div class="pipeline-stages">
           <div class="stage" data-stage="generator">
             <div class="stage-progress">
               <div class="stage-label">Generator</div>
               <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-model" id="generator-model">--</div>
             </div>
           </div>
           <div class="stage" data-stage="refiner">
             <div class="stage-progress">
               <div class="stage-label">Refiner</div>
               <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-model" id="refiner-model">--</div>
             </div>
           </div>
           <div class="stage" data-stage="validator">
             <div class="stage-progress">
               <div class="stage-label">Validator</div>
               <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-model" id="validator-model">--</div>
             </div>
           </div>
           <div class="stage" data-stage="curator">
             <div class="stage-progress">
               <div class="stage-label">Curator</div>
               <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-model" id="curator-model">--</div>
             </div>
+          </div>
+        </div>
+        <div class="consensus-stats">
+          <div class="stat-item">
+            <span class="stat-label">Tokens:</span>
+            <span class="stat-value" id="token-count">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Cost:</span>
+            <span class="stat-value" id="cost-count">$0.00</span>
           </div>
         </div>
       </div>
@@ -260,6 +278,9 @@ let isProcessing = false;
 let settingsModal: SettingsModal | null = null;
 let dailyUsageCount = 0;
 let dailyLimit = 5;
+let totalTokens = 0;
+let totalCost = 0;
+let activeProfile: any = null;
 
 // DOM elements - Updated for new layout
 const terminalOutput = document.getElementById('terminal-output')!;
@@ -384,19 +405,29 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
   // Animate stages
   updateStageStatus('generator', 'running');
   
+  // Simulate token and cost accumulation
   setTimeout(() => {
     updateStageStatus('generator', 'completed');
     updateStageStatus('refiner', 'running');
+    totalTokens += 150;
+    totalCost += 0.002;
+    updateConsensusStats();
   }, 500);
   
   setTimeout(() => {
     updateStageStatus('refiner', 'completed');
     updateStageStatus('validator', 'running');
+    totalTokens += 200;
+    totalCost += 0.003;
+    updateConsensusStats();
   }, 1000);
   
   setTimeout(() => {
     updateStageStatus('validator', 'completed');
     updateStageStatus('curator', 'running');
+    totalTokens += 180;
+    totalCost += 0.0025;
+    updateConsensusStats();
   }, 1500);
   
   // Add query to chat
@@ -407,10 +438,15 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
     
     setTimeout(() => {
       updateStageStatus('curator', 'completed');
+      totalTokens += 220;
+      totalCost += 0.0035;
+      updateConsensusStats();
+      
       updateStatus('Consensus Complete!', 'success');
       addLogEntry(`🎯 Consensus completed in ${result.duration_ms}ms`, 'success');
       addLogEntry(`📝 Model: ${result.model_used}`, 'info');
       addLogEntry(`💬 Result: ${result.result.substring(0, 200)}${result.result.length > 200 ? '...' : ''}`, 'success');
+      addLogEntry(`📊 Total tokens: ${totalTokens.toLocaleString()}, Cost: $${totalCost.toFixed(4)}`, 'info');
       
       // Also show result in chat
       addChatMessage(result.result, true);
@@ -625,10 +661,11 @@ async function updateStatusBar() {
   }
 }
 
-// Initialize settings modal with callback to update status bar
+// Initialize settings modal with callback to update status bar and profile
 settingsModal = new SettingsModal(() => {
   // Callback when settings are saved
   updateStatusBar();
+  loadActiveProfile(); // Reload profile when settings change
 });
 settingsModal.initializeModal(document.body);
 
@@ -641,7 +678,76 @@ function updateConversationCount() {
   }
 }
 
+// Function to update consensus stats (tokens and cost)
+function updateConsensusStats() {
+  const tokenElement = document.getElementById('token-count');
+  const costElement = document.getElementById('cost-count');
+  
+  if (tokenElement) {
+    tokenElement.textContent = totalTokens.toLocaleString();
+  }
+  
+  if (costElement) {
+    costElement.textContent = `$${totalCost.toFixed(4)}`;
+  }
+}
+
+// Function to load and display active profile
+async function loadActiveProfile() {
+  try {
+    const settings = await (window as any).settingsAPI.loadSettings();
+    
+    if (settings.activeProfileId || settings.activeProfileName) {
+      // Load all profiles
+      const profiles = await (window as any).settingsAPI.loadProfiles();
+      
+      // Find the active profile
+      const matchingProfile = profiles.find((p: any) => 
+        p.id === settings.activeProfileId || 
+        p.name === settings.activeProfileName
+      );
+      
+      if (matchingProfile) {
+        activeProfile = matchingProfile;
+        
+        // Update profile display
+        const profileNameElement = document.getElementById('active-profile-name');
+        if (profileNameElement) {
+          profileNameElement.textContent = matchingProfile.name;
+        }
+        
+        // Update model displays
+        const generatorElement = document.getElementById('generator-model');
+        const refinerElement = document.getElementById('refiner-model');
+        const validatorElement = document.getElementById('validator-model');
+        const curatorElement = document.getElementById('curator-model');
+        
+        if (generatorElement) generatorElement.textContent = matchingProfile.generator || '--';
+        if (refinerElement) refinerElement.textContent = matchingProfile.refiner || '--';
+        if (validatorElement) validatorElement.textContent = matchingProfile.validator || '--';
+        if (curatorElement) curatorElement.textContent = matchingProfile.curator || '--';
+        
+        addLogEntry(`📋 Loaded profile: ${matchingProfile.name}`, 'info');
+      } else {
+        // Set default profile
+        const profileNameElement = document.getElementById('active-profile-name');
+        if (profileNameElement) {
+          profileNameElement.textContent = 'Balanced Performer (Default)';
+        }
+        addLogEntry('📋 Using default profile: Balanced Performer', 'info');
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load active profile:', error);
+    const profileNameElement = document.getElementById('active-profile-name');
+    if (profileNameElement) {
+      profileNameElement.textContent = 'Error loading profile';
+    }
+  }
+}
+
 // Update status bar on startup
 setTimeout(() => {
   updateStatusBar();
+  loadActiveProfile();
 }, 500);
