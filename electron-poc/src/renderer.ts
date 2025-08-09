@@ -214,19 +214,6 @@ document.body.innerHTML = `
   <div class="status-bar">
     <div class="status-bar-left">
       <div class="status-item">
-        <span class="status-icon">👤</span>
-        <span id="status-user">Not logged in</span>
-      </div>
-      <div class="status-item">
-        <span class="status-icon">📦</span>
-        <span id="status-plan">Free</span>
-      </div>
-      <div class="status-item">
-        <span class="status-icon">💬</span>
-        <span id="status-conversations">-- remaining</span>
-      </div>
-      <div class="status-divider">|</div>
-      <div class="status-item">
         <span class="status-icon">🌿</span>
         <span>main</span>
       </div>
@@ -237,6 +224,19 @@ document.body.innerHTML = `
       <div class="status-item">
         <span class="status-icon">🚫</span>
         <span>0</span>
+      </div>
+    </div>
+    <div class="status-bar-center">
+      <div class="status-item">
+        <span id="status-user">Not logged in</span>
+      </div>
+      <div class="status-divider">|</div>
+      <div class="status-item">
+        <span id="status-plan">Free</span>
+      </div>
+      <div class="status-divider">|</div>
+      <div class="status-item">
+        <span id="status-conversations">-- remaining</span>
       </div>
     </div>
     <div class="status-bar-right">
@@ -258,6 +258,8 @@ let currentView = 'consensus';
 let isConnected = false;
 let isProcessing = false;
 let settingsModal: SettingsModal | null = null;
+let dailyUsageCount = 0;
+let dailyLimit = 5;
 
 // DOM elements - Updated for new layout
 const terminalOutput = document.getElementById('terminal-output')!;
@@ -412,6 +414,10 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
       
       // Also show result in chat
       addChatMessage(result.result, true);
+      
+      // Update usage count in status bar
+      dailyUsageCount++;
+      updateConversationCount();
     }, 2000);
     
   } catch (error) {
@@ -468,6 +474,10 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
       updateStageStatus('curator', 'completed');
       addLogEntry(`✅ Consensus completed for: "${query}"`, 'success');
       addChatMessage(result.result, true);
+      
+      // Update usage count in status bar
+      dailyUsageCount++;
+      updateConversationCount();
     }, 2000);
     
   } catch (error) {
@@ -520,7 +530,8 @@ addChatMessage('Welcome to Hive Consensus! Try asking me a question.', true);
 // Function to update status bar with license info
 async function updateStatusBar() {
   try {
-    const settings = await (window as any).settingsAPI.load();
+    const settings = await (window as any).settingsAPI.loadSettings();
+    console.log('Settings loaded:', settings);
     
     const userElement = document.getElementById('status-user');
     const planElement = document.getElementById('status-plan');
@@ -531,6 +542,7 @@ async function updateStatusBar() {
       const result = await (window as any).settingsAPI.testKeys({
         hiveKey: settings.hiveKey
       });
+      console.log('License info:', result.licenseInfo);
       
       if (result.hiveValid && result.licenseInfo) {
         // Update user display
@@ -540,27 +552,51 @@ async function updateStatusBar() {
           const displayEmail = email.length > 20 ? email.substring(0, 17) + '...' : email;
           userElement.textContent = displayEmail;
           userElement.title = email; // Full email in tooltip
+          console.log('Set user display to:', displayEmail);
         }
         
         // Update plan display
         if (planElement) {
-          planElement.textContent = result.licenseInfo.tier || 'Free';
+          // Capitalize the tier name
+          const tier = (result.licenseInfo.tier || 'Free').charAt(0).toUpperCase() + 
+                       (result.licenseInfo.tier || 'Free').slice(1).toLowerCase();
+          planElement.textContent = tier;
+          console.log('Set plan display to:', tier);
         }
         
-        // Update conversations display
+        // Update conversations display based on what D1 actually returns
         if (conversationsElement) {
+          console.log('Updating conversations with:', {
+            remaining: result.licenseInfo.remaining,
+            dailyUsed: result.licenseInfo.dailyUsed,
+            dailyLimit: result.licenseInfo.dailyLimit
+          });
+          
           if (result.licenseInfo.remaining !== undefined) {
+            // D1 provided remaining count
             if (result.licenseInfo.remaining === 'unlimited' || result.licenseInfo.remaining === 2147483647 || result.licenseInfo.remaining === 4294967295) {
               conversationsElement.textContent = 'Unlimited';
             } else {
-              conversationsElement.textContent = `${result.licenseInfo.remaining} remaining`;
+              // Calculate used from remaining
+              const limit = result.licenseInfo.dailyLimit || 10;
+              const used = limit - result.licenseInfo.remaining;
+              dailyUsageCount = used;
+              dailyLimit = limit;
+              conversationsElement.textContent = `${used} used / ${result.licenseInfo.remaining} remaining`;
             }
-          } else if (result.licenseInfo.dailyUsed !== undefined && result.licenseInfo.dailyLimit) {
+          } else if (result.licenseInfo.dailyUsed !== undefined && result.licenseInfo.dailyLimit !== undefined) {
+            // D1 provided used count and limit
+            dailyUsageCount = result.licenseInfo.dailyUsed;
+            dailyLimit = result.licenseInfo.dailyLimit;
             const remaining = result.licenseInfo.dailyLimit - result.licenseInfo.dailyUsed;
-            conversationsElement.textContent = `${remaining} remaining`;
-          } else if (result.licenseInfo.dailyLimit) {
-            conversationsElement.textContent = `${result.licenseInfo.dailyLimit} daily`;
+            conversationsElement.textContent = `${result.licenseInfo.dailyUsed} used / ${remaining} remaining`;
+          } else if (result.licenseInfo.dailyLimit !== undefined) {
+            // D1 only provided limit (no usage data from validation endpoint)
+            // Track usage locally since D1 tracks via pre/post conversation
+            dailyLimit = result.licenseInfo.dailyLimit;
+            conversationsElement.textContent = `${dailyUsageCount} used / ${dailyLimit} remaining`;
           } else {
+            // No usage info available
             conversationsElement.textContent = '-- remaining';
           }
         }
@@ -571,14 +607,14 @@ async function updateStatusBar() {
         if (conversationsElement) conversationsElement.textContent = '-- remaining';
       }
     } else {
-      // No license key
+      // No license key configured
       if (userElement) userElement.textContent = 'Not logged in';
       if (planElement) planElement.textContent = 'Free';
       if (conversationsElement) conversationsElement.textContent = '-- remaining';
     }
   } catch (error) {
     console.error('Failed to update status bar:', error);
-    // Set defaults on error
+    // Set defaults on error - don't hardcode values
     const userElement = document.getElementById('status-user');
     const planElement = document.getElementById('status-plan');
     const conversationsElement = document.getElementById('status-conversations');
@@ -595,6 +631,15 @@ settingsModal = new SettingsModal(() => {
   updateStatusBar();
 });
 settingsModal.initializeModal(document.body);
+
+// Function to update just the conversation count
+function updateConversationCount() {
+  const conversationsElement = document.getElementById('status-conversations');
+  if (conversationsElement) {
+    const remaining = Math.max(0, dailyLimit - dailyUsageCount);
+    conversationsElement.textContent = `${dailyUsageCount} used / ${remaining} remaining`;
+  }
+}
 
 // Update status bar on startup
 setTimeout(() => {
