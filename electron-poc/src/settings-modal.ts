@@ -717,6 +717,16 @@ export class SettingsModal {
         input.value = this.maskApiKey(settings.hiveKey);
         input.setAttribute('data-masked', 'true');
         this.validateHiveKey(settings.hiveKey);
+        
+        // Show stored license information if available
+        if (settings.hiveTier || settings.hiveDailyLimit) {
+          this.updateLicenseStatus({
+            valid: true,
+            tier: settings.hiveTier || 'Free',
+            dailyLimit: settings.hiveDailyLimit || 10,
+            remaining: settings.hiveRemaining
+          });
+        }
       }
 
       // Load selected profile from active_profile_id
@@ -803,9 +813,22 @@ export class SettingsModal {
       if (hiveKey) {
         if (result.hiveValid) {
           results.push('✅ Hive key is valid');
-          this.updateLicenseStatus(result.licenseInfo);
+          if (result.licenseInfo) {
+            results.push(`📊 Tier: ${result.licenseInfo.tier}`);
+            results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
+            if (result.licenseInfo.remaining !== undefined) {
+              results.push(`📈 Remaining today: ${result.licenseInfo.remaining} conversations`);
+            }
+            if (result.licenseInfo.email) {
+              results.push(`📧 Account: ${result.licenseInfo.email}`);
+            }
+            this.updateLicenseStatus(result.licenseInfo);
+          }
         } else {
-          results.push('❌ Hive key is invalid (format: HIVE-XXXX-XXXX-XXXX)');
+          results.push('❌ Hive key is invalid');
+          if (result.licenseInfo?.error) {
+            results.push(`⚠️ ${result.licenseInfo.error}`);
+          }
           hasError = true;
         }
       } else {
@@ -964,10 +987,20 @@ export class SettingsModal {
 
     if (info.valid) {
       statusDiv.className = 'license-status valid';
-      statusDiv.textContent = `✓ Valid ${info.tier} license - ${info.dailyLimit} conversations/day`;
+      let statusText = `✓ Valid ${info.tier} license - ${info.dailyLimit} conversations/day`;
+      
+      if (info.remaining !== undefined) {
+        statusText += ` (${info.remaining} remaining today)`;
+      }
+      
+      if (info.email) {
+        statusText += ` - ${info.email}`;
+      }
+      
+      statusDiv.textContent = statusText;
     } else {
       statusDiv.className = 'license-status invalid';
-      statusDiv.textContent = '✗ Invalid or expired license key';
+      statusDiv.textContent = info.error || '✗ Invalid or expired license key';
     }
   }
 

@@ -182,16 +182,29 @@ ipcMain.handle('settings-load', async () => {
             });
           }
           
-          // Load other settings
-          db.get('SELECT value FROM configurations WHERE key = ?', ['auto_save'], (err4, row4: any) => {
-            if (row4) settings.autoSave = row4.value === 'true';
+          // Load license tier and usage information
+          db.get('SELECT value FROM configurations WHERE key = ?', ['hive_tier'], (errTier, rowTier: any) => {
+            if (rowTier) settings.hiveTier = rowTier.value;
             
-            db.get('SELECT value FROM configurations WHERE key = ?', ['show_costs'], (err5, row5: any) => {
-              if (row5) settings.showCosts = row5.value === 'true';
+            db.get('SELECT value FROM configurations WHERE key = ?', ['hive_daily_limit'], (errLimit, rowLimit: any) => {
+              if (rowLimit) settings.hiveDailyLimit = parseInt(rowLimit.value);
               
-              db.get('SELECT value FROM configurations WHERE key = ?', ['max_daily_conversations'], (err6, row6: any) => {
-                if (row6) settings.maxDailyConversations = row6.value;
-                resolve(settings);
+              db.get('SELECT value FROM configurations WHERE key = ?', ['hive_remaining'], (errRemaining, rowRemaining: any) => {
+                if (rowRemaining) settings.hiveRemaining = parseInt(rowRemaining.value);
+                
+                // Load other settings
+                db.get('SELECT value FROM configurations WHERE key = ?', ['auto_save'], (err4, row4: any) => {
+                  if (row4) settings.autoSave = row4.value === 'true';
+                  
+                  db.get('SELECT value FROM configurations WHERE key = ?', ['show_costs'], (err5, row5: any) => {
+                    if (row5) settings.showCosts = row5.value === 'true';
+                    
+                    db.get('SELECT value FROM configurations WHERE key = ?', ['max_daily_conversations'], (err6, row6: any) => {
+                      if (row6) settings.maxDailyConversations = row6.value;
+                      resolve(settings);
+                    });
+                  });
+                });
               });
             });
           });
@@ -220,22 +233,147 @@ ipcMain.handle('settings-test-keys', async (_, { openrouterKey, hiveKey }) => {
     }
   }
   
-  // Test Hive key - validate format HIVE-XXXX-XXXX-XXXX
+  // Test Hive key - real D1 authentication
   if (hiveKey) {
     const upperKey = hiveKey.toUpperCase();
     if (upperKey.startsWith('HIVE-')) {
       const parts = upperKey.split('-');
-      // Should have at least 3 segments after HIVE (HIVE-XXXX-XXXX-XXXX)
+      // Validate format first (HIVE-XXXX-XXXX-XXXX or longer)
       if (parts.length >= 4 && parts.slice(1).every((segment: string) => 
         segment.length === 4 && /^[A-Z0-9]{4}$/.test(segment)
       )) {
-        result.hiveValid = true;
+        try {
+          // Create device fingerprint (matching Rust implementation)
+          const crypto = require('crypto');
+          const hostname = os.hostname();
+          const username = os.userInfo().username;
+          const platform = os.platform();
+          const arch = os.arch();
+          const release = os.release();
+          const cpus = os.cpus().length;
+          const memory = Math.floor(os.totalmem() / 1024 / 1024); // MB
+          
+          const deviceData = {
+            platform,
+            arch,
+            release,
+            cpus,
+            memory
+          };
+          
+          const deviceString = JSON.stringify(deviceData);
+          const fingerprint = crypto.createHash('sha256')
+            .update(deviceString)
+            .digest('hex')
+            .substring(0, 32);
+          
+          // Make request to Cloudflare D1 gateway
+          const response = await fetch('https://gateway.hivetechs.io/v1/session/validate', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${upperKey}`,
+              'Content-Type': 'application/json',
+              'User-Agent': 'hive-electron/2.0.0'
+            },
+            body: JSON.stringify({
+              client_id: 'hive-tools',
+              session_token: upperKey,
+              fingerprint: fingerprint,
+              nonce: Date.now().toString()
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            
+            if (data.valid) {
+              // Parse tier information
+              const tier = data.tier || data.user?.subscription_tier || 'free';
+              const dailyLimit = data.daily_limit || data.limits?.daily || 10;
+              const remaining = data.usage?.remaining || 0;
+              const email = data.email || data.user?.email || '';
+              const userId = data.user_id || data.user?.id || '';
+              
+              result.hiveValid = true;
+              result.licenseInfo = {
+                valid: true,
+                tier: tier.charAt(0).toUpperCase() + tier.slice(1).toLowerCase(),
+                dailyLimit: dailyLimit,
+                remaining: remaining,
+                email: email,
+                userId: userId,
+                features: data.features || ['consensus']
+              };
+              
+              // Store validated license info in database
+              if (db) {
+                const timestamp = new Date().toISOString();
+                db.run(
+                  `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(key) DO UPDATE SET
+                   value = excluded.value,
+                   updated_at = excluded.updated_at`,
+                  ['hive_tier', tier, 0, userId || 'default', timestamp, timestamp]
+                );
+                
+                db.run(
+                  `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(key) DO UPDATE SET
+                   value = excluded.value,
+                   updated_at = excluded.updated_at`,
+                  ['hive_daily_limit', dailyLimit.toString(), 0, userId || 'default', timestamp, timestamp]
+                );
+                
+                db.run(
+                  `INSERT INTO configurations (key, value, encrypted, user_id, created_at, updated_at) 
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(key) DO UPDATE SET
+                   value = excluded.value,
+                   updated_at = excluded.updated_at`,
+                  ['hive_remaining', remaining.toString(), 0, userId || 'default', timestamp, timestamp]
+                );
+              }
+            } else {
+              result.hiveValid = false;
+              result.licenseInfo = {
+                valid: false,
+                error: data.error || 'Invalid license key'
+              };
+            }
+          } else {
+            // Handle error responses
+            const errorText = await response.text();
+            console.error('License validation failed:', response.status, errorText);
+            
+            result.hiveValid = false;
+            result.licenseInfo = {
+              valid: false,
+              error: `Validation failed: ${response.status}`
+            };
+          }
+        } catch (error) {
+          console.error('Failed to validate Hive license:', error);
+          result.hiveValid = false;
+          result.licenseInfo = {
+            valid: false,
+            error: 'Network error - unable to validate license'
+          };
+        }
+      } else {
+        result.hiveValid = false;
         result.licenseInfo = {
-          valid: true,
-          tier: 'premium',
-          dailyLimit: 1000
+          valid: false,
+          error: 'Invalid license key format'
         };
       }
+    } else {
+      result.hiveValid = false;
+      result.licenseInfo = {
+        valid: false,
+        error: 'License key must start with HIVE-'
+      };
     }
   }
   
