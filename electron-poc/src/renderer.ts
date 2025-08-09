@@ -18,25 +18,25 @@ const ACTIVITY_BAR_ITEMS: ActivityBarItem[] = [
   {
     id: 'explorer',
     title: 'Explorer (Ctrl+Shift+E)', 
-    icon: '📁',
+    icon: '☰',
     enabled: true
   },
   {
     id: 'consensus',
     title: 'Consensus Engine (Ctrl+Shift+C)',
-    icon: '🧠', 
+    icon: '◈', 
     enabled: true
   },
   {
     id: 'git',
     title: 'Source Control (Ctrl+Shift+G)',
-    icon: '🌿',
+    icon: '⎇',
     enabled: true
   },
   {
     id: 'terminal',
     title: 'Terminal (Ctrl+`)',
-    icon: '💻',
+    icon: '▣',
     enabled: true
   }
 ];
@@ -54,7 +54,42 @@ document.body.innerHTML = `
       </div>
     </div>
     <div class="title-bar-center">
-      🐝 Hive Consensus - Day 0 Validation
+      <div class="title-logo">
+        <svg width="24" height="24" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="64" height="64" rx="8" fill="#2A2A2A"/>
+          <g transform="translate(32, 32)" stroke="#FFC107" stroke-width="1.2" fill="none">
+            <line x1="-3" y1="-18" x2="-6" y2="-22"/>
+            <line x1="3" y1="-18" x2="6" y2="-22"/>
+            <path d="M -8 -18 L -8 -14 L -4 -12 L 0 -12 L 4 -12 L 8 -14 L 8 -18 L 4 -20 L 0 -20 L -4 -20 Z"/>
+            <line x1="-4" y1="-20" x2="-4" y2="-12"/>
+            <line x1="4" y1="-20" x2="4" y2="-12"/>
+            <g id="left-wing">
+              <path d="M -10 -10 L -22 -14 L -26 -10 L -26 -2 L -22 2 L -14 2 L -10 -2 Z"/>
+              <line x1="-14" y1="-10" x2="-18" y2="-6"/>
+              <line x1="-18" y1="-10" x2="-22" y2="-6"/>
+              <line x1="-14" y1="-6" x2="-18" y2="-2"/>
+              <line x1="-18" y1="-6" x2="-22" y2="-2"/>
+            </g>
+            <g id="right-wing">
+              <path d="M 10 -10 L 22 -14 L 26 -10 L 26 -2 L 22 2 L 14 2 L 10 -2 Z"/>
+              <line x1="14" y1="-10" x2="18" y2="-6"/>
+              <line x1="18" y1="-10" x2="22" y2="-6"/>
+              <line x1="14" y1="-6" x2="18" y2="-2"/>
+              <line x1="18" y1="-6" x2="22" y2="-2"/>
+            </g>
+            <path d="M -8 -12 L -10 -6 L -10 -2 L -8 2 L -4 4 L 0 4 L 4 4 L 8 2 L 10 -2 L 10 -6 L 8 -12"/>
+            <line x1="-8" y1="-8" x2="8" y2="-8"/>
+            <line x1="-8" y1="-4" x2="8" y2="-4"/>
+            <line x1="-8" y1="0" x2="8" y2="0"/>
+            <path d="M -8 2 L -10 8 L -8 14 L -6 18 L -2 20 L 0 20 L 2 20 L 6 18 L 8 14 L 10 8 L 8 2"/>
+            <line x1="-8" y1="6" x2="8" y2="6"/>
+            <line x1="-8" y1="10" x2="8" y2="10"/>
+            <line x1="-6" y1="14" x2="6" y2="14"/>
+            <path d="M -2 20 L 0 24 L 2 20"/>
+          </g>
+        </svg>
+      </div>
+      <span class="title-text">Hive Consensus - Day 0 Validation</span>
     </div>
     <div class="title-bar-right"></div>
   </div>
@@ -443,5 +478,5 @@ setTimeout(async () => {
 
 // Initialize default view
 switchToView('consensus');
-addLogEntry('🐝 Hive Consensus Day 0 Validation started', 'info');
-addLogEntry('📋 Click buttons above to test the Electron + Rust architecture', 'info');
+addLogEntry('⚡ Hive Consensus Day 0 Validation started', 'info');
+addLogEntry('🔧 Click buttons above to test the Electron + Rust architecture', 'info');
