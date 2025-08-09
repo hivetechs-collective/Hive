@@ -128,6 +128,7 @@ export class SettingsModal {
   private profileCreationModal: HTMLElement | null = null;
   private availableModels: any[] = [];
   private customProfiles: ConsensusProfile[] = [];
+  private notificationQueue: HTMLElement[] = [];
 
   private createProfileCreationModal(): string {
     return `
@@ -773,24 +774,46 @@ export class SettingsModal {
     const openrouterKey = openrouterInput.getAttribute('data-actual-key') || openrouterInput.value;
     const hiveKey = hiveInput.getAttribute('data-actual-key') || hiveInput.value;
 
+    // Clear existing notifications
+    this.clearAllNotifications();
+
     try {
       const result = await (window as any).settingsAPI.testKeys({
         openrouterKey,
         hiveKey
       });
 
-      if (result.openrouterValid) {
-        this.showMessage('OpenRouter key is valid!', 'success');
+      // Build combined result message
+      const results: string[] = [];
+      let hasError = false;
+
+      // Check OpenRouter key
+      if (openrouterKey) {
+        if (result.openrouterValid) {
+          results.push('✅ OpenRouter key is valid');
+        } else {
+          results.push('❌ OpenRouter key is invalid');
+          hasError = true;
+        }
       } else {
-        this.showMessage('OpenRouter key is invalid', 'error');
+        results.push('⚠️ No OpenRouter key provided');
       }
 
-      if (result.hiveValid) {
-        this.showMessage('Hive key is valid!', 'success');
-        this.updateLicenseStatus(result.licenseInfo);
+      // Check Hive key
+      if (hiveKey) {
+        if (result.hiveValid) {
+          results.push('✅ Hive key is valid');
+          this.updateLicenseStatus(result.licenseInfo);
+        } else {
+          results.push('❌ Hive key is invalid (format: HIVE-XXXX-XXXX-XXXX)');
+          hasError = true;
+        }
       } else {
-        this.showMessage('Hive key is invalid', 'error');
+        results.push('⚠️ No Hive key provided');
       }
+
+      // Show combined notification
+      this.showCombinedMessage(results, hasError ? 'mixed' : 'success');
     } catch (error) {
       this.showMessage(`Failed to test keys: ${error}`, 'error');
     }
@@ -1192,13 +1215,17 @@ export class SettingsModal {
   }
 
   private showMessage(message: string, type: 'success' | 'error') {
+    // Calculate position based on existing notifications
+    const existingToasts = document.querySelectorAll('.toast');
+    const topOffset = 60 + (existingToasts.length * 60); // Stack notifications
+    
     // Create toast notification
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
     toast.style.cssText = `
       position: fixed;
-      top: 60px;
+      top: ${topOffset}px;
       right: 20px;
       padding: 12px 20px;
       background: ${type === 'success' ? '#4CAF50' : '#F44336'};
@@ -1206,12 +1233,83 @@ export class SettingsModal {
       border-radius: 4px;
       z-index: 10000;
       animation: slideIn 0.3s ease;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      max-width: 400px;
     `;
     
     document.body.appendChild(toast);
+    this.notificationQueue.push(toast);
     
     setTimeout(() => {
-      toast.remove();
+      toast.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => {
+        toast.remove();
+        const index = this.notificationQueue.indexOf(toast);
+        if (index > -1) {
+          this.notificationQueue.splice(index, 1);
+        }
+        // Reposition remaining notifications
+        this.repositionNotifications();
+      }, 300);
     }, 3000);
+  }
+
+  private showCombinedMessage(messages: string[], type: 'success' | 'error' | 'mixed') {
+    // Clear existing notifications first
+    this.clearAllNotifications();
+    
+    // Create combined toast notification
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    // Create formatted content
+    const content = document.createElement('div');
+    content.innerHTML = messages.map(msg => `<div style="margin: 2px 0;">${msg}</div>`).join('');
+    toast.appendChild(content);
+    
+    const bgColor = type === 'success' ? '#4CAF50' : type === 'error' ? '#F44336' : '#FF9800';
+    
+    toast.style.cssText = `
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      padding: 15px 20px;
+      background: ${bgColor};
+      color: white;
+      border-radius: 6px;
+      z-index: 10000;
+      animation: slideIn 0.3s ease;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      max-width: 400px;
+      font-size: 14px;
+      line-height: 1.5;
+    `;
+    
+    document.body.appendChild(toast);
+    this.notificationQueue.push(toast);
+    
+    setTimeout(() => {
+      toast.style.animation = 'slideOut 0.3s ease';
+      setTimeout(() => {
+        toast.remove();
+        const index = this.notificationQueue.indexOf(toast);
+        if (index > -1) {
+          this.notificationQueue.splice(index, 1);
+        }
+      }, 300);
+    }, 5000); // Longer duration for combined message
+  }
+
+  private clearAllNotifications() {
+    this.notificationQueue.forEach(toast => {
+      toast.remove();
+    });
+    this.notificationQueue = [];
+  }
+
+  private repositionNotifications() {
+    this.notificationQueue.forEach((toast, index) => {
+      toast.style.top = `${60 + (index * 60)}px`;
+    });
   }
 }

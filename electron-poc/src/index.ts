@@ -220,15 +220,23 @@ ipcMain.handle('settings-test-keys', async (_, { openrouterKey, hiveKey }) => {
     }
   }
   
-  // Test Hive key (would normally check against Cloudflare D1)
-  if (hiveKey && hiveKey.startsWith('hive-')) {
-    // For now, just validate format
-    result.hiveValid = true;
-    result.licenseInfo = {
-      valid: true,
-      tier: 'premium',
-      dailyLimit: 1000
-    };
+  // Test Hive key - validate format HIVE-XXXX-XXXX-XXXX
+  if (hiveKey) {
+    const upperKey = hiveKey.toUpperCase();
+    if (upperKey.startsWith('HIVE-')) {
+      const parts = upperKey.split('-');
+      // Should have at least 3 segments after HIVE (HIVE-XXXX-XXXX-XXXX)
+      if (parts.length >= 4 && parts.slice(1).every((segment: string) => 
+        segment.length === 4 && /^[A-Z0-9]{4}$/.test(segment)
+      )) {
+        result.hiveValid = true;
+        result.licenseInfo = {
+          valid: true,
+          tier: 'premium',
+          dailyLimit: 1000
+        };
+      }
+    }
   }
   
   return result;
