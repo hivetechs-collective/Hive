@@ -214,11 +214,58 @@ ipcMain.handle('websocket-connect', async (event, url: string) => {
 });
 
 ipcMain.handle('websocket-send', async (_, message: string) => {
+  // Check if WebSocket is open
   if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
     wsConnection.send(message);
     return { sent: true };
   }
-  throw new Error('WebSocket not connected');
+  
+  // If not connected, try to reconnect once
+  console.log('WebSocket not ready, attempting reconnection...');
+  try {
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject('Connection timeout'), 3000);
+      
+      if (!wsConnection || wsConnection.readyState === WebSocket.CLOSED) {
+        // Reconnect to WebSocket
+        wsConnection = new WebSocket('ws://127.0.0.1:8765/ws');
+        
+        wsConnection.once('open', () => {
+          clearTimeout(timeout);
+          console.log('WebSocket reconnected successfully');
+          resolve(true);
+        });
+        
+        wsConnection.once('error', (err: any) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+        
+        // Re-attach message handler for all windows
+        wsConnection.on('message', (data: any) => {
+          // Send to all windows
+          BrowserWindow.getAllWindows().forEach(window => {
+            window.webContents.send('websocket-message', data.toString());
+          });
+        });
+      } else if (wsConnection.readyState === WebSocket.CONNECTING) {
+        // Wait for existing connection
+        wsConnection.once('open', () => {
+          clearTimeout(timeout);
+          resolve(true);
+        });
+      } else {
+        reject('Unknown WebSocket state');
+      }
+    });
+    
+    // Now send the message
+    wsConnection.send(message);
+    return { sent: true };
+  } catch (error) {
+    console.error('Failed to reconnect WebSocket:', error);
+    throw new Error('WebSocket not connected and reconnection failed');
+  }
 });
 
 ipcMain.handle('websocket-close', async () => {

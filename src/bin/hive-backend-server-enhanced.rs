@@ -50,10 +50,21 @@ struct ConsensusResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct ContextMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum WSMessage {
     // Client -> Server
-    StartConsensus { query: String, profile: Option<String> },
+    StartConsensus { 
+        query: String, 
+        profile: Option<String>,
+        conversation_id: Option<String>,
+        context: Option<Vec<ContextMessage>>
+    },
     CancelConsensus,
     
     // Server -> Client
@@ -199,10 +210,11 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Initialize consensus engine with database
+    // The ConsensusEngine will initialize its own AI helpers internally
     let consensus_engine = if let Some(ref db) = database {
         match ConsensusEngine::new(Some(db.clone())).await {
             Ok(engine) => {
-                info!("✅ Consensus engine initialized with database");
+                info!("✅ Consensus engine initialized with database and AI helpers");
                 Some(engine)
             }
             Err(e) => {
@@ -211,24 +223,12 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     } else {
+        warn!("⚠️ Running without database - no consensus engine available");
         None
     };
-
-    // Initialize AI helpers
-    let ai_helpers = if let Some(ref db) = database {
-        match AIHelperEcosystem::new(db.clone()).await {
-            Ok(helpers) => {
-                info!("✅ AI Helper Ecosystem initialized");
-                Some(Arc::new(helpers))
-            }
-            Err(e) => {
-                warn!("⚠️ AI Helpers not available: {}", e);
-                None
-            }
-        }
-    } else {
-        None
-    };
+    
+    // AI helpers are now managed internally by ConsensusEngine
+    let ai_helpers = None;
 
     // Create shared state
     let state = Arc::new(AppState {
@@ -281,18 +281,20 @@ async fn test_websocket_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
         info!("Test WebSocket connected");
         
         // Send a test message
-        if let Err(e) = socket.send(axum::extract::ws::Message::Text(
+        let (mut tx, mut rx) = socket.split();
+        
+        if let Err(e) = tx.send(axum::extract::ws::Message::Text(
             "WebSocket connection successful!".to_string()
         )).await {
             error!("Failed to send test message: {}", e);
         }
         
         // Echo messages back
-        while let Some(msg) = socket.recv().await {
+        while let Some(msg) = rx.next().await {
             if let Ok(msg) = msg {
                 match msg {
                     axum::extract::ws::Message::Text(txt) => {
-                        let _ = socket.send(axum::extract::ws::Message::Text(
+                        let _ = tx.send(axum::extract::ws::Message::Text(
                             format!("Echo: {}", txt)
                         )).await;
                     }
@@ -344,9 +346,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
         if let Ok(msg) = msg {
             match msg {
                 axum::extract::ws::Message::Text(text) => {
-                    if let Ok(ws_msg) = serde_json::from_str::<WSMessage>(&text) {
-                        match ws_msg {
-                            WSMessage::StartConsensus { query, profile } => {
+                    info!("Received WebSocket text message: {}", text);
+                    match serde_json::from_str::<WSMessage>(&text) {
+                        Ok(ws_msg) => {
+                            info!("Successfully parsed WSMessage: {:?}", ws_msg);
+                            match ws_msg {
+                                WSMessage::StartConsensus { query, profile, conversation_id, context } => {
+                                    info!("Received StartConsensus message!");
                                 // Run consensus in separate task to avoid blocking
                                 let state_clone = state.clone();
                                 let tx_clone = tx.clone();
@@ -355,6 +361,8 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                     run_consensus_streaming(
                                         query,
                                         profile,
+                                        conversation_id,
+                                        context,
                                         state_clone,
                                         tx_clone,
                                     ).await;
@@ -364,7 +372,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                                 info!("Consensus cancellation requested");
                                 // TODO: Implement cancellation token
                             }
-                            _ => {}
+                            _ => {
+                                info!("Received other WSMessage type");
+                            }
+                        }
+                        }
+                        Err(e) => {
+                            error!("Failed to parse WSMessage: {}, raw text was: {}", e, text);
                         }
                     }
                 }
@@ -380,10 +394,13 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
 async fn run_consensus_streaming(
     query: String,
     profile: Option<String>,
+    conversation_id: Option<String>,
+    context: Option<Vec<ContextMessage>>,
     state: Arc<AppState>,
     tx: mpsc::UnboundedSender<WSMessage>,
 ) {
-    info!("Starting streaming consensus for query: '{}' with profile: {:?}", query, profile);
+    info!("Starting streaming consensus for query: '{}' with profile: {:?}, conversation_id: {:?}", 
+        query, profile, conversation_id);
     
     // Check if engine is initialized
     let engine_guard = state.consensus_engine.read().await;
@@ -398,6 +415,26 @@ async fn run_consensus_streaming(
     let engine = engine_guard.as_ref().unwrap();
     info!("Consensus engine obtained, preparing to process...");
     
+    // Build context string from conversation history
+    let context_str = if let Some(ctx_messages) = context {
+        if !ctx_messages.is_empty() {
+            let mut ctx = String::new();
+            ctx.push_str("Previous conversation context:\n");
+            for msg in ctx_messages.iter().take(10) { // Limit to last 10 messages for context
+                ctx.push_str(&format!("{}: {}\n", msg.role, msg.content));
+            }
+            Some(ctx)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    
+    if let Some(ref ctx) = context_str {
+        info!("Using conversation context with {} characters", ctx.len());
+    }
+    
     // For now, always use full consensus pipeline
     // TODO: Implement AI helper routing when methods are available
     let _ = tx.send(WSMessage::AIHelperDecision {
@@ -410,8 +447,15 @@ async fn run_consensus_streaming(
     
     info!("Starting consensus processing with callbacks...");
     
-    // Run consensus with streaming callbacks (profile is passed as second parameter)
-    match engine.process_with_callbacks(&query, profile, callbacks, None).await {
+    // Set the profile if provided
+    if let Some(profile_name) = profile {
+        if let Err(e) = engine.set_profile(&profile_name).await {
+            warn!("Failed to set profile {}: {}", profile_name, e);
+        }
+    }
+    
+    // Run consensus with streaming callbacks (context as second parameter, user_id as fourth)
+    match engine.process_with_callbacks(&query, context_str, callbacks, conversation_id).await {
         Ok(result) => {
             info!("Consensus completed successfully");
             // Calculate total tokens from stages

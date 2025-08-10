@@ -5,9 +5,9 @@
 //! and ensuring appropriate knowledge domain routing.
 
 use std::sync::Arc;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn, debug};
+use tracing::{debug, error, info, warn};
 use crate::consensus::ExecutionMode;
 
 use crate::ai_helpers::{
@@ -170,11 +170,7 @@ impl IntelligentContextOrchestrator {
         // Use PatternRecognizer to identify code vs general patterns
         let patterns = self.pattern_recognizer
             .analyze_code_patterns(question, "question_analysis")
-            .await
-            .unwrap_or_else(|e| {
-                warn!("Pattern analysis failed: {}, using heuristics", e);
-                Vec::new()
-            });
+            .await?;  // NO FALLBACK - if AI pattern analysis fails, propagate error
         
         // Calculate indicator scores
         let code_indicators = self.calculate_code_indicators(question, &patterns);
@@ -306,29 +302,10 @@ impl IntelligentContextOrchestrator {
     
     // Helper methods for calculations and analysis
     
-    fn detect_additional_categories(&self, question: &str) -> Vec<QuestionCategory> {
-        let question_lower = question.to_lowercase();
-        let mut categories = Vec::new();
-        
-        // Physics/Science indicators
-        if question_lower.contains("quantum") || question_lower.contains("physics") 
-            || question_lower.contains("chemistry") || question_lower.contains("biology") {
-            categories.push(QuestionCategory::AcademicKnowledge);
-        }
-        
-        // Programming indicators
-        if question_lower.contains("code") || question_lower.contains("function")
-            || question_lower.contains("algorithm") || question_lower.contains("programming") {
-            categories.push(QuestionCategory::GeneralProgramming);
-        }
-        
-        // Repository indicators  
-        if question_lower.contains("this") || question_lower.contains("here")
-            || question_lower.contains("current") || question_lower.contains("my") {
-            categories.push(QuestionCategory::RepositorySpecific);
-        }
-        
-        categories
+    fn detect_additional_categories(&self, _question: &str) -> Vec<QuestionCategory> {
+        // NO HARD-CODED DETECTION - AI model must determine all categories
+        // The LLM should analyze the question semantically, not with keywords
+        Vec::new() // AI model provides all category analysis
     }
     
     fn determine_primary_category(
@@ -354,28 +331,25 @@ impl IntelligentContextOrchestrator {
             .count() as f64 / patterns.len().max(1) as f64
     }
     
-    fn calculate_repo_indicators(&self, question: &str, _patterns: &[crate::ai_helpers::Pattern]) -> f64 {
-        let repo_keywords = ["this", "here", "current", "my", "our", "the code", "this project"];
-        let matches = repo_keywords.iter()
-            .filter(|&&keyword| question.to_lowercase().contains(keyword))
-            .count();
-        matches as f64 / repo_keywords.len() as f64
+    fn calculate_repo_indicators(&self, _question: &str, patterns: &[crate::ai_helpers::Pattern]) -> f64 {
+        // Use AI pattern analysis only - no keywords
+        patterns.iter()
+            .filter(|p| matches!(p.pattern_type, crate::ai_helpers::PatternType::Evolution))
+            .count() as f64 / patterns.len().max(1) as f64
     }
     
-    fn calculate_general_indicators(&self, question: &str, _patterns: &[crate::ai_helpers::Pattern]) -> f64 {
-        let general_keywords = ["what is", "how does", "explain", "difference between"];
-        let matches = general_keywords.iter()
-            .filter(|&&keyword| question.to_lowercase().contains(keyword))
-            .count();
-        matches as f64 / general_keywords.len() as f64
+    fn calculate_general_indicators(&self, _question: &str, patterns: &[crate::ai_helpers::Pattern]) -> f64 {
+        // Use AI pattern analysis only - no keywords
+        patterns.iter()
+            .filter(|p| matches!(p.pattern_type, crate::ai_helpers::PatternType::Insight))
+            .count() as f64 / patterns.len().max(1) as f64
     }
     
-    fn calculate_academic_indicators(&self, question: &str, _patterns: &[crate::ai_helpers::Pattern]) -> f64 {
-        let academic_keywords = ["quantum", "physics", "chemistry", "theory", "mathematics"];
-        let matches = academic_keywords.iter()
-            .filter(|&&keyword| question.to_lowercase().contains(keyword))
-            .count();
-        matches as f64 / academic_keywords.len() as f64
+    fn calculate_academic_indicators(&self, _question: &str, patterns: &[crate::ai_helpers::Pattern]) -> f64 {
+        // Use AI pattern analysis only - no keywords
+        patterns.iter()
+            .filter(|p| matches!(p.pattern_type, crate::ai_helpers::PatternType::Relationship))
+            .count() as f64 / patterns.len().max(1) as f64
     }
     
     fn calculate_repo_suitability(
@@ -508,14 +482,9 @@ impl IntelligentContextOrchestrator {
         // This uses GraphCodeBERT to create embeddings and understand semantic meaning
         
         // For now, fall back to basic analysis until analyze_question_complexity is implemented
-        // TODO: Implement analyze_question_complexity in KnowledgeSynthesizer
-        warn!("Using fallback complexity analysis - analyze_question_complexity not yet implemented");
-        
-        // Simple fallback based on question length and structure
-        let length_normalized = (question.len() as f64 / 100.0).min(1.0);
-        let complexity = length_normalized * 0.5; // Simple length-based estimate
-        
-        Ok(complexity)
+        // NO FALLBACK - must use AI for complexity analysis
+        error!("AI complexity analysis required but not implemented - cannot use fallback");
+        Err(anyhow!("LLM-based complexity analysis required but not available"))
     }
 }
 

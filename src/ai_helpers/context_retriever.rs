@@ -7,10 +7,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use anyhow::{Result, Context};
+use anyhow::{anyhow, Result, Context};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::ai_helpers::{ChromaVectorStore, StageContext, Pattern, Insight};
 use crate::consensus::operation_intelligence::{OperationContext, OperationOutcome};
@@ -935,8 +935,9 @@ impl ContextRetriever {
                 self.parse_context_decision_from_value(&result, question)
             }
             Err(e) => {
-                tracing::warn!("Failed to analyze question context with AI model: {}, falling back to heuristics", e);
-                Ok(self.fallback_context_analysis(question))
+                // NO FALLBACK - LLM or nothing
+                error!("AI model analysis failed: {}. Cannot proceed without LLM intelligence.", e);
+                Err(anyhow!("AI Helper LLM analysis required but failed: {}", e))
             }
         }
     }
@@ -966,9 +967,9 @@ impl ContextRetriever {
             });
         }
         
-        // If parsing failed, fall back to heuristics
-        tracing::warn!("Failed to parse AI context analysis, using fallback");
-        Ok(self.fallback_context_analysis(question))
+        // NO FALLBACK - if AI analysis fails, we fail
+        error!("Failed to parse AI context analysis. Cannot proceed without LLM intelligence.");
+        Err(anyhow!("AI model response parsing failed - LLM intelligence required"))
     }
     
     // === Operation History Analysis Methods ===
@@ -1674,7 +1675,8 @@ impl ContextRetriever {
         }
     }
     
-    /// Fallback heuristic analysis when AI model is unavailable
+    /// REMOVED - No fallback allowed, LLM or nothing
+    #[deprecated(note = "Fallback removed - AI Helpers must use LLM intelligence only")]
     fn fallback_context_analysis(&self, question: &str) -> ContextDecision {
         let question_lower = question.to_lowercase();
         

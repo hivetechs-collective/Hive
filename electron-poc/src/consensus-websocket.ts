@@ -25,37 +25,49 @@ export class ConsensusWebSocket {
   private isManuallyDisconnected = false;
   private pingInterval: number | null = null;
   private connected = false;
+  private listenersSetup = false;
   
   constructor(url: string, callbacks: ConsensusStreamCallbacks) {
     this.url = url;
     this.callbacks = callbacks;
+    this.setupIPCListeners();
+  }
+  
+  private setupIPCListeners(): void {
+    // Only set up listeners once to avoid duplication
+    if (this.listenersSetup) {
+      return;
+    }
+    
+    this.listenersSetup = true;
+    
+    // Set up message listeners once
+    (window as any).websocketAPI.onMessage((data: string) => {
+      try {
+        const message = JSON.parse(data);
+        this.handleMessage(message);
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    });
+    
+    (window as any).websocketAPI.onError((error: string) => {
+      console.error('WebSocket error via IPC:', error);
+      this.callbacks.onError?.('WebSocket connection error');
+      this.connected = false;
+      this.callbacks.onConnectionStateChange?.(false);
+    });
+    
+    (window as any).websocketAPI.onClose(() => {
+      console.log('WebSocket closed via IPC');
+      this.connected = false;
+      this.callbacks.onConnectionStateChange?.(false);
+      this.scheduleReconnect();
+    });
   }
   
   private async connectViaIPC(): Promise<void> {
     try {
-      // Set up message listeners first
-      (window as any).websocketAPI.onMessage((data: string) => {
-        try {
-          const message = JSON.parse(data);
-          this.handleMessage(message);
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-        }
-      });
-      
-      (window as any).websocketAPI.onError((error: string) => {
-        console.error('WebSocket error via IPC:', error);
-        this.callbacks.onError?.('WebSocket connection error');
-        this.connected = false;
-        this.callbacks.onConnectionStateChange?.(false);
-      });
-      
-      (window as any).websocketAPI.onClose(() => {
-        console.log('WebSocket closed via IPC');
-        this.connected = false;
-        this.callbacks.onConnectionStateChange?.(false);
-        this.scheduleReconnect();
-      });
       
       // Connect via IPC
       const result = await (window as any).websocketAPI.connect(this.url);
@@ -197,7 +209,12 @@ export class ConsensusWebSocket {
     }
   }
   
-  async startConsensus(query: string, profile?: string): Promise<void> {
+  async startConsensus(
+    query: string, 
+    profile?: string, 
+    conversationId?: string,
+    context?: Array<{role: string, content: string}>
+  ): Promise<void> {
     if (!this.connected) {
       this.callbacks.onError?.('WebSocket not connected');
       return;
@@ -206,12 +223,14 @@ export class ConsensusWebSocket {
     const message = {
       type: 'start_consensus',
       query,
-      profile
+      profile,
+      conversation_id: conversationId,
+      context: context
     };
     
     try {
       await (window as any).websocketAPI.send(JSON.stringify(message));
-      console.log('Sent consensus request via IPC');
+      console.log('Sent consensus request via IPC with conversation_id:', conversationId);
     } catch (error) {
       console.error('Failed to send consensus request:', error);
       this.callbacks.onError?.('Failed to send message');

@@ -463,9 +463,9 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
     fn on_start(&self) {
         // Signal stage start through the consensus callbacks
         tracing::info!("DirectStreamingCallbacks::on_start called, forwarding to consensus callbacks");
-        // Note: We don't know the actual model here, so we pass a placeholder
-        // The actual model will be shown in on_stage_complete
-        if let Err(e) = self.inner.on_stage_start(self.stage, "loading...") {
+        // For Direct mode, we're using the Generator stage
+        // The actual model will be updated when we get the first chunk
+        if let Err(e) = self.inner.on_stage_start(self.stage, "starting...") {
             tracing::error!("Failed to call on_stage_start: {}", e);
         }
     }
@@ -538,13 +538,17 @@ impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbac
     }
     
     fn on_complete(&self, _final_content: String, usage: Option<crate::consensus::openrouter::Usage>) {
-        // Capture usage data
+        // Capture usage data synchronously using blocking
         if let Some(usage_data) = usage {
+            // Use blocking to ensure the usage is captured immediately
             let usage_capture = self.usage_capture.clone();
-            tokio::spawn(async move {
-                let mut guard = usage_capture.lock().await;
-                *guard = Some(usage_data);
-            });
+            // We're already in an async context, so we can block on the mutex
+            let mut guard = futures::executor::block_on(usage_capture.lock());
+            *guard = Some(usage_data);
+            tracing::debug!("Direct mode: Captured usage data - prompt: {}, completion: {}", 
+                guard.as_ref().map(|u| u.prompt_tokens).unwrap_or(0),
+                guard.as_ref().map(|u| u.completion_tokens).unwrap_or(0)
+            );
         }
         // NOTE: We don't forward completion here because the DirectExecutionHandler
         // will call callbacks.on_stage_complete directly with the full StageResult

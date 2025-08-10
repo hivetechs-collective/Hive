@@ -288,30 +288,8 @@ impl ModeDetector {
     pub async fn detect_mode(&self, request: &str) -> ExecutionMode {
         tracing::debug!("🔍 Mode detector analyzing request: '{}'", request);
         
-        // First, check pattern matches
-        let mut best_match: Option<(ExecutionMode, f32)> = None;
-        
-        for pattern in &self.patterns {
-            if let Some((mode, confidence)) = pattern.matches(request) {
-                tracing::debug!("  Pattern '{}' matched with mode {:?} (confidence: {})", 
-                    pattern.description, mode, confidence);
-                if best_match.is_none() || best_match.as_ref().unwrap().1 < confidence {
-                    best_match = Some((mode, confidence));
-                }
-            }
-        }
-        
-        // If we have a high-confidence pattern match, use it
-        if let Some((mode, confidence)) = best_match {
-            if confidence >= 0.85 {
-                tracing::info!("🎯 Mode detector: High confidence pattern match - using {:?} mode (confidence: {})", mode, confidence);
-                return mode;
-            }
-        }
-        
-        // Analyze complexity
-        let complexity = self.complexity_analyzer.analyze(request);
-        tracing::debug!("  Complexity score: {}", complexity);
+        // NO PATTERN MATCHING - LLM OR NOTHING
+        // User directive: "remove fall back or any hard coding this is LLM or nothing"
         
         // If we have AI helpers, use their intelligent analysis
         if let Some(ai_helpers) = &self.ai_helpers {
@@ -322,79 +300,35 @@ impl ModeDetector {
                     return ai_mode;
                 }
                 Err(e) => {
-                    tracing::warn!("AI Helper decision failed: {}, falling back to heuristics", e);
+                    // NO FALLBACK - LLM or nothing
+                    tracing::error!("AI Helper decision failed: {}. Cannot proceed without LLM intelligence.", e);
+                    // Default to Direct mode when AI is unavailable - at least attempt something
+                    tracing::warn!("⚠️ AI Helper unavailable - defaulting to Direct mode (no pattern matching fallback)");
+                    return ExecutionMode::Direct;
                 }
             }
         }
         
-        // HEAVILY favor direct mode - simple questions should get immediate answers
-        match (best_match, complexity) {
-            // ANY direct pattern match should be honored - don't let complexity override simple questions
-            (Some((ExecutionMode::Direct, confidence)), _) if confidence >= 0.6 => {
-                tracing::info!("🚀 Mode detector: Direct pattern match - using Direct mode (confidence: {})", confidence);
-                ExecutionMode::Direct
-            },
-            
-            // Only use consensus for very high confidence complex analysis patterns
-            (Some((ExecutionMode::Consensus, confidence)), _) if confidence >= 0.9 => {
-                tracing::info!("🧠 Mode detector: Consensus pattern match - using Consensus mode (confidence: {})", confidence);
-                ExecutionMode::Consensus
-            },
-            
-            // All other cases - favor direct mode for simple questions
-            _ => {
-                let simple_question_words = ["what", "which", "where", "when", "who", "how"];
-                let starts_simple = simple_question_words.iter()
-                    .any(|&word| request.to_lowercase().starts_with(word));
-                
-                let factual_patterns = ["what is", "what's", "which is", "where is", "what are", "who is"];
-                let is_factual = factual_patterns.iter()
-                    .any(|&pattern| request.to_lowercase().contains(pattern));
-                
-                // Very aggressive direct mode for simple questions
-                if (starts_simple || is_factual) && request.len() < 100 && complexity < 0.5 {
-                    tracing::info!("🚀 Mode detector: Simple/factual question - using Direct mode");
-                    ExecutionMode::Direct
-                } else if complexity > 0.7 {
-                    // Only use consensus for clearly complex analysis
-                    tracing::info!("🧠 Mode detector: High complexity ({}) - using Consensus mode", complexity);
-                    ExecutionMode::Consensus
-                } else {
-                    // For unclear cases, default to direct for efficiency unless clearly complex
-                    tracing::info!("🚀 Mode detector: Default fallback - using Direct mode (complexity: {})", complexity);
-                    ExecutionMode::Direct
-                }
-            },
-        }
+        // NO PATTERN MATCHING FALLBACK - if AI helpers aren't configured, log error
+        tracing::error!("❌ No AI Helpers configured and pattern matching disabled - cannot make intelligent decision");
+        tracing::warn!("⚠️ Defaulting to Direct mode without intelligence");
+        ExecutionMode::Direct
     }
 
     /// Check if this is a simple file operation
-    pub fn is_simple_file_operation(&self, request: &str) -> bool {
-        let simple_patterns = [
-            r"(?i)^(create|make|add|write)\s+(a\s+)?(new\s+)?file",
-            r"(?i)^(update|modify|change|edit)\s+(the\s+)?file",
-            r"(?i)^(delete|remove)\s+(the\s+)?file",
-            r"(?i)^(rename|move)\s+(the\s+)?file",
-        ];
-        
-        simple_patterns.iter().any(|pattern| {
-            regex::Regex::new(pattern).unwrap().is_match(request)
-        })
+    /// NO PATTERN MATCHING - must use AI Helper decision
+    pub fn is_simple_file_operation(&self, _request: &str) -> bool {
+        // NO PATTERN MATCHING - LLM or nothing
+        // This should be determined by AI Helpers, not patterns
+        false
     }
 
     /// Check if this requires deep analysis
-    pub fn requires_deep_analysis(&self, request: &str) -> bool {
-        let analysis_patterns = [
-            r"(?i)(analyze|explain|investigate|debug|diagnose)",
-            r"(?i)(architecture|design|structure|pattern)",
-            r"(?i)(compare|evaluate|assess|review)",
-            r"(?i)how\s+(does|do|can|should)",
-            r"(?i)why\s+(does|do|is|are)",
-        ];
-        
-        analysis_patterns.iter().any(|pattern| {
-            regex::Regex::new(pattern).unwrap().is_match(request)
-        })
+    /// NO PATTERN MATCHING - must use AI Helper decision
+    pub fn requires_deep_analysis(&self, _request: &str) -> bool {
+        // NO PATTERN MATCHING - LLM or nothing
+        // This should be determined by AI Helpers, not patterns
+        false
     }
 
     /// Get a confidence score for the mode detection

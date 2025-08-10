@@ -285,12 +285,24 @@ let activeProfile: any = null;
 let consensusWebSocket: ConsensusWebSocket | null = null;
 let currentStreamContent: Map<string, string> = new Map();
 
+// Conversation context management (like Dioxus implementation)
+let currentConversationId: string | null = null;
+let conversationHistory: Array<{role: string, content: string}> = [];
+let conversationMessages: Array<{question: string, answer: string}> = [];
+
 // DOM elements - Updated for new layout
 const terminalOutput = document.getElementById('terminal-output')!;
 const backendStatus = document.getElementById('backend-status')!;
 const chatContent = document.getElementById('chat-content')!;
 
 // Utility functions
+function generateConversationId(): string {
+  // Generate a unique ID like the Rust implementation
+  const timestamp = Date.now().toString(36);
+  const randomPart = Math.random().toString(36).substring(2, 9);
+  return `conv_${timestamp}_${randomPart}`;
+}
+
 function addLogEntry(message: string, type: 'info' | 'success' | 'error' | 'warning' = 'info') {
   const entry = document.createElement('div');
   entry.className = `terminal-line ${type}`;
@@ -445,11 +457,29 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
   const testQuery = "What is the capital of France?";
   addChatMessage(testQuery, false);
   
+  // Create new conversation if needed
+  if (!currentConversationId) {
+    currentConversationId = generateConversationId();
+    addLogEntry(`📝 New conversation started: ${currentConversationId}`, 'info');
+  }
+  
+  // Add to conversation history
+  conversationHistory.push({ role: 'user', content: testQuery });
+  
   // Get current profile from settings or use default
   const currentProfileName = activeProfile?.name || 'balanced-performer';
   
-  // Start consensus via WebSocket
-  consensusWebSocket.startConsensus(testQuery, currentProfileName);
+  // Start consensus via WebSocket with conversation context
+  consensusWebSocket.startConsensus(testQuery, currentProfileName, currentConversationId, conversationHistory);
+});
+
+// New conversation button handler
+document.getElementById('new-conversation-btn')?.addEventListener('click', () => {
+  currentConversationId = null;
+  conversationHistory = [];
+  conversationMessages = [];
+  addLogEntry('🆕 Starting new conversation (context cleared)', 'info');
+  addChatMessage('New conversation started. Previous context cleared.', true);
 });
 
 // Chat input handler - Now uses WebSocket streaming
@@ -496,11 +526,20 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   
   addLogEntry(`🚀 Starting streaming consensus for: "${query}"`, 'info');
   
+  // Create new conversation if needed
+  if (!currentConversationId) {
+    currentConversationId = generateConversationId();
+    addLogEntry(`📝 New conversation started: ${currentConversationId}`, 'info');
+  }
+  
+  // Add to conversation history
+  conversationHistory.push({ role: 'user', content: query });
+  
   // Get current profile from settings or use default
   const currentProfileName = activeProfile?.name || 'Free Also';
   
-  // Start consensus via WebSocket
-  consensusWebSocket.startConsensus(query, currentProfileName);
+  // Start consensus via WebSocket with conversation context
+  consensusWebSocket.startConsensus(query, currentProfileName, currentConversationId, conversationHistory);
 });
 
 // Fallback REST API function
@@ -566,6 +605,12 @@ document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
 
 // Initialize WebSocket connection for streaming
 function initializeWebSocket() {
+  // Prevent multiple initializations
+  if (consensusWebSocket) {
+    console.log('WebSocket already initialized');
+    return;
+  }
+  
   const wsUrl = 'ws://127.0.0.1:8765/ws';
   
   console.log('Initializing WebSocket with URL:', wsUrl);
@@ -605,12 +650,8 @@ function initializeWebSocket() {
     },
     
     onStreamChunk: (stage, chunk) => {
-      // Accumulate content for each stage
+      // Show streaming output immediately as it arrives
       const stageName = stage.toLowerCase();
-      const currentContent = currentStreamContent.get(stageName) || '';
-      currentStreamContent.set(stageName, currentContent + chunk);
-      
-      // Show streaming output from all stages, not just Curator
       const chatContent = document.getElementById('chat-content');
       
       // Find or create message for this stage
@@ -628,24 +669,22 @@ function initializeWebSocket() {
         stageMessage = message;
       }
       
-      // Update content - convert markdown-like formatting to HTML
+      // Accumulate content first
+      const currentContent = currentStreamContent.get(stageName) || '';
+      const newContent = currentContent + chunk;
+      currentStreamContent.set(stageName, newContent);
+      
+      // Update the entire content (replacing, not appending)
       const contentEl = stageMessage.querySelector('.message-content');
       if (contentEl) {
-        // Simple markdown to HTML conversion
-        let htmlContent = currentStreamContent.get(stageName) || '';
-        
-        // Convert markdown formatting
-        htmlContent = htmlContent
+        // Convert accumulated content markdown to HTML
+        let htmlContent = newContent
           .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
           .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
           .replace(/\n\n/g, '</p><p>') // Paragraphs
           .replace(/\n/g, '<br>'); // Line breaks
         
-        // Wrap in paragraph if not already
-        if (!htmlContent.startsWith('<p>')) {
-          htmlContent = '<p>' + htmlContent + '</p>';
-        }
-        
+        // Replace entire content (not append)
         contentEl.innerHTML = htmlContent;
       }
       
@@ -669,6 +708,7 @@ function initializeWebSocket() {
     onStageCompleted: (stage, tokens, cost) => {
       const stageName = stage.toLowerCase();
       updateStageStatus(stageName, 'completed');
+      updateStageProgress(stageName, 100);
       totalTokens += tokens;
       totalCost += cost;
       updateConsensusStats();
@@ -676,9 +716,18 @@ function initializeWebSocket() {
     },
     
     onConsensusComplete: (result, finalTokens, finalCost) => {
+      // Prevent duplicate completion messages
+      if (!isProcessing) {
+        console.warn('Consensus complete called but not processing, ignoring');
+        return;
+      }
+      
       totalTokens = finalTokens;
       totalCost = finalCost;
       updateConsensusStats();
+      
+      // Mark as no longer processing
+      isProcessing = false;
       
       // Remove all streaming indicators
       const chatContent = document.getElementById('chat-content');
@@ -689,21 +738,38 @@ function initializeWebSocket() {
         msg.className = msg.className.replace(/streaming-\w+/g, '').trim();
       });
       
-      // Add final consensus result if provided
+      // Add final consensus result if provided (only once)
       if (result && result.trim()) {
         const finalMessage = document.createElement('div');
-        finalMessage.className = 'chat-message system';
+        finalMessage.className = 'chat-message system consensus-final';
         finalMessage.innerHTML = `
           <div class="message-time">[${new Date().toLocaleTimeString()}] Final Consensus</div>
           <div class="message-content"><strong>${result}</strong></div>
         `;
         chatContent?.appendChild(finalMessage);
+        
+        // Add assistant response to conversation history for context
+        conversationHistory.push({ role: 'assistant', content: result });
+        
+        // Store the Q&A pair for this conversation
+        if (conversationHistory.length >= 2) {
+          const lastUserMessage = conversationHistory[conversationHistory.length - 2];
+          if (lastUserMessage.role === 'user') {
+            conversationMessages.push({
+              question: lastUserMessage.content,
+              answer: result
+            });
+          }
+        }
+        
+        addLogEntry(`💾 Conversation context updated (${conversationHistory.length} messages)`, 'info');
       }
       
       // Auto-scroll to ensure the complete result is visible
       autoScrollChat();
       
       addLogEntry(`🎯 Consensus complete! Total: ${formatTokens(finalTokens)} tokens, ${formatCost(finalCost)}`, 'success');
+      addLogEntry(`📝 Conversation ID: ${currentConversationId}`, 'info');
       
       // Update usage count
       dailyUsageCount++;
@@ -722,6 +788,13 @@ function initializeWebSocket() {
     
     onAIHelperDecision: (directMode, reason) => {
       addLogEntry(`🤖 AI Helper: ${reason}`, 'info');
+      // If Direct mode, mark other stages as skipped
+      if (directMode) {
+        ['refiner', 'validator', 'curator'].forEach(stage => {
+          updateStageStatus(stage, 'completed');
+          updateModelDisplay(stage, 'skipped (direct mode)');
+        });
+      }
     }
   });
   

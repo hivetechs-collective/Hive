@@ -2220,15 +2220,9 @@ impl ConsensusPipeline {
             let twenty_four_hours_ago = (Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
             tracing::debug!("Looking for recent curator knowledge since: {}", twenty_four_hours_ago);
 
-            // First check if this is a follow-up query (simple pattern matching)
-            let query_lower = query.to_lowercase();
-            let is_follow_up = [
-                "give me", "tell me more", "can you explain", "show me", "what about",
-                "examples", "code example", "how does", " it ", " that ", " this ",
-                " those ", " these ", " them ", " they "
-            ].iter().any(|pattern| query_lower.contains(pattern));
-
-            tracing::debug!("Is follow-up query: {}", is_follow_up);
+            // ALWAYS retrieve recent context - let AI Helpers determine relevance!
+            // No pattern matching - AI Helpers will analyze semantically
+            tracing::debug!("Retrieving recent conversations for AI Helper analysis");
 
             // TEMPORAL SEARCH: One conversation at a time, most recent first
             // Step 1: Search backwards through time, one conversation at a time
@@ -2252,36 +2246,19 @@ impl ConsensusPipeline {
                 ))
             })?;
 
-            // Search one by one until we find relevant context
-            for result in all_recent_results {
+            // ALWAYS include at least the most recent conversation for context
+            // The AI Helpers will determine semantic relevance
+            let mut recent_conversations = Vec::new();
+            
+            for result in all_recent_results.take(3) { // Get last 3 conversations
                 let (curator_output, question, confidence, created_at) = result?;
-
-                // For follow-up queries, the most recent is ALWAYS relevant
-                if is_follow_up && selected_memory.is_none() {
-                    tracing::debug!("Follow-up detected - using most recent conversation: {}", question);
-                    selected_memory = Some((curator_output, question, confidence, created_at));
-                    found_context = true;
-                    break;
-                }
-
-                // For non-follow-up, check if this conversation might be relevant
-                let query_words: Vec<String> = query.to_lowercase()
-                    .split_whitespace()
-                    .filter(|w| w.len() > 2)
-                    .map(|w| w.to_string())
-                    .collect();
-
-                let conversation_relevant = query_words.iter().any(|word| {
-                    question.to_lowercase().contains(word) ||
-                    curator_output.to_lowercase().contains(word)
-                });
-
-                if conversation_relevant {
-                    tracing::debug!("Found relevant conversation: {}", question);
-                    selected_memory = Some((curator_output, question, confidence, created_at));
-                    found_context = true;
-                    break;
-                }
+                recent_conversations.push((curator_output, question, confidence, created_at));
+                found_context = true;
+            }
+            
+            // Use the most recent as primary context
+            if !recent_conversations.is_empty() {
+                selected_memory = Some(recent_conversations[0].clone());
             }
 
             // If we found context in recent conversations, use it
@@ -2299,22 +2276,31 @@ impl ConsensusPipeline {
                     date, question, curator_output
                 ));
                 context_parts.push("".to_string());
-
-                if is_follow_up {
-                    context_parts.push("🚨 FOLLOW-UP DETECTED: This is a follow-up question.".to_string());
-                    context_parts.push("You MUST provide examples/clarification about the topic above.".to_string());
-                    context_parts.push("Do NOT reference any other topics or previous conversations.".to_string());
-                } else {
-                    context_parts.push("⚡ Use this context to inform your response.".to_string());
+                
+                // Add all recent conversations for AI Helper analysis
+                if recent_conversations.len() > 1 {
+                    context_parts.push("📚 Additional Recent Context:".to_string());
+                    for (i, (curator_output, question, _, created_at)) in recent_conversations.iter().skip(1).enumerate() {
+                        let date = chrono::DateTime::parse_from_rfc3339(&created_at)
+                            .map(|dt| dt.format("%Y-%m-%d %H:%M").to_string())
+                            .unwrap_or_else(|_| "recent".to_string());
+                        context_parts.push(format!(
+                            "Context {}: From {}: Question: {}\nAnswer Summary: {}...\n",
+                            i + 2, date, question, 
+                            curator_output.chars().take(200).collect::<String>()
+                        ));
+                    }
                 }
+                
+                context_parts.push("⚡ The AI Helpers will analyze this context semantically to determine relevance.".to_string());
 
                 return Ok(context_parts.join("\n"));
             }
 
             tracing::debug!("No relevant context found in recent 24h conversations, falling back to thematic search");
 
-            // If follow-up but no 24h context, try broader window (72 hours)
-            if is_follow_up {
+            // If no recent context found, try broader window (72 hours)
+            if !found_context {
                 let seventy_two_hours_ago = (Utc::now() - chrono::Duration::hours(72)).to_rfc3339();
                 tracing::debug!("Follow-up detected, checking broader window (72h)");
 
@@ -2441,7 +2427,7 @@ impl ConsensusPipeline {
                     }
                 }
 
-                if !found_thematic && is_follow_up {
+                if !found_thematic {
                     // For follow-ups with no context found, provide a clear message
                     context_parts.push("⚠️ NO RECENT CONTEXT FOUND".to_string());
                     context_parts.push("This appears to be a follow-up question, but no recent conversation context was found.".to_string());
