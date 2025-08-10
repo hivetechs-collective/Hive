@@ -1259,11 +1259,48 @@ impl ConsensusPipeline {
                 0.0
             };
             
+            // Create a stage result for Direct mode to include in the ConsensusResult
+            let stage_result = StageResult {
+                stage_id: Uuid::new_v4().to_string(),
+                stage_name: "Generator".to_string(), // Direct mode uses Generator stage
+                question: question.to_string(),
+                answer: result_text.clone(),
+                model: model.clone(),
+                conversation_id: conversation_id.to_string(),
+                timestamp: Utc::now(),
+                usage: usage_data.as_ref().map(|u| TokenUsage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                    total_tokens: u.total_tokens,
+                }),
+                analytics: Some(StageAnalytics {
+                    duration: start_time.elapsed().as_secs_f64(),
+                    cost: total_cost,
+                    input_cost: 0.0,
+                    output_cost: 0.0,
+                    provider: "openrouter".to_string(),
+                    model_internal_id: model.clone(),
+                    quality_score: 1.0,
+                    error_count: 0,
+                    fallback_used: false,
+                    rate_limit_hit: false,
+                    retry_count: 0,
+                    start_time: Utc::now() - chrono::Duration::seconds(start_time.elapsed().as_secs() as i64),
+                    end_time: Utc::now(),
+                    memory_usage: None,
+                    features: AnalyticsFeatures {
+                        streaming: true,
+                        routing_variant: "direct".to_string(),
+                        optimization_applied: Some(true),
+                    },
+                }),
+            };
+            
             Ok(ConsensusResult {
                 success: true,
                 result: Some(result_text),
                 error: None,
-                stages: vec![],
+                stages: vec![stage_result], // Include the stage result so tokens are counted
                 conversation_id: conversation_id.to_string(),
                 total_duration: start_time.elapsed().as_secs_f64(),
                 total_cost,
