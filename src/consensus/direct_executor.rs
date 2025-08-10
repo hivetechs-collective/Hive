@@ -271,6 +271,9 @@ impl DirectExecutionHandler {
             usage_capture: usage_capture_ref,
         };
         
+        // Send the actual model name when starting
+        let _ = callbacks.on_stage_start(Stage::Generator, model);
+        
         let start_time = std::time::Instant::now();
         
         // Stream the response from the generator
@@ -462,12 +465,9 @@ struct DirectStreamingCallbacks {
 impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbacks {
     fn on_start(&self) {
         // Signal stage start through the consensus callbacks
-        tracing::info!("DirectStreamingCallbacks::on_start called, forwarding to consensus callbacks");
-        // For Direct mode, we're using the Generator stage
-        // The actual model will be updated when we get the first chunk
-        if let Err(e) = self.inner.on_stage_start(self.stage, "starting...") {
-            tracing::error!("Failed to call on_stage_start: {}", e);
-        }
+        tracing::info!("DirectStreamingCallbacks::on_start called");
+        // Stage start with model name is already sent in handle_request before streaming begins
+        // No need to send it again here
     }
     
     fn on_chunk(&self, chunk: String, total_content: String) {
