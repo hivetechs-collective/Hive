@@ -19,6 +19,17 @@
   --status-modified: #FFC107;
   --status-added: #4CAF50;
   --status-deleted: #F44336;
+  
+  /* Modern terminal semantic colors (2025 standards) */
+  --terminal-success: #10B981;  /* Green - successful operations */
+  --terminal-error: #EF4444;    /* Red - errors */
+  --terminal-warning: #F59E0B;  /* Amber - warnings */
+  --terminal-info: #06B6D4;     /* Cyan - informational */
+  --terminal-user: #8B5CF6;     /* Purple - user messages */
+  --terminal-ai: #3B82F6;       /* Blue - AI responses */
+  --terminal-dim: #6B7280;      /* Gray - secondary text */
+  --terminal-code-bg: #1F2937;  /* Dark gray - code blocks */
+  --terminal-link: #60A5FA;     /* Light blue - links */
 }
 
 * {
@@ -920,9 +931,21 @@ body {
 }
 
 .consensus-stats .stat-value {
-  color: #FFC107;
   font-weight: 600;
-  font-family: 'Courier New', monospace;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+  font-size: 13px;
+}
+
+.consensus-stats .stat-value.tokens {
+  color: var(--terminal-info);
+}
+
+.consensus-stats .stat-value.cost {
+  color: var(--terminal-success);
+}
+
+.consensus-stats .stat-value.duration {
+  color: var(--terminal-warning);
 }
 
 .stage-progress {
@@ -961,6 +984,29 @@ body {
   min-height: 0; /* Critical for flexbox overflow */
 }
 
+/* Stage badges */
+.stage-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, var(--terminal-ai), var(--terminal-info));
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.message-time .stage-badge {
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; }
+}
+
 .chat-header {
   background: var(--background-secondary);
   padding: 12px 16px;
@@ -977,6 +1023,27 @@ body {
   padding: 16px;
   min-height: 0; /* Allow content to shrink */
   max-height: calc(100vh - 400px); /* Ensure it doesn't exceed viewport */
+  background: linear-gradient(180deg, var(--background-primary) 0%, rgba(30, 30, 30, 0.95) 100%);
+}
+
+/* Modern terminal output styling */
+.chat-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.chat-content::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 5px;
+}
+
+.chat-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--terminal-ai), var(--terminal-info));
+  border-radius: 5px;
+  border: 2px solid var(--background-primary);
+}
+
+.chat-content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--terminal-info), var(--terminal-ai));
 }
 
 .chat-message {
@@ -991,41 +1058,323 @@ body {
 
 .message-content {
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.6;
   font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
+/* Modern message type styling */
+.chat-message.user .message-content {
+  color: var(--terminal-user);
+  border-left: 2px solid var(--terminal-user);
+  padding-left: 12px;
+  margin-left: 0;
+}
+
+.chat-message.assistant .message-content {
+  color: var(--text-primary);
 }
 
 .chat-message.system .message-content {
-  color: var(--hive-yellow);
+  color: var(--terminal-dim);
+  font-style: italic;
 }
 
-/* Streaming message styles */
+.chat-message.success .message-content {
+  color: var(--terminal-success);
+}
+
+.chat-message.error .message-content {
+  color: var(--terminal-error);
+  background: rgba(239, 68, 68, 0.1);
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.chat-message.warning .message-content {
+  color: var(--terminal-warning);
+  background: rgba(245, 158, 11, 0.1);
+  padding: 8px;
+  border-radius: 4px;
+}
+
+.chat-message.info .message-content {
+  color: var(--terminal-info);
+}
+
+/* Status icons */
+.message-content .status-icon {
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: bold;
+}
+
+.message-content .status-icon.success { color: var(--terminal-success); }
+.message-content .status-icon.error { color: var(--terminal-error); }
+.message-content .status-icon.warning { color: var(--terminal-warning); }
+.message-content .status-icon.info { color: var(--terminal-info); }
+
+/* Markdown element styles */
+.message-content h1, 
+.message-content h2, 
+.message-content h3, 
+.message-content h4, 
+.message-content h5, 
+.message-content h6 {
+  color: var(--text-primary);
+  margin: 16px 0 8px 0;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.message-content h1 { font-size: 1.5em; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; }
+.message-content h2 { font-size: 1.3em; }
+.message-content h3 { font-size: 1.15em; }
+.message-content h4 { font-size: 1.05em; }
+.message-content h5 { font-size: 0.95em; }
+.message-content h6 { font-size: 0.9em; color: var(--text-secondary); }
+
+/* Code blocks with modern styling */
+.message-content .code-block {
+  background: var(--terminal-code-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 12px 0;
+  overflow-x: auto;
+  position: relative;
+}
+
+.message-content .code-block::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 10px;
+  color: var(--terminal-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.message-content .code-block code {
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e1e4e8;
+  white-space: pre;
+}
+
+/* Inline code */
+.message-content code:not(.code-block code) {
+  background: rgba(110, 118, 129, 0.2);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', monospace;
+  font-size: 0.9em;
+  color: var(--terminal-info);
+}
+
+/* Lists with better spacing */
+.message-content ul,
+.message-content ol {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.message-content li {
+  margin: 6px 0;
+  line-height: 1.6;
+}
+
+.message-content ul li::marker {
+  color: var(--terminal-info);
+}
+
+.message-content ol li::marker {
+  color: var(--terminal-warning);
+  font-weight: 600;
+}
+
+/* Blockquotes */
+.message-content blockquote {
+  border-left: 3px solid var(--terminal-info);
+  padding-left: 16px;
+  margin: 12px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+  background: rgba(6, 182, 212, 0.05);
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+/* Links */
+.message-content a {
+  color: var(--terminal-link);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--terminal-link);
+  transition: all 0.2s;
+}
+
+.message-content a:hover {
+  color: var(--terminal-info);
+  border-bottom-style: solid;
+}
+
+/* Tables */
+.message-content table {
+  border-collapse: collapse;
+  margin: 12px 0;
+  width: 100%;
+}
+
+.message-content th,
+.message-content td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.message-content th {
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.message-content tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Horizontal rules */
+.message-content hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 20px 0;
+  opacity: 0.5;
+}
+
+/* Bold and emphasis */
+.message-content strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.message-content em {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Streaming message styles with modern indicators */
 .chat-message.streaming {
-  opacity: 0.9;
-  border-left: 3px solid var(--hive-blue);
-  padding-left: 12px;
-  animation: pulse 1.5s ease-in-out infinite;
+  position: relative;
+  padding-left: 16px;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 0.9; }
-  50% { opacity: 1; }
+.chat-message.streaming::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  animation: streamingGradient 2s linear infinite;
+}
+
+@keyframes streamingGradient {
+  0% {
+    background: linear-gradient(180deg, transparent 0%, var(--terminal-ai) 50%, transparent 100%);
+    transform: translateY(-100%);
+  }
+  100% {
+    background: linear-gradient(180deg, transparent 0%, var(--terminal-ai) 50%, transparent 100%);
+    transform: translateY(100%);
+  }
+}
+
+/* Stage-specific colors with semantic meaning */
+.chat-message.streaming-generator {
+  border-left-color: var(--terminal-success);
 }
 
 .chat-message.streaming-generator .message-time {
-  color: #4CAF50;
+  color: var(--terminal-success);
+  font-weight: 600;
+}
+
+.chat-message.streaming-generator .message-time::before {
+  content: '⚡ ';
+  font-size: 12px;
+}
+
+.chat-message.streaming-refiner {
+  border-left-color: var(--terminal-info);
 }
 
 .chat-message.streaming-refiner .message-time {
-  color: #2196F3;
+  color: var(--terminal-info);
+  font-weight: 600;
+}
+
+.chat-message.streaming-refiner .message-time::before {
+  content: '✨ ';
+  font-size: 12px;
+}
+
+.chat-message.streaming-validator {
+  border-left-color: var(--terminal-warning);
 }
 
 .chat-message.streaming-validator .message-time {
-  color: #FF9800;
+  color: var(--terminal-warning);
+  font-weight: 600;
+}
+
+.chat-message.streaming-validator .message-time::before {
+  content: '🔍 ';
+  font-size: 12px;
+}
+
+.chat-message.streaming-curator {
+  border-left-color: var(--terminal-user);
 }
 
 .chat-message.streaming-curator .message-time {
-  color: #9C27B0;
+  color: var(--terminal-user);
+  font-weight: 600;
+}
+
+.chat-message.streaming-curator .message-time::before {
+  content: '💎 ';
+  font-size: 12px;
+}
+
+/* Streaming indicator dots */
+.streaming-indicator {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.streaming-indicator span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: streamingDot 1.4s ease-in-out infinite;
+}
+
+.streaming-indicator span:nth-child(1) { animation-delay: 0s; }
+.streaming-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.streaming-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes streamingDot {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
 }
 
 .chat-input-area {

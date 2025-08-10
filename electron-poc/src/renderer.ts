@@ -314,12 +314,36 @@ function addLogEntry(message: string, type: 'info' | 'success' | 'error' | 'warn
 // Declare runConsensusViaREST as a variable that will hold the function
 let runConsensusViaREST: (query: string) => Promise<void>;
 
-function addChatMessage(message: string, isSystem: boolean = false) {
+function addChatMessage(message: string, isSystem: boolean = false, messageType: 'info' | 'success' | 'warning' | 'error' | 'user' = 'user') {
   const messageDiv = document.createElement('div');
-  messageDiv.className = `chat-message ${isSystem ? 'system' : 'user'}`;
+  
+  // Determine the proper class based on message type
+  let messageClass = 'assistant';
+  if (!isSystem && messageType === 'user') {
+    messageClass = 'user';
+  } else if (messageType === 'error') {
+    messageClass = 'error';
+  } else if (messageType === 'warning') {
+    messageClass = 'warning';
+  } else if (messageType === 'success') {
+    messageClass = 'success';
+  } else if (messageType === 'info') {
+    messageClass = 'info';
+  } else if (isSystem) {
+    messageClass = 'system';
+  }
+  
+  messageDiv.className = `chat-message ${messageClass}`;
+  
+  const timestamp = new Date().toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+  
   messageDiv.innerHTML = `
-    <div class="message-time">[${new Date().toLocaleTimeString()}]</div>
-    <div class="message-content">${message}</div>
+    <div class="message-time">${timestamp}</div>
+    <div class="message-content">${convertMarkdownToHTML(message)}</div>
   `;
   chatContent.appendChild(messageDiv);
   // Auto-scroll to bottom to show newest message
@@ -336,6 +360,78 @@ function autoScrollChat() {
       chatContent.scrollTop = chatContent.scrollHeight;
     });
   }
+}
+
+// Enhanced markdown to HTML converter
+function convertMarkdownToHTML(markdown: string): string {
+  let html = markdown;
+  
+  // Headers (h1-h6)
+  html = html.replace(/^###### (.*?)$/gm, '<h6 class="md-h6">$1</h6>');
+  html = html.replace(/^##### (.*?)$/gm, '<h5 class="md-h5">$1</h5>');
+  html = html.replace(/^#### (.*?)$/gm, '<h4 class="md-h4">$1</h4>');
+  html = html.replace(/^### (.*?)$/gm, '<h3 class="md-h3">$1</h3>');
+  html = html.replace(/^## (.*?)$/gm, '<h2 class="md-h2">$1</h2>');
+  html = html.replace(/^# (.*?)$/gm, '<h1 class="md-h1">$1</h1>');
+  
+  // Code blocks with language support
+  html = html.replace(/```([\w]*)?\n([\s\S]*?)```/g, (match, lang, code) => {
+    const language = lang || 'plaintext';
+    return `<pre class="code-block" data-lang="${language}"><code>${escapeHtml(code.trim())}</code></pre>`;
+  });
+  
+  // Inline code
+  html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+  
+  // Bold and italic
+  html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>'); // Bold + Italic
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>'); // Bold
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>'); // Italic
+  
+  // Lists
+  html = html.replace(/^\* (.*?)$/gm, '<li class="ul-item">$1</li>');
+  html = html.replace(/^- (.*?)$/gm, '<li class="ul-item">$1</li>');
+  html = html.replace(/^\d+\. (.*?)$/gm, '<li class="ol-item">$1</li>');
+  
+  // Wrap consecutive list items
+  html = html.replace(/(<li class="ul-item">.*?<\/li>\s*)+/g, (match) => {
+    return `<ul class="md-list">${match}</ul>`;
+  });
+  html = html.replace(/(<li class="ol-item">.*?<\/li>\s*)+/g, (match) => {
+    return `<ol class="md-list">${match}</ol>`;
+  });
+  
+  // Blockquotes
+  html = html.replace(/^> (.*?)$/gm, '<blockquote class="md-blockquote">$1</blockquote>');
+  
+  // Horizontal rules
+  html = html.replace(/^---$/gm, '<hr class="md-hr">');
+  
+  // Links
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="md-link" target="_blank">$1</a>');
+  
+  // Paragraphs (must be last)
+  html = html.replace(/\n\n/g, '</p><p class="md-paragraph">');
+  html = html.replace(/\n/g, '<br>');
+  
+  // Wrap in paragraph if not already wrapped
+  if (!html.startsWith('<')) {
+    html = `<p class="md-paragraph">${html}</p>`;
+  }
+  
+  return html;
+}
+
+// Helper to escape HTML in code blocks
+function escapeHtml(text: string): string {
+  const map: { [key: string]: string } = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, m => map[m]);
 }
 
 function updateStatus(text: string, className: string) {
@@ -658,11 +754,18 @@ function initializeWebSocket() {
       let stageMessage = chatContent?.querySelector(`.streaming-${stageName}`);
       
       if (!stageMessage) {
-        // Create new message container for this stage
+        // Create new message container for this stage with enhanced styling
         const message = document.createElement('div');
-        message.className = `chat-message system streaming streaming-${stageName}`;
+        message.className = `chat-message assistant streaming streaming-${stageName}`;
+        
+        const timestamp = new Date().toLocaleTimeString('en-US', { 
+          hour: 'numeric', 
+          minute: '2-digit',
+          hour12: true 
+        });
+        
         message.innerHTML = `
-          <div class="message-time">[${new Date().toLocaleTimeString()}] ${stage}</div>
+          <div class="message-time">${timestamp} <span class="stage-badge">${stage}</span></div>
           <div class="message-content"></div>
         `;
         chatContent?.appendChild(message);
@@ -677,12 +780,8 @@ function initializeWebSocket() {
       // Update the entire content (replacing, not appending)
       const contentEl = stageMessage.querySelector('.message-content');
       if (contentEl) {
-        // Convert accumulated content markdown to HTML
-        let htmlContent = newContent
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
-          .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
-          .replace(/\n\n/g, '</p><p>') // Paragraphs
-          .replace(/\n/g, '<br>'); // Line breaks
+        // Enhanced markdown to HTML conversion
+        let htmlContent = convertMarkdownToHTML(newContent);
         
         // Replace entire content (not append)
         contentEl.innerHTML = htmlContent;
@@ -741,10 +840,17 @@ function initializeWebSocket() {
       // Add final consensus result if provided (only once)
       if (result && result.trim()) {
         const finalMessage = document.createElement('div');
-        finalMessage.className = 'chat-message system consensus-final';
+        finalMessage.className = 'chat-message assistant consensus-final';
+        
+        const timestamp = new Date().toLocaleTimeString('en-US', { 
+          hour: 'numeric', 
+          minute: '2-digit',
+          hour12: true 
+        });
+        
         finalMessage.innerHTML = `
-          <div class="message-time">[${new Date().toLocaleTimeString()}] Final Consensus</div>
-          <div class="message-content"><strong>${result}</strong></div>
+          <div class="message-time">${timestamp} <span class="stage-badge">🎆 Final Consensus</span></div>
+          <div class="message-content">${convertMarkdownToHTML(result)}</div>
         `;
         chatContent?.appendChild(finalMessage);
         
@@ -1031,10 +1137,12 @@ function updateConsensusStats() {
   
   if (tokenElement) {
     tokenElement.textContent = totalTokens.toLocaleString();
+    tokenElement.className = 'stat-value tokens';
   }
   
   if (costElement) {
     costElement.textContent = `$${totalCost.toFixed(4)}`;
+    costElement.className = 'stat-value cost';
   }
 }
 
