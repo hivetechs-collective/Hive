@@ -173,29 +173,41 @@ document.body.innerHTML = `
         <div class="pipeline-stages">
           <div class="stage" data-stage="generator">
             <div class="stage-progress">
-              <div class="stage-label">Generator</div>
-              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-label">
+                <span>⚡ Generator</span>
+                <span class="stage-status" id="generator-status">ready</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="generator-progress"></div></div>
               <div class="stage-model" id="generator-model">--</div>
             </div>
           </div>
           <div class="stage" data-stage="refiner">
             <div class="stage-progress">
-              <div class="stage-label">Refiner</div>
-              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-label">
+                <span>✨ Refiner</span>
+                <span class="stage-status" id="refiner-status">ready</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="refiner-progress"></div></div>
               <div class="stage-model" id="refiner-model">--</div>
             </div>
           </div>
           <div class="stage" data-stage="validator">
             <div class="stage-progress">
-              <div class="stage-label">Validator</div>
-              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-label">
+                <span>🔍 Validator</span>
+                <span class="stage-status" id="validator-status">ready</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="validator-progress"></div></div>
               <div class="stage-model" id="validator-model">--</div>
             </div>
           </div>
           <div class="stage" data-stage="curator">
             <div class="stage-progress">
-              <div class="stage-label">Curator</div>
-              <div class="progress-bar"><div class="progress-fill"></div></div>
+              <div class="stage-label">
+                <span>💎 Curator</span>
+                <span class="stage-status" id="curator-status">ready</span>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="curator-progress"></div></div>
               <div class="stage-model" id="curator-model">--</div>
             </div>
           </div>
@@ -455,24 +467,38 @@ function updateStageStatus(stage: string, status: 'ready' | 'running' | 'complet
   const stageElement = document.querySelector(`[data-stage="${stage}"]`);
   if (stageElement) {
     const progressFill = stageElement.querySelector('.progress-fill') as HTMLElement;
-    const stageLabel = stageElement.querySelector('.stage-label')!;
+    const statusElement = document.getElementById(`${stage}-status`);
     
+    // Update status text
+    if (statusElement) {
+      statusElement.textContent = status;
+      statusElement.className = `stage-status ${status}`;
+    }
+    
+    // Update progress bar
     switch (status) {
       case 'ready':
         progressFill.style.width = '0%';
+        progressFill.classList.remove('running');
+        progressFill.style.background = 'linear-gradient(90deg, var(--hive-yellow) 0%, var(--hive-blue) 100%)';
         addLogEntry(`🔄 ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage ready`, 'info');
         break;
       case 'running':
         progressFill.style.width = '50%';
+        progressFill.classList.add('running');
+        progressFill.style.background = 'linear-gradient(90deg, var(--terminal-warning) 0%, var(--terminal-info) 100%)';
         addLogEntry(`⚡ ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage running...`, 'info');
         break;
       case 'completed':
         progressFill.style.width = '100%';
-        addLogEntry(`✅ ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage completed`, 'info');
+        progressFill.classList.remove('running');
+        progressFill.style.background = 'linear-gradient(90deg, var(--terminal-success) 0%, var(--terminal-info) 100%)';
+        addLogEntry(`✅ ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage completed`, 'success');
         break;
       case 'error':
         progressFill.style.width = '0%';
-        progressFill.style.background = '#F44336';
+        progressFill.classList.remove('running');
+        progressFill.style.background = 'var(--terminal-error)';
         addLogEntry(`❌ ${stage.charAt(0).toUpperCase() + stage.slice(1)} stage error`, 'error');
         break;
     }
@@ -740,6 +766,7 @@ function initializeWebSocket() {
     onStageStarted: (stage, model) => {
       const stageName = stage.toLowerCase();
       updateStageStatus(stageName, 'running');
+      updateStageProgress(stageName, 25); // Start at 25% when stage begins
       updateModelDisplay(stageName, model);
       addLogEntry(`▶️ ${stage} started with ${model}`, 'info');
       currentStreamContent.set(stageName, '');
@@ -793,7 +820,9 @@ function initializeWebSocket() {
     
     onStageProgress: (stage, percentage, tokens) => {
       const stageName = stage.toLowerCase();
-      updateStageProgress(stageName, percentage);
+      // Ensure minimum 25% when running, cap at 95% until complete
+      const adjustedPercentage = Math.max(25, Math.min(95, percentage));
+      updateStageProgress(stageName, adjustedPercentage);
       
       // Update token count
       if (stage === 'Generator') {
@@ -931,9 +960,28 @@ function updateModelDisplay(stage: string, model: string) {
 }
 
 function updateStageProgress(stage: string, percentage: number) {
-  const stageElement = document.querySelector(`[data-stage="${stage}"] .progress-fill`) as HTMLElement;
-  if (stageElement) {
-    stageElement.style.width = `${percentage}%`;
+  const progressElement = document.getElementById(`${stage}-progress`) as HTMLElement;
+  if (progressElement) {
+    progressElement.style.width = `${percentage}%`;
+    
+    // Update status based on percentage
+    const statusElement = document.getElementById(`${stage}-status`);
+    if (statusElement) {
+      if (percentage === 0) {
+        statusElement.textContent = 'ready';
+        statusElement.className = 'stage-status ready';
+        progressElement.classList.remove('running');
+      } else if (percentage > 0 && percentage < 100) {
+        statusElement.textContent = 'running';
+        statusElement.className = 'stage-status running';
+        progressElement.classList.add('running');
+      } else if (percentage === 100) {
+        statusElement.textContent = 'completed';
+        statusElement.className = 'stage-status completed';
+        progressElement.classList.remove('running');
+        progressElement.style.background = 'linear-gradient(90deg, var(--terminal-success) 0%, var(--terminal-info) 100%)';
+      }
+    }
   }
 }
 
@@ -941,6 +989,17 @@ function resetStageStatus() {
   ['generator', 'refiner', 'validator', 'curator'].forEach(stage => {
     updateStageStatus(stage, 'ready');
     updateStageProgress(stage, 0);
+    
+    // Reset model display
+    const modelElement = document.getElementById(`${stage}-model`);
+    if (modelElement) {
+      modelElement.textContent = '--';
+    }
+  });
+  
+  // Clear any lingering running states
+  document.querySelectorAll('.progress-fill').forEach(el => {
+    el.classList.remove('running');
   });
 }
 
