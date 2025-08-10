@@ -11,8 +11,33 @@ contextBridge.exposeInMainWorld('backendAPI', {
   async runConsensus(query: string): Promise<any> {
     return ipcRenderer.invoke('backend-consensus', query);
   },
+  async runQuickConsensus(data: {query: string, profile?: string}): Promise<any> {
+    return ipcRenderer.invoke('backend-consensus-quick', data);
+  },
   async healthCheck(): Promise<any> {
     return ipcRenderer.invoke('backend-health');
+  }
+});
+
+// WebSocket proxy API
+contextBridge.exposeInMainWorld('websocketAPI', {
+  async connect(url: string): Promise<any> {
+    return ipcRenderer.invoke('websocket-connect', url);
+  },
+  async send(message: string): Promise<any> {
+    return ipcRenderer.invoke('websocket-send', message);
+  },
+  async close(): Promise<any> {
+    return ipcRenderer.invoke('websocket-close');
+  },
+  onMessage(callback: (data: string) => void) {
+    ipcRenderer.on('websocket-message', (_, data) => callback(data));
+  },
+  onError(callback: (error: string) => void) {
+    ipcRenderer.on('websocket-error', (_, error) => callback(error));
+  },
+  onClose(callback: () => void) {
+    ipcRenderer.on('websocket-closed', callback);
   }
 });
 

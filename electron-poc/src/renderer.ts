@@ -6,6 +6,7 @@
 import './index.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
+import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 
 // Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
@@ -281,6 +282,8 @@ let dailyLimit = 5;
 let totalTokens = 0;
 let totalCost = 0;
 let activeProfile: any = null;
+let consensusWebSocket: ConsensusWebSocket | null = null;
+let currentStreamContent: Map<string, string> = new Map();
 
 // DOM elements - Updated for new layout
 const terminalOutput = document.getElementById('terminal-output')!;
@@ -296,6 +299,9 @@ function addLogEntry(message: string, type: 'info' | 'success' | 'error' | 'warn
   terminalOutput.scrollTop = terminalOutput.scrollHeight;
 }
 
+// Declare runConsensusViaREST as a variable that will hold the function
+let runConsensusViaREST: (query: string) => Promise<void>;
+
 function addChatMessage(message: string, isSystem: boolean = false) {
   const messageDiv = document.createElement('div');
   messageDiv.className = `chat-message ${isSystem ? 'system' : 'user'}`;
@@ -304,7 +310,20 @@ function addChatMessage(message: string, isSystem: boolean = false) {
     <div class="message-content">${message}</div>
   `;
   chatContent.appendChild(messageDiv);
-  chatContent.scrollTop = chatContent.scrollHeight;
+  // Auto-scroll to bottom to show newest message
+  requestAnimationFrame(() => {
+    chatContent.scrollTop = chatContent.scrollHeight;
+  });
+}
+
+// Helper function to auto-scroll chat to bottom
+function autoScrollChat() {
+  const chatContent = document.getElementById('chat-content');
+  if (chatContent) {
+    requestAnimationFrame(() => {
+      chatContent.scrollTop = chatContent.scrollHeight;
+    });
+  }
 }
 
 function updateStatus(text: string, className: string) {
@@ -396,81 +415,44 @@ document.getElementById('test-connection-btn')?.addEventListener('click', async 
 });
 
 document.getElementById('run-consensus-btn')?.addEventListener('click', async () => {
-  if (isProcessing) return;
+  if (isProcessing) {
+    addLogEntry('⚠️ Consensus already in progress', 'warning');
+    return;
+  }
+  
+  if (!consensusWebSocket?.isConnected()) {
+    addLogEntry('🔄 Connecting to consensus engine...', 'info');
+    consensusWebSocket?.connect();
+    setTimeout(() => {
+      if (consensusWebSocket?.isConnected()) {
+        document.getElementById('run-consensus-btn')?.click();
+      } else {
+        addLogEntry('❌ Failed to connect to consensus engine', 'error');
+      }
+    }, 1000);
+    return;
+  }
   
   isProcessing = true;
+  totalTokens = 0;
+  totalCost = 0;
+  updateConsensusStats();
+  resetStageStatus();
   updateStatus('Running Consensus...', 'processing');
-  addLogEntry('🚀 Starting 4-stage consensus pipeline...', 'info');
+  addLogEntry('🚀 Starting streaming consensus pipeline...', 'info');
   
-  // Animate stages
-  updateStageStatus('generator', 'running');
+  // Test query
+  const testQuery = "What is the capital of France?";
+  addChatMessage(testQuery, false);
   
-  // Simulate token and cost accumulation
-  setTimeout(() => {
-    updateStageStatus('generator', 'completed');
-    updateStageStatus('refiner', 'running');
-    totalTokens += 150;
-    totalCost += 0.002;
-    updateConsensusStats();
-  }, 500);
+  // Get current profile from settings or use default
+  const currentProfileName = activeProfile?.name || 'balanced-performer';
   
-  setTimeout(() => {
-    updateStageStatus('refiner', 'completed');
-    updateStageStatus('validator', 'running');
-    totalTokens += 200;
-    totalCost += 0.003;
-    updateConsensusStats();
-  }, 1000);
-  
-  setTimeout(() => {
-    updateStageStatus('validator', 'completed');
-    updateStageStatus('curator', 'running');
-    totalTokens += 180;
-    totalCost += 0.0025;
-    updateConsensusStats();
-  }, 1500);
-  
-  // Add query to chat
-  addChatMessage("What is the capital of France?", false);
-  
-  try {
-    const result = await (window as any).backendAPI.runConsensus("What is the capital of France?");
-    
-    setTimeout(() => {
-      updateStageStatus('curator', 'completed');
-      totalTokens += 220;
-      totalCost += 0.0035;
-      updateConsensusStats();
-      
-      updateStatus('Consensus Complete!', 'success');
-      addLogEntry(`🎯 Consensus completed in ${result.duration_ms}ms`, 'success');
-      addLogEntry(`📝 Model: ${result.model_used}`, 'info');
-      addLogEntry(`💬 Result: ${result.result.substring(0, 200)}${result.result.length > 200 ? '...' : ''}`, 'success');
-      addLogEntry(`📊 Total tokens: ${totalTokens.toLocaleString()}, Cost: $${totalCost.toFixed(4)}`, 'info');
-      
-      // Also show result in chat
-      addChatMessage(result.result, true);
-      
-      // Update usage count in status bar
-      dailyUsageCount++;
-      updateConversationCount();
-    }, 2000);
-    
-  } catch (error) {
-    updateStageStatus('generator', 'error');
-    updateStageStatus('refiner', 'ready');
-    updateStageStatus('validator', 'ready');
-    updateStageStatus('curator', 'ready');
-    updateStatus('Consensus Failed', 'error');
-    addLogEntry(`❌ Consensus failed: ${error}`, 'error');
-  } finally {
-    setTimeout(() => {
-      isProcessing = false;
-    }, 2500);
-  }
+  // Start consensus via WebSocket
+  consensusWebSocket.startConsensus(testQuery, currentProfileName);
 });
 
-// Chat input handler
+// Chat input handler - Now uses WebSocket streaming
 document.getElementById('send-chat')?.addEventListener('click', async () => {
   const chatInput = document.getElementById('chat-input') as HTMLInputElement;
   const query = chatInput.value.trim();
@@ -480,55 +462,99 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   chatInput.value = '';
   addChatMessage(query, false);
   
-  if (!isConnected) {
-    addChatMessage('Please connect to backend first', true);
+  // Check WebSocket connection
+  if (!consensusWebSocket || !consensusWebSocket.isConnected()) {
+    addLogEntry('WebSocket not connected, attempting to connect...', 'warning');
+    
+    // Initialize WebSocket if not already done
+    if (!consensusWebSocket) {
+      initializeWebSocket();
+    } else {
+      consensusWebSocket.connect();
+    }
+    
+    // Wait a bit for connection
+    setTimeout(() => {
+      if (consensusWebSocket?.isConnected()) {
+        addLogEntry('WebSocket connected!', 'success');
+        // Retry the send
+        document.getElementById('send-chat')?.click();
+      } else {
+        addLogEntry('WebSocket connection failed, using REST API fallback', 'warning');
+        // Fallback to REST API
+        runConsensusViaREST(query);
+      }
+    }, 1000);
     return;
   }
   
   isProcessing = true;
-  addLogEntry(`🚀 Running consensus for: "${query}"`, 'info');
+  totalTokens = 0;
+  totalCost = 0;
+  updateConsensusStats();
+  resetStageStatus();
   
-  // Animate stages
-  updateStageStatus('generator', 'running');
-  setTimeout(() => {
-    updateStageStatus('generator', 'completed');
-    updateStageStatus('refiner', 'running');
-  }, 500);
-  setTimeout(() => {
-    updateStageStatus('refiner', 'completed');
-    updateStageStatus('validator', 'running');
-  }, 1000);
-  setTimeout(() => {
-    updateStageStatus('validator', 'completed');
-    updateStageStatus('curator', 'running');
-  }, 1500);
+  addLogEntry(`🚀 Starting streaming consensus for: "${query}"`, 'info');
+  
+  // Get current profile from settings or use default
+  const currentProfileName = activeProfile?.name || 'Free Also';
+  
+  // Start consensus via WebSocket
+  consensusWebSocket.startConsensus(query, currentProfileName);
+});
+
+// Fallback REST API function
+runConsensusViaREST = async (query: string) => {
+  isProcessing = true;
+  totalTokens = 0;
+  totalCost = 0;
+  updateConsensusStats();
+  resetStageStatus();
+  
+  addLogEntry(`🚀 Starting consensus via IPC/REST for: "${query}"`, 'info');
   
   try {
-    const result = await (window as any).backendAPI.runConsensus(query);
+    // Use IPC to communicate with main process, which can make the HTTP request
+    const result = await (window as any).backendAPI.runQuickConsensus({
+      query: query,
+      profile: activeProfile?.name || 'Free Also'
+    });
     
-    setTimeout(() => {
-      updateStageStatus('curator', 'completed');
-      addLogEntry(`✅ Consensus completed for: "${query}"`, 'success');
-      addChatMessage(result.result, true);
-      
-      // Update usage count in status bar
-      dailyUsageCount++;
-      updateConversationCount();
-    }, 2000);
+    // Update all stages as complete
+    ['generator', 'refiner', 'validator', 'curator'].forEach(stage => {
+      updateStageStatus(stage, 'completed');
+      updateStageProgress(stage, 100);
+    });
+    
+    // Update stats
+    totalTokens = result.tokens_used || 1000;
+    totalCost = result.cost || 0.01;
+    updateConsensusStats();
+    
+    addLogEntry(`✅ Consensus completed in ${result.duration_ms}ms`, 'success');
+    addChatMessage(result.result, true);
+    
+    // Update usage count
+    dailyUsageCount++;
+    updateConversationCount();
     
   } catch (error) {
-    updateStageStatus('generator', 'error');
-    updateStageStatus('refiner', 'ready');
-    updateStageStatus('validator', 'ready');
-    updateStageStatus('curator', 'ready');
-    addLogEntry(`❌ Consensus failed: ${error}`, 'error');
-    addChatMessage(`Error: ${error}`, true);
+    resetStageStatus();
+    console.error('Full error details:', error);
+    
+    // Check if it's a network error
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      addLogEntry(`❌ Network error: Cannot connect to backend at http://127.0.0.1:8765`, 'error');
+      addLogEntry(`💡 Make sure the backend server is running`, 'warning');
+      addChatMessage(`Network Error: Cannot reach the backend server. Please ensure it's running on port 8765.`, true);
+    } else {
+      addLogEntry(`❌ Consensus failed: ${error}`, 'error');
+      addChatMessage(`Error: ${error}`, true);
+    }
   } finally {
-    setTimeout(() => {
-      isProcessing = false;
-    }, 2500);
+    isProcessing = false;
   }
-});
+};
 
 // Enter key support for chat input
 document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
@@ -538,9 +564,256 @@ document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
   }
 });
 
+// Initialize WebSocket connection for streaming
+function initializeWebSocket() {
+  const wsUrl = 'ws://127.0.0.1:8765/ws';
+  
+  console.log('Initializing WebSocket with URL:', wsUrl);
+  consensusWebSocket = new ConsensusWebSocket(wsUrl, {
+    onConnectionStateChange: (connected) => {
+      if (connected) {
+        addLogEntry('✅ WebSocket connected for streaming', 'success');
+      } else {
+        addLogEntry('⚠️ WebSocket disconnected', 'warning');
+      }
+    },
+    
+    onProfileLoaded: (name, models) => {
+      activeProfile = { name, models };
+      const profileDisplay = document.getElementById('active-profile-name');
+      if (profileDisplay) {
+        profileDisplay.textContent = name;
+      }
+      
+      // Update model displays
+      if (models.length >= 4) {
+        updateModelDisplay('generator', models[0]);
+        updateModelDisplay('refiner', models[1]);
+        updateModelDisplay('validator', models[2]);
+        updateModelDisplay('curator', models[3]);
+      }
+      
+      addLogEntry(`📋 Profile loaded: ${name}`, 'info');
+    },
+    
+    onStageStarted: (stage, model) => {
+      const stageName = stage.toLowerCase();
+      updateStageStatus(stageName, 'running');
+      updateModelDisplay(stageName, model);
+      addLogEntry(`▶️ ${stage} started with ${model}`, 'info');
+      currentStreamContent.set(stageName, '');
+    },
+    
+    onStreamChunk: (stage, chunk) => {
+      // Accumulate content for each stage
+      const stageName = stage.toLowerCase();
+      const currentContent = currentStreamContent.get(stageName) || '';
+      currentStreamContent.set(stageName, currentContent + chunk);
+      
+      // Show streaming output from all stages, not just Curator
+      const chatContent = document.getElementById('chat-content');
+      
+      // Find or create message for this stage
+      let stageMessage = chatContent?.querySelector(`.streaming-${stageName}`);
+      
+      if (!stageMessage) {
+        // Create new message container for this stage
+        const message = document.createElement('div');
+        message.className = `chat-message system streaming streaming-${stageName}`;
+        message.innerHTML = `
+          <div class="message-time">[${new Date().toLocaleTimeString()}] ${stage}</div>
+          <div class="message-content"></div>
+        `;
+        chatContent?.appendChild(message);
+        stageMessage = message;
+      }
+      
+      // Update content - convert markdown-like formatting to HTML
+      const contentEl = stageMessage.querySelector('.message-content');
+      if (contentEl) {
+        // Simple markdown to HTML conversion
+        let htmlContent = currentStreamContent.get(stageName) || '';
+        
+        // Convert markdown formatting
+        htmlContent = htmlContent
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold
+          .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic
+          .replace(/\n\n/g, '</p><p>') // Paragraphs
+          .replace(/\n/g, '<br>'); // Line breaks
+        
+        // Wrap in paragraph if not already
+        if (!htmlContent.startsWith('<p>')) {
+          htmlContent = '<p>' + htmlContent + '</p>';
+        }
+        
+        contentEl.innerHTML = htmlContent;
+      }
+      
+      // Always auto-scroll to show the newest content
+      autoScrollChat();
+    },
+    
+    onStageProgress: (stage, percentage, tokens) => {
+      const stageName = stage.toLowerCase();
+      updateStageProgress(stageName, percentage);
+      
+      // Update token count
+      if (stage === 'Generator') {
+        totalTokens = tokens;
+      } else {
+        totalTokens += tokens;
+      }
+      updateConsensusStats();
+    },
+    
+    onStageCompleted: (stage, tokens, cost) => {
+      const stageName = stage.toLowerCase();
+      updateStageStatus(stageName, 'completed');
+      totalTokens += tokens;
+      totalCost += cost;
+      updateConsensusStats();
+      addLogEntry(`✅ ${stage} completed (${tokens} tokens, ${formatCost(cost)})`, 'success');
+    },
+    
+    onConsensusComplete: (result, finalTokens, finalCost) => {
+      totalTokens = finalTokens;
+      totalCost = finalCost;
+      updateConsensusStats();
+      
+      // Remove all streaming indicators
+      const chatContent = document.getElementById('chat-content');
+      const streamingMessages = chatContent?.querySelectorAll('.streaming');
+      streamingMessages?.forEach(msg => {
+        msg.classList.remove('streaming');
+        // Remove stage-specific streaming classes
+        msg.className = msg.className.replace(/streaming-\w+/g, '').trim();
+      });
+      
+      // Add final consensus result if provided
+      if (result && result.trim()) {
+        const finalMessage = document.createElement('div');
+        finalMessage.className = 'chat-message system';
+        finalMessage.innerHTML = `
+          <div class="message-time">[${new Date().toLocaleTimeString()}] Final Consensus</div>
+          <div class="message-content"><strong>${result}</strong></div>
+        `;
+        chatContent?.appendChild(finalMessage);
+      }
+      
+      // Auto-scroll to ensure the complete result is visible
+      autoScrollChat();
+      
+      addLogEntry(`🎯 Consensus complete! Total: ${formatTokens(finalTokens)} tokens, ${formatCost(finalCost)}`, 'success');
+      
+      // Update usage count
+      dailyUsageCount++;
+      updateConversationCount();
+      
+      // Reset processing state
+      isProcessing = false;
+      currentStreamContent.clear();
+    },
+    
+    onError: (message) => {
+      addLogEntry(`❌ Error: ${message}`, 'error');
+      resetStageStatus();
+      isProcessing = false;
+    },
+    
+    onAIHelperDecision: (directMode, reason) => {
+      addLogEntry(`🤖 AI Helper: ${reason}`, 'info');
+    }
+  });
+  
+  consensusWebSocket.connect();
+  console.log('WebSocket connect() called, waiting for connection...');
+  
+  // Force check connection status after a short delay
+  setTimeout(() => {
+    console.log('Checking WebSocket connection status...');
+    if (consensusWebSocket.isConnected()) {
+      console.log('✅ WebSocket is connected!');
+      addLogEntry('✅ WebSocket connected and ready', 'success');
+    } else {
+      console.log('❌ WebSocket failed to connect');
+      addLogEntry('⚠️ WebSocket not connected - messages will use REST API', 'warning');
+    }
+  }, 500);
+}
+
+function updateModelDisplay(stage: string, model: string) {
+  const modelElement = document.getElementById(`${stage}-model`);
+  if (modelElement) {
+    // Truncate long model names for display
+    const displayModel = model.length > 30 ? model.substring(0, 27) + '...' : model;
+    modelElement.textContent = displayModel;
+    modelElement.title = model; // Show full name on hover
+  }
+}
+
+function updateStageProgress(stage: string, percentage: number) {
+  const stageElement = document.querySelector(`[data-stage="${stage}"] .progress-fill`) as HTMLElement;
+  if (stageElement) {
+    stageElement.style.width = `${percentage}%`;
+  }
+}
+
+function resetStageStatus() {
+  ['generator', 'refiner', 'validator', 'curator'].forEach(stage => {
+    updateStageStatus(stage, 'ready');
+    updateStageProgress(stage, 0);
+  });
+}
+
+// Add a test WebSocket button for debugging
+const testWSBtn = document.getElementById('test-consensus');
+if (testWSBtn) {
+  const originalOnClick = testWSBtn.onclick;
+  testWSBtn.onclick = null;
+  testWSBtn.addEventListener('click', async () => {
+    addLogEntry('🧪 Testing WebSocket connection directly...', 'info');
+    
+    // Test with a simple WebSocket first
+    try {
+      const testWS = new WebSocket('ws://localhost:8765/ws-test');
+      testWS.onopen = () => {
+        addLogEntry('✅ Test WebSocket connected!', 'success');
+        testWS.send('Hello from Electron');
+      };
+      testWS.onmessage = (event) => {
+        addLogEntry(`📥 Test WS received: ${event.data}`, 'info');
+      };
+      testWS.onerror = (error) => {
+        addLogEntry(`❌ Test WS error: ${error}`, 'error');
+        console.error('Test WebSocket error:', error);
+      };
+      testWS.onclose = () => {
+        addLogEntry('🔌 Test WebSocket closed', 'info');
+      };
+    } catch (error) {
+      addLogEntry(`❌ Failed to create test WebSocket: ${error}`, 'error');
+      console.error('WebSocket creation error:', error);
+    }
+  });
+}
+
+// Make WebSocket test function available globally for console debugging
+(window as any).testWebSocket = () => {
+  console.log('Testing WebSocket connection...');
+  const ws = new WebSocket('ws://localhost:8765/ws-test');
+  ws.onopen = () => console.log('✅ WebSocket opened!');
+  ws.onerror = (e) => console.error('❌ WebSocket error:', e);
+  ws.onclose = (e) => console.log('WebSocket closed:', e.code, e.reason);
+  ws.onmessage = (e) => console.log('WebSocket message:', e.data);
+  return ws;
+};
+
 // Auto-test connection on startup
 setTimeout(async () => {
   addLogEntry('🔄 Auto-testing backend connection...', 'info');
+  
+  // Initialize WebSocket for streaming
+  initializeWebSocket();
   
   try {
     if ((window as any).backendAPI) {

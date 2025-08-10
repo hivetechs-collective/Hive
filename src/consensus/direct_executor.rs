@@ -185,6 +185,12 @@ impl DirectExecutionHandler {
         callbacks: Arc<dyn StreamingCallbacks>,
         conversation_id: &str,
     ) -> Result<(String, Option<crate::consensus::openrouter::Usage>)> {
+        // Notify about profile being loaded (for UI display)
+        let _ = callbacks.on_profile_loaded(
+            &self.profile.profile_name,
+            &[self.profile.generator_model.clone()]
+        );
+        
         // Build messages for the generator
         let mut messages = self.generator.build_messages(request, None, context)?;
         
@@ -456,12 +462,19 @@ struct DirectStreamingCallbacks {
 impl crate::consensus::openrouter::StreamingCallbacks for DirectStreamingCallbacks {
     fn on_start(&self) {
         // Signal stage start through the consensus callbacks
-        let _ = self.inner.on_stage_start(self.stage, "direct");
+        tracing::info!("DirectStreamingCallbacks::on_start called, forwarding to consensus callbacks");
+        // Note: We don't know the actual model here, so we pass a placeholder
+        // The actual model will be shown in on_stage_complete
+        if let Err(e) = self.inner.on_stage_start(self.stage, "loading...") {
+            tracing::error!("Failed to call on_stage_start: {}", e);
+        }
     }
     
     fn on_chunk(&self, chunk: String, total_content: String) {
         // Forward to consensus callbacks
-        let _ = self.inner.on_stage_chunk(self.stage, &chunk, &total_content);
+        if let Err(e) = self.inner.on_stage_chunk(self.stage, &chunk, &total_content) {
+            tracing::error!("Failed to call on_stage_chunk: {}", e);
+        }
         
         // Only parse for operations if we have a parser (file operations)
         if let Some(parser) = &self.parser {

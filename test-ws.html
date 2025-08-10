@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    <script>
+        const ws = new WebSocket('ws://localhost:8765/ws');
+        const status = document.getElementById('status');
+        const messages = document.getElementById('messages');
+        
+        ws.onopen = () => {
+            status.textContent = '✅ Connected';
+            console.log('WebSocket connected');
+            
+            // Test consensus
+            ws.send(JSON.stringify({
+                type: 'start_consensus',
+                query: 'What is 1+1?',
+                profile: 'Free Also'
+            }));
+        };
+        
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+            console.log('Message:', msg);
+            const div = document.createElement('div');
+            div.textContent = JSON.stringify(msg, null, 2);
+            messages.appendChild(div);
+        };
+        
+        ws.onerror = (error) => {
+            status.textContent = '❌ Error: ' + error;
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = () => {
+            status.textContent = '🔌 Disconnected';
+            console.log('WebSocket closed');
+        };
+    </script>
+</body>
+</html>

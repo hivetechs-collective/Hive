@@ -157,6 +157,78 @@ ipcMain.handle('backend-consensus', async (_, query: string) => {
   }
 });
 
+ipcMain.handle('backend-consensus-quick', async (_, data: {query: string, profile?: string}) => {
+  try {
+    const response = await fetch('http://127.0.0.1:8765/api/consensus/quick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Quick consensus error:', error);
+    throw error;
+  }
+});
+
+// WebSocket proxy - main process handles WebSocket connection
+const WebSocket = require('ws');
+let wsConnection: any = null;
+let wsCallbacks: Map<string, Function> = new Map();
+
+ipcMain.handle('websocket-connect', async (event, url: string) => {
+  return new Promise((resolve, reject) => {
+    try {
+      if (wsConnection) {
+        wsConnection.close();
+      }
+      
+      wsConnection = new WebSocket(url);
+      
+      wsConnection.on('open', () => {
+        console.log('WebSocket connected in main process');
+        resolve({ connected: true });
+      });
+      
+      wsConnection.on('message', (data: any) => {
+        // Forward message to renderer
+        event.sender.send('websocket-message', data.toString());
+      });
+      
+      wsConnection.on('error', (error: any) => {
+        console.error('WebSocket error in main:', error);
+        event.sender.send('websocket-error', error.message);
+        reject(error);
+      });
+      
+      wsConnection.on('close', () => {
+        console.log('WebSocket closed in main process');
+        event.sender.send('websocket-closed');
+        wsConnection = null;
+      });
+      
+    } catch (error) {
+      reject(error);
+    }
+  });
+});
+
+ipcMain.handle('websocket-send', async (_, message: string) => {
+  if (wsConnection && wsConnection.readyState === WebSocket.OPEN) {
+    wsConnection.send(message);
+    return { sent: true };
+  }
+  throw new Error('WebSocket not connected');
+});
+
+ipcMain.handle('websocket-close', async () => {
+  if (wsConnection) {
+    wsConnection.close();
+    wsConnection = null;
+  }
+  return { closed: true };
+});
+
 // Settings API handlers
 ipcMain.handle('settings-load', async () => {
   return new Promise((resolve, reject) => {

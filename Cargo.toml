@@ -221,6 +221,18 @@ path = "src/bin/test-terminal-cleaning.rs"
 name = "git-features-demo"
 path = "git_features_standalone.rs"
 
+[[bin]]
+name = "hive-backend-server"
+path = "src/bin/hive-backend-server.rs"
+
+[[bin]]
+name = "hive-backend-server-enhanced"
+path = "src/bin/hive-backend-server-enhanced.rs"
+
+[[bin]]
+name = "init-database"
+path = "src/bin/init-database.rs"
+
 [package.metadata.bundle]
 name = "Hive"
 identifier = "com.hivetechs.hive"
