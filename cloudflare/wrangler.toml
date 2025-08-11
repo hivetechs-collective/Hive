@@ -1,0 +1,37 @@
+name = "hivetechs-api"
+main = "secure-worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "hive-user-db"
+database_id = "b646eb8d-810f-41c1-ba12-b95a543b4884"
+
+# Environment variables
+[vars]
+API_KEY = "43883e6a515fc38b337fb9a87c9332d97888493602ee7246898c8af832da9f3e"
+JWT_SERVICE_SECRET = "hivetechs-service-jwt-secret-256-bit-shared-with-gateway-worker-change-in-production"
+JWT_SECRET = ""
+ENCRYPTION_KEY = ""
+
+# Development environment
+[env.dev]
+workers_dev = true
+
+# Production environment  
+[env.production]
+workers_dev = false
+route = "gateway.hivetechs.io/*"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "hive-user-db"
+database_id = "b646eb8d-810f-41c1-ba12-b95a543b4884"
+
+[env.production.vars]
+API_KEY = "43883e6a515fc38b337fb9a87c9332d97888493602ee7246898c8af832da9f3e"
+JWT_SERVICE_SECRET = "hivetechs-service-jwt-secret-256-bit-shared-with-gateway-worker-change-in-production"
+JWT_SECRET = ""
+ENCRYPTION_KEY = ""
