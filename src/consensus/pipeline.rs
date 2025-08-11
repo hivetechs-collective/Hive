@@ -2308,19 +2308,25 @@ impl ConsensusPipeline {
             let mut selected_memory: Option<(String, String, f64, String)> = None;
 
             // Get ALL conversations from the last 24 hours, ordered by recency
+            // Query from the messages table where conversations are actually saved
             let mut stmt = conn.prepare(
-                "SELECT source_of_truth, question, 1.0 as confidence_score, created_at
-                 FROM knowledge_conversations
-                 WHERE created_at > ?1
-                 ORDER BY created_at DESC"
+                "SELECT m1.content as user_question, m2.content as assistant_response, 
+                        m2.stage, m2.model_used, m2.timestamp
+                 FROM messages m1
+                 JOIN messages m2 ON m1.conversation_id = m2.conversation_id
+                 WHERE m1.role = 'user' AND m2.role = 'assistant'
+                   AND m2.timestamp > m1.timestamp
+                   AND m2.timestamp > ?1
+                 ORDER BY m2.timestamp DESC
+                 LIMIT 10"
             )?;
 
             let all_recent_results = stmt.query_map([&twenty_four_hours_ago], |row| {
                 Ok((
-                    row.get::<_, String>(0)?, // curator_output
-                    row.get::<_, String>(1)?, // question
-                    row.get::<_, f64>(2)?,    // confidence_score
-                    row.get::<_, String>(3)?, // created_at
+                    row.get::<_, String>(1)?, // assistant_response
+                    row.get::<_, String>(0)?, // user_question
+                    1.0_f64,                   // confidence_score (default for now)
+                    row.get::<_, String>(4)?, // timestamp
                 ))
             })?;
 
@@ -2383,10 +2389,14 @@ impl ConsensusPipeline {
                 tracing::debug!("Follow-up detected, checking broader window (72h)");
 
                 let mut stmt = conn.prepare(
-                    "SELECT source_of_truth, question, 1.0 as confidence_score, created_at
-                     FROM knowledge_conversations
-                     WHERE created_at > ?1 AND created_at <= ?2
-                     ORDER BY created_at DESC
+                    "SELECT m1.content as user_question, m2.content as assistant_response, 
+                            m2.stage, m2.model_used, m2.timestamp
+                     FROM messages m1
+                     JOIN messages m2 ON m1.conversation_id = m2.conversation_id
+                     WHERE m1.role = 'user' AND m2.role = 'assistant'
+                       AND m2.timestamp > m1.timestamp
+                       AND m2.timestamp > ?1 AND m2.timestamp <= ?2
+                     ORDER BY m2.timestamp DESC
                      LIMIT 3"
                 )?;
 
@@ -2394,10 +2404,10 @@ impl ConsensusPipeline {
                     rusqlite::params![&seventy_two_hours_ago, &twenty_four_hours_ago],
                     |row| {
                         Ok((
-                            row.get::<_, String>(0)?, // source_of_truth (curator output)
-                            row.get::<_, String>(1)?, // question
-                            row.get::<_, f64>(2)?,    // confidence_score
-                            row.get::<_, String>(3)?, // created_at
+                            row.get::<_, String>(1)?, // assistant_response
+                            row.get::<_, String>(0)?, // user_question
+                            1.0_f64,                   // confidence_score  
+                            row.get::<_, String>(4)?, // timestamp
                         ))
                     }
                 )?;

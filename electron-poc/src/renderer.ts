@@ -7,6 +7,7 @@ import './index.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
+import { IntelligenceProgressBar } from './intelligence-progress-bar';
 
 // Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
@@ -296,6 +297,7 @@ let totalCost = 0;
 let currentStageTokens = 0; // Track tokens for the current stage only
 let activeProfile: any = null;
 let consensusWebSocket: ConsensusWebSocket | null = null;
+let intelligenceProgressBar: IntelligenceProgressBar | null = null;
 let currentStreamContent: Map<string, string> = new Map();
 
 // Conversation context management (like Dioxus implementation)
@@ -658,6 +660,49 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   currentStageTokens = 0;
   updateConsensusStats();
   resetStageStatus();
+  
+  // Show Intelligence Progress Bar for AI memory and context building
+  // Safe: Won't break if the progress bar failed to initialize
+  if (intelligenceProgressBar) {
+    try {
+      intelligenceProgressBar.show();
+      intelligenceProgressBar.update({
+        phase: 'memory',
+        progress: 10,
+        message: 'Searching memories...'
+      });
+      
+      // Simulate the phases (in real implementation, these would be triggered by backend events)
+      setTimeout(() => {
+        intelligenceProgressBar?.update({
+          phase: 'context',
+          progress: 50,
+          memoryHits: 2,
+          contextRelevance: 0.75
+        });
+      }, 1500);
+      
+      setTimeout(() => {
+        intelligenceProgressBar?.update({
+          phase: 'classification',
+          progress: 80,
+          memoryHits: 2,
+          contextRelevance: 0.75
+        });
+      }, 3000);
+      
+      setTimeout(() => {
+        intelligenceProgressBar?.update({
+          phase: 'complete',
+          progress: 100,
+          memoryHits: 2,
+          contextRelevance: 0.75
+        });
+      }, 4500);
+    } catch (error) {
+      console.error('Error updating Intelligence Progress Bar:', error);
+    }
+  }
   
   addLogEntry(`🚀 Starting streaming consensus for: "${query}"`, 'info');
   
@@ -1280,6 +1325,21 @@ async function loadActiveProfile() {
 
 // Update status bar on startup
 setTimeout(() => {
+  console.log('🔄 Updating status bar and loading profile...');
   updateStatusBar();
   loadActiveProfile();
+  
+  // Initialize Intelligence Progress Bar AFTER critical components
+  // Wrapped in try-catch to prevent breaking the app
+  try {
+    const chatContentElement = document.querySelector('.chat-content');
+    if (chatContentElement) {
+      intelligenceProgressBar = new IntelligenceProgressBar();
+      intelligenceProgressBar.mount(chatContentElement as HTMLElement);
+      console.log('✅ Intelligence Progress Bar initialized');
+    }
+  } catch (error) {
+    console.error('Failed to initialize Intelligence Progress Bar:', error);
+    // App continues to work even if this fails
+  }
 }, 500);

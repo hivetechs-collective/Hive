@@ -191,8 +191,19 @@ impl DirectExecutionHandler {
             &[self.profile.generator_model.clone()]
         );
         
-        // Build messages for the generator
-        let mut messages = self.generator.build_messages(request, None, context)?;
+        // CRITICAL: Retrieve memory context for continuity after refresh
+        let memory_context = self.get_memory_context(request, conversation_id).await?;
+        
+        // Combine existing context with memory context
+        let full_context = match (context, memory_context) {
+            (Some(ctx), Some(mem)) => Some(format!("{}\n\n{}", mem, ctx)),
+            (Some(ctx), None) => Some(ctx.to_string()),
+            (None, Some(mem)) => Some(mem),
+            (None, None) => None,
+        };
+        
+        // Build messages for the generator with full context
+        let mut messages = self.generator.build_messages(request, None, full_context.as_deref())?;
         
         // Check if this is a file operation request
         let is_file_operation = self.is_file_operation_request(request);
@@ -408,6 +419,83 @@ impl DirectExecutionHandler {
         })
     }
 
+    /// Retrieve memory context from recent conversations
+    async fn get_memory_context(&self, query: &str, conversation_id: &str) -> Result<Option<String>> {
+        tracing::info!("🧠 Direct mode: Retrieving memory context for conversation {}", conversation_id);
+        
+        let db = self.db.clone();
+        let query = query.to_string();
+        
+        // Use spawn_blocking for database queries
+        let context = tokio::task::spawn_blocking(move || -> Result<Option<String>> {
+            let mut conn = db.get_connection()?;
+            let twenty_four_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
+            
+            // Query recent conversations from messages table
+            let mut stmt = conn.prepare(
+                "SELECT m1.content as user_question, m2.content as assistant_response, 
+                        m2.stage, m2.model_used, m2.timestamp
+                 FROM messages m1
+                 JOIN messages m2 ON m1.conversation_id = m2.conversation_id
+                 WHERE m1.role = 'user' AND m2.role = 'assistant'
+                   AND m2.timestamp > m1.timestamp
+                   AND m2.timestamp > ?1
+                 ORDER BY m2.timestamp DESC
+                 LIMIT 5"
+            )?;
+            
+            let results = stmt.query_map([&twenty_four_hours_ago], |row| {
+                Ok((
+                    row.get::<_, String>(0)?, // user_question
+                    row.get::<_, String>(1)?, // assistant_response
+                    row.get::<_, Option<String>>(2)?, // stage
+                    row.get::<_, String>(4)?, // timestamp
+                ))
+            })?;
+            
+            let mut context_parts = Vec::new();
+            let mut found_any = false;
+            
+            for (i, result) in results.enumerate() {
+                if let Ok((question, response, stage, timestamp)) = result {
+                    if i == 0 {
+                        context_parts.push("🧠 RECENT CONTEXT:".to_string());
+                        context_parts.push("".to_string());
+                    }
+                    
+                    let date = chrono::DateTime::parse_from_rfc3339(&timestamp)
+                        .map(|dt| dt.format("%H:%M").to_string())
+                        .unwrap_or_else(|_| "recent".to_string());
+                    
+                    let mode = stage.as_deref().unwrap_or("unknown");
+                    
+                    // Include recent Q&A pairs for context
+                    context_parts.push(format!("[{}] Q: {}", date, question));
+                    
+                    // Truncate long responses for context
+                    let response_preview = if response.len() > 300 {
+                        format!("{}...", &response[..300])
+                    } else {
+                        response.clone()
+                    };
+                    context_parts.push(format!("A: {}\n", response_preview));
+                    
+                    found_any = true;
+                }
+            }
+            
+            if found_any {
+                tracing::info!("✅ Direct mode: Found {} recent conversation(s) for context", context_parts.len() / 2);
+                Ok(Some(context_parts.join("\n")))
+            } else {
+                tracing::info!("📭 Direct mode: No recent conversations found");
+                Ok(None)
+            }
+        }).await??;
+        
+        Ok(context)
+    }
+    
     /// Check if a request should use direct execution
     pub async fn should_use_direct_path(&self, request: &str) -> Result<bool> {
         let request_lower = request.to_lowercase();
