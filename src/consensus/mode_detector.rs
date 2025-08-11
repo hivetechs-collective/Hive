@@ -309,36 +309,40 @@ impl ModeDetector {
             
             // Build the routing guidance prompt - similar to stage guidance
             let routing_prompt = format!(
-                r#"You are an intelligent routing assistant for an AI consensus system.
+                r#"Analyze this question: "{}"
 
-Analyze this question and determine if it needs DIRECT (simple, fast) or CONSENSUS (thorough, multi-stage) processing.
+IMPORTANT: For SIMPLE MATH like "what is 2+2" or "what is 1+8", you MUST respond with "DIRECT".
 
-Question: "{}"
+Choose routing mode:
 
-ROUTING GUIDANCE:
-Use DIRECT mode (single fast response) ONLY for:
-- Simple arithmetic (2+2, basic calculations)
-- Basic factual questions (capitals, definitions)
-- Greetings and small talk
-- Questions answerable in 1-2 sentences
+DIRECT mode - Use for:
+• Basic arithmetic (1+1, 2+2, 5*3, etc.) - ALWAYS USE DIRECT FOR MATH
+• Simple factual questions (what is the capital of France?)
+• Greetings (hello, hi, good morning)
+• Yes/no questions
+• Questions with obvious 1-sentence answers
 
-Use CONSENSUS mode (4-stage collaborative analysis) for:
-- Programming questions (design, architecture, implementation)
-- Complex analysis or explanations
-- Questions requiring code examples
-- Anything needing careful thought or multiple perspectives
-- Questions about systems, patterns, or best practices
+CONSENSUS mode - Use for:
+• Programming/coding questions
+• Design or architecture questions
+• Complex analysis
+• Questions needing multiple perspectives
+• Creative tasks
+• Anything requiring deep thought
 
-Respond with ONLY one word: "DIRECT" or "CONSENSUS"
+Look at the question. If it's simple math or a basic fact, respond "DIRECT".
+Otherwise, respond "CONSENSUS".
 
-Decision:"#,
+Respond with EXACTLY one word only: DIRECT or CONSENSUS
+
+Your response:"#,
                 request
             );
             
             let messages = vec![
                 crate::consensus::openrouter::OpenRouterMessage {
                     role: "system".to_string(),
-                    content: "You are a routing assistant. Analyze complexity and respond with only 'DIRECT' or 'CONSENSUS'.".to_string(),
+                    content: "You are a routing assistant. For simple math questions like 'what is 2+2', ALWAYS respond 'DIRECT'. For complex questions, respond 'CONSENSUS'. Respond with ONLY one word.".to_string(),
                 },
                 crate::consensus::openrouter::OpenRouterMessage {
                     role: "user".to_string(),
@@ -360,10 +364,14 @@ Decision:"#,
             
             match client.chat_completion(req).await {
                 Ok(response) => {
-                    let decision = response.choices.first()
+                    let raw_response = response.choices.first()
                         .and_then(|c| c.message.as_ref())
-                        .map(|m| m.content.trim().to_uppercase())
+                        .map(|m| m.content.clone())
                         .unwrap_or_else(|| "CONSENSUS".to_string());
+                    
+                    tracing::info!("🤖 LLM routing response: '{}'", raw_response);
+                    
+                    let decision = raw_response.trim().to_uppercase();
                     
                     if decision.contains("DIRECT") {
                         tracing::info!("🎯 Generator model decided: Direct mode for simple question");

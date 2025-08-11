@@ -153,48 +153,60 @@ impl ConsensusPipeline {
     
     /// Configure mode detection for Claude Code-style execution
     pub async fn with_mode_detection(mut self) -> Result<Self> {
-        // Only configure if we have the necessary components
-        if let (Some(ai_helpers), Some(openrouter_client), Some(model_manager), Some(database)) = 
-            (&self.ai_helpers, &self.openrouter_client, &self.model_manager, &self.database) {
+        tracing::info!("🔧 Configuring mode detection...");
+        
+        // Mode detection is REQUIRED - ensure all components exist
+        let ai_helpers = self.ai_helpers
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("AI Helpers required for mode detection"))?;
             
-            // Create mode detector with routing config using Generator model from profile
-            let mut mode_detector = ModeDetector::new()?
-                .with_ai_helpers(ai_helpers.clone());
+        let openrouter_client = self.openrouter_client
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("OpenRouter client required for mode detection"))?;
             
-            // Get the Generator model from the current profile
-            mode_detector = mode_detector.with_routing_config(
-                openrouter_client.clone(),
-                self.profile.generator_model.clone()
+        let database = self.database
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Database required for mode detection"))?;
+        
+        // Create mode detector with routing config using Generator model from profile
+        let mut mode_detector = ModeDetector::new()?
+            .with_ai_helpers(ai_helpers.clone());
+        
+        // Configure with OpenRouter and Generator model for LLM-based routing
+        mode_detector = mode_detector.with_routing_config(
+            openrouter_client.clone(),
+            self.profile.generator_model.clone()
+        );
+        
+        tracing::info!("✅ Mode detector configured with Generator model: {}", self.profile.generator_model);
+        self.mode_detector = Some(Arc::new(mode_detector));
+        
+        // Create streaming executor for direct mode
+        if let Some(file_executor) = &self.file_executor {
+            let streaming_executor = Arc::new(
+                StreamingOperationExecutor::new(
+                    file_executor.clone(),
+                    ai_helpers.clone(),
+                    Arc::new(std::sync::atomic::AtomicBool::new(true)), // Auto-accept for direct mode
+                    tokio::sync::mpsc::unbounded_channel().0, // Status channel
+                )
             );
             
-            self.mode_detector = Some(Arc::new(mode_detector));
+            // Create direct execution handler
+            let generator_stage = Arc::new(GeneratorStage::new());
+            let direct_handler = Arc::new(
+                DirectExecutionHandler::new(
+                    generator_stage,
+                    ai_helpers.clone(),
+                    streaming_executor,
+                    openrouter_client.clone(),
+                    self.profile.clone(),
+                    database.clone(),
+                )
+            );
             
-            // Create streaming executor for direct mode
-            if let Some(file_executor) = &self.file_executor {
-                let streaming_executor = Arc::new(
-                    StreamingOperationExecutor::new(
-                        file_executor.clone(),
-                        ai_helpers.clone(),
-                        Arc::new(std::sync::atomic::AtomicBool::new(true)), // Auto-accept for direct mode
-                        tokio::sync::mpsc::unbounded_channel().0, // Status channel
-                    )
-                );
-                
-                // Create direct execution handler
-                let generator_stage = Arc::new(GeneratorStage::new());
-                let direct_handler = Arc::new(
-                    DirectExecutionHandler::new(
-                        generator_stage,
-                        ai_helpers.clone(),
-                        streaming_executor,
-                        openrouter_client.clone(),
-                        self.profile.clone(),
-                        database.clone(),
-                    )
-                );
-                
-                self.direct_handler = Some(direct_handler);
-            }
+            self.direct_handler = Some(direct_handler);
+            tracing::info!("✅ Direct execution handler configured for simple questions");
         }
         
         Ok(self)
@@ -558,33 +570,26 @@ impl ConsensusPipeline {
         let mut stage_results = Vec::new();
 
         // Use AI-powered mode detection to route questions intelligently
-        let execution_mode = if let Some(mode_detector) = &self.mode_detector {
-            let mode = mode_detector.detect_mode(question).await;
-            tracing::info!("🤖 AI Mode Detection result: {:?}", mode);
-            
-            // Notify the frontend about the routing decision
-            let direct_mode = matches!(mode, ExecutionMode::Direct);
-            let reason = match mode {
-                ExecutionMode::Direct => "AI Helper determined this is a simple question suitable for direct response",
-                ExecutionMode::Consensus => "AI Helper determined this question requires full consensus analysis",
-                ExecutionMode::HybridConsensus => "AI Helper determined this requires consensus with file operations",
-            };
-            
-            if let Err(e) = self.callbacks.on_mode_decision(direct_mode, reason) {
-                tracing::warn!("Failed to send mode decision callback: {}", e);
-            }
-            
-            mode
-        } else {
-            tracing::info!("📊 No mode detector available, defaulting to Consensus mode");
-            
-            // Notify frontend we're using consensus by default
-            if let Err(e) = self.callbacks.on_mode_decision(false, "No AI Helper available - using full consensus mode") {
-                tracing::warn!("Failed to send mode decision callback: {}", e);
-            }
-            
-            ExecutionMode::Consensus
+        // Mode detector is REQUIRED - this should never be None in production
+        let mode_detector = self.mode_detector
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Mode detector not initialized - this is a critical error"))?;
+        
+        tracing::info!("🔍 Analyzing question for routing: {}", question);
+        let execution_mode = mode_detector.detect_mode(question).await;
+        tracing::info!("🤖 AI Mode Detection result: {:?}", execution_mode);
+        
+        // Notify the frontend about the routing decision
+        let direct_mode = matches!(execution_mode, ExecutionMode::Direct);
+        let reason = match execution_mode {
+            ExecutionMode::Direct => "AI determined this is a simple question suitable for direct response",
+            ExecutionMode::Consensus => "AI determined this question requires full consensus analysis",
+            ExecutionMode::HybridConsensus => "AI determined this requires consensus with file operations",
         };
+        
+        if let Err(e) = self.callbacks.on_mode_decision(direct_mode, reason) {
+            tracing::warn!("Failed to send mode decision callback: {}", e);
+        }
 
         // Route based on AI decision
         match execution_mode {
