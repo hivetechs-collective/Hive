@@ -309,33 +309,25 @@ impl ModeDetector {
             
             // Build the routing guidance prompt - similar to stage guidance
             let routing_prompt = format!(
-                r#"Analyze this question: "{}"
+                r#"Question: "{}"
 
-IMPORTANT: For SIMPLE MATH like "what is 2+2" or "what is 1+8", you MUST respond with "DIRECT".
+CRITICAL RULE: If the question is basic arithmetic (addition, subtraction, multiplication, division of numbers), you MUST respond "DIRECT".
 
-Choose routing mode:
+Examples that MUST be "DIRECT":
+- "what is 6 + 6" → DIRECT
+- "what is 2+2" → DIRECT  
+- "5 * 3" → DIRECT
+- "10 - 4" → DIRECT
+- "what is 12 divided by 3" → DIRECT
 
-DIRECT mode - Use for:
-• Basic arithmetic (1+1, 2+2, 5*3, etc.) - ALWAYS USE DIRECT FOR MATH
-• Simple factual questions (what is the capital of France?)
-• Greetings (hello, hi, good morning)
-• Yes/no questions
-• Questions with obvious 1-sentence answers
+Examples that should be "CONSENSUS":
+- "write code to calculate fibonacci" → CONSENSUS
+- "explain how databases work" → CONSENSUS
+- "design a REST API" → CONSENSUS
 
-CONSENSUS mode - Use for:
-• Programming/coding questions
-• Design or architecture questions
-• Complex analysis
-• Questions needing multiple perspectives
-• Creative tasks
-• Anything requiring deep thought
+Is the question above simple arithmetic? If yes, respond DIRECT. Otherwise, respond CONSENSUS.
 
-Look at the question. If it's simple math or a basic fact, respond "DIRECT".
-Otherwise, respond "CONSENSUS".
-
-Respond with EXACTLY one word only: DIRECT or CONSENSUS
-
-Your response:"#,
+RESPOND WITH EXACTLY ONE WORD: DIRECT or CONSENSUS"#,
                 request
             );
             

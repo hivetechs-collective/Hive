@@ -377,7 +377,17 @@ function autoScrollChat() {
 
 // Enhanced markdown to HTML converter
 function convertMarkdownToHTML(markdown: string): string {
-  let html = markdown;
+  // First, remove any HTML artifacts that shouldn't be in the markdown
+  let cleanedMarkdown = markdown
+    .replace(/<h1 class="md-h1">/g, '# ')
+    .replace(/<h2 class="md-h2">/g, '## ')
+    .replace(/<h3 class="md-h3">/g, '### ')
+    .replace(/<h4 class="md-h4">/g, '#### ')
+    .replace(/<h5 class="md-h5">/g, '##### ')
+    .replace(/<h6 class="md-h6">/g, '###### ')
+    .replace(/<\/h[1-6]>/g, '');
+  
+  let html = cleanedMarkdown;
   
   // Headers (h1-h6)
   html = html.replace(/^###### (.*?)$/gm, '<h6 class="md-h6">$1</h6>');

@@ -248,7 +248,17 @@ async function handlePreConversation(request, env) {
     });
   }
 
-  const { license_key, installation_id, conversation_request_hash } = await request.json();
+  const requestBody = await request.json();
+  
+  // Use license_key from auth result (from Authorization header)
+  const license_key = authResult.license_key;
+  
+  // Provide defaults for optional fields
+  const installation_id = requestBody.installation_id || 'default-installation';
+  
+  // Generate a hash from the question if not provided
+  const conversation_request_hash = requestBody.conversation_request_hash || 
+    (requestBody.question ? await createHash('sha256', requestBody.question) : generateSecureToken());
 
   // Rate limiting check
   const rateLimitOk = await checkRateLimit(env.DB, license_key, 'conversations');
