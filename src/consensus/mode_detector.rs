@@ -307,25 +307,19 @@ impl ModeDetector {
         if let (Some(client), Some(model)) = (&self.openrouter_client, &self.generator_model) {
             tracing::info!("🤖 Using Generator model {} for routing decision", model);
             
-            // Build the routing guidance prompt - similar to stage guidance
+            // Build the routing guidance prompt - let the LLM decide based on complexity
             let routing_prompt = format!(
                 r#"Question: "{}"
 
-CRITICAL RULE: If the question is basic arithmetic (addition, subtraction, multiplication, division of numbers), you MUST respond "DIRECT".
+Analyze this question and determine if it requires:
+- DIRECT: Simple, straightforward answer that can be provided immediately
+- CONSENSUS: Complex analysis requiring multiple perspectives and deeper reasoning
 
-Examples that MUST be "DIRECT":
-- "what is 6 + 6" → DIRECT
-- "what is 2+2" → DIRECT  
-- "5 * 3" → DIRECT
-- "10 - 4" → DIRECT
-- "what is 12 divided by 3" → DIRECT
-
-Examples that should be "CONSENSUS":
-- "write code to calculate fibonacci" → CONSENSUS
-- "explain how databases work" → CONSENSUS
-- "design a REST API" → CONSENSUS
-
-Is the question above simple arithmetic? If yes, respond DIRECT. Otherwise, respond CONSENSUS.
+Consider factors like:
+- Question complexity and depth
+- Need for multiple viewpoints or validation
+- Whether it requires analysis, planning, or complex reasoning
+- If it's a simple factual answer or calculation vs complex problem solving
 
 RESPOND WITH EXACTLY ONE WORD: DIRECT or CONSENSUS"#,
                 request
@@ -334,7 +328,7 @@ RESPOND WITH EXACTLY ONE WORD: DIRECT or CONSENSUS"#,
             let messages = vec![
                 crate::consensus::openrouter::OpenRouterMessage {
                     role: "system".to_string(),
-                    content: "You are a routing assistant. For simple math questions like 'what is 2+2', ALWAYS respond 'DIRECT'. For complex questions, respond 'CONSENSUS'. Respond with ONLY one word.".to_string(),
+                    content: "You are a routing assistant that determines whether questions need simple direct answers or complex multi-stage analysis. Respond with ONLY one word: DIRECT or CONSENSUS.".to_string(),
                 },
                 crate::consensus::openrouter::OpenRouterMessage {
                     role: "user".to_string(),
