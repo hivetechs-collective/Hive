@@ -311,20 +311,11 @@ impl ModeDetector {
             let routing_prompt = format!(
                 r#"Question: "{}"
 
-Determine routing: Is this a simple question with a straightforward answer (DIRECT) or does it need complex analysis (CONSENSUS)?
+Analyze the complexity of this question. 
 
-Simple questions (use DIRECT):
-- Basic arithmetic or math calculations
-- Simple factual questions with clear answers
-- Basic definitions or explanations
-- Questions that can be answered in one sentence
+If it has a simple, straightforward answer that can be given immediately, respond: DIRECT
 
-Complex questions (use CONSENSUS):
-- Code writing or debugging
-- System design or architecture
-- Analysis or comparisons
-- Questions needing multiple perspectives
-- Problems requiring step-by-step reasoning
+If it requires complex analysis, multiple perspectives, or detailed reasoning, respond: CONSENSUS
 
 YOUR RESPONSE MUST BE EXACTLY ONE WORD: Either "DIRECT" or "CONSENSUS"
 
@@ -366,22 +357,7 @@ Answer:"#,
                     
                     // Handle empty or invalid responses
                     if raw_response.trim().is_empty() {
-                        tracing::warn!("⚠️ LLM returned empty response for routing - checking for obvious simple patterns");
-                        
-                        // Check for obvious simple math patterns as a fallback
-                        let lower = request.to_lowercase();
-                        if lower.contains("what is") && 
-                           (lower.contains('+') || lower.contains('-') || 
-                            lower.contains('*') || lower.contains('/') ||
-                            lower.contains("plus") || lower.contains("minus") ||
-                            lower.contains("times") || lower.contains("divided")) &&
-                           lower.split_whitespace().count() < 10 {
-                            tracing::info!("🎯 Detected simple arithmetic pattern - using Direct mode");
-                            return ExecutionMode::Direct;
-                        }
-                        
-                        // Default to consensus for safety
-                        tracing::info!("🎯 No clear pattern detected - defaulting to Consensus mode");
+                        tracing::warn!("⚠️ LLM returned empty response for routing - defaulting to Consensus for safety");
                         return ExecutionMode::Consensus;
                     }
                     
