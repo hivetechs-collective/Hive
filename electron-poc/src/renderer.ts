@@ -4,10 +4,11 @@
  */
 
 import './index.css';
+import './neural-consciousness.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
-import { IntelligenceProgressBar } from './intelligence-progress-bar';
+import { NeuralConsciousness } from './neural-consciousness';
 
 // Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
@@ -297,8 +298,11 @@ let totalCost = 0;
 let currentStageTokens = 0; // Track tokens for the current stage only
 let activeProfile: any = null;
 let consensusWebSocket: ConsensusWebSocket | null = null;
-let intelligenceProgressBar: IntelligenceProgressBar | null = null;
+let neuralConsciousness: NeuralConsciousness | null = null;
 let currentStreamContent: Map<string, string> = new Map();
+
+// Feature flag for Neural Consciousness (can be toggled without breaking app)
+let ENABLE_NEURAL_CONSCIOUSNESS = true;
 
 // Conversation context management (like Dioxus implementation)
 let currentConversationId: string | null = null;
@@ -661,46 +665,30 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   updateConsensusStats();
   resetStageStatus();
   
-  // Show Intelligence Progress Bar for AI memory and context building
-  // Safe: Won't break if the progress bar failed to initialize
-  if (intelligenceProgressBar) {
+  // Show Neural Consciousness animation if enabled
+  if (ENABLE_NEURAL_CONSCIOUSNESS && neuralConsciousness) {
     try {
-      intelligenceProgressBar.show();
-      intelligenceProgressBar.update({
-        phase: 'memory',
-        progress: 10,
-        message: 'Searching memories...'
-      });
+      neuralConsciousness.show();
       
-      // Simulate the phases (in real implementation, these would be triggered by backend events)
+      // Simulate the phases (will be connected to real backend events)
       setTimeout(() => {
-        intelligenceProgressBar?.update({
-          phase: 'context',
-          progress: 50,
-          memoryHits: 2,
-          contextRelevance: 0.75
-        });
+        neuralConsciousness?.updatePhase('memory');
       }, 1500);
       
       setTimeout(() => {
-        intelligenceProgressBar?.update({
-          phase: 'classification',
-          progress: 80,
-          memoryHits: 2,
-          contextRelevance: 0.75
-        });
-      }, 3000);
+        neuralConsciousness?.updatePhase('synthesis');
+      }, 3500);
       
       setTimeout(() => {
-        intelligenceProgressBar?.update({
-          phase: 'complete',
-          progress: 100,
-          memoryHits: 2,
-          contextRelevance: 0.75
-        });
-      }, 4500);
+        neuralConsciousness?.updatePhase('classification');
+      }, 5500);
+      
+      // Hide after classification completes
+      setTimeout(() => {
+        neuralConsciousness?.hide();
+      }, 7000);
     } catch (error) {
-      console.error('Error updating Intelligence Progress Bar:', error);
+      console.error('Error with Neural Consciousness animation:', error);
     }
   }
   
@@ -1329,17 +1317,21 @@ setTimeout(() => {
   updateStatusBar();
   loadActiveProfile();
   
-  // Initialize Intelligence Progress Bar AFTER critical components
-  // Wrapped in try-catch to prevent breaking the app
-  try {
-    const chatContentElement = document.querySelector('.chat-content');
-    if (chatContentElement) {
-      intelligenceProgressBar = new IntelligenceProgressBar();
-      intelligenceProgressBar.mount(chatContentElement as HTMLElement);
-      console.log('✅ Intelligence Progress Bar initialized');
+  // Initialize Neural Consciousness AFTER critical components
+  // Feature flag controlled and safe initialization
+  if (ENABLE_NEURAL_CONSCIOUSNESS) {
+    try {
+      const chatContentElement = document.getElementById('chat-content');
+      if (chatContentElement) {
+        neuralConsciousness = new NeuralConsciousness();
+        neuralConsciousness.enable(true); // Enable with feature flag
+        neuralConsciousness.mount(chatContentElement as HTMLElement);
+        console.log('✅ Neural Consciousness initialized and enabled');
+      }
+    } catch (error) {
+      console.error('Failed to initialize Neural Consciousness:', error);
+      // App continues to work even if this fails
+      ENABLE_NEURAL_CONSCIOUSNESS = false;
     }
-  } catch (error) {
-    console.error('Failed to initialize Intelligence Progress Bar:', error);
-    // App continues to work even if this fails
   }
 }, 500);
