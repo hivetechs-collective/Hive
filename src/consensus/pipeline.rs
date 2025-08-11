@@ -1585,7 +1585,7 @@ impl ConsensusPipeline {
             model: model.to_string(),
             messages: openrouter_messages,
             temperature: Some(0.7),
-            max_tokens: Some(4000), // Matching TypeScript hardcoded value
+            max_tokens: Some(8000), // Increased from 4000 to prevent truncation
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
