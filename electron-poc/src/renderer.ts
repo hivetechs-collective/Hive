@@ -28,18 +28,8 @@ document.body.innerHTML = `
 
   <!-- Main Content Area - Exact Dioxus Layout -->
   <div class="main-content">
-    <!-- Left Sidebar with Logo and Control Buttons -->
+    <!-- Left Sidebar with Neural Consciousness and Control Buttons -->
     <div class="sidebar" id="left-sidebar">
-      <!-- Logo Section at Top -->
-      <div class="logo-section">
-        <div class="gradient-line"></div>
-        <div class="logo-container">
-          <img src="${hiveLogo}" alt="HiveTechs Logo" 
-               style="width: 64px; height: 64px; object-fit: contain; border-radius: 8px;" 
-               class="hive-logo" />
-          <div class="logo-version">2.0.0</div>
-        </div>
-      </div>
 
       <!-- Git Panel -->
       <div class="git-panel">
@@ -686,11 +676,8 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
         neuralConsciousness?.updatePhase('classification');
       }, 4500);
       
-      // Hide after routing decision (when Generator starts)
-      // This will be replaced with actual WebSocket event once available
-      setTimeout(() => {
-        neuralConsciousness?.hide();
-      }, 6500);
+      // Animation will continue through all consensus stages
+      // and only hide after the final completion animation
     } catch (error) {
       console.error('Error with Neural Consciousness animation:', error);
     }
@@ -824,9 +811,22 @@ function initializeWebSocket() {
       // Reset current stage tokens when a new stage starts
       currentStageTokens = 0;
       
-      // Hide Neural Consciousness when Generator starts (routing is complete)
-      if (stageName === 'generator' && neuralConsciousness) {
-        neuralConsciousness.hide();
+      // Update Neural Consciousness for each consensus stage
+      if (neuralConsciousness) {
+        switch(stageName) {
+          case 'generator':
+            neuralConsciousness.updatePhase('generator');
+            break;
+          case 'refiner':
+            neuralConsciousness.updatePhase('refiner');
+            break;
+          case 'validator':
+            neuralConsciousness.updatePhase('validator');
+            break;
+          case 'curator':
+            neuralConsciousness.updatePhase('curator');
+            break;
+        }
       }
     },
     
@@ -916,6 +916,17 @@ function initializeWebSocket() {
       // Mark as no longer processing
       isProcessing = false;
       
+      // Show final completion animation before hiding
+      if (neuralConsciousness) {
+        // Trigger completion phase with grand finale
+        neuralConsciousness.showCompletion().then(() => {
+          // Hide after completion animation finishes
+          setTimeout(() => {
+            neuralConsciousness.hide();
+          }, 2000);
+        });
+      }
+      
       // Remove all streaming indicators
       const chatContent = document.getElementById('chat-content');
       const streamingMessages = chatContent?.querySelectorAll('.streaming');
@@ -978,6 +989,11 @@ function initializeWebSocket() {
       addLogEntry(`❌ Error: ${message}`, 'error');
       resetStageStatus();
       isProcessing = false;
+      
+      // Hide Neural Consciousness on error
+      if (neuralConsciousness) {
+        neuralConsciousness.hide();
+      }
     },
     
     onAIHelperDecision: (directMode, reason) => {

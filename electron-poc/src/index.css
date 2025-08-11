@@ -434,9 +434,9 @@ body {
   overflow: hidden;
 }
 
-/* Left Sidebar */
+/* Left Sidebar - Widened to accommodate Neural Consciousness */
 .sidebar {
-  width: 280px;
+  width: 240px;
   background: var(--background-primary);
   border-right: 1px solid var(--border-color);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
