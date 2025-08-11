@@ -153,11 +153,18 @@ impl ConsensusEngine {
             None
         };
 
+        // Create OpenRouter client for AI helpers if API key is available
+        let openrouter_client = if let Some(ref key) = openrouter_api_key {
+            Some(Arc::new(crate::consensus::openrouter::OpenRouterClient::new(key.clone())))
+        } else {
+            None
+        };
+        
         // Initialize AI helpers if database is available
         let ai_helpers = if let Some(ref db) = database {
-            match AIHelperEcosystem::new(db.clone()).await {
+            match AIHelperEcosystem::new_with_client(db.clone(), openrouter_client.clone()).await {
                 Ok(helpers) => {
-                    tracing::info!("AI Helper Ecosystem initialized successfully");
+                    tracing::info!("AI Helper Ecosystem initialized successfully with OpenRouter access");
                     Some(Arc::new(helpers))
                 }
                 Err(e) => {

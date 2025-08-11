@@ -922,24 +922,19 @@ impl ContextRetriever {
         Ok(false)
     }
     
-    /// Analyze question using GraphCodeBERT to determine context needs
+    /// Analyze question using LLM to determine context needs
     pub async fn analyze_question_context(&self, question: &str) -> Result<ContextDecision> {
-        let model = "microsoft/graphcodebert-base";
+        // For now, we can't access the OpenRouter client from here
+        // The real LLM-based routing should happen in intelligent_context_orchestrator
+        // which has access to the ecosystem's OpenRouter client
         
-        match self.python_service.analyze_code(
-            model,
-            question,
-            "classify_question_context"
-        ).await {
-            Ok(result) => {
-                self.parse_context_decision_from_value(&result, question)
-            }
-            Err(e) => {
-                // NO FALLBACK - LLM or nothing
-                error!("AI model analysis failed: {}. Cannot proceed without LLM intelligence.", e);
-                Err(anyhow!("AI Helper LLM analysis required but failed: {}", e))
-            }
-        }
+        // Return a neutral response that allows the orchestrator to make the real decision
+        Ok(ContextDecision {
+            should_use_repo: false,
+            confidence: 0.5,
+            category: "general_programming".to_string(),
+            reasoning: "Pending LLM analysis in orchestrator".to_string(),
+        })
     }
     
     /// Parse the AI model response from a Value into a context decision

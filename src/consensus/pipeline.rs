@@ -157,9 +157,16 @@ impl ConsensusPipeline {
         if let (Some(ai_helpers), Some(openrouter_client), Some(model_manager), Some(database)) = 
             (&self.ai_helpers, &self.openrouter_client, &self.model_manager, &self.database) {
             
-            // Create mode detector
-            let mode_detector = ModeDetector::new()?
+            // Create mode detector with routing config using Generator model from profile
+            let mut mode_detector = ModeDetector::new()?
                 .with_ai_helpers(ai_helpers.clone());
+            
+            // Get the Generator model from the current profile
+            mode_detector = mode_detector.with_routing_config(
+                openrouter_client.clone(),
+                self.profile.generator_model.clone()
+            );
+            
             self.mode_detector = Some(Arc::new(mode_detector));
             
             // Create streaming executor for direct mode

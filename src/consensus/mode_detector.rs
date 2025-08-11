@@ -118,6 +118,8 @@ pub struct ModeDetector {
     complexity_analyzer: ComplexityAnalyzer,
     ai_helpers: Option<Arc<AIHelperEcosystem>>,
     complexity_threshold: f32,
+    openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>,
+    generator_model: Option<String>,
 }
 
 impl ModeDetector {
@@ -275,6 +277,8 @@ impl ModeDetector {
             complexity_analyzer: ComplexityAnalyzer::new(),
             ai_helpers: None,
             complexity_threshold: 0.4, // Lower threshold = more queries go to consensus for better thinking
+            openrouter_client: None,
+            generator_model: None,
         })
     }
 
@@ -283,36 +287,106 @@ impl ModeDetector {
         self.ai_helpers = Some(ai_helpers);
         self
     }
+    
+    /// Set OpenRouter client and generator model for LLM-based routing
+    pub fn with_routing_config(
+        mut self, 
+        client: Arc<crate::consensus::openrouter::OpenRouterClient>,
+        generator_model: String
+    ) -> Self {
+        self.openrouter_client = Some(client);
+        self.generator_model = Some(generator_model);
+        self
+    }
 
     /// Detect the appropriate execution mode for a request
     pub async fn detect_mode(&self, request: &str) -> ExecutionMode {
         tracing::debug!("🔍 Mode detector analyzing request: '{}'", request);
         
-        // NO PATTERN MATCHING - LLM OR NOTHING
-        // User directive: "remove fall back or any hard coding this is LLM or nothing"
-        
-        // If we have AI helpers, use their intelligent analysis
-        if let Some(ai_helpers) = &self.ai_helpers {
-            // Use AI for intelligent mode detection
-            match ai_helpers.intelligent_orchestrator.make_execution_mode_decision(request).await {
-                Ok(ai_mode) => {
-                    tracing::info!("🤖 AI Helper recommends {:?} mode for: '{}'", ai_mode, request);
-                    return ai_mode;
+        // Use the Generator model from the current profile to make routing decision
+        if let (Some(client), Some(model)) = (&self.openrouter_client, &self.generator_model) {
+            tracing::info!("🤖 Using Generator model {} for routing decision", model);
+            
+            // Build the routing guidance prompt - similar to stage guidance
+            let routing_prompt = format!(
+                r#"You are an intelligent routing assistant for an AI consensus system.
+
+Analyze this question and determine if it needs DIRECT (simple, fast) or CONSENSUS (thorough, multi-stage) processing.
+
+Question: "{}"
+
+ROUTING GUIDANCE:
+Use DIRECT mode (single fast response) ONLY for:
+- Simple arithmetic (2+2, basic calculations)
+- Basic factual questions (capitals, definitions)
+- Greetings and small talk
+- Questions answerable in 1-2 sentences
+
+Use CONSENSUS mode (4-stage collaborative analysis) for:
+- Programming questions (design, architecture, implementation)
+- Complex analysis or explanations
+- Questions requiring code examples
+- Anything needing careful thought or multiple perspectives
+- Questions about systems, patterns, or best practices
+
+Respond with ONLY one word: "DIRECT" or "CONSENSUS"
+
+Decision:"#,
+                request
+            );
+            
+            let messages = vec![
+                crate::consensus::openrouter::OpenRouterMessage {
+                    role: "system".to_string(),
+                    content: "You are a routing assistant. Analyze complexity and respond with only 'DIRECT' or 'CONSENSUS'.".to_string(),
+                },
+                crate::consensus::openrouter::OpenRouterMessage {
+                    role: "user".to_string(),
+                    content: routing_prompt,
+                },
+            ];
+            
+            let req = crate::consensus::openrouter::OpenRouterRequest {
+                model: model.clone(),
+                messages,
+                temperature: Some(0.1), // Low temperature for consistent routing
+                max_tokens: Some(10), // Only need one word
+                stream: Some(false),
+                top_p: None,
+                frequency_penalty: None,
+                presence_penalty: None,
+                provider: None,
+            };
+            
+            match client.chat_completion(req).await {
+                Ok(response) => {
+                    let decision = response.choices.first()
+                        .and_then(|c| c.message.as_ref())
+                        .map(|m| m.content.trim().to_uppercase())
+                        .unwrap_or_else(|| "CONSENSUS".to_string());
+                    
+                    if decision.contains("DIRECT") {
+                        tracing::info!("🎯 Generator model decided: Direct mode for simple question");
+                        return ExecutionMode::Direct;
+                    } else {
+                        tracing::info!("🎯 Generator model decided: Consensus mode for complex question");
+                        return ExecutionMode::Consensus;
+                    }
                 }
                 Err(e) => {
-                    // NO FALLBACK - LLM or nothing
-                    tracing::error!("AI Helper decision failed: {}. Cannot proceed without LLM intelligence.", e);
-                    // Default to Direct mode when AI is unavailable - at least attempt something
-                    tracing::warn!("⚠️ AI Helper unavailable - defaulting to Direct mode (no pattern matching fallback)");
-                    return ExecutionMode::Direct;
+                    tracing::error!("❌ CRITICAL: Generator model routing failed: {}", e);
+                    tracing::error!("Cannot proceed without LLM - profile or API key may be broken");
+                    // This is a critical failure - the LLM must be available
+                    panic!("LLM routing decision failed - cannot continue without working LLM: {}", e);
                 }
             }
         }
         
-        // NO PATTERN MATCHING FALLBACK - if AI helpers aren't configured, log error
-        tracing::error!("❌ No AI Helpers configured and pattern matching disabled - cannot make intelligent decision");
-        tracing::warn!("⚠️ Defaulting to Direct mode without intelligence");
-        ExecutionMode::Direct
+        // If we get here, we don't have proper LLM configuration
+        // This is a critical error - we cannot make routing decisions without an LLM
+        tracing::error!("❌ CRITICAL: No LLM configuration available for routing decision");
+        tracing::error!("Profile may be missing Generator model or OpenRouter client not initialized");
+        panic!("Cannot make routing decision without LLM - system configuration error")
     }
 
     /// Check if this is a simple file operation

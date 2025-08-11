@@ -72,6 +72,9 @@ pub struct IntelligentContextOrchestrator {
     quality_analyzer: Arc<QualityAnalyzer>,
     knowledge_synthesizer: Arc<KnowledgeSynthesizer>,
     
+    /// OpenRouter client for making LLM routing decisions
+    openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>,
+    
     /// Separate caches for different question types to prevent contamination
     repo_cache: Arc<tokio::sync::RwLock<lru::LruCache<String, IntelligentContextDecision>>>,
     general_cache: Arc<tokio::sync::RwLock<lru::LruCache<String, IntelligentContextDecision>>>,
@@ -86,6 +89,23 @@ impl IntelligentContextOrchestrator {
         quality_analyzer: Arc<QualityAnalyzer>,
         knowledge_synthesizer: Arc<KnowledgeSynthesizer>,
     ) -> Self {
+        Self::new_with_client(
+            context_retriever,
+            pattern_recognizer,
+            quality_analyzer,
+            knowledge_synthesizer,
+            None
+        )
+    }
+    
+    /// Create a new Intelligent Context Orchestrator with OpenRouter client
+    pub fn new_with_client(
+        context_retriever: Arc<ContextRetriever>,
+        pattern_recognizer: Arc<PatternRecognizer>,
+        quality_analyzer: Arc<QualityAnalyzer>,
+        knowledge_synthesizer: Arc<KnowledgeSynthesizer>,
+        openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>,
+    ) -> Self {
         let cache_size = std::num::NonZeroUsize::new(50).unwrap();
         
         Self {
@@ -93,6 +113,7 @@ impl IntelligentContextOrchestrator {
             pattern_recognizer,
             quality_analyzer,
             knowledge_synthesizer,
+            openrouter_client,
             repo_cache: Arc::new(tokio::sync::RwLock::new(lru::LruCache::new(cache_size))),
             general_cache: Arc::new(tokio::sync::RwLock::new(lru::LruCache::new(cache_size))),
             academic_cache: Arc::new(tokio::sync::RwLock::new(lru::LruCache::new(cache_size))),
@@ -398,82 +419,16 @@ impl IntelligentContextOrchestrator {
     }
     
     /// Make an intelligent execution mode decision (Direct vs Consensus)
+    /// This will be called by the mode detector which has access to the current profile
     pub async fn make_execution_mode_decision(&self, question: &str) -> Result<ExecutionMode> {
         info!("🤖 AI Helper analyzing execution mode for: '{}'", 
             &question[..question.len().min(100)]);
         
-        // First classify the question
-        let classification = self.classify_question_multi_ai(question).await?;
+        // The actual LLM call should be made by the mode detector using the Generator model
+        // If we're called directly, it means the mode detector doesn't have proper config
         
-        // Analyze complexity
-        let pattern_analysis = self.analyze_question_patterns(question).await?;
-        let quality_assessment = self.assess_context_quality(question, &classification).await?;
-        
-        // Decision logic based on AI analysis
-        let mode = match classification.primary_category {
-            // Simple factual questions should use Direct mode
-            QuestionCategory::GeneralKnowledge => {
-                info!("📚 General knowledge question - using Direct mode");
-                ExecutionMode::Direct
-            }
-            
-            // Academic questions that don't need codebase context
-            QuestionCategory::AcademicKnowledge => {
-                info!("🎓 Academic question - using Direct mode");
-                ExecutionMode::Direct
-            }
-            
-            // Repository-specific questions
-            QuestionCategory::RepositorySpecific => {
-                // Use our semantic retriever to properly assess complexity
-                let true_complexity = self.assess_true_question_complexity(question).await
-                    .unwrap_or(quality_assessment.complexity_level);
-                
-                info!("📂 Repository question - AI complexity: {:.2}, true complexity: {:.2}", 
-                    quality_assessment.complexity_level, true_complexity);
-                
-                if true_complexity < 0.3 {
-                    info!("📂 Simple repository question - using Direct mode");
-                    ExecutionMode::Direct
-                } else {
-                    info!("📂 Complex repository question - using Consensus mode");
-                    ExecutionMode::Consensus
-                }
-            }
-            
-            // General programming questions
-            QuestionCategory::GeneralProgramming => {
-                if quality_assessment.complexity_level < 0.4 {
-                    info!("💻 Simple programming question - using Direct mode");
-                    ExecutionMode::Direct
-                } else {
-                    info!("💻 Complex programming question - using Consensus mode");
-                    ExecutionMode::Consensus
-                }
-            }
-            
-            // Complex CS theory needs consensus
-            QuestionCategory::ComputerScience => {
-                info!("🔬 Computer science theory - using Consensus mode");
-                ExecutionMode::Consensus
-            }
-            
-            // Hybrid/complex questions
-            QuestionCategory::Hybrid | QuestionCategory::Ambiguous => {
-                if quality_assessment.complexity_level > 0.6 {
-                    info!("🔀 Complex/hybrid question - using Consensus mode");
-                    ExecutionMode::Consensus
-                } else {
-                    info!("🔀 Moderate complexity - using Direct mode");
-                    ExecutionMode::Direct
-                }
-            }
-        };
-        
-        info!("🎯 AI Helper decision: {:?} mode (category: {:?}, complexity: {:.2})",
-            mode, classification.primary_category, quality_assessment.complexity_level);
-        
-        Ok(mode)
+        error!("Execution mode decision should be made by mode detector with profile's Generator model");
+        Err(anyhow!("LLM routing must be done through mode detector with Generator model"))
     }
     
     /// Assess true complexity of a question using AI semantic analysis

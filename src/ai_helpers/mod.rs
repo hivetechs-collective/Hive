@@ -226,6 +226,9 @@ pub struct AIHelperEcosystem {
     
     /// Shared state
     state: Arc<RwLock<HelperState>>,
+    
+    /// OpenRouter client for making LLM calls
+    pub openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>,
 }
 
 /// Internal state for AI helpers
@@ -243,6 +246,14 @@ struct HelperState {
 impl AIHelperEcosystem {
     /// Create a new AI Helper Ecosystem
     pub async fn new(database: Arc<crate::core::database::DatabaseManager>) -> Result<Self> {
+        Self::new_with_client(database, None).await
+    }
+    
+    /// Create a new AI Helper Ecosystem with OpenRouter client
+    pub async fn new_with_client(
+        database: Arc<crate::core::database::DatabaseManager>,
+        openrouter_client: Option<Arc<crate::consensus::openrouter::OpenRouterClient>>
+    ) -> Result<Self> {
         tracing::info!("🚀 Initializing AI Helper Ecosystem (moving heavy work to background threads)");
         
         // First, ensure all required models are downloaded
@@ -311,11 +322,12 @@ impl AIHelperEcosystem {
         let knowledge_synthesizer = Arc::new(knowledge_synthesizer);
         
         // Create intelligent context orchestrator coordinating all AI helpers
-        let intelligent_orchestrator = Arc::new(IntelligentContextOrchestrator::new(
+        let intelligent_orchestrator = Arc::new(IntelligentContextOrchestrator::new_with_client(
             context_retriever.clone(),
             pattern_recognizer.clone(),
             quality_analyzer.clone(),
             knowledge_synthesizer.clone(),
+            openrouter_client.clone(),
         ));
         
         let state = Arc::new(RwLock::new(HelperState {
@@ -378,6 +390,7 @@ impl AIHelperEcosystem {
             parallel_processor,
             performance_monitor,
             state,
+            openrouter_client,
         })
     }
     
