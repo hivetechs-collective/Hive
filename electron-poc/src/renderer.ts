@@ -293,6 +293,7 @@ let dailyUsageCount = 0;
 let dailyLimit = 5;
 let totalTokens = 0;
 let totalCost = 0;
+let currentStageTokens = 0; // Track tokens for the current stage only
 let activeProfile: any = null;
 let consensusWebSocket: ConsensusWebSocket | null = null;
 let currentStreamContent: Map<string, string> = new Map();
@@ -570,6 +571,7 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
   isProcessing = true;
   totalTokens = 0;
   totalCost = 0;
+  currentStageTokens = 0;
   updateConsensusStats();
   resetStageStatus();
   updateStatus('Running Consensus...', 'processing');
@@ -643,6 +645,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   isProcessing = true;
   totalTokens = 0;
   totalCost = 0;
+  currentStageTokens = 0;
   updateConsensusStats();
   resetStageStatus();
   
@@ -669,6 +672,7 @@ runConsensusViaREST = async (query: string) => {
   isProcessing = true;
   totalTokens = 0;
   totalCost = 0;
+  currentStageTokens = 0;
   updateConsensusStats();
   resetStageStatus();
   
@@ -824,12 +828,10 @@ function initializeWebSocket() {
       const adjustedPercentage = Math.max(25, Math.min(95, percentage));
       updateStageProgress(stageName, adjustedPercentage);
       
-      // Update token count
-      if (stage === 'Generator') {
-        totalTokens = tokens;
-      } else {
-        totalTokens += tokens;
-      }
+      // Track current stage tokens for display (these are cumulative within the stage)
+      currentStageTokens = tokens;
+      // Don't add to totalTokens here - will be added when stage completes
+      // This prevents the exponential accumulation bug
       updateConsensusStats();
     },
     
@@ -837,8 +839,11 @@ function initializeWebSocket() {
       const stageName = stage.toLowerCase();
       updateStageStatus(stageName, 'completed');
       updateStageProgress(stageName, 100);
+      // Add this stage's tokens to the total (only once per stage)
       totalTokens += tokens;
       totalCost += cost;
+      // Reset current stage tokens since this stage is done
+      currentStageTokens = 0;
       updateConsensusStats();
       addLogEntry(`✅ ${stage} completed (${tokens} tokens, ${formatCost(cost)})`, 'success');
     },
@@ -1195,7 +1200,9 @@ function updateConsensusStats() {
   const costElement = document.getElementById('cost-count');
   
   if (tokenElement) {
-    tokenElement.textContent = totalTokens.toLocaleString();
+    // Show total + current stage tokens during streaming
+    const displayTokens = totalTokens + currentStageTokens;
+    tokenElement.textContent = displayTokens.toLocaleString();
     tokenElement.className = 'stat-value tokens';
   }
   
