@@ -493,7 +493,7 @@ async fn run_consensus_streaming(
     }
     
     // Run consensus with streaming callbacks (context as second parameter, user_id as fourth)
-    match engine.process_with_callbacks(&query, context_str, callbacks, conversation_id).await {
+    match engine.process_with_callbacks(&query, context_str.clone(), callbacks, conversation_id.clone()).await {
         Ok(result) => {
             info!("Consensus completed successfully");
             // Calculate total tokens from stages
@@ -502,13 +502,94 @@ async fn run_consensus_streaming(
                 .map(|usage| usage.total_tokens)
                 .sum();
             
+            let final_result = result.result.clone().unwrap_or_default();
+            
             let _ = tx.send(WSMessage::ConsensusComplete {
-                result: result.result.unwrap_or_default(),
+                result: final_result.clone(),
                 total_tokens,
                 total_cost: result.total_cost,
             });
             
-            // TODO: Store in knowledge base when AI helper methods are available
+            // Save to database for memory continuity (both Simple and Complex questions)
+            {
+                // Determine execution mode based on stages used
+                let execution_mode = if result.stages.len() == 1 && 
+                    result.stages[0].stage_name.to_lowercase().contains("direct") {
+                    "simple"
+                } else {
+                    "consensus"
+                };
+                
+                let conv_id = conversation_id.clone()
+                    .unwrap_or_else(|| hive_ai::core::database::generate_id());
+                
+                // Save user question as a message
+                match hive_ai::core::database::Message::create(
+                    conv_id.clone(),
+                    "user".to_string(),
+                    query.clone(),
+                    None,
+                    None,
+                ).await {
+                    Ok(_) => {
+                        info!("✅ Saved user question to database");
+                    }
+                    Err(e) => {
+                        error!("Failed to save user question: {}", e);
+                    }
+                }
+                
+                // Save assistant response as a message
+                let model_info = if !result.stages.is_empty() {
+                    Some(result.stages[0].model.clone())
+                } else {
+                    None
+                };
+                
+                match hive_ai::core::database::Message::create(
+                    conv_id.clone(),
+                    "assistant".to_string(),
+                    final_result.clone(),
+                    Some(execution_mode.to_string()),
+                    model_info,
+                ).await {
+                    Ok(_) => {
+                        info!("✅ Saved assistant response to database (mode: {})", execution_mode);
+                        info!("   - Question: {}", query);
+                        info!("   - Mode: {}", execution_mode);
+                        info!("   - Tokens: {}", total_tokens);
+                        info!("   - Cost: ${:.4}", result.total_cost);
+                    }
+                    Err(e) => {
+                        error!("Failed to save assistant response: {}", e);
+                    }
+                }
+                
+                // Also store conversation cost data if available
+                if let Ok(db) = get_database().await {
+                    // Calculate input and output tokens from stages
+                    let total_input_tokens: u32 = result.stages.iter()
+                        .filter_map(|stage| stage.usage.as_ref())
+                        .map(|usage| usage.prompt_tokens)
+                        .sum();
+                    
+                    let total_output_tokens: u32 = result.stages.iter()
+                        .filter_map(|stage| stage.usage.as_ref())
+                        .map(|usage| usage.completion_tokens)
+                        .sum();
+                    
+                    if let Err(e) = db.store_conversation_with_cost(
+                        &conv_id,
+                        None, // user_id if available
+                        &query,
+                        result.total_cost,
+                        total_input_tokens,
+                        total_output_tokens,
+                    ).await {
+                        warn!("Failed to store conversation cost data: {}", e);
+                    }
+                }
+            }
         }
         Err(e) => {
             error!("Consensus failed with error: {}", e);

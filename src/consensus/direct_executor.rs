@@ -326,6 +326,8 @@ impl DirectExecutionHandler {
                 retry_count: 0,
                 start_time: chrono::Utc::now() - chrono::Duration::seconds(duration as i64),
                 end_time: chrono::Utc::now(),
+                time_to_first_token: None, // TODO: Track when first chunk arrives
+                classification_latency: None, // Will be set by pipeline
                 memory_usage: None,
                 features: crate::consensus::types::AnalyticsFeatures {
                     streaming: true,

@@ -112,6 +112,12 @@ pub struct StageAnalytics {
     pub start_time: DateTime<Utc>,
     #[serde(rename = "endTime")]
     pub end_time: DateTime<Utc>,
+    #[serde(rename = "timeToFirstToken")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_to_first_token: Option<f64>, // Time in seconds from request to first streaming token
+    #[serde(rename = "classificationLatency")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification_latency: Option<f64>, // Time in seconds for routing decision (Simple vs Complex)
     #[serde(rename = "memoryUsage")]
     pub memory_usage: Option<u64>,
     pub features: AnalyticsFeatures,

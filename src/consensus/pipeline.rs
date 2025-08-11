@@ -1318,6 +1318,8 @@ impl ConsensusPipeline {
                     retry_count: 0,
                     start_time: Utc::now() - chrono::Duration::seconds(start_time.elapsed().as_secs() as i64),
                     end_time: Utc::now(),
+                    time_to_first_token: None,
+                    classification_latency: None,
                     memory_usage: None,
                     features: AnalyticsFeatures {
                         streaming: true,
@@ -1473,6 +1475,8 @@ impl ConsensusPipeline {
                 start_time: Utc::now()
                     - chrono::Duration::seconds(stage_start.elapsed().as_secs() as i64),
                 end_time: Utc::now(),
+                time_to_first_token: response.analytics.time_to_first_token,
+                classification_latency: response.analytics.classification_latency,
                 memory_usage: None,
                 features: response.analytics.features,
             }),
@@ -1674,6 +1678,8 @@ impl ConsensusPipeline {
                             retry_count: 0,
                             start_time: Utc::now(),
                             end_time: Utc::now(),
+                            time_to_first_token: None,
+                            classification_latency: None,
                             memory_usage: None,
                             features: crate::consensus::types::AnalyticsFeatures {
                                 streaming: self.config.enable_streaming,
@@ -1775,6 +1781,8 @@ impl ConsensusPipeline {
                             retry_count: 0,
                             start_time: Utc::now(),
                             end_time: Utc::now(),
+                            time_to_first_token: None,
+                            classification_latency: None,
                             memory_usage: None,
                             features: crate::consensus::types::AnalyticsFeatures {
                                 streaming: self.config.enable_streaming,
@@ -1848,6 +1856,8 @@ impl ConsensusPipeline {
                             retry_count: 0,
                             start_time: Utc::now(),
                             end_time: Utc::now(),
+                            time_to_first_token: None,
+                            classification_latency: None,
                             memory_usage: None,
                             features: crate::consensus::types::AnalyticsFeatures {
                                 streaming: self.config.enable_streaming,

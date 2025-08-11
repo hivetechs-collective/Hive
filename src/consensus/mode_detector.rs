@@ -300,44 +300,56 @@ impl ModeDetector {
     }
 
     /// Detect the appropriate execution mode for a request
-    pub async fn detect_mode(&self, request: &str) -> ExecutionMode {
+    /// Returns the mode and the time taken for classification in seconds
+    pub async fn detect_mode_with_timing(&self, request: &str) -> (ExecutionMode, Option<f64>) {
         tracing::debug!("🔍 Mode detector analyzing request: '{}'", request);
+        let classification_start = std::time::Instant::now();
         
         // Use the Generator model from the current profile to make routing decision
         if let (Some(client), Some(model)) = (&self.openrouter_client, &self.generator_model) {
-            tracing::info!("🤖 Using Generator model {} for routing decision", model);
+            tracing::info!("🤖 Using Generator model {} for complexity classification", model);
             
-            // Build the routing guidance prompt - let the LLM decide based on complexity
-            let routing_prompt = format!(
-                r#"Question: "{}"
+            // Build the classification prompt with clear coaching
+            let classification_prompt = format!(
+                r#"Consider this question: "{}"
 
-Analyze the complexity of this question. 
+Determine if this is a SIMPLE or COMPLEX question.
 
-If it has a simple, straightforward answer that can be given immediately, respond: DIRECT
+Simple questions are:
+- Basic facts or definitions (What is X?)
+- Simple calculations or math
+- Yes/no questions
+- Single lookup queries
+- Brief explanations of terms
 
-If it requires complex analysis, multiple perspectives, or detailed reasoning, respond: CONSENSUS
+Complex questions are:
+- Analysis or debugging tasks
+- Multi-step problems
+- Architecture or design questions
+- Implementation requests
+- Questions requiring deep reasoning
 
-YOUR RESPONSE MUST BE EXACTLY ONE WORD: Either "DIRECT" or "CONSENSUS"
+Respond with only ONE word: Simple or Complex
 
-Answer:"#,
+Response:"#,
                 request
             );
             
             let messages = vec![
                 crate::consensus::openrouter::OpenRouterMessage {
                     role: "system".to_string(),
-                    content: "You are a routing assistant that determines whether questions need simple direct answers or complex multi-stage analysis. Respond with ONLY one word: DIRECT or CONSENSUS.".to_string(),
+                    content: "You are a classification assistant. Your job is to determine if questions are Simple (basic, factual, quick) or Complex (analytical, multi-step, detailed). Always respond with exactly one word: either 'Simple' or 'Complex'.".to_string(),
                 },
                 crate::consensus::openrouter::OpenRouterMessage {
                     role: "user".to_string(),
-                    content: routing_prompt,
+                    content: classification_prompt,
                 },
             ];
             
             let req = crate::consensus::openrouter::OpenRouterRequest {
                 model: model.clone(),
                 messages,
-                temperature: Some(0.1), // Low temperature for consistent routing
+                temperature: Some(0.1), // Low temperature for consistent classification
                 max_tokens: Some(10), // Only need one word
                 stream: Some(false),
                 top_p: None,
@@ -346,6 +358,7 @@ Answer:"#,
                 provider: None,
             };
             
+            // Make the classification request
             match client.chat_completion(req).await {
                 Ok(response) => {
                     let raw_response = response.choices.first()
@@ -353,38 +366,66 @@ Answer:"#,
                         .map(|m| m.content.clone())
                         .unwrap_or_else(|| String::new());
                     
-                    tracing::info!("🤖 LLM routing response: '{}'", raw_response);
+                    tracing::info!("🎯 Classification response: '{}'", raw_response);
                     
                     // Handle empty or invalid responses
                     if raw_response.trim().is_empty() {
-                        tracing::warn!("⚠️ LLM returned empty response for routing - defaulting to Consensus for safety");
-                        return ExecutionMode::Consensus;
+                        let latency = classification_start.elapsed().as_secs_f64();
+                        tracing::warn!("⚠️ Generator returned empty classification after {:.2}s - analyzing with fallback heuristics", latency);
+                        // Simple fallback: very short questions are often simple
+                        if request.len() < 50 && !request.contains("explain") && !request.contains("how") {
+                            tracing::info!("📊 Short question detected, classifying as Simple");
+                            return (ExecutionMode::Direct, Some(latency));
+                        } else {
+                            tracing::info!("📊 Defaulting to Complex for safety");
+                            return (ExecutionMode::Consensus, Some(latency));
+                        }
                     }
                     
-                    let decision = raw_response.trim().to_uppercase();
+                    let classification = raw_response.trim().to_lowercase();
                     
-                    if decision.contains("DIRECT") {
-                        tracing::info!("🎯 Generator model decided: Direct mode for simple question");
-                        return ExecutionMode::Direct;
+                    if classification.contains("simple") {
+                        let latency = classification_start.elapsed().as_secs_f64();
+                        tracing::info!("✅ Classified as SIMPLE in {:.2}s - will use Direct mode with Generator only", latency);
+                        return (ExecutionMode::Direct, Some(latency));
+                    } else if classification.contains("complex") {
+                        let latency = classification_start.elapsed().as_secs_f64();
+                        tracing::info!("🔄 Classified as COMPLEX in {:.2}s - will use full Consensus pipeline", latency);
+                        return (ExecutionMode::Consensus, Some(latency));
                     } else {
-                        tracing::info!("🎯 Generator model decided: Consensus mode for complex question");
-                        return ExecutionMode::Consensus;
+                        // Unexpected response - try to infer
+                        tracing::warn!("⚠️ Unexpected classification: '{}' - attempting to infer", classification);
+                        let latency = classification_start.elapsed().as_secs_f64();
+                        if classification.contains("easy") || classification.contains("basic") || 
+                           classification.contains("quick") || classification.contains("direct") {
+                            tracing::info!("📊 Inferred as Simple from response in {:.2}s", latency);
+                            return (ExecutionMode::Direct, Some(latency));
+                        } else {
+                            tracing::info!("📊 Could not infer - defaulting to Complex after {:.2}s", latency);
+                            return (ExecutionMode::Consensus, Some(latency));
+                        }
                     }
                 }
                 Err(e) => {
-                    tracing::error!("❌ CRITICAL: Generator model routing failed: {}", e);
-                    tracing::error!("Cannot proceed without LLM - profile or API key may be broken");
-                    // This is a critical failure - the LLM must be available
-                    panic!("LLM routing decision failed - cannot continue without working LLM: {}", e);
+                    let latency = classification_start.elapsed().as_secs_f64();
+                    tracing::error!("❌ Classification request failed after {:.2}s: {}", latency, e);
+                    tracing::warn!("⚠️ Falling back to Consensus mode for safety");
+                    return (ExecutionMode::Consensus, Some(latency));
                 }
             }
         }
         
         // If we get here, we don't have proper LLM configuration
-        // This is a critical error - we cannot make routing decisions without an LLM
-        tracing::error!("❌ CRITICAL: No LLM configuration available for routing decision");
-        tracing::error!("Profile may be missing Generator model or OpenRouter client not initialized");
-        panic!("Cannot make routing decision without LLM - system configuration error")
+        let latency = classification_start.elapsed().as_secs_f64();
+        tracing::error!("❌ No LLM configuration available for classification");
+        tracing::warn!("⚠️ Defaulting to Consensus mode after {:.2}s", latency);
+        (ExecutionMode::Consensus, Some(latency))
+    }
+    
+    /// Detect the appropriate execution mode for a request (backward compatibility)
+    pub async fn detect_mode(&self, request: &str) -> ExecutionMode {
+        let (mode, _latency) = self.detect_mode_with_timing(request).await;
+        mode
     }
 
     /// Check if this is a simple file operation

@@ -1934,6 +1934,8 @@ mod tests {
             analytics: Some(StageAnalytics {
                 duration: 1.5,
                 cost: 0.01,
+                input_cost: 0.005,
+                output_cost: 0.005,
                 provider: "test".to_string(),
                 model_internal_id: "test_model".to_string(),
                 quality_score: 0.8,
@@ -1943,6 +1945,8 @@ mod tests {
                 retry_count: 0,
                 start_time: chrono::Utc::now(),
                 end_time: chrono::Utc::now(),
+                time_to_first_token: Some(0.5),
+                classification_latency: None,
                 memory_usage: None,
                 features: crate::consensus::types::AnalyticsFeatures {
                     streaming: true,
