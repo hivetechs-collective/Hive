@@ -311,17 +311,24 @@ impl ModeDetector {
             let routing_prompt = format!(
                 r#"Question: "{}"
 
-Analyze this question and determine if it requires:
-- DIRECT: Simple, straightforward answer that can be provided immediately
-- CONSENSUS: Complex analysis requiring multiple perspectives and deeper reasoning
+Determine routing: Is this a simple question with a straightforward answer (DIRECT) or does it need complex analysis (CONSENSUS)?
 
-Consider factors like:
-- Question complexity and depth
-- Need for multiple viewpoints or validation
-- Whether it requires analysis, planning, or complex reasoning
-- If it's a simple factual answer or calculation vs complex problem solving
+Simple questions (use DIRECT):
+- Basic arithmetic or math calculations
+- Simple factual questions with clear answers
+- Basic definitions or explanations
+- Questions that can be answered in one sentence
 
-RESPOND WITH EXACTLY ONE WORD: DIRECT or CONSENSUS"#,
+Complex questions (use CONSENSUS):
+- Code writing or debugging
+- System design or architecture
+- Analysis or comparisons
+- Questions needing multiple perspectives
+- Problems requiring step-by-step reasoning
+
+YOUR RESPONSE MUST BE EXACTLY ONE WORD: Either "DIRECT" or "CONSENSUS"
+
+Answer:"#,
                 request
             );
             
@@ -353,9 +360,30 @@ RESPOND WITH EXACTLY ONE WORD: DIRECT or CONSENSUS"#,
                     let raw_response = response.choices.first()
                         .and_then(|c| c.message.as_ref())
                         .map(|m| m.content.clone())
-                        .unwrap_or_else(|| "CONSENSUS".to_string());
+                        .unwrap_or_else(|| String::new());
                     
                     tracing::info!("🤖 LLM routing response: '{}'", raw_response);
+                    
+                    // Handle empty or invalid responses
+                    if raw_response.trim().is_empty() {
+                        tracing::warn!("⚠️ LLM returned empty response for routing - checking for obvious simple patterns");
+                        
+                        // Check for obvious simple math patterns as a fallback
+                        let lower = request.to_lowercase();
+                        if lower.contains("what is") && 
+                           (lower.contains('+') || lower.contains('-') || 
+                            lower.contains('*') || lower.contains('/') ||
+                            lower.contains("plus") || lower.contains("minus") ||
+                            lower.contains("times") || lower.contains("divided")) &&
+                           lower.split_whitespace().count() < 10 {
+                            tracing::info!("🎯 Detected simple arithmetic pattern - using Direct mode");
+                            return ExecutionMode::Direct;
+                        }
+                        
+                        // Default to consensus for safety
+                        tracing::info!("🎯 No clear pattern detected - defaulting to Consensus mode");
+                        return ExecutionMode::Consensus;
+                    }
                     
                     let decision = raw_response.trim().to_uppercase();
                     
