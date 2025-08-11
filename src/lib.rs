@@ -21,6 +21,7 @@ pub mod hooks;
 pub mod ide;
 pub mod install;
 pub mod integration;
+pub mod maintenance;
 pub mod memory;
 pub mod migration;
 pub mod modes;

@@ -25,6 +25,7 @@ use hive_ai::{
         database::{initialize_database, get_database, DatabaseManager},
         api_keys::ApiKeyManager,
     },
+    maintenance::{BackgroundMaintenance, MaintenanceConfig},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -177,6 +178,7 @@ struct AppState {
     consensus_engine: Arc<RwLock<Option<ConsensusEngine>>>,
     database: Arc<RwLock<Option<Arc<DatabaseManager>>>>,
     ai_helpers: Arc<RwLock<Option<Arc<AIHelperEcosystem>>>>,
+    maintenance: Arc<RwLock<Option<Arc<BackgroundMaintenance>>>>,
 }
 
 #[tokio::main]
@@ -230,11 +232,34 @@ async fn main() -> anyhow::Result<()> {
     // AI helpers are now managed internally by ConsensusEngine
     let ai_helpers = None;
 
+    // Initialize maintenance system if database is available
+    let maintenance = if let Some(ref db) = database {
+        // Get API key for OpenRouter sync
+        let api_key = ApiKeyManager::get_openrouter_key()
+            .await
+            .ok();
+        
+        let maintenance = Arc::new(BackgroundMaintenance::new(db.clone(), api_key));
+        
+        // Start background maintenance tasks
+        let maintenance_clone = Arc::clone(&maintenance);
+        tokio::spawn(async move {
+            maintenance_clone.start().await;
+        });
+        
+        info!("✅ Background maintenance system started");
+        Some(maintenance)
+    } else {
+        warn!("⚠️ Running without maintenance system - no database available");
+        None
+    };
+
     // Create shared state
     let state = Arc::new(AppState {
         consensus_engine: Arc::new(RwLock::new(consensus_engine)),
         database: Arc::new(RwLock::new(database)),
         ai_helpers: Arc::new(RwLock::new(ai_helpers)),
+        maintenance: Arc::new(RwLock::new(maintenance)),
     });
 
     // Build the router with WebSocket support
@@ -248,6 +273,8 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/consensus/quick", post(quick_consensus))
         .route("/api/ai-helper/route", post(ai_routing_decision))
         .route("/api/profiles", get(list_profiles))
+        .route("/api/maintenance/status", get(maintenance_status))
+        .route("/api/maintenance/sync", post(force_maintenance_sync))
         .route("/health", get(health_check))
         
         // CORS for Electron
@@ -590,7 +617,40 @@ async fn health_check() -> Json<serde_json::Value> {
             "ai_helpers": true,
             "streaming": true,
             "multi_threading": true,
+            "maintenance": true,
         },
         "timestamp": chrono::Utc::now().to_rfc3339(),
     }))
+}
+
+// Get maintenance status
+async fn maintenance_status(
+    State(state): State<Arc<AppState>>,
+) -> Json<serde_json::Value> {
+    if let Some(ref maintenance) = *state.maintenance.read().await {
+        let status = maintenance.get_status().await;
+        Json(serde_json::json!(status))
+    } else {
+        Json(serde_json::json!({
+            "error": "Maintenance system not initialized"
+        }))
+    }
+}
+
+// Force maintenance sync
+async fn force_maintenance_sync(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, String> {
+    if let Some(ref maintenance) = *state.maintenance.read().await {
+        match maintenance.force_sync().await {
+            Ok(report) => Ok(Json(serde_json::json!({
+                "success": true,
+                "models_updated": report.models_updated,
+                "profiles_migrated": report.profiles_migrated,
+            }))),
+            Err(e) => Err(format!("Sync failed: {}", e))
+        }
+    } else {
+        Err("Maintenance system not initialized".to_string())
+    }
 }
