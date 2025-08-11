@@ -101,6 +101,21 @@ impl StreamingCallbacks for WebSocketCallbacks {
         Ok(())
     }
 
+    fn on_mode_decision(&self, direct_mode: bool, reason: &str) -> anyhow::Result<()> {
+        info!("WebSocket callback: on_mode_decision called - direct_mode: {}, reason: {}", direct_mode, reason);
+        
+        let msg = WSMessage::AIHelperDecision { 
+            direct_mode,
+            reason: reason.to_string(),
+        };
+        
+        match self.tx.send(msg) {
+            Ok(_) => info!("✅ Sent AIHelperDecision message - mode: {}", if direct_mode { "Direct" } else { "Consensus" }),
+            Err(e) => error!("❌ Failed to send AIHelperDecision message: {}", e),
+        }
+        Ok(())
+    }
+
     fn on_stage_start(&self, stage: Stage, model: &str) -> anyhow::Result<()> {
         info!("WebSocket callback: on_stage_start called for {} with model {}", stage.display_name(), model);
         
@@ -462,12 +477,8 @@ async fn run_consensus_streaming(
         info!("Using conversation context with {} characters", ctx.len());
     }
     
-    // For now, always use full consensus pipeline
-    // TODO: Implement AI helper routing when methods are available
-    let _ = tx.send(WSMessage::AIHelperDecision {
-        direct_mode: false,
-        reason: "Using full consensus pipeline for best quality".to_string(),
-    });
+    // Note: The consensus engine will use AI Helpers to intelligently decide between Direct and Consensus mode
+    // The decision will be communicated through the streaming callbacks
     
     // Create streaming callbacks
     let callbacks = Arc::new(WebSocketCallbacks { tx: tx.clone() });

@@ -44,6 +44,11 @@ pub trait StreamingCallbacks: Send + Sync {
         Ok(())
     }
     
+    /// Called when AI Helper makes routing decision
+    fn on_mode_decision(&self, direct_mode: bool, reason: &str) -> Result<()> {
+        Ok(())
+    }
+    
     /// Called when a stage starts
     fn on_stage_start(&self, stage: Stage, model: &str) -> Result<()> {
         Ok(())

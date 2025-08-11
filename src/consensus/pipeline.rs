@@ -554,9 +554,28 @@ impl ConsensusPipeline {
         let execution_mode = if let Some(mode_detector) = &self.mode_detector {
             let mode = mode_detector.detect_mode(question).await;
             tracing::info!("🤖 AI Mode Detection result: {:?}", mode);
+            
+            // Notify the frontend about the routing decision
+            let direct_mode = matches!(mode, ExecutionMode::Direct);
+            let reason = match mode {
+                ExecutionMode::Direct => "AI Helper determined this is a simple question suitable for direct response",
+                ExecutionMode::Consensus => "AI Helper determined this question requires full consensus analysis",
+                ExecutionMode::HybridConsensus => "AI Helper determined this requires consensus with file operations",
+            };
+            
+            if let Err(e) = self.callbacks.on_mode_decision(direct_mode, reason) {
+                tracing::warn!("Failed to send mode decision callback: {}", e);
+            }
+            
             mode
         } else {
             tracing::info!("📊 No mode detector available, defaulting to Consensus mode");
+            
+            // Notify frontend we're using consensus by default
+            if let Err(e) = self.callbacks.on_mode_decision(false, "No AI Helper available - using full consensus mode") {
+                tracing::warn!("Failed to send mode decision callback: {}", e);
+            }
+            
             ExecutionMode::Consensus
         };
 
