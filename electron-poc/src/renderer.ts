@@ -774,6 +774,8 @@ function initializeWebSocket() {
       updateModelDisplay(stageName, model);
       addLogEntry(`▶️ ${stage} started with ${model}`, 'info');
       currentStreamContent.set(stageName, '');
+      // Reset current stage tokens when a new stage starts
+      currentStageTokens = 0;
     },
     
     onStreamChunk: (stage, chunk) => {
