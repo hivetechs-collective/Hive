@@ -668,25 +668,29 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   // Show Neural Consciousness animation if enabled
   if (ENABLE_NEURAL_CONSCIOUSNESS && neuralConsciousness) {
     try {
+      // Show the consciousness animation
       neuralConsciousness.show();
       
-      // Simulate the phases (will be connected to real backend events)
+      // Phase 1: Memory Retrieval (0-2s)
       setTimeout(() => {
         neuralConsciousness?.updatePhase('memory');
-      }, 1500);
+      }, 500);
       
+      // Phase 2: Context Synthesis (2-4s)
       setTimeout(() => {
         neuralConsciousness?.updatePhase('synthesis');
-      }, 3500);
+      }, 2500);
       
+      // Phase 3: Classification (4-6s)
       setTimeout(() => {
         neuralConsciousness?.updatePhase('classification');
-      }, 5500);
+      }, 4500);
       
-      // Hide after classification completes
+      // Hide after routing decision (when Generator starts)
+      // This will be replaced with actual WebSocket event once available
       setTimeout(() => {
         neuralConsciousness?.hide();
-      }, 7000);
+      }, 6500);
     } catch (error) {
       console.error('Error with Neural Consciousness animation:', error);
     }
@@ -819,6 +823,11 @@ function initializeWebSocket() {
       currentStreamContent.set(stageName, '');
       // Reset current stage tokens when a new stage starts
       currentStageTokens = 0;
+      
+      // Hide Neural Consciousness when Generator starts (routing is complete)
+      if (stageName === 'generator' && neuralConsciousness) {
+        neuralConsciousness.hide();
+      }
     },
     
     onStreamChunk: (stage, chunk) => {
