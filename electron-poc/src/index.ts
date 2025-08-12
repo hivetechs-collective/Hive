@@ -58,6 +58,18 @@ const initDatabase = () => {
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
   
+  // Create stage_outputs table to track model usage per stage
+  db.run(`CREATE TABLE IF NOT EXISTS stage_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    stage_name TEXT NOT NULL,
+    model TEXT NOT NULL,
+    tokens_used INTEGER DEFAULT 0,
+    cost REAL DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+  )`);
+  
   // Keep consensus profiles table matching actual database schema
   db.run(`CREATE TABLE IF NOT EXISTS consensus_profiles (
     id TEXT PRIMARY KEY,
@@ -901,6 +913,37 @@ ipcMain.handle('save-conversation', async (_, data: {
         if (err3) console.error('Error saving to conversation_usage:', err3);
       });
       
+      // Track model usage for each stage using the active profile
+      // Get the active profile to know which models were used
+      db.get(`
+        SELECT cp.generator_model, cp.refiner_model, cp.validator_model, cp.curator_model 
+        FROM consensus_settings cs
+        JOIN consensus_profiles cp ON cs.value = cp.id
+        WHERE cs.key = 'active_profile_id'
+      `, [], (errProfile, profile: any) => {
+        if (!errProfile && profile) {
+          // Insert stage outputs for tracking
+          const stages = [
+            { name: 'Generator', model: profile.generator_model },
+            { name: 'Refiner', model: profile.refiner_model },
+            { name: 'Validator', model: profile.validator_model },
+            { name: 'Curator', model: profile.curator_model }
+          ];
+          
+          stages.forEach(stage => {
+            // Estimate tokens and cost per stage (divide by 4)
+            const stageTokens = Math.floor((data.totalTokens || 0) / 4);
+            const stageCost = (data.totalCost || 0) / 4;
+            
+            db.run(`
+              INSERT INTO stage_outputs (
+                conversation_id, stage_name, model, tokens_used, cost, created_at
+              ) VALUES (?, ?, ?, ?, ?, ?)
+            `, [data.conversationId, stage.name, stage.model, stageTokens, stageCost, timestamp]);
+          });
+        }
+      });
+      
       // Insert into performance_metrics if duration provided
       if (data.duration) {
         db.run(`
@@ -1088,43 +1131,104 @@ ipcMain.handle('get-analytics', async () => {
             tokens: (row.total_tokens_input || 0) + (row.total_tokens_output || 0)
           }));
           
-          // Get model usage from conversations (since stage_outputs doesn't exist)
+          // Get model usage from stage_outputs table (tracks all 4 models per conversation)
           db.all(`
             SELECT 
-              'claude-3.5-sonnet' as model,
+              so.model,
               COUNT(*) as count,
-              SUM(c.total_cost) as totalCost
-            FROM conversations c
-            INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+              SUM(so.cost) as totalCost
+            FROM stage_outputs so
+            INNER JOIN conversation_usage cu ON so.conversation_id = cu.conversation_id
             WHERE cu.user_id = ?
-            AND c.total_cost > 0
+            GROUP BY so.model
+            ORDER BY totalCost DESC
           `, [userId], (err4, rows4: any[]) => {
-            if (err4) console.error('Error getting model usage:', err4);
+            if (err4) {
+              console.error('Error getting model usage from stage_outputs:', err4);
+              // Fallback: Get models from consensus_profiles if stage_outputs is empty
+              db.all(`
+                SELECT 
+                  cp.generator_model as model,
+                  COUNT(c.id) as count,
+                  SUM(c.total_cost * 0.25) as totalCost
+                FROM conversations c
+                INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+                LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
+                WHERE cu.user_id = ? AND cp.generator_model IS NOT NULL
+                GROUP BY cp.generator_model
+                UNION ALL
+                SELECT 
+                  cp.refiner_model as model,
+                  COUNT(c.id) as count,
+                  SUM(c.total_cost * 0.25) as totalCost
+                FROM conversations c
+                INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+                LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
+                WHERE cu.user_id = ? AND cp.refiner_model IS NOT NULL
+                GROUP BY cp.refiner_model
+                UNION ALL
+                SELECT 
+                  cp.validator_model as model,
+                  COUNT(c.id) as count,
+                  SUM(c.total_cost * 0.25) as totalCost
+                FROM conversations c
+                INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+                LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
+                WHERE cu.user_id = ? AND cp.validator_model IS NOT NULL
+                GROUP BY cp.validator_model
+                UNION ALL
+                SELECT 
+                  cp.curator_model as model,
+                  COUNT(c.id) as count,
+                  SUM(c.total_cost * 0.25) as totalCost
+                FROM conversations c
+                INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+                LEFT JOIN consensus_profiles cp ON c.profile_id = cp.id
+                WHERE cu.user_id = ? AND cp.curator_model IS NOT NULL
+                GROUP BY cp.curator_model
+              `, [userId, userId, userId, userId], (err5, rows5: any[]) => {
+                const modelUsage: { [model: string]: number } = {};
+                const modelCosts: { [model: string]: number } = {};
+                
+                // Aggregate the model data
+                (rows5 || []).forEach((row: any) => {
+                  const modelName = row.model?.split('/').pop() || row.model; // Simplify model names
+                  if (!modelUsage[modelName]) {
+                    modelUsage[modelName] = 0;
+                    modelCosts[modelName] = 0;
+                  }
+                  modelUsage[modelName] += row.count || 0;
+                  modelCosts[modelName] += row.totalCost || 0;
+                });
+                
+                analyticsData.modelUsage = modelUsage;
+                analyticsData.costByModel = modelCosts;
+                continueProcessing();
+              });
+              return;
+            }
             
             const modelUsage: { [model: string]: number } = {};
             const modelCosts: { [model: string]: number } = {};
             
-            // Process the results
+            // Process the results from stage_outputs
             (rows4 || []).forEach((row: any) => {
+              const modelName = row.model?.split('/').pop() || row.model; // Simplify model names
               if (row.count > 0) {
-                modelUsage[row.model] = row.count;
-                modelCosts[row.model] = row.totalCost || 0;
+                modelUsage[modelName] = row.count;
+                modelCosts[modelName] = row.totalCost || 0;
               }
             });
             
-            // If we have no data, provide defaults
-            if (Object.keys(modelUsage).length === 0) {
-              modelUsage['claude-3.5-sonnet'] = analyticsData.totalQueries || 0;
-              modelCosts['claude-3.5-sonnet'] = analyticsData.totalCost || 0;
-            }
-            
             analyticsData.modelUsage = modelUsage;
             analyticsData.costByModel = modelCosts;
-            
+            continueProcessing();
+          });
+          
+          function continueProcessing() {
             // Calculate hourly stats for last 24 hours
             const hourlyStats: any[] = [];
             const now = new Date();
-            let hoursProcessed = 0;
             
             const processHour = (i: number) => {
               if (i < 0) {
@@ -1186,11 +1290,10 @@ ipcMain.handle('get-analytics', async () => {
             
             // Start processing hours from 23 to 0
             processHour(23);
-          });
+          }
         });
       });
       });
-    });
     });
   });
 });

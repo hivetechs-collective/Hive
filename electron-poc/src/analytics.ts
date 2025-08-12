@@ -464,20 +464,30 @@ export class AnalyticsDashboard {
 
     // Draw line chart
     const stats = this.data.hourlyStats;
-    const maxQueries = Math.max(...stats.map(s => s.queries));
-    const padding = 20;
+    const maxQueries = Math.max(...stats.map(s => s.queries), 1); // Ensure at least 1 to avoid division by zero
+    const padding = 30; // Increased for labels
     const width = canvas.width - padding * 2;
     const height = canvas.height - padding * 2;
 
-    // Draw grid lines
+    // Draw grid lines and Y-axis labels
     ctx.strokeStyle = 'rgba(100, 200, 255, 0.1)';
     ctx.lineWidth = 1;
+    ctx.font = '10px monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.textAlign = 'right';
+    
     for (let i = 0; i <= 4; i++) {
       const y = padding + (height / 4) * i;
+      const value = Math.round(maxQueries * (1 - i / 4));
+      
+      // Draw grid line
       ctx.beginPath();
       ctx.moveTo(padding, y);
       ctx.lineTo(canvas.width - padding, y);
       ctx.stroke();
+      
+      // Draw Y-axis label
+      ctx.fillText(value.toString(), padding - 5, y + 3);
     }
 
     // Draw line
@@ -507,6 +517,19 @@ export class AnalyticsDashboard {
       ctx.beginPath();
       ctx.arc(x, y, 3, 0, Math.PI * 2);
       ctx.fill();
+    });
+    
+    // Draw X-axis labels (hours)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    
+    // Show every 4th hour to avoid crowding
+    stats.forEach((stat, index) => {
+      if (index % 4 === 0 || index === stats.length - 1) {
+        const x = padding + (width / (stats.length - 1)) * index;
+        ctx.fillText(stat.hour, x, canvas.height - 5);
+      }
     });
   }
 
@@ -545,11 +568,21 @@ export class AnalyticsDashboard {
       ctx.fillStyle = gradient;
       ctx.fillRect(x, y, barWidth, barHeight);
 
-      // Draw value
+      // Draw value on top of bar
       ctx.fillStyle = '#ffffff';
       ctx.font = '10px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(count.toString(), x + barWidth / 2, y - 5);
+      
+      // Draw model name below bar (truncated)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = '8px monospace';
+      ctx.save();
+      ctx.translate(x + barWidth / 2, canvas.height - 5);
+      ctx.rotate(-Math.PI / 4); // Rotate 45 degrees
+      const shortName = model.length > 12 ? model.substring(0, 10) + '..' : model;
+      ctx.fillText(shortName, 0, 0);
+      ctx.restore();
     });
   }
 
