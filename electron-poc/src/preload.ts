@@ -57,5 +57,17 @@ contextBridge.exposeInMainWorld('settingsAPI', {
 contextBridge.exposeInMainWorld('electronAPI', {
   getAnalytics: () => ipcRenderer.invoke('get-analytics'),
   saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
-  getUsageCount: () => ipcRenderer.invoke('get-usage-count')
+  getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
+  
+  // LazyGit API
+  startLazyGit: () => ipcRenderer.invoke('lazygit-start'),
+  stopLazyGit: () => ipcRenderer.invoke('lazygit-stop'),
+  writeLazyGit: (data: string) => ipcRenderer.invoke('lazygit-write', data),
+  resizeLazyGit: (cols: number, rows: number) => ipcRenderer.invoke('lazygit-resize', cols, rows),
+  onLazyGitData: (callback: (data: string) => void) => {
+    ipcRenderer.on('lazygit-data', (_, data) => callback(data));
+  },
+  onLazyGitExit: (callback: (code: number) => void) => {
+    ipcRenderer.on('lazygit-exit', (_, code) => callback(code));
+  }
 });

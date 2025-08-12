@@ -108,9 +108,16 @@ export class LazyGitTerminal {
     
     // Set up terminal input handler
     this.terminal.onData((data) => {
-      if (this.isConnected && this.ws) {
-        // Send input to LazyGit process
-        this.ws.send(JSON.stringify({ type: 'input', data }));
+      if (this.isConnected) {
+        const electronAPI = (window as any).electronAPI;
+        
+        if (electronAPI && electronAPI.writeLazyGit) {
+          // Send input via IPC
+          electronAPI.writeLazyGit(data);
+        } else if (this.ws) {
+          // Send input via WebSocket
+          this.ws.send(JSON.stringify({ type: 'input', data }));
+        }
       }
     });
     
@@ -120,6 +127,51 @@ export class LazyGitTerminal {
   }
 
   private async connectToBackend(): Promise<void> {
+    // Check if we have Electron IPC available
+    const electronAPI = (window as any).electronAPI;
+    
+    if (electronAPI && electronAPI.startLazyGit) {
+      // Use Electron IPC for LazyGit
+      return this.connectViaIPC();
+    }
+    
+    // Fall back to WebSocket (for development)
+    return this.connectViaWebSocket();
+  }
+  
+  private async connectViaIPC(): Promise<void> {
+    const electronAPI = (window as any).electronAPI;
+    
+    try {
+      // Start LazyGit process
+      const result = await electronAPI.startLazyGit();
+      
+      if (result.success) {
+        this.isConnected = true;
+        this.terminal.writeln('\x1b[1;32m✓ LazyGit started\x1b[0m\n');
+        
+        // Set up data handler for LazyGit output
+        electronAPI.onLazyGitData((data: string) => {
+          this.terminal.write(data);
+        });
+        
+        // Set up exit handler
+        electronAPI.onLazyGitExit((code: number) => {
+          this.terminal.writeln(`\n\x1b[1;33mLazyGit exited (code ${code})\x1b[0m`);
+          this.isConnected = false;
+        });
+      } else {
+        throw new Error(result.error || 'Failed to start LazyGit');
+      }
+    } catch (error: any) {
+      console.error('Failed to start LazyGit:', error);
+      this.terminal.writeln(`\x1b[1;31m✗ Failed to start LazyGit: ${error.message}\x1b[0m`);
+      this.terminal.writeln('Starting in demo mode...\n');
+      this.startDemoMode();
+    }
+  }
+  
+  private async connectViaWebSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
       // Connect to LazyGit WebSocket endpoint
       this.ws = new WebSocket('ws://localhost:8766/lazygit');
