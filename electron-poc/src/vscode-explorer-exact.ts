@@ -4,6 +4,7 @@
  */
 
 import { FileNode } from './types/window';
+import { getFileIcon, getFolderIcon, createIconElement } from './file-icons';
 
 // VS Code's TreeItemCollapsibleState
 enum TreeItemCollapsibleState {
@@ -29,6 +30,8 @@ export class VSCodeExplorerExact {
   private selectedNode: TreeNode | null = null;
   private onFileSelectCallback: ((path: string) => void) | null = null;
   private rootNodes: TreeNode[] = [];
+  private draggedNode: TreeNode | null = null;
+  private dropTarget: HTMLElement | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -312,7 +315,19 @@ export class VSCodeExplorerExact {
     const row = document.createElement('div');
     row.className = 'monaco-list-row';
     row.setAttribute('data-path', node.path);
+    row.setAttribute('data-type', node.type);
     row.setAttribute('role', 'treeitem');
+    
+    // Make draggable
+    row.draggable = true;
+    
+    // Add drag event listeners
+    row.addEventListener('dragstart', (e) => this.handleDragStart(e, node));
+    row.addEventListener('dragover', (e) => this.handleDragOver(e, node));
+    row.addEventListener('drop', (e) => this.handleDrop(e, node));
+    row.addEventListener('dragend', (e) => this.handleDragEnd(e));
+    row.addEventListener('dragenter', (e) => this.handleDragEnter(e, node));
+    row.addEventListener('dragleave', (e) => this.handleDragLeave(e));
     
     if (this.selectedNode?.path === node.path) {
       row.classList.add('selected');
@@ -355,14 +370,16 @@ export class VSCodeExplorerExact {
     const container = document.createElement('div');
     container.className = 'monaco-icon-label-container';
     
-    // Add file/folder icon
+    // Add file/folder icon with color
     const icon = document.createElement('i');
     if (node.type === 'directory') {
-      icon.className = node.collapsibleState === TreeItemCollapsibleState.Expanded 
-        ? 'codicon codicon-folder-opened'
-        : 'codicon codicon-folder';
+      const folderIcon = getFolderIcon(node.name, node.collapsibleState === TreeItemCollapsibleState.Expanded);
+      icon.className = `codicon codicon-${folderIcon.icon}`;
+      icon.style.cssText = `color: ${folderIcon.color || '#dcb67a'};`;
     } else {
-      icon.className = `codicon ${this.getFileIconClass(node.name)}`;
+      const fileIcon = getFileIcon(node.name);
+      icon.className = `codicon codicon-${fileIcon.icon}`;
+      icon.style.cssText = `color: ${fileIcon.color || '#969696'};`;
     }
     container.appendChild(icon);
     
@@ -385,23 +402,13 @@ export class VSCodeExplorerExact {
   }
 
   private getFileIconClass(filename: string): string {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    const iconMap: Record<string, string> = {
-      'ts': 'codicon-file-code',
-      'tsx': 'codicon-file-code',
-      'js': 'codicon-file-code',
-      'jsx': 'codicon-file-code',
-      'json': 'codicon-json',
-      'md': 'codicon-markdown',
-      'css': 'codicon-file-code',
-      'html': 'codicon-file-code',
-      'rs': 'codicon-file-code',
-      'toml': 'codicon-file-code',
-      'yaml': 'codicon-file-code',
-      'yml': 'codicon-file-code'
-    };
-    
-    return iconMap[ext || ''] || 'codicon-file';
+    const iconMapping = getFileIcon(filename);
+    return `codicon-${iconMapping.icon}`;
+  }
+  
+  private getFileIconStyle(filename: string): string {
+    const iconMapping = getFileIcon(filename);
+    return `color: ${iconMapping.color || '#969696'};`;
   }
 
   private async getFlattenedNodes(): Promise<TreeNode[]> {
@@ -570,12 +577,21 @@ export class VSCodeExplorerExact {
 
   public async collapseAll() {
     console.log('[VSCodeExplorer] Collapsing all...');
+    // Clear all expanded nodes
+    this.expandedNodes.clear();
+    
+    // Reset all nodes to collapsed state
     this.treeData.forEach(node => {
       if (node.type === 'directory') {
         node.collapsibleState = TreeItemCollapsibleState.Collapsed;
+        // Also reset children if loaded
+        if (node.children) {
+          node.children = undefined; // Clear children to force reload when expanded
+        }
       }
     });
-    this.expandedNodes.clear();
+    
+    // Re-render the tree
     await this.render();
   }
 
@@ -590,13 +606,19 @@ export class VSCodeExplorerExact {
       targetDir = this.selectedNode.parent.path;
     }
     
+    console.log('[VSCodeExplorer] Target directory:', targetDir);
+    console.log('[VSCodeExplorer] Full path will be:', targetDir + '/' + fileName);
+    
     try {
       // Create the file through IPC
-      await window.fileAPI.createFile(targetDir, fileName);
-      console.log('[VSCodeExplorer] File created successfully');
+      const result = await window.fileAPI.createFile(targetDir, fileName);
+      console.log('[VSCodeExplorer] IPC result:', result);
+      console.log('[VSCodeExplorer] File created successfully, refreshing...');
       await this.refresh();
+      console.log('[VSCodeExplorer] Refresh completed');
     } catch (error) {
       console.error('[VSCodeExplorer] Failed to create file:', error);
+      alert('Failed to create file: ' + (error as any).message);
     }
   }
 
@@ -611,17 +633,143 @@ export class VSCodeExplorerExact {
       targetDir = this.selectedNode.parent.path;
     }
     
+    console.log('[VSCodeExplorer] Target directory:', targetDir);
+    console.log('[VSCodeExplorer] Full path will be:', targetDir + '/' + folderName);
+    
     try {
       // Create the folder through IPC
-      await window.fileAPI.createFolder(targetDir, folderName);
-      console.log('[VSCodeExplorer] Folder created successfully');
+      const result = await window.fileAPI.createFolder(targetDir, folderName);
+      console.log('[VSCodeExplorer] IPC result:', result);
+      console.log('[VSCodeExplorer] Folder created successfully, refreshing...');
       await this.refresh();
+      console.log('[VSCodeExplorer] Refresh completed');
     } catch (error) {
       console.error('[VSCodeExplorer] Failed to create folder:', error);
+      alert('Failed to create folder: ' + (error as any).message);
     }
   }
 
   public destroy() {
     this.container.innerHTML = '';
+  }
+  
+  // Drag and Drop Handlers
+  private handleDragStart(e: DragEvent, node: TreeNode) {
+    console.log('[VSCodeExplorer] Drag start:', node.name);
+    this.draggedNode = node;
+    
+    // Set drag effect
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', node.path);
+    }
+    
+    // Add dragging class to the element
+    const element = e.currentTarget as HTMLElement;
+    element.classList.add('dragging');
+    element.style.opacity = '0.5';
+  }
+  
+  private handleDragOver(e: DragEvent, node: TreeNode) {
+    e.preventDefault(); // Allow drop
+    
+    if (!this.draggedNode) return;
+    
+    // Only allow dropping on directories or between items
+    if (node.type === 'directory') {
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'move';
+      }
+    }
+  }
+  
+  private handleDragEnter(e: DragEvent, node: TreeNode) {
+    if (!this.draggedNode) return;
+    if (this.draggedNode === node) return; // Can't drop on itself
+    
+    const element = e.currentTarget as HTMLElement;
+    
+    // Only highlight directories as drop targets
+    if (node.type === 'directory') {
+      element.classList.add('drop-target');
+      element.style.background = 'rgba(0, 122, 204, 0.2)';
+      element.style.border = '1px solid #007acc';
+      this.dropTarget = element;
+    }
+  }
+  
+  private handleDragLeave(e: DragEvent) {
+    const element = e.currentTarget as HTMLElement;
+    element.classList.remove('drop-target');
+    element.style.background = '';
+    element.style.border = '';
+  }
+  
+  private async handleDrop(e: DragEvent, targetNode: TreeNode) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('[VSCodeExplorer] Drop on:', targetNode.name);
+    
+    if (!this.draggedNode) return;
+    if (this.draggedNode === targetNode) return; // Can't drop on itself
+    
+    const element = e.currentTarget as HTMLElement;
+    element.classList.remove('drop-target');
+    element.style.background = '';
+    element.style.border = '';
+    
+    // Only allow dropping on directories
+    if (targetNode.type === 'directory') {
+      try {
+        // Move the file/folder
+        await this.moveItem(this.draggedNode.path, targetNode.path);
+        
+        // Refresh the tree
+        await this.refresh();
+      } catch (error) {
+        console.error('[VSCodeExplorer] Failed to move item:', error);
+        alert('Failed to move: ' + (error as any).message);
+      }
+    }
+    
+    this.draggedNode = null;
+  }
+  
+  private handleDragEnd(e: DragEvent) {
+    const element = e.currentTarget as HTMLElement;
+    element.classList.remove('dragging');
+    element.style.opacity = '';
+    
+    // Clean up any drop targets
+    const dropTargets = this.container.querySelectorAll('.drop-target');
+    dropTargets.forEach(target => {
+      target.classList.remove('drop-target');
+      (target as HTMLElement).style.background = '';
+      (target as HTMLElement).style.border = '';
+    });
+    
+    this.draggedNode = null;
+    this.dropTarget = null;
+  }
+  
+  private async moveItem(sourcePath: string, targetDir: string) {
+    console.log('[VSCodeExplorer] Moving', sourcePath, 'to', targetDir);
+    
+    // Extract the item name from the source path
+    const itemName = sourcePath.split('/').pop();
+    if (!itemName) throw new Error('Invalid source path');
+    
+    const newPath = targetDir + '/' + itemName;
+    
+    // Check if target already exists
+    if (await window.fileAPI.fileExists(newPath)) {
+      throw new Error(`Item '${itemName}' already exists in the target directory`);
+    }
+    
+    // Move the item using file system operations
+    await window.fileAPI.moveFile(sourcePath, newPath);
+    
+    console.log('[VSCodeExplorer] Item moved successfully');
   }
 }

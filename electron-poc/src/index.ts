@@ -277,19 +277,56 @@ const registerFileSystemHandlers = () => {
   });
   
   ipcMain.handle('fs-create-file', async (_, dirPath: string, fileName: string) => {
-    const fs = require('fs').promises;
-    const path = require('path');
-    const filePath = path.join(dirPath, fileName);
-    await fs.writeFile(filePath, '', 'utf8');
-    return true;
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const filePath = path.join(dirPath, fileName);
+      console.log('[Main] Creating file:', filePath);
+      await fs.writeFile(filePath, '', 'utf8');
+      console.log('[Main] File created successfully:', filePath);
+      return true;
+    } catch (error) {
+      console.error('[Main] Failed to create file:', error);
+      throw error;
+    }
   });
   
   ipcMain.handle('fs-create-folder', async (_, dirPath: string, folderName: string) => {
-    const fs = require('fs').promises;
-    const path = require('path');
-    const folderPath = path.join(dirPath, folderName);
-    await fs.mkdir(folderPath, { recursive: true });
-    return true;
+    try {
+      const fs = require('fs').promises;
+      const path = require('path');
+      const folderPath = path.join(dirPath, folderName);
+      console.log('[Main] Creating folder:', folderPath);
+      await fs.mkdir(folderPath, { recursive: true });
+      console.log('[Main] Folder created successfully:', folderPath);
+      return true;
+    } catch (error) {
+      console.error('[Main] Failed to create folder:', error);
+      throw error;
+    }
+  });
+  
+  ipcMain.handle('fs-move-file', async (_, sourcePath: string, targetPath: string) => {
+    try {
+      const fs = require('fs').promises;
+      console.log('[Main] Moving:', sourcePath, 'to', targetPath);
+      await fs.rename(sourcePath, targetPath);
+      console.log('[Main] Move successful');
+      return true;
+    } catch (error) {
+      console.error('[Main] Failed to move file:', error);
+      throw error;
+    }
+  });
+  
+  ipcMain.handle('fs-file-exists', async (_, filePath: string) => {
+    try {
+      const fs = require('fs').promises;
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   });
 };
 

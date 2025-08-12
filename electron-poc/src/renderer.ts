@@ -34,6 +34,146 @@ import { VSCodeFileExplorer } from './vs-file-explorer';
 import { VSCodeExplorerExact } from './vscode-explorer-exact';
 import { EditorTabs } from './editor-tabs';
 
+// Simple input dialog function for VS Code-style prompts
+function showInputDialog(title: string, message: string, defaultValue: string = ''): Promise<string | null> {
+    return new Promise((resolve) => {
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        // Create dialog
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            background: #252526;
+            border: 1px solid #007acc;
+            border-radius: 4px;
+            padding: 20px;
+            min-width: 400px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        `;
+        
+        // Title
+        const titleEl = document.createElement('h3');
+        titleEl.style.cssText = `
+            margin: 0 0 10px 0;
+            color: #cccccc;
+            font-size: 14px;
+            font-weight: normal;
+        `;
+        titleEl.textContent = title;
+        dialog.appendChild(titleEl);
+        
+        // Message
+        const messageEl = document.createElement('div');
+        messageEl.style.cssText = `
+            color: #969696;
+            font-size: 13px;
+            margin-bottom: 15px;
+        `;
+        messageEl.textContent = message;
+        dialog.appendChild(messageEl);
+        
+        // Input
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = defaultValue;
+        input.style.cssText = `
+            width: 100%;
+            padding: 6px 8px;
+            background: #3c3c3c;
+            border: 1px solid #3c3c3c;
+            color: #cccccc;
+            font-size: 13px;
+            border-radius: 2px;
+            outline: none;
+            box-sizing: border-box;
+        `;
+        input.addEventListener('focus', () => {
+            input.style.borderColor = '#007acc';
+        });
+        input.addEventListener('blur', () => {
+            input.style.borderColor = '#3c3c3c';
+        });
+        dialog.appendChild(input);
+        
+        // Buttons
+        const buttons = document.createElement('div');
+        buttons.style.cssText = `
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        `;
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = `
+            padding: 6px 14px;
+            background: #3c3c3c;
+            border: 1px solid #3c3c3c;
+            color: #cccccc;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 13px;
+        `;
+        cancelBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(null);
+        };
+        
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'OK';
+        okBtn.style.cssText = `
+            padding: 6px 14px;
+            background: #007acc;
+            border: 1px solid #007acc;
+            color: white;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 13px;
+        `;
+        okBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            resolve(input.value);
+        };
+        
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(okBtn);
+        dialog.appendChild(buttons);
+        
+        // Handle Enter key
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                document.body.removeChild(overlay);
+                resolve(input.value);
+            } else if (e.key === 'Escape') {
+                document.body.removeChild(overlay);
+                resolve(null);
+            }
+        });
+        
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        
+        // Focus input and select text
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 0);
+    });
+}
+
 // Create the exact Hive Consensus GUI layout
 // Add global error handler to catch errors before webpack-dev-server
 window.addEventListener('error', (event) => {
@@ -449,19 +589,25 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                     
                     addFileBtn?.addEventListener('click', async () => {
                         console.log('Add file clicked');
-                        // For now, just create a default file
                         if (window.fileExplorer) {
-                            console.log('Creating new file: untitled.txt');
-                            await window.fileExplorer.createFile('untitled.txt');
+                            // Create a simple input dialog
+                            const fileName = await showInputDialog('New File', 'Enter file name:', 'untitled.txt');
+                            if (fileName && fileName.trim()) {
+                                console.log('Creating new file:', fileName);
+                                await window.fileExplorer.createFile(fileName.trim());
+                            }
                         }
                     });
                     
                     addFolderBtn?.addEventListener('click', async () => {
                         console.log('Add folder clicked');
-                        // For now, just create a default folder
                         if (window.fileExplorer) {
-                            console.log('Creating new folder: New Folder');
-                            await window.fileExplorer.createFolder('New Folder');
+                            // Create a simple input dialog
+                            const folderName = await showInputDialog('New Folder', 'Enter folder name:', 'New Folder');
+                            if (folderName && folderName.trim()) {
+                                console.log('Creating new folder:', folderName);
+                                await window.fileExplorer.createFolder(folderName.trim());
+                            }
                         }
                     });
                     

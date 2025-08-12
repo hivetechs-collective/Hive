@@ -23,6 +23,8 @@ declare global {
       getFileStats(filePath: string): Promise<any>;
       createFile(dirPath: string, fileName: string): Promise<boolean>;
       createFolder(dirPath: string, folderName: string): Promise<boolean>;
+      moveFile(sourcePath: string, targetPath: string): Promise<boolean>;
+      fileExists(filePath: string): Promise<boolean>;
       onFileChanged(callback: (filePath: string) => void): void;
     };
     

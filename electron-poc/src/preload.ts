@@ -112,6 +112,8 @@ contextBridge.exposeInMainWorld('fileAPI', {
   getFileStats: (filePath: string) => safeInvoke('fs-stats', filePath),
   createFile: (dirPath: string, fileName: string) => safeInvoke('fs-create-file', dirPath, fileName),
   createFolder: (dirPath: string, folderName: string) => safeInvoke('fs-create-folder', dirPath, folderName),
+  moveFile: (sourcePath: string, targetPath: string) => safeInvoke('fs-move-file', sourcePath, targetPath),
+  fileExists: (filePath: string) => safeInvoke('fs-file-exists', filePath),
   onFileChanged: (callback: (filePath: string) => void) => {
     ipcRenderer.on('file-changed', (_, filePath) => callback(filePath));
   }
