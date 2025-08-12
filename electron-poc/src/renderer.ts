@@ -76,31 +76,6 @@ document.body.innerHTML = `
         
         <!-- Welcome Content (Default view) -->
         <div id="welcome-content" class="welcome-content">
-          <h2>Hive Consensus</h2>
-          <div class="validation-status">
-            <div class="status-item">
-              <span class="status-icon">✅</span>
-              <span>Electron App Running</span>
-            </div>
-            <div class="status-item">
-              <span class="status-icon">✅</span>
-              <span>Rust Backend Connected</span>
-            </div>
-            <div class="status-item">
-              <span class="status-icon">✅</span>
-              <span>IPC Communication Working</span>
-            </div>
-          </div>
-          <div class="test-buttons">
-            <button id="test-connection-btn" class="action-button primary">
-              <span class="button-icon">🔗</span>
-              Test Connection
-            </button>
-            <button id="run-consensus-btn" class="action-button primary">
-              <span class="button-icon">🚀</span>
-              Run Consensus
-            </button>
-          </div>
         </div>
       </div>
 
