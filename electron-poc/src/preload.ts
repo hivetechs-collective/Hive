@@ -75,5 +75,21 @@ contextBridge.exposeInMainWorld('gitAPI', {
   pull: () => ipcRenderer.invoke('git-pull'),
   fetch: () => ipcRenderer.invoke('git-fetch'),
   switchBranch: (branchName: string) => ipcRenderer.invoke('git-switch-branch', branchName),
-  createBranch: (branchName: string) => ipcRenderer.invoke('git-create-branch', branchName)
+  createBranch: (branchName: string) => ipcRenderer.invoke('git-create-branch', branchName),
+  getFileStatus: (path: string) => ipcRenderer.invoke('git-file-status', path)
+});
+
+// File System API
+contextBridge.exposeInMainWorld('fileAPI', {
+  getFileTree: (rootPath?: string) => ipcRenderer.invoke('fs-get-tree', rootPath),
+  getDirectoryContents: (dirPath: string) => ipcRenderer.invoke('fs-get-directory', dirPath),
+  readFile: (filePath: string) => ipcRenderer.invoke('fs-read-file', filePath),
+  writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs-write-file', filePath, content),
+  watchFile: (filePath: string) => ipcRenderer.invoke('fs-watch-file', filePath),
+  unwatchFile: (filePath: string) => ipcRenderer.invoke('fs-unwatch-file', filePath),
+  searchFiles: (rootPath: string, pattern: string) => ipcRenderer.invoke('fs-search', rootPath, pattern),
+  getFileStats: (filePath: string) => ipcRenderer.invoke('fs-stats', filePath),
+  onFileChanged: (callback: (filePath: string) => void) => {
+    ipcRenderer.on('file-changed', (_, filePath) => callback(filePath));
+  }
 });

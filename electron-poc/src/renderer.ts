@@ -8,12 +8,15 @@ import './index.css';
 import './neural-consciousness.css';
 import './analytics.css';
 import './git.css';
+import './file-explorer.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { NeuralConsciousness } from './neural-consciousness';
 import { analyticsDashboard } from './analytics';
 import { GitUI } from './git-ui';
+import { FileExplorer } from './file-explorer';
+import { EditorTabs } from './editor-tabs';
 
 // Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
@@ -33,18 +36,55 @@ document.body.innerHTML = `
 
   <!-- Main Content Area - Exact Dioxus Layout -->
   <div class="main-content">
-    <!-- Left Sidebar with Source Control and Control Buttons -->
+    <!-- Left Sidebar -->
     <div class="sidebar" id="left-sidebar">
+      <!-- Neural Consciousness stays at top -->
+      <div id="neural-consciousness-container" style="height: 120px;">
+        <!-- Neural Consciousness will be mounted here -->
+      </div>
+      
+      <!-- Activity Bar below Neural Consciousness -->
+      <div class="activity-bar">
+        <button class="activity-btn" data-view="explorer" aria-label="Explorer">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M17.5 0h-9L7 1.5V6H2.5L1 7.5v15.07L2.5 24h12.07L16 22.57V18h4.7l1.3-1.43v-14l-1.3-1.43L17.5 0zm0 2.12l2.38 2.38v12.38l-2.38 2.38H16v-10l-1.5-1.5H8V1.5l1.5-.08H17.5z"/>
+          </svg>
+          <span class="activity-tooltip">Explorer (Ctrl+Shift+E)</span>
+        </button>
+        <button class="activity-btn" data-view="git" aria-label="Source Control">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21.007 8.222A3.738 3.738 0 0 0 15.045 5.2a3.737 3.737 0 0 0 1.156 6.583 2.988 2.988 0 0 1-2.668 1.67h-2.99a4.456 4.456 0 0 0-2.989 1.165V7.4a3.737 3.737 0 1 0-1.494 0v9.117a3.776 3.776 0 1 0 1.816.099 2.99 2.99 0 0 1 2.668-1.667h2.99a4.484 4.484 0 0 0 4.223-3.039 3.736 3.736 0 0 0 3.25-3.687zM4.565 3.738a2.242 2.242 0 1 1 4.484 0 2.242 2.242 0 0 1-4.484 0zm4.484 16.441a2.242 2.242 0 1 1-4.484 0 2.242 2.242 0 0 1 4.484 0zm8.221-9.715a2.242 2.242 0 1 1 0-4.485 2.242 2.242 0 0 1 0 4.485z"/>
+          </svg>
+          <span class="activity-tooltip">Source Control (Ctrl+Shift+G)</span>
+        </button>
+      </div>
 
-      <!-- Source Control Panel -->
-      <div class="source-control-panel" id="source-control-panel">
-        <div class="panel-header">SOURCE CONTROL</div>
-        <div id="git-ui-container">
-          <!-- Git UI will be mounted here -->
+      <!-- Side Panels (collapsible) -->
+      <div class="side-panel" id="side-panel" style="display: none;">
+        <!-- File Explorer Panel -->
+        <div class="file-explorer-panel" id="file-explorer-panel">
+          <div class="panel-header">
+            <span>EXPLORER</span>
+            <button class="panel-close" onclick="document.getElementById('side-panel').style.display='none'">×</button>
+          </div>
+          <div id="file-explorer-container">
+            <!-- File Explorer will be mounted here -->
+          </div>
+        </div>
+
+        <!-- Source Control Panel -->
+        <div class="source-control-panel" id="source-control-panel" style="display: none;">
+          <div class="panel-header">
+            <span>SOURCE CONTROL</span>
+            <button class="panel-close" onclick="document.getElementById('side-panel').style.display='none'">×</button>
+          </div>
+          <div id="git-ui-container">
+            <!-- Git UI will be mounted here -->
+          </div>
         </div>
       </div>
 
-      <!-- Control Buttons Panel -->
+      <!-- Control Buttons Panel at bottom -->
       <div class="control-panel">
         <button class="control-btn" id="analytics-btn" data-panel="analytics">
           <span class="control-icon">📊</span>
@@ -61,30 +101,26 @@ document.body.innerHTML = `
       </div>
     </div>
 
-    <!-- Center Area (Tabs + Main Content + Terminal) -->
+    <!-- Center Area (Editor + Terminal) -->
     <div class="center-area" id="center-area">
-      <!-- Tabs -->
-      <div class="editor-tabs">
+      <!-- Editor Area -->
+      <div class="editor-area" id="editor-area">
+        <!-- Editor tabs and content will be mounted here -->
       </div>
       
-      <!-- Main Content Area (Above Terminal) -->
-      <div class="main-editor-area">
-        <!-- Analytics Panel (Hidden by default) -->
-        <div id="analytics-panel" class="panel-content" style="display: none;">
-          <!-- Analytics content will be mounted here -->
-        </div>
-        
-        <!-- Welcome Content (Default view) -->
-        <div id="welcome-content" class="welcome-content">
-        </div>
+      <!-- Analytics Panel (Hidden by default) -->
+      <div id="analytics-panel" class="panel-content" style="display: none;">
+        <!-- Analytics content will be mounted here -->
       </div>
 
-      <!-- Terminal Section (Bottom, toggleable) -->
-      <div class="terminal-section" id="terminal-section">
+      <!-- Terminal Section (Bottom, resizable) -->
+      <div class="terminal-section" id="terminal-section" style="height: 200px;">
+        <div class="resize-handle horizontal-resize" id="terminal-resize"></div>
         <div class="terminal-header">
           <span class="terminal-title">TERMINAL</span>
           <div class="terminal-controls">
-            <button class="terminal-btn" id="toggle-terminal">−</button>
+            <button class="terminal-btn" id="minimize-terminal" title="Minimize">−</button>
+            <button class="terminal-btn" id="close-terminal" title="Close">×</button>
           </div>
         </div>
         <div class="terminal-content" id="terminal-content">
@@ -1666,4 +1702,140 @@ setTimeout(() => {
         (window as any).gitUI = new GitUI(gitContainer);
     }
     
+    // Initialize File Explorer
+    const fileExplorerContainer = document.getElementById('file-explorer-container');
+    if (fileExplorerContainer) {
+        const fileExplorer = new FileExplorer(fileExplorerContainer);
+        (window as any).fileExplorer = fileExplorer;
+        
+        // Initialize Editor Tabs
+        const editorArea = document.getElementById('editor-area');
+        if (editorArea) {
+            const editorTabs = new EditorTabs(editorArea);
+            (window as any).editorTabs = editorTabs;
+            
+            // Connect file explorer to editor
+            fileExplorer.onFileSelect((filePath: string) => {
+                editorTabs.openFile(filePath);
+            });
+            
+            // Connect Git UI file clicks to editor
+            document.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const fileNode = target.closest('.git-file');
+                if (fileNode) {
+                    const filePath = fileNode.getAttribute('data-file');
+                    if (filePath) {
+                        editorTabs.openFile(filePath);
+                    }
+                }
+            });
+        }
+    }
+    
+    // Initialize Neural Consciousness in its container
+    const neuralContainer = document.getElementById('neural-consciousness-container');
+    if (neuralContainer) {
+        const neuralConsciousness = new NeuralConsciousness(neuralContainer);
+        (window as any).neuralConsciousness = neuralConsciousness;
+    }
+    
+    // Set up activity bar toggle functionality
+    const activityButtons = document.querySelectorAll('.activity-btn');
+    const sidePanel = document.getElementById('side-panel');
+    const fileExplorerPanel = document.getElementById('file-explorer-panel');
+    const sourceControlPanel = document.getElementById('source-control-panel');
+    let currentView: string | null = null;
+    
+    activityButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const view = btn.getAttribute('data-view');
+            
+            // Toggle panel if clicking same button
+            if (currentView === view && sidePanel) {
+                sidePanel.style.display = sidePanel.style.display === 'none' ? 'block' : 'none';
+                if (sidePanel.style.display === 'none') {
+                    btn.classList.remove('active');
+                    currentView = null;
+                }
+                return;
+            }
+            
+            // Update active state
+            activityButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentView = view;
+            
+            // Show side panel and correct content
+            if (sidePanel) {
+                sidePanel.style.display = 'block';
+            }
+            
+            // Show/hide panels
+            if (view === 'explorer' && fileExplorerPanel && sourceControlPanel) {
+                fileExplorerPanel.style.display = 'block';
+                sourceControlPanel.style.display = 'none';
+            } else if (view === 'git' && fileExplorerPanel && sourceControlPanel) {
+                fileExplorerPanel.style.display = 'none';
+                sourceControlPanel.style.display = 'block';
+            }
+        });
+    });
+    
+    // Terminal controls
+    const minimizeTerminal = document.getElementById('minimize-terminal');
+    const closeTerminal = document.getElementById('close-terminal');
+    const terminalSection = document.getElementById('terminal-section');
+    
+    if (minimizeTerminal && terminalSection) {
+        minimizeTerminal.addEventListener('click', () => {
+            terminalSection.classList.toggle('minimized');
+        });
+    }
+    
+    if (closeTerminal && terminalSection) {
+        closeTerminal.addEventListener('click', () => {
+            terminalSection.style.display = 'none';
+        });
+    }
+    
+    // Add resize functionality
+    setupResizeHandles();
+    
+    // Menu events are handled via window.addEventListener for messages from main process
+    // This would need to be set up in preload script if we want menu events
+    
 }, 200);
+
+// Resize functionality for panels
+function setupResizeHandles() {
+    const terminalResize = document.getElementById('terminal-resize');
+    const terminalSection = document.getElementById('terminal-section');
+    
+    if (terminalResize && terminalSection) {
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
+        
+        terminalResize.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = parseInt(window.getComputedStyle(terminalSection).height, 10);
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const deltaY = startY - e.clientY;
+            const newHeight = Math.min(Math.max(startHeight + deltaY, 100), 600);
+            terminalSection.style.height = newHeight + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.style.cursor = '';
+        });
+    }
+}

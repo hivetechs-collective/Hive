@@ -1,0 +1,319 @@
+/* VS Code-style File Explorer */
+.file-explorer-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1e1e1e;
+  color: #cccccc;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  user-select: none;
+}
+
+.file-explorer-header {
+  padding: 8px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #999;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-explorer-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.file-explorer-action {
+  background: transparent;
+  border: none;
+  color: #999;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.file-explorer-action:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+/* Virtual Scroller */
+.virtual-scroller {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.virtual-content {
+  position: relative;
+}
+
+/* File Nodes */
+.file-node {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.1s;
+}
+
+.file-node:hover {
+  background: #2a2d2e;
+}
+
+.file-node.selected {
+  background: #094771;
+}
+
+.file-node.selected:hover {
+  background: #094771;
+}
+
+.file-icon {
+  margin-right: 6px;
+  flex-shrink: 0;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-indicator {
+  margin-left: auto;
+  padding-left: 8px;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.git-indicator.modified {
+  color: #e2c08d;
+}
+
+.git-indicator.added {
+  color: #73c991;
+}
+
+.git-indicator.deleted {
+  color: #f48771;
+}
+
+.git-indicator.untracked {
+  color: #6b6b6b;
+}
+
+/* Folder expand/collapse animation */
+.file-node[data-type="directory"] .file-icon {
+  transition: transform 0.2s;
+}
+
+.file-node[data-type="directory"].expanded .file-icon {
+  transform: rotate(90deg);
+}
+
+/* Editor Tabs */
+.editor-tabs-bar {
+  display: flex;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  height: 35px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.editor-tabs-bar::-webkit-scrollbar {
+  height: 3px;
+}
+
+.editor-tabs-bar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.editor-tabs-bar::-webkit-scrollbar-thumb {
+  background: #4a4a4a;
+  border-radius: 3px;
+}
+
+.editor-tab {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 35px;
+  background: #2d2d30;
+  border-right: 1px solid #252526;
+  cursor: pointer;
+  min-width: 100px;
+  max-width: 200px;
+  position: relative;
+  transition: background-color 0.1s;
+}
+
+.editor-tab:hover {
+  background: #353537;
+}
+
+.editor-tab.active {
+  background: #1e1e1e;
+  border-bottom: 2px solid #007acc;
+}
+
+.tab-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #969696;
+  padding-right: 8px;
+}
+
+.editor-tab.active .tab-name {
+  color: #ffffff;
+}
+
+.tab-close {
+  background: transparent;
+  border: none;
+  color: #969696;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.2s;
+  border-radius: 3px;
+}
+
+.editor-tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+/* Editors Container */
+.editors-container {
+  flex: 1;
+  position: relative;
+  background: #1e1e1e;
+}
+
+.editor-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Monaco Editor Overrides */
+.monaco-editor {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace !important;
+}
+
+.monaco-editor .margin {
+  background: #1e1e1e !important;
+}
+
+.monaco-editor .minimap {
+  border-left: 1px solid #3c3c3c;
+}
+
+/* Diff Editor */
+.diff-editor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* File Explorer Toggle */
+.explorer-toggle {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transition: all 0.2s;
+}
+
+.explorer-toggle:hover {
+  background: #3c3c3c;
+  width: 28px;
+}
+
+.explorer-toggle.hidden {
+  left: 200px;
+}
+
+/* Split View Layout */
+.split-view {
+  display: flex;
+  height: 100%;
+}
+
+.split-view .file-explorer-panel {
+  width: 240px;
+  min-width: 200px;
+  max-width: 400px;
+  resize: horizontal;
+  overflow: auto;
+  border-right: 1px solid #3c3c3c;
+}
+
+.split-view .editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Performance optimizations */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High DPI support */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .file-node,
+  .editor-tab {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

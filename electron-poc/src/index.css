@@ -435,16 +435,88 @@ body {
   overflow: hidden;
 }
 
-/* Left Sidebar - Widened to accommodate Neural Consciousness */
+/* Left Sidebar - VS Code Style with Activity Bar */
 .sidebar {
-  width: 240px;
   background: var(--background-primary);
   border-right: 1px solid var(--border-color);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   display: flex;
-  flex-direction: column;
   position: relative;
   z-index: 35;
+}
+
+/* Activity Bar */
+.activity-bar {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  background: var(--background-secondary);
+  border-top: 1px solid var(--border-color);
+}
+
+.activity-btn {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #858585;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.activity-btn:hover {
+  color: #cccccc;
+  background: var(--background-tertiary);
+  border-color: var(--border-color);
+}
+
+.activity-btn:hover .activity-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.activity-btn.active {
+  color: #ffffff;
+  background: var(--background-tertiary);
+  border-color: #007acc;
+}
+
+.activity-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.activity-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: #333;
+  color: #fff;
+  font-size: 11px;
+  white-space: nowrap;
+  border-radius: 3px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Side Panel */
+.side-panel {
+  flex: 1;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* Logo Section */
@@ -684,6 +756,34 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--background-primary);
+  position: relative;
+}
+
+/* Resize Handles */
+.resize-handle {
+  position: absolute;
+  background: transparent;
+  z-index: 100;
+}
+
+.horizontal-resize {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+}
+
+.horizontal-resize:hover {
+  background: #007acc;
+}
+
+.terminal-section.minimized {
+  height: 30px !important;
+}
+
+.terminal-section.minimized .terminal-content {
+  display: none;
 }
 
 /* Editor Tabs */
@@ -814,11 +914,11 @@ body {
 
 /* Terminal Section */
 .terminal-section {
-  height: 200px;
   background: #1a1a1a;
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .terminal-header {
