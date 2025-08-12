@@ -1124,11 +1124,13 @@ ipcMain.handle('get-analytics', async () => {
           
           analyticsData.recentActivity = (rows3 || []).map((row: any) => ({
             timestamp: row.timestamp,
+            question: row.question || 'Direct query',
             model: 'consensus-pipeline',
             cost: row.cost || 0,
             duration: (row.duration || 0) / 1000, // Convert to seconds
             status: 'completed',
-            tokens: (row.total_tokens_input || 0) + (row.total_tokens_output || 0)
+            tokens: (row.total_tokens_input || 0) + (row.total_tokens_output || 0),
+            conversationId: row.conversation_id
           }));
           
           // Get model usage from stage_outputs table (tracks all 4 models per conversation)

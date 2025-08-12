@@ -304,7 +304,7 @@
 
 .activity-table-wrapper {
   overflow-x: auto;
-  max-height: 300px;
+  max-height: 350px;
   overflow-y: auto;
 }
 
@@ -352,6 +352,38 @@
 
 .status-error {
   color: #ef4444;
+}
+
+/* Question and time cells */
+.question-cell {
+  max-width: 350px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #ffffff;
+  font-weight: 500;
+  cursor: help;
+}
+
+.question-cell:hover {
+  color: var(--hive-blue);
+}
+
+.time-cell {
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.date-small {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.cost-cell {
+  color: var(--hive-yellow);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Alerts Section */

@@ -31,11 +31,13 @@ interface AnalyticsData {
 
 interface Activity {
   timestamp: string;
+  question?: string;
   model: string;
   cost: number;
   duration: number;
   status: 'completed' | 'failed' | 'timeout';
   tokens: number;
+  conversationId?: string;
 }
 
 interface HourlyStat {
@@ -346,17 +348,17 @@ export class AnalyticsDashboard {
 
         <!-- Recent Activity Table -->
         <div class="activity-section">
-          <h3>Recent Activity</h3>
+          <h3>Recent Queries</h3>
           <div class="activity-table-wrapper">
             <table class="activity-table">
               <thead>
                 <tr>
                   <th>Time</th>
-                  <th>Model</th>
-                  <th>Status</th>
+                  <th style="width: 40%;">Question</th>
                   <th>Duration</th>
                   <th>Tokens</th>
                   <th>Cost</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody id="activity-tbody">
@@ -669,21 +671,45 @@ export class AnalyticsDashboard {
     const tbody = this.container?.querySelector('#activity-tbody');
     if (!tbody || !this.data) return;
 
+    if (this.data.recentActivity.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="no-data">No recent queries</td></tr>';
+      return;
+    }
+
     let html = '';
     
     this.data.recentActivity.forEach(activity => {
-      const time = new Date(activity.timestamp).toLocaleTimeString();
+      const date = new Date(activity.timestamp);
+      const time = date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit'
+      });
+      const dateStr = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      
       const statusClass = activity.status === 'completed' ? 'status-success' : 'status-error';
       const statusIcon = activity.status === 'completed' ? '✅' : '❌';
       
+      // Truncate long questions
+      const question = activity.question || 'Query';
+      const displayQuestion = question.length > 60 ? 
+        question.substring(0, 57) + '...' : question;
+      
       html += `
         <tr>
-          <td>${time}</td>
-          <td>${activity.model}</td>
-          <td class="${statusClass}">${statusIcon}</td>
-          <td>${(activity.duration / 1000).toFixed(1)}s</td>
+          <td class="time-cell">
+            <div>${time}</div>
+            <div class="date-small">${dateStr}</div>
+          </td>
+          <td class="question-cell" title="${question.replace(/"/g, '&quot;')}">
+            ${displayQuestion}
+          </td>
+          <td>${activity.duration.toFixed(1)}s</td>
           <td>${activity.tokens.toLocaleString()}</td>
-          <td>$${activity.cost.toFixed(3)}</td>
+          <td class="cost-cell">$${activity.cost.toFixed(3)}</td>
+          <td class="${statusClass}">${statusIcon}</td>
         </tr>
       `;
     });
