@@ -42,13 +42,13 @@ document.body.innerHTML = `
       <div class="activity-bar-unified">
         <!-- File & Git Section -->
         <button class="activity-btn" data-view="explorer" aria-label="Explorer">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M17.5 0h-9L7 1.5V6H2.5L1 7.5v15.07L2.5 24h12.07L16 22.57V18h4.7l1.3-1.43v-14l-1.3-1.43L17.5 0zm0 2.12l2.38 2.38v12.38l-2.38 2.38H16v-10l-1.5-1.5H8V1.5l1.5-.08H17.5z"/>
           </svg>
           <span class="activity-tooltip">Explorer (Ctrl+Shift+E)</span>
         </button>
         <button class="activity-btn" data-view="git" aria-label="Source Control">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M21.007 8.222A3.738 3.738 0 0 0 15.045 5.2a3.737 3.737 0 0 0 1.156 6.583 2.988 2.988 0 0 1-2.668 1.67h-2.99a4.456 4.456 0 0 0-2.989 1.165V7.4a3.737 3.737 0 1 0-1.494 0v9.117a3.776 3.776 0 1 0 1.816.099 2.99 2.99 0 0 1 2.668-1.667h2.99a4.484 4.484 0 0 0 4.223-3.039 3.736 3.736 0 0 0 3.25-3.687zM4.565 3.738a2.242 2.242 0 1 1 4.484 0 2.242 2.242 0 0 1-4.484 0zm4.484 16.441a2.242 2.242 0 1 1-4.484 0 2.242 2.242 0 0 1 4.484 0zm8.221-9.715a2.242 2.242 0 1 1 0-4.485 2.242 2.242 0 0 1 0 4.485z"/>
           </svg>
           <span class="activity-tooltip">Source Control (Ctrl+Shift+G)</span>
@@ -58,19 +58,19 @@ document.body.innerHTML = `
         
         <!-- Analytics, Settings, Memory Section -->
         <button class="activity-btn" data-view="analytics" aria-label="Analytics">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 13h2v8H3zm4-8h2v16H7zm4-2h2v18h-2zm4 4h2v14h-2zm4-2h2v16h-2z"/>
           </svg>
           <span class="activity-tooltip">Analytics</span>
         </button>
         <button class="activity-btn" data-view="settings" aria-label="Settings">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM12 14a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm9.95-2.01l-1.9-.63c-.13-.42-.29-.83-.48-1.23l1.13-1.62-1.41-1.41-1.62 1.13c-.4-.19-.81-.35-1.23-.48l-.63-1.9h-2l-.63 1.9c-.42.13-.83.29-1.23.48L9.3 6.11 7.89 7.52l1.13 1.62c-.19.4-.35.81-.48 1.23l-1.9.63v2l1.9.63c.13.42.29.83.48 1.23l-1.13 1.62 1.41 1.41 1.62-1.13c.4.19.81.35 1.23.48l.63 1.9h2l.63-1.9c.42-.13.83-.29 1.23-.48l1.62 1.13 1.41-1.41-1.13-1.62c.19-.4.35-.81.48-1.23l1.9-.63v-2z"/>
           </svg>
           <span class="activity-tooltip">Settings</span>
         </button>
         <button class="activity-btn" data-view="memory" aria-label="Memory">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M21.67 14.24c-.21-.62-.64-1.12-1.21-1.41l-2.96-1.5V8.82c1.13-.45 1.92-1.55 1.92-2.84 0-1.68-1.37-3.05-3.05-3.05-1.68 0-3.05 1.37-3.05 3.05 0 1.29.79 2.39 1.92 2.84v2.51l-2.96 1.5c-.57.29-1 .79-1.21 1.41-.43 1.27.05 2.68 1.15 3.36l3.39 2.11c.4.25.85.37 1.3.37s.9-.12 1.3-.37l3.39-2.11c1.1-.68 1.58-2.09 1.07-3.36zM7.64 14.24c-.21-.62-.64-1.12-1.21-1.41l-2.96-1.5V8.82c1.13-.45 1.92-1.55 1.92-2.84C5.39 4.3 4.02 2.93 2.34 2.93S-.73 4.3-.73 5.98c0 1.29.79 2.39 1.92 2.84v2.51l-2.96 1.5c-.57.29-1 .79-1.21 1.41-.43 1.27.05 2.68 1.15 3.36l3.39 2.11c.4.25.85.37 1.3.37s.9-.12 1.3-.37l3.39-2.11c1.1-.68 1.58-2.09 1.07-3.36z"/>
           </svg>
           <span class="activity-tooltip">Memory</span>
