@@ -438,7 +438,11 @@ export class AnalyticsDashboard {
 
     // Update today's metrics
     updateMetric('today-queries', this.data.todayQueries.toLocaleString());
-    updateMetric('today-cost', `$${this.data.todayCost.toFixed(2)}`);
+    // Show more precision for small costs (< $0.10)
+    const todayCostFormatted = this.data.todayCost < 0.10 && this.data.todayCost > 0 
+      ? `$${this.data.todayCost.toFixed(4)}` 
+      : `$${this.data.todayCost.toFixed(2)}`;
+    updateMetric('today-cost', todayCostFormatted);
     
     // Update all-time metrics
     updateMetric('total-queries', this.data.totalQueries.toLocaleString());

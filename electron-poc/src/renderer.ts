@@ -288,6 +288,7 @@ document.body.innerHTML = `
 let currentView = 'consensus';
 let isConnected = false;
 let isProcessing = false;
+let conversationStartTime = 0;
 let settingsModal: SettingsModal | null = null;
 let dailyUsageCount = 0;
 let dailyLimit = 5;
@@ -579,6 +580,7 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
   }
   
   isProcessing = true;
+  conversationStartTime = performance.now();
   (window as any).consensusStartTime = Date.now();
   totalTokens = 0;
   totalCost = 0;
@@ -654,6 +656,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   }
   
   isProcessing = true;
+  conversationStartTime = performance.now();
   (window as any).consensusStartTime = Date.now();
   totalTokens = 0;
   totalCost = 0;
@@ -710,6 +713,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
 // Fallback REST API function
 runConsensusViaREST = async (query: string) => {
   isProcessing = true;
+  conversationStartTime = performance.now();
   (window as any).consensusStartTime = Date.now();
   totalTokens = 0;
   totalCost = 0;
@@ -1539,8 +1543,54 @@ const loadSessionMetrics = () => {
 };
 
 // Save consensus analytics
-const saveConsensusAnalytics = (totalTokens: number, totalCost: number) => {
+const saveConsensusAnalytics = async (totalTokens: number, totalCost: number) => {
   const timestamp = new Date().toISOString();
+  
+  // Generate a unique conversation ID
+  const conversationId = `conv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  
+  // Get the current question from the chat
+  const chatContent = document.getElementById('chat-content');
+  const userMessages = chatContent?.querySelectorAll('.user-message');
+  const lastUserMessage = userMessages?.[userMessages.length - 1]?.textContent || 'Consensus query';
+  
+  // Get the assistant's response
+  const assistantMessages = chatContent?.querySelectorAll('.assistant-message');
+  const lastAssistantMessage = assistantMessages?.[assistantMessages.length - 1]?.textContent || '';
+  
+  // Save to database via Electron API
+  try {
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI && electronAPI.saveConversation) {
+      // Log the values being saved
+      console.log('💾 Saving conversation with:', {
+        conversationId,
+        totalCost,
+        totalTokens,
+        question: lastUserMessage.substring(0, 50) + '...'
+      });
+      
+      const saved = await electronAPI.saveConversation({
+        conversationId,
+        question: lastUserMessage,
+        answer: lastAssistantMessage,
+        totalCost,
+        totalTokens,
+        inputTokens: Math.floor(totalTokens * 0.7),
+        outputTokens: Math.floor(totalTokens * 0.3),
+        duration: performance.now() - conversationStartTime,
+        model: 'consensus-pipeline'
+      });
+      
+      if (saved) {
+        console.log('✅ Conversation saved to database with cost $' + totalCost.toFixed(4));
+        // Update the conversation count after saving
+        updateConversationCount();
+      }
+    }
+  } catch (error) {
+    console.error('Failed to save conversation:', error);
+  }
   
   // Update session metrics
   sessionMetrics.totalQueries++;

@@ -864,6 +864,12 @@ ipcMain.handle('save-conversation', async (_, data: {
       return;
     }
     
+    console.log('📝 Saving conversation to database:', {
+      id: data.conversationId,
+      cost: data.totalCost,
+      tokens: data.totalTokens
+    });
+    
     const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io
     const timestamp = new Date().toISOString();
     
@@ -1032,10 +1038,11 @@ ipcMain.handle('get-analytics', async () => {
     const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io user ID
     
     // Get TODAY's queries for this user from conversation_usage table
+    // Use UTC dates consistently since timestamps are stored in UTC
     db.get(`
       SELECT COUNT(*) as count 
       FROM conversation_usage 
-      WHERE date(timestamp) = date('now', 'localtime') 
+      WHERE date(timestamp, 'localtime') = date('now', 'localtime') 
       AND user_id = ?
     `, [userId], (err1, row1: any) => {
       if (err1) {
@@ -1057,6 +1064,7 @@ ipcMain.handle('get-analytics', async () => {
         analyticsData.totalQueries = rowTotal?.count || 0;
       
         // Get TODAY's cost and token usage - join with conversation_usage for user filtering
+        // Convert UTC timestamps to localtime for date comparison
         db.get(`
           SELECT 
             SUM(c.total_cost) as total_cost,
@@ -1066,7 +1074,7 @@ ipcMain.handle('get-analytics', async () => {
           FROM conversations c
           INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
           LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
-          WHERE date(cu.timestamp) = date('now', 'localtime')
+          WHERE date(cu.timestamp, 'localtime') = date('now', 'localtime')
           AND cu.user_id = ?
         `, [userId], (err2, row2: any) => {
         if (err2) console.error('Error getting today cost data:', err2);
