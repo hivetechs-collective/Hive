@@ -814,36 +814,65 @@ export class SettingsModal {
           if (result.licenseInfo) {
             results.push(`📊 Tier: ${result.licenseInfo.tier}`);
             
-            // Show usage information based on what D1 provides
-            if (result.licenseInfo.remaining !== undefined) {
-              // D1 provided remaining count
-              if (result.licenseInfo.remaining === 'unlimited') {
-                results.push(`✅ Unlimited conversations`);
-              } else {
-                if (result.licenseInfo.dailyUsed !== undefined) {
-                  // Show both used and remaining
-                  results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}`);
-                  results.push(`✅ Remaining today: ${result.licenseInfo.remaining}`);
+            // Get actual usage from local database (same source as status bar)
+            try {
+              const localUsage = await (window as any).electronAPI?.getUsageCount();
+              if (localUsage) {
+                console.log('Using local usage data in settings:', localUsage);
+                if (localUsage.limit === 999999) {
+                  results.push(`📈 Used today: ${localUsage.used}`);
+                  results.push(`✅ Unlimited conversations`);
                 } else {
-                  // Only show remaining
-                  results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit || '?'}`);
-                  results.push(`✅ Remaining today: ${result.licenseInfo.remaining}`);
+                  results.push(`📈 Used today: ${localUsage.used}`);
+                  results.push(`✅ Remaining today: ${localUsage.remaining}`);
+                  results.push(`💬 Daily limit: ${localUsage.limit}`);
+                }
+              } else {
+                // Fallback to D1 data if local DB fails
+                if (result.licenseInfo.remaining !== undefined) {
+                  if (result.licenseInfo.remaining === 'unlimited') {
+                    results.push(`✅ Unlimited conversations`);
+                  } else {
+                    if (result.licenseInfo.dailyUsed !== undefined) {
+                      results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}`);
+                      results.push(`✅ Remaining today: ${result.licenseInfo.remaining}`);
+                    } else {
+                      results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit || '?'}`);
+                      results.push(`✅ Remaining today: ${result.licenseInfo.remaining}`);
+                    }
+                  }
+                } else if (result.licenseInfo.dailyUsed !== undefined && result.licenseInfo.dailyLimit !== undefined) {
+                  const remaining = result.licenseInfo.dailyLimit - result.licenseInfo.dailyUsed;
+                  results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}`);
+                  results.push(`✅ Remaining today: ${remaining}`);
+                } else if (result.licenseInfo.dailyLimit !== undefined) {
+                  results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
                 }
               }
-            } else if (result.licenseInfo.dailyUsed !== undefined && result.licenseInfo.dailyLimit !== undefined) {
-              // D1 provided used count and limit
-              const remaining = result.licenseInfo.dailyLimit - result.licenseInfo.dailyUsed;
-              results.push(`📈 Used today: ${result.licenseInfo.dailyUsed}`);
-              results.push(`✅ Remaining today: ${remaining}`);
-            } else if (result.licenseInfo.dailyLimit !== undefined) {
-              // D1 only provided limit (no usage data from validation endpoint)
-              results.push(`💬 Daily limit: ${result.licenseInfo.dailyLimit} conversations`);
+            } catch (error) {
+              console.error('Failed to get local usage in settings:', error);
+              // Use D1 data as fallback
+              if (result.licenseInfo.dailyUsed !== undefined) {
+                results.push(`📈 Used today: ${result.licenseInfo.dailyUsed} (from D1)`);
+              }
             }
             
             if (result.licenseInfo.email) {
               results.push(`📧 Account: ${result.licenseInfo.email}`);
             }
-            this.updateLicenseStatus(result.licenseInfo);
+            
+            // Update license status with local usage data
+            const updatedLicenseInfo = { ...result.licenseInfo };
+            try {
+              const localUsage = await (window as any).electronAPI?.getUsageCount();
+              if (localUsage) {
+                updatedLicenseInfo.dailyUsed = localUsage.used;
+                updatedLicenseInfo.remaining = localUsage.remaining;
+              }
+            } catch (error) {
+              console.error('Failed to get local usage for license status:', error);
+            }
+            this.updateLicenseStatus(updatedLicenseInfo);
           }
         } else {
           results.push('❌ Hive key is invalid');
@@ -1021,14 +1050,28 @@ export class SettingsModal {
     }
     
     try {
-      // Silently test the key to get latest usage from D1
+      // Test the key to get license info from D1
       const result = await (window as any).settingsAPI.testKeys({
         hiveKey: hiveKey
       });
       
       if (result.hiveValid && result.licenseInfo) {
-        // Update the display with fresh data from D1
-        this.updateLicenseStatus(result.licenseInfo);
+        // Get actual usage from local database (same source as status bar)
+        const updatedLicenseInfo = { ...result.licenseInfo };
+        try {
+          const localUsage = await (window as any).electronAPI?.getUsageCount();
+          if (localUsage) {
+            console.log('Using local usage for license status:', localUsage);
+            updatedLicenseInfo.dailyUsed = localUsage.used;
+            updatedLicenseInfo.remaining = localUsage.remaining;
+            updatedLicenseInfo.dailyLimit = localUsage.limit;
+          }
+        } catch (error) {
+          console.error('Failed to get local usage for refresh:', error);
+        }
+        
+        // Update the display with combined data (D1 license info + local usage)
+        this.updateLicenseStatus(updatedLicenseInfo);
         
         // Also update the main status bar
         if (this.onSettingsChanged) {
@@ -1320,7 +1363,7 @@ export class SettingsModal {
     });
   }
 
-  private showMessage(message: string, type: 'success' | 'error') {
+  private showMessage(message: string, type: 'success' | 'error' | 'info') {
     // Calculate position based on existing notifications
     const existingToasts = document.querySelectorAll('.toast');
     const topOffset = 60 + (existingToasts.length * 60); // Stack notifications
@@ -1334,7 +1377,7 @@ export class SettingsModal {
       top: ${topOffset}px;
       right: 20px;
       padding: 12px 20px;
-      background: ${type === 'success' ? '#4CAF50' : '#F44336'};
+      background: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#F44336' : '#2196F3'};
       color: white;
       border-radius: 4px;
       z-index: 10000;
@@ -1420,8 +1463,37 @@ export class SettingsModal {
   }
   
   public renderInContainer(container: HTMLElement): void {
-    // Render the settings UI directly in the container (for panel mode)
-    container.innerHTML = this.createModal();
-    this.initializeModal(container);
+    // Render the actual settings content (without modal wrapper) in the container
+    const modalContent = this.createModal();
+    
+    // Extract just the settings-content div from the modal
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = modalContent;
+    const settingsContent = tempDiv.querySelector('.settings-content');
+    
+    if (settingsContent) {
+      container.innerHTML = settingsContent.outerHTML;
+    } else {
+      // Fallback to full modal content if settings-content not found
+      container.innerHTML = modalContent;
+    }
+    
+    this.initializePanelMode(container);
   }
+
+  private initializePanelMode(container: HTMLElement): void {
+    // Load models from database first
+    this.loadModelsFromDatabase().then(() => {
+      // Update model dropdowns if they exist
+      this.updateModelDropdowns();
+    });
+    
+    // Use the same event handlers as the modal, but scoped to container
+    this.setupEventHandlers();
+    this.setupProfileCreationHandlers();
+    
+    // Load saved settings
+    this.loadSettings();
+  }
+
 }

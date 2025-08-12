@@ -1733,6 +1733,7 @@ setTimeout(() => {
         const panel = document.createElement('div');
         panel.id = `${id}-panel`;
         panel.className = 'content-panel';
+        console.log('Creating panel:', id, panel);
         panel.innerHTML = `
             <div class="panel-header">
                 <span>${title}</span>
@@ -1808,6 +1809,7 @@ setTimeout(() => {
                 // Show selected panel
                 const panel = panels[view];
                 if (panel) {
+                    console.log('Showing panel for view:', view, panel);
                     panel.style.display = 'block';
                     btn.classList.add('active');
                     currentView = view;
@@ -1823,11 +1825,21 @@ setTimeout(() => {
                         if (container) {
                             window.gitUI = new GitUI(container);
                         }
-                    } else if (view === 'settings' && !settingsModal) {
-                        settingsModal = new SettingsModal();
+                    } else if (view === 'settings') {
+                        console.log('Rendering settings panel...');
                         const container = document.getElementById('settings-container');
-                        if (container) {
-                            settingsModal.renderInContainer(container);
+                        if (container && settingsModal) {
+                            // Check if container is empty (not yet rendered)
+                            if (container.innerHTML.trim() === '') {
+                                console.log('Rendering settings in container:', container);
+                                settingsModal.renderInContainer(container);
+                            } else {
+                                console.log('Settings already rendered in container');
+                            }
+                        } else if (!settingsModal) {
+                            console.error('Settings modal not initialized');
+                        } else {
+                            console.error('Settings container not found');
                         }
                     } else if (view === 'analytics' && analyticsPanel) {
                         showAnalyticsPanel();
