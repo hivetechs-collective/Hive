@@ -5,6 +5,7 @@
 
 import { FileNode } from './types/window';
 import { getFileIcon, getFolderIcon, createIconElement } from './file-icons';
+import { GitDecorationProvider, GitDecoration } from './git-decoration-provider';
 
 // VS Code's TreeItemCollapsibleState
 enum TreeItemCollapsibleState {
@@ -32,6 +33,8 @@ export class VSCodeExplorerExact {
   private rootNodes: TreeNode[] = [];
   private draggedNode: TreeNode | null = null;
   private dropTarget: HTMLElement | null = null;
+  private gitDecorationProvider: GitDecorationProvider | null = null;
+  private rootPath: string = '/Users/veronelazio/Developer/Private/hive/electron-poc';
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -42,8 +45,31 @@ export class VSCodeExplorerExact {
     console.log('[VSCodeExplorer] Initializing exact VS Code implementation...');
     this.setupContainer();
     this.attachStyles();
+    
+    // Initialize Git decoration provider
+    await this.initializeGitDecorations();
+    
     await this.loadRootDirectory();
     this.render();
+  }
+  
+  private async initializeGitDecorations() {
+    try {
+      console.log('[VSCodeExplorer] Initializing Git decorations...');
+      this.gitDecorationProvider = new GitDecorationProvider(this.rootPath);
+      
+      // Listen for decoration changes
+      this.gitDecorationProvider.on('decorationsChanged', (changedPaths: string[]) => {
+        console.log('[VSCodeExplorer] Git decorations changed, re-rendering...');
+        this.render(); // Re-render when Git status changes
+      });
+      
+      // Initialize the provider
+      await this.gitDecorationProvider.initialize();
+      console.log('[VSCodeExplorer] Git decorations initialized');
+    } catch (error) {
+      console.error('[VSCodeExplorer] Failed to initialize Git decorations:', error);
+    }
   }
 
   private setupContainer() {
@@ -382,7 +408,54 @@ export class VSCodeExplorerExact {
     label.className = 'label-name';
     label.textContent = node.name;
     
-    nameContainer.appendChild(label);
+    // Apply Git decoration if available
+    if (this.gitDecorationProvider) {
+      const decoration = this.gitDecorationProvider.getDecoration(node.path);
+      if (decoration) {
+        // Apply color to the label
+        if (decoration.color) {
+          label.style.color = decoration.color;
+        }
+        
+        // Add Git status badge
+        if (decoration.badge) {
+          const gitIndicator = document.createElement('span');
+          gitIndicator.className = 'git-indicator';
+          gitIndicator.textContent = decoration.badge;
+          
+          // Determine the status class based on the badge
+          if (decoration.badge === 'M') {
+            gitIndicator.classList.add('modified');
+          } else if (decoration.badge === 'A') {
+            gitIndicator.classList.add('added');
+          } else if (decoration.badge === 'D') {
+            gitIndicator.classList.add('deleted');
+          } else if (decoration.badge === 'U') {
+            gitIndicator.classList.add('untracked');
+          }
+          
+          // Apply custom color if different from default
+          if (decoration.color) {
+            gitIndicator.style.color = decoration.color;
+          }
+          
+          nameContainer.appendChild(label);
+          nameContainer.appendChild(gitIndicator);
+        } else {
+          nameContainer.appendChild(label);
+        }
+        
+        // Add tooltip if available
+        if (decoration.tooltip) {
+          row.title = decoration.tooltip;
+        }
+      } else {
+        nameContainer.appendChild(label);
+      }
+    } else {
+      nameContainer.appendChild(label);
+    }
+    
     container.appendChild(nameContainer);
     iconLabel.appendChild(container);
     explorerItem.appendChild(iconLabel);
@@ -639,6 +712,12 @@ export class VSCodeExplorerExact {
     console.log('[VSCodeExplorer] Refreshing...');
     this.treeData.clear();
     this.expandedNodes.clear();
+    
+    // Refresh Git decorations
+    if (this.gitDecorationProvider) {
+      await this.gitDecorationProvider.refreshStatus();
+    }
+    
     await this.loadRootDirectory();
     await this.render();
   }
@@ -682,8 +761,12 @@ export class VSCodeExplorerExact {
       const result = await window.fileAPI.createFile(targetDir, fileName);
       console.log('[VSCodeExplorer] IPC result:', result);
       console.log('[VSCodeExplorer] File created successfully, refreshing...');
-      await this.refresh();
-      console.log('[VSCodeExplorer] Refresh completed');
+      
+      // Give Git a moment to detect the new file
+      setTimeout(async () => {
+        await this.refresh();
+        console.log('[VSCodeExplorer] Refresh completed');
+      }, 500);
     } catch (error) {
       console.error('[VSCodeExplorer] Failed to create file:', error);
       alert('Failed to create file: ' + (error as any).message);
@@ -709,8 +792,12 @@ export class VSCodeExplorerExact {
       const result = await window.fileAPI.createFolder(targetDir, folderName);
       console.log('[VSCodeExplorer] IPC result:', result);
       console.log('[VSCodeExplorer] Folder created successfully, refreshing...');
-      await this.refresh();
-      console.log('[VSCodeExplorer] Refresh completed');
+      
+      // Give Git a moment to detect the new folder
+      setTimeout(async () => {
+        await this.refresh();
+        console.log('[VSCodeExplorer] Refresh completed');
+      }, 500);
     } catch (error) {
       console.error('[VSCodeExplorer] Failed to create folder:', error);
       alert('Failed to create folder: ' + (error as any).message);
@@ -718,6 +805,12 @@ export class VSCodeExplorerExact {
   }
 
   public destroy() {
+    // Clean up Git decoration provider
+    if (this.gitDecorationProvider) {
+      this.gitDecorationProvider.dispose();
+      this.gitDecorationProvider = null;
+    }
+    
     this.container.innerHTML = '';
   }
   
