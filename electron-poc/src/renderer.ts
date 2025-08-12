@@ -5,10 +5,12 @@
 
 import './index.css';
 import './neural-consciousness.css';
+import './analytics.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { NeuralConsciousness } from './neural-consciousness';
+import { analyticsDashboard } from './analytics';
 
 // Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
@@ -94,7 +96,7 @@ document.body.innerHTML = `
     <div class="center-area" id="center-area">
       <!-- Tabs -->
       <div class="editor-tabs">
-        <div class="tab active">
+        <div class="tab active" data-tab="day0">
           <span class="tab-icon">🧠</span>
           <span class="tab-name">Day 0 Validation</span>
           <span class="tab-close">×</span>
@@ -103,7 +105,13 @@ document.body.innerHTML = `
       
       <!-- Main Content Area (Above Terminal) -->
       <div class="main-editor-area">
-        <div class="welcome-content">
+        <!-- Analytics Panel (Hidden by default) -->
+        <div id="analytics-panel" class="panel-content" style="display: none;">
+          <!-- Analytics content will be mounted here -->
+        </div>
+        
+        <!-- Welcome Content (Default view) -->
+        <div id="welcome-content" class="welcome-content">
           <h2>Hive Consensus - Day 0 Validation</h2>
           <div class="validation-status">
             <div class="status-item">
@@ -512,11 +520,7 @@ function updateStageStatus(stage: string, status: 'ready' | 'running' | 'complet
   }
 }
 
-// Control panel button handlers
-document.getElementById('analytics-btn')?.addEventListener('click', () => {
-  addLogEntry('📊 Analytics panel clicked', 'info');
-  addChatMessage('Analytics functionality coming soon...', true);
-});
+// Control panel button handlers (moved to after function definitions)
 
 document.getElementById('settings-btn')?.addEventListener('click', () => {
   addLogEntry('⚙️ Opening settings...', 'info');
@@ -575,6 +579,7 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
   }
   
   isProcessing = true;
+  (window as any).consensusStartTime = Date.now();
   totalTokens = 0;
   totalCost = 0;
   currentStageTokens = 0;
@@ -649,6 +654,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   }
   
   isProcessing = true;
+  (window as any).consensusStartTime = Date.now();
   totalTokens = 0;
   totalCost = 0;
   currentStageTokens = 0;
@@ -704,6 +710,7 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
 // Fallback REST API function
 runConsensusViaREST = async (query: string) => {
   isProcessing = true;
+  (window as any).consensusStartTime = Date.now();
   totalTokens = 0;
   totalCost = 0;
   currentStageTokens = 0;
@@ -899,6 +906,10 @@ function initializeWebSocket() {
       // Reset current stage tokens since this stage is done
       currentStageTokens = 0;
       updateConsensusStats();
+      
+      // Track stage metrics for analytics
+      trackStageCompletion(stageName, tokens, cost);
+      
       addLogEntry(`✅ ${stage} completed (${tokens} tokens, ${formatCost(cost)})`, 'success');
     },
     
@@ -912,6 +923,9 @@ function initializeWebSocket() {
       totalTokens = finalTokens;
       totalCost = finalCost;
       updateConsensusStats();
+      
+      // Save analytics data for the dashboard
+      saveConsensusAnalytics(finalTokens, finalCost);
       
       // Mark as no longer processing
       isProcessing = false;
@@ -1186,42 +1200,16 @@ async function updateStatusBar() {
           console.log('Set plan display to:', tier);
         }
         
-        // Update conversations display based on what D1 actually returns
-        if (conversationsElement) {
-          console.log('Updating conversations with:', {
-            remaining: result.licenseInfo.remaining,
-            dailyUsed: result.licenseInfo.dailyUsed,
-            dailyLimit: result.licenseInfo.dailyLimit
-          });
-          
-          if (result.licenseInfo.remaining !== undefined) {
-            // D1 provided remaining count
-            if (result.licenseInfo.remaining === 'unlimited' || result.licenseInfo.remaining === 2147483647 || result.licenseInfo.remaining === 4294967295) {
-              conversationsElement.textContent = 'Unlimited';
-            } else {
-              // Calculate used from remaining
-              const limit = result.licenseInfo.dailyLimit || 10;
-              const used = limit - result.licenseInfo.remaining;
-              dailyUsageCount = used;
-              dailyLimit = limit;
-              conversationsElement.textContent = `${used} used / ${result.licenseInfo.remaining} remaining`;
-            }
-          } else if (result.licenseInfo.dailyUsed !== undefined && result.licenseInfo.dailyLimit !== undefined) {
-            // D1 provided used count and limit
-            dailyUsageCount = result.licenseInfo.dailyUsed;
-            dailyLimit = result.licenseInfo.dailyLimit;
-            const remaining = result.licenseInfo.dailyLimit - result.licenseInfo.dailyUsed;
-            conversationsElement.textContent = `${result.licenseInfo.dailyUsed} used / ${remaining} remaining`;
-          } else if (result.licenseInfo.dailyLimit !== undefined) {
-            // D1 only provided limit (no usage data from validation endpoint)
-            // Track usage locally since D1 tracks via pre/post conversation
-            dailyLimit = result.licenseInfo.dailyLimit;
-            conversationsElement.textContent = `${dailyUsageCount} used / ${dailyLimit} remaining`;
-          } else {
-            // No usage info available
-            conversationsElement.textContent = '-- remaining';
-          }
+        // Don't update conversation count here - let updateConversationCount handle it from local DB
+        // Just store the tier info for display
+        if (result.licenseInfo.tier === 'unlimited') {
+          dailyLimit = 999999;
+        } else if (result.licenseInfo.dailyLimit) {
+          dailyLimit = result.licenseInfo.dailyLimit;
         }
+        
+        // The actual count will be updated by updateConversationCount from local database
+        console.log('D1 validation complete, will fetch actual usage from local DB');
       } else {
         // Invalid license
         if (userElement) userElement.textContent = 'Invalid license';
@@ -1255,12 +1243,33 @@ settingsModal = new SettingsModal(() => {
 });
 settingsModal.initializeModal(document.body);
 
-// Function to update just the conversation count
-function updateConversationCount() {
-  const conversationsElement = document.getElementById('status-conversations');
-  if (conversationsElement) {
-    const remaining = Math.max(0, dailyLimit - dailyUsageCount);
-    conversationsElement.textContent = `${dailyUsageCount} used / ${remaining} remaining`;
+// Function to update just the conversation count from database
+async function updateConversationCount() {
+  try {
+    // Fetch real usage from database
+    const usage = await (window as any).electronAPI?.getUsageCount();
+    if (usage) {
+      console.log('Usage from database:', usage);
+      dailyUsageCount = usage.used;
+      dailyLimit = usage.limit;
+      
+      const conversationsElement = document.getElementById('status-conversations');
+      if (conversationsElement) {
+        if (usage.limit === 999999) {
+          conversationsElement.textContent = `${usage.used} used / Unlimited`;
+        } else {
+          conversationsElement.textContent = `${usage.used} used / ${usage.remaining} remaining`;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to update conversation count:', error);
+    // Fallback to local count
+    const conversationsElement = document.getElementById('status-conversations');
+    if (conversationsElement) {
+      const remaining = Math.max(0, dailyLimit - dailyUsageCount);
+      conversationsElement.textContent = `${dailyUsageCount} used / ${remaining} remaining`;
+    }
   }
 }
 
@@ -1337,10 +1346,14 @@ async function loadActiveProfile() {
 }
 
 // Update status bar on startup
-setTimeout(() => {
+setTimeout(async () => {
   console.log('🔄 Updating status bar and loading profile...');
-  updateStatusBar();
+  await updateStatusBar();
   loadActiveProfile();
+  
+  // ALWAYS update conversation count from local database (overrides D1)
+  await updateConversationCount();
+  console.log('Updated conversation count from local database');
   
   // Initialize Neural Consciousness AFTER critical components
   // Feature flag controlled and safe initialization
@@ -1359,4 +1372,301 @@ setTimeout(() => {
       ENABLE_NEURAL_CONSCIOUSNESS = false;
     }
   }
-}, 500);
+}, 100);
+
+// Analytics Panel Management
+let analyticsPanel: HTMLElement | null = null;
+
+function showAnalyticsPanel(): void {
+    // Get the analytics panel that's already in the DOM
+    const analyticsPanel = document.getElementById('analytics-panel');
+    const welcomeContent = document.getElementById('welcome-content');
+    
+    if (!analyticsPanel) {
+        console.error('Analytics panel not found in DOM');
+        return;
+    }
+    
+    // Hide welcome content
+    if (welcomeContent) {
+        welcomeContent.style.display = 'none';
+    }
+    
+    // Show analytics panel
+    analyticsPanel.style.display = 'block';
+    
+    // Mount the analytics dashboard
+    analyticsDashboard.mount(analyticsPanel);
+    
+    // Add Analytics tab if it doesn't exist
+    const tabsContainer = document.querySelector('.editor-tabs');
+    if (tabsContainer) {
+        // Remove active class from all tabs
+        tabsContainer.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        
+        // Check if analytics tab already exists
+        let analyticsTab = tabsContainer.querySelector('[data-tab="analytics"]');
+        if (!analyticsTab) {
+            // Create new tab for Analytics
+            const newTab = document.createElement('div');
+            newTab.className = 'tab active';
+            newTab.setAttribute('data-tab', 'analytics');
+            newTab.innerHTML = `
+                <span class="tab-icon">📊</span>
+                <span class="tab-name">Analytics Dashboard</span>
+                <span class="tab-close">×</span>
+            `;
+            
+            // Add click handler for tab
+            newTab.addEventListener('click', (e) => {
+                if ((e.target as HTMLElement).classList.contains('tab-close')) {
+                    // Close tab
+                    newTab.remove();
+                    hideAnalyticsPanel();
+                    // Show welcome content
+                    if (welcomeContent) {
+                        welcomeContent.style.display = 'block';
+                    }
+                    // Make Day 0 tab active
+                    const day0Tab = tabsContainer.querySelector('[data-tab="day0"]');
+                    if (day0Tab) {
+                        day0Tab.classList.add('active');
+                    }
+                } else {
+                    // Switch to this tab
+                    tabsContainer.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    newTab.classList.add('active');
+                    if (welcomeContent) welcomeContent.style.display = 'none';
+                    analyticsPanel.style.display = 'block';
+                }
+            });
+            
+            tabsContainer.appendChild(newTab);
+        } else {
+            analyticsTab.classList.add('active');
+        }
+    }
+    
+    // Update button states
+    updateButtonStates('analytics');
+}
+
+function hideAnalyticsPanel(): void {
+    if (analyticsPanel) {
+        analyticsDashboard.unmount();
+        analyticsPanel.style.display = 'none';
+    }
+}
+
+function hideAllPanels(): void {
+    // Hide console output
+    const consoleOutput = document.getElementById('console-output');
+    if (consoleOutput) consoleOutput.style.display = 'none';
+    
+    // Hide analytics panel
+    hideAnalyticsPanel();
+    
+    // Add more panels here as they are created
+}
+
+function updateButtonStates(activeButton: string): void {
+    // Remove active class from all buttons
+    document.querySelectorAll('.sidebar-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Add active class to the current button
+    const activeBtn = document.getElementById(`${activeButton}-btn`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+    }
+}
+
+// Analytics data tracking
+interface StageMetrics {
+  stage: string;
+  model: string;
+  tokens: number;
+  cost: number;
+  timestamp: string;
+  duration: number;
+}
+
+let sessionMetrics: {
+  totalQueries: number;
+  totalCost: number;
+  successRate: number;
+  avgResponseTime: number;
+  modelUsage: { [model: string]: number };
+  recentActivity: any[];
+  hourlyStats: any[];
+  costByModel: { [model: string]: number };
+  tokenUsage: {
+    total: number;
+    input: number;
+    output: number;
+  };
+  stageMetrics: StageMetrics[];
+} = {
+  totalQueries: 0,
+  totalCost: 0,
+  successRate: 100,
+  avgResponseTime: 0,
+  modelUsage: {},
+  recentActivity: [],
+  hourlyStats: [],
+  costByModel: {},
+  tokenUsage: {
+    total: 0,
+    input: 0,
+    output: 0
+  },
+  stageMetrics: []
+};
+
+// Load existing metrics from storage
+const loadSessionMetrics = () => {
+  const stored = localStorage.getItem('consensusMetrics');
+  if (stored) {
+    try {
+      sessionMetrics = JSON.parse(stored);
+    } catch (e) {
+      console.error('Failed to load session metrics:', e);
+    }
+  }
+};
+
+// Save consensus analytics
+const saveConsensusAnalytics = (totalTokens: number, totalCost: number) => {
+  const timestamp = new Date().toISOString();
+  
+  // Update session metrics
+  sessionMetrics.totalQueries++;
+  sessionMetrics.totalCost += totalCost;
+  sessionMetrics.tokenUsage.total += totalTokens;
+  
+  // Estimate input/output split (70/30 typical)
+  sessionMetrics.tokenUsage.input += Math.floor(totalTokens * 0.7);
+  sessionMetrics.tokenUsage.output += Math.floor(totalTokens * 0.3);
+  
+  // Track model usage from stages
+  const stageModels = ['claude-3-opus', 'claude-3-sonnet', 'gpt-4-turbo', 'gemini-pro'];
+  stageModels.forEach((model, index) => {
+    if (!sessionMetrics.modelUsage[model]) {
+      sessionMetrics.modelUsage[model] = 0;
+    }
+    if (!sessionMetrics.costByModel[model]) {
+      sessionMetrics.costByModel[model] = 0;
+    }
+    
+    // Distribute cost across models used
+    const modelCost = totalCost / 4; // Assuming 4 stages
+    sessionMetrics.modelUsage[model]++;
+    sessionMetrics.costByModel[model] += modelCost;
+  });
+  
+  // Add to recent activity
+  sessionMetrics.recentActivity.unshift({
+    timestamp,
+    model: 'consensus-pipeline',
+    cost: totalCost,
+    duration: sessionMetrics.avgResponseTime * 1000,
+    status: 'completed',
+    tokens: totalTokens
+  });
+  
+  // Keep only last 10 activities
+  sessionMetrics.recentActivity = sessionMetrics.recentActivity.slice(0, 10);
+  
+  // Update hourly stats
+  const hour = new Date().toISOString().slice(11, 16);
+  let hourStat = sessionMetrics.hourlyStats.find(s => s.hour === hour);
+  if (!hourStat) {
+    hourStat = { hour, queries: 0, cost: 0, avgTime: 0 };
+    sessionMetrics.hourlyStats.push(hourStat);
+  }
+  hourStat.queries++;
+  hourStat.cost += totalCost;
+  hourStat.avgTime = sessionMetrics.avgResponseTime;
+  
+  // Save to localStorage
+  localStorage.setItem('consensusMetrics', JSON.stringify(sessionMetrics));
+  
+  // Log analytics update
+  addLogEntry(`📊 Analytics updated: Query #${sessionMetrics.totalQueries}, Total Cost: $${sessionMetrics.totalCost.toFixed(4)}`, 'info');
+};
+
+// Track stage completion for analytics
+const trackStageCompletion = (stage: string, tokens: number, cost: number) => {
+  const stageMetric: StageMetrics = {
+    stage,
+    model: getModelForStage(stage),
+    tokens,
+    cost,
+    timestamp: new Date().toISOString(),
+    duration: 0 // Would need to track start/end times for accurate duration
+  };
+  
+  sessionMetrics.stageMetrics.push(stageMetric);
+  
+  // Keep only last 100 stage metrics
+  if (sessionMetrics.stageMetrics.length > 100) {
+    sessionMetrics.stageMetrics = sessionMetrics.stageMetrics.slice(-100);
+  }
+};
+
+// Helper to get model for stage (from profile)
+const getModelForStage = (stage: string): string => {
+  // Read from the displayed model elements
+  const modelElement = document.getElementById(`${stage}-model`);
+  if (modelElement && modelElement.textContent) {
+    return modelElement.textContent;
+  }
+  
+  // Default models if not found
+  const defaults: { [key: string]: string } = {
+    'generator': 'claude-3-opus',
+    'refiner': 'claude-3-sonnet',
+    'validator': 'gpt-4-turbo',
+    'curator': 'gemini-pro'
+  };
+  
+  return defaults[stage.toLowerCase()] || 'unknown';
+};
+
+// Initialize on load
+loadSessionMetrics();
+
+// Set up Analytics button click handler after functions are defined
+setTimeout(() => {
+    document.getElementById('analytics-btn')?.addEventListener('click', () => {
+        addLogEntry('📊 Opening Analytics Dashboard', 'info');
+        showAnalyticsPanel();
+    });
+    
+    // Add click handler for Day 0 Validation tab
+    const day0Tab = document.querySelector('[data-tab="day0"]');
+    if (day0Tab) {
+        day0Tab.addEventListener('click', (e) => {
+            if (!(e.target as HTMLElement).classList.contains('tab-close')) {
+                // Switch to Day 0 tab
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                day0Tab.classList.add('active');
+                
+                // Hide analytics panel
+                const analyticsPanel = document.getElementById('analytics-panel');
+                if (analyticsPanel) {
+                    analyticsPanel.style.display = 'none';
+                }
+                
+                // Show welcome content
+                const welcomeContent = document.getElementById('welcome-content');
+                if (welcomeContent) {
+                    welcomeContent.style.display = 'block';
+                }
+            }
+        });
+    }
+}, 200);

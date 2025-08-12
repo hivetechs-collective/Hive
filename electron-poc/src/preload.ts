@@ -52,3 +52,10 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   loadProfiles: () => ipcRenderer.invoke('settings-load-profiles'),
   loadModels: () => ipcRenderer.invoke('settings-load-models'),
 });
+
+// Analytics API
+contextBridge.exposeInMainWorld('electronAPI', {
+  getAnalytics: () => ipcRenderer.invoke('get-analytics'),
+  saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
+  getUsageCount: () => ipcRenderer.invoke('get-usage-count')
+});

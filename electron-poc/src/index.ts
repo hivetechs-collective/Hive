@@ -831,3 +831,366 @@ ipcMain.handle('settings-reset', async () => {
     });
   });
 });
+
+// Analytics data handler - fetch real consensus metrics from database
+// Save conversation to database
+ipcMain.handle('save-conversation', async (_, data: {
+  conversationId: string;
+  question: string;
+  answer: string;
+  totalCost: number;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  model?: string;
+  duration?: number;
+}) => {
+  return new Promise((resolve) => {
+    if (!db) {
+      console.error('Database not initialized for saving conversation');
+      resolve(false);
+      return;
+    }
+    
+    const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io
+    const timestamp = new Date().toISOString();
+    
+    // Insert into conversations table
+    db.run(`
+      INSERT INTO conversations (
+        id, user_id, title, total_cost, total_tokens_input, total_tokens_output, 
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      data.conversationId,
+      userId,
+      data.question?.substring(0, 100) || 'Consensus Query',
+      data.totalCost,
+      data.inputTokens,
+      data.outputTokens,
+      timestamp,
+      timestamp
+    ], (err1) => {
+      if (err1) {
+        console.error('Error saving conversation:', err1);
+        resolve(false);
+        return;
+      }
+      
+      // Insert into knowledge_conversations
+      db.run(`
+        INSERT INTO knowledge_conversations (
+          conversation_id, question, final_answer, source_of_truth, created_at
+        ) VALUES (?, ?, ?, ?, ?)
+      `, [
+        data.conversationId,
+        data.question,
+        data.answer,
+        data.answer, // Using answer as source of truth for now
+        timestamp
+      ], (err2) => {
+        if (err2) console.error('Error saving to knowledge_conversations:', err2);
+      });
+      
+      // Insert into conversation_usage for tracking
+      db.run(`
+        INSERT INTO conversation_usage (
+          user_id, conversation_id, timestamp
+        ) VALUES (?, ?, ?)
+      `, [userId, data.conversationId, timestamp], (err3) => {
+        if (err3) console.error('Error saving to conversation_usage:', err3);
+      });
+      
+      // Insert into performance_metrics if duration provided
+      if (data.duration) {
+        db.run(`
+          INSERT INTO performance_metrics (
+            conversation_id, timestamp, total_duration, total_cost, created_at
+          ) VALUES (?, ?, ?, ?, ?)
+        `, [data.conversationId, timestamp, data.duration, data.totalCost || 0, timestamp], (err4) => {
+          if (err4) console.error('Error saving performance metrics:', err4);
+        });
+      }
+      
+      // Insert into cost_analytics
+      db.run(`
+        INSERT INTO cost_analytics (
+          conversation_id, total_cost, cost_per_token, model_costs, optimization_potential, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        data.conversationId,
+        data.totalCost,
+        data.totalCost / (data.totalTokens || 1),
+        JSON.stringify({ [data.model || 'consensus']: data.totalCost }),
+        0,
+        timestamp
+      ], (err5) => {
+        if (err5) console.error('Error saving cost analytics:', err5);
+      });
+      
+      console.log(`✅ Saved conversation ${data.conversationId} to database`);
+      resolve(true);
+    });
+  });
+});
+
+// Get user's daily usage count
+ipcMain.handle('get-usage-count', async () => {
+  return new Promise((resolve) => {
+    if (!db) {
+      resolve({ used: 0, limit: 999999, remaining: 999999 });
+      return;
+    }
+    
+    const userId = '3034c561-e193-4968-a575-f1b165d31a5b';
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    db.get(`
+      SELECT COUNT(*) as count 
+      FROM conversation_usage 
+      WHERE user_id = ? 
+      AND date(timestamp) = date('now', 'localtime')
+    `, [userId], (err, row: any) => {
+      if (err) {
+        console.error('Error getting usage count:', err);
+        resolve({ used: 0, limit: 999999, remaining: 999999 });
+        return;
+      }
+      
+      const used = row?.count || 0;
+      const limit = 999999; // Unlimited for this user
+      const remaining = limit - used;
+      
+      console.log(`Usage count for user ${userId}: ${used} / ${limit}`);
+      resolve({ used, limit, remaining });
+    });
+  });
+});
+
+ipcMain.handle('get-analytics', async () => {
+  return new Promise((resolve) => {
+    if (!db) {
+      console.error('Database not initialized for analytics');
+      resolve(null);
+      return;
+    }
+
+    const analyticsData: any = {};
+    
+    // Calculate date ranges
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    
+    // Get user-specific data - using the logged-in user's ID
+    // This comes from the D1 validation response stored earlier
+    const userId = '3034c561-e193-4968-a575-f1b165d31a5b'; // sales@hivetechs.io user ID
+    
+    // Get TODAY's queries for this user from conversation_usage table
+    db.get(`
+      SELECT COUNT(*) as count 
+      FROM conversation_usage 
+      WHERE date(timestamp) = date('now', 'localtime') 
+      AND user_id = ?
+    `, [userId], (err1, row1: any) => {
+      if (err1) {
+        console.error('Error getting conversation count:', err1);
+        resolve(null);
+        return;
+      }
+      
+      console.log('Analytics - Today queries for user:', row1?.count);
+      analyticsData.todayQueries = row1?.count || 0;
+      
+      // Get all-time total queries for this user
+      db.get(`
+        SELECT COUNT(*) as count 
+        FROM conversation_usage 
+        WHERE user_id = ?
+      `, [userId], (errTotal, rowTotal: any) => {
+        console.log('Analytics - Total queries for user:', rowTotal?.count);
+        analyticsData.totalQueries = rowTotal?.count || 0;
+      
+        // Get TODAY's cost and token usage - join with conversation_usage for user filtering
+        db.get(`
+          SELECT 
+            SUM(c.total_cost) as total_cost,
+            SUM(c.total_tokens_input) as total_input,
+            SUM(c.total_tokens_output) as total_output,
+            AVG(pm.total_duration / 1000.0) as avg_time
+          FROM conversations c
+          INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+          LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
+          WHERE date(cu.timestamp) = date('now', 'localtime')
+          AND cu.user_id = ?
+        `, [userId], (err2, row2: any) => {
+        if (err2) console.error('Error getting today cost data:', err2);
+        
+          console.log('Analytics - Today cost data:', row2);
+          analyticsData.todayCost = row2?.total_cost || 0;
+          analyticsData.todayAvgResponseTime = row2?.avg_time || 0;
+          analyticsData.todayTokenUsage = {
+            total: (row2?.total_input || 0) + (row2?.total_output || 0),
+            input: row2?.total_input || 0,
+            output: row2?.total_output || 0
+          };
+          
+          // Get all-time totals - join with conversation_usage for user filtering
+          db.get(`
+            SELECT 
+              SUM(c.total_cost) as total_cost,
+              SUM(c.total_tokens_input) as total_input,
+              SUM(c.total_tokens_output) as total_output,
+              AVG(pm.total_duration / 1000.0) as avg_time
+            FROM conversations c
+            INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+            LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
+            WHERE cu.user_id = ?
+          `, [userId], (errAllTime, rowAllTime: any) => {
+            if (errAllTime) console.error('Error getting all-time cost data:', errAllTime);
+            console.log('Analytics - All-time cost data:', rowAllTime);
+            analyticsData.totalCost = rowAllTime?.total_cost || 0;
+            analyticsData.avgResponseTime = rowAllTime?.avg_time || 0;
+            analyticsData.tokenUsage = {
+              total: (rowAllTime?.total_input || 0) + (rowAllTime?.total_output || 0),
+              input: rowAllTime?.total_input || 0,
+              output: rowAllTime?.total_output || 0
+            };
+        
+        // Get recent activity - join with conversation_usage for user filtering
+        db.all(`
+          SELECT 
+            c.id as conversation_id,
+            kc.question,
+            c.total_cost as cost,
+            c.total_tokens_input,
+            c.total_tokens_output,
+            pm.total_duration as duration,
+            cu.timestamp
+          FROM conversation_usage cu
+          INNER JOIN conversations c ON c.id = cu.conversation_id
+          LEFT JOIN knowledge_conversations kc ON c.id = kc.conversation_id
+          LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
+          WHERE cu.user_id = ?
+          ORDER BY cu.timestamp DESC 
+          LIMIT 10
+        `, [userId], (err3, rows3: any[]) => {
+          if (err3) console.error('Error getting recent activity:', err3);
+          
+          analyticsData.recentActivity = (rows3 || []).map((row: any) => ({
+            timestamp: row.timestamp,
+            model: 'consensus-pipeline',
+            cost: row.cost || 0,
+            duration: (row.duration || 0) / 1000, // Convert to seconds
+            status: 'completed',
+            tokens: (row.total_tokens_input || 0) + (row.total_tokens_output || 0)
+          }));
+          
+          // Get model usage from conversations (since stage_outputs doesn't exist)
+          db.all(`
+            SELECT 
+              'claude-3.5-sonnet' as model,
+              COUNT(*) as count,
+              SUM(c.total_cost) as totalCost
+            FROM conversations c
+            INNER JOIN conversation_usage cu ON c.id = cu.conversation_id
+            WHERE cu.user_id = ?
+            AND c.total_cost > 0
+          `, [userId], (err4, rows4: any[]) => {
+            if (err4) console.error('Error getting model usage:', err4);
+            
+            const modelUsage: { [model: string]: number } = {};
+            const modelCosts: { [model: string]: number } = {};
+            
+            // Process the results
+            (rows4 || []).forEach((row: any) => {
+              if (row.count > 0) {
+                modelUsage[row.model] = row.count;
+                modelCosts[row.model] = row.totalCost || 0;
+              }
+            });
+            
+            // If we have no data, provide defaults
+            if (Object.keys(modelUsage).length === 0) {
+              modelUsage['claude-3.5-sonnet'] = analyticsData.totalQueries || 0;
+              modelCosts['claude-3.5-sonnet'] = analyticsData.totalCost || 0;
+            }
+            
+            analyticsData.modelUsage = modelUsage;
+            analyticsData.costByModel = modelCosts;
+            
+            // Calculate hourly stats for last 24 hours
+            const hourlyStats: any[] = [];
+            const now = new Date();
+            let hoursProcessed = 0;
+            
+            const processHour = (i: number) => {
+              if (i < 0) {
+                // All hours processed
+                analyticsData.hourlyStats = hourlyStats;
+                analyticsData.successRate = analyticsData.totalQueries > 0 ? 100 : 0;
+                
+                // Add alerts
+                analyticsData.alerts = [{
+                  type: 'info',
+                  message: `Database contains ${analyticsData.totalQueries} consensus queries`,
+                  timestamp: new Date().toISOString()
+                }];
+                
+                // Resolve with complete data
+                console.log('Analytics - Complete data:', JSON.stringify(analyticsData, null, 2));
+                resolve(analyticsData);
+                return;
+              }
+              
+              const hourStart = new Date(now.getTime() - (i + 1) * 60 * 60 * 1000);
+              const hourEnd = new Date(now.getTime() - i * 60 * 60 * 1000);
+              
+              db.get(`
+                SELECT 
+                  COUNT(DISTINCT cu.conversation_id) as queries,
+                  SUM(c.total_cost) as cost,
+                  AVG(pm.total_duration / 1000.0) as avg_time
+                FROM conversation_usage cu
+                LEFT JOIN conversations c ON c.id = cu.conversation_id
+                LEFT JOIN performance_metrics pm ON c.id = pm.conversation_id
+                WHERE cu.timestamp >= ? AND cu.timestamp < ?
+                AND cu.user_id = ?
+              `, [hourStart.toISOString(), hourEnd.toISOString(), userId], (err5, row5: any) => {
+                if (err5) {
+                  console.error('Error getting hourly stats:', err5);
+                  // Continue with default values even if error
+                  hourlyStats.push({
+                    hour: hourStart.toISOString().slice(11, 16),
+                    queries: 0,
+                    cost: 0,
+                    avgTime: 0
+                  });
+                  processHour(i - 1);
+                  return;
+                }
+                
+                hourlyStats.push({
+                  hour: hourStart.toISOString().slice(11, 16),
+                  queries: row5?.queries || 0,
+                  cost: row5?.cost || 0,
+                  avgTime: row5?.avg_time || 0
+                });
+                
+                // Process next hour
+                processHour(i - 1);
+              });
+            };
+            
+            // Start processing hours from 23 to 0
+            processHour(23);
+          });
+        });
+      });
+      });
+    });
+    });
+  });
+});

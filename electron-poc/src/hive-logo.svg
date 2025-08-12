@@ -1,0 +1,41 @@
+<svg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hiveGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#64c8ff;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#4ecdc4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#45b7d1;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Hexagon outline -->
+  <path d="M40 10 L60 20 L60 40 L40 50 L20 40 L20 20 Z" 
+        fill="none" 
+        stroke="url(#hiveGradient)" 
+        stroke-width="2"
+        filter="url(#glow)"
+        class="hive-hexagon"/>
+  
+  <!-- Inner hexagon -->
+  <path d="M40 18 L52 24 L52 36 L40 42 L28 36 L28 24 Z" 
+        fill="url(#hiveGradient)"
+        opacity="0.3"
+        class="hive-inner"/>
+  
+  <!-- Center dot -->
+  <circle cx="40" cy="30" r="3" fill="url(#hiveGradient)" opacity="0.8" class="hive-center"/>
+  
+  <!-- Connection lines -->
+  <line x1="40" y1="18" x2="40" y2="30" stroke="url(#hiveGradient)" stroke-width="1" opacity="0.5"/>
+  <line x1="28" y1="24" x2="40" y2="30" stroke="url(#hiveGradient)" stroke-width="1" opacity="0.5"/>
+  <line x1="52" y1="24" x2="40" y2="30" stroke="url(#hiveGradient)" stroke-width="1" opacity="0.5"/>
+  <line x1="28" y1="36" x2="40" y2="30" stroke="url(#hiveGradient)" stroke-width="1" opacity="0.5"/>
+  <line x1="52" y1="36" x2="40" y2="30" stroke="url(#hiveGradient)" stroke-width="1" opacity="0.5"/>
+  <line x1="40" y1="42" x2="40" y2="30" stroke="url(#hiveGradient)" stroke-width="1" opacity="0.5"/>
+</svg>
