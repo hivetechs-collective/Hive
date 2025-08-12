@@ -3,6 +3,20 @@
  * Layout: Left Sidebar | Center (with bottom Terminal) | Right Consensus Chat
  */
 
+// DISABLE WEBPACK-DEV-SERVER ERROR OVERLAY
+(function() {
+  if (typeof window !== 'undefined') {
+    // Remove overlay periodically
+    const removeOverlay = () => {
+      const overlay = document.getElementById('webpack-dev-server-client-overlay');
+      if (overlay) overlay.remove();
+      const overlayDiv = document.getElementById('webpack-dev-server-client-overlay-div');
+      if (overlayDiv) overlayDiv.remove();
+    };
+    removeOverlay();
+    setInterval(removeOverlay, 100);
+  }
+})();
 
 import './index.css';
 import './neural-consciousness.css';
@@ -16,9 +30,66 @@ import { NeuralConsciousness } from './neural-consciousness';
 import { analyticsDashboard } from './analytics';
 import { GitUI } from './git-ui';
 import { FileExplorer } from './file-explorer';
+import { VSCodeFileExplorer } from './vs-file-explorer';
+import { VSCodeExplorerExact } from './vscode-explorer-exact';
 import { EditorTabs } from './editor-tabs';
 
 // Create the exact Hive Consensus GUI layout
+// Add global error handler to catch errors before webpack-dev-server
+window.addEventListener('error', (event) => {
+  console.error('[Global Error Handler] Caught error event');
+  console.error('[Global Error Handler] Event type:', event.constructor.name);
+  console.error('[Global Error Handler] Error object:', event.error);
+  console.error('[Global Error Handler] Error type:', event.error?.constructor?.name);
+  console.error('[Global Error Handler] Error message:', event.message);
+  console.error('[Global Error Handler] Stack:', event.error?.stack);
+  
+  // Check if the error itself is an Event
+  if (event.error && (event.error instanceof Event || event.error.constructor.name.includes('Event'))) {
+    console.error('[Global Error Handler] ERROR IS AN EVENT OBJECT! Preventing propagation');
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    return false;
+  }
+  
+  // Check if the error message contains [object Event]
+  if (event.message && event.message.includes('[object Event]')) {
+    console.error('[Global Error Handler] Error message contains [object Event], preventing');
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    return false;
+  }
+}, true);
+
+// Also catch unhandled promise rejections
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[Unhandled Rejection] Caught rejection');
+  console.error('[Unhandled Rejection] Event type:', event.constructor.name);
+  console.error('[Unhandled Rejection] Reason:', event.reason);
+  console.error('[Unhandled Rejection] Reason type:', event.reason?.constructor?.name);
+  
+  // Check if the reason is an Event object
+  if (event.reason instanceof Event) {
+    console.error('[Unhandled Rejection] REASON IS AN EVENT OBJECT! Preventing propagation');
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    return false;
+  }
+  
+  // Check for [object Event] string
+  const reasonStr = Object.prototype.toString.call(event.reason);
+  if (reasonStr.includes('Event') || (event.reason && event.reason.toString && event.reason.toString().includes('[object Event]'))) {
+    console.error('[Unhandled Rejection] Reason contains Event, preventing:', reasonStr);
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    return false;
+  }
+}, true);
+
 document.body.innerHTML = `
 <div class="hive-consensus-gui">
   <!-- Title Bar -->
@@ -36,9 +107,9 @@ document.body.innerHTML = `
 
   <!-- Main Content Area - Exact Dioxus Layout -->
   <div class="main-content">
-    <!-- Left Sidebar - Single unified panel -->
+    <!-- Left Sidebar - VS Code style with activity bar + sidebar panel -->
     <div class="sidebar" id="left-sidebar">
-      <!-- Activity buttons all in one stack -->
+      <!-- Activity buttons -->
       <div class="activity-bar-unified">
         <!-- File & Git Section -->
         <button class="activity-btn" data-view="explorer" aria-label="Explorer">
@@ -75,6 +146,55 @@ document.body.innerHTML = `
           </svg>
           <span class="activity-tooltip">Memory</span>
         </button>
+      </div>
+      
+      <!-- Sidebar Panel Content (VS Code style) -->
+      <div class="sidebar-panel" id="sidebar-panel">
+        <!-- Explorer Panel -->
+        <div class="sidebar-section" id="explorer-sidebar" style="display: none;">
+          <div class="sidebar-header">
+            <span class="sidebar-title">EXPLORER</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action" title="New File" aria-label="New File">
+                <i class="codicon codicon-new-file"></i>
+              </button>
+              <button class="sidebar-action" title="New Folder" aria-label="New Folder">
+                <i class="codicon codicon-new-folder"></i>
+              </button>
+              <button class="sidebar-action" title="Refresh Explorer" aria-label="Refresh Explorer">
+                <i class="codicon codicon-refresh"></i>
+              </button>
+              <button class="sidebar-action" title="Collapse Folders in Explorer" aria-label="Collapse All">
+                <i class="codicon codicon-collapse-all"></i>
+              </button>
+            </div>
+          </div>
+          <div class="sidebar-content" id="explorer-content">
+            <!-- Explorer tree will be rendered here -->
+          </div>
+        </div>
+        
+        <!-- Git Panel -->
+        <div class="sidebar-section" id="git-sidebar" style="display: none;">
+          <div class="sidebar-header">
+            <span class="sidebar-title">SOURCE CONTROL</span>
+            <div class="sidebar-actions">
+              <button class="sidebar-action" title="Commit">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M10.5 6a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM7.25 4v8a.75.75 0 001.5 0V4a.75.75 0 00-1.5 0z"/>
+                </svg>
+              </button>
+              <button class="sidebar-action" title="Refresh">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 2.5a5.487 5.487 0 00-4.131 1.869l1.204 1.204A.25.25 0 014.896 6H1.25A.25.25 0 011 5.75V2.104a.25.25 0 01.427-.177L2.331 2.831a6.987 6.987 0 1110.675 8.681.75.75 0 01-1.506-.31A5.5 5.5 0 008 2.5z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="sidebar-content" id="git-content">
+            <!-- Git UI will be rendered here -->
+          </div>
+        </div>
       </div>
     </div>
 
@@ -256,6 +376,118 @@ let isConnected = false;
 let isProcessing = false;
 let conversationStartTime = 0;
 let settingsModal: SettingsModal | null = null;
+
+// Sidebar Panel Management
+function toggleSidebarPanel(panelType: 'explorer' | 'git') {
+    const sidebarPanel = document.getElementById('sidebar-panel');
+    const explorerSidebar = document.getElementById('explorer-sidebar');
+    const gitSidebar = document.getElementById('git-sidebar');
+    
+    if (!sidebarPanel || !explorerSidebar || !gitSidebar) return;
+    
+    // Check if this panel is already active
+    const isCurrentlyActive = sidebarPanel.classList.contains('active') && 
+                              document.getElementById(`${panelType}-sidebar`)?.style.display !== 'none';
+    
+    if (isCurrentlyActive) {
+        // Hide sidebar panel
+        sidebarPanel.classList.remove('active');
+        explorerSidebar.style.display = 'none';
+        gitSidebar.style.display = 'none';
+    } else {
+        // Show sidebar panel and activate the requested panel
+        sidebarPanel.classList.add('active');
+        
+        // Hide all panels first
+        explorerSidebar.style.display = 'none';
+        gitSidebar.style.display = 'none';
+        
+        // Show the requested panel
+        const targetPanel = document.getElementById(`${panelType}-sidebar`);
+        if (targetPanel) {
+            targetPanel.style.display = 'block';
+            
+            // Initialize the content if needed
+            if (panelType === 'explorer' && !window.fileExplorer) {
+                const container = document.getElementById('explorer-content');
+                if (container) {
+                    console.log('Initializing VSCodeTreeExplorer in container:', container);
+                    
+                    // Ensure editor tabs exist first
+                    if (!window.editorTabs) {
+                        const editorArea = document.getElementById('editor-area');
+                        if (editorArea) {
+                            window.editorTabs = new EditorTabs(editorArea);
+                            console.log('Created editorTabs instance');
+                        }
+                    }
+                    
+                    window.fileExplorer = new VSCodeExplorerExact(container);
+                    
+                    // Connect to editor tabs when files are selected
+                    window.fileExplorer.onFileSelect((filePath: string) => {
+                        console.log('File selected:', filePath);
+                        if (window.editorTabs) {
+                            // Wrap in try-catch to prevent errors from bubbling to webpack
+                            try {
+                                window.editorTabs.openFile(filePath).catch((err: any) => {
+                                    console.error('Error opening file:', err);
+                                });
+                            } catch (err) {
+                                console.error('Error calling openFile:', err);
+                            }
+                        } else {
+                            console.error('editorTabs not found');
+                        }
+                    });
+                    
+                    // Connect add file/folder buttons
+                    const addFileBtn = document.querySelector('.sidebar-actions button[title="New File"]');
+                    const addFolderBtn = document.querySelector('.sidebar-actions button[title="New Folder"]');
+                    const refreshBtn = document.querySelector('.sidebar-actions button[title="Refresh Explorer"]');
+                    const collapseBtn = document.querySelector('.sidebar-actions button[title="Collapse Folders in Explorer"]');
+                    
+                    addFileBtn?.addEventListener('click', async () => {
+                        console.log('Add file clicked');
+                        // For now, just create a default file
+                        if (window.fileExplorer) {
+                            console.log('Creating new file: untitled.txt');
+                            await window.fileExplorer.createFile('untitled.txt');
+                        }
+                    });
+                    
+                    addFolderBtn?.addEventListener('click', async () => {
+                        console.log('Add folder clicked');
+                        // For now, just create a default folder
+                        if (window.fileExplorer) {
+                            console.log('Creating new folder: New Folder');
+                            await window.fileExplorer.createFolder('New Folder');
+                        }
+                    });
+                    
+                    refreshBtn?.addEventListener('click', () => {
+                        console.log('Refresh clicked');
+                        if (window.fileExplorer) {
+                            window.fileExplorer.refresh();
+                        }
+                    });
+                    
+                    collapseBtn?.addEventListener('click', () => {
+                        console.log('Collapse all clicked');
+                        if (window.fileExplorer && window.fileExplorer.collapseAll) {
+                            window.fileExplorer.collapseAll();
+                        }
+                    });
+                }
+            } else if (panelType === 'git' && !window.gitUI) {
+                const container = document.getElementById('git-content');
+                if (container) {
+                    window.gitUI = new GitUI(container);
+                }
+            }
+        }
+    }
+}
 let dailyUsageCount = 0;
 let dailyLimit = 5;
 let totalTokens = 0;
@@ -1678,35 +1910,21 @@ setTimeout(() => {
         (window as any).gitUI = new GitUI(gitContainer);
     }
     
-    // Initialize File Explorer
-    const fileExplorerContainer = document.getElementById('file-explorer-container');
-    if (fileExplorerContainer) {
-        const fileExplorer = new FileExplorer(fileExplorerContainer);
-        (window as any).fileExplorer = fileExplorer;
-        
-        // Initialize Editor Tabs
-        const editorArea = document.getElementById('editor-area');
-        if (editorArea) {
-            const editorTabs = new EditorTabs(editorArea);
-            (window as any).editorTabs = editorTabs;
-            
-            // Connect file explorer to editor
-            fileExplorer.onFileSelect((filePath: string) => {
-                editorTabs.openFile(filePath);
-            });
-            
-            // Connect Git UI file clicks to editor
-            document.addEventListener('click', (e) => {
-                const target = e.target as HTMLElement;
-                const fileNode = target.closest('.git-file');
-                if (fileNode) {
-                    const filePath = fileNode.getAttribute('data-file');
-                    if (filePath) {
-                        editorTabs.openFile(filePath);
-                    }
+    // File Explorer and Editor Tabs are already initialized in showSidebarPanel
+    // Just set up Git UI file click handler if not already done
+    if (!document.querySelector('[data-git-handler]')) {
+        const gitHandler = (e: Event) => {
+            const target = e.target as HTMLElement;
+            const fileNode = target.closest('.git-file');
+            if (fileNode) {
+                const filePath = fileNode.getAttribute('data-file');
+                if (filePath && window.editorTabs) {
+                    window.editorTabs.openFile(filePath);
                 }
-            });
-        }
+            }
+        };
+        document.addEventListener('click', gitHandler);
+        document.body.setAttribute('data-git-handler', 'true');
     }
     
     // Initialize Neural Consciousness in the right panel
@@ -1783,7 +2001,31 @@ setTimeout(() => {
             const view = btn.getAttribute('data-view');
             if (!view) return;
             
-            // Toggle panel if clicking same button
+            // Handle sidebar views (Explorer, Git) separately from center panels
+            if (view === 'explorer' || view === 'git') {
+                // For Explorer and Git, toggle the sidebar panel only
+                if (currentView === view) {
+                    // Already active, toggle off
+                    toggleSidebarPanel(view as 'explorer' | 'git');
+                    btn.classList.remove('active');
+                    currentView = null;
+                } else {
+                    // Not active, toggle on
+                    // Remove active from all buttons first
+                    activityButtons.forEach(b => b.classList.remove('active'));
+                    // Hide all center panels (don't interfere with sidebar)
+                    Object.values(panels).forEach(p => {
+                        if (p) p.style.display = 'none';
+                    });
+                    
+                    toggleSidebarPanel(view as 'explorer' | 'git');
+                    btn.classList.add('active');
+                    currentView = view;
+                }
+                return; // Exit early for sidebar panels
+            }
+            
+            // Handle center panels (Settings, Analytics, Memory)
             if (currentView === view) {
                 const panel = panels[view];
                 if (panel) {
@@ -1798,7 +2040,7 @@ setTimeout(() => {
                     }
                 }
             } else {
-                // Hide all panels
+                // Hide all center panels
                 Object.values(panels).forEach(p => {
                     if (p) p.style.display = 'none';
                 });
@@ -1806,26 +2048,16 @@ setTimeout(() => {
                 // Remove active from all buttons
                 activityButtons.forEach(b => b.classList.remove('active'));
                 
-                // Show selected panel
+                // Show selected center panel
                 const panel = panels[view];
                 if (panel) {
-                    console.log('Showing panel for view:', view, panel);
+                    console.log('Showing center panel for view:', view, panel);
                     panel.style.display = 'block';
                     btn.classList.add('active');
                     currentView = view;
                     
-                    // Initialize content if needed
-                    if (view === 'explorer' && !window.fileExplorer) {
-                        const container = document.getElementById('file-explorer-container');
-                        if (container) {
-                            window.fileExplorer = new FileExplorer(container);
-                        }
-                    } else if (view === 'git' && !window.gitUI) {
-                        const container = document.getElementById('git-ui-container');
-                        if (container) {
-                            window.gitUI = new GitUI(container);
-                        }
-                    } else if (view === 'settings') {
+                    // Handle special panel initialization
+                    if (view === 'settings') {
                         console.log('Rendering settings panel...');
                         const container = document.getElementById('settings-container');
                         if (container && settingsModal) {
@@ -1849,7 +2081,7 @@ setTimeout(() => {
         });
     });
     
-    // Close buttons for panels
+    // Close buttons for panels (inside same scope as panels variable)
     document.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         if (target.classList.contains('panel-close')) {

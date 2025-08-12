@@ -69,37 +69,77 @@ export class EditorTabs {
    * Open a file in a new tab or focus existing tab
    */
   async openFile(filePath: string): Promise<void> {
-    // Check if already open
-    const existingTab = this.tabs.find(t => t.path === filePath);
-    if (existingTab) {
-      this.activateTab(existingTab.id);
-      return;
+    try {
+      console.log('[EditorTabs] Opening file:', filePath);
+      
+      // Check if already open
+      const existingTab = this.tabs.find(t => t.path === filePath);
+      if (existingTab) {
+        console.log('[EditorTabs] File already open, activating tab');
+        this.activateTab(existingTab.id);
+        return;
+      }
+
+      // Load file content
+      console.log('[EditorTabs] Loading file content...');
+      console.log('[EditorTabs] window.fileAPI:', window.fileAPI);
+      
+      if (!window.fileAPI) {
+        throw new Error('window.fileAPI is not defined');
+      }
+      
+      if (!window.fileAPI.readFile) {
+        throw new Error('window.fileAPI.readFile is not a function');
+      }
+      
+      const content = await window.fileAPI.readFile(filePath);
+      const name = filePath.split('/').pop() || 'untitled';
+      const language = this.detectLanguage(name);
+
+      console.log('[EditorTabs] Creating new tab for:', name);
+      // Create new tab
+      const tab: EditorTab = {
+        id: `tab-${Date.now()}`,
+        path: filePath,
+        name,
+        content,
+        isDirty: false,
+        language
+      };
+
+      this.tabs.push(tab);
+      
+      console.log('[EditorTabs] Creating editor...');
+      this.createEditor(tab);
+      
+      console.log('[EditorTabs] Rendering tabs...');
+      this.renderTabs();
+      
+      console.log('[EditorTabs] Activating tab...');
+      this.activateTab(tab.id);
+
+      // Watch file for external changes
+      console.log('[EditorTabs] Setting up file watch...');
+      try {
+        await window.fileAPI.watchFile(filePath);
+        // Only set up the handler once globally, not per file
+        if (!this.fileWatchHandlerSet) {
+          window.fileAPI.onFileChanged(this.handleExternalFileChange.bind(this));
+          this.fileWatchHandlerSet = true;
+        }
+      } catch (err) {
+        console.error('[EditorTabs] Error setting up file watch:', err);
+      }
+      
+      console.log('[EditorTabs] File opened successfully');
+    } catch (error) {
+      console.error('[EditorTabs] Error opening file:', error);
+      console.error('[EditorTabs] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      // Don't re-throw, just log the error
     }
-
-    // Load file content
-    const content = await window.fileAPI.readFile(filePath);
-    const name = filePath.split('/').pop() || 'untitled';
-    const language = this.detectLanguage(name);
-
-    // Create new tab
-    const tab: EditorTab = {
-      id: `tab-${Date.now()}`,
-      path: filePath,
-      name,
-      content,
-      isDirty: false,
-      language
-    };
-
-    this.tabs.push(tab);
-    this.createEditor(tab);
-    this.renderTabs();
-    this.activateTab(tab.id);
-
-    // Watch file for external changes
-    window.fileAPI.watchFile(filePath);
-    window.fileAPI.onFileChanged(this.handleExternalFileChange.bind(this));
   }
+  
+  private fileWatchHandlerSet = false;
 
   /**
    * Open Git diff view for a file
@@ -150,6 +190,8 @@ export class EditorTabs {
    * Create Monaco editor for a tab
    */
   private createEditor(tab: EditorTab): void {
+    console.log('[EditorTabs] Creating editor container for tab:', tab.id);
+    
     const editorContainer = document.createElement('div');
     editorContainer.className = 'editor-container';
     editorContainer.id = `editor-${tab.id}`;
@@ -157,6 +199,7 @@ export class EditorTabs {
     editorContainer.style.height = '100%';
     this.editorsContainer.appendChild(editorContainer);
 
+    console.log('[EditorTabs] Creating Monaco model...');
     // Create or reuse model for better performance
     let model = this.models.get(tab.path);
     if (!model) {
@@ -167,49 +210,65 @@ export class EditorTabs {
       this.models.set(tab.path, model);
     }
 
+    console.log('[EditorTabs] Creating Monaco editor instance...');
+    
     // Create editor with performance optimizations
-    const editor = monaco.editor.create(editorContainer, {
-      model,
-      theme: 'vs-dark',
-      automaticLayout: true,
-      scrollBeyondLastLine: false,
-      renderWhitespace: 'selection',
-      minimap: {
-        enabled: true,
-        maxColumn: 120
-      },
-      fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      lineNumbers: 'on',
-      glyphMargin: true,
-      folding: true,
-      lineDecorationsWidth: 0,
-      lineNumbersMinChars: 3,
-      renderLineHighlight: 'line',
-      scrollbar: {
-        useShadows: false,
-        vertical: 'visible',
-        horizontal: 'visible'
-      },
-      suggestOnTriggerCharacters: true,
-      quickSuggestions: true,
-      wordWrap: 'off'
-    });
+    let editor;
+    try {
+      editor = monaco.editor.create(editorContainer, {
+        model,
+        theme: 'vs-dark',
+        automaticLayout: true,
+        scrollBeyondLastLine: false,
+        renderWhitespace: 'selection',
+        minimap: {
+          enabled: true,
+          maxColumn: 120
+        },
+        fontSize: 13,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        lineNumbers: 'on',
+        glyphMargin: true,
+        folding: true,
+        lineDecorationsWidth: 0,
+        lineNumbersMinChars: 3,
+        renderLineHighlight: 'line',
+        scrollbar: {
+          useShadows: false,
+          vertical: 'visible',
+          horizontal: 'visible'
+        },
+        suggestOnTriggerCharacters: true,
+        quickSuggestions: true,
+        wordWrap: 'off'
+      });
 
-    // Track changes for dirty state
-    editor.onDidChangeModelContent(() => {
-      if (!tab.isDirty) {
-        tab.isDirty = true;
-        this.renderTabs();
+      // Track changes for dirty state
+      editor.onDidChangeModelContent(() => {
+        if (!tab.isDirty) {
+          tab.isDirty = true;
+          this.renderTabs();
+        }
+      });
+
+      // Save on Ctrl+S
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        this.saveTab(tab.id);
+      });
+
+      this.editors.set(tab.id, editor);
+      console.log('[EditorTabs] Editor created successfully for tab:', tab.id);
+    } catch (error) {
+      console.error('[EditorTabs] Error creating editor:', error);
+      console.error('[EditorTabs] Error details:', error instanceof Error ? error.message : 'Unknown error');
+      // Create a fallback text area if Monaco fails
+      const fallbackContainer = document.getElementById(`editor-${tab.id}`);
+      if (fallbackContainer) {
+        fallbackContainer.innerHTML = `
+          <textarea style="width: 100%; height: 100%; background: #1e1e1e; color: #fff; border: none; padding: 10px; font-family: monospace;">${tab.content || ''}</textarea>
+        `;
       }
-    });
-
-    // Save on Ctrl+S
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      this.saveTab(tab.id);
-    });
-
-    this.editors.set(tab.id, editor);
+    }
   }
 
   /**

@@ -225,12 +225,18 @@ const registerFileSystemHandlers = () => {
   ipcMain.handle('fs-get-tree', async (_, rootPath?: string) => {
     if (!fileSystemManager) initFileSystemManager();
     const root = rootPath || process.cwd();
-    return await fileSystemManager!.getFileTree(root);
+    console.log('[Main] fs-get-tree called with root:', root);
+    const result = await fileSystemManager!.getFileTree(root);
+    console.log('[Main] fs-get-tree returning', result?.length || 0, 'items');
+    return result;
   });
 
   ipcMain.handle('fs-get-directory', async (_, dirPath: string) => {
     if (!fileSystemManager) initFileSystemManager();
-    return await fileSystemManager!.getDirectoryContents(dirPath);
+    console.log('[Main] fs-get-directory called for:', dirPath);
+    const result = await fileSystemManager!.getDirectoryContents(dirPath);
+    console.log('[Main] fs-get-directory returning', result?.length || 0, 'items for', dirPath);
+    return result;
   });
 
   ipcMain.handle('fs-read-file', async (_, filePath: string) => {
@@ -243,7 +249,7 @@ const registerFileSystemHandlers = () => {
     return await fileSystemManager!.writeFileContent(filePath, content);
   });
 
-  ipcMain.handle('fs-watch-file', (_, filePath: string) => {
+  ipcMain.handle('fs-watch-file', async (_, filePath: string) => {
     if (!fileSystemManager) initFileSystemManager();
     fileSystemManager!.watchFile(filePath, () => {
       // Send file change event to renderer
@@ -251,11 +257,13 @@ const registerFileSystemHandlers = () => {
         mainWindow.webContents.send('file-changed', filePath);
       }
     });
+    return true; // Must return something when using ipcMain.handle
   });
 
-  ipcMain.handle('fs-unwatch-file', (_, filePath: string) => {
+  ipcMain.handle('fs-unwatch-file', async (_, filePath: string) => {
     if (!fileSystemManager) initFileSystemManager();
     fileSystemManager!.unwatchFile(filePath);
+    return true; // Must return something when using ipcMain.handle
   });
 
   ipcMain.handle('fs-search', async (_, rootPath: string, pattern: string) => {
@@ -266,6 +274,22 @@ const registerFileSystemHandlers = () => {
   ipcMain.handle('fs-stats', async (_, filePath: string) => {
     if (!fileSystemManager) initFileSystemManager();
     return await fileSystemManager!.getFileStats(filePath);
+  });
+  
+  ipcMain.handle('fs-create-file', async (_, dirPath: string, fileName: string) => {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const filePath = path.join(dirPath, fileName);
+    await fs.writeFile(filePath, '', 'utf8');
+    return true;
+  });
+  
+  ipcMain.handle('fs-create-folder', async (_, dirPath: string, folderName: string) => {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const folderPath = path.join(dirPath, folderName);
+    await fs.mkdir(folderPath, { recursive: true });
+    return true;
   });
 };
 
@@ -1707,6 +1731,32 @@ ipcMain.handle('get-analytics', async () => {
       });
     });
   });
+});
+
+// Input dialog handler for file/folder creation
+ipcMain.handle('show-input-dialog', async (_, title: string, defaultValue = '') => {
+  const { dialog } = require('electron');
+  
+  if (!mainWindow) {
+    return null;
+  }
+  
+  // For now, use showMessageBox with input as a fallback
+  // In production, you'd create a proper input dialog window
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: title,
+    message: title,
+    detail: `Default: ${defaultValue}`,
+    buttons: ['OK', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1
+  });
+  
+  if (result.response === 0) {
+    return defaultValue; // Return default for now
+  }
+  return null;
 });
 
 // Store reference to main window

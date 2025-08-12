@@ -29,15 +29,19 @@ export class FileExplorer {
   }
 
   private async init() {
+    console.log('Initializing FileExplorer with container:', this.container);
+    
     // Load initial file tree
     await this.loadFileTree();
     
     // Set up virtual scrolling for performance
+    console.log('Creating VirtualScroller...');
     this.virtualScroller = new VirtualScroller(this.container, {
       itemHeight: 22,
       buffer: 10,
       renderItem: (node: FileNode & { level: number }) => this.renderFileNode(node)
     });
+    console.log('VirtualScroller created successfully');
     
     // Initial render
     this.render();
@@ -45,7 +49,9 @@ export class FileExplorer {
 
   private async loadFileTree() {
     try {
+      console.log('Loading file tree...');
       this.fileTree = await window.fileAPI.getFileTree();
+      console.log('File tree loaded:', this.fileTree?.length, 'items');
       this.updateVisibleNodes();
     } catch (error) {
       console.error('Failed to load file tree:', error);
@@ -160,15 +166,25 @@ export class FileExplorer {
 
   private async handleNodeClick(node: FileNode & { level: number }, event: Event) {
     event.stopPropagation();
+    console.log('Node clicked:', node.name, node.type, 'expanded:', node.expanded);
     
     if (node.type === 'directory') {
       // Toggle expansion
       node.expanded = !node.expanded;
+      console.log('Directory toggled to:', node.expanded);
+      
       if (node.expanded) {
         this.expandedPaths.add(node.path);
         // Lazy load children if not loaded
         if (!node.children) {
-          node.children = await window.fileAPI.getDirectoryContents(node.path);
+          console.log('Loading directory contents for:', node.path);
+          try {
+            node.children = await window.fileAPI.getDirectoryContents(node.path);
+            console.log('Loaded', node.children?.length, 'children for', node.path);
+          } catch (error) {
+            console.error('Failed to load directory contents:', error);
+            node.children = [];
+          }
         }
       } else {
         this.expandedPaths.delete(node.path);
@@ -177,6 +193,7 @@ export class FileExplorer {
       this.render();
     } else {
       // Open file in editor
+      console.log('File selected:', node.path);
       this.selectedPath = node.path;
       this.fileChangeCallbacks.forEach(cb => cb(node.path));
       this.render();
@@ -197,10 +214,37 @@ export class FileExplorer {
     this.updateVisibleNodes();
     this.render();
   }
+  
+  public async createFile(fileName: string) {
+    try {
+      // For now, just log the creation - implement actual file creation later
+      console.log('Creating file:', fileName);
+      // TODO: Call file system API to create file
+      // await window.fileAPI.writeFile(path.join(currentPath, fileName), '');
+      // this.refresh();
+    } catch (error) {
+      console.error('Failed to create file:', error);
+    }
+  }
+  
+  public async createFolder(folderName: string) {
+    try {
+      // For now, just log the creation - implement actual folder creation later
+      console.log('Creating folder:', folderName);
+      // TODO: Call file system API to create folder
+      // await window.fileAPI.createDirectory(path.join(currentPath, folderName));
+      // this.refresh();
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+    }
+  }
 
   private render() {
     if (this.virtualScroller) {
+      console.log('Rendering virtual scroller with', this.visibleNodes.length, 'visible nodes');
       this.virtualScroller.setItems(this.visibleNodes);
+    } else {
+      console.error('Virtual scroller not initialized');
     }
   }
 

@@ -57,7 +57,8 @@ contextBridge.exposeInMainWorld('settingsAPI', {
 contextBridge.exposeInMainWorld('electronAPI', {
   getAnalytics: () => ipcRenderer.invoke('get-analytics'),
   saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
-  getUsageCount: () => ipcRenderer.invoke('get-usage-count')
+  getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
+  showInputDialog: (title: string, defaultValue?: string) => ipcRenderer.invoke('show-input-dialog', title, defaultValue)
 });
 
 // Git API
@@ -79,16 +80,38 @@ contextBridge.exposeInMainWorld('gitAPI', {
   getFileStatus: (path: string) => ipcRenderer.invoke('git-file-status', path)
 });
 
+// Helper to safely invoke IPC calls and prevent Event objects from being thrown
+const safeInvoke = async (channel: string, ...args: any[]) => {
+  try {
+    const result = await ipcRenderer.invoke(channel, ...args);
+    return result;
+  } catch (error) {
+    // If error is an Event object, convert it to a proper error
+    if (error instanceof Event) {
+      console.error('[SafeInvoke] Caught Event object as error, converting...');
+      throw new Error('IPC call failed: Event object thrown');
+    }
+    // If error looks like [object Event], convert it
+    if (error && typeof error === 'object' && error.toString && error.toString().includes('[object Event]')) {
+      console.error('[SafeInvoke] Caught [object Event] string, converting...');
+      throw new Error('IPC call failed: Event-like object thrown');
+    }
+    throw error;
+  }
+};
+
 // File System API
 contextBridge.exposeInMainWorld('fileAPI', {
-  getFileTree: (rootPath?: string) => ipcRenderer.invoke('fs-get-tree', rootPath),
-  getDirectoryContents: (dirPath: string) => ipcRenderer.invoke('fs-get-directory', dirPath),
-  readFile: (filePath: string) => ipcRenderer.invoke('fs-read-file', filePath),
-  writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs-write-file', filePath, content),
-  watchFile: (filePath: string) => ipcRenderer.invoke('fs-watch-file', filePath),
-  unwatchFile: (filePath: string) => ipcRenderer.invoke('fs-unwatch-file', filePath),
-  searchFiles: (rootPath: string, pattern: string) => ipcRenderer.invoke('fs-search', rootPath, pattern),
-  getFileStats: (filePath: string) => ipcRenderer.invoke('fs-stats', filePath),
+  getFileTree: (rootPath?: string) => safeInvoke('fs-get-tree', rootPath),
+  getDirectoryContents: (dirPath: string) => safeInvoke('fs-get-directory', dirPath),
+  readFile: (filePath: string) => safeInvoke('fs-read-file', filePath),
+  writeFile: (filePath: string, content: string) => safeInvoke('fs-write-file', filePath, content),
+  watchFile: (filePath: string) => safeInvoke('fs-watch-file', filePath),
+  unwatchFile: (filePath: string) => safeInvoke('fs-unwatch-file', filePath),
+  searchFiles: (rootPath: string, pattern: string) => safeInvoke('fs-search', rootPath, pattern),
+  getFileStats: (filePath: string) => safeInvoke('fs-stats', filePath),
+  createFile: (dirPath: string, fileName: string) => safeInvoke('fs-create-file', dirPath, fileName),
+  createFolder: (dirPath: string, folderName: string) => safeInvoke('fs-create-folder', dirPath, folderName),
   onFileChanged: (callback: (filePath: string) => void) => {
     ipcRenderer.on('file-changed', (_, filePath) => callback(filePath));
   }

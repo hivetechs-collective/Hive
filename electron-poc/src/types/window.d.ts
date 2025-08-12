@@ -21,6 +21,8 @@ declare global {
       unwatchFile(filePath: string): Promise<void>;
       searchFiles(rootPath: string, pattern: string): Promise<string[]>;
       getFileStats(filePath: string): Promise<any>;
+      createFile(dirPath: string, fileName: string): Promise<boolean>;
+      createFolder(dirPath: string, folderName: string): Promise<boolean>;
       onFileChanged(callback: (filePath: string) => void): void;
     };
     

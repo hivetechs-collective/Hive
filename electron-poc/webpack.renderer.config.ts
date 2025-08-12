@@ -36,6 +36,11 @@ export const rendererConfig: Configuration = {
       fs: false,
     },
   },
+  devServer: {
+    client: {
+      overlay: false, // Disable the error overlay
+    },
+  },
   // Suppress the critical dependency warning from Monaco
   ignoreWarnings: [
     {

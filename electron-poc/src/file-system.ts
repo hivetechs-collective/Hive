@@ -31,7 +31,8 @@ export class FileSystemManager {
   /**
    * Get file tree with depth limit for performance
    */
-  async getFileTree(rootPath: string, maxDepth = 2): Promise<FileNode[]> {
+  async getFileTree(rootPath: string, maxDepth = 1): Promise<FileNode[]> {
+    // Only get the first level - children will be loaded lazily
     return this.scanDirectory(rootPath, 0, maxDepth);
   }
 
@@ -41,7 +42,9 @@ export class FileSystemManager {
     }
 
     try {
+      console.log('[FileSystem] Scanning directory:', dirPath, 'depth:', currentDepth, 'maxDepth:', maxDepth);
       const entries = await readdir(dirPath, { withFileTypes: true });
+      console.log('[FileSystem] Found', entries.length, 'entries in', dirPath);
       const nodes: FileNode[] = [];
 
       // Use Promise.all for parallel processing but limit concurrency

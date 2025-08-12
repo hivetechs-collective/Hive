@@ -1,4 +1,24 @@
 /* Hive Consensus GUI - Exact Dioxus Layout Recreation */
+
+/* Codicon Font Definition */
+.codicon {
+  font-family: 'codicon';
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  text-decoration: none;
+  text-rendering: auto;
+  text-align: center;
+  display: inline-block;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+  -webkit-user-select: none;
+  -ms-user-select: none;
+}
+
 :root {
   /* Base Dioxus colors */
   --background-primary: #0E1414;
@@ -435,16 +455,14 @@ body {
   overflow: hidden;
 }
 
-/* Left Sidebar - VS Code Style with Activity Bar */
+/* Left Sidebar - VS Code Style with Activity Bar + Panel */
 .sidebar {
   background: var(--background-primary);
   border-right: 1px solid var(--border-color);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   display: flex;
-  flex-direction: column;
-  width: 48px !important;
-  min-width: 48px !important;
-  max-width: 48px !important;
+  flex-direction: row; /* Changed to row for activity bar + panel */
+  min-width: 48px; /* Minimum width for activity bar only */
   flex-shrink: 0;
   position: relative;
   z-index: 35;
@@ -468,8 +486,118 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
+  height: 100%;
+  width: 48px;
   padding: 8px 0;
   gap: 4px;
+  background: var(--background-primary);
+  border-right: 1px solid var(--border-color);
+}
+
+/* Sidebar Panel - VS Code style panel area */
+.sidebar-panel {
+  width: 240px;
+  background: var(--background-secondary);
+  border-right: 1px solid var(--border-color);
+  display: none; /* Hidden by default */
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-panel.active {
+  display: flex;
+}
+
+/* Sidebar Section */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--background-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  min-height: 35px;
+}
+
+.sidebar-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.sidebar-action {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  transition: background-color 0.15s ease;
+  font-size: 16px;
+  position: relative;
+}
+
+.sidebar-action i {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.sidebar-action:hover {
+  background: var(--background-primary);
+  color: var(--text-primary);
+}
+
+/* VS Code style tooltips */
+.sidebar-action[title]:hover::after {
+  content: attr(title);
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: #1e1e1e;
+  border: 1px solid #454545;
+  color: #cccccc;
+  font-size: 12px;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  white-space: nowrap;
+  border-radius: 3px;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  animation: fadeInTooltip 0.15s ease-in;
+}
+
+@keyframes fadeInTooltip {
+  from { opacity: 0; transform: translateX(-50%) translateY(-2px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
 }
 
 /* Sidebar Divider */
@@ -797,8 +925,12 @@ body {
 /* Editor Area - Main content above terminal */
 #editor-area {
   flex: 1;
-  overflow: auto;
+  overflow: hidden; /* Changed from auto to hidden for proper Monaco layout */
   background: var(--background-primary);
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Important for nested flexbox */
+  position: relative;
 }
 
 /* Resize Handles */
@@ -893,6 +1025,50 @@ body {
 /* Hide Neural Consciousness when panel is collapsed */
 .consensus-chat-panel.collapsed #neural-consciousness-container {
   display: none !important;
+}
+
+/* Content Panels */
+.content-panel {
+  display: none;
+  flex: 1;
+  padding: 20px;
+  background: var(--background-primary);
+  overflow-y: auto;
+}
+
+.content-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+
+.content-panel .panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.content-panel .close-panel-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.content-panel .close-panel-btn:hover {
+  background: var(--background-tertiary);
+  color: var(--text-primary);
 }
 
 .horizontal-resize {
