@@ -1,18 +1,19 @@
 /**
  * Hive Consensus - Exact Dioxus GUI Recreation
- * Layout: Left Sidebar | LazyGit Panel | Center (with bottom Terminal) | Right Consensus Chat
+ * Layout: Left Sidebar | Center (with bottom Terminal) | Right Consensus Chat
  */
 
-import { LazyGitManager } from './lazygit';
 
 import './index.css';
 import './neural-consciousness.css';
 import './analytics.css';
+import './git.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { NeuralConsciousness } from './neural-consciousness';
 import { analyticsDashboard } from './analytics';
+import { GitUI } from './git-ui';
 
 // Create the exact Hive Consensus GUI layout
 document.body.innerHTML = `
@@ -25,29 +26,21 @@ document.body.innerHTML = `
       <div class="title-logo">
         <img src="${hiveLogo}" alt="HiveTechs Logo" style="width: 24px; height: 24px; object-fit: contain; border-radius: 4px;" />
       </div>
-      <span class="title-text">Hive Consensus - Day 0 Validation</span>
+      <span class="title-text">Hive Consensus</span>
     </div>
     <div class="title-bar-right"></div>
   </div>
 
   <!-- Main Content Area - Exact Dioxus Layout -->
   <div class="main-content">
-    <!-- Left Sidebar with Neural Consciousness and Control Buttons -->
+    <!-- Left Sidebar with Source Control and Control Buttons -->
     <div class="sidebar" id="left-sidebar">
 
-      <!-- Git Panel -->
-      <div class="git-panel">
+      <!-- Source Control Panel -->
+      <div class="source-control-panel" id="source-control-panel">
         <div class="panel-header">SOURCE CONTROL</div>
-        <div class="git-info">
-          <div class="branch-info">
-            <span class="branch-icon">🔀</span>
-            <span class="branch-name">main</span>
-          </div>
-        </div>
-        <div class="git-buttons">
-          <button class="git-btn" title="Pull">↓</button>
-          <button class="git-btn" title="Push">↑</button>
-          <button class="git-btn" title="Sync">🔄</button>
+        <div id="git-ui-container">
+          <!-- Git UI will be mounted here -->
         </div>
       </div>
 
@@ -68,41 +61,10 @@ document.body.innerHTML = `
       </div>
     </div>
 
-    <!-- LazyGit Panel (Middle Left) -->
-    <div class="lazygit-panel" id="lazygit-panel">
-      <div class="panel-header">LAZYGIT</div>
-      <div class="lazygit-content">
-        <div class="lazygit-placeholder">
-          <div class="lazygit-status">
-            <div class="status-item">📁 /hive</div>
-            <div class="status-item">🌿 main</div>
-            <div class="status-item">✅ Clean</div>
-          </div>
-          <div class="lazygit-files">
-            <div class="file-status">
-              <span class="file-icon">📄</span>
-              <span class="file-name">electron-poc/src/renderer.ts</span>
-              <span class="file-status-indicator modified">M</span>
-            </div>
-            <div class="file-status">
-              <span class="file-icon">📄</span>
-              <span class="file-name">electron-poc/src/index.css</span>
-              <span class="file-status-indicator modified">M</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Center Area (Tabs + Main Content + Terminal) -->
     <div class="center-area" id="center-area">
       <!-- Tabs -->
       <div class="editor-tabs">
-        <div class="tab active" data-tab="day0">
-          <span class="tab-icon">🧠</span>
-          <span class="tab-name">Day 0 Validation</span>
-          <span class="tab-close">×</span>
-        </div>
       </div>
       
       <!-- Main Content Area (Above Terminal) -->
@@ -114,7 +76,7 @@ document.body.innerHTML = `
         
         <!-- Welcome Content (Default view) -->
         <div id="welcome-content" class="welcome-content">
-          <h2>Hive Consensus - Day 0 Validation</h2>
+          <h2>Hive Consensus</h2>
           <div class="validation-status">
             <div class="status-item">
               <span class="status-icon">✅</span>
@@ -1691,25 +1653,6 @@ const getModelForStage = (stage: string): string => {
 // Initialize on load
 loadSessionMetrics();
 
-// Initialize LazyGit terminal
-async function initializeLazyGit() {
-    const lazyGitContent = document.querySelector('.lazygit-content');
-    if (lazyGitContent) {
-        // Clear the placeholder content
-        lazyGitContent.innerHTML = '<div id="lazygit-terminal" style="width: 100%; height: 100%;"></div>';
-        
-        const terminalContainer = document.getElementById('lazygit-terminal');
-        if (terminalContainer) {
-            try {
-                await LazyGitManager.initialize(terminalContainer);
-                addLogEntry('🚀 LazyGit terminal initialized', 'success');
-            } catch (error) {
-                console.error('Failed to initialize LazyGit:', error);
-                addLogEntry('❌ Failed to initialize LazyGit terminal', 'error');
-            }
-        }
-    }
-}
 
 // Set up Analytics button click handler after functions are defined
 setTimeout(() => {
@@ -1742,8 +1685,10 @@ setTimeout(() => {
         });
     }
     
-    // Initialize LazyGit terminal after a short delay
-    setTimeout(() => {
-        initializeLazyGit();
-    }, 500);
+    // Initialize Git UI
+    const gitContainer = document.getElementById('git-ui-container');
+    if (gitContainer) {
+        (window as any).gitUI = new GitUI(gitContainer);
+    }
+    
 }, 200);

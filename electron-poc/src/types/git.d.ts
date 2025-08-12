@@ -1,0 +1,52 @@
+export interface GitFileStatus {
+  path: string;
+  index: string;  // X in XY format - staged status
+  working: string; // Y in XY format - working tree status
+  renamed?: string;
+}
+
+export interface GitBranch {
+  name: string;
+  current: boolean;
+  commit: string;
+  remote?: string;
+  ahead?: number;
+  behind?: number;
+}
+
+export interface GitCommit {
+  hash: string;
+  author: string;
+  date: Date;
+  message: string;
+  refs?: string;
+}
+
+export interface GitStatus {
+  files: GitFileStatus[];
+  branch: string;
+  ahead: number;
+  behind: number;
+  isRepo: boolean;
+}
+
+declare global {
+  interface Window {
+    gitAPI: {
+      getStatus(): Promise<GitStatus>;
+      getBranches(): Promise<GitBranch[]>;
+      getLog(limit?: number): Promise<GitCommit[]>;
+      getDiff(file?: string): Promise<string>;
+      getStagedDiff(file?: string): Promise<string>;
+      stage(files: string[]): Promise<void>;
+      unstage(files: string[]): Promise<void>;
+      commit(message: string): Promise<void>;
+      discard(files: string[]): Promise<void>;
+      push(): Promise<void>;
+      pull(): Promise<void>;
+      fetch(): Promise<void>;
+      switchBranch(branchName: string): Promise<void>;
+      createBranch(branchName: string): Promise<void>;
+    };
+  }
+}

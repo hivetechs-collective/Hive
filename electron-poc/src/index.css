@@ -493,10 +493,9 @@ body {
   font-weight: 600;
 }
 
-/* Git Panel */
+/* Git Panel - Old (Hidden) */
 .git-panel {
-  padding: 16px;
-  border-bottom: 1px solid var(--border-color);
+  display: none;
 }
 
 .panel-header {

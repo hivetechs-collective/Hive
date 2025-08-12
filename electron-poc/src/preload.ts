@@ -57,17 +57,23 @@ contextBridge.exposeInMainWorld('settingsAPI', {
 contextBridge.exposeInMainWorld('electronAPI', {
   getAnalytics: () => ipcRenderer.invoke('get-analytics'),
   saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
-  getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
-  
-  // LazyGit API
-  startLazyGit: () => ipcRenderer.invoke('lazygit-start'),
-  stopLazyGit: () => ipcRenderer.invoke('lazygit-stop'),
-  writeLazyGit: (data: string) => ipcRenderer.invoke('lazygit-write', data),
-  resizeLazyGit: (cols: number, rows: number) => ipcRenderer.invoke('lazygit-resize', cols, rows),
-  onLazyGitData: (callback: (data: string) => void) => {
-    ipcRenderer.on('lazygit-data', (_, data) => callback(data));
-  },
-  onLazyGitExit: (callback: (code: number) => void) => {
-    ipcRenderer.on('lazygit-exit', (_, code) => callback(code));
-  }
+  getUsageCount: () => ipcRenderer.invoke('get-usage-count')
+});
+
+// Git API
+contextBridge.exposeInMainWorld('gitAPI', {
+  getStatus: () => ipcRenderer.invoke('git-status'),
+  getBranches: () => ipcRenderer.invoke('git-branches'),
+  getLog: (limit?: number) => ipcRenderer.invoke('git-log', limit),
+  getDiff: (file?: string) => ipcRenderer.invoke('git-diff', file),
+  getStagedDiff: (file?: string) => ipcRenderer.invoke('git-staged-diff', file),
+  stage: (files: string[]) => ipcRenderer.invoke('git-stage', files),
+  unstage: (files: string[]) => ipcRenderer.invoke('git-unstage', files),
+  commit: (message: string) => ipcRenderer.invoke('git-commit', message),
+  discard: (files: string[]) => ipcRenderer.invoke('git-discard', files),
+  push: () => ipcRenderer.invoke('git-push'),
+  pull: () => ipcRenderer.invoke('git-pull'),
+  fetch: () => ipcRenderer.invoke('git-fetch'),
+  switchBranch: (branchName: string) => ipcRenderer.invoke('git-switch-branch', branchName),
+  createBranch: (branchName: string) => ipcRenderer.invoke('git-create-branch', branchName)
 });

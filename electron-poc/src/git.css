@@ -1,0 +1,290 @@
+/* VS Code-style Git UI */
+.git-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: #cccccc;
+  font-size: 13px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.git-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #3c3c3c;
+  background: #252526;
+}
+
+.git-branch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.branch-icon {
+  color: #999;
+}
+
+.branch-name {
+  font-weight: 500;
+}
+
+.sync-badge {
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sync-badge.ahead {
+  background: #1a472a;
+  color: #4ec9b0;
+}
+
+.sync-badge.behind {
+  background: #5a1d1d;
+  color: #f48771;
+}
+
+.git-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.git-action-btn {
+  background: transparent;
+  border: none;
+  color: #999;
+  padding: 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.git-action-btn:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+.commit-message-box {
+  padding: 8px 12px;
+  background: #1e1e1e;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.commit-input {
+  width: 100%;
+  background: #3c3c3c;
+  border: 1px solid #4a4a4a;
+  color: #ccc;
+  padding: 6px 8px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: inherit;
+  margin-bottom: 6px;
+}
+
+.commit-input:focus {
+  outline: none;
+  border-color: #007acc;
+}
+
+.commit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.commit-btn {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.commit-confirm {
+  background: #007acc;
+  color: white;
+}
+
+.commit-confirm:hover {
+  background: #0098ff;
+}
+
+.commit-cancel {
+  background: #3c3c3c;
+  color: #ccc;
+}
+
+.commit-cancel:hover {
+  background: #4a4a4a;
+}
+
+.git-files {
+  flex: 1;
+  overflow-y: auto;
+  background: #1e1e1e;
+}
+
+.file-section {
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: #252526;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #999;
+  user-select: none;
+}
+
+.file-count {
+  background: #3c3c3c;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+
+.file-list {
+  padding: 2px 0;
+}
+
+.git-file {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.git-file:hover {
+  background: #2a2d2e;
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.file-status {
+  font-weight: 600;
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+}
+
+.status-added {
+  color: #73c991;
+}
+
+.status-modified {
+  color: #e2c08d;
+}
+
+.status-deleted {
+  color: #f48771;
+}
+
+.status-renamed {
+  color: #c586c0;
+}
+
+.status-untracked {
+  color: #6b6b6b;
+}
+
+.file-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-path {
+  color: #6b6b6b;
+  font-size: 11px;
+  margin-left: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.git-file:hover .file-actions {
+  opacity: 1;
+}
+
+.file-action {
+  background: transparent;
+  border: none;
+  color: #999;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.file-action:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+.git-empty {
+  padding: 24px;
+  text-align: center;
+  color: #6b6b6b;
+  font-style: italic;
+}
+
+/* Update existing git panel styles */
+.git-panel {
+  display: none; /* Hide the old simple git panel */
+}
+
+/* New source control panel */
+.source-control-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border-right: 1px solid #3c3c3c;
+  min-width: 200px;
+  max-width: 350px;
+  resize: horizontal;
+  overflow: auto;
+}
+
+.panel-header {
+  padding: 8px 12px;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #999;
+  user-select: none;
+}
