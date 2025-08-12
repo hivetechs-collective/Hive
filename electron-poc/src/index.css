@@ -915,11 +915,13 @@ body {
 
 /* Center Area */
 .center-area {
-  flex: 1;
+  flex: 1; /* Take available space */
   display: flex;
   flex-direction: column;
   background: var(--background-primary);
   position: relative;
+  min-width: 0; /* Critical: Prevent growing beyond available space */
+  overflow: hidden; /* Contain all content */
 }
 
 /* Editor Area - Main content above terminal */
@@ -1284,6 +1286,7 @@ body {
   position: relative;
   min-width: 300px;
   max-width: 600px;
+  flex-shrink: 0; /* Never shrink - stay fixed width */
 }
 
 /* Progress Section */

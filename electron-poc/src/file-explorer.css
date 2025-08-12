@@ -140,48 +140,67 @@
   width: 100%;
   max-width: 100%;
   overflow: hidden;
+  flex-shrink: 0; /* Don't shrink the tab bar height */
 }
 
 /* Tab Navigation Buttons */
 .tab-nav-button {
-  display: none; /* Hidden by default, shown when needed */
+  display: flex !important; /* Force always visible */
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: 32px;
   height: 35px;
-  background: #252526;
+  background: #3e3e42;
   border: none;
-  color: #969696;
+  border-left: 1px solid #252526;
+  border-right: 1px solid #252526;
+  color: #ffffff;
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
-  transition: background 0.1s, color 0.1s;
+  transition: all 0.2s;
+  z-index: 10;
+  font-size: 18px;
+  font-weight: bold;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.tab-nav-button:hover {
-  background: #2a2a2a;
-  color: #cccccc;
+.tab-nav-button.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  color: #5a5a5a;
+  pointer-events: none; /* Completely disable interaction */
 }
 
-.tab-nav-button:active {
+.tab-nav-button:hover:not(.disabled) {
+  background: #505052;
+  color: #ffffff;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.3);
+}
+
+.tab-nav-button:active:not(.disabled) {
   background: #1e1e1e;
+  transform: scale(0.95);
 }
 
 .tab-nav-button svg {
   width: 16px;
   height: 16px;
+  fill: currentColor;
 }
 
 /* Editor Tabs Bar */
 .editor-tabs-bar {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto; /* Allow shrinking */
   height: 35px;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-behavior: smooth;
   scrollbar-width: none; /* Hide scrollbar */
-  min-width: 0; /* Allow shrinking */
+  min-width: 0; /* Critical: Allow shrinking below content size */
+  max-width: 100%; /* Don't exceed container */
 }
 
 .editor-tabs-bar::-webkit-scrollbar {
@@ -190,7 +209,7 @@
 
 /* Tab Actions */
 .tab-actions {
-  display: flex;
+  display: none; /* Hide for now since not functional */
   align-items: center;
   height: 35px;
   padding: 0 4px;

@@ -57,9 +57,13 @@ export class EditorTabs {
     // Create left navigation button
     const leftNav = document.createElement('button');
     leftNav.className = 'tab-nav-button tab-nav-left';
-    leftNav.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M10 3L5 8l5 5V3z"/></svg>';
+    leftNav.innerHTML = '◀'; // Use simple arrow character
     leftNav.title = 'Show previous tabs (Alt+Left)';
-    leftNav.onclick = () => this.scrollTabs('left');
+    leftNav.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.scrollTabs('left');
+    });
     
     // Create tabs container
     this.tabsContainer = document.createElement('div');
@@ -73,9 +77,13 @@ export class EditorTabs {
     // Create right navigation button
     const rightNav = document.createElement('button');
     rightNav.className = 'tab-nav-button tab-nav-right';
-    rightNav.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M6 3v10l5-5-5-5z"/></svg>';
+    rightNav.innerHTML = '▶'; // Use simple arrow character
     rightNav.title = 'Show next tabs (Alt+Right)';
-    rightNav.onclick = () => this.scrollTabs('right');
+    rightNav.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.scrollTabs('right');
+    });
     
     // Create tab actions (new tab button, etc.)
     const tabActions = document.createElement('div');
@@ -109,13 +117,18 @@ export class EditorTabs {
   }
   
   private scrollTabs(direction: 'left' | 'right') {
-    const scrollAmount = 200;
+    console.log('[EditorTabs] Scrolling tabs:', direction);
+    const scrollAmount = 150; // Scroll by approximately one tab width
+    
     if (direction === 'left') {
-      this.tabsContainer.scrollLeft -= scrollAmount;
+      this.tabsContainer.scrollLeft = Math.max(0, this.tabsContainer.scrollLeft - scrollAmount);
     } else {
-      this.tabsContainer.scrollLeft += scrollAmount;
+      const maxScroll = this.tabsContainer.scrollWidth - this.tabsContainer.clientWidth;
+      this.tabsContainer.scrollLeft = Math.min(maxScroll, this.tabsContainer.scrollLeft + scrollAmount);
     }
-    this.updateNavigationButtons();
+    
+    // Update navigation buttons after scrolling
+    setTimeout(() => this.updateNavigationButtons(), 100);
   }
   
   private updateNavigationButtons() {
@@ -125,15 +138,30 @@ export class EditorTabs {
     const leftBtn = wrapper.querySelector('.tab-nav-left') as HTMLButtonElement;
     const rightBtn = wrapper.querySelector('.tab-nav-right') as HTMLButtonElement;
     
+    // Always show navigation buttons, just disable them when can't scroll
     if (leftBtn) {
-      leftBtn.style.display = this.tabsContainer.scrollLeft > 0 ? 'flex' : 'none';
+      const canScrollLeft = this.tabsContainer.scrollLeft > 0;
+      if (canScrollLeft) {
+        leftBtn.classList.remove('disabled');
+        leftBtn.removeAttribute('disabled');
+      } else {
+        leftBtn.classList.add('disabled');
+        leftBtn.setAttribute('disabled', 'true');
+      }
     }
     
     if (rightBtn) {
       const hasOverflow = this.tabsContainer.scrollWidth > this.tabsContainer.clientWidth;
       const canScrollRight = this.tabsContainer.scrollLeft < 
-        (this.tabsContainer.scrollWidth - this.tabsContainer.clientWidth);
-      rightBtn.style.display = hasOverflow && canScrollRight ? 'flex' : 'none';
+        (this.tabsContainer.scrollWidth - this.tabsContainer.clientWidth - 1);
+      
+      if (hasOverflow && canScrollRight) {
+        rightBtn.classList.remove('disabled');
+        rightBtn.removeAttribute('disabled');
+      } else {
+        rightBtn.classList.add('disabled');
+        rightBtn.setAttribute('disabled', 'true');
+      }
     }
   }
 
