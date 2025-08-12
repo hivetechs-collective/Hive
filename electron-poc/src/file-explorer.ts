@@ -36,7 +36,7 @@ export class FileExplorer {
     this.virtualScroller = new VirtualScroller(this.container, {
       itemHeight: 22,
       buffer: 10,
-      renderItem: (node: FileNode) => this.renderFileNode(node)
+      renderItem: (node: FileNode & { level: number }) => this.renderFileNode(node)
     });
     
     // Initial render
@@ -104,12 +104,20 @@ export class FileExplorer {
   private async addGitStatus(element: HTMLElement, path: string) {
     // Check Git status asynchronously to avoid blocking
     requestIdleCallback(async () => {
-      const status = await window.gitAPI.getFileStatus(path);
-      if (status) {
-        const indicator = document.createElement('span');
-        indicator.className = `git-indicator ${status}`;
-        indicator.textContent = this.getGitStatusIcon(status);
-        element.appendChild(indicator);
+      try {
+        const gitStatus = await window.gitAPI.getStatus();
+        const file = gitStatus.files.find(f => f.path === path);
+        if (file) {
+          const indicator = document.createElement('span');
+          const status = file.index !== ' ' ? 'staged' : file.working !== ' ' ? 'modified' : '';
+          if (status) {
+            indicator.className = `git-indicator ${status}`;
+            indicator.textContent = this.getGitStatusIcon(status);
+            element.appendChild(indicator);
+          }
+        }
+      } catch (error) {
+        // Ignore git status errors
       }
     });
   }

@@ -87,18 +87,18 @@ export class NeuralConsciousness {
       </div>
     `;
     
-    // Initially hidden
-    container.style.display = 'none';
+    // Container is now visible by default
+    container.style.display = 'block';
     return container;
   }
   
   private setupCanvas(): void {
     const resize = () => {
       // Fixed circular dimensions
-      this.canvas.width = 200;
-      this.canvas.height = 200;
-      this.centerCore.x = 100;
-      this.centerCore.y = 100;
+      this.canvas.width = 180;
+      this.canvas.height = 180;
+      this.centerCore.x = 90;
+      this.centerCore.y = 90;
     };
     
     window.addEventListener('resize', resize);
@@ -107,8 +107,8 @@ export class NeuralConsciousness {
   
   private initializeNeuralNetwork(): void {
     // Create initial neurons in a circular pattern
-    const neuronCount = 30; // Fewer neurons for smaller display
-    const radius = 60; // Radius for 200px circle
+    const neuronCount = 30; // Original neuron count
+    const radius = 60; // Radius for proper display
     
     for (let i = 0; i < neuronCount; i++) {
       const angle = (i / neuronCount) * Math.PI * 2;
@@ -126,6 +126,10 @@ export class NeuralConsciousness {
         this.connections.push(new Connection(n1, n2));
       }
     }
+  }
+  
+  public getContainer(): HTMLElement {
+    return this.container;
   }
   
   public mount(parentElement: HTMLElement): void {
@@ -152,7 +156,7 @@ export class NeuralConsciousness {
     console.log(`Neural Consciousness ${this.enabled ? 'enabled' : 'disabled'}`);
   }
   
-  private startIdleAnimation(): void {
+  public startIdleAnimation(): void {
     // Gentle idle animation for neurons
     this.neurons.forEach((neuron, i) => {
       neuron.activate(0.2 + Math.random() * 0.3);
@@ -816,7 +820,7 @@ export class NeuralConsciousness {
     });
   }
   
-  private animate(): void {
+  public animate(): void {
     if (!this.ctx) return;
     
     // Clear canvas with slight fade effect

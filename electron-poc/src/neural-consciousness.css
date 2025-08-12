@@ -2,10 +2,9 @@
 
 .neural-consciousness-container {
   position: relative;
-  width: 200px;
-  height: 200px;
-  margin: 20px auto;
-  margin-bottom: 30px;
+  width: 180px;
+  height: 180px;
+  margin: 10px auto;
   z-index: 10;
   background: transparent;
   border-radius: 50%;

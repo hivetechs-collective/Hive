@@ -36,4 +36,16 @@ export const rendererConfig: Configuration = {
       fs: false,
     },
   },
+  // Suppress the critical dependency warning from Monaco
+  ignoreWarnings: [
+    {
+      module: /monaco-editor/,
+      message: /Critical dependency/
+    }
+  ],
+  stats: {
+    warningsFilter: [
+      /Critical dependency: require function is used in a way in which dependencies cannot be statically extracted/,
+    ],
+  },
 };

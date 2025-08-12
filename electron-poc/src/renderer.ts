@@ -36,15 +36,11 @@ document.body.innerHTML = `
 
   <!-- Main Content Area - Exact Dioxus Layout -->
   <div class="main-content">
-    <!-- Left Sidebar -->
+    <!-- Left Sidebar - Single unified panel -->
     <div class="sidebar" id="left-sidebar">
-      <!-- Neural Consciousness stays at top -->
-      <div id="neural-consciousness-container" style="height: 120px;">
-        <!-- Neural Consciousness will be mounted here -->
-      </div>
-      
-      <!-- Activity Bar below Neural Consciousness -->
-      <div class="activity-bar">
+      <!-- Activity buttons all in one stack -->
+      <div class="activity-bar-unified">
+        <!-- File & Git Section -->
         <button class="activity-btn" data-view="explorer" aria-label="Explorer">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M17.5 0h-9L7 1.5V6H2.5L1 7.5v15.07L2.5 24h12.07L16 22.57V18h4.7l1.3-1.43v-14l-1.3-1.43L17.5 0zm0 2.12l2.38 2.38v12.38l-2.38 2.38H16v-10l-1.5-1.5H8V1.5l1.5-.08H17.5z"/>
@@ -57,46 +53,27 @@ document.body.innerHTML = `
           </svg>
           <span class="activity-tooltip">Source Control (Ctrl+Shift+G)</span>
         </button>
-      </div>
-
-      <!-- Side Panels (collapsible) -->
-      <div class="side-panel" id="side-panel" style="display: none;">
-        <!-- File Explorer Panel -->
-        <div class="file-explorer-panel" id="file-explorer-panel">
-          <div class="panel-header">
-            <span>EXPLORER</span>
-            <button class="panel-close" onclick="document.getElementById('side-panel').style.display='none'">×</button>
-          </div>
-          <div id="file-explorer-container">
-            <!-- File Explorer will be mounted here -->
-          </div>
-        </div>
-
-        <!-- Source Control Panel -->
-        <div class="source-control-panel" id="source-control-panel" style="display: none;">
-          <div class="panel-header">
-            <span>SOURCE CONTROL</span>
-            <button class="panel-close" onclick="document.getElementById('side-panel').style.display='none'">×</button>
-          </div>
-          <div id="git-ui-container">
-            <!-- Git UI will be mounted here -->
-          </div>
-        </div>
-      </div>
-
-      <!-- Control Buttons Panel at bottom -->
-      <div class="control-panel">
-        <button class="control-btn" id="analytics-btn" data-panel="analytics">
-          <span class="control-icon">📊</span>
-          <span class="control-label">Analytics</span>
+        
+        <div class="sidebar-divider"></div>
+        
+        <!-- Analytics, Settings, Memory Section -->
+        <button class="activity-btn" data-view="analytics" aria-label="Analytics">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 13h2v8H3zm4-8h2v16H7zm4-2h2v18h-2zm4 4h2v14h-2zm4-2h2v16h-2z"/>
+          </svg>
+          <span class="activity-tooltip">Analytics</span>
         </button>
-        <button class="control-btn" id="settings-btn" data-panel="settings">
-          <span class="control-icon">⚙️</span>
-          <span class="control-label">Settings</span>
+        <button class="activity-btn" data-view="settings" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM12 14a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm9.95-2.01l-1.9-.63c-.13-.42-.29-.83-.48-1.23l1.13-1.62-1.41-1.41-1.62 1.13c-.4-.19-.81-.35-1.23-.48l-.63-1.9h-2l-.63 1.9c-.42.13-.83.29-1.23.48L9.3 6.11 7.89 7.52l1.13 1.62c-.19.4-.35.81-.48 1.23l-1.9.63v2l1.9.63c.13.42.29.83.48 1.23l-1.13 1.62 1.41 1.41 1.62-1.13c.4.19.81.35 1.23.48l.63 1.9h2l.63-1.9c.42-.13.83-.29 1.23-.48l1.62 1.13 1.41-1.41-1.13-1.62c.19-.4.35-.81.48-1.23l1.9-.63v-2z"/>
+          </svg>
+          <span class="activity-tooltip">Settings</span>
         </button>
-        <button class="control-btn" id="memory-btn" data-panel="memory">
-          <span class="control-icon">🧠</span>
-          <span class="control-label">Memory</span>
+        <button class="activity-btn" data-view="memory" aria-label="Memory">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21.67 14.24c-.21-.62-.64-1.12-1.21-1.41l-2.96-1.5V8.82c1.13-.45 1.92-1.55 1.92-2.84 0-1.68-1.37-3.05-3.05-3.05-1.68 0-3.05 1.37-3.05 3.05 0 1.29.79 2.39 1.92 2.84v2.51l-2.96 1.5c-.57.29-1 .79-1.21 1.41-.43 1.27.05 2.68 1.15 3.36l3.39 2.11c.4.25.85.37 1.3.37s.9-.12 1.3-.37l3.39-2.11c1.1-.68 1.58-2.09 1.07-3.36zM7.64 14.24c-.21-.62-.64-1.12-1.21-1.41l-2.96-1.5V8.82c1.13-.45 1.92-1.55 1.92-2.84C5.39 4.3 4.02 2.93 2.34 2.93S-.73 4.3-.73 5.98c0 1.29.79 2.39 1.92 2.84v2.51l-2.96 1.5c-.57.29-1 .79-1.21 1.41-.43 1.27.05 2.68 1.15 3.36l3.39 2.11c.4.25.85.37 1.3.37s.9-.12 1.3-.37l3.39-2.11c1.1-.68 1.58-2.09 1.07-3.36z"/>
+          </svg>
+          <span class="activity-tooltip">Memory</span>
         </button>
       </div>
     </div>
@@ -134,7 +111,12 @@ document.body.innerHTML = `
 
     <!-- Right Panel (Consensus Chat) -->
     <div class="consensus-chat-panel" id="consensus-chat">
-      <!-- Progress Bars at Top -->
+      <!-- Neural Consciousness at top right -->
+      <div id="neural-consciousness-container" style="height: 200px; width: 100%; border-bottom: 1px solid var(--border-color);">
+        <!-- Neural Consciousness will be mounted here -->
+      </div>
+      
+      <!-- Progress Bars below Neural Consciousness -->
       <div class="progress-section">
         <div class="progress-header">
           <img src="${hiveLogo}" alt="Hive" 
@@ -1335,22 +1317,7 @@ setTimeout(async () => {
   console.log('Updated conversation count from local database');
   
   // Initialize Neural Consciousness AFTER critical components
-  // Feature flag controlled and safe initialization
-  if (ENABLE_NEURAL_CONSCIOUSNESS) {
-    try {
-      const chatContentElement = document.getElementById('chat-content');
-      if (chatContentElement) {
-        neuralConsciousness = new NeuralConsciousness();
-        neuralConsciousness.enable(true); // Enable with feature flag
-        neuralConsciousness.mount(chatContentElement as HTMLElement);
-        console.log('✅ Neural Consciousness initialized and enabled');
-      }
-    } catch (error) {
-      console.error('Failed to initialize Neural Consciousness:', error);
-      // App continues to work even if this fails
-      ENABLE_NEURAL_CONSCIOUSNESS = false;
-    }
-  }
+  // Neural Consciousness is initialized in the right panel, not here
 }, 100);
 
 // Analytics Panel Management
@@ -1733,53 +1700,147 @@ setTimeout(() => {
         }
     }
     
-    // Initialize Neural Consciousness in its container
+    // Initialize Neural Consciousness in the right panel
     const neuralContainer = document.getElementById('neural-consciousness-container');
-    if (neuralContainer) {
-        const neuralConsciousness = new NeuralConsciousness(neuralContainer);
+    if (neuralContainer && ENABLE_NEURAL_CONSCIOUSNESS) {
+        neuralConsciousness = new NeuralConsciousness();
+        neuralContainer.appendChild(neuralConsciousness.getContainer());
+        neuralConsciousness.enable(true);
+        neuralConsciousness.animate();
+        neuralConsciousness.startIdleAnimation();
         (window as any).neuralConsciousness = neuralConsciousness;
+        console.log('✅ Neural Consciousness initialized in right panel');
     }
     
-    // Set up activity bar toggle functionality
+    // Set up activity bar toggle functionality for all buttons
     const activityButtons = document.querySelectorAll('.activity-btn');
-    const sidePanel = document.getElementById('side-panel');
-    const fileExplorerPanel = document.getElementById('file-explorer-panel');
-    const sourceControlPanel = document.getElementById('source-control-panel');
+    const editorArea = document.getElementById('editor-area');
+    const analyticsPanel = document.getElementById('analytics-panel');
     let currentView: string | null = null;
+    let panels: { [key: string]: HTMLElement } = {};
+    
+    // Create panels for each view
+    const createPanel = (id: string, title: string, content: HTMLElement | string) => {
+        const panel = document.createElement('div');
+        panel.id = `${id}-panel`;
+        panel.className = 'content-panel';
+        panel.innerHTML = `
+            <div class="panel-header">
+                <span>${title}</span>
+                <button class="panel-close" data-panel="${id}">×</button>
+            </div>
+            <div class="panel-body" id="${id}-content">
+                ${typeof content === 'string' ? content : ''}
+            </div>
+        `;
+        if (typeof content !== 'string') {
+            panel.querySelector('.panel-body')?.appendChild(content);
+        }
+        panel.style.display = 'none';
+        return panel;
+    };
+    
+    // Initialize panels
+    if (editorArea) {
+        // File Explorer
+        const explorerContent = document.createElement('div');
+        explorerContent.id = 'file-explorer-container';
+        panels.explorer = createPanel('explorer', 'EXPLORER', explorerContent);
+        editorArea.appendChild(panels.explorer);
+        
+        // Source Control
+        const gitContent = document.createElement('div');
+        gitContent.id = 'git-ui-container';
+        panels.git = createPanel('git', 'SOURCE CONTROL', gitContent);
+        editorArea.appendChild(panels.git);
+        
+        // Settings
+        panels.settings = createPanel('settings', 'SETTINGS', '<div id="settings-container"></div>');
+        editorArea.appendChild(panels.settings);
+        
+        // Memory
+        panels.memory = createPanel('memory', 'MEMORY', '<div id="memory-container"></div>');
+        editorArea.appendChild(panels.memory);
+        
+        // Analytics panel already exists, just track it
+        if (analyticsPanel) {
+            panels.analytics = analyticsPanel;
+        }
+    }
     
     activityButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             const view = btn.getAttribute('data-view');
+            if (!view) return;
             
             // Toggle panel if clicking same button
-            if (currentView === view && sidePanel) {
-                sidePanel.style.display = sidePanel.style.display === 'none' ? 'block' : 'none';
-                if (sidePanel.style.display === 'none') {
-                    btn.classList.remove('active');
-                    currentView = null;
+            if (currentView === view) {
+                const panel = panels[view];
+                if (panel) {
+                    if (panel.style.display === 'none') {
+                        panel.style.display = 'block';
+                        btn.classList.add('active');
+                    } else {
+                        panel.style.display = 'none';
+                        btn.classList.remove('active');
+                        currentView = null;
+                        return;
+                    }
                 }
-                return;
-            }
-            
-            // Update active state
-            activityButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentView = view;
-            
-            // Show side panel and correct content
-            if (sidePanel) {
-                sidePanel.style.display = 'block';
-            }
-            
-            // Show/hide panels
-            if (view === 'explorer' && fileExplorerPanel && sourceControlPanel) {
-                fileExplorerPanel.style.display = 'block';
-                sourceControlPanel.style.display = 'none';
-            } else if (view === 'git' && fileExplorerPanel && sourceControlPanel) {
-                fileExplorerPanel.style.display = 'none';
-                sourceControlPanel.style.display = 'block';
+            } else {
+                // Hide all panels
+                Object.values(panels).forEach(p => {
+                    if (p) p.style.display = 'none';
+                });
+                
+                // Remove active from all buttons
+                activityButtons.forEach(b => b.classList.remove('active'));
+                
+                // Show selected panel
+                const panel = panels[view];
+                if (panel) {
+                    panel.style.display = 'block';
+                    btn.classList.add('active');
+                    currentView = view;
+                    
+                    // Initialize content if needed
+                    if (view === 'explorer' && !window.fileExplorer) {
+                        const container = document.getElementById('file-explorer-container');
+                        if (container) {
+                            window.fileExplorer = new FileExplorer(container);
+                        }
+                    } else if (view === 'git' && !window.gitUI) {
+                        const container = document.getElementById('git-ui-container');
+                        if (container) {
+                            window.gitUI = new GitUI(container);
+                        }
+                    } else if (view === 'settings' && !settingsModal) {
+                        settingsModal = new SettingsModal();
+                        const container = document.getElementById('settings-container');
+                        if (container) {
+                            settingsModal.renderInContainer(container);
+                        }
+                    } else if (view === 'analytics' && analyticsPanel) {
+                        showAnalyticsPanel();
+                    }
+                }
             }
         });
+    });
+    
+    // Close buttons for panels
+    document.addEventListener('click', (e) => {
+        const target = e.target as HTMLElement;
+        if (target.classList.contains('panel-close')) {
+            const panelId = target.getAttribute('data-panel');
+            if (panelId && panels[panelId]) {
+                panels[panelId].style.display = 'none';
+                // Remove active state from corresponding button
+                const btn = document.querySelector(`.activity-btn[data-view="${panelId}"]`);
+                if (btn) btn.classList.remove('active');
+                if (currentView === panelId) currentView = null;
+            }
+        }
     });
     
     // Terminal controls

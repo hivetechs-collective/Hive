@@ -1418,4 +1418,10 @@ export class SettingsModal {
       toast.style.top = `${60 + (index * 60)}px`;
     });
   }
+  
+  public renderInContainer(container: HTMLElement): void {
+    // Render the settings UI directly in the container (for panel mode)
+    container.innerHTML = this.createModal();
+    this.initializeModal(container);
+  }
 }
