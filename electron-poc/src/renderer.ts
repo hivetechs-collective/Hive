@@ -3,6 +3,8 @@
  * Layout: Left Sidebar | LazyGit Panel | Center (with bottom Terminal) | Right Consensus Chat
  */
 
+import { LazyGitManager } from './lazygit';
+
 import './index.css';
 import './neural-consciousness.css';
 import './analytics.css';
@@ -1689,6 +1691,26 @@ const getModelForStage = (stage: string): string => {
 // Initialize on load
 loadSessionMetrics();
 
+// Initialize LazyGit terminal
+async function initializeLazyGit() {
+    const lazyGitContent = document.querySelector('.lazygit-content');
+    if (lazyGitContent) {
+        // Clear the placeholder content
+        lazyGitContent.innerHTML = '<div id="lazygit-terminal" style="width: 100%; height: 100%;"></div>';
+        
+        const terminalContainer = document.getElementById('lazygit-terminal');
+        if (terminalContainer) {
+            try {
+                await LazyGitManager.initialize(terminalContainer);
+                addLogEntry('🚀 LazyGit terminal initialized', 'success');
+            } catch (error) {
+                console.error('Failed to initialize LazyGit:', error);
+                addLogEntry('❌ Failed to initialize LazyGit terminal', 'error');
+            }
+        }
+    }
+}
+
 // Set up Analytics button click handler after functions are defined
 setTimeout(() => {
     document.getElementById('analytics-btn')?.addEventListener('click', () => {
@@ -1719,4 +1741,9 @@ setTimeout(() => {
             }
         });
     }
+    
+    // Initialize LazyGit terminal after a short delay
+    setTimeout(() => {
+        initializeLazyGit();
+    }, 500);
 }, 200);
