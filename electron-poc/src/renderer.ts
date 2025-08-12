@@ -94,9 +94,9 @@ document.body.innerHTML = `
       <div class="terminal-section" id="terminal-section" style="height: 200px;">
         <div class="resize-handle horizontal-resize" id="terminal-resize"></div>
         <div class="terminal-header">
+          <button class="collapse-btn" id="toggle-terminal" title="Toggle Terminal">−</button>
           <span class="terminal-title">TERMINAL</span>
           <div class="terminal-controls">
-            <button class="terminal-btn" id="minimize-terminal" title="Minimize">−</button>
             <button class="terminal-btn" id="close-terminal" title="Close">×</button>
           </div>
         </div>
@@ -111,23 +111,31 @@ document.body.innerHTML = `
 
     <!-- Right Panel (Consensus Chat) -->
     <div class="consensus-chat-panel" id="consensus-chat">
+      <!-- Collapse button for entire panel -->
+      <button class="panel-collapse-btn" id="toggle-consensus-panel" title="Toggle Panel">−</button>
+      
+      <!-- Vertical resize handle for consensus panel -->
+      <div class="resize-handle vertical-resize" id="consensus-resize"></div>
+      
       <!-- Neural Consciousness at top right -->
       <div id="neural-consciousness-container" style="height: 200px; width: 100%; border-bottom: 1px solid var(--border-color);">
         <!-- Neural Consciousness will be mounted here -->
       </div>
       
       <!-- Progress Bars below Neural Consciousness -->
-      <div class="progress-section">
+      <div class="progress-section" id="progress-section">
         <div class="progress-header">
+          <button class="collapse-btn" id="toggle-progress" title="Toggle Progress">−</button>
           <img src="${hiveLogo}" alt="Hive" 
                style="width: 20px; height: 20px; object-fit: contain; border-radius: 3px;" />
           <span>Consensus Progress</span>
         </div>
-        <div class="profile-display" id="active-profile-display">
-          <span class="profile-label">Profile:</span>
-          <span class="profile-name" id="active-profile-name">Loading...</span>
-        </div>
-        <div class="pipeline-stages">
+        <div class="progress-content" id="progress-content">
+          <div class="profile-display" id="active-profile-display">
+            <span class="profile-label">Profile:</span>
+            <span class="profile-name" id="active-profile-name">Loading...</span>
+          </div>
+          <div class="pipeline-stages">
           <div class="stage" data-stage="generator">
             <div class="stage-progress">
               <div class="stage-label">
@@ -178,6 +186,7 @@ document.body.innerHTML = `
             <span class="stat-label">Cost:</span>
             <span class="stat-value" id="cost-count">$0.00</span>
           </div>
+        </div>
         </div>
       </div>
 
@@ -1844,19 +1853,12 @@ setTimeout(() => {
     });
     
     // Terminal controls
-    const minimizeTerminal = document.getElementById('minimize-terminal');
     const closeTerminal = document.getElementById('close-terminal');
-    const terminalSection = document.getElementById('terminal-section');
+    const terminalSectionElement = document.getElementById('terminal-section');
     
-    if (minimizeTerminal && terminalSection) {
-        minimizeTerminal.addEventListener('click', () => {
-            terminalSection.classList.toggle('minimized');
-        });
-    }
-    
-    if (closeTerminal && terminalSection) {
+    if (closeTerminal && terminalSectionElement) {
         closeTerminal.addEventListener('click', () => {
-            terminalSection.style.display = 'none';
+            terminalSectionElement.style.display = 'none';
         });
     }
     
@@ -1870,6 +1872,7 @@ setTimeout(() => {
 
 // Resize functionality for panels
 function setupResizeHandles() {
+    // Terminal vertical resize
     const terminalResize = document.getElementById('terminal-resize');
     const terminalSection = document.getElementById('terminal-section');
     
@@ -1897,6 +1900,82 @@ function setupResizeHandles() {
         document.addEventListener('mouseup', () => {
             isResizing = false;
             document.body.style.cursor = '';
+        });
+    }
+    
+    // Consensus panel horizontal resize
+    const consensusResize = document.getElementById('consensus-resize');
+    const consensusPanel = document.getElementById('consensus-chat');
+    
+    if (consensusResize && consensusPanel) {
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+        
+        consensusResize.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = parseInt(window.getComputedStyle(consensusPanel).width, 10);
+            document.body.style.cursor = 'ew-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const deltaX = startX - e.clientX;
+            const newWidth = Math.min(Math.max(startWidth + deltaX, 300), 600);
+            consensusPanel.style.width = newWidth + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.style.cursor = '';
+        });
+    }
+    
+    // Progress section collapse/expand
+    const toggleProgress = document.getElementById('toggle-progress');
+    const progressContent = document.getElementById('progress-content');
+    
+    if (toggleProgress && progressContent) {
+        toggleProgress.addEventListener('click', () => {
+            const isCollapsed = progressContent.style.display === 'none';
+            progressContent.style.display = isCollapsed ? 'block' : 'none';
+            toggleProgress.textContent = isCollapsed ? '−' : '+';
+        });
+    }
+    
+    // Terminal collapse/expand
+    const toggleTerminal = document.getElementById('toggle-terminal');
+    const terminalContent = document.getElementById('terminal-content');
+    
+    if (toggleTerminal && terminalContent && terminalSection) {
+        toggleTerminal.addEventListener('click', () => {
+            const isCollapsed = terminalContent.style.display === 'none';
+            terminalContent.style.display = isCollapsed ? 'block' : 'none';
+            terminalSection.style.height = isCollapsed ? '200px' : '35px';
+            toggleTerminal.textContent = isCollapsed ? '−' : '+';
+        });
+    }
+    
+    // Consensus panel collapse/expand
+    const toggleConsensusPanel = document.getElementById('toggle-consensus-panel');
+    
+    if (toggleConsensusPanel && consensusPanel) {
+        toggleConsensusPanel.addEventListener('click', () => {
+            const isCollapsed = consensusPanel.classList.contains('collapsed');
+            if (isCollapsed) {
+                consensusPanel.classList.remove('collapsed');
+                consensusPanel.style.width = '400px';
+                toggleConsensusPanel.textContent = '−';
+                toggleConsensusPanel.title = 'Collapse Panel';
+            } else {
+                consensusPanel.classList.add('collapsed');
+                consensusPanel.style.width = '40px';
+                toggleConsensusPanel.textContent = '+';
+                toggleConsensusPanel.title = 'Expand Panel';
+            }
         });
     }
 }
