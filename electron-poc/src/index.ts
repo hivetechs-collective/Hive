@@ -1267,7 +1267,7 @@ ipcMain.handle('get-analytics', async () => {
                   console.error('Error getting hourly stats:', err5);
                   // Continue with default values even if error
                   hourlyStats.push({
-                    hour: hourStart.toISOString().slice(11, 16),
+                    hour: hourStart.getHours().toString().padStart(2, '0') + ':00',
                     queries: 0,
                     cost: 0,
                     avgTime: 0
@@ -1277,7 +1277,7 @@ ipcMain.handle('get-analytics', async () => {
                 }
                 
                 hourlyStats.push({
-                  hour: hourStart.toISOString().slice(11, 16),
+                  hour: hourStart.getHours().toString().padStart(2, '0') + ':00',
                   queries: row5?.queries || 0,
                   cost: row5?.cost || 0,
                   avgTime: row5?.avg_time || 0

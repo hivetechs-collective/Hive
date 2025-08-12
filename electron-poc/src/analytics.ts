@@ -218,8 +218,9 @@ export class AnalyticsDashboard {
     const now = new Date();
     for (let i = 23; i >= 0; i--) {
       const hour = new Date(now.getTime() - i * 60 * 60 * 1000);
+      const hourStr = hour.getHours().toString().padStart(2, '0') + ':00';
       stats.push({
-        hour: hour.toISOString().slice(11, 16),
+        hour: hourStr,
         queries: 0,
         cost: 0,
         avgTime: 0
@@ -308,8 +309,8 @@ export class AnalyticsDashboard {
           
           <div class="chart-container">
             <h3>Model Usage</h3>
-            <div class="bar-chart" id="model-chart">
-              <canvas id="model-canvas"></canvas>
+            <div class="model-usage-list" id="model-usage-list">
+              <!-- Will be populated with model bars -->
             </div>
           </div>
         </div>
@@ -534,56 +535,46 @@ export class AnalyticsDashboard {
   }
 
   private updateModelChart(): void {
-    const canvas = this.container?.querySelector('#model-canvas') as HTMLCanvasElement;
-    if (!canvas || !this.data) return;
+    const container = this.container?.querySelector('#model-usage-list');
+    if (!container || !this.data) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Sort models by usage count
+    const models = Object.entries(this.data.modelUsage)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 10); // Show top 10 models
+    
+    if (models.length === 0) {
+      container.innerHTML = '<div class="no-data">No model usage data available</div>';
+      return;
+    }
 
-    // Set canvas size
-    canvas.width = canvas.offsetWidth;
-    canvas.height = 150;
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw bar chart
-    const models = Object.entries(this.data.modelUsage);
     const maxUsage = Math.max(...models.map(([_, count]) => count));
-    const padding = 20;
-    const width = canvas.width - padding * 2;
-    const height = canvas.height - padding * 2;
-    const barWidth = width / models.length * 0.8;
-    const barGap = width / models.length * 0.2;
-
-    models.forEach(([model, count], index) => {
-      const x = padding + (barWidth + barGap) * index + barGap / 2;
-      const barHeight = (count / maxUsage) * height;
-      const y = padding + height - barHeight;
-
-      // Draw bar
-      const gradient = ctx.createLinearGradient(0, y, 0, y + barHeight);
-      gradient.addColorStop(0, '#a78bfa');
-      gradient.addColorStop(1, '#6366f1');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(x, y, barWidth, barHeight);
-
-      // Draw value on top of bar
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(count.toString(), x + barWidth / 2, y - 5);
+    
+    let html = '';
+    models.forEach(([model, count]) => {
+      const percentage = (count / maxUsage) * 100;
+      const cost = this.data?.costByModel[model] || 0;
       
-      // Draw model name below bar (truncated)
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.font = '8px monospace';
-      ctx.save();
-      ctx.translate(x + barWidth / 2, canvas.height - 5);
-      ctx.rotate(-Math.PI / 4); // Rotate 45 degrees
-      const shortName = model.length > 12 ? model.substring(0, 10) + '..' : model;
-      ctx.fillText(shortName, 0, 0);
-      ctx.restore();
+      // Simplify model name - remove provider prefix if present
+      const displayName = model.includes('/') ? 
+        model.split('/').pop() : model;
+      
+      html += `
+        <div class="model-usage-item">
+          <div class="model-info">
+            <span class="model-name">${displayName}</span>
+            <span class="model-stats">${count} uses • $${cost.toFixed(2)}</span>
+          </div>
+          <div class="model-bar-wrapper">
+            <div class="model-bar" style="width: ${percentage}%">
+              <div class="model-bar-fill"></div>
+            </div>
+          </div>
+        </div>
+      `;
     });
+    
+    container.innerHTML = html;
   }
 
   private updateTokenGauge(): void {
@@ -641,20 +632,27 @@ export class AnalyticsDashboard {
 
     const totalCost = Object.values(this.data.costByModel).reduce((sum, cost) => sum + cost, 0);
     
+    if (totalCost === 0) {
+      container.innerHTML = '<div class="no-data">No cost data available</div>';
+      return;
+    }
+    
     let html = '<div class="cost-bars">';
     
     Object.entries(this.data.costByModel)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
+      .slice(0, 8) // Show top 8 models
       .forEach(([model, cost]) => {
         const percentage = (cost / totalCost) * 100;
-        const modelShort = model.split('-').slice(0, 2).join('-');
+        // Simplify model name - remove provider
+        const displayName = model.includes('/') ? 
+          model.split('/').pop() : model;
         
         html += `
           <div class="cost-bar-item">
             <div class="cost-bar-label">
-              <span class="model-name">${modelShort}</span>
-              <span class="model-cost">$${cost.toFixed(2)}</span>
+              <span class="model-name">${displayName}</span>
+              <span class="model-cost">$${cost.toFixed(2)} (${percentage.toFixed(1)}%)</span>
             </div>
             <div class="cost-bar-wrapper">
               <div class="cost-bar" style="width: ${percentage}%"></div>
