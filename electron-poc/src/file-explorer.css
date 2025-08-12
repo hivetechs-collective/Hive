@@ -174,6 +174,19 @@
 .editor-tab.active {
   background: #1e1e1e;
   border-bottom: 2px solid #007acc;
+  box-shadow: inset 0 -2px 0 #007acc;
+  position: relative;
+}
+
+/* Add a top highlight for active tab */
+.editor-tab.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #007acc;
 }
 
 .tab-name {
@@ -184,10 +197,17 @@
   font-size: 13px;
   color: #969696;
   padding-right: 8px;
+  transition: color 0.1s ease;
 }
 
 .editor-tab.active .tab-name {
   color: #ffffff;
+  font-weight: 500;
+}
+
+/* Hover effect for inactive tabs */
+.editor-tab:not(.active):hover .tab-name {
+  color: #cccccc;
 }
 
 .tab-close {

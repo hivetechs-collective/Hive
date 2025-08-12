@@ -472,8 +472,8 @@ export class EditorTabs {
         }
       }
       
-      // Ctrl+Tab to switch tabs
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Tab') {
+      // Ctrl+Tab to switch tabs forward
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Tab' && !e.shiftKey) {
         e.preventDefault();
         const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
         const nextIndex = (currentIndex + 1) % this.tabs.length;
@@ -481,7 +481,164 @@ export class EditorTabs {
           this.activateTab(this.tabs[nextIndex].id);
         }
       }
+      
+      // Ctrl+Shift+Tab to switch tabs backward
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Tab' && e.shiftKey) {
+        e.preventDefault();
+        const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : this.tabs.length - 1;
+        if (this.tabs[prevIndex]) {
+          this.activateTab(this.tabs[prevIndex].id);
+        }
+      }
+      
+      // Alt+Left Arrow to go to previous tab
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+        if (currentIndex > 0) {
+          this.activateTab(this.tabs[currentIndex - 1].id);
+        } else if (this.tabs.length > 0) {
+          // Wrap around to last tab
+          this.activateTab(this.tabs[this.tabs.length - 1].id);
+        }
+      }
+      
+      // Alt+Right Arrow to go to next tab
+      if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+        if (currentIndex < this.tabs.length - 1) {
+          this.activateTab(this.tabs[currentIndex + 1].id);
+        } else if (this.tabs.length > 0) {
+          // Wrap around to first tab
+          this.activateTab(this.tabs[0].id);
+        }
+      }
+      
+      // Ctrl+PageUp to go to previous tab (VS Code style)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'PageUp') {
+        e.preventDefault();
+        const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+        if (currentIndex > 0) {
+          this.activateTab(this.tabs[currentIndex - 1].id);
+        }
+      }
+      
+      // Ctrl+PageDown to go to next tab (VS Code style)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'PageDown') {
+        e.preventDefault();
+        const currentIndex = this.tabs.findIndex(t => t.id === this.activeTabId);
+        if (currentIndex < this.tabs.length - 1) {
+          this.activateTab(this.tabs[currentIndex + 1].id);
+        }
+      }
+      
+      // Ctrl+1-9 to jump to specific tab (like browsers and VS Code)
+      if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
+        e.preventDefault();
+        const tabIndex = parseInt(e.key) - 1;
+        if (tabIndex < this.tabs.length) {
+          this.activateTab(this.tabs[tabIndex].id);
+        }
+      }
+      
+      // F1 to show keyboard shortcuts help
+      if (e.key === 'F1') {
+        e.preventDefault();
+        this.showKeyboardShortcuts();
+      }
     });
+  }
+  
+  /**
+   * Show keyboard shortcuts in a modal or alert
+   */
+  private showKeyboardShortcuts(): void {
+    const shortcuts = `
+    Editor Tab Keyboard Shortcuts:
+    
+    Navigation:
+    • Alt + ← / →           Navigate between tabs
+    • Ctrl + Tab            Next tab
+    • Ctrl + Shift + Tab    Previous tab
+    • Ctrl + PageUp/Down    Previous/Next tab
+    • Ctrl + 1-9            Jump to tab by number
+    
+    File Operations:
+    • Ctrl + S              Save current file
+    • Ctrl + W              Close current tab
+    
+    Help:
+    • F1                    Show this help
+    `;
+    
+    // Create a simple modal to show shortcuts
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #252526;
+      border: 1px solid #007acc;
+      border-radius: 4px;
+      padding: 20px;
+      z-index: 10000;
+      color: #cccccc;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-width: 500px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    `;
+    modal.textContent = shortcuts;
+    
+    // Add close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕ Close (ESC)';
+    closeBtn.style.cssText = `
+      display: block;
+      margin-top: 15px;
+      padding: 8px 16px;
+      background: #007acc;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: sans-serif;
+    `;
+    closeBtn.onclick = () => modal.remove();
+    modal.appendChild(closeBtn);
+    
+    // Add backdrop
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 9999;
+    `;
+    backdrop.onclick = () => {
+      modal.remove();
+      backdrop.remove();
+    };
+    
+    // Close on ESC key
+    const closeOnEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        modal.remove();
+        backdrop.remove();
+        document.removeEventListener('keydown', closeOnEsc);
+      }
+    };
+    document.addEventListener('keydown', closeOnEsc);
+    
+    document.body.appendChild(backdrop);
+    document.body.appendChild(modal);
+    closeBtn.focus();
   }
 
   /**
