@@ -125,6 +125,7 @@ export class AnalyticsDashboard {
         console.log('Calling getAnalytics...');
         const analyticsData = await electronAPI.getAnalytics();
         console.log('Analytics data received:', analyticsData);
+        console.log('Recent activity sample:', analyticsData?.recentActivity?.slice(0, 2));
         
         if (analyticsData) {
           this.data = analyticsData;

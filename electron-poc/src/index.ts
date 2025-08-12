@@ -1122,9 +1122,11 @@ ipcMain.handle('get-analytics', async () => {
         `, [userId], (err3, rows3: any[]) => {
           if (err3) console.error('Error getting recent activity:', err3);
           
+          console.log('Recent activity rows:', rows3?.slice(0, 2)); // Log first 2 rows
+          
           analyticsData.recentActivity = (rows3 || []).map((row: any) => ({
             timestamp: row.timestamp,
-            question: row.question || 'Direct query',
+            question: row.question || 'Query', // Fixed fallback text
             model: 'consensus-pipeline',
             cost: row.cost || 0,
             duration: (row.duration || 0) / 1000, // Convert to seconds
