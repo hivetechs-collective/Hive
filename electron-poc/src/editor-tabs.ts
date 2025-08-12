@@ -50,19 +50,91 @@ export class EditorTabs {
   }
 
   private init() {
-    // Create tabs bar
+    // Create tabs wrapper with navigation
+    const tabsWrapper = document.createElement('div');
+    tabsWrapper.className = 'editor-tabs-wrapper';
+    
+    // Create left navigation button
+    const leftNav = document.createElement('button');
+    leftNav.className = 'tab-nav-button tab-nav-left';
+    leftNav.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M10 3L5 8l5 5V3z"/></svg>';
+    leftNav.title = 'Show previous tabs (Alt+Left)';
+    leftNav.onclick = () => this.scrollTabs('left');
+    
+    // Create tabs container
     this.tabsContainer = document.createElement('div');
     this.tabsContainer.className = 'editor-tabs-bar';
+    
+    // Add scroll listener to update navigation buttons
+    this.tabsContainer.addEventListener('scroll', () => {
+      this.updateNavigationButtons();
+    });
+    
+    // Create right navigation button
+    const rightNav = document.createElement('button');
+    rightNav.className = 'tab-nav-button tab-nav-right';
+    rightNav.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M6 3v10l5-5-5-5z"/></svg>';
+    rightNav.title = 'Show next tabs (Alt+Right)';
+    rightNav.onclick = () => this.scrollTabs('right');
+    
+    // Create tab actions (new tab button, etc.)
+    const tabActions = document.createElement('div');
+    tabActions.className = 'tab-actions';
+    tabActions.innerHTML = `
+      <button class="tab-action-button" title="Split Editor">
+        <svg width="16" height="16" viewBox="0 0 16 16">
+          <path fill="currentColor" d="M2 2v12h12V2H2zm7 11H3V3h6v10zm4 0h-3V3h3v10z"/>
+        </svg>
+      </button>
+    `;
+    
+    // Assemble the tab bar
+    tabsWrapper.appendChild(leftNav);
+    tabsWrapper.appendChild(this.tabsContainer);
+    tabsWrapper.appendChild(rightNav);
+    tabsWrapper.appendChild(tabActions);
     
     // Create editors container
     this.editorsContainer = document.createElement('div');
     this.editorsContainer.className = 'editors-container';
     
-    this.container.appendChild(this.tabsContainer);
+    this.container.appendChild(tabsWrapper);
     this.container.appendChild(this.editorsContainer);
     
     // Set up keyboard shortcuts
     this.setupKeyboardShortcuts();
+    
+    // Update navigation button visibility
+    this.updateNavigationButtons();
+  }
+  
+  private scrollTabs(direction: 'left' | 'right') {
+    const scrollAmount = 200;
+    if (direction === 'left') {
+      this.tabsContainer.scrollLeft -= scrollAmount;
+    } else {
+      this.tabsContainer.scrollLeft += scrollAmount;
+    }
+    this.updateNavigationButtons();
+  }
+  
+  private updateNavigationButtons() {
+    const wrapper = this.container.querySelector('.editor-tabs-wrapper');
+    if (!wrapper) return;
+    
+    const leftBtn = wrapper.querySelector('.tab-nav-left') as HTMLButtonElement;
+    const rightBtn = wrapper.querySelector('.tab-nav-right') as HTMLButtonElement;
+    
+    if (leftBtn) {
+      leftBtn.style.display = this.tabsContainer.scrollLeft > 0 ? 'flex' : 'none';
+    }
+    
+    if (rightBtn) {
+      const hasOverflow = this.tabsContainer.scrollWidth > this.tabsContainer.clientWidth;
+      const canScrollRight = this.tabsContainer.scrollLeft < 
+        (this.tabsContainer.scrollWidth - this.tabsContainer.clientWidth);
+      rightBtn.style.display = hasOverflow && canScrollRight ? 'flex' : 'none';
+    }
   }
 
   /**
@@ -401,6 +473,9 @@ export class EditorTabs {
       
       this.tabsContainer.appendChild(tabEl);
     });
+    
+    // Update navigation button visibility after rendering tabs
+    this.updateNavigationButtons();
   }
 
   /**

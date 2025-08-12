@@ -129,28 +129,98 @@
   transform: rotate(90deg);
 }
 
-/* Editor Tabs */
-.editor-tabs-bar {
+/* Editor Tabs Wrapper */
+.editor-tabs-wrapper {
   display: flex;
+  align-items: center;
   background: #252526;
   border-bottom: 1px solid #3c3c3c;
   height: 35px;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Tab Navigation Buttons */
+.tab-nav-button {
+  display: none; /* Hidden by default, shown when needed */
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 35px;
+  background: #252526;
+  border: none;
+  color: #969696;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.tab-nav-button:hover {
+  background: #2a2a2a;
+  color: #cccccc;
+}
+
+.tab-nav-button:active {
+  background: #1e1e1e;
+}
+
+.tab-nav-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Editor Tabs Bar */
+.editor-tabs-bar {
+  display: flex;
+  flex: 1;
+  height: 35px;
   overflow-x: auto;
   overflow-y: hidden;
-  scrollbar-width: thin;
+  scroll-behavior: smooth;
+  scrollbar-width: none; /* Hide scrollbar */
+  min-width: 0; /* Allow shrinking */
 }
 
 .editor-tabs-bar::-webkit-scrollbar {
-  height: 3px;
+  display: none; /* Hide scrollbar */
 }
 
-.editor-tabs-bar::-webkit-scrollbar-track {
+/* Tab Actions */
+.tab-actions {
+  display: flex;
+  align-items: center;
+  height: 35px;
+  padding: 0 4px;
+  background: #252526;
+  border-left: 1px solid #3c3c3c;
+  flex-shrink: 0;
+}
+
+.tab-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   background: transparent;
+  border: none;
+  color: #969696;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.1s, color 0.1s;
 }
 
-.editor-tabs-bar::-webkit-scrollbar-thumb {
-  background: #4a4a4a;
-  border-radius: 3px;
+.tab-action-button:hover {
+  background: #2a2a2a;
+  color: #cccccc;
+}
+
+.tab-action-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .editor-tab {

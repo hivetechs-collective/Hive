@@ -931,6 +931,7 @@ body {
   flex-direction: column;
   min-height: 0; /* Important for nested flexbox */
   position: relative;
+  max-width: 100%; /* Prevent extending beyond container */
 }
 
 /* Resize Handles */
