@@ -6,6 +6,22 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 
+// Suppress ResizeObserver errors in webpack dev server
+if (typeof window !== 'undefined') {
+  const originalError = window.onerror;
+  window.onerror = function(message, source, lineno, colno, error) {
+    // Ignore ResizeObserver errors
+    if (message && typeof message === 'string' && message.includes('ResizeObserver')) {
+      return true;
+    }
+    // Call original error handler if it exists
+    if (originalError) {
+      return originalError(message, source, lineno, colno, error);
+    }
+    return false;
+  };
+}
+
 export class LazyGitTerminal {
   private terminal: Terminal;
   private fitAddon: FitAddon;
@@ -67,9 +83,23 @@ export class LazyGitTerminal {
     // Fit terminal to container
     this.fitAddon.fit();
     
-    // Set up resize observer
+    // Set up resize observer with debouncing to prevent errors
+    let resizeTimeout: NodeJS.Timeout;
     const resizeObserver = new ResizeObserver(() => {
-      this.fitAddon.fit();
+      // Debounce resize operations to prevent ResizeObserver loop errors
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        try {
+          // Use requestAnimationFrame to ensure DOM is ready
+          requestAnimationFrame(() => {
+            if (this.terminal && this.fitAddon) {
+              this.fitAddon.fit();
+            }
+          });
+        } catch (e) {
+          // Silently ignore resize errors
+        }
+      }, 100);
     });
     resizeObserver.observe(this.container);
     
