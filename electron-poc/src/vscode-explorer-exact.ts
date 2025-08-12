@@ -321,14 +321,6 @@ export class VSCodeExplorerExact {
     // Make draggable
     row.draggable = true;
     
-    // Add drag event listeners
-    row.addEventListener('dragstart', (e) => this.handleDragStart(e, node));
-    row.addEventListener('dragover', (e) => this.handleDragOver(e, node));
-    row.addEventListener('drop', (e) => this.handleDrop(e, node));
-    row.addEventListener('dragend', (e) => this.handleDragEnd(e));
-    row.addEventListener('dragenter', (e) => this.handleDragEnter(e, node));
-    row.addEventListener('dragleave', (e) => this.handleDragLeave(e));
-    
     if (this.selectedNode?.path === node.path) {
       row.classList.add('selected');
     }
@@ -534,6 +526,82 @@ export class VSCodeExplorerExact {
     };
     
     newList.addEventListener('click', handleClick);
+    
+    // Add drag and drop event delegation
+    this.setupDragAndDrop(newList);
+  }
+  
+  private setupDragAndDrop(container: HTMLElement) {
+    // Drag start
+    container.addEventListener('dragstart', (e: DragEvent) => {
+      const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+      if (!row) return;
+      
+      const path = row.getAttribute('data-path');
+      if (!path) return;
+      
+      const node = this.treeData.get(path);
+      if (!node) return;
+      
+      this.handleDragStart(e, node);
+    });
+    
+    // Drag over
+    container.addEventListener('dragover', (e: DragEvent) => {
+      e.preventDefault(); // Required to allow drop
+      
+      const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+      if (!row) return;
+      
+      const path = row.getAttribute('data-path');
+      if (!path) return;
+      
+      const node = this.treeData.get(path);
+      if (!node) return;
+      
+      this.handleDragOver(e, node);
+    });
+    
+    // Drag enter
+    container.addEventListener('dragenter', (e: DragEvent) => {
+      const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+      if (!row) return;
+      
+      const path = row.getAttribute('data-path');
+      if (!path) return;
+      
+      const node = this.treeData.get(path);
+      if (!node) return;
+      
+      this.handleDragEnter(e, node);
+    });
+    
+    // Drag leave
+    container.addEventListener('dragleave', (e: DragEvent) => {
+      this.handleDragLeave(e);
+    });
+    
+    // Drop
+    container.addEventListener('drop', (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+      if (!row) return;
+      
+      const path = row.getAttribute('data-path');
+      if (!path) return;
+      
+      const node = this.treeData.get(path);
+      if (!node) return;
+      
+      this.handleDrop(e, node);
+    });
+    
+    // Drag end
+    container.addEventListener('dragend', (e: DragEvent) => {
+      this.handleDragEnd(e);
+    });
   }
 
   private async toggleExpanded(node: TreeNode) {
@@ -664,18 +732,21 @@ export class VSCodeExplorerExact {
       e.dataTransfer.setData('text/plain', node.path);
     }
     
-    // Add dragging class to the element
-    const element = e.currentTarget as HTMLElement;
-    element.classList.add('dragging');
-    element.style.opacity = '0.5';
+    // Add dragging class to the row element
+    const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+    if (row) {
+      row.classList.add('dragging');
+      row.style.opacity = '0.5';
+    }
   }
   
   private handleDragOver(e: DragEvent, node: TreeNode) {
     e.preventDefault(); // Allow drop
     
     if (!this.draggedNode) return;
+    if (this.draggedNode === node) return; // Can't drop on itself
     
-    // Only allow dropping on directories or between items
+    // Only allow dropping on directories
     if (node.type === 'directory') {
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = 'move';
@@ -687,22 +758,35 @@ export class VSCodeExplorerExact {
     if (!this.draggedNode) return;
     if (this.draggedNode === node) return; // Can't drop on itself
     
-    const element = e.currentTarget as HTMLElement;
+    const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+    if (!row) return;
+    
+    // Clear previous drop target
+    if (this.dropTarget && this.dropTarget !== row) {
+      this.dropTarget.classList.remove('drop-target');
+      this.dropTarget.style.background = '';
+      this.dropTarget.style.border = '';
+    }
     
     // Only highlight directories as drop targets
     if (node.type === 'directory') {
-      element.classList.add('drop-target');
-      element.style.background = 'rgba(0, 122, 204, 0.2)';
-      element.style.border = '1px solid #007acc';
-      this.dropTarget = element;
+      row.classList.add('drop-target');
+      row.style.background = 'rgba(0, 122, 204, 0.2)';
+      row.style.border = '1px solid #007acc';
+      this.dropTarget = row;
     }
   }
   
   private handleDragLeave(e: DragEvent) {
-    const element = e.currentTarget as HTMLElement;
-    element.classList.remove('drop-target');
-    element.style.background = '';
-    element.style.border = '';
+    // Only clear if we're leaving the row entirely
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+    
+    if (row && relatedTarget && !row.contains(relatedTarget)) {
+      row.classList.remove('drop-target');
+      row.style.background = '';
+      row.style.border = '';
+    }
   }
   
   private async handleDrop(e: DragEvent, targetNode: TreeNode) {
@@ -710,36 +794,60 @@ export class VSCodeExplorerExact {
     e.stopPropagation();
     
     console.log('[VSCodeExplorer] Drop on:', targetNode.name);
+    console.log('[VSCodeExplorer] Dragged node:', this.draggedNode?.name);
     
-    if (!this.draggedNode) return;
-    if (this.draggedNode === targetNode) return; // Can't drop on itself
+    if (!this.draggedNode) {
+      console.log('[VSCodeExplorer] No dragged node, aborting drop');
+      return;
+    }
     
-    const element = e.currentTarget as HTMLElement;
-    element.classList.remove('drop-target');
-    element.style.background = '';
-    element.style.border = '';
+    if (this.draggedNode === targetNode) {
+      console.log('[VSCodeExplorer] Cannot drop on itself');
+      return;
+    }
+    
+    // Clear drop target styles
+    const row = (e.target as HTMLElement).closest('.monaco-list-row') as HTMLElement;
+    if (row) {
+      row.classList.remove('drop-target');
+      row.style.background = '';
+      row.style.border = '';
+    }
     
     // Only allow dropping on directories
     if (targetNode.type === 'directory') {
       try {
+        console.log('[VSCodeExplorer] Moving', this.draggedNode.path, 'to', targetNode.path);
+        
         // Move the file/folder
         await this.moveItem(this.draggedNode.path, targetNode.path);
         
+        console.log('[VSCodeExplorer] Move completed, refreshing tree...');
+        
         // Refresh the tree
         await this.refresh();
+        
+        console.log('[VSCodeExplorer] Tree refreshed');
       } catch (error) {
         console.error('[VSCodeExplorer] Failed to move item:', error);
         alert('Failed to move: ' + (error as any).message);
       }
+    } else {
+      console.log('[VSCodeExplorer] Target is not a directory, cannot drop');
     }
     
     this.draggedNode = null;
   }
   
   private handleDragEnd(e: DragEvent) {
-    const element = e.currentTarget as HTMLElement;
-    element.classList.remove('dragging');
-    element.style.opacity = '';
+    console.log('[VSCodeExplorer] Drag end');
+    
+    // Clear dragging styles
+    const draggingElements = this.container.querySelectorAll('.dragging');
+    draggingElements.forEach(el => {
+      el.classList.remove('dragging');
+      (el as HTMLElement).style.opacity = '';
+    });
     
     // Clean up any drop targets
     const dropTargets = this.container.querySelectorAll('.drop-target');

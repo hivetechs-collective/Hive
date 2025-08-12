@@ -430,3 +430,20 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* Drag and Drop Styles */
+.monaco-list-row.dragging {
+  opacity: 0.5;
+  cursor: move;
+}
+
+.monaco-list-row.drop-target {
+  background: rgba(0, 122, 204, 0.2) !important;
+  border: 1px solid #007acc !important;
+  border-radius: 2px;
+}
+
+.monaco-list-row[data-type="directory"].drag-over {
+  background: rgba(0, 122, 204, 0.3) !important;
+  box-shadow: inset 0 0 0 2px #007acc;
+}

@@ -111,7 +111,7 @@ export class SimpleFileExplorer {
     if (node.expanded) {
       // Collapse
       node.expanded = false;
-      const nextSibling = div.nextSibling;
+      let nextSibling = div.nextSibling;
       while (nextSibling && (nextSibling as HTMLElement).dataset?.parent === item.path) {
         const toRemove = nextSibling;
         nextSibling = nextSibling.nextSibling;
