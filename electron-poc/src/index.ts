@@ -999,7 +999,7 @@ ipcMain.handle('get-usage-count', async () => {
       SELECT COUNT(*) as count 
       FROM conversation_usage 
       WHERE user_id = ? 
-      AND date(timestamp) = date('now', 'localtime')
+      AND date(timestamp, 'localtime') = date('now', 'localtime')
     `, [userId], (err, row: any) => {
       if (err) {
         console.error('Error getting usage count:', err);
