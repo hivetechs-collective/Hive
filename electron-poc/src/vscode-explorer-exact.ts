@@ -38,10 +38,25 @@ export class VSCodeExplorerExact {
 
   constructor(container: HTMLElement) {
     this.container = container;
-    this.initialize();
+    this.initializeInternal();
   }
 
-  private async initialize() {
+  // Public method to initialize/reinitialize with a specific path
+  public async initialize(rootPath?: string) {
+    if (rootPath) {
+      this.rootPath = rootPath;
+      console.log('[VSCodeExplorer] Setting root path to:', rootPath);
+    }
+    
+    // Re-initialize Git decorations with new path
+    await this.initializeGitDecorations();
+    
+    // Reload the directory tree
+    await this.loadRootDirectory();
+    this.render();
+  }
+
+  private async initializeInternal() {
     console.log('[VSCodeExplorer] Initializing exact VS Code implementation...');
     this.setupContainer();
     this.attachStyles();

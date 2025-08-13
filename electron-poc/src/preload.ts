@@ -60,15 +60,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
   showInputDialog: (title: string, defaultValue?: string) => ipcRenderer.invoke('show-input-dialog', title, defaultValue),
   
+  // Dialog API
+  showOpenDialog: (options: any) => ipcRenderer.invoke('show-open-dialog', options),
+  showSaveDialog: (options: any) => ipcRenderer.invoke('show-save-dialog', options),
+  showMessageBox: (options: any) => ipcRenderer.invoke('show-message-box', options),
+  setTitle: (title: string) => ipcRenderer.invoke('set-title', title),
+  
   // Menu event listeners
   onMenuOpenFolder: (callback: (folderPath: string) => void) => {
     ipcRenderer.on('menu-open-folder', (_, folderPath) => callback(folderPath));
   },
+  onMenuOpenFile: (callback: (filePath: string) => void) => {
+    ipcRenderer.on('menu-open-file', (_, filePath) => callback(filePath));
+  },
   onMenuNewFile: (callback: () => void) => {
     ipcRenderer.on('menu-new-file', callback);
   },
-  onMenuSaveFile: (callback: () => void) => {
-    ipcRenderer.on('menu-save-file', callback);
+  onMenuSave: (callback: () => void) => {
+    ipcRenderer.on('menu-save', callback);
+  },
+  onMenuSaveAs: (callback: () => void) => {
+    ipcRenderer.on('menu-save-as', callback);
+  },
+  onMenuCloseTab: (callback: () => void) => {
+    ipcRenderer.on('menu-close-tab', callback);
   }
 });
 
@@ -88,7 +103,8 @@ contextBridge.exposeInMainWorld('gitAPI', {
   fetch: () => ipcRenderer.invoke('git-fetch'),
   switchBranch: (branchName: string) => ipcRenderer.invoke('git-switch-branch', branchName),
   createBranch: (branchName: string) => ipcRenderer.invoke('git-create-branch', branchName),
-  getFileStatus: (path: string) => ipcRenderer.invoke('git-file-status', path)
+  getFileStatus: (path: string) => ipcRenderer.invoke('git-file-status', path),
+  initRepo: (repoPath: string) => ipcRenderer.invoke('git-init', repoPath)
 });
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown

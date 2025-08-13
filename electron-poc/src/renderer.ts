@@ -38,6 +38,9 @@ import { VSCodeExplorerExact } from './vscode-explorer-exact';
 import { EditorTabs } from './editor-tabs';
 import { StatusBar } from './status-bar';
 
+// Current opened folder state
+let currentOpenedFolder: string | null = null;
+
 // Simple input dialog function for VS Code-style prompts
 function showInputDialog(title: string, message: string, defaultValue: string = ''): Promise<string | null> {
     return new Promise((resolve) => {
@@ -566,24 +569,36 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                         }
                     }
                     
-                    window.fileExplorer = new VSCodeExplorerExact(container);
-                    
-                    // Connect to editor tabs when files are selected
-                    window.fileExplorer.onFileSelect((filePath: string) => {
-                        console.log('File selected:', filePath);
-                        if (window.editorTabs) {
-                            // Wrap in try-catch to prevent errors from bubbling to webpack
-                            try {
-                                window.editorTabs.openFile(filePath).catch((err: any) => {
-                                    console.error('Error opening file:', err);
-                                });
-                            } catch (err) {
-                                console.error('Error calling openFile:', err);
+                    // Only initialize explorer if a folder is opened
+                    if (currentOpenedFolder) {
+                        window.fileExplorer = new VSCodeExplorerExact(container);
+                        window.fileExplorer.initialize(currentOpenedFolder);
+                        
+                        // Connect to editor tabs when files are selected
+                        window.fileExplorer.onFileSelect((filePath: string) => {
+                            console.log('File selected:', filePath);
+                            if (window.editorTabs) {
+                                // Wrap in try-catch to prevent errors from bubbling to webpack
+                                try {
+                                    window.editorTabs.openFile(filePath).catch((err: any) => {
+                                        console.error('Error opening file:', err);
+                                    });
+                                } catch (err) {
+                                    console.error('Error calling openFile:', err);
+                                }
+                            } else {
+                                console.error('editorTabs not found');
                             }
-                        } else {
-                            console.error('editorTabs not found');
-                        }
-                    });
+                        });
+                    } else {
+                        // Show empty state
+                        container.innerHTML = `
+                            <div style="padding: 20px; text-align: center; opacity: 0.6;">
+                                <div>No folder opened</div>
+                                <div style="margin-top: 10px; font-size: 12px;">Open a folder to start</div>
+                            </div>
+                        `;
+                    }
                     
                     // Connect add file/folder buttons
                     const addFileBtn = document.querySelector('.sidebar-actions button[title="New File"]');
@@ -632,8 +647,19 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
             } else if (panelType === 'git' && !window.gitUI) {
                 const container = document.getElementById('git-content');
                 if (container) {
-                    // Use VS Code style SCM view
-                    window.gitUI = new VSCodeSCMView(container);
+                    // Only initialize git if a folder is opened
+                    if (currentOpenedFolder) {
+                        // Use VS Code style SCM view
+                        window.gitUI = new VSCodeSCMView(container);
+                    } else {
+                        // Show empty state
+                        container.innerHTML = `
+                            <div style="padding: 20px; text-align: center; opacity: 0.6;">
+                                <div>No folder opened</div>
+                                <div style="margin-top: 10px; font-size: 12px;">Open a folder to see Git status</div>
+                            </div>
+                        `;
+                    }
                 }
             }
         }
@@ -2104,6 +2130,15 @@ setTimeout(() => {
         (window as any).statusBar = new StatusBar(statusBar as HTMLElement);
     }
     
+    // Initialize Editor Tabs immediately on startup (not just when explorer is clicked)
+    if (!window.editorTabs) {
+        const editorArea = document.getElementById('editor-area');
+        if (editorArea) {
+            window.editorTabs = new EditorTabs(editorArea);
+            console.log('✅ Editor tabs initialized on startup');
+        }
+    }
+    
     // Listen for menu events from main process
     setupMenuEventListeners();
     
@@ -2419,4 +2454,151 @@ function setupResizeHandles() {
             }
         });
     }
-}// Testing Git modification indicator
+}
+
+// Menu event handlers for opening files and folders
+// These are triggered from the main process when File menu items are clicked
+
+// Function to handle opening a folder
+async function handleOpenFolder(folderPath: string) {
+    try {
+        console.log('[Menu] Opening folder:', folderPath);
+        
+        // Update the current opened folder state
+        currentOpenedFolder = folderPath;
+        
+        // Update window title with folder name
+        const folderName = folderPath.split('/').pop() || folderPath;
+        document.title = `Hive AI - ${folderName}`;
+        
+        // Refresh the file explorer with the new folder
+        const explorerContainer = document.getElementById('explorer-content');
+        if (explorerContainer) {
+            // Clear existing explorer and create a new one with the opened folder
+            explorerContainer.innerHTML = '';
+            window.fileExplorer = new VSCodeExplorerExact(explorerContainer);
+            await window.fileExplorer.initialize(folderPath);
+            
+            // Reconnect file selection handler for the editor
+            window.fileExplorer.onFileSelect((filePath: string) => {
+                console.log('File selected:', filePath);
+                if (window.editorTabs) {
+                    // Wrap in try-catch to prevent errors from bubbling to webpack
+                    try {
+                        window.editorTabs.openFile(filePath).catch((err: any) => {
+                            console.error('Error opening file:', err);
+                        });
+                    } catch (err) {
+                        console.error('Error calling openFile:', err);
+                    }
+                } else {
+                    console.error('editorTabs not found');
+                }
+            });
+        }
+        
+        // Initialize/refresh the Git panel with the new folder
+        const gitContainer = document.getElementById('git-content');
+        if (gitContainer) {
+            // Clear existing Git UI and create a new one
+            gitContainer.innerHTML = '';
+            window.gitUI = new VSCodeSCMView(gitContainer);
+        }
+        
+        // Update status bar with folder info
+        if ((window as any).statusBar) {
+            (window as any).statusBar.setWorkspaceInfo({ 
+                folder: folderName,
+                path: folderPath
+            });
+            
+            // Check if this folder is a Git repository and update Git info
+            try {
+                const gitStatus = await (window as any).gitAPI.getStatus();
+                if (gitStatus && gitStatus.branch) {
+                    (window as any).statusBar.setGitInfo({
+                        branch: gitStatus.branch,
+                        ahead: gitStatus.ahead || 0,
+                        behind: gitStatus.behind || 0
+                    });
+                }
+            } catch (error) {
+                console.log('[Menu] No Git repo found in opened folder');
+            }
+        }
+        
+        addLogEntry(`📁 Opened folder: ${folderName}`, 'success');
+        
+    } catch (error) {
+        console.error('[Menu] Failed to open folder:', error);
+        addLogEntry('❌ Failed to open folder', 'error');
+    }
+}
+
+// Function to handle opening a single file
+async function handleOpenFile(filePath: string) {
+    try {
+        console.log('[Menu] Opening file:', filePath);
+        
+        // If no folder is currently opened, open the parent folder
+        if (!currentOpenedFolder) {
+            const parentFolder = filePath.substring(0, filePath.lastIndexOf('/'));
+            await handleOpenFolder(parentFolder);
+        }
+        
+        // Open the file in the editor
+        if (window.editorTabs) {
+            const content = await (window as any).fileAPI.readFile(filePath);
+            window.editorTabs.openFile(filePath, content);
+        }
+        
+        addLogEntry(`📄 Opened file: ${filePath.split('/').pop()}`, 'success');
+        
+    } catch (error) {
+        console.error('[Menu] Failed to open file:', error);
+        addLogEntry('❌ Failed to open file', 'error');
+    }
+}
+
+// Listen for menu events from the main process
+// These events are sent from the main process when File menu items are clicked
+if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    // Listen for open folder event
+    (window as any).electronAPI.onMenuOpenFolder((folderPath: string) => {
+        handleOpenFolder(folderPath);
+    });
+    
+    // Listen for open file event
+    (window as any).electronAPI.onMenuOpenFile((filePath: string) => {
+        handleOpenFile(filePath);
+    });
+    
+    // Listen for other menu events
+    (window as any).electronAPI.onMenuNewFile(() => {
+        console.log('[Menu] New file requested');
+        // Create a new untitled file in the editor
+        if (window.editorTabs) {
+            window.editorTabs.openFile('untitled.txt', '');
+        }
+    });
+    
+    (window as any).electronAPI.onMenuSave(() => {
+        console.log('[Menu] Save requested');
+        // Save the current file
+        if (window.editorTabs) {
+            window.editorTabs.saveCurrentFile();
+        }
+    });
+    
+    (window as any).electronAPI.onMenuCloseTab(() => {
+        console.log('[Menu] Close tab requested');
+        // Close the current tab
+        if (window.editorTabs) {
+            window.editorTabs.closeCurrentTab();
+        }
+    });
+    
+    console.log('[Menu] Menu event listeners registered');
+}
+
+// Testing Git modification indicator
