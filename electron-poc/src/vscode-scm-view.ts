@@ -6,6 +6,7 @@
 import { GitStatus, GitFileStatus } from './types/git';
 import { GitDecorationProvider } from './git-decoration-provider';
 import { GitGraphView } from './git-graph';
+import { notifications } from './notification';
 
 interface ResourceGroup {
   id: string;
@@ -534,19 +535,37 @@ export class VSCodeSCMView {
 
   public async commit() {
     if (!this.commitMessage.trim()) {
-      alert('Please enter a commit message');
+      notifications.show({
+        title: 'Commit Failed',
+        message: 'Please enter a commit message',
+        type: 'warning',
+        duration: 3000
+      });
       return;
     }
     
     // Check if there are staged files
     const stagedFiles = this.gitStatus?.files.filter(f => f.index !== ' ' && f.index !== '?') || [];
     if (stagedFiles.length === 0) {
-      alert('No files staged for commit. Please stage files first.');
+      notifications.show({
+        title: 'No Staged Files',
+        message: 'Please stage files before committing',
+        type: 'warning',
+        duration: 3000
+      });
       return;
     }
     
+    const notificationId = notifications.show({
+      title: 'Committing',
+      message: `Committing ${stagedFiles.length} file(s)...`,
+      type: 'loading',
+      duration: 0
+    });
+    
     try {
       await window.gitAPI.commit(this.commitMessage);
+      const message = this.commitMessage;
       this.commitMessage = '';
       // Update the commit message input
       const input = this.container.querySelector('.scm-input') as HTMLTextAreaElement;
@@ -554,9 +573,21 @@ export class VSCodeSCMView {
         input.value = '';
       }
       await this.refresh();
-    } catch (error) {
+      
+      notifications.update(notificationId, {
+        title: 'Commit Successful',
+        message: `Committed: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}"`,
+        type: 'success',
+        duration: 3000
+      });
+    } catch (error: any) {
       console.error('Failed to commit:', error);
-      alert(`Commit failed: ${error}`);
+      notifications.update(notificationId, {
+        title: 'Commit Failed',
+        message: error?.message || 'An error occurred while committing',
+        type: 'error',
+        duration: 5000
+      });
     }
   }
 
@@ -566,44 +597,108 @@ export class VSCodeSCMView {
   }
 
   public async push() {
+    const branch = this.gitStatus?.branch || 'current branch';
+    
+    // Show loading notification
+    const notificationId = notifications.show({
+      title: 'Git Push',
+      message: `Pushing ${branch} to remote...`,
+      type: 'loading',
+      duration: 0 // Persistent until updated
+    });
+
     try {
       console.log('[SCM] Pushing to remote...');
       await window.gitAPI.push();
       await this.refresh();
       console.log('[SCM] Push successful');
       
-      // Show success notification (you could add a toast notification here)
-      const branch = this.gitStatus?.branch || 'current branch';
-      console.log(`Successfully pushed ${branch} to remote`);
+      // Update to success notification
+      notifications.update(notificationId, {
+        title: 'Push Successful',
+        message: `Successfully pushed ${branch} to remote`,
+        type: 'success',
+        duration: 3000
+      });
     } catch (error: any) {
       console.error('Failed to push:', error);
       
       // Check if it's an upstream branch error
       if (error?.message?.includes('no upstream branch')) {
-        alert(`Branch '${this.gitStatus?.branch}' has no upstream branch. The system will now set it up and push.`);
+        notifications.update(notificationId, {
+          title: 'Setting Upstream',
+          message: `Setting upstream branch for ${branch}...`,
+          type: 'info',
+          duration: 5000
+        });
+        // The git-manager will handle setting upstream automatically
       } else {
-        alert(`Push failed: ${error?.message || error}`);
+        notifications.update(notificationId, {
+          title: 'Push Failed',
+          message: error?.message || 'An error occurred while pushing',
+          type: 'error',
+          duration: 5000
+        });
       }
     }
   }
 
   public async pull() {
+    const notificationId = notifications.show({
+      title: 'Git Pull',
+      message: 'Pulling from remote...',
+      type: 'loading',
+      duration: 0
+    });
+
     try {
       await window.gitAPI.pull();
       await this.refresh();
-    } catch (error) {
+      
+      notifications.update(notificationId, {
+        title: 'Pull Successful',
+        message: 'Successfully pulled changes from remote',
+        type: 'success',
+        duration: 3000
+      });
+    } catch (error: any) {
       console.error('Failed to pull:', error);
-      alert(`Pull failed: ${error}`);
+      notifications.update(notificationId, {
+        title: 'Pull Failed', 
+        message: error?.message || 'An error occurred while pulling',
+        type: 'error',
+        duration: 5000
+      });
     }
   }
 
   public async sync() {
+    const notificationId = notifications.show({
+      title: 'Git Sync',
+      message: 'Synchronizing with remote...',
+      type: 'loading',
+      duration: 0
+    });
+
     try {
       await window.gitAPI.pull();
       await window.gitAPI.push();
       await this.refresh();
-    } catch (error) {
+      
+      notifications.update(notificationId, {
+        title: 'Sync Complete',
+        message: 'Successfully synchronized with remote',
+        type: 'success',
+        duration: 3000
+      });
+    } catch (error: any) {
       console.error('Failed to sync:', error);
+      notifications.update(notificationId, {
+        title: 'Sync Failed',
+        message: error?.message || 'An error occurred during sync',
+        type: 'error',
+        duration: 5000
+      });
     }
   }
   
