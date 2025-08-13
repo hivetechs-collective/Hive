@@ -99,25 +99,66 @@
 
 .git-indicator {
   margin-left: auto;
-  padding-left: 8px;
+  padding: 0 4px;
   font-weight: 600;
-  font-size: 11px;
+  font-size: 10px;
+  min-width: 14px;
+  text-align: center;
+  border-radius: 2px;
 }
 
 .git-indicator.modified {
   color: #e2c08d;
+  background: rgba(226, 192, 141, 0.15);
 }
 
 .git-indicator.added {
   color: #73c991;
+  background: rgba(115, 201, 145, 0.15);
 }
 
 .git-indicator.deleted {
   color: #f48771;
+  background: rgba(244, 135, 113, 0.15);
 }
 
 .git-indicator.untracked {
-  color: #6b6b6b;
+  color: #73c991;
+  background: rgba(115, 201, 145, 0.15);
+}
+
+.git-indicator.staged {
+  color: #007acc;
+  background: rgba(0, 122, 204, 0.15);
+}
+
+/* File name colors based on Git status */
+.monaco-list-row[data-git-status="modified"] .label-name {
+  color: #e2c08d;
+}
+
+.monaco-list-row[data-git-status="added"] .label-name {
+  color: #73c991;
+}
+
+.monaco-list-row[data-git-status="deleted"] .label-name {
+  color: #f48771;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.monaco-list-row[data-git-status="untracked"] .label-name {
+  color: #73c991;
+}
+
+.monaco-list-row[data-git-status="renamed"] .label-name {
+  color: #4fc3f7;
+}
+
+/* Parent folder indicators */
+.monaco-list-row[data-type="directory"][data-has-changes="true"] .label-name {
+  color: #e2c08d;
+  font-weight: 500;
 }
 
 /* Folder expand/collapse animation */

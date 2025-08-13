@@ -24,12 +24,14 @@ import './analytics.css';
 import './git.css';
 import './file-explorer.css';
 import './status-bar.css';
+import './vscode-scm.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { NeuralConsciousness } from './neural-consciousness';
 import { analyticsDashboard } from './analytics';
 import { GitUI } from './git-ui';
+import { VSCodeSCMView } from './vscode-scm-view';
 import { FileExplorer } from './file-explorer';
 import { VSCodeFileExplorer } from './vs-file-explorer';
 import { VSCodeExplorerExact } from './vscode-explorer-exact';
@@ -630,7 +632,8 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
             } else if (panelType === 'git' && !window.gitUI) {
                 const container = document.getElementById('git-content');
                 if (container) {
-                    window.gitUI = new GitUI(container);
+                    // Use VS Code style SCM view
+                    window.gitUI = new VSCodeSCMView(container);
                 }
             }
         }
@@ -2089,10 +2092,10 @@ setTimeout(() => {
         });
     }
     
-    // Initialize Git UI
+    // Initialize Git UI (VS Code style)
     const gitContainer = document.getElementById('git-ui-container');
     if (gitContainer) {
-        (window as any).gitUI = new GitUI(gitContainer);
+        (window as any).gitUI = new VSCodeSCMView(gitContainer);
     }
     
     // Initialize enhanced Status Bar with Git integration

@@ -1,0 +1,415 @@
+/* VS Code Style Source Control View */
+
+.scm-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--vscode-sideBar-background, #252526);
+  color: var(--vscode-sideBar-foreground, #cccccc);
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Welcome View */
+.scm-view-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.scm-view-welcome .welcome-icon {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.scm-view-welcome h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.scm-view-welcome p {
+  font-size: 12px;
+  opacity: 0.8;
+  margin: 0;
+}
+
+/* Header */
+.scm-view-header {
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #3c3c3c);
+}
+
+.scm-provider-container {
+  padding: 8px 12px;
+}
+
+.scm-provider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--vscode-sideBarSectionHeader-foreground, #999);
+}
+
+.scm-provider-label {
+  opacity: 0.8;
+}
+
+.scm-provider-path {
+  opacity: 0.6;
+}
+
+/* Commit Input */
+.scm-input-container {
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #3c3c3c);
+  position: relative;
+}
+
+.scm-editor {
+  position: relative;
+}
+
+.scm-input {
+  width: 100%;
+  min-height: 54px;
+  max-height: 150px;
+  padding: 8px 12px;
+  padding-right: 40px;
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, #cccccc);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  resize: vertical;
+  outline: none;
+}
+
+.scm-input:focus {
+  border-color: var(--vscode-focusBorder, #007acc);
+}
+
+.scm-input::placeholder {
+  color: var(--vscode-input-placeholderForeground, #999);
+}
+
+.scm-input-counter {
+  position: absolute;
+  right: 12px;
+  top: 8px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.scm-input-counter.warn {
+  color: var(--vscode-editorWarning-foreground, #ff9800);
+}
+
+.scm-input-actions {
+  display: flex;
+  padding: 4px 8px;
+  gap: 2px;
+}
+
+.scm-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground, #c5c5c5);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.scm-action-button:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+}
+
+/* Resource Groups */
+.scm-view-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.scm-resource-group {
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #3c3c3c);
+}
+
+.scm-resource-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: var(--vscode-sideBarSectionHeader-background, #383838);
+  cursor: pointer;
+  user-select: none;
+}
+
+.scm-resource-group-header:hover {
+  background: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+.scm-resource-group-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vscode-sideBarSectionHeader-foreground, #999);
+}
+
+.scm-resource-group-title .codicon {
+  font-size: 14px;
+}
+
+.count-badge {
+  padding: 0 6px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #ffffff);
+  border-radius: 10px;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.scm-resource-group-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground, #c5c5c5);
+  cursor: pointer;
+  opacity: 0.8;
+  transition: all 0.1s;
+}
+
+.icon-button:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
+  opacity: 1;
+}
+
+/* Resource Items */
+.scm-resource-group-content {
+  background: var(--vscode-sideBar-background, #252526);
+}
+
+.scm-resource-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+
+.scm-resource-item:hover {
+  background: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+.scm-resource-item.selected {
+  background: var(--vscode-list-activeSelectionBackground, #094771);
+}
+
+.scm-resource-item-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.scm-resource-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.scm-resource-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.scm-resource-decoration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.scm-resource-decoration .added {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #73c991);
+}
+
+.scm-resource-decoration .modified {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+}
+
+.scm-resource-decoration .deleted {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #f48771);
+}
+
+.scm-resource-decoration .untracked {
+  color: var(--vscode-gitDecoration-untrackedResourceForeground, #73c991);
+}
+
+.scm-resource-decoration .renamed {
+  color: var(--vscode-gitDecoration-renamedResourceForeground, #4fc3f7);
+}
+
+.scm-resource-name {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.scm-resource-name .codicon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.scm-resource-name .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scm-resource-name .description {
+  margin-left: 4px;
+  opacity: 0.6;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scm-resource-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.scm-resource-item:hover .scm-resource-actions {
+  opacity: 1;
+}
+
+/* Status Bar */
+.scm-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  border-top: 1px solid var(--vscode-sideBarSectionHeader-border, #3c3c3c);
+  background: var(--vscode-sideBar-background, #252526);
+  font-size: 12px;
+}
+
+.scm-status-branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scm-status-branch .codicon {
+  font-size: 14px;
+}
+
+.scm-status-branch .badge {
+  padding: 0 4px;
+  margin-left: 4px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #ffffff);
+  border-radius: 2px;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.scm-status-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* Scrollbar Styles */
+.scm-view-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scm-view-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scm-view-content::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+  border-radius: 10px;
+}
+
+.scm-view-content::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
+}
+
+/* Animations */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.icon-button.syncing .codicon-sync {
+  animation: spin 1s linear infinite;
+}
+
+/* VS Code Theme Variables Fallbacks */
+:root {
+  --vscode-sideBar-background: #252526;
+  --vscode-sideBar-foreground: #cccccc;
+  --vscode-sideBarSectionHeader-background: #383838;
+  --vscode-sideBarSectionHeader-foreground: #999999;
+  --vscode-sideBarSectionHeader-border: #3c3c3c;
+  --vscode-list-hoverBackground: #2a2d2e;
+  --vscode-list-activeSelectionBackground: #094771;
+  --vscode-input-background: #3c3c3c;
+  --vscode-input-foreground: #cccccc;
+  --vscode-input-placeholderForeground: #999999;
+  --vscode-focusBorder: #007acc;
+  --vscode-badge-background: #4d4d4d;
+  --vscode-badge-foreground: #ffffff;
+  --vscode-icon-foreground: #c5c5c5;
+  --vscode-toolbar-hoverBackground: rgba(90, 93, 94, 0.31);
+  --vscode-gitDecoration-addedResourceForeground: #73c991;
+  --vscode-gitDecoration-modifiedResourceForeground: #e2c08d;
+  --vscode-gitDecoration-deletedResourceForeground: #f48771;
+  --vscode-gitDecoration-untrackedResourceForeground: #73c991;
+  --vscode-gitDecoration-renamedResourceForeground: #4fc3f7;
+  --vscode-scrollbarSlider-background: rgba(121, 121, 121, 0.4);
+  --vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
+}

@@ -344,6 +344,24 @@ export class VSCodeExplorerExact {
     row.setAttribute('data-type', node.type);
     row.setAttribute('role', 'treeitem');
     
+    // Add Git status attribute for styling
+    if (this.gitDecorationProvider) {
+      const decoration = this.gitDecorationProvider.getDecoration(node.path);
+      if (decoration && decoration.badge) {
+        let status = '';
+        switch (decoration.badge) {
+          case 'M': status = 'modified'; break;
+          case 'A': status = 'added'; break;
+          case 'D': status = 'deleted'; break;
+          case 'U': status = 'untracked'; break;
+          case 'R': status = 'renamed'; break;
+        }
+        if (status) {
+          row.setAttribute('data-git-status', status);
+        }
+      }
+    }
+    
     // Make draggable
     row.draggable = true;
     
@@ -409,6 +427,7 @@ export class VSCodeExplorerExact {
     label.textContent = node.name;
     
     // Apply Git decoration if available
+    let gitIndicator: HTMLElement | null = null;
     if (this.gitDecorationProvider) {
       const decoration = this.gitDecorationProvider.getDecoration(node.path);
       if (decoration) {
@@ -419,7 +438,7 @@ export class VSCodeExplorerExact {
         
         // Add Git status badge
         if (decoration.badge) {
-          const gitIndicator = document.createElement('span');
+          gitIndicator = document.createElement('span');
           gitIndicator.className = 'git-indicator';
           gitIndicator.textContent = decoration.badge;
           
@@ -433,30 +452,24 @@ export class VSCodeExplorerExact {
           } else if (decoration.badge === 'U') {
             gitIndicator.classList.add('untracked');
           }
-          
-          // Apply custom color if different from default
-          if (decoration.color) {
-            gitIndicator.style.color = decoration.color;
-          }
-          
-          nameContainer.appendChild(label);
-          nameContainer.appendChild(gitIndicator);
-        } else {
-          nameContainer.appendChild(label);
         }
         
         // Add tooltip if available
         if (decoration.tooltip) {
           row.title = decoration.tooltip;
         }
-      } else {
-        nameContainer.appendChild(label);
       }
-    } else {
-      nameContainer.appendChild(label);
     }
     
+    // Build the structure
+    nameContainer.appendChild(label);
     container.appendChild(nameContainer);
+    
+    // Add git indicator to the end of the container if it exists
+    if (gitIndicator) {
+      container.appendChild(gitIndicator);
+    }
+    
     iconLabel.appendChild(container);
     explorerItem.appendChild(iconLabel);
     contents.appendChild(explorerItem);

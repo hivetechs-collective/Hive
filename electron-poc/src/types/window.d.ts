@@ -51,5 +51,6 @@ declare global {
     fileExplorer: any;
     editorTabs: any;
     gitUI: any;
+    scmView: any;
   }
 }
