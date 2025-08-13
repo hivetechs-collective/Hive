@@ -408,16 +408,7 @@ document.body.innerHTML = `
           <div class="sidebar-header">
             <span class="sidebar-title">SOURCE CONTROL</span>
             <div class="sidebar-actions">
-              <button class="sidebar-action" title="Commit">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M10.5 6a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0zM7.25 4v8a.75.75 0 001.5 0V4a.75.75 0 00-1.5 0z"/>
-                </svg>
-              </button>
-              <button class="sidebar-action" title="Refresh">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2.5a5.487 5.487 0 00-4.131 1.869l1.204 1.204A.25.25 0 014.896 6H1.25A.25.25 0 011 5.75V2.104a.25.25 0 01.427-.177L2.331 2.831a6.987 6.987 0 1110.675 8.681.75.75 0 01-1.506-.31A5.5 5.5 0 008 2.5z"/>
-                </svg>
-              </button>
+              <!-- Removed redundant commit and refresh buttons -->
             </div>
           </div>
           <div class="sidebar-content" id="git-content">

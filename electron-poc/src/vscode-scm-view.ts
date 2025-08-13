@@ -117,9 +117,6 @@ export class VSCodeSCMView {
         <!-- Header with VS Code-style toolbar -->
         <div class="scm-view-header">
           <div class="scm-provider-container">
-            <div class="scm-provider">
-              <span class="scm-provider-label">SOURCE CONTROL</span>
-            </div>
             <div class="scm-toolbar">
               <button class="scm-toolbar-button" title="Refresh" onclick="window.scmView?.refresh()">
                 <span class="codicon codicon-refresh"></span>
