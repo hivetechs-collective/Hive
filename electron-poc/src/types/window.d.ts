@@ -68,5 +68,9 @@ declare global {
     editorTabs: any;
     gitUI: any;
     scmView: any;
+    
+    // Global functions
+    openFolder: () => Promise<void>;
+    cloneRepository: () => Promise<void>;
   }
 }

@@ -267,6 +267,26 @@ const registerDialogHandlers = () => {
     return result;
   });
   
+  ipcMain.handle('show-input-dialog', async (_, title: string, defaultValue?: string) => {
+    // For now, use a simple prompt-like dialog
+    // In a real app, you'd create a custom dialog
+    const result = await dialog.showMessageBox(mainWindow!, {
+      type: 'question',
+      buttons: ['OK', 'Cancel'],
+      defaultId: 0,
+      title: title,
+      message: title,
+      detail: defaultValue || ''
+    });
+    
+    if (result.response === 0) {
+      // In a real implementation, you'd get the actual input value
+      // For now, return a placeholder
+      return 'https://github.com/user/repo.git';
+    }
+    return null;
+  });
+  
   ipcMain.handle('set-title', (_, title: string) => {
     if (mainWindow) {
       mainWindow.setTitle(title);

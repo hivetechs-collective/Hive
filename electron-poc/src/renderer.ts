@@ -746,19 +746,10 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
             } else if (panelType === 'git' && !window.gitUI) {
                 const container = document.getElementById('git-content');
                 if (container) {
-                    // Only initialize git if a folder is opened
-                    if (currentOpenedFolder) {
-                        // Use VS Code style SCM view
-                        window.gitUI = new VSCodeSCMView(container);
-                    } else {
-                        // Show empty state
-                        container.innerHTML = `
-                            <div style="padding: 20px; text-align: center; opacity: 0.6;">
-                                <div>No folder opened</div>
-                                <div style="margin-top: 10px; font-size: 12px;">Open a folder to see Git status</div>
-                            </div>
-                        `;
-                    }
+                    // Always create VSCodeSCMView - it will handle empty state itself
+                    window.gitUI = new VSCodeSCMView(container);
+                    // Also set it as scmView for consistency
+                    window.scmView = window.gitUI;
                 }
             }
         }
@@ -2596,12 +2587,18 @@ async function handleOpenFolder(folderPath: string) {
             });
         }
         
+        // Update Git manager with the new folder
+        if (window.gitAPI) {
+            await window.gitAPI.setFolder(folderPath);
+        }
+        
         // Initialize/refresh the Git panel with the new folder
         const gitContainer = document.getElementById('git-content');
         if (gitContainer) {
             // Clear existing Git UI and create a new one
             gitContainer.innerHTML = '';
             window.gitUI = new VSCodeSCMView(gitContainer);
+            window.scmView = window.gitUI;
         }
         
         // Update status bar with folder info
@@ -2709,24 +2706,8 @@ window.openFolder = async () => {
         
         if (!result.canceled && result.filePaths.length > 0) {
             const folderPath = result.filePaths[0];
-            console.log('Opening folder:', folderPath);
-            
-            // Update Git manager with the new folder
-            await window.gitAPI.setFolder(folderPath);
-            
-            // Update the file explorer with the new folder
-            if (window.fileExplorer) {
-                await window.fileExplorer.loadDirectory(folderPath);
-            }
-            
-            // Update git status for the new folder
-            if (window.scmView) {
-                await window.scmView.refresh();
-            }
-            
-            // Update window title
-            const folderName = folderPath.split('/').pop() || folderPath.split('\\').pop() || 'Folder';
-            await window.electronAPI.setTitle(`${folderName} - VS Code`);
+            // Use the same handleOpenFolder function that File > Open Folder uses
+            handleOpenFolder(folderPath);
         }
     } catch (error) {
         console.error('Failed to open folder:', error);
