@@ -5,6 +5,7 @@
 
 import { GitStatus, GitFileStatus } from './types/git';
 import { GitDecorationProvider } from './git-decoration-provider';
+import { GitGraphView } from './git-graph';
 
 interface ResourceGroup {
   id: string;
@@ -20,6 +21,7 @@ export class VSCodeSCMView {
   private selectedFiles: Set<string> = new Set();
   private commitMessage: string = '';
   private gitDecorationProvider: GitDecorationProvider | null = null;
+  private gitGraphView: GitGraphView | null = null;
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -67,6 +69,19 @@ export class VSCodeSCMView {
     // Group resources
     const groups = this.groupResources();
     
+    // Check if SCM view already exists - if so, just update the content
+    const existingScmView = this.container.querySelector('.scm-view');
+    if (existingScmView) {
+      // Update only the file groups, not the entire view
+      const contentElement = this.container.querySelector('.scm-view-content');
+      if (contentElement) {
+        contentElement.innerHTML = groups.map(group => this.renderResourceGroup(group)).join('');
+        this.attachEventListeners();
+        return; // Don't recreate the entire view
+      }
+    }
+    
+    // First render - create the entire structure
     this.container.innerHTML = `
       <div class="scm-view">
         <!-- Header -->
@@ -111,6 +126,9 @@ export class VSCodeSCMView {
         <div class="scm-view-content">
           ${groups.map(group => this.renderResourceGroup(group)).join('')}
         </div>
+        
+        <!-- Git Graph Section -->
+        <div id="git-graph-container" style="border-top: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);"></div>
 
         <!-- Status Bar -->
         <div class="scm-status-bar">
@@ -133,6 +151,25 @@ export class VSCodeSCMView {
     `;
 
     this.attachEventListeners();
+    
+    // Initialize Git Graph view if not already done
+    setTimeout(() => {
+      const graphContainer = document.getElementById('git-graph-container');
+      console.log('[SCM] Git graph container found:', !!graphContainer);
+      console.log('[SCM] Git graph view exists:', !!this.gitGraphView);
+      if (graphContainer && !this.gitGraphView) {
+        console.log('[SCM] Creating new GitGraphView...');
+        try {
+          this.gitGraphView = new GitGraphView(graphContainer);
+          console.log('[SCM] GitGraphView created successfully');
+        } catch (error) {
+          console.error('[SCM] Failed to create GitGraphView:', error);
+        }
+      } else if (graphContainer && this.gitGraphView) {
+        console.log('[SCM] Git graph already exists, refreshing...');
+        this.gitGraphView.refresh();
+      }
+    }, 100); // Small delay to ensure DOM is ready
   }
 
   private groupResources(): ResourceGroup[] {
@@ -518,6 +555,9 @@ export class VSCodeSCMView {
     }
     if (this.gitDecorationProvider) {
       this.gitDecorationProvider.dispose();
+    }
+    if (this.gitGraphView) {
+      this.gitGraphView.destroy();
     }
   }
 }

@@ -35,7 +35,7 @@ declare global {
     gitAPI: {
       getStatus(): Promise<GitStatus>;
       getBranches(): Promise<GitBranch[]>;
-      getLog(limit?: number): Promise<GitCommit[]>;
+      getLog(options?: { maxCount?: number; graph?: boolean; oneline?: boolean; limit?: number }): Promise<string | GitCommit[]>;
       getDiff(file?: string): Promise<string>;
       getStagedDiff(file?: string): Promise<string>;
       stage(files: string[]): Promise<void>;
@@ -48,6 +48,8 @@ declare global {
       switchBranch(branchName: string): Promise<void>;
       createBranch(branchName: string): Promise<void>;
       initRepo(repoPath: string): Promise<any>;
+      getCommitFiles(hash: string): Promise<{ files: any[] }>;
+      getFileDiff(commitHash: string, filePath: string): Promise<string>;
     };
   }
 }

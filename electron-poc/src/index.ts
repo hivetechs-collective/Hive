@@ -146,9 +146,12 @@ const registerGitHandlers = () => {
     return await gitManager!.getBranches();
   });
 
-  ipcMain.handle('git-log', async (_, limit?: number) => {
+  ipcMain.handle('git-log', async (_, options?: { maxCount?: number; graph?: boolean; oneline?: boolean; limit?: number }) => {
     if (!gitManager) initGitManager();
-    return await gitManager!.getLog(limit);
+    console.log('[Main] git-log called with options:', options);
+    const result = await gitManager!.getLog(options || {});
+    console.log('[Main] git-log returning:', result ? result.substring(0, 100) + '...' : 'empty');
+    return result;
   });
 
   ipcMain.handle('git-diff', async (_, file?: string) => {
@@ -225,6 +228,18 @@ const registerGitHandlers = () => {
     const git = new GitManager(repoPath);
     await git.initRepo();
     return { success: true };
+  });
+  
+  // Get files changed in a commit
+  ipcMain.handle('git-commit-files', async (_, hash: string) => {
+    if (!gitManager) initGitManager();
+    return await gitManager!.getCommitFiles(hash);
+  });
+  
+  // Get diff for a specific file in a commit
+  ipcMain.handle('git-file-diff', async (_, commitHash: string, filePath: string) => {
+    if (!gitManager) initGitManager();
+    return await gitManager!.getFileDiff(commitHash, filePath);
   });
 };
 
@@ -603,10 +618,8 @@ app.on('ready', () => {
   initGitManager(); // Initialize Git manager here
   createWindow();
   
-  // Register all IPC handlers
-  registerGitHandlers();
+  // Register dialog handlers (Git and FileSystem handlers are already registered in createWindow)
   registerDialogHandlers();
-  registerFileSystemHandlers();
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

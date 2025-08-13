@@ -802,6 +802,47 @@ export class EditorTabs {
   }
 
   /**
+   * Open a custom content tab (for commit details, etc.)
+   */
+  public openCustomTab(tabName: string, container: HTMLElement): void {
+    try {
+      console.log('[EditorTabs] Opening custom tab:', tabName);
+      
+      // Create a unique ID for the custom tab
+      const tabId = `custom-${Date.now()}`;
+      
+      // Create new tab
+      const tab: EditorTab = {
+        id: tabId,
+        path: tabName,
+        isDirty: false
+      };
+      
+      this.tabs.push(tab);
+      
+      // Create container for this tab
+      const editorContainer = document.createElement('div');
+      editorContainer.className = 'editor-container custom-content';
+      editorContainer.id = `editor-${tabId}`;
+      editorContainer.style.display = 'none';
+      editorContainer.style.height = '100%';
+      editorContainer.style.overflow = 'auto';
+      
+      // Append the custom container
+      editorContainer.appendChild(container);
+      this.editorsContainer.appendChild(editorContainer);
+      
+      // Re-render tabs and activate the new one
+      this.renderTabs();
+      this.activateTab(tabId);
+      
+      console.log('[EditorTabs] Custom tab opened successfully');
+    } catch (error) {
+      console.error('[EditorTabs] Failed to open custom tab:', error);
+    }
+  }
+
+  /**
    * Clean up resources
    */
   public destroy(): void {

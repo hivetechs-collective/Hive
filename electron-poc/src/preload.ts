@@ -91,7 +91,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 contextBridge.exposeInMainWorld('gitAPI', {
   getStatus: () => ipcRenderer.invoke('git-status'),
   getBranches: () => ipcRenderer.invoke('git-branches'),
-  getLog: (limit?: number) => ipcRenderer.invoke('git-log', limit),
+  getLog: (options?: { maxCount?: number; graph?: boolean; oneline?: boolean; limit?: number }) => ipcRenderer.invoke('git-log', options),
   getDiff: (file?: string) => ipcRenderer.invoke('git-diff', file),
   getStagedDiff: (file?: string) => ipcRenderer.invoke('git-staged-diff', file),
   stage: (files: string[]) => ipcRenderer.invoke('git-stage', files),
@@ -104,7 +104,9 @@ contextBridge.exposeInMainWorld('gitAPI', {
   switchBranch: (branchName: string) => ipcRenderer.invoke('git-switch-branch', branchName),
   createBranch: (branchName: string) => ipcRenderer.invoke('git-create-branch', branchName),
   getFileStatus: (path: string) => ipcRenderer.invoke('git-file-status', path),
-  initRepo: (repoPath: string) => ipcRenderer.invoke('git-init', repoPath)
+  initRepo: (repoPath: string) => ipcRenderer.invoke('git-init', repoPath),
+  getCommitFiles: (hash: string) => ipcRenderer.invoke('git-commit-files', hash),
+  getFileDiff: (commitHash: string, filePath: string) => ipcRenderer.invoke('git-file-diff', commitHash, filePath)
 });
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown

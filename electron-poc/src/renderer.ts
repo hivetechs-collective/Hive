@@ -41,6 +41,88 @@ import { StatusBar } from './status-bar';
 // Current opened folder state
 let currentOpenedFolder: string | null = null;
 
+// Add welcome view styles
+const addWelcomeStyles = () => {
+    if (!document.getElementById('welcome-view-styles')) {
+        const style = document.createElement('style');
+        style.id = 'welcome-view-styles';
+        style.textContent = `
+            .welcome-view {
+                padding: 20px;
+                height: 100%;
+                display: flex;
+                flex-direction: column;
+            }
+            .welcome-content {
+                color: var(--vscode-foreground, #cccccc);
+                font-size: 13px;
+                line-height: 1.5;
+            }
+            .welcome-message {
+                margin: 0 0 12px 0;
+                color: var(--vscode-foreground, #cccccc);
+            }
+            .welcome-button {
+                display: block;
+                width: 100%;
+                padding: 6px 14px;
+                margin: 8px 0;
+                background: var(--vscode-button-secondaryBackground, #3a3d41);
+                color: var(--vscode-button-secondaryForeground, #cccccc);
+                border: 1px solid var(--vscode-button-border, transparent);
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 13px;
+                text-align: center;
+            }
+            .welcome-button.primary {
+                background: var(--vscode-button-background, #0e639c);
+                color: var(--vscode-button-foreground, #ffffff);
+            }
+            .welcome-button:hover {
+                background: var(--vscode-button-hoverBackground, #1177bb);
+            }
+            .welcome-hint {
+                margin: 12px 0;
+                font-size: 12px;
+                color: var(--vscode-descriptionForeground, #969696);
+            }
+            .welcome-section {
+                margin: 20px 0;
+                padding-top: 20px;
+                border-top: 1px solid var(--vscode-widget-border, #303031);
+            }
+            .welcome-text {
+                margin: 0 0 8px 0;
+                color: var(--vscode-foreground, #cccccc);
+            }
+            .welcome-docs {
+                margin: 20px 0 0 0;
+                font-size: 12px;
+                color: var(--vscode-descriptionForeground, #969696);
+            }
+            .welcome-link {
+                color: var(--vscode-textLink-foreground, #3794ff);
+                text-decoration: none;
+            }
+            .welcome-link:hover {
+                text-decoration: underline;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+};
+
+// Clone repository function
+(window as any).cloneRepository = async () => {
+    console.log('Clone repository clicked');
+    // TODO: Implement clone repository dialog
+    alert('Clone repository feature coming soon!');
+};
+
+// Initialize welcome styles
+addWelcomeStyles();
+
 // Simple input dialog function for VS Code-style prompts
 function showInputDialog(title: string, message: string, defaultValue: string = ''): Promise<string | null> {
     return new Promise((resolve) => {
@@ -591,11 +673,28 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                             }
                         });
                     } else {
-                        // Show empty state
+                        // Show VS Code-style welcome screen
                         container.innerHTML = `
-                            <div style="padding: 20px; text-align: center; opacity: 0.6;">
-                                <div>No folder opened</div>
-                                <div style="margin-top: 10px; font-size: 12px;">Open a folder to start</div>
+                            <div class="welcome-view">
+                                <div class="welcome-content">
+                                    <p class="welcome-message">You have not yet opened a folder.</p>
+                                    <button class="welcome-button primary" onclick="window.openFolder()">
+                                        Open Folder
+                                    </button>
+                                    <p class="welcome-hint">
+                                        Opening a folder will close all currently open editors. To keep them open, add a folder instead.
+                                    </p>
+                                    <div class="welcome-section">
+                                        <p class="welcome-text">You can clone a repository locally.</p>
+                                        <button class="welcome-button" onclick="window.cloneRepository()">
+                                            Clone Repository
+                                        </button>
+                                    </div>
+                                    <p class="welcome-docs">
+                                        To learn more about how to use Git and source control in VS Code 
+                                        <a href="https://code.visualstudio.com/docs/editor/versioncontrol" target="_blank" class="welcome-link">read our docs</a>.
+                                    </p>
+                                </div>
                             </div>
                         `;
                     }

@@ -120,24 +120,6 @@ export class GitManager {
     }
   }
 
-  async getLog(limit: number = 50): Promise<GitCommit[]> {
-    if (!this.isRepo) return [];
-
-    try {
-      const log = await this.git.log({ maxCount: limit });
-      
-      return log.all.map(commit => ({
-        hash: commit.hash,
-        author: commit.author_name,
-        date: new Date(commit.date),
-        message: commit.message,
-        refs: commit.refs
-      }));
-    } catch (error) {
-      console.error('Git log error:', error);
-      return [];
-    }
-  }
 
   async getDiff(file?: string): Promise<string> {
     if (!this.isRepo) return '';
@@ -169,6 +151,42 @@ export class GitManager {
       return diff;
     } catch (error) {
       console.error('Git staged diff error:', error);
+      return '';
+    }
+  }
+
+  async getLog(options: { maxCount?: number; graph?: boolean; oneline?: boolean; limit?: number } = {}): Promise<string> {
+    if (!this.isRepo) {
+      console.log('[GitManager] Not a repo, returning empty log');
+      return '';
+    }
+
+    try {
+      // Use raw git command for more control over format
+      const args = ['log'];
+      
+      const maxCount = options.maxCount || options.limit || 50;
+      console.log('[GitManager] Using maxCount:', maxCount);
+      args.push(`-${maxCount}`);
+      
+      // For now, skip graph decorations to simplify parsing
+      // if (options.graph) {
+      //   args.push('--graph');
+      // }
+      
+      if (options.oneline) {
+        args.push('--oneline');
+      } else {
+        // Use a simpler format with newlines between commits
+        args.push('--pretty=format:COMMIT_START|%H|%an|%ae|%ad|%s|COMMIT_END%n');
+      }
+      
+      console.log('[GitManager] Git log args:', args);
+      const result = await this.git.raw(args);
+      console.log('[GitManager] Git log result length:', result ? result.length : 0);
+      return result || '';
+    } catch (error) {
+      console.error('[GitManager] Git log error:', error);
       return '';
     }
   }
@@ -288,6 +306,48 @@ export class GitManager {
     } catch (error) {
       console.error('Failed to initialize Git repository:', error);
       throw error;
+    }
+  }
+  
+  async getCommitFiles(hash: string): Promise<{ files: any[] }> {
+    if (!this.isRepo) return { files: [] };
+    
+    try {
+      // Get the list of files changed in this commit
+      const result = await this.git.raw(['show', '--name-status', '--format=', hash]);
+      const lines = result.split('\n').filter(line => line.trim());
+      
+      const files = lines.map(line => {
+        const parts = line.split('\t');
+        if (parts.length >= 2) {
+          return {
+            status: parts[0],
+            path: parts[1],
+            additions: 0,
+            deletions: 0
+          };
+        }
+        return null;
+      }).filter(f => f);
+      
+      return { files };
+    } catch (error) {
+      console.error('Failed to get commit files:', error);
+      return { files: [] };
+    }
+  }
+
+  async getFileDiff(commitHash: string, filePath: string): Promise<string> {
+    if (!this.isRepo) return '';
+    
+    try {
+      // Get the diff for a specific file in a commit
+      // Show the complete diff with context
+      const result = await this.git.raw(['show', commitHash, '--', filePath]);
+      return result || '';
+    } catch (error) {
+      console.error('Failed to get file diff:', error);
+      return '';
     }
   }
 }
