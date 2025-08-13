@@ -43,10 +43,13 @@ export class VSCodeSCMView {
   public async refresh() {
     try {
       this.gitStatus = await window.gitAPI.getStatus();
-      this.render();
     } catch (error) {
       console.error('[SCM] Failed to refresh:', error);
+      // Set gitStatus to null to show welcome message
+      this.gitStatus = null;
     }
+    // Always render, even if there was an error
+    this.render();
   }
 
   private render() {

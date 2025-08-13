@@ -39,10 +39,9 @@ export class GitManager {
       this.checkIfRepo();
     } else {
       // No folder open - definitively not a repo
-      // Don't use simpleGit() without a path as it will use current working directory
       this.isRepo = false;
-      // Create a dummy git instance that won't do anything
-      this.git = simpleGit('/nonexistent');
+      // Don't create a git instance when no folder is open
+      this.git = null as any;
     }
   }
 
@@ -62,7 +61,8 @@ export class GitManager {
     behind: number;
     isRepo: boolean;
   }> {
-    if (!this.isRepo) {
+    // Return empty status if no folder is open or not a repo
+    if (!this.repoPath || !this.isRepo || !this.git) {
       return {
         files: [],
         branch: '',
@@ -106,7 +106,7 @@ export class GitManager {
   }
 
   async getBranches(): Promise<GitBranch[]> {
-    if (!this.isRepo) return [];
+    if (!this.repoPath || !this.isRepo || !this.git) return [];
 
     try {
       const summary = await this.git.branchLocal();
@@ -164,8 +164,8 @@ export class GitManager {
   }
 
   async getLog(options: { maxCount?: number; graph?: boolean; oneline?: boolean; limit?: number } = {}): Promise<string> {
-    if (!this.isRepo) {
-      console.log('[GitManager] Not a repo, returning empty log');
+    if (!this.repoPath || !this.isRepo || !this.git) {
+      console.log('[GitManager] Not a repo or no folder open, returning empty log');
       return '';
     }
 
