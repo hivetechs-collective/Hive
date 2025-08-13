@@ -644,7 +644,6 @@ export class VSCodeSCMView {
 
   public async pull() {
     console.log('[SCM] Pull button clicked');
-    alert('Pull button clicked - starting pull operation');
     
     const notificationId = notifications.show({
       title: 'Git Pull',

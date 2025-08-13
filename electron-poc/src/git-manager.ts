@@ -268,32 +268,32 @@ export class GitManager {
     if (!this.isRepo) return;
 
     try {
-      // First try regular push
-      await this.git.push();
-    } catch (error: any) {
-      // Check if error is about no upstream branch
-      if (error.message && error.message.includes('no upstream branch')) {
-        try {
-          // Get current branch name
-          const status = await this.git.status();
-          const currentBranch = status.current;
-          
-          if (currentBranch) {
-            console.log(`Setting upstream branch for ${currentBranch}`);
-            // Push with --set-upstream
-            await this.git.push(['--set-upstream', 'origin', currentBranch]);
-            console.log('Successfully pushed with upstream set');
-          } else {
-            throw new Error('Could not determine current branch');
-          }
-        } catch (upstreamError) {
-          console.error('Failed to set upstream:', upstreamError);
-          throw upstreamError;
-        }
-      } else {
-        console.error('Git push error:', error);
-        throw error;
+      // Get current branch status first
+      const status = await this.git.status();
+      const currentBranch = status.current;
+      
+      if (!currentBranch) {
+        throw new Error('No current branch');
       }
+
+      // Check if branch has upstream
+      const branches = await this.git.branch(['-vv']);
+      const currentBranchInfo = branches.branches[currentBranch];
+      const hasUpstream = currentBranchInfo && (currentBranchInfo as any).tracking;
+
+      if (!hasUpstream) {
+        console.log(`No upstream for ${currentBranch}, setting upstream...`);
+        // Push with --set-upstream
+        await this.git.push(['--set-upstream', 'origin', currentBranch]);
+        console.log('Successfully pushed with upstream set');
+      } else {
+        // Regular push
+        await this.git.push();
+        console.log('Successfully pushed');
+      }
+    } catch (error: any) {
+      console.error('Git push error:', error);
+      throw error;
     }
   }
 
@@ -301,10 +301,37 @@ export class GitManager {
     if (!this.isRepo) return;
 
     try {
+      // Get current branch status
+      const status = await this.git.status();
+      const currentBranch = status.current;
+      
+      if (!currentBranch) {
+        throw new Error('No current branch');
+      }
+
+      // Check if branch has upstream
+      const branches = await this.git.branch(['-vv']);
+      const currentBranchInfo = branches.branches[currentBranch];
+      const hasUpstream = currentBranchInfo && (currentBranchInfo as any).tracking;
+
+      if (!hasUpstream) {
+        console.log(`No upstream for ${currentBranch}, setting upstream first...`);
+        // Set upstream to track origin/branch
+        await this.git.branch(['--set-upstream-to', `origin/${currentBranch}`, currentBranch]);
+        console.log('Upstream set, now pulling...');
+      }
+      
+      // Now pull
       await this.git.pull();
-    } catch (error) {
-      console.error('Git pull error:', error);
-      throw error;
+      console.log('Successfully pulled');
+    } catch (error: any) {
+      // If pull fails because remote branch doesn't exist, that's okay
+      if (error.message && error.message.includes('no such ref was fetched')) {
+        console.log('Remote branch does not exist yet - nothing to pull');
+      } else {
+        console.error('Git pull error:', error);
+        throw error;
+      }
     }
   }
 
