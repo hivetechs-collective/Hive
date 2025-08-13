@@ -110,8 +110,27 @@ export class GitGraphView {
             
             .git-graph-content {
                 flex: 1;
-                overflow: auto;
+                overflow-y: auto;
+                overflow-x: hidden;
                 padding: 0;
+                min-height: 0;
+            }
+            
+            .git-graph-content::-webkit-scrollbar {
+                width: 10px;
+            }
+            
+            .git-graph-content::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            
+            .git-graph-content::-webkit-scrollbar-thumb {
+                background: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.4));
+                border-radius: 5px;
+            }
+            
+            .git-graph-content::-webkit-scrollbar-thumb:hover {
+                background: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.7));
             }
             
             .git-graph-commits {
@@ -122,10 +141,10 @@ export class GitGraphView {
             .git-graph-commit {
                 display: flex;
                 align-items: center;
-                padding: 2px 8px;
+                padding: 4px 8px;
                 cursor: pointer;
                 position: relative;
-                min-height: 22px;
+                min-height: 24px;
                 font-size: 12px;
             }
             
@@ -328,7 +347,7 @@ export class GitGraphView {
         try {
             // Get commit log with graph information
             const log = await window.gitAPI.getLog({
-                maxCount: 100,
+                maxCount: 200,
                 graph: true
             }) as string;
             

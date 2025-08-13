@@ -138,7 +138,8 @@
 
 /* Resource Groups */
 .scm-view-content {
-  flex: 1;
+  flex: 0 1 auto;
+  max-height: 40%;
   overflow-y: auto;
   overflow-x: hidden;
 }
