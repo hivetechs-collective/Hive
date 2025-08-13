@@ -48,16 +48,17 @@ export class VSCodeExplorerExact {
       console.log('[VSCodeExplorer] Setting root path to:', rootPath);
     }
     
-    // If no root path set, don't initialize
-    if (!this.rootPath) {
-      console.log('[VSCodeExplorer] No root path set, skipping initialization');
-      return;
-    }
-    
     // Setup container and styles if not already done
     if (!this.container.querySelector('.explorer-folders-view')) {
       this.setupContainer();
       this.attachStyles();
+    }
+    
+    // If no root path set, show welcome message
+    if (!this.rootPath) {
+      console.log('[VSCodeExplorer] No root path set, showing welcome message');
+      this.showWelcomeMessage();
+      return;
     }
     
     // Re-initialize Git decorations with new path
@@ -108,6 +109,25 @@ export class VSCodeExplorerExact {
             <!-- Tree items will be rendered here -->
           </div>
         </div>
+      </div>
+    `;
+  }
+
+  private showWelcomeMessage() {
+    const rowsContainer = this.container.querySelector('.monaco-list-rows');
+    if (!rowsContainer) return;
+    
+    rowsContainer.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: #888;">
+        <div style="margin-bottom: 20px;">No folder opened</div>
+        <button onclick="window.openFolder()" style="
+          padding: 8px 16px;
+          background: #007ACC;
+          color: white;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+        ">Open Folder</button>
       </div>
     `;
   }
@@ -295,8 +315,8 @@ export class VSCodeExplorerExact {
 
   private async loadRootDirectory() {
     try {
-      console.log('[VSCodeExplorer] Loading root directory...');
-      const rootItems = await window.fileAPI.getFileTree();
+      console.log('[VSCodeExplorer] Loading root directory:', this.rootPath);
+      const rootItems = await window.fileAPI.getFileTree(this.rootPath);
       
       if (!rootItems || rootItems.length === 0) {
         console.warn('[VSCodeExplorer] No items returned from fileAPI');
@@ -786,7 +806,7 @@ export class VSCodeExplorerExact {
     console.log('[VSCodeExplorer] Create file:', fileName);
     
     // Get the current directory (use selected directory or root)
-    let targetDir = '/Users/veronelazio/Developer/Private/hive/electron-poc';
+    let targetDir = this.rootPath;
     if (this.selectedNode && this.selectedNode.type === 'directory') {
       targetDir = this.selectedNode.path;
     } else if (this.selectedNode && this.selectedNode.parent) {
@@ -817,7 +837,7 @@ export class VSCodeExplorerExact {
     console.log('[VSCodeExplorer] Create folder:', folderName);
     
     // Get the current directory (use selected directory or root)
-    let targetDir = '/Users/veronelazio/Developer/Private/hive/electron-poc';
+    let targetDir = this.rootPath;
     if (this.selectedNode && this.selectedNode.type === 'directory') {
       targetDir = this.selectedNode.path;
     } else if (this.selectedNode && this.selectedNode.parent) {

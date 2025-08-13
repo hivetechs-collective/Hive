@@ -304,9 +304,13 @@ const registerFileSystemHandlers = () => {
   // File System IPC handlers
   ipcMain.handle('fs-get-tree', async (_, rootPath?: string) => {
     if (!fileSystemManager) initFileSystemManager();
-    const root = rootPath || process.cwd();
-    console.log('[Main] fs-get-tree called with root:', root);
-    const result = await fileSystemManager!.getFileTree(root);
+    // Only return files if a root path is explicitly provided
+    if (!rootPath) {
+      console.log('[Main] fs-get-tree called without root path, returning empty');
+      return [];
+    }
+    console.log('[Main] fs-get-tree called with root:', rootPath);
+    const result = await fileSystemManager!.getFileTree(rootPath);
     console.log('[Main] fs-get-tree returning', result?.length || 0, 'items');
     return result;
   });
