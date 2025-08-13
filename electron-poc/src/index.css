@@ -31,8 +31,11 @@
 .codicon-git-commit:before { content: '\eafc' }
 .codicon-source-control:before { content: '\eafc' }
 .codicon-add:before { content: '\ea60' }
-.codicon-remove:before { content: '\eb00' }
+.codicon-remove:before { content: '\eacc' }
+.codicon-minus:before { content: '\eacc' }
+.codicon-dash:before { content: '\eacc' }
 .codicon-close:before { content: '\ea76' }
+.codicon-discard:before { content: '\ea76' }
 
 :root {
   /* Base Dioxus colors */
