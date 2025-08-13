@@ -268,10 +268,32 @@ export class GitManager {
     if (!this.isRepo) return;
 
     try {
+      // First try regular push
       await this.git.push();
-    } catch (error) {
-      console.error('Git push error:', error);
-      throw error;
+    } catch (error: any) {
+      // Check if error is about no upstream branch
+      if (error.message && error.message.includes('no upstream branch')) {
+        try {
+          // Get current branch name
+          const status = await this.git.status();
+          const currentBranch = status.current;
+          
+          if (currentBranch) {
+            console.log(`Setting upstream branch for ${currentBranch}`);
+            // Push with --set-upstream
+            await this.git.push(['--set-upstream', 'origin', currentBranch]);
+            console.log('Successfully pushed with upstream set');
+          } else {
+            throw new Error('Could not determine current branch');
+          }
+        } catch (upstreamError) {
+          console.error('Failed to set upstream:', upstreamError);
+          throw upstreamError;
+        }
+      } else {
+        console.error('Git push error:', error);
+        throw error;
+      }
     }
   }
 

@@ -567,11 +567,23 @@ export class VSCodeSCMView {
 
   public async push() {
     try {
+      console.log('[SCM] Pushing to remote...');
       await window.gitAPI.push();
       await this.refresh();
-    } catch (error) {
+      console.log('[SCM] Push successful');
+      
+      // Show success notification (you could add a toast notification here)
+      const branch = this.gitStatus?.branch || 'current branch';
+      console.log(`Successfully pushed ${branch} to remote`);
+    } catch (error: any) {
       console.error('Failed to push:', error);
-      alert(`Push failed: ${error}`);
+      
+      // Check if it's an upstream branch error
+      if (error?.message?.includes('no upstream branch')) {
+        alert(`Branch '${this.gitStatus?.branch}' has no upstream branch. The system will now set it up and push.`);
+      } else {
+        alert(`Push failed: ${error?.message || error}`);
+      }
     }
   }
 
