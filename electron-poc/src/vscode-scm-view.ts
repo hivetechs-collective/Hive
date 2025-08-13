@@ -112,13 +112,29 @@ export class VSCodeSCMView {
     // First render - create the entire structure
     this.container.innerHTML = `
       <div class="scm-view">
-        <!-- Header -->
+        <!-- Header with VS Code-style toolbar -->
         <div class="scm-view-header">
           <div class="scm-provider-container">
             <div class="scm-provider">
-              <span class="codicon codicon-source-control"></span>
-              <span class="scm-provider-label">Git</span>
-              <span class="scm-provider-path">${this.getRepoName()}</span>
+              <span class="scm-provider-label">SOURCE CONTROL</span>
+            </div>
+            <div class="scm-toolbar">
+              <button class="scm-toolbar-button" title="Refresh" onclick="window.scmView?.refresh()">
+                <span class="codicon codicon-refresh"></span>
+              </button>
+              <button class="scm-toolbar-button" title="Commit" onclick="window.scmView?.commit()">
+                <span class="codicon codicon-check"></span>
+              </button>
+              <div class="scm-toolbar-separator"></div>
+              <button class="scm-toolbar-button" title="Pull..." onclick="window.scmView?.pull()">
+                <span class="codicon codicon-cloud-download"></span>
+              </button>
+              <button class="scm-toolbar-button" title="Push" onclick="window.scmView?.push()">
+                <span class="codicon codicon-cloud-upload"></span>
+              </button>
+              <button class="scm-toolbar-button" title="Sync Changes" onclick="window.scmView?.sync()">
+                <span class="codicon codicon-sync"></span>
+              </button>
             </div>
           </div>
         </div>
@@ -136,17 +152,6 @@ export class VSCodeSCMView {
             <div class="scm-input-counter ${this.commitMessage.length > 50 ? 'warn' : ''}">
               ${this.commitMessage.length}
             </div>
-          </div>
-          <div class="scm-input-actions">
-            <button class="scm-action-button" title="Commit" onclick="window.scmView?.commit()">
-              <span class="codicon codicon-check"></span>
-            </button>
-            <button class="scm-action-button" title="Commit and Push" onclick="window.scmView?.commitAndPush()">
-              <span class="codicon codicon-cloud-upload"></span>
-            </button>
-            <button class="scm-action-button" title="More Actions">
-              <span class="codicon codicon-ellipsis"></span>
-            </button>
           </div>
         </div>
 
@@ -475,9 +480,21 @@ export class VSCodeSCMView {
       return;
     }
     
+    // Check if there are staged files
+    const stagedFiles = this.gitStatus?.files.filter(f => f.index !== ' ' && f.index !== '?') || [];
+    if (stagedFiles.length === 0) {
+      alert('No files staged for commit. Please stage files first.');
+      return;
+    }
+    
     try {
       await window.gitAPI.commit(this.commitMessage);
       this.commitMessage = '';
+      // Update the commit message input
+      const input = this.container.querySelector('.scm-input') as HTMLTextAreaElement;
+      if (input) {
+        input.value = '';
+      }
       await this.refresh();
     } catch (error) {
       console.error('Failed to commit:', error);
@@ -500,6 +517,16 @@ export class VSCodeSCMView {
     }
   }
 
+  public async pull() {
+    try {
+      await window.gitAPI.pull();
+      await this.refresh();
+    } catch (error) {
+      console.error('Failed to pull:', error);
+      alert(`Pull failed: ${error}`);
+    }
+  }
+
   public async sync() {
     try {
       await window.gitAPI.pull();
@@ -508,6 +535,11 @@ export class VSCodeSCMView {
     } catch (error) {
       console.error('Failed to sync:', error);
     }
+  }
+  
+  public showMoreActions() {
+    // TODO: Implement dropdown menu with additional Git actions
+    console.log('More actions menu - to be implemented');
   }
 
   public async openFile(path: string) {

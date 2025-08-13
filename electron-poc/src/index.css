@@ -19,6 +19,21 @@
   -ms-user-select: none;
 }
 
+/* Codicon icon content codes - From official VS Code CDN 2025 */
+.codicon-refresh:before { content: '\eb37' }
+.codicon-check:before { content: '\eab2' }
+.codicon-cloud-download:before { content: '\eac2' }
+.codicon-cloud-upload:before { content: '\eac3' }
+.codicon-sync:before { content: '\ea77' }
+.codicon-arrow-down:before { content: '\ea9a' }
+.codicon-arrow-up:before { content: '\ea9b' }
+.codicon-repo:before { content: '\ea62' }
+.codicon-git-commit:before { content: '\eafc' }
+.codicon-source-control:before { content: '\eafc' }
+.codicon-add:before { content: '\ea60' }
+.codicon-remove:before { content: '\eb00' }
+.codicon-close:before { content: '\ea76' }
+
 :root {
   /* Base Dioxus colors */
   --background-primary: #0E1414;
