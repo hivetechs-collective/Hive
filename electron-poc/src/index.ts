@@ -642,7 +642,8 @@ const createApplicationMenu = () => {
 // Some APIs can only be used after this event occurs.
 app.on('ready', () => {
   initDatabase();
-  initGitManager(); // Initialize Git manager here
+  // Don't initialize Git manager on startup - wait until a folder is opened
+  // initGitManager(); 
   createWindow();
   
   // Register dialog handlers (Git and FileSystem handlers are already registered in createWindow)

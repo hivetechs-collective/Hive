@@ -38,9 +38,11 @@ export class GitManager {
       this.git = simpleGit(this.repoPath);
       this.checkIfRepo();
     } else {
-      // No folder open - not a repo
+      // No folder open - definitively not a repo
+      // Don't use simpleGit() without a path as it will use current working directory
       this.isRepo = false;
-      this.git = simpleGit();
+      // Create a dummy git instance that won't do anything
+      this.git = simpleGit('/nonexistent');
     }
   }
 
