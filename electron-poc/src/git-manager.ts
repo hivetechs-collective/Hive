@@ -206,6 +206,12 @@ export class GitManager {
     if (!this.isRepo) return;
 
     try {
+      // Remove lock file if it exists
+      const lockPath = path.join(this.repoPath, '.git', 'index.lock');
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath);
+      }
+      
       await this.git.add(files);
     } catch (error) {
       console.error('Git stage error:', error);
@@ -217,6 +223,12 @@ export class GitManager {
     if (!this.isRepo) return;
 
     try {
+      // Remove lock file if it exists
+      const lockPath = path.join(this.repoPath, '.git', 'index.lock');
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath);
+      }
+      
       await this.git.reset(['HEAD', ...files]);
     } catch (error) {
       console.error('Git unstage error:', error);
@@ -228,6 +240,12 @@ export class GitManager {
     if (!this.isRepo) return;
 
     try {
+      // Remove lock file if it exists
+      const lockPath = path.join(this.repoPath, '.git', 'index.lock');
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath);
+      }
+      
       await this.git.commit(message);
     } catch (error) {
       console.error('Git commit error:', error);

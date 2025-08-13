@@ -22,6 +22,7 @@ export class VSCodeSCMView {
   private commitMessage: string = '';
   private gitDecorationProvider: GitDecorationProvider | null = null;
   private gitGraphView: GitGraphView | null = null;
+  private pendingOperations = new Set<string>(); // Track files being processed
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -178,12 +179,7 @@ export class VSCodeSCMView {
             ${this.gitStatus.behind > 0 ? `<span class="badge">↓${this.gitStatus.behind}</span>` : ''}
           </div>
           <div class="scm-status-actions">
-            <button class="icon-button" title="Synchronize Changes" onclick="window.scmView?.sync()">
-              <span class="codicon codicon-sync"></span>
-            </button>
-            <button class="icon-button" title="Refresh" onclick="window.scmView?.refresh()">
-              <span class="codicon codicon-refresh"></span>
-            </button>
+            <!-- Removed redundant sync and refresh buttons -->
           </div>
         </div>
       </div>
@@ -397,25 +393,87 @@ export class VSCodeSCMView {
   }
 
   public async stageFile(path: string) {
+    // Prevent double-clicks
+    if (this.pendingOperations.has(path)) {
+      console.log('[SCM] Operation already pending for:', path);
+      return;
+    }
+    
     try {
       console.log('[SCM] Staging file:', path);
-      await window.gitAPI.stage([path]);
-      await this.refresh();
-      console.log('[SCM] File staged successfully');
+      this.pendingOperations.add(path);
+      
+      // Optimistically update UI immediately
+      const fileStatus = this.gitStatus?.files.find(f => f.path === path);
+      if (fileStatus) {
+        // Move from working to index immediately in UI
+        if (fileStatus.working !== ' ') {
+          fileStatus.index = fileStatus.working;
+          fileStatus.working = ' ';
+        }
+        this.render(); // Re-render immediately
+      }
+      
+      // Perform actual git operation in background
+      window.gitAPI.stage([path]).then(() => {
+        console.log('[SCM] File staged successfully');
+        this.pendingOperations.delete(path);
+        // Refresh to get real status
+        this.refresh();
+      }).catch(error => {
+        console.error('[SCM] Failed to stage:', error);
+        this.pendingOperations.delete(path);
+        alert(`Failed to stage file: ${error}`);
+        // Revert optimistic update on error
+        this.refresh();
+      });
+      
     } catch (error) {
       console.error('[SCM] Failed to stage:', error);
+      this.pendingOperations.delete(path);
       alert(`Failed to stage file: ${error}`);
     }
   }
 
   public async unstageFile(path: string) {
+    // Prevent double-clicks
+    if (this.pendingOperations.has(path)) {
+      console.log('[SCM] Operation already pending for:', path);
+      return;
+    }
+    
     try {
       console.log('[SCM] Unstaging file:', path);
-      await window.gitAPI.unstage([path]);
-      await this.refresh();
-      console.log('[SCM] File unstaged successfully');
+      this.pendingOperations.add(path);
+      
+      // Optimistically update UI immediately
+      const fileStatus = this.gitStatus?.files.find(f => f.path === path);
+      if (fileStatus) {
+        // Move from index to working immediately in UI
+        if (fileStatus.index !== ' ') {
+          fileStatus.working = fileStatus.index === 'A' ? '?' : 'M';
+          fileStatus.index = ' ';
+        }
+        this.render(); // Re-render immediately
+      }
+      
+      // Perform actual git operation in background
+      window.gitAPI.unstage([path]).then(() => {
+        console.log('[SCM] File unstaged successfully');
+        this.pendingOperations.delete(path);
+        // Refresh to get real status
+        this.refresh();
+      }).catch(error => {
+        console.error('[SCM] Failed to unstage:', error);
+        this.pendingOperations.delete(path);
+        alert(`Failed to unstage file: ${error}`);
+        // Revert optimistic update on error
+        this.refresh();
+      });
+      
     } catch (error) {
       console.error('[SCM] Failed to unstage:', error);
+      this.pendingOperations.delete(path);
       alert(`Failed to unstage file: ${error}`);
     }
   }
