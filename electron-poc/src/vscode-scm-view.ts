@@ -158,8 +158,9 @@ export class VSCodeSCMView {
         <!-- Git Graph Section -->
         <div id="git-graph-container" style="
           border-top: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);
-          flex: 1;
-          min-height: 200px;
+          height: 65vh;
+          min-height: 400px;
+          max-height: 800px;
           overflow: hidden;
         "></div>
 
