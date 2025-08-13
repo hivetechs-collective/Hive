@@ -594,9 +594,11 @@ export class VSCodeSCMView {
   }
 
   public async push() {
+    console.log('[SCM] Push button clicked');
     const branch = this.gitStatus?.branch || 'current branch';
     
     // Show loading notification
+    console.log('[SCM] Showing push notification...');
     const notificationId = notifications.show({
       title: 'Git Push',
       message: `Pushing ${branch} to remote...`,
@@ -641,6 +643,9 @@ export class VSCodeSCMView {
   }
 
   public async pull() {
+    console.log('[SCM] Pull button clicked');
+    alert('Pull button clicked - starting pull operation');
+    
     const notificationId = notifications.show({
       title: 'Git Pull',
       message: 'Pulling from remote...',

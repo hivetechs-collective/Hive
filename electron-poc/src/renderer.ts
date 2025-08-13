@@ -32,6 +32,7 @@ import { NeuralConsciousness } from './neural-consciousness';
 import { analyticsDashboard } from './analytics';
 import { GitUI } from './git-ui';
 import { VSCodeSCMView } from './vscode-scm-view';
+import './notification.css';
 import { FileExplorer } from './file-explorer';
 import { VSCodeFileExplorer } from './vs-file-explorer';
 import { VSCodeExplorerExact } from './vscode-explorer-exact';
