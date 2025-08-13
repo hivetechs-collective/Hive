@@ -27,8 +27,8 @@ export class VSCodeSCMView {
   }
 
   private async initialize() {
-    // Initialize Git decoration provider
-    this.gitDecorationProvider = new GitDecorationProvider('/Users/veronelazio/Developer/Private/hive/electron-poc');
+    // Initialize Git decoration provider for the parent hive repo
+    this.gitDecorationProvider = new GitDecorationProvider('/Users/veronelazio/Developer/Private/hive');
     await this.gitDecorationProvider.initialize();
     
     // Start auto-refresh
@@ -39,7 +39,7 @@ export class VSCodeSCMView {
     (window as any).scmView = this;
   }
 
-  private async refresh() {
+  public async refresh() {
     try {
       this.gitStatus = await window.gitAPI.getStatus();
       this.render();
@@ -218,17 +218,15 @@ export class VSCodeSCMView {
     
     const statusIcon = this.getStatusIcon(file);
     const isSelected = this.selectedFiles.has(file.path);
+    
+    // Escape the path for use in onclick handlers
+    const escapedPath = file.path.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
     return `
       <div class="scm-resource-item ${isSelected ? 'selected' : ''}" 
            data-path="${file.path}" 
            data-group="${groupId}">
-        <div class="scm-resource-item-content">
-          <div class="scm-resource-checkbox">
-            <input type="checkbox" 
-                   ${isSelected ? 'checked' : ''}
-                   onchange="window.scmView?.toggleFileSelection('${file.path}')">
-          </div>
+        <div class="scm-resource-item-content" onclick="window.scmView?.openFile('${escapedPath}')" style="cursor: pointer; flex: 1;" title="${file.working === 'M' || file.index === 'M' || file.working === 'D' || file.index === 'D' ? 'Click to view diff' : 'Click to open file'}">
           <div class="scm-resource-decoration" title="${statusIcon.tooltip}">
             <span class="${statusIcon.className}">${statusIcon.letter}</span>
           </div>
@@ -236,24 +234,20 @@ export class VSCodeSCMView {
             <span class="codicon codicon-file"></span>
             <span class="label">${fileName}</span>
             ${folderPath ? `<span class="description">${folderPath}</span>` : ''}
+            ${file.working === 'M' || file.index === 'M' || file.working === 'D' || file.index === 'D' ? 
+              '<span style="margin-left: 6px; opacity: 0.5; font-size: 10px;">(diff)</span>' : ''}
           </div>
         </div>
         <div class="scm-resource-actions">
-          <button class="icon-button" title="Open File" onclick="window.scmView?.openFile('${file.path}')">
-            <span class="codicon codicon-go-to-file"></span>
-          </button>
           ${groupId === 'changes' || groupId === 'untracked' ? `
-            <button class="icon-button" title="Stage Changes" onclick="window.scmView?.stageFile('${file.path}')">
+            <button class="icon-button" title="Stage Changes" onclick="event.stopPropagation(); window.scmView?.stageFile('${escapedPath}')">
               <span class="codicon codicon-add"></span>
             </button>
           ` : groupId === 'staged' ? `
-            <button class="icon-button" title="Unstage Changes" onclick="window.scmView?.unstageFile('${file.path}')">
+            <button class="icon-button" title="Unstage Changes" onclick="event.stopPropagation(); window.scmView?.unstageFile('${escapedPath}')">
               <span class="codicon codicon-remove"></span>
             </button>
           ` : ''}
-          <button class="icon-button" title="Discard Changes" onclick="window.scmView?.discardFile('${file.path}')">
-            <span class="codicon codicon-discard"></span>
-          </button>
         </div>
       </div>
     `;
@@ -322,19 +316,25 @@ export class VSCodeSCMView {
 
   public async stageFile(path: string) {
     try {
+      console.log('[SCM] Staging file:', path);
       await window.gitAPI.stage([path]);
       await this.refresh();
+      console.log('[SCM] File staged successfully');
     } catch (error) {
-      console.error('Failed to stage:', error);
+      console.error('[SCM] Failed to stage:', error);
+      alert(`Failed to stage file: ${error}`);
     }
   }
 
   public async unstageFile(path: string) {
     try {
+      console.log('[SCM] Unstaging file:', path);
       await window.gitAPI.unstage([path]);
       await this.refresh();
+      console.log('[SCM] File unstaged successfully');
     } catch (error) {
-      console.error('Failed to unstage:', error);
+      console.error('[SCM] Failed to unstage:', error);
+      alert(`Failed to unstage file: ${error}`);
     }
   }
 
@@ -433,10 +433,77 @@ export class VSCodeSCMView {
     }
   }
 
-  public openFile(path: string) {
-    // Open file in editor
-    if (window.editorTabs) {
-      window.editorTabs.openFile(path);
+  public async openFile(path: string) {
+    try {
+      // Convert relative path to absolute path for electron-poc
+      const fullPath = path.startsWith('/') ? path : `/Users/veronelazio/Developer/Private/hive/${path}`;
+      
+      console.log('[SCM] Opening file:', fullPath);
+      
+      // Check if file has changes (modified, staged, etc.)
+      const fileStatus = this.gitStatus?.files.find(f => 
+        f.path === path || `/Users/veronelazio/Developer/Private/hive/${f.path}` === fullPath
+      );
+      
+      if (fileStatus && (fileStatus.working === 'M' || fileStatus.index === 'M' || 
+                         fileStatus.working === 'D' || fileStatus.index === 'D' ||
+                         fileStatus.working === 'A' || fileStatus.index === 'A')) {
+        // File has changes - show diff view
+        console.log('[SCM] File has changes, showing diff view');
+        await this.showDiffView(path, fileStatus);
+      } else {
+        // No changes or untracked file - open normally
+        const content = await window.fileAPI.readFile(fullPath);
+        
+        // Open file in editor tabs
+        if (window.editorTabs) {
+          window.editorTabs.openFile(fullPath, content);
+          console.log('[SCM] File opened in editor tabs');
+        } else {
+          console.error('[SCM] Editor tabs not available');
+        }
+      }
+    } catch (error) {
+      console.error('[SCM] Failed to open file:', error);
+    }
+  }
+  
+  private async showDiffView(path: string, fileStatus: any) {
+    try {
+      const fullPath = path.startsWith('/') ? path : `/Users/veronelazio/Developer/Private/hive/${path}`;
+      
+      // Get the diff for this file
+      let diff: string;
+      if (fileStatus.index !== ' ' && fileStatus.index !== '?') {
+        // File is staged - get staged diff
+        diff = await window.gitAPI.getStagedDiff(path);
+      } else {
+        // File is not staged - get working tree diff
+        diff = await window.gitAPI.getDiff(path);
+      }
+      
+      // Import and create diff viewer
+      const { DiffViewer } = await import('./diff-viewer');
+      const diffViewer = new DiffViewer();
+      
+      // Show the diff
+      await diffViewer.showDiff(fullPath, diff);
+      
+      // Open diff viewer in a new tab
+      if (window.editorTabs) {
+        const container = diffViewer.getContainer();
+        window.editorTabs.openDiffTab(fullPath + ' (diff)', container);
+      }
+      
+    } catch (error) {
+      console.error('[SCM] Failed to show diff view:', error);
+      // Fallback to normal file opening
+      const fullPath = path.startsWith('/') ? path : `/Users/veronelazio/Developer/Private/hive/${path}`;
+      const content = await window.fileAPI.readFile(fullPath);
+      
+      if (window.editorTabs) {
+        window.editorTabs.openFile(fullPath, content);
+      }
     }
   }
 

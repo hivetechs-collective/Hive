@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItem } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -91,9 +91,10 @@ const initDatabase = () => {
 // Git Integration
 let gitManager: GitManager | null = null;
 
-// Initialize Git manager with the current working directory
+// Initialize Git manager with the parent hive directory
 const initGitManager = () => {
-  gitManager = new GitManager(process.cwd());
+  // Use the parent hive directory for Git operations
+  gitManager = new GitManager('/Users/veronelazio/Developer/Private/hive');
 };
 
 // File System Manager
@@ -217,6 +218,37 @@ const registerGitHandlers = () => {
       if (file.working === 'A') return 'added';
     }
     return null;
+  });
+  
+  // Initialize Git repository
+  ipcMain.handle('git-init', async (_, repoPath: string) => {
+    const git = new GitManager(repoPath);
+    await git.initRepo();
+    return { success: true };
+  });
+};
+
+const registerDialogHandlers = () => {
+  // Dialog IPC handlers
+  ipcMain.handle('show-open-dialog', async (_, options: any) => {
+    const result = await dialog.showOpenDialog(mainWindow!, options);
+    return result;
+  });
+  
+  ipcMain.handle('show-save-dialog', async (_, options: any) => {
+    const result = await dialog.showSaveDialog(mainWindow!, options);
+    return result;
+  });
+  
+  ipcMain.handle('show-message-box', async (_, options: any) => {
+    const result = await dialog.showMessageBox(mainWindow!, options);
+    return result;
+  });
+  
+  ipcMain.handle('set-title', (_, title: string) => {
+    if (mainWindow) {
+      mainWindow.setTitle(title);
+    }
   });
 };
 
@@ -571,6 +603,10 @@ app.on('ready', () => {
   initGitManager(); // Initialize Git manager here
   createWindow();
   
+  // Register all IPC handlers
+  registerGitHandlers();
+  registerDialogHandlers();
+  registerFileSystemHandlers();
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

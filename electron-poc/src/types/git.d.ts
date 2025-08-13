@@ -47,6 +47,7 @@ declare global {
       fetch(): Promise<void>;
       switchBranch(branchName: string): Promise<void>;
       createBranch(branchName: string): Promise<void>;
+      initRepo(repoPath: string): Promise<any>;
     };
   }
 }

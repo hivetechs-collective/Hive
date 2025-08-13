@@ -163,11 +163,34 @@ export class StatusBar {
     this.currentFile = filePath;
     this.render();
   }
+  
+  public setGitInfo(info: { branch: string; ahead: number; behind: number }) {
+    if (!this.gitStatus) {
+      this.gitStatus = {
+        isRepo: true,
+        files: [],
+        branch: info.branch,
+        ahead: info.ahead,
+        behind: info.behind
+      };
+    } else {
+      this.gitStatus.branch = info.branch;
+      this.gitStatus.ahead = info.ahead;
+      this.gitStatus.behind = info.behind;
+    }
+    this.render();
+  }
+  
+  public setWorkspaceInfo(info: { name: string; path: string }) {
+    // Store workspace info and re-render
+    this.render();
+  }
 
   public destroy() {
     if (this.updateInterval) {
       clearInterval(this.updateInterval);
       this.updateInterval = null;
     }
+    this.container.innerHTML = '';
   }
 }

@@ -45,6 +45,22 @@ declare global {
       switchBranch(branchName: string): Promise<void>;
       createBranch(branchName: string): Promise<void>;
       getFileStatus(path: string): Promise<string | null>;
+      initRepo(repoPath: string): Promise<any>;
+    };
+    
+    // Electron API
+    electronAPI: {
+      getAnalytics(): Promise<any>;
+      saveConversation(data: any): Promise<any>;
+      getUsageCount(): Promise<any>;
+      showInputDialog(title: string, defaultValue?: string): Promise<string | null>;
+      showOpenDialog(options: any): Promise<any>;
+      showSaveDialog(options: any): Promise<any>;
+      showMessageBox(options: any): Promise<any>;
+      setTitle(title: string): Promise<void>;
+      onMenuOpenFolder(callback: (folderPath: string) => void): void;
+      onMenuNewFile(callback: () => void): void;
+      onMenuSaveFile(callback: () => void): void;
     };
     
     // Global instances

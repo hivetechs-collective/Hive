@@ -760,6 +760,48 @@ export class EditorTabs {
   }
 
   /**
+   * Open a diff viewer in a new tab
+   */
+  public openDiffTab(tabName: string, diffContainer: HTMLElement): void {
+    try {
+      console.log('[EditorTabs] Opening diff tab:', tabName);
+      
+      // Create a unique ID for the diff tab
+      const tabId = `diff-${Date.now()}`;
+      
+      // Create new tab for diff
+      const tab: EditorTab = {
+        id: tabId,
+        path: tabName,
+        name: tabName,
+        content: '', // Diff doesn't have text content
+        isDirty: false,
+        language: 'diff'
+      };
+      
+      this.tabs.push(tab);
+      
+      // Create container for the diff viewer
+      const editorContainer = document.createElement('div');
+      editorContainer.className = 'editor-container';
+      editorContainer.id = `editor-${tabId}`;
+      editorContainer.style.display = 'none';
+      
+      // Append the diff container to our editor container
+      editorContainer.appendChild(diffContainer);
+      this.editorsContainer.appendChild(editorContainer);
+      
+      // Re-render tabs and activate the new one
+      this.renderTabs();
+      this.activateTab(tabId);
+      
+      console.log('[EditorTabs] Diff tab opened successfully');
+    } catch (error) {
+      console.error('[EditorTabs] Failed to open diff tab:', error);
+    }
+  }
+
+  /**
    * Clean up resources
    */
   public destroy(): void {

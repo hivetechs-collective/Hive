@@ -32,7 +32,8 @@ export class GitManager {
   private isRepo: boolean = false;
 
   constructor(repoPath?: string) {
-    this.repoPath = repoPath || process.cwd();
+    // Always use the parent hive directory for Git operations
+    this.repoPath = repoPath || '/Users/veronelazio/Developer/Private/hive';
     this.git = simpleGit(this.repoPath);
     this.checkIfRepo();
   }
@@ -70,12 +71,17 @@ export class GitManager {
       
       // Process all file statuses
       status.files.forEach(file => {
-        files.push({
-          path: file.path,
-          index: file.index || ' ',
-          working: file.working_dir || ' ',
-          renamed: (file as any).rename || undefined
-        });
+        // Filter out submodules (dioxus-fork, src/hive_ui) - these are deprecated
+        // Only include files from electron-poc directory
+        if (file.path.startsWith('electron-poc/') || 
+            (!file.path.includes('dioxus-fork') && !file.path.includes('src/hive_ui'))) {
+          files.push({
+            path: file.path,
+            index: file.index || ' ',
+            working: file.working_dir || ' ',
+            renamed: (file as any).rename || undefined
+          });
+        }
       });
 
       return {
@@ -272,5 +278,16 @@ export class GitManager {
 
   getIsRepo(): boolean {
     return this.isRepo;
+  }
+  
+  async initRepo(): Promise<void> {
+    try {
+      await this.git.init();
+      this.isRepo = true;
+      console.log('Git repository initialized at:', this.repoPath);
+    } catch (error) {
+      console.error('Failed to initialize Git repository:', error);
+      throw error;
+    }
   }
 }
