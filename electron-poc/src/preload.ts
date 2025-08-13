@@ -70,6 +70,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuOpenFolder: (callback: (folderPath: string) => void) => {
     ipcRenderer.on('menu-open-folder', (_, folderPath) => callback(folderPath));
   },
+  onMenuCloseFolder: (callback: () => void) => {
+    ipcRenderer.on('menu-close-folder', callback);
+  },
   onMenuOpenFile: (callback: (filePath: string) => void) => {
     ipcRenderer.on('menu-open-file', (_, filePath) => callback(filePath));
   },

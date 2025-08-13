@@ -14,6 +14,10 @@ import { rendererConfig } from './webpack.renderer.config';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    icon: './resources/icon', // Don't include file extension
+    name: 'Hive Consensus',
+    appBundleId: 'com.hivetechs.consensus',
+    appCategoryType: 'public.app-category.developer-tools',
   },
   rebuildConfig: {},
   makers: [new MakerSquirrel({}), new MakerZIP({}, ['darwin']), new MakerRpm({}), new MakerDeb({})],

@@ -440,6 +440,25 @@ export class EditorTabs {
   }
 
   /**
+   * Close all tabs (public method for closing folder)
+   */
+  public async closeAllTabs(): Promise<void> {
+    // Create a copy of tabs array since we'll be modifying it
+    const tabsToClose = [...this.tabs];
+    
+    // Close each tab
+    for (const tab of tabsToClose) {
+      await this.closeTab(tab.id);
+    }
+    
+    // Clear the editor container if no tabs remain
+    if (this.tabs.length === 0) {
+      this.editorsContainer.innerHTML = '';
+      this.activeTabId = null;
+    }
+  }
+
+  /**
    * Save a tab
    */
   private async saveTab(tabId: string): Promise<void> {

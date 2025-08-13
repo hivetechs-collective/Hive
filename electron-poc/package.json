@@ -1,8 +1,8 @@
 {
-  "name": "electron-poc",
-  "productName": "electron-poc",
+  "name": "hive-consensus",
+  "productName": "Hive Consensus",
   "version": "1.0.0",
-  "description": "My Electron application description",
+  "description": "Hive Consensus - AI-powered development environment",
   "main": ".webpack/main",
   "scripts": {
     "start": "electron-forge start",

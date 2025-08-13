@@ -637,10 +637,10 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
             targetPanel.style.display = 'block';
             
             // Initialize the content if needed
-            if (panelType === 'explorer' && !window.fileExplorer) {
+            if (panelType === 'explorer') {
                 const container = document.getElementById('explorer-content');
                 if (container) {
-                    console.log('Initializing VSCodeTreeExplorer in container:', container);
+                    console.log('Explorer panel activated, currentOpenedFolder:', currentOpenedFolder);
                     
                     // Ensure editor tabs exist first
                     if (!window.editorTabs) {
@@ -651,27 +651,36 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                         }
                     }
                     
-                    // Only initialize explorer if a folder is opened
+                    // Check if we need to initialize or update the explorer
                     if (currentOpenedFolder) {
-                        window.fileExplorer = new VSCodeExplorerExact(container);
-                        window.fileExplorer.initialize(currentOpenedFolder);
-                        
-                        // Connect to editor tabs when files are selected
-                        window.fileExplorer.onFileSelect((filePath: string) => {
-                            console.log('File selected:', filePath);
-                            if (window.editorTabs) {
-                                // Wrap in try-catch to prevent errors from bubbling to webpack
-                                try {
-                                    window.editorTabs.openFile(filePath).catch((err: any) => {
-                                        console.error('Error opening file:', err);
-                                    });
-                                } catch (err) {
-                                    console.error('Error calling openFile:', err);
+                        // If explorer doesn't exist, create it
+                        if (!window.fileExplorer) {
+                            console.log('Creating new file explorer for:', currentOpenedFolder);
+                            container.innerHTML = ''; // Clear any existing content
+                            window.fileExplorer = new VSCodeExplorerExact(container);
+                            window.fileExplorer.initialize(currentOpenedFolder);
+                            
+                            // Connect to editor tabs when files are selected
+                            window.fileExplorer.onFileSelect((filePath: string) => {
+                                console.log('File selected:', filePath);
+                                if (window.editorTabs) {
+                                    // Wrap in try-catch to prevent errors from bubbling to webpack
+                                    try {
+                                        window.editorTabs.openFile(filePath).catch((err: any) => {
+                                            console.error('Error opening file:', err);
+                                        });
+                                    } catch (err) {
+                                        console.error('Error calling openFile:', err);
+                                    }
+                                } else {
+                                    console.error('editorTabs not found');
                                 }
-                            } else {
-                                console.error('editorTabs not found');
-                            }
-                        });
+                            });
+                        } else {
+                            // Explorer already exists, but we need to ensure it's showing the correct folder
+                            console.log('Explorer exists, reinitializing with:', currentOpenedFolder);
+                            window.fileExplorer.initialize(currentOpenedFolder);
+                        }
                     } else {
                         // Show VS Code-style welcome screen
                         container.innerHTML = `
@@ -2559,7 +2568,7 @@ async function handleOpenFolder(folderPath: string) {
         
         // Update window title with folder name
         const folderName = folderPath.split('/').pop() || folderPath;
-        document.title = `Hive AI - ${folderName}`;
+        document.title = `Hive Consensus - ${folderName}`;
         
         // Refresh the file explorer with the new folder
         const explorerContainer = document.getElementById('explorer-content');
@@ -2662,6 +2671,48 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
     // Listen for open folder event
     (window as any).electronAPI.onMenuOpenFolder((folderPath: string) => {
         handleOpenFolder(folderPath);
+    });
+    
+    // Listen for close folder event
+    (window as any).electronAPI.onMenuCloseFolder(async () => {
+        console.log('[Menu] Close folder requested');
+        // Reset the current opened folder
+        currentOpenedFolder = null;
+        
+        // Reset window title
+        document.title = 'Hive Consensus';
+        
+        // Clear and reinitialize the Explorer to show welcome message
+        const explorerContainer = document.getElementById('explorer-content');
+        if (explorerContainer) {
+            explorerContainer.innerHTML = '';
+            window.fileExplorer = new VSCodeExplorerExact(explorerContainer);
+            await window.fileExplorer.initialize(); // Initialize without a folder - shows welcome
+        }
+        
+        // Reset Git manager to no folder state
+        if (window.gitAPI) {
+            // Tell the backend to reset git manager without a folder
+            await window.gitAPI.setFolder('');
+        }
+        
+        // Reinitialize SCM view to show welcome message
+        const scmContainer = document.getElementById('source-control-content');
+        if (scmContainer) {
+            // Destroy old view and create new one
+            if (window.scmView) {
+                window.scmView.destroy();
+            }
+            // Create new SCM view which will show welcome since no folder is open
+            window.scmView = new VSCodeSCMView(scmContainer);
+        }
+        
+        // Close all editor tabs
+        if (window.editorTabs) {
+            await window.editorTabs.closeAllTabs();
+        }
+        
+        addLogEntry('📁 Closed folder', 'info');
     });
     
     // Listen for open file event

@@ -1,4 +1,8 @@
 import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItem } from 'electron';
+
+// Set the app name immediately
+app.setName('Hive Consensus');
+
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -112,6 +116,8 @@ const createWindow = (): void => {
     width: 800,
     minWidth: 700, // Prevent window from becoming too small
     minHeight: 400,
+    title: 'Hive Consensus',
+    icon: path.join(__dirname, '../resources/icon.png'), // Icon for the window
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       nodeIntegration: false,
@@ -454,6 +460,15 @@ const createApplicationMenu = () => {
               if (mainWindow) {
                 mainWindow.webContents.send('menu-open-folder', result.filePaths[0]);
               }
+            }
+          }
+        },
+        {
+          label: 'Close Folder',
+          accelerator: 'CmdOrCtrl+K F',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-close-folder');
             }
           }
         },
@@ -1847,35 +1862,10 @@ ipcMain.handle('get-analytics', async () => {
   });
 });
 
-// Input dialog handler for file/folder creation
-ipcMain.handle('show-input-dialog', async (_, title: string, defaultValue = '') => {
-  const { dialog } = require('electron');
-  
-  if (!mainWindow) {
-    return null;
-  }
-  
-  // For now, use showMessageBox with input as a fallback
-  // In production, you'd create a proper input dialog window
-  const result = await dialog.showMessageBox(mainWindow, {
-    type: 'question',
-    title: title,
-    message: title,
-    detail: `Default: ${defaultValue}`,
-    buttons: ['OK', 'Cancel'],
-    defaultId: 0,
-    cancelId: 1
-  });
-  
-  if (result.response === 0) {
-    return defaultValue; // Return default for now
-  }
-  return null;
-});
-
 // Store reference to main window
 app.on('browser-window-created', (_, window) => {
   if (!mainWindow) {
     mainWindow = window;
   }
+});
 });

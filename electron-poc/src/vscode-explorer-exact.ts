@@ -34,11 +34,11 @@ export class VSCodeExplorerExact {
   private draggedNode: TreeNode | null = null;
   private dropTarget: HTMLElement | null = null;
   private gitDecorationProvider: GitDecorationProvider | null = null;
-  private rootPath: string = '/Users/veronelazio/Developer/Private/hive/electron-poc';
+  private rootPath: string = '';
 
   constructor(container: HTMLElement) {
     this.container = container;
-    this.initializeInternal();
+    // Don't initialize automatically - wait for initialize() to be called with a path
   }
 
   // Public method to initialize/reinitialize with a specific path
@@ -46,6 +46,18 @@ export class VSCodeExplorerExact {
     if (rootPath) {
       this.rootPath = rootPath;
       console.log('[VSCodeExplorer] Setting root path to:', rootPath);
+    }
+    
+    // If no root path set, don't initialize
+    if (!this.rootPath) {
+      console.log('[VSCodeExplorer] No root path set, skipping initialization');
+      return;
+    }
+    
+    // Setup container and styles if not already done
+    if (!this.container.querySelector('.explorer-folders-view')) {
+      this.setupContainer();
+      this.attachStyles();
     }
     
     // Re-initialize Git decorations with new path
