@@ -71,16 +71,12 @@ export class VSCodeSCMView {
               <p class="scm-welcome-message">
                 In order to use Git features, you can open a folder containing a Git repository or clone from a URL.
               </p>
-              <div class="scm-welcome-actions">
-                <button class="scm-welcome-button primary" onclick="window.openFolder()">
-                  <span class="codicon codicon-folder-opened"></span>
-                  Open Folder
-                </button>
-                <button class="scm-welcome-button" onclick="window.cloneRepository()">
-                  <span class="codicon codicon-repo-clone"></span>
-                  Clone Repository
-                </button>
-              </div>
+              <button class="scm-welcome-button primary" onclick="window.openFolder()">
+                Open Folder
+              </button>
+              <button class="scm-welcome-button" onclick="window.cloneRepository()">
+                Clone Repository
+              </button>
               <p class="scm-welcome-docs">
                 To learn more about how to use Git and source control 
                 <a href="https://code.visualstudio.com/docs/editor/versioncontrol" target="_blank" class="scm-welcome-link">read our docs</a>.
@@ -610,39 +606,27 @@ export class VSCodeSCMView {
         line-height: 1.5;
       }
       
-      .scm-welcome-actions {
-        display: flex;
-        gap: 12px;
-        justify-content: center;
-        margin-bottom: 20px;
-      }
-      
       .scm-welcome-button {
+        display: block;
+        width: 100%;
         padding: 6px 14px;
-        background: var(--vscode-button-secondaryBackground);
-        color: var(--vscode-button-secondaryForeground);
-        border: 1px solid var(--vscode-button-secondaryBorder, transparent);
+        margin: 8px 0;
+        background: var(--vscode-button-secondaryBackground, #3a3d41);
+        color: var(--vscode-button-secondaryForeground, #cccccc);
+        border: 1px solid var(--vscode-button-border, transparent);
         border-radius: 2px;
         cursor: pointer;
         font-size: 13px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        transition: background-color 0.1s;
-      }
-      
-      .scm-welcome-button:hover {
-        background: var(--vscode-button-secondaryHoverBackground);
+        text-align: center;
       }
       
       .scm-welcome-button.primary {
-        background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        border-color: var(--vscode-button-border, transparent);
+        background: var(--vscode-button-background, #0e639c);
+        color: var(--vscode-button-foreground, #ffffff);
       }
       
-      .scm-welcome-button.primary:hover {
-        background: var(--vscode-button-hoverBackground);
+      .scm-welcome-button:hover {
+        background: var(--vscode-button-hoverBackground, #1177bb);
       }
       
       .scm-welcome-docs {
