@@ -447,3 +447,82 @@
   background: rgba(0, 122, 204, 0.3) !important;
   box-shadow: inset 0 0 0 2px #007acc;
 }
+
+/* Git Decoration Styles */
+.git-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  min-width: 14px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.git-indicator.modified {
+  background: rgba(226, 192, 141, 0.2);
+  color: #e2c08d;
+}
+
+.git-indicator.added {
+  background: rgba(115, 201, 145, 0.2);
+  color: #73c991;
+}
+
+.git-indicator.deleted {
+  background: rgba(244, 135, 113, 0.2);
+  color: #f48771;
+}
+
+.git-indicator.untracked {
+  background: rgba(107, 107, 107, 0.2);
+  color: #6b6b6b;
+}
+
+.git-indicator.conflicted {
+  background: rgba(253, 126, 20, 0.2);
+  color: #fd7e14;
+}
+
+.git-indicator.renamed {
+  background: rgba(79, 195, 247, 0.2);
+  color: #4fc3f7;
+}
+
+.git-indicator.staged {
+  background: rgba(0, 122, 204, 0.2);
+  color: #007acc;
+}
+
+/* File name color modifications for Git status */
+.label-name.git-modified {
+  color: #e2c08d !important;
+}
+
+.label-name.git-added {
+  color: #73c991 !important;
+}
+
+.label-name.git-deleted {
+  color: #f48771 !important;
+}
+
+.label-name.git-untracked {
+  color: #6b6b6b !important;
+}
+
+.label-name.git-conflicted {
+  color: #fd7e14 !important;
+}
+
+.label-name.git-renamed {
+  color: #4fc3f7 !important;
+}
+
+.label-name.git-staged {
+  color: #007acc !important;
+}

@@ -1,0 +1,138 @@
+/* VS Code-style Status Bar */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 22px;
+  background: #007acc;
+  color: #ffffff;
+  font-size: 12px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  border-top: 1px solid #3c3c3c;
+  padding: 0;
+  user-select: none;
+  z-index: 100;
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 8px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+  white-space: nowrap;
+  gap: 4px;
+}
+
+.status-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.status-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.9;
+}
+
+/* Git branch styling */
+.status-item.git-branch {
+  background: rgba(255, 255, 255, 0.05);
+  font-weight: 500;
+}
+
+.status-item.git-branch:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sync-indicator {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 3px;
+  border-radius: 2px;
+  margin-left: 4px;
+}
+
+.sync-indicator.ahead {
+  background: rgba(115, 201, 145, 0.3);
+  color: #73c991;
+}
+
+.sync-indicator.behind {
+  background: rgba(244, 135, 113, 0.3);
+  color: #f48771;
+}
+
+.changes-indicator {
+  background: rgba(226, 192, 141, 0.3);
+  color: #e2c08d;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin-left: 4px;
+}
+
+/* Current file styling */
+.status-item.current-file {
+  color: rgba(255, 255, 255, 0.8);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Git status indicators */
+.status-item.git-staged {
+  color: #73c991;
+}
+
+.status-item.git-modified {
+  color: #e2c08d;
+}
+
+.status-item.git-untracked {
+  color: #cccccc;
+}
+
+.status-item.ready {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+
+/* Dark theme adjustments */
+.status-bar.dark {
+  background: #1e1e1e;
+  color: #cccccc;
+  border-top-color: #3c3c3c;
+}
+
+.status-bar.dark .status-item.git-branch {
+  background: rgba(0, 122, 204, 0.2);
+  color: #007acc;
+}
+
+.status-bar.dark .status-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .status-item.current-file {
+    max-width: 100px;
+  }
+  
+  .status-item span {
+    display: none;
+  }
+  
+  .status-item .status-icon {
+    margin-right: 0;
+  }
+}

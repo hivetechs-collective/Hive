@@ -22,6 +22,13 @@ export class GitUI {
       this.render();
     } catch (error) {
       console.error('Failed to refresh git status:', error);
+      // Show error state in UI
+      this.container.innerHTML = `
+        <div class="git-empty">
+          <p style="color: #f48771;">Git status unavailable</p>
+          <p style="color: #6b6b6b; font-size: 11px;">Check if this is a Git repository</p>
+        </div>
+      `;
     }
   }
 
@@ -65,22 +72,22 @@ export class GitUI {
             ${behind > 0 ? `<span class="sync-badge behind">↓${behind}</span>` : ''}
           </div>
           <div class="git-actions">
-            <button class="git-action-btn" title="Refresh" onclick="gitUI.refresh()">
+            <button class="git-action-btn" title="Refresh" onclick="window.gitUI?.refresh?.()">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M5.563 2.516A6.001 6.001 0 008 14A6 6 0 003.405 4.41a.5.5 0 00-.845.535A5 5 0 107.5 2.959a.5.5 0 10.002-1 6 6 0 013.061.584l-.011-.026.002-.003.026.011V.5a.5.5 0 00-1 0V2l.001.03a.294.294 0 00.075.204.296.296 0 00.213.089L11.5 2.5a.5.5 0 000-1H9.908A7.001 7.001 0 002 8a7 7 0 1012.135-4.734.5.5 0 00-.634.774z"/>
               </svg>
             </button>
-            <button class="git-action-btn" title="Commit" onclick="gitUI.showCommitDialog()">
+            <button class="git-action-btn" title="Commit" onclick="window.gitUI?.showCommitDialog?.()">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M11.93 8.5a4.002 4.002 0 01-7.86 0H.5a.5.5 0 010-1h3.57a4.002 4.002 0 017.86 0h3.57a.5.5 0 110 1h-3.57zM8 11a3 3 0 100-6 3 3 0 000 6z"/>
               </svg>
             </button>
-            <button class="git-action-btn" title="Pull" onclick="gitUI.pull()">
+            <button class="git-action-btn" title="Pull" onclick="window.gitUI?.pull?.()">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M8 1a.5.5 0 01.5.5v9.793l2.146-2.147a.5.5 0 01.708.708l-3 3a.5.5 0 01-.708 0l-3-3a.5.5 0 11.708-.708L7.5 11.293V1.5A.5.5 0 018 1zm-4 13.5a.5.5 0 010-1h8a.5.5 0 010 1H4z"/>
               </svg>
             </button>
-            <button class="git-action-btn" title="Push" onclick="gitUI.push()">
+            <button class="git-action-btn" title="Push" onclick="window.gitUI?.push?.()">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M8 14.5a.5.5 0 01-.5-.5V4.207L5.354 6.354a.5.5 0 11-.708-.708l3-3a.5.5 0 01.708 0l3 3a.5.5 0 01-.708.708L8.5 4.207V14a.5.5 0 01-.5.5z"/>
               </svg>
@@ -92,8 +99,8 @@ export class GitUI {
         <div class="commit-message-box" id="commit-message-box" style="display: none;">
           <input type="text" class="commit-input" id="commit-input" placeholder="Commit message..." />
           <div class="commit-actions">
-            <button class="commit-btn commit-confirm" onclick="gitUI.doCommit()">Commit</button>
-            <button class="commit-btn commit-cancel" onclick="gitUI.hideCommitDialog()">Cancel</button>
+            <button class="commit-btn commit-confirm" onclick="window.gitUI?.doCommit?.()">Commit</button>
+            <button class="commit-btn commit-cancel" onclick="window.gitUI?.hideCommitDialog?.()">Cancel</button>
           </div>
         </div>
 
@@ -159,25 +166,25 @@ export class GitUI {
         </div>
         <div class="file-actions">
           ${section === 'staged' ? `
-            <button class="file-action" title="Unstage" onclick="gitUI.unstageFile('${file.path}')">
+            <button class="file-action" title="Unstage" onclick="window.gitUI?.unstageFile?.('${file.path}')">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M8 4a.5.5 0 01.5.5v7a.5.5 0 01-1 0v-7A.5.5 0 018 4z"/>
                 <path fill="currentColor" d="M3.5 8a.5.5 0 01.5-.5h7a.5.5 0 010 1H4a.5.5 0 01-.5-.5z"/>
               </svg>
             </button>
           ` : section === 'changes' ? `
-            <button class="file-action" title="Stage" onclick="gitUI.stageFile('${file.path}')">
+            <button class="file-action" title="Stage" onclick="window.gitUI?.stageFile?.('${file.path}')">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M8 4a.5.5 0 01.5.5v3h3a.5.5 0 010 1h-3v3a.5.5 0 01-1 0v-3h-3a.5.5 0 010-1h3v-3A.5.5 0 018 4z"/>
               </svg>
             </button>
-            <button class="file-action" title="Discard" onclick="gitUI.discardFile('${file.path}')">
+            <button class="file-action" title="Discard" onclick="window.gitUI?.discardFile?.('${file.path}')">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M2.146 2.854a.5.5 0 11.708-.708L8 7.293l5.146-5.147a.5.5 0 01.708.708L8.707 8l5.147 5.146a.5.5 0 01-.708.708L8 8.707l-5.146 5.147a.5.5 0 01-.708-.708L7.293 8 2.146 2.854z"/>
               </svg>
             </button>
           ` : section === 'untracked' ? `
-            <button class="file-action" title="Stage" onclick="gitUI.stageFile('${file.path}')">
+            <button class="file-action" title="Stage" onclick="window.gitUI?.stageFile?.('${file.path}')">
               <svg width="16" height="16" viewBox="0 0 16 16">
                 <path fill="currentColor" d="M8 4a.5.5 0 01.5.5v3h3a.5.5 0 010 1h-3v3a.5.5 0 01-1 0v-3h-3a.5.5 0 010-1h3v-3A.5.5 0 018 4z"/>
               </svg>

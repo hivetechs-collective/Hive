@@ -5,7 +5,6 @@
 
 import { EventEmitter } from 'events';
 import * as path from 'path';
-import * as chokidar from 'chokidar';
 
 export interface GitDecoration {
   badge?: string;      // Single letter badge (M, A, D, U, etc.)
@@ -44,11 +43,10 @@ export enum GitStatus {
 
 export class GitDecorationProvider extends EventEmitter {
   private decorations: Map<string, GitDecoration> = new Map();
-  private fileWatcher: chokidar.FSWatcher | null = null;
-  private gitWatcher: chokidar.FSWatcher | null = null;
   private updateTimer: NodeJS.Timeout | null = null;
   private rootPath: string;
   private gitStatus: Map<string, GitFileStatus> = new Map();
+  private updateInterval: NodeJS.Timeout | null = null;
 
   // VS Code-inspired color scheme
   private readonly colors = {
@@ -86,44 +84,13 @@ export class GitDecorationProvider extends EventEmitter {
     // Initial Git status load
     await this.updateGitStatus();
     
-    // Set up file system watchers
-    this.setupWatchers();
+    // Set up polling for Git status changes (since we can't use file watchers in renderer)
+    // Poll every 2 seconds for changes
+    this.updateInterval = setInterval(() => {
+      this.scheduleUpdate();
+    }, 2000);
     
     console.log('[GitDecorationProvider] Initialized with', this.decorations.size, 'decorations');
-  }
-
-  private setupWatchers(): void {
-    // Watch .git directory for Git operations
-    const gitPath = path.join(this.rootPath, '.git');
-    this.gitWatcher = chokidar.watch(gitPath, {
-      ignored: /(^|[\/\\])\../, // Ignore dotfiles except .git
-      persistent: true,
-      ignoreInitial: true,
-      depth: 2
-    });
-
-    // Watch working directory for file changes
-    this.fileWatcher = chokidar.watch(this.rootPath, {
-      ignored: [
-        /(^|[\/\\])\../, // Ignore dotfiles
-        /node_modules/,
-        /\.git/
-      ],
-      persistent: true,
-      ignoreInitial: true
-    });
-
-    // Git directory changes
-    this.gitWatcher.on('all', (event, filePath) => {
-      console.log('[GitDecorationProvider] Git change detected:', event, filePath);
-      this.scheduleUpdate();
-    });
-
-    // Working directory changes
-    this.fileWatcher.on('all', (event, filePath) => {
-      console.log('[GitDecorationProvider] File change detected:', event, filePath);
-      this.scheduleUpdate();
-    });
   }
 
   private scheduleUpdate(): void {
@@ -305,14 +272,11 @@ export class GitDecorationProvider extends EventEmitter {
   }
 
   public dispose(): void {
-    if (this.fileWatcher) {
-      this.fileWatcher.close();
-    }
-    if (this.gitWatcher) {
-      this.gitWatcher.close();
-    }
     if (this.updateTimer) {
       clearTimeout(this.updateTimer);
+    }
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
     }
     this.decorations.clear();
     this.gitStatus.clear();

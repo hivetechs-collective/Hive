@@ -58,7 +58,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAnalytics: () => ipcRenderer.invoke('get-analytics'),
   saveConversation: (data: any) => ipcRenderer.invoke('save-conversation', data),
   getUsageCount: () => ipcRenderer.invoke('get-usage-count'),
-  showInputDialog: (title: string, defaultValue?: string) => ipcRenderer.invoke('show-input-dialog', title, defaultValue)
+  showInputDialog: (title: string, defaultValue?: string) => ipcRenderer.invoke('show-input-dialog', title, defaultValue),
+  
+  // Menu event listeners
+  onMenuOpenFolder: (callback: (folderPath: string) => void) => {
+    ipcRenderer.on('menu-open-folder', (_, folderPath) => callback(folderPath));
+  },
+  onMenuNewFile: (callback: () => void) => {
+    ipcRenderer.on('menu-new-file', callback);
+  },
+  onMenuSaveFile: (callback: () => void) => {
+    ipcRenderer.on('menu-save-file', callback);
+  }
 });
 
 // Git API

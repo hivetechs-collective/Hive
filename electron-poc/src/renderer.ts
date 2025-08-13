@@ -23,6 +23,7 @@ import './neural-consciousness.css';
 import './analytics.css';
 import './git.css';
 import './file-explorer.css';
+import './status-bar.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
@@ -33,6 +34,7 @@ import { FileExplorer } from './file-explorer';
 import { VSCodeFileExplorer } from './vs-file-explorer';
 import { VSCodeExplorerExact } from './vscode-explorer-exact';
 import { EditorTabs } from './editor-tabs';
+import { StatusBar } from './status-bar';
 
 // Simple input dialog function for VS Code-style prompts
 function showInputDialog(title: string, message: string, defaultValue: string = ''): Promise<string | null> {
@@ -1511,6 +1513,43 @@ addLogEntry('⚡ Hive Consensus Day 0 Validation started', 'info');
 addLogEntry('🔧 Click buttons above to test the Electron + Rust architecture', 'info');
 addChatMessage('Welcome to Hive Consensus! Try asking me a question.', true);
 
+// Function to setup menu event listeners
+function setupMenuEventListeners() {
+    // Listen for Open Folder menu event
+    (window as any).electronAPI?.onMenuOpenFolder?.((folderPath: string) => {
+        console.log('Opening folder:', folderPath);
+        // Refresh the file explorer with the new folder
+        if (window.fileExplorer && window.fileExplorer.refresh) {
+            window.fileExplorer.refresh();
+        }
+        // Update status bar
+        if ((window as any).statusBar) {
+            (window as any).statusBar.render();
+        }
+    });
+    
+    // Listen for New File menu event
+    (window as any).electronAPI?.onMenuNewFile?.(() => {
+        console.log('New file requested');
+        if (window.fileExplorer && window.fileExplorer.createFile) {
+            showInputDialog('New File', 'Enter file name:').then(fileName => {
+                if (fileName) {
+                    window.fileExplorer.createFile(fileName);
+                }
+            });
+        }
+    });
+    
+    // Listen for Save File menu event
+    (window as any).electronAPI?.onMenuSaveFile?.(() => {
+        console.log('Save file requested');
+        // Save current file in editor
+        if (window.editorTabs && window.editorTabs.saveCurrentFile) {
+            window.editorTabs.saveCurrentFile();
+        }
+    });
+}
+
 // Function to update status bar with license info
 async function updateStatusBar() {
   try {
@@ -2056,6 +2095,15 @@ setTimeout(() => {
         (window as any).gitUI = new GitUI(gitContainer);
     }
     
+    // Initialize enhanced Status Bar with Git integration
+    const statusBar = document.querySelector('.status-bar');
+    if (statusBar) {
+        (window as any).statusBar = new StatusBar(statusBar as HTMLElement);
+    }
+    
+    // Listen for menu events from main process
+    setupMenuEventListeners();
+    
     // File Explorer and Editor Tabs are already initialized in showSidebarPanel
     // Just set up Git UI file click handler if not already done
     if (!document.querySelector('[data-git-handler]')) {
@@ -2368,4 +2416,4 @@ function setupResizeHandles() {
             }
         });
     }
-}
+}// Testing Git modification indicator
