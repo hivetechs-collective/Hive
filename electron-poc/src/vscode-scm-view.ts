@@ -125,14 +125,18 @@ export class VSCodeSCMView {
                 <span class="codicon codicon-check"></span>
               </button>
               <div class="scm-toolbar-separator"></div>
-              <button class="scm-toolbar-button" title="Pull..." onclick="window.scmView?.pull()">
+              <button class="scm-toolbar-button" title="Pull (${this.gitStatus?.behind || 0} behind)" onclick="window.scmView?.pull()">
                 <span class="codicon codicon-cloud-download"></span>
+                ${this.gitStatus?.behind ? `<span class="badge">${this.gitStatus.behind}↓</span>` : ''}
               </button>
-              <button class="scm-toolbar-button" title="Push" onclick="window.scmView?.push()">
+              <button class="scm-toolbar-button" title="Push (${this.gitStatus?.ahead || 0} ahead)" onclick="window.scmView?.push()">
                 <span class="codicon codicon-cloud-upload"></span>
+                ${this.gitStatus?.ahead ? `<span class="badge">${this.gitStatus.ahead}↑</span>` : ''}
               </button>
               <button class="scm-toolbar-button" title="Sync Changes" onclick="window.scmView?.sync()">
                 <span class="codicon codicon-sync"></span>
+                ${(this.gitStatus?.ahead || this.gitStatus?.behind) ? 
+                  `<span class="badge">${this.gitStatus.ahead || 0}↑ ${this.gitStatus.behind || 0}↓</span>` : ''}
               </button>
             </div>
           </div>
@@ -597,11 +601,22 @@ export class VSCodeSCMView {
     console.log('[SCM] Push button clicked');
     const branch = this.gitStatus?.branch || 'current branch';
     
+    // Check if there's anything to push
+    if (this.gitStatus?.ahead === 0) {
+      notifications.show({
+        title: 'Nothing to push',
+        message: 'Your branch is up to date with remote',
+        type: 'info',
+        duration: 3000
+      });
+      return;
+    }
+    
     // Show loading notification
     console.log('[SCM] Showing push notification...');
     const notificationId = notifications.show({
       title: 'Git Push',
-      message: `Pushing ${branch} to remote...`,
+      message: `Pushing ${this.gitStatus?.ahead || ''} commit(s) to remote...`,
       type: 'loading',
       duration: 0 // Persistent until updated
     });
@@ -615,7 +630,7 @@ export class VSCodeSCMView {
       // Update to success notification
       notifications.update(notificationId, {
         title: 'Push Successful',
-        message: `Successfully pushed ${branch} to remote`,
+        message: `Successfully pushed ${this.gitStatus?.ahead || ''} commit(s) to ${branch}`,
         type: 'success',
         duration: 3000
       });
@@ -645,9 +660,20 @@ export class VSCodeSCMView {
   public async pull() {
     console.log('[SCM] Pull button clicked');
     
+    // Check if there's anything to pull
+    if (this.gitStatus?.behind === 0) {
+      notifications.show({
+        title: 'Already up to date',
+        message: 'No changes to pull from remote',
+        type: 'info',
+        duration: 3000
+      });
+      return;
+    }
+    
     const notificationId = notifications.show({
       title: 'Git Pull',
-      message: 'Pulling from remote...',
+      message: `Pulling ${this.gitStatus?.behind || ''} commit(s) from remote...`,
       type: 'loading',
       duration: 0
     });

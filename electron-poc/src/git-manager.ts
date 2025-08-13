@@ -75,6 +75,13 @@ export class GitManager {
     }
 
     try {
+      // Fetch first to get accurate ahead/behind counts
+      try {
+        await this.git.fetch();
+      } catch (fetchError) {
+        console.log('Fetch failed (may be offline):', fetchError);
+      }
+      
       const status = await this.git.status();
       
       const files: GitFileStatus[] = [];
@@ -97,8 +104,8 @@ export class GitManager {
       return {
         files,
         branch: status.current || 'master',
-        ahead: status.ahead,
-        behind: status.behind,
+        ahead: status.ahead || 0,
+        behind: status.behind || 0,
         isRepo: true,
         repoPath: this.repoPath
       };
