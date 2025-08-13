@@ -2700,4 +2700,61 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
     console.log('[Menu] Menu event listeners registered');
 }
 
+// Define global functions for opening folder and cloning repository
+window.openFolder = async () => {
+    try {
+        const result = await window.electronAPI.showOpenDialog({
+            properties: ['openDirectory']
+        });
+        
+        if (!result.canceled && result.filePaths.length > 0) {
+            const folderPath = result.filePaths[0];
+            console.log('Opening folder:', folderPath);
+            
+            // Update Git manager with the new folder
+            await window.gitAPI.setFolder(folderPath);
+            
+            // Update the file explorer with the new folder
+            if (window.fileExplorer) {
+                await window.fileExplorer.loadDirectory(folderPath);
+            }
+            
+            // Update git status for the new folder
+            if (window.scmView) {
+                await window.scmView.refresh();
+            }
+            
+            // Update window title
+            const folderName = folderPath.split('/').pop() || folderPath.split('\\').pop() || 'Folder';
+            await window.electronAPI.setTitle(`${folderName} - VS Code`);
+        }
+    } catch (error) {
+        console.error('Failed to open folder:', error);
+    }
+};
+
+window.cloneRepository = async () => {
+    try {
+        // For now, show a prompt for the repository URL
+        const repoUrl = await window.electronAPI.showInputDialog('Clone Repository', 'Enter repository URL:');
+        
+        if (repoUrl) {
+            // Select destination folder
+            const result = await window.electronAPI.showOpenDialog({
+                properties: ['openDirectory', 'createDirectory'],
+                title: 'Select destination folder for clone'
+            });
+            
+            if (!result.canceled && result.filePaths.length > 0) {
+                const destPath = result.filePaths[0];
+                // TODO: Implement actual git clone functionality
+                console.log('Would clone', repoUrl, 'to', destPath);
+                alert(`Clone functionality coming soon!\nWould clone: ${repoUrl}\nTo: ${destPath}`);
+            }
+        }
+    } catch (error) {
+        console.error('Failed to clone repository:', error);
+    }
+};
+
 // Testing Git modification indicator

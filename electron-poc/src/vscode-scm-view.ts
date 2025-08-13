@@ -29,9 +29,8 @@ export class VSCodeSCMView {
   }
 
   private async initialize() {
-    // Initialize Git decoration provider for the parent hive repo
-    this.gitDecorationProvider = new GitDecorationProvider('/Users/veronelazio/Developer/Private/hive');
-    await this.gitDecorationProvider.initialize();
+    // Don't initialize Git decoration provider without a folder
+    // It will be initialized when a folder is opened
     
     // Start auto-refresh
     await this.refresh();
@@ -52,17 +51,47 @@ export class VSCodeSCMView {
 
   private render() {
     if (!this.gitStatus || !this.gitStatus.isRepo) {
+      // VS Code-style welcome message for Source Control
       this.container.innerHTML = `
-        <div class="scm-view-welcome">
-          <div class="welcome-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-            </svg>
+        <div class="scm-view">
+          <div class="scm-view-header">
+            <div class="scm-provider-container">
+              <div class="scm-provider">
+                <span class="codicon codicon-source-control"></span>
+                <span class="scm-provider-label">Source Control</span>
+              </div>
+            </div>
           </div>
-          <h3>No source control provider registered.</h3>
-          <p>Source control providers can be registered by extensions.</p>
+          
+          <div class="scm-welcome-view">
+            <div class="scm-welcome-content">
+              <div class="scm-welcome-icon">
+                <span class="codicon codicon-source-control" style="font-size: 48px; opacity: 0.5;"></span>
+              </div>
+              <p class="scm-welcome-message">
+                In order to use Git features, you can open a folder containing a Git repository or clone from a URL.
+              </p>
+              <div class="scm-welcome-actions">
+                <button class="scm-welcome-button primary" onclick="window.openFolder()">
+                  <span class="codicon codicon-folder-opened"></span>
+                  Open Folder
+                </button>
+                <button class="scm-welcome-button" onclick="window.cloneRepository()">
+                  <span class="codicon codicon-repo-clone"></span>
+                  Clone Repository
+                </button>
+              </div>
+              <p class="scm-welcome-docs">
+                To learn more about how to use Git and source control 
+                <a href="https://code.visualstudio.com/docs/editor/versioncontrol" target="_blank" class="scm-welcome-link">read our docs</a>.
+              </p>
+            </div>
+          </div>
         </div>
       `;
+      
+      // Add styles for the welcome view
+      this.attachWelcomeStyles();
       return;
     }
 
@@ -547,6 +576,91 @@ export class VSCodeSCMView {
   public openDiff(path: string) {
     // TODO: Open diff view
     console.log('Open diff for', path);
+  }
+
+  private attachWelcomeStyles() {
+    if (document.getElementById('scm-welcome-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'scm-welcome-styles';
+    style.textContent = `
+      .scm-welcome-view {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: calc(100% - 35px);
+        padding: 20px;
+      }
+      
+      .scm-welcome-content {
+        text-align: center;
+        max-width: 400px;
+      }
+      
+      .scm-welcome-icon {
+        margin-bottom: 20px;
+        color: var(--vscode-foreground);
+      }
+      
+      .scm-welcome-message {
+        font-size: 14px;
+        color: var(--vscode-foreground);
+        margin-bottom: 20px;
+        line-height: 1.5;
+      }
+      
+      .scm-welcome-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+      
+      .scm-welcome-button {
+        padding: 6px 14px;
+        background: var(--vscode-button-secondaryBackground);
+        color: var(--vscode-button-secondaryForeground);
+        border: 1px solid var(--vscode-button-secondaryBorder, transparent);
+        border-radius: 2px;
+        cursor: pointer;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: background-color 0.1s;
+      }
+      
+      .scm-welcome-button:hover {
+        background: var(--vscode-button-secondaryHoverBackground);
+      }
+      
+      .scm-welcome-button.primary {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border-color: var(--vscode-button-border, transparent);
+      }
+      
+      .scm-welcome-button.primary:hover {
+        background: var(--vscode-button-hoverBackground);
+      }
+      
+      .scm-welcome-docs {
+        font-size: 13px;
+        color: var(--vscode-descriptionForeground);
+        line-height: 1.5;
+      }
+      
+      .scm-welcome-link {
+        color: var(--vscode-textLink-foreground);
+        text-decoration: none;
+      }
+      
+      .scm-welcome-link:hover {
+        text-decoration: underline;
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   public destroy() {

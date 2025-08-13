@@ -91,10 +91,10 @@ const initDatabase = () => {
 // Git Integration
 let gitManager: GitManager | null = null;
 
-// Initialize Git manager with the parent hive directory
-const initGitManager = () => {
-  // Use the parent hive directory for Git operations
-  gitManager = new GitManager('/Users/veronelazio/Developer/Private/hive');
+// Initialize Git manager - pass no path when no folder is open
+const initGitManager = (folderPath?: string) => {
+  // If no path provided, create GitManager without a path (not a repo)
+  gitManager = new GitManager(folderPath);
 };
 
 // File System Manager
@@ -240,6 +240,13 @@ const registerGitHandlers = () => {
   ipcMain.handle('git-file-diff', async (_, commitHash: string, filePath: string) => {
     if (!gitManager) initGitManager();
     return await gitManager!.getFileDiff(commitHash, filePath);
+  });
+  
+  // Update Git manager when folder changes
+  ipcMain.handle('git-set-folder', async (_, folderPath: string) => {
+    console.log('[Git] Setting folder to:', folderPath);
+    gitManager = new GitManager(folderPath);
+    return { success: true };
   });
 };
 

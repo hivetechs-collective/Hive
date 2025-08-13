@@ -815,6 +815,7 @@ export class EditorTabs {
       const tab: EditorTab = {
         id: tabId,
         path: tabName,
+        name: tabName,
         isDirty: false
       };
       

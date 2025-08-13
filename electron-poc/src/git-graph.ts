@@ -626,25 +626,52 @@ export class GitGraphView {
         return container;
     }
     
+    private getStatusLabel(status: string): string {
+        switch (status) {
+            case 'A': return 'Added';
+            case 'M': return 'Modified';
+            case 'D': return 'Deleted';
+            case 'R': return 'Renamed';
+            case 'C': return 'Copied';
+            default: return status;
+        }
+    }
+    
     private async addFileDiff(container: HTMLElement, commitHash: string, file: any): Promise<void> {
         // Create file section
         const fileSection = document.createElement('div');
         fileSection.className = 'file-diff-section';
-        fileSection.style.cssText = 'margin: 16px 0; border: 1px solid var(--vscode-widget-border);';
+        fileSection.style.cssText = 'margin: 8px 0; border: 1px solid var(--vscode-panel-border, #2d2d30);';
         
-        // File header
+        // File header - VS Code style
         const fileHeader = document.createElement('div');
         fileHeader.className = 'file-diff-header';
-        fileHeader.style.cssText = 'padding: 8px 16px; background: var(--vscode-editor-background); border-bottom: 1px solid var(--vscode-widget-border); font-size: 13px; display: flex; align-items: center; gap: 8px;';
+        fileHeader.style.cssText = `
+            padding: 8px 16px;
+            background: var(--vscode-editor-inactiveSelectionBackground, #3f3f46);
+            border-bottom: 1px solid var(--vscode-panel-border, #2d2d30);
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+        `;
+        
+        // Add expand/collapse icon
+        const expandIcon = document.createElement('span');
+        expandIcon.className = 'codicon codicon-chevron-down';
+        expandIcon.style.cssText = 'margin-right: 4px;';
         
         const statusBadge = document.createElement('span');
         statusBadge.style.cssText = this.getStatusStyle(file.status);
-        statusBadge.textContent = file.status;
+        statusBadge.textContent = this.getStatusLabel(file.status);
         
         const fileName = document.createElement('span');
-        fileName.style.cssText = 'flex: 1; font-family: monospace;';
+        fileName.style.cssText = 'flex: 1; font-family: var(--vscode-editor-font-family); color: var(--vscode-foreground);';
         fileName.textContent = file.path;
         
+        fileHeader.appendChild(expandIcon);
         fileHeader.appendChild(statusBadge);
         fileHeader.appendChild(fileName);
         fileSection.appendChild(fileHeader);
@@ -653,16 +680,35 @@ export class GitGraphView {
         try {
             const diff = await window.gitAPI.getFileDiff(commitHash, file.path);
             
-            // Create diff viewer
-            const diffViewer = document.createElement('div');
-            diffViewer.className = 'file-diff-content';
-            diffViewer.style.cssText = 'max-height: 400px; overflow: auto; font-family: monospace; font-size: 12px; line-height: 1.4;';
-            
-            // Parse and render the diff
-            this.renderDiff(diffViewer, diff);
-            fileSection.appendChild(diffViewer);
+            if (diff) {
+                // Create diff viewer
+                const diffViewer = document.createElement('div');
+                diffViewer.className = 'file-diff-content';
+                diffViewer.style.cssText = `
+                    max-height: 500px;
+                    overflow: auto;
+                    background: var(--vscode-editor-background, #1e1e1e);
+                    border-top: 1px solid var(--vscode-panel-border, #2d2d30);
+                `;
+                
+                // Parse and render the diff
+                this.renderDiff(diffViewer, diff);
+                fileSection.appendChild(diffViewer);
+                
+                // Toggle collapse/expand
+                let isExpanded = true;
+                fileHeader.addEventListener('click', () => {
+                    isExpanded = !isExpanded;
+                    diffViewer.style.display = isExpanded ? 'block' : 'none';
+                    expandIcon.className = isExpanded ? 'codicon codicon-chevron-down' : 'codicon codicon-chevron-right';
+                });
+            }
         } catch (error) {
             console.error('Failed to get diff for file:', file.path, error);
+            const errorMsg = document.createElement('div');
+            errorMsg.style.cssText = 'padding: 8px 16px; color: var(--vscode-errorForeground, #f48771);';
+            errorMsg.textContent = 'Failed to load diff';
+            fileSection.appendChild(errorMsg);
         }
         
         container.appendChild(fileSection);
@@ -680,31 +726,58 @@ export class GitGraphView {
     private renderDiff(container: HTMLElement, diff: string): void {
         const lines = diff.split('\n');
         const table = document.createElement('table');
-        table.style.cssText = 'width: 100%; border-collapse: collapse;';
+        table.style.cssText = 'width: 100%; border-collapse: collapse; font-family: "SF Mono", Monaco, Consolas, "Courier New", monospace; font-size: 12px;';
+        
+        let lineNumOld = 0;
+        let lineNumNew = 0;
+        let inHunk = false;
         
         lines.forEach(line => {
             const tr = document.createElement('tr');
             
-            if (line.startsWith('+') && !line.startsWith('+++')) {
-                tr.style.cssText = 'background: rgba(40, 167, 69, 0.1);';
-                tr.innerHTML = `<td style="width: 40px; text-align: right; padding: 0 8px; color: #969696;"></td>
-                               <td style="padding: 0 8px; color: #28a745;">+</td>
-                               <td style="padding: 0 8px;"><span style="color: #28a745;">${this.escapeHtml(line.substring(1))}</span></td>`;
-            } else if (line.startsWith('-') && !line.startsWith('---')) {
-                tr.style.cssText = 'background: rgba(220, 53, 69, 0.1);';
-                tr.innerHTML = `<td style="width: 40px; text-align: right; padding: 0 8px; color: #969696;"></td>
-                               <td style="padding: 0 8px; color: #dc3545;">-</td>
-                               <td style="padding: 0 8px;"><span style="color: #dc3545;">${this.escapeHtml(line.substring(1))}</span></td>`;
-            } else if (line.startsWith('@@')) {
-                tr.style.cssText = 'background: var(--vscode-diffEditor-insertedTextBackground); color: var(--vscode-descriptionForeground);';
-                tr.innerHTML = `<td colspan="3" style="padding: 4px 8px; font-style: italic;">${this.escapeHtml(line)}</td>`;
-            } else if (line.startsWith('diff --git')) {
-                // Skip diff headers
-                return;
-            } else if (line) {
-                tr.innerHTML = `<td style="width: 40px; text-align: right; padding: 0 8px; color: #969696;"></td>
-                               <td style="padding: 0 8px; color: #969696;"></td>
-                               <td style="padding: 0 8px;">${this.escapeHtml(line)}</td>`;
+            if (line.startsWith('@@')) {
+                // Parse line numbers from hunk header
+                const match = line.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/);
+                if (match) {
+                    lineNumOld = parseInt(match[1]) - 1;
+                    lineNumNew = parseInt(match[2]) - 1;
+                    inHunk = true;
+                }
+                tr.style.cssText = 'background: rgba(0, 123, 255, 0.05); color: #0366d6;';
+                tr.innerHTML = `<td colspan="4" style="padding: 4px 8px; font-style: italic; color: #586069;">${this.escapeHtml(line)}</td>`;
+            } else if (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('new file') || line.startsWith('---') || line.startsWith('+++')) {
+                // Skip or style diff headers minimally
+                if (line.startsWith('+++') || line.startsWith('---')) {
+                    return; // Skip these lines entirely
+                }
+                tr.style.cssText = 'color: #586069;';
+                tr.innerHTML = `<td colspan="4" style="padding: 2px 8px; font-size: 11px;">${this.escapeHtml(line)}</td>`;
+            } else if (line.startsWith('+') && inHunk) {
+                lineNumNew++;
+                tr.style.cssText = 'background: rgba(40, 167, 69, 0.15);';
+                tr.innerHTML = `
+                    <td style="width: 50px; text-align: right; padding: 0 8px; color: #959da5; user-select: none;"></td>
+                    <td style="width: 50px; text-align: right; padding: 0 8px; color: #959da5; user-select: none;">${lineNumNew}</td>
+                    <td style="width: 20px; text-align: center; color: #28a745; user-select: none;">+</td>
+                    <td style="padding: 0 8px; white-space: pre;"><span style="color: #22863a;">${this.escapeHtml(line.substring(1))}</span></td>`;
+            } else if (line.startsWith('-') && inHunk) {
+                lineNumOld++;
+                tr.style.cssText = 'background: rgba(220, 53, 69, 0.15);';
+                tr.innerHTML = `
+                    <td style="width: 50px; text-align: right; padding: 0 8px; color: #959da5; user-select: none;">${lineNumOld}</td>
+                    <td style="width: 50px; text-align: right; padding: 0 8px; color: #959da5; user-select: none;"></td>
+                    <td style="width: 20px; text-align: center; color: #dc3545; user-select: none;">-</td>
+                    <td style="padding: 0 8px; white-space: pre;"><span style="color: #cb2431;">${this.escapeHtml(line.substring(1))}</span></td>`;
+            } else if (inHunk && line.length > 0) {
+                // Context line
+                lineNumOld++;
+                lineNumNew++;
+                tr.style.cssText = '';
+                tr.innerHTML = `
+                    <td style="width: 50px; text-align: right; padding: 0 8px; color: #959da5; user-select: none;">${lineNumOld}</td>
+                    <td style="width: 50px; text-align: right; padding: 0 8px; color: #959da5; user-select: none;">${lineNumNew}</td>
+                    <td style="width: 20px; text-align: center; color: #959da5; user-select: none;"></td>
+                    <td style="padding: 0 8px; white-space: pre; color: #24292e;">${this.escapeHtml(line)}</td>`;
             }
             
             if (tr.innerHTML) {

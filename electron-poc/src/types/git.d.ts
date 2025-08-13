@@ -50,6 +50,7 @@ declare global {
       initRepo(repoPath: string): Promise<any>;
       getCommitFiles(hash: string): Promise<{ files: any[] }>;
       getFileDiff(commitHash: string, filePath: string): Promise<string>;
+      setFolder(folderPath: string): Promise<{ success: boolean }>;
     };
   }
 }

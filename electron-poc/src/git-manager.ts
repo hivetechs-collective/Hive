@@ -32,10 +32,16 @@ export class GitManager {
   private isRepo: boolean = false;
 
   constructor(repoPath?: string) {
-    // Always use the parent hive directory for Git operations
-    this.repoPath = repoPath || '/Users/veronelazio/Developer/Private/hive';
-    this.git = simpleGit(this.repoPath);
-    this.checkIfRepo();
+    // Use provided path or no path (for when no folder is open)
+    this.repoPath = repoPath || '';
+    if (this.repoPath) {
+      this.git = simpleGit(this.repoPath);
+      this.checkIfRepo();
+    } else {
+      // No folder open - not a repo
+      this.isRepo = false;
+      this.git = simpleGit();
+    }
   }
 
   private async checkIfRepo(): Promise<void> {
@@ -342,11 +348,43 @@ export class GitManager {
     
     try {
       // Get the diff for a specific file in a commit
-      // Show the complete diff with context
-      const result = await this.git.raw(['show', commitHash, '--', filePath]);
+      // Use proper diff format with unified context
+      const result = await this.git.raw(['diff', `${commitHash}^..${commitHash}`, '--', filePath]);
+      
+      // If the file was added in this commit (no parent), show the full file as added
+      if (!result || result.trim() === '') {
+        const fileContent = await this.git.raw(['show', `${commitHash}:${filePath}`]);
+        if (fileContent) {
+          // Format as an addition diff
+          const lines = fileContent.split('\n');
+          const diff = `diff --git a/${filePath} b/${filePath}
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/${filePath}
+${lines.map(line => '+' + line).join('\n')}`;
+          return diff;
+        }
+      }
+      
       return result || '';
     } catch (error) {
-      console.error('Failed to get file diff:', error);
+      // Try alternative method for first commit or added files
+      try {
+        const fileContent = await this.git.raw(['show', `${commitHash}:${filePath}`]);
+        if (fileContent) {
+          const lines = fileContent.split('\n');
+          const diff = `diff --git a/${filePath} b/${filePath}
+new file mode 100644
+index 0000000..0000000
+--- /dev/null
++++ b/${filePath}
+${lines.map(line => '+' + line).join('\n')}`;
+          return diff;
+        }
+      } catch (innerError) {
+        console.error('Failed to get file diff:', innerError);
+      }
       return '';
     }
   }
