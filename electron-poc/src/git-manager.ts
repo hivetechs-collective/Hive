@@ -60,6 +60,7 @@ export class GitManager {
     ahead: number;
     behind: number;
     isRepo: boolean;
+    repoPath?: string;
   }> {
     // Return empty status if no folder is open or not a repo
     if (!this.repoPath || !this.isRepo || !this.git) {
@@ -68,7 +69,8 @@ export class GitManager {
         branch: '',
         ahead: 0,
         behind: 0,
-        isRepo: false
+        isRepo: false,
+        repoPath: this.repoPath
       };
     }
 
@@ -97,7 +99,8 @@ export class GitManager {
         branch: status.current || 'master',
         ahead: status.ahead,
         behind: status.behind,
-        isRepo: true
+        isRepo: true,
+        repoPath: this.repoPath
       };
     } catch (error) {
       console.error('Git status error:', error);

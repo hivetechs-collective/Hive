@@ -28,6 +28,7 @@ export interface GitStatus {
   ahead: number;
   behind: number;
   isRepo: boolean;
+  repoPath?: string;
 }
 
 declare global {

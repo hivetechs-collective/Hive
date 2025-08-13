@@ -752,13 +752,42 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                         }
                     });
                 }
-            } else if (panelType === 'git' && !window.gitUI) {
+            } else if (panelType === 'git') {
                 const container = document.getElementById('git-content');
                 if (container) {
-                    // Always create VSCodeSCMView - it will handle empty state itself
-                    window.gitUI = new VSCodeSCMView(container);
-                    // Also set it as scmView for consistency
-                    window.scmView = window.gitUI;
+                    // If we don't have a git UI yet, or need to refresh it
+                    if (!window.gitUI) {
+                        console.log('Git panel activated, currentOpenedFolder:', currentOpenedFolder);
+                        
+                        // If a folder is open, make sure Git is set to that folder
+                        if (currentOpenedFolder && window.gitAPI) {
+                            console.log('Setting Git folder to:', currentOpenedFolder);
+                            window.gitAPI.setFolder(currentOpenedFolder).then(() => {
+                                // Add a delay to ensure Git status is fully ready
+                                setTimeout(() => {
+                                    // Create the Git UI after setting the folder
+                                    window.gitUI = new VSCodeSCMView(container);
+                                    window.scmView = window.gitUI;
+                                }, 300);
+                            });
+                        } else {
+                            // No folder open, create Git UI which will show welcome
+                            window.gitUI = new VSCodeSCMView(container);
+                            window.scmView = window.gitUI;
+                        }
+                    } else if (currentOpenedFolder && window.gitAPI) {
+                        // Git UI exists but we need to ensure it's showing the right folder
+                        console.log('Git UI exists, updating to folder:', currentOpenedFolder);
+                        window.gitAPI.setFolder(currentOpenedFolder).then(() => {
+                            // Add a delay to ensure Git status is fully ready
+                            setTimeout(() => {
+                                // Recreate the Git UI to show the updated folder
+                                container.innerHTML = '';
+                                window.gitUI = new VSCodeSCMView(container);
+                                window.scmView = window.gitUI;
+                            }, 300);
+                        });
+                    }
                 }
             }
         }

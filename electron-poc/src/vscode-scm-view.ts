@@ -187,6 +187,7 @@ export class VSCodeSCMView {
     this.attachEventListeners();
     
     // Initialize Git Graph view if not already done
+    // Use a longer delay to ensure Git status is fully loaded
     setTimeout(() => {
       const graphContainer = document.getElementById('git-graph-container');
       console.log('[SCM] Git graph container found:', !!graphContainer);
@@ -196,6 +197,8 @@ export class VSCodeSCMView {
         try {
           this.gitGraphView = new GitGraphView(graphContainer);
           console.log('[SCM] GitGraphView created successfully');
+          // Immediately refresh to load commits
+          this.gitGraphView.refresh();
         } catch (error) {
           console.error('[SCM] Failed to create GitGraphView:', error);
         }
@@ -203,7 +206,7 @@ export class VSCodeSCMView {
         console.log('[SCM] Git graph already exists, refreshing...');
         this.gitGraphView.refresh();
       }
-    }, 100); // Small delay to ensure DOM is ready
+    }, 500); // Increased delay to ensure Git is fully ready
   }
 
   private groupResources(): ResourceGroup[] {
@@ -336,8 +339,11 @@ export class VSCodeSCMView {
   }
 
   private getRepoName(): string {
-    const path = '/Users/veronelazio/Developer/Private/hive/electron-poc';
-    return path.split('/').pop() || 'Repository';
+    // Use the actual repo path from git status, or return empty if no repo
+    if (this.gitStatus && this.gitStatus.repoPath) {
+      return this.gitStatus.repoPath.split('/').pop() || '';
+    }
+    return '';
   }
 
   private attachEventListeners() {
