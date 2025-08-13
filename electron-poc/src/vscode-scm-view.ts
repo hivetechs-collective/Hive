@@ -125,18 +125,14 @@ export class VSCodeSCMView {
                 <span class="codicon codicon-check"></span>
               </button>
               <div class="scm-toolbar-separator"></div>
-              <button class="scm-toolbar-button" title="Pull (${this.gitStatus?.behind || 0} behind)" onclick="window.scmView?.pull()">
+              <button class="scm-toolbar-button" title="Pull${this.gitStatus?.behind ? ` (${this.gitStatus.behind} behind)` : ''}" onclick="window.scmView?.pull()">
                 <span class="codicon codicon-cloud-download"></span>
-                ${this.gitStatus?.behind ? `<span class="badge">${this.gitStatus.behind}↓</span>` : ''}
               </button>
-              <button class="scm-toolbar-button" title="Push (${this.gitStatus?.ahead || 0} ahead)" onclick="window.scmView?.push()">
+              <button class="scm-toolbar-button" title="Push${this.gitStatus?.ahead ? ` (${this.gitStatus.ahead} ahead)` : ''}" onclick="window.scmView?.push()">
                 <span class="codicon codicon-cloud-upload"></span>
-                ${this.gitStatus?.ahead ? `<span class="badge">${this.gitStatus.ahead}↑</span>` : ''}
               </button>
-              <button class="scm-toolbar-button" title="Sync Changes" onclick="window.scmView?.sync()">
+              <button class="scm-toolbar-button" title="Sync Changes${this.gitStatus?.ahead || this.gitStatus?.behind ? ` (${this.gitStatus.ahead || 0}↑ ${this.gitStatus.behind || 0}↓)` : ''}" onclick="window.scmView?.sync()">
                 <span class="codicon codicon-sync"></span>
-                ${(this.gitStatus?.ahead || this.gitStatus?.behind) ? 
-                  `<span class="badge">${this.gitStatus.ahead || 0}↑ ${this.gitStatus.behind || 0}↓</span>` : ''}
               </button>
             </div>
           </div>
@@ -600,9 +596,12 @@ export class VSCodeSCMView {
   public async push() {
     console.log('[SCM] Push button clicked');
     const branch = this.gitStatus?.branch || 'current branch';
+    const aheadCount = this.gitStatus?.ahead || 0;
     
-    // Check if there's anything to push
-    if (this.gitStatus?.ahead === 0) {
+    console.log('[SCM] Current status - branch:', branch, 'ahead:', aheadCount, 'hasUpstream:', this.gitStatus?.hasUpstream);
+    
+    // For branches without upstream, we still want to push if there are local commits
+    if (aheadCount === 0 && this.gitStatus?.hasUpstream) {
       notifications.show({
         title: 'Nothing to push',
         message: 'Your branch is up to date with remote',
@@ -613,47 +612,45 @@ export class VSCodeSCMView {
     }
     
     // Show loading notification
-    console.log('[SCM] Showing push notification...');
+    const pushMessage = !this.gitStatus?.hasUpstream ? 
+      `Publishing branch ${branch} to remote...` : 
+      `Pushing ${aheadCount} commit(s) to remote...`;
+    
+    console.log('[SCM] Showing push notification:', pushMessage);
     const notificationId = notifications.show({
-      title: 'Git Push',
-      message: `Pushing ${this.gitStatus?.ahead || ''} commit(s) to remote...`,
+      title: !this.gitStatus?.hasUpstream ? 'Publishing Branch' : 'Git Push',
+      message: pushMessage,
       type: 'loading',
       duration: 0 // Persistent until updated
     });
 
     try {
-      console.log('[SCM] Pushing to remote...');
+      console.log('[SCM] Calling gitAPI.push()...');
       await window.gitAPI.push();
+      console.log('[SCM] Push completed, refreshing status...');
       await this.refresh();
-      console.log('[SCM] Push successful');
+      console.log('[SCM] Status refreshed, new ahead count:', this.gitStatus?.ahead);
       
       // Update to success notification
+      const successMessage = !this.gitStatus?.hasUpstream ? 
+        `Successfully published ${branch} to remote` :
+        `Successfully pushed ${aheadCount} commit(s) to ${branch}`;
+        
       notifications.update(notificationId, {
         title: 'Push Successful',
-        message: `Successfully pushed ${this.gitStatus?.ahead || ''} commit(s) to ${branch}`,
+        message: successMessage,
         type: 'success',
         duration: 3000
       });
     } catch (error: any) {
-      console.error('Failed to push:', error);
+      console.error('[SCM] Push failed:', error);
       
-      // Check if it's an upstream branch error
-      if (error?.message?.includes('no upstream branch')) {
-        notifications.update(notificationId, {
-          title: 'Setting Upstream',
-          message: `Setting upstream branch for ${branch}...`,
-          type: 'info',
-          duration: 5000
-        });
-        // The git-manager will handle setting upstream automatically
-      } else {
-        notifications.update(notificationId, {
-          title: 'Push Failed',
-          message: error?.message || 'An error occurred while pushing',
-          type: 'error',
-          duration: 5000
-        });
-      }
+      notifications.update(notificationId, {
+        title: 'Push Failed',
+        message: error?.message || 'An error occurred while pushing',
+        type: 'error',
+        duration: 5000
+      });
     }
   }
 
@@ -700,26 +697,56 @@ export class VSCodeSCMView {
   }
 
   public async sync() {
+    console.log('[SCM] Sync button clicked');
+    const branch = this.gitStatus?.branch || 'current branch';
+    const ahead = this.gitStatus?.ahead || 0;
+    const behind = this.gitStatus?.behind || 0;
+    
+    console.log('[SCM] Sync status - branch:', branch, 'ahead:', ahead, 'behind:', behind);
+    
+    // If nothing to sync
+    if (ahead === 0 && behind === 0) {
+      notifications.show({
+        title: 'Already up to date',
+        message: 'Your branch is synchronized with remote',
+        type: 'info',
+        duration: 3000
+      });
+      return;
+    }
+    
+    const syncMessage = `Pulling ${behind} and pushing ${ahead} commit(s)...`;
     const notificationId = notifications.show({
       title: 'Git Sync',
-      message: 'Synchronizing with remote...',
+      message: syncMessage,
       type: 'loading',
       duration: 0
     });
 
     try {
-      await window.gitAPI.pull();
-      await window.gitAPI.push();
+      // Pull first if behind
+      if (behind > 0) {
+        console.log('[SCM] Pulling changes...');
+        await window.gitAPI.pull();
+      }
+      
+      // Then push if ahead
+      if (ahead > 0) {
+        console.log('[SCM] Pushing changes...');
+        await window.gitAPI.push();
+      }
+      
+      console.log('[SCM] Sync complete, refreshing...');
       await this.refresh();
       
       notifications.update(notificationId, {
         title: 'Sync Complete',
-        message: 'Successfully synchronized with remote',
+        message: `Successfully synchronized ${branch} with remote`,
         type: 'success',
         duration: 3000
       });
     } catch (error: any) {
-      console.error('Failed to sync:', error);
+      console.error('[SCM] Sync failed:', error);
       notifications.update(notificationId, {
         title: 'Sync Failed',
         message: error?.message || 'An error occurred during sync',

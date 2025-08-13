@@ -61,6 +61,7 @@ export class GitManager {
     behind: number;
     isRepo: boolean;
     repoPath?: string;
+    hasUpstream?: boolean;
   }> {
     // Return empty status if no folder is open or not a repo
     if (!this.repoPath || !this.isRepo || !this.git) {
@@ -101,13 +102,38 @@ export class GitManager {
         }
       });
 
+      // Check if branch has tracking to determine ahead/behind
+      let ahead = status.ahead || 0;
+      let behind = status.behind || 0;
+      let hasUpstream = false;
+      
+      // Check if current branch has upstream tracking
+      if (status.current) {
+        const branches = await this.git.branch(['-vv']);
+        const currentBranchInfo = branches.branches[status.current];
+        hasUpstream = currentBranchInfo && (currentBranchInfo as any).tracking;
+        
+        // If no upstream, count local commits as "ahead"
+        if (!hasUpstream) {
+          try {
+            // Count commits that would be pushed
+            const log = await this.git.log(['origin/master..HEAD']);
+            ahead = log.total;
+          } catch (e) {
+            // If we can't determine, assume we have commits to push
+            ahead = 1;
+          }
+        }
+      }
+
       return {
         files,
         branch: status.current || 'master',
-        ahead: status.ahead || 0,
-        behind: status.behind || 0,
+        ahead,
+        behind,
         isRepo: true,
-        repoPath: this.repoPath
+        repoPath: this.repoPath,
+        hasUpstream
       };
     } catch (error) {
       console.error('Git status error:', error);
@@ -272,9 +298,14 @@ export class GitManager {
   }
 
   async push(): Promise<void> {
-    if (!this.isRepo) return;
+    if (!this.isRepo) {
+      console.log('[GitManager] Not a repo, cannot push');
+      return;
+    }
 
     try {
+      console.log('[GitManager] Starting push operation...');
+      
       // Get current branch status first
       const status = await this.git.status();
       const currentBranch = status.current;
@@ -282,24 +313,33 @@ export class GitManager {
       if (!currentBranch) {
         throw new Error('No current branch');
       }
+      
+      console.log(`[GitManager] Current branch: ${currentBranch}`);
 
       // Check if branch has upstream
       const branches = await this.git.branch(['-vv']);
       const currentBranchInfo = branches.branches[currentBranch];
       const hasUpstream = currentBranchInfo && (currentBranchInfo as any).tracking;
+      
+      console.log(`[GitManager] Has upstream: ${hasUpstream}`);
 
       if (!hasUpstream) {
-        console.log(`No upstream for ${currentBranch}, setting upstream...`);
+        console.log(`[GitManager] No upstream for ${currentBranch}, setting upstream...`);
         // Push with --set-upstream
-        await this.git.push(['--set-upstream', 'origin', currentBranch]);
-        console.log('Successfully pushed with upstream set');
+        const result = await this.git.push(['--set-upstream', 'origin', currentBranch]);
+        console.log('[GitManager] Push with upstream result:', result);
+        console.log('[GitManager] Successfully pushed with upstream set');
       } else {
         // Regular push
-        await this.git.push();
-        console.log('Successfully pushed');
+        console.log('[GitManager] Performing regular push...');
+        const result = await this.git.push();
+        console.log('[GitManager] Push result:', result);
+        console.log('[GitManager] Successfully pushed');
       }
     } catch (error: any) {
-      console.error('Git push error:', error);
+      console.error('[GitManager] Git push error:', error);
+      console.error('[GitManager] Error message:', error?.message);
+      console.error('[GitManager] Error stack:', error?.stack);
       throw error;
     }
   }
