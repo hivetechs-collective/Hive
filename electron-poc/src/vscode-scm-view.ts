@@ -764,16 +764,24 @@ export class VSCodeSCMView {
     });
 
     try {
-      // Pull first if behind
-      if (behind > 0) {
-        console.log('[SCM] Pulling changes...');
-        await window.gitAPI.pull();
-      }
-      
-      // Then push if ahead
-      if (ahead > 0) {
-        console.log('[SCM] Pushing changes...');
-        await window.gitAPI.push();
+      // Use new sync API if available
+      if (window.gitAPI.sync) {
+        console.log('[SCM] Using new sync API');
+        await window.gitAPI.sync();
+      } else {
+        // Fallback to sequential pull/push
+        console.log('[SCM] Using fallback pull+push');
+        // Pull first if behind
+        if (behind > 0) {
+          console.log('[SCM] Pulling changes...');
+          await window.gitAPI.pull();
+        }
+        
+        // Then push if ahead
+        if (ahead > 0) {
+          console.log('[SCM] Pushing changes...');
+          await window.gitAPI.push();
+        }
       }
       
       console.log('[SCM] Sync complete, refreshing...');

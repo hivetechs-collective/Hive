@@ -46,6 +46,7 @@ declare global {
       discard(files: string[]): Promise<void>;
       push(): Promise<void>;
       pull(): Promise<void>;
+      sync(): Promise<void>;
       fetch(): Promise<void>;
       switchBranch(branchName: string): Promise<void>;
       createBranch(branchName: string): Promise<void>;

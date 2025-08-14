@@ -103,6 +103,7 @@ contextBridge.exposeInMainWorld('gitAPI', {
   discard: (files: string[]) => ipcRenderer.invoke('git-discard', files),
   push: () => ipcRenderer.invoke('git-push'),
   pull: () => ipcRenderer.invoke('git-pull'),
+  sync: () => ipcRenderer.invoke('git-sync'),
   fetch: () => ipcRenderer.invoke('git-fetch'),
   switchBranch: (branchName: string) => ipcRenderer.invoke('git-switch-branch', branchName),
   createBranch: (branchName: string) => ipcRenderer.invoke('git-create-branch', branchName),
