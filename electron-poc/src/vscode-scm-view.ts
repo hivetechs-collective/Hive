@@ -128,7 +128,7 @@ export class VSCodeSCMView {
               <button class="scm-toolbar-button" title="Pull${this.gitStatus?.behind ? ` (${this.gitStatus.behind} behind)` : ''}" onclick="window.scmView?.pull()">
                 <span class="codicon codicon-cloud-download"></span>
               </button>
-              <button class="scm-toolbar-button" title="Push${this.gitStatus?.ahead ? ` (${this.gitStatus.ahead} ahead)` : ''}" onclick="window.scmView?.push()">
+              <button class="scm-toolbar-button" title="Push${this.gitStatus?.ahead ? ` (${this.gitStatus.ahead} ahead)` : ''}" onclick="alert('Push clicked!'); window.scmView?.push()">
                 <span class="codicon codicon-cloud-upload"></span>
               </button>
               <button class="scm-toolbar-button" title="Sync Changes${this.gitStatus?.ahead || this.gitStatus?.behind ? ` (${this.gitStatus.ahead || 0}↑ ${this.gitStatus.behind || 0}↓)` : ''}" onclick="window.scmView?.sync()">
@@ -595,6 +595,14 @@ export class VSCodeSCMView {
 
   public async push() {
     console.log('[SCM] Push button clicked');
+    
+    // Check if gitAPI is available
+    if (!window.gitAPI || !window.gitAPI.push) {
+      alert('Git API not available!');
+      console.error('[SCM] window.gitAPI:', window.gitAPI);
+      return;
+    }
+    
     const branch = this.gitStatus?.branch || 'current branch';
     const aheadCount = this.gitStatus?.ahead || 0;
     
@@ -625,23 +633,55 @@ export class VSCodeSCMView {
     });
 
     try {
-      console.log('[SCM] Calling gitAPI.push()...');
-      await window.gitAPI.push();
-      console.log('[SCM] Push completed, refreshing status...');
-      await this.refresh();
-      console.log('[SCM] Status refreshed, new ahead count:', this.gitStatus?.ahead);
+      console.log('[SCM] About to call gitAPI.push()');
+      console.error('[SCM ERROR TEST] This should appear in console');
       
-      // Update to success notification
-      const successMessage = !this.gitStatus?.hasUpstream ? 
-        `Successfully published ${branch} to remote` :
-        `Successfully pushed ${aheadCount} commit(s) to ${branch}`;
+      // Try calling push and see what happens
+      const pushResult = await window.gitAPI.push();
+      console.log('[SCM] Push result:', pushResult);
+      
+      // Show progress with regular updates
+      let progressInterval = setInterval(() => {
+        const currentMessage = document.querySelector('.notification-message');
+        if (currentMessage && currentMessage.textContent) {
+          const dots = (currentMessage.textContent.match(/\./g) || []).length;
+          if (dots < 3) {
+            currentMessage.textContent += '.';
+          } else {
+            currentMessage.textContent = currentMessage.textContent.replace(/\.+$/, '');
+          }
+        }
+      }, 500);
+      
+      // Add shorter timeout for testing - 10 seconds
+      const pushPromise = window.gitAPI.push();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Push operation timed out after 10 seconds')), 10000)
+      );
+      
+      try {
+        await Promise.race([pushPromise, timeoutPromise]);
+        clearInterval(progressInterval);
         
-      notifications.update(notificationId, {
-        title: 'Push Successful',
-        message: successMessage,
-        type: 'success',
-        duration: 3000
-      });
+        console.log('[SCM] Push completed, refreshing status...');
+        await this.refresh();
+        console.log('[SCM] Status refreshed, new ahead count:', this.gitStatus?.ahead);
+        
+        // Update to success notification
+        const successMessage = !this.gitStatus?.hasUpstream ? 
+          `Successfully published ${branch} to remote` :
+          `Successfully pushed ${aheadCount} commit(s) to ${branch}`;
+          
+        notifications.update(notificationId, {
+          title: 'Push Successful',
+          message: successMessage,
+          type: 'success',
+          duration: 3000
+        });
+      } catch (innerError) {
+        clearInterval(progressInterval);
+        throw innerError;
+      }
     } catch (error: any) {
       console.error('[SCM] Push failed:', error);
       

@@ -191,8 +191,16 @@ const registerGitHandlers = () => {
   });
 
   ipcMain.handle('git-push', async () => {
+    console.log('[Main] git-push IPC called');
     if (!gitManager) initGitManager();
-    return await gitManager!.push();
+    try {
+      const result = await gitManager!.push();
+      console.log('[Main] git-push completed successfully');
+      return result;
+    } catch (error: any) {
+      console.error('[Main] git-push failed:', error);
+      throw error;
+    }
   });
 
   ipcMain.handle('git-pull', async () => {

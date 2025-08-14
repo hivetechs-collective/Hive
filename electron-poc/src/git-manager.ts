@@ -1,6 +1,7 @@
 import simpleGit, { SimpleGit, StatusResult, LogResult, DiffResult } from 'simple-git';
 import * as path from 'path';
 import * as fs from 'fs';
+import { spawn } from 'child_process';
 
 export interface GitFileStatus {
   path: string;
@@ -35,13 +36,33 @@ export class GitManager {
     // Use provided path or no path (for when no folder is open)
     this.repoPath = repoPath || '';
     if (this.repoPath) {
-      this.git = simpleGit(this.repoPath);
+      // Configure simple-git with progress and completion handlers
+      this.git = simpleGit(this.repoPath, {
+        progress(data) {
+          console.log('[GitManager] Git progress:', data);
+        },
+        // Ensure Git uses system credential helper
+        config: [
+          'credential.helper=osxkeychain'
+        ]
+      });
       this.checkIfRepo();
+      this.configureGit();
     } else {
       // No folder open - definitively not a repo
       this.isRepo = false;
       // Don't create a git instance when no folder is open
       this.git = null as any;
+    }
+  }
+
+  private async configureGit(): Promise<void> {
+    try {
+      // Enable automatic upstream for new branches (Git 2.37+)
+      await this.git.addConfig('push.autoSetupRemote', 'true');
+      console.log('[GitManager] Configured push.autoSetupRemote');
+    } catch (error) {
+      console.log('[GitManager] Could not set push.autoSetupRemote (may need newer Git):', error);
     }
   }
 
@@ -297,6 +318,54 @@ export class GitManager {
     }
   }
 
+  private pushWithSpawn(args: string[]): Promise<string> {
+    return new Promise((resolve, reject) => {
+      console.log(`[GitManager] Spawning: git push ${args.join(' ')}`);
+      
+      const gitProcess = spawn('git', ['push', ...args], {
+        cwd: this.repoPath,
+        env: { ...process.env }
+      });
+      
+      let output = '';
+      let errorOutput = '';
+      
+      gitProcess.stdout.on('data', (data) => {
+        const text = data.toString();
+        output += text;
+        console.log('[GitManager] Git stdout:', text);
+      });
+      
+      gitProcess.stderr.on('data', (data) => {
+        const text = data.toString();
+        errorOutput += text;
+        console.log('[GitManager] Git stderr:', text);
+        
+        // Git often sends progress to stderr, so don't treat all stderr as error
+        if (text.includes('Enumerating') || text.includes('Counting') || 
+            text.includes('Compressing') || text.includes('Writing') ||
+            text.includes('Total') || text.includes('->')) {
+          // This is progress output, not an error
+          console.log('[GitManager] Git progress:', text);
+        }
+      });
+      
+      gitProcess.on('close', (code) => {
+        console.log(`[GitManager] Git process exited with code ${code}`);
+        if (code === 0) {
+          resolve(output + errorOutput);
+        } else {
+          reject(new Error(`Git push failed with code ${code}: ${errorOutput}`));
+        }
+      });
+      
+      gitProcess.on('error', (err) => {
+        console.error('[GitManager] Failed to spawn git process:', err);
+        reject(err);
+      });
+    });
+  }
+
   async push(): Promise<void> {
     if (!this.isRepo) {
       console.log('[GitManager] Not a repo, cannot push');
@@ -316,6 +385,14 @@ export class GitManager {
       
       console.log(`[GitManager] Current branch: ${currentBranch}`);
 
+      // First, try to fetch to ensure we have the latest remote info
+      try {
+        await this.git.fetch(['--prune']);
+        console.log('[GitManager] Fetched remote info');
+      } catch (fetchError) {
+        console.log('[GitManager] Fetch failed (may be offline):', fetchError);
+      }
+
       // Check if branch has upstream
       const branches = await this.git.branch(['-vv']);
       const currentBranchInfo = branches.branches[currentBranch];
@@ -324,15 +401,16 @@ export class GitManager {
       console.log(`[GitManager] Has upstream: ${hasUpstream}`);
 
       if (!hasUpstream) {
-        console.log(`[GitManager] No upstream for ${currentBranch}, setting upstream...`);
-        // Push with --set-upstream
-        const result = await this.git.push(['--set-upstream', 'origin', currentBranch]);
+        console.log(`[GitManager] No upstream for ${currentBranch}, pushing with --set-upstream...`);
+        
+        // Try using spawn for better control and to avoid hanging
+        const result = await this.pushWithSpawn(['--set-upstream', 'origin', currentBranch]);
         console.log('[GitManager] Push with upstream result:', result);
         console.log('[GitManager] Successfully pushed with upstream set');
       } else {
-        // Regular push
+        // Regular push using spawn
         console.log('[GitManager] Performing regular push...');
-        const result = await this.git.push();
+        const result = await this.pushWithSpawn(['origin', currentBranch]);
         console.log('[GitManager] Push result:', result);
         console.log('[GitManager] Successfully pushed');
       }
@@ -340,6 +418,12 @@ export class GitManager {
       console.error('[GitManager] Git push error:', error);
       console.error('[GitManager] Error message:', error?.message);
       console.error('[GitManager] Error stack:', error?.stack);
+      
+      // Check if it's an authentication error
+      if (error?.message?.includes('Authentication') || error?.message?.includes('could not read Username')) {
+        throw new Error('Git authentication required. Please ensure your Git credentials are configured.');
+      }
+      
       throw error;
     }
   }
