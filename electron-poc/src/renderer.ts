@@ -551,17 +551,17 @@ document.body.innerHTML = `
   <!-- Status Bar -->
   <div class="status-bar">
     <div class="status-bar-left">
-      <div class="status-item">
+      <div class="status-item" id="status-git-branch" style="display: none;">
         <span class="status-icon">🌿</span>
-        <span>main</span>
+        <span id="branch-name">main</span>
       </div>
-      <div class="status-item">
+      <div class="status-item" id="status-git-warnings" style="display: none;">
         <span class="status-icon">⚠️</span>
-        <span>0</span>
+        <span id="warning-count">0</span>
       </div>
-      <div class="status-item">
+      <div class="status-item" id="status-git-errors" style="display: none;">
         <span class="status-icon">🚫</span>
-        <span>0</span>
+        <span id="error-count">0</span>
       </div>
     </div>
     <div class="status-bar-center">
@@ -1699,6 +1699,48 @@ function setupMenuEventListeners() {
     });
 }
 
+// Function to update Git branch display in status bar
+async function updateGitStatusBar() {
+    const branchElement = document.getElementById('status-git-branch');
+    const branchNameElement = document.getElementById('branch-name');
+    const warningsElement = document.getElementById('status-git-warnings');
+    const errorsElement = document.getElementById('status-git-errors');
+    
+    if (currentOpenedFolder && window.gitAPI) {
+        try {
+            // Get Git status to show branch
+            const status = await window.gitAPI.getStatus();
+            if (status && status.isRepo) {
+                // Show Git info
+                if (branchElement) branchElement.style.display = 'flex';
+                if (warningsElement) warningsElement.style.display = 'flex';
+                if (errorsElement) errorsElement.style.display = 'flex';
+                
+                // Update branch name
+                if (branchNameElement) {
+                    branchNameElement.textContent = status.branch || 'main';
+                }
+            } else {
+                // Not a Git repo, hide Git info
+                if (branchElement) branchElement.style.display = 'none';
+                if (warningsElement) warningsElement.style.display = 'none';
+                if (errorsElement) errorsElement.style.display = 'none';
+            }
+        } catch (error) {
+            console.error('Failed to get Git status:', error);
+            // Hide on error
+            if (branchElement) branchElement.style.display = 'none';
+            if (warningsElement) warningsElement.style.display = 'none';
+            if (errorsElement) errorsElement.style.display = 'none';
+        }
+    } else {
+        // No folder open, hide Git info
+        if (branchElement) branchElement.style.display = 'none';
+        if (warningsElement) warningsElement.style.display = 'none';
+        if (errorsElement) errorsElement.style.display = 'none';
+    }
+}
+
 // Function to update status bar with license info
 async function updateStatusBar() {
   try {
@@ -1720,6 +1762,8 @@ async function updateStatusBar() {
         // Update user display
         if (userElement) {
           const email = result.licenseInfo.email || 'Licensed User';
+          // Store full email for responsive handling
+          userElement.setAttribute('data-full-email', email);
           // Truncate email if too long for status bar
           const displayEmail = email.length > 20 ? email.substring(0, 17) + '...' : email;
           userElement.textContent = displayEmail;
@@ -1732,6 +1776,7 @@ async function updateStatusBar() {
           // Capitalize the tier name
           const tier = (result.licenseInfo.tier || 'Free').charAt(0).toUpperCase() + 
                        (result.licenseInfo.tier || 'Free').slice(1).toLowerCase();
+          planElement.setAttribute('data-full-plan', tier);
           planElement.textContent = tier;
           console.log('Set plan display to:', tier);
         }
@@ -1791,11 +1836,16 @@ async function updateConversationCount() {
       
       const conversationsElement = document.getElementById('status-conversations');
       if (conversationsElement) {
+        let fullText: string;
         if (usage.limit === 999999) {
-          conversationsElement.textContent = `${usage.used} used / Unlimited`;
+          fullText = `${usage.used} used / Unlimited`;
         } else {
-          conversationsElement.textContent = `${usage.used} used / ${usage.remaining} remaining`;
+          fullText = `${usage.used} used / ${usage.remaining} remaining`;
         }
+        conversationsElement.setAttribute('data-full-text', fullText);
+        conversationsElement.textContent = fullText;
+        // Update responsive display
+        updateStatusBarResponsive();
       }
     }
   } catch (error) {
@@ -1804,7 +1854,11 @@ async function updateConversationCount() {
     const conversationsElement = document.getElementById('status-conversations');
     if (conversationsElement) {
       const remaining = Math.max(0, dailyLimit - dailyUsageCount);
-      conversationsElement.textContent = `${dailyUsageCount} used / ${remaining} remaining`;
+      const fullText = `${dailyUsageCount} used / ${remaining} remaining`;
+      conversationsElement.setAttribute('data-full-text', fullText);
+      conversationsElement.textContent = fullText;
+      // Update responsive display
+      updateStatusBarResponsive();
     }
   }
 }
@@ -1891,9 +1945,88 @@ setTimeout(async () => {
   await updateConversationCount();
   console.log('Updated conversation count from local database');
   
+  // Apply responsive text sizing after initial load
+  updateStatusBarResponsive();
+  
   // Initialize Neural Consciousness AFTER critical components
   // Neural Consciousness is initialized in the right panel, not here
 }, 100);
+
+// Function to handle responsive status bar text
+function updateStatusBarResponsive() {
+  const width = window.innerWidth;
+  const userElement = document.getElementById('status-user');
+  const planElement = document.getElementById('status-plan');
+  const conversationsElement = document.getElementById('status-conversations');
+  
+  if (userElement) {
+    const fullEmail = userElement.getAttribute('data-full-email') || userElement.textContent || '';
+    if (width < 480) {
+      // Ultra small - show only username part
+      const username = fullEmail.split('@')[0];
+      userElement.textContent = username.length > 10 ? username.substring(0, 7) + '...' : username;
+    } else if (width < 768) {
+      // Small - show abbreviated email
+      const parts = fullEmail.split('@');
+      if (parts.length === 2) {
+        const username = parts[0].length > 8 ? parts[0].substring(0, 5) + '...' : parts[0];
+        const domain = parts[1].length > 10 ? '@' + parts[1].substring(0, 7) + '...' : '@' + parts[1];
+        userElement.textContent = username + domain;
+      } else {
+        userElement.textContent = fullEmail.length > 15 ? fullEmail.substring(0, 12) + '...' : fullEmail;
+      }
+    } else if (width < 1200) {
+      // Medium - show most of email
+      userElement.textContent = fullEmail.length > 20 ? fullEmail.substring(0, 17) + '...' : fullEmail;
+    } else {
+      // Large - show full email
+      userElement.textContent = fullEmail;
+    }
+  }
+  
+  if (planElement) {
+    const fullPlan = planElement.getAttribute('data-full-plan') || planElement.textContent || '';
+    if (width < 768) {
+      // Abbreviate plan names
+      if (fullPlan.includes('Professional')) {
+        planElement.textContent = 'Pro';
+      } else if (fullPlan.includes('Enterprise')) {
+        planElement.textContent = 'Ent';
+      } else if (fullPlan.includes('Unlimited')) {
+        planElement.textContent = 'Unl';
+      }
+    } else {
+      planElement.textContent = fullPlan;
+    }
+  }
+  
+  if (conversationsElement) {
+    const fullText = conversationsElement.getAttribute('data-full-text') || conversationsElement.textContent || '';
+    if (width < 480) {
+      // Ultra compact
+      const match = fullText.match(/(\d+)\s*(?:used|\/)/);
+      if (match) {
+        conversationsElement.textContent = match[1];
+      }
+    } else if (width < 768) {
+      // Compact format
+      const usedMatch = fullText.match(/(\d+)\s*used/);
+      const remainingMatch = fullText.match(/(\d+)\s*remaining/);
+      if (usedMatch && remainingMatch) {
+        conversationsElement.textContent = `${usedMatch[1]}/${remainingMatch[1]}`;
+      } else if (fullText.includes('Unlimited')) {
+        conversationsElement.textContent = `${usedMatch?.[1] || '0'}/∞`;
+      }
+    } else {
+      conversationsElement.textContent = fullText;
+    }
+  }
+}
+
+// Add resize listener
+window.addEventListener('resize', () => {
+  requestAnimationFrame(updateStatusBarResponsive);
+});
 
 // Analytics Panel Management
 let analyticsPanel: HTMLElement | null = null;
@@ -2589,6 +2722,9 @@ async function handleOpenFolder(folderPath: string) {
         const folderName = folderPath.split('/').pop() || folderPath;
         document.title = `Hive Consensus - ${folderName}`;
         
+        // Update Git branch display in status bar
+        updateGitStatusBar();
+        
         // Refresh the file explorer with the new folder
         const explorerContainer = document.getElementById('explorer-content');
         if (explorerContainer) {
@@ -2728,6 +2864,9 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
         
         // Reset window title
         document.title = 'Hive Consensus';
+        
+        // Hide Git branch display in status bar
+        updateGitStatusBar();
         
         // Clear and reinitialize the Explorer to show welcome message
         const explorerContainer = document.getElementById('explorer-content');

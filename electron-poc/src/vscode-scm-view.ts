@@ -822,7 +822,35 @@ export class VSCodeSCMView {
         f.path === path || `/Users/veronelazio/Developer/Private/hive/${f.path}` === fullPath
       );
       
-      if (fileStatus && (fileStatus.working === 'M' || fileStatus.index === 'M' || 
+      // Check if this is a submodule (directories like dioxus-fork or src/hive_ui)
+      const isSubmodule = path === 'dioxus-fork' || path === 'src/hive_ui';
+      
+      if (isSubmodule) {
+        // For submodules, show a summary view
+        console.log('[SCM] Submodule detected:', path);
+        if (window.editorTabs) {
+          const submoduleInfo = `
+            <div style="padding: 20px; font-family: var(--vscode-font-family);">
+              <h2>Submodule: ${path}</h2>
+              <p style="color: var(--vscode-descriptionForeground);">
+                This is a Git submodule with modified content.
+              </p>
+              <p style="margin-top: 20px;">
+                To see changes in this submodule:
+              </p>
+              <ol style="margin-top: 10px; line-height: 1.8;">
+                <li>Navigate to the submodule directory: <code>cd ${fullPath}</code></li>
+                <li>Check status: <code>git status</code></li>
+                <li>View diff: <code>git diff</code></li>
+              </ol>
+            </div>
+          `;
+          const container = document.createElement('div');
+          container.innerHTML = submoduleInfo;
+          window.editorTabs.openCustomTab(`Submodule: ${path}`, container);
+          console.log('[SCM] Submodule info opened in editor tabs');
+        }
+      } else if (fileStatus && (fileStatus.working === 'M' || fileStatus.index === 'M' || 
                          fileStatus.working === 'D' || fileStatus.index === 'D' ||
                          fileStatus.working === 'A' || fileStatus.index === 'A')) {
         // File has changes - show diff view

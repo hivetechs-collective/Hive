@@ -12,13 +12,27 @@
   padding: 0;
   user-select: none;
   z-index: 100;
+  overflow: hidden;
 }
 
 .status-bar-left,
+.status-bar-center,
 .status-bar-right {
   display: flex;
   align-items: center;
   height: 100%;
+}
+
+.status-bar-center {
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.status-divider {
+  margin: 0 8px;
+  opacity: 0.5;
 }
 
 .status-item {
@@ -123,16 +137,79 @@
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
-  .status-item.current-file {
-    max-width: 100px;
+@media (max-width: 1200px) {
+  .status-bar {
+    font-size: 11px;
   }
   
-  .status-item span {
+  .status-item {
+    padding: 0 6px;
+  }
+  
+  .status-item.current-file {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 900px) {
+  .status-bar-center .status-item span {
+    /* Use shorter text on smaller screens */
+    font-size: 11px;
+  }
+  
+  .status-item {
+    padding: 0 4px;
+  }
+  
+  .status-divider {
+    margin: 0 4px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Don't hide text completely, just make it more compact */
+  .status-bar {
+    font-size: 10px;
+  }
+  
+  .status-item {
+    padding: 0 3px;
+    gap: 2px;
+  }
+  
+  .status-item.current-file {
+    max-width: 80px;
+  }
+  
+  /* Hide dividers to save space */
+  .status-divider {
     display: none;
   }
   
-  .status-item .status-icon {
-    margin-right: 0;
+  /* Make center text more compact but still visible */
+  .status-bar-center {
+    font-size: 10px;
+  }
+  
+  /* Only show essential info in very small screens */
+  .status-bar-center .status-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Ultra small screens - show only icons and abbreviated text */
+  .status-bar-center .status-item span {
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .status-icon {
+    width: 12px;
+    height: 12px;
   }
 }
