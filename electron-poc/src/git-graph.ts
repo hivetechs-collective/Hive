@@ -303,106 +303,6 @@ export class GitGraphView {
                 line-height: 1.4;
             }
             
-            .git-graph-files-section {
-                margin-top: 12px;
-                border-top: 1px solid var(--vscode-widget-border, #303031);
-                padding-top: 8px;
-            }
-            
-            .git-graph-files-header {
-                margin-bottom: 8px;
-                font-weight: 600;
-                font-size: 11px;
-                text-transform: uppercase;
-                color: var(--vscode-descriptionForeground, #969696);
-            }
-            
-            .git-graph-files-list {
-                max-height: 200px;
-                overflow-y: auto;
-            }
-            
-            .git-graph-file-item {
-                display: flex;
-                align-items: center;
-                padding: 4px 8px;
-                cursor: pointer;
-                border-radius: 3px;
-                font-size: 12px;
-            }
-            
-            .git-graph-file-item:hover {
-                background: var(--vscode-list-hoverBackground, #2a2d2e);
-            }
-            
-            .git-graph-file-status {
-                width: 18px;
-                height: 18px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                border-radius: 2px;
-                font-size: 10px;
-                font-weight: bold;
-                margin-right: 8px;
-                flex-shrink: 0;
-            }
-            
-            .git-graph-file-status.modified {
-                background: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
-                color: var(--vscode-editor-background, #1e1e1e);
-            }
-            
-            .git-graph-file-status.added {
-                background: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
-                color: var(--vscode-editor-background, #1e1e1e);
-            }
-            
-            .git-graph-file-status.deleted {
-                background: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
-                color: white;
-            }
-            
-            .git-graph-file-info {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                min-width: 0;
-                flex: 1;
-            }
-            
-            .git-graph-file-name {
-                font-weight: 500;
-            }
-            
-            .git-graph-file-path {
-                color: var(--vscode-descriptionForeground, #969696);
-                font-size: 11px;
-                margin-left: 4px;
-            }
-            
-            .git-graph-stats {
-                display: flex;
-                gap: 8px;
-                margin-top: 4px;
-                font-size: 11px;
-            }
-            
-            .git-graph-stats .additions {
-                color: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
-            }
-            
-            .git-graph-stats .deletions {
-                color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e39);
-            }
-            
-            .git-graph-loading {
-                padding: 8px;
-                color: var(--vscode-descriptionForeground, #969696);
-                font-style: italic;
-                font-size: 11px;
-            }
-            
             .git-graph-empty {
                 display: flex;
                 flex-direction: column;
@@ -552,7 +452,7 @@ export class GitGraphView {
             const authorName = commit.authorName || 'Unknown';
             
             return `
-                <div class="git-graph-commit ${isExpanded ? 'expanded' : ''} ${isSelected ? 'selected' : ''}" 
+                <div class="git-graph-commit ${isSelected ? 'selected' : ''}" 
                      data-hash="${commit.hash}"
                      onclick="window.gitGraph?.toggleCommit('${commit.hash}')">
                     <div class="git-graph-visual">
@@ -566,7 +466,6 @@ export class GitGraphView {
                         <span class="git-graph-commit-date">${this.formatDate(commit.authorDate)}</span>
                     </div>
                 </div>
-                ${isExpanded ? this.renderCommitDetails(commit) : ''}
             `;
         }).join('');
         
@@ -638,80 +537,31 @@ export class GitGraphView {
     }
 
     private renderCommitDetails(commit: GitCommit): string {
-        const filesHtml = commit.files ? commit.files.map(file => {
-            const fileName = file.split('/').pop() || file;
-            const folderPath = file.includes('/') ? file.substring(0, file.lastIndexOf('/')) : '';
-            
-            // Determine file status icon based on name (simplified)
-            let statusIcon = 'M'; // Modified by default
-            let statusClass = 'modified';
-            
-            return `
-                <div class="git-graph-file-item" onclick="event.stopPropagation(); window.gitGraph?.openFileDiff('${commit.hash}', '${file}')" title="Click to view diff">
-                    <div class="git-graph-file-status ${statusClass}">${statusIcon}</div>
-                    <div class="git-graph-file-info">
-                        <span class="codicon codicon-file"></span>
-                        <span class="git-graph-file-name">${fileName}</span>
-                        ${folderPath ? `<span class="git-graph-file-path">${folderPath}/</span>` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('') : '<div class="git-graph-loading">Loading files...</div>';
-        
-        const statsHtml = commit.stats ? `
-            <div class="git-graph-stats">
-                <span class="additions">+${commit.stats.additions}</span>
-                <span class="deletions">-${commit.stats.deletions}</span>
-            </div>
-        ` : '';
-        
         return `
             <div class="git-graph-commit-details">
-                <div class="git-graph-detail-header">
-                    <div class="git-graph-detail-row">
-                        <span class="git-graph-detail-label">Commit:</span>
-                        <span class="git-graph-detail-value">${commit.hash}</span>
-                    </div>
-                    <div class="git-graph-detail-row">
-                        <span class="git-graph-detail-label">Author:</span>
-                        <span class="git-graph-detail-value">${commit.authorName} &lt;${commit.authorEmail}&gt;</span>
-                    </div>
-                    <div class="git-graph-detail-row">
-                        <span class="git-graph-detail-label">Date:</span>
-                        <span class="git-graph-detail-value">${commit.authorDate.toLocaleString()}</span>
-                    </div>
-                    ${statsHtml}
+                <div class="git-graph-detail-row">
+                    <span class="git-graph-detail-label">Commit:</span>
+                    <span class="git-graph-detail-value">${commit.hash}</span>
                 </div>
+                <div class="git-graph-detail-row">
+                    <span class="git-graph-detail-label">Author:</span>
+                    <span class="git-graph-detail-value">${commit.authorName} &lt;${commit.authorEmail}&gt;</span>
+                </div>
+                <div class="git-graph-detail-row">
+                    <span class="git-graph-detail-label">Date:</span>
+                    <span class="git-graph-detail-value">${commit.authorDate.toLocaleString()}</span>
+                </div>
+                ${commit.parent.length > 0 ? `
+                    <div class="git-graph-detail-row">
+                        <span class="git-graph-detail-label">Parents:</span>
+                        <span class="git-graph-detail-value">${commit.parent.join(', ')}</span>
+                    </div>
+                ` : ''}
                 ${commit.body ? `
                     <div class="git-graph-commit-body">${this.escapeHtml(commit.body)}</div>
                 ` : ''}
-                <div class="git-graph-files-section">
-                    <div class="git-graph-files-header">
-                        <span class="git-graph-files-title">Changed Files (${commit.files ? commit.files.length : 0})</span>
-                    </div>
-                    <div class="git-graph-files-list">
-                        ${filesHtml}
-                    </div>
-                </div>
             </div>
         `;
-    }
-    
-    public async openFileDiff(commitHash: string, filePath: string) {
-        console.log('[GitGraph] Opening diff for file:', filePath, 'in commit:', commitHash);
-        
-        try {
-            // Get the diff for this specific file in this commit
-            const diff = await window.gitAPI.getFileDiff(commitHash, filePath);
-            
-            // TODO: Open diff in editor or diff viewer
-            console.log('[GitGraph] File diff:', diff);
-            
-            // For now, just show in an alert
-            alert(`Diff viewer for ${filePath} would open here with the changes from commit ${commitHash}`);
-        } catch (error) {
-            console.error('[GitGraph] Failed to get file diff:', error);
-        }
     }
 
     private formatDate(date: Date): string {
@@ -735,59 +585,14 @@ export class GitGraphView {
     }
 
     // Public methods
-    public async toggleCommit(hash: string) {
-        if (this.expandedCommits.has(hash)) {
-            this.expandedCommits.delete(hash);
-        } else {
-            this.expandedCommits.add(hash);
-            // Load file changes if not already loaded
-            const commit = this.commits.find(c => c.hash === hash);
-            if (commit && !commit.files) {
-                await this.loadCommitFiles(commit);
-            }
-        }
+    public toggleCommit(hash: string) {
+        // Open commit details in main window instead of expanding inline
         this.selectedCommit = hash;
+        const commit = this.commits.find(c => c.hash === hash);
+        if (commit) {
+            this.openCommitDetails(commit);
+        }
         this.render();
-    }
-    
-    private async loadCommitFiles(commit: GitCommit) {
-        try {
-            console.log('[GitGraph] Loading files for commit:', commit.hash);
-            const files = await window.gitAPI.getCommitFiles(commit.hash);
-            commit.files = files;
-            
-            // Also get the stats if possible
-            const stats = await this.getCommitStats(commit.hash);
-            commit.stats = stats;
-        } catch (error) {
-            console.error('[GitGraph] Failed to load commit files:', error);
-            commit.files = [];
-        }
-    }
-    
-    private async getCommitStats(hash: string): Promise<{ additions: number; deletions: number; }> {
-        try {
-            // Get the diff stat for this commit
-            const result = await window.gitAPI.getDiff(`${hash}~1..${hash}`);
-            
-            // Parse the diff to count additions and deletions
-            const lines = result.split('\n');
-            let additions = 0;
-            let deletions = 0;
-            
-            for (const line of lines) {
-                if (line.startsWith('+') && !line.startsWith('+++')) {
-                    additions++;
-                } else if (line.startsWith('-') && !line.startsWith('---')) {
-                    deletions++;
-                }
-            }
-            
-            return { additions, deletions };
-        } catch (error) {
-            console.error('[GitGraph] Failed to get commit stats:', error);
-            return { additions: 0, deletions: 0 };
-        }
     }
     
     private async openCommitDetails(commit: GitCommit) {
@@ -818,7 +623,7 @@ export class GitGraphView {
     }
     
     private async createCommitDetailsView(commit: GitCommit, commitInfo: any): Promise<HTMLElement> {
-        const files = commitInfo.files || [];
+        const files = Array.isArray(commitInfo) ? commitInfo : (commitInfo.files || []);
         
         // Create a container for the commit view
         const container = document.createElement('div');
@@ -846,7 +651,9 @@ export class GitGraphView {
         
         // Load diff for each file
         for (const file of files) {
-            await this.addFileDiff(diffsContainer, commit.hash, file);
+            // Convert string to object if needed
+            const fileObj = typeof file === 'string' ? { path: file, status: 'M' } : file;
+            await this.addFileDiff(diffsContainer, commit.hash, fileObj);
         }
         
         return container;
@@ -889,13 +696,16 @@ export class GitGraphView {
         expandIcon.className = 'codicon codicon-chevron-down';
         expandIcon.style.cssText = 'margin-right: 4px;';
         
+        // Determine file status from the diff if not provided
+        const fileStatus = file.status || 'M';
+        
         const statusBadge = document.createElement('span');
-        statusBadge.style.cssText = this.getStatusStyle(file.status);
-        statusBadge.textContent = this.getStatusLabel(file.status);
+        statusBadge.style.cssText = this.getStatusStyle(fileStatus);
+        statusBadge.textContent = this.getStatusLabel(fileStatus);
         
         const fileName = document.createElement('span');
         fileName.style.cssText = 'flex: 1; font-family: var(--vscode-editor-font-family); color: var(--vscode-foreground);';
-        fileName.textContent = file.path;
+        fileName.textContent = file.path || file;
         
         fileHeader.appendChild(expandIcon);
         fileHeader.appendChild(statusBadge);
