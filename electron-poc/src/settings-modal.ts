@@ -130,6 +130,7 @@ export class SettingsModal {
   private customProfiles: ConsensusProfile[] = [];
   private notificationQueue: HTMLElement[] = [];
   private onSettingsChanged: (() => void) | null = null;
+  private currentContainer: HTMLElement | null = null;
 
   constructor(onSettingsChanged?: () => void) {
     this.onSettingsChanged = onSettingsChanged || null;
@@ -278,7 +279,6 @@ export class SettingsModal {
               
               <div class="button-group">
                 <button id="create-profile" class="btn btn-secondary">+ New Profile</button>
-                <button id="save-profile" class="btn btn-primary">Save Profile Selection</button>
               </div>
             </div>
             
@@ -596,11 +596,6 @@ export class SettingsModal {
     // Save keys button
     document.getElementById('save-keys')?.addEventListener('click', () => {
       this.saveApiKeys();
-    });
-
-    // Save profile button
-    document.getElementById('save-profile')?.addEventListener('click', () => {
-      this.saveProfile();
     });
 
     // Apply settings button
@@ -949,23 +944,6 @@ export class SettingsModal {
     }
   }
 
-  private async saveProfile() {
-    if (!this.selectedProfileId) {
-      this.showMessage('Please select a profile', 'error');
-      return;
-    }
-
-    try {
-      const profile = EXPERT_PROFILES.find(p => p.id === this.selectedProfileId);
-      if (!profile) return;
-
-      await (window as any).settingsAPI.saveProfile(profile);
-      this.showMessage('Profile saved successfully!', 'success');
-    } catch (error) {
-      this.showMessage(`Failed to save profile: ${error}`, 'error');
-    }
-  }
-
   private async applyAllSettings() {
     const openrouterInput = document.getElementById('openrouter-key') as HTMLInputElement;
     const hiveInput = document.getElementById('hive-key') as HTMLInputElement;
@@ -975,23 +953,28 @@ export class SettingsModal {
     const hiveKey = hiveInput.getAttribute('data-actual-key') || hiveInput.value;
 
     try {
+      // Save all settings including the selected profile
       await (window as any).settingsAPI.saveAllSettings({
         openrouterKey,
         hiveKey,
         selectedProfile: this.selectedProfileId
       });
       
+      // Profile is now saved to database, the callback will reload it
+      
       this.showMessage('All settings saved successfully!', 'success');
       
-      // Call the callback if provided
+      // Call the callback if provided to update UI
       if (this.onSettingsChanged) {
         this.onSettingsChanged();
       }
       
-      // Close modal after successful save
-      setTimeout(() => {
-        this.hideModal();
-      }, 1000);
+      // Don't close modal automatically when in tab mode
+      if (this.modalElement && this.modalElement.style.display !== 'none') {
+        setTimeout(() => {
+          this.hideModal();
+        }, 1000);
+      }
     } catch (error) {
       this.showMessage(`Failed to save settings: ${error}`, 'error');
     }
@@ -1095,15 +1078,16 @@ export class SettingsModal {
     const statusDiv = document.getElementById('license-status');
     if (!statusDiv) return;
 
-    if (info.valid) {
+    // Check if info has license information (from D1 response)
+    if (info && (info.tier || info.dailyLimit || info.valid === true)) {
       statusDiv.className = 'license-status valid';
-      let statusText = `✓ Valid ${info.tier} license - ${info.dailyLimit} conversations/day`;
+      let statusText = `✓ Valid ${info.tier || 'standard'} license - ${info.dailyLimit || 10} conversations/day`;
       
       if (info.dailyUsed !== undefined && info.remaining !== undefined) {
         statusText += ` (${info.dailyUsed} used, ${info.remaining} remaining today)`;
       } else if (info.remaining !== undefined) {
         if (info.remaining === 'unlimited') {
-          statusText = `✓ Valid ${info.tier} license - Unlimited conversations`;
+          statusText = `✓ Valid ${info.tier || 'standard'} license - Unlimited conversations`;
         } else {
           statusText += ` (${info.remaining} remaining today)`;
         }
@@ -1116,7 +1100,7 @@ export class SettingsModal {
       statusDiv.textContent = statusText;
     } else {
       statusDiv.className = 'license-status invalid';
-      statusDiv.textContent = info.error || '✗ Invalid or expired license key';
+      statusDiv.textContent = info?.error || '✗ Invalid or expired license key';
     }
   }
 
@@ -1355,25 +1339,50 @@ export class SettingsModal {
 
   private attachProfileCardHandlers() {
     document.querySelectorAll('.profile-card').forEach(card => {
-      card.addEventListener('click', () => {
+      card.addEventListener('click', async () => {
         document.querySelectorAll('.profile-card').forEach(c => c.classList.remove('selected'));
         card.classList.add('selected');
         this.selectedProfileId = (card as HTMLElement).dataset.profileId || null;
+        
+        // Instantly update the consensus panel with the selected profile
+        if (this.selectedProfileId) {
+          const profile = [...EXPERT_PROFILES, ...this.customProfiles].find(p => p.id === this.selectedProfileId);
+          if (profile) {
+            try {
+              // Save the profile immediately to database
+              await (window as any).settingsAPI.saveProfile(profile);
+              
+              // Call the settings changed callback to reload from database and update UI
+              if (this.onSettingsChanged) {
+                this.onSettingsChanged();
+              }
+              
+              // Show feedback
+              this.showMessage(`Profile switched to: ${profile.name}`, 'success');
+            } catch (error) {
+              console.error('Failed to apply profile:', error);
+            }
+          }
+        }
       });
     });
   }
 
   private showMessage(message: string, type: 'success' | 'error' | 'info') {
+    // Determine where to append the toast
+    const targetContainer = this.currentContainer || document.body;
+    const isInTab = this.currentContainer !== null;
+    
     // Calculate position based on existing notifications
-    const existingToasts = document.querySelectorAll('.toast');
-    const topOffset = 60 + (existingToasts.length * 60); // Stack notifications
+    const existingToasts = targetContainer.querySelectorAll('.toast');
+    const topOffset = isInTab ? 20 + (existingToasts.length * 60) : 60 + (existingToasts.length * 60);
     
     // Create toast notification
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
     toast.style.cssText = `
-      position: fixed;
+      position: ${isInTab ? 'absolute' : 'fixed'};
       top: ${topOffset}px;
       right: 20px;
       padding: 12px 20px;
@@ -1386,7 +1395,7 @@ export class SettingsModal {
       max-width: 400px;
     `;
     
-    document.body.appendChild(toast);
+    targetContainer.appendChild(toast);
     this.notificationQueue.push(toast);
     
     setTimeout(() => {
@@ -1463,6 +1472,9 @@ export class SettingsModal {
   }
   
   public renderInContainer(container: HTMLElement): void {
+    // Store the container for context-aware toast notifications
+    this.currentContainer = container;
+    
     // Render the actual settings content (without modal wrapper) in the container
     const modalContent = this.createModal();
     
@@ -1492,8 +1504,37 @@ export class SettingsModal {
     this.setupEventHandlers();
     this.setupProfileCreationHandlers();
     
-    // Load saved settings
+    // Load saved settings (this includes license validation)
     this.loadSettings();
+  }
+
+  /**
+   * Get settings content as an HTMLElement for tab display
+   */
+  public getSettingsTabContent(): HTMLElement {
+    const container = document.createElement('div');
+    container.style.cssText = `
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      background: #1e1e1e;
+      color: #cccccc;
+      padding: 20px;
+      position: relative;
+    `;
+    
+    // Render the settings panel into the container
+    this.renderInContainer(container);
+    
+    return container;
+  }
+
+  /**
+   * Handle save when settings tab is closed
+   */
+  public async handleSave(): Promise<void> {
+    // Apply all settings before closing
+    await this.applyAllSettings();
   }
 
 }

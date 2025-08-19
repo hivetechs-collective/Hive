@@ -607,7 +607,7 @@ export class GitGraphView {
             const title = `Commit ${commit.abbrevHash}: ${commit.subject}`;
             
             // Open in a new tab
-            window.editorTabs.openCustomTab(title, container);
+            window.editorTabs.openCustomTab(`commit-${commit.hash}`, title, container);
         }
     }
     

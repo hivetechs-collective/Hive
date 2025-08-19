@@ -31,6 +31,8 @@ export interface EditorTab {
   content?: string;
   isDirty: boolean;
   language?: string;
+  isCloseable?: boolean;
+  onClose?: () => void;
 }
 
 export class EditorTabs {
@@ -409,6 +411,15 @@ export class EditorTabs {
       const save = confirm(`Save changes to ${tab.name}?`);
       if (save) {
         await this.saveTab(tabId);
+      }
+    }
+
+    // Call onClose callback if it exists
+    if (tab.onClose) {
+      try {
+        await tab.onClose();
+      } catch (error) {
+        console.error('[EditorTabs] Error in onClose callback:', error);
       }
     }
 
@@ -821,21 +832,31 @@ export class EditorTabs {
   }
 
   /**
-   * Open a custom content tab (for commit details, etc.)
+   * Open a custom content tab (for commit details, settings, etc.)
    */
-  public openCustomTab(tabName: string, container: HTMLElement): void {
+  public openCustomTab(tabId: string, tabName: string, container: HTMLElement, options?: {
+    isCloseable?: boolean;
+    onClose?: () => void;
+  }): void {
     try {
       console.log('[EditorTabs] Opening custom tab:', tabName);
       
-      // Create a unique ID for the custom tab
-      const tabId = `custom-${Date.now()}`;
+      // Check if a tab with this ID already exists
+      const existingTabIndex = this.tabs.findIndex(t => t.id === tabId);
+      if (existingTabIndex !== -1) {
+        // Tab already exists, just activate it
+        this.activateTab(tabId);
+        return;
+      }
       
       // Create new tab
       const tab: EditorTab = {
         id: tabId,
         path: tabName,
         name: tabName,
-        isDirty: false
+        isDirty: false,
+        isCloseable: options?.isCloseable !== false,
+        onClose: options?.onClose
       };
       
       this.tabs.push(tab);

@@ -1020,10 +1020,35 @@ function updateStageStatus(stage: string, status: 'ready' | 'running' | 'complet
 
 document.getElementById('settings-btn')?.addEventListener('click', () => {
   addLogEntry('⚙️ Opening settings...', 'info');
-  if (settingsModal) {
+  openSettingsTab();
+});
+
+// Function to open settings as a full tab
+function openSettingsTab() {
+  console.log('[Settings] Opening settings as tab, editorTabs exists:', !!window.editorTabs);
+  
+  // Create the settings content as a tab
+  const settingsContent = settingsModal.getSettingsTabContent();
+  
+  // Use the editor tabs system to open settings as a custom tab
+  if (window.editorTabs) {
+    console.log('[Settings] Calling openCustomTab');
+    window.editorTabs.openCustomTab('settings', '⚙️ Settings', settingsContent, {
+      isCloseable: true,
+      onClose: () => {
+        // Save any pending changes when tab is closed
+        settingsModal.handleSave();
+      }
+    });
+  } else {
+    console.error('[Settings] EditorTabs not available, falling back to modal');
+    // Fallback - show the modal if tabs aren't available
+    if (!settingsModal.modalElement) {
+      settingsModal.initializeModal(document.body);
+    }
     settingsModal.showModal();
   }
-});
+}
 
 document.getElementById('memory-btn')?.addEventListener('click', () => {
   addLogEntry('🧠 Memory panel clicked', 'info');
@@ -1098,8 +1123,9 @@ document.getElementById('run-consensus-btn')?.addEventListener('click', async ()
   // Add to conversation history
   conversationHistory.push({ role: 'user', content: testQuery });
   
-  // Get current profile from settings or use default
-  const currentProfileName = activeProfile?.name || 'balanced-performer';
+  // Get current profile from database (should always be loaded)
+  const currentProfileName = activeProfile?.name || 'Balanced Performer';
+  console.log('[Consensus] Using profile:', currentProfileName, 'activeProfile:', activeProfile);
   
   // Start consensus via WebSocket with conversation context
   consensusWebSocket.startConsensus(testQuery, currentProfileName, currentConversationId, conversationHistory);
@@ -1198,8 +1224,9 @@ document.getElementById('send-chat')?.addEventListener('click', async () => {
   // Add to conversation history
   conversationHistory.push({ role: 'user', content: query });
   
-  // Get current profile from settings or use default
-  const currentProfileName = activeProfile?.name || 'Free Also';
+  // Get current profile from database (should always be loaded)
+  const currentProfileName = activeProfile?.name || 'Balanced Performer';
+  console.log('[Consensus] Using profile for user query:', currentProfileName, 'activeProfile:', activeProfile);
   
   // Start consensus via WebSocket with conversation context
   consensusWebSocket.startConsensus(query, currentProfileName, currentConversationId, conversationHistory);
@@ -1817,12 +1844,19 @@ async function updateStatusBar() {
 }
 
 // Initialize settings modal with callback to update status bar and profile
-settingsModal = new SettingsModal(() => {
+settingsModal = new SettingsModal(async () => {
   // Callback when settings are saved
   updateStatusBar();
-  loadActiveProfile(); // Reload profile when settings change
+  await loadActiveProfile(); // Reload profile from database
+  
+  // Log the profile switch after it's loaded
+  if (activeProfile) {
+    addLogEntry(`✅ Profile switched to: ${activeProfile.name}`, 'success');
+    console.log('[Settings] Active profile updated:', activeProfile);
+  }
 });
-settingsModal.initializeModal(document.body);
+// Don't initialize modal - we're using tabs instead
+// settingsModal.initializeModal(document.body);
 
 // Function to update just the conversation count from database
 async function updateConversationCount() {
@@ -1939,7 +1973,7 @@ async function loadActiveProfile() {
 setTimeout(async () => {
   console.log('🔄 Updating status bar and loading profile...');
   await updateStatusBar();
-  loadActiveProfile();
+  await loadActiveProfile();  // Await to ensure profile is loaded before continuing
   
   // ALWAYS update conversation count from local database (overrides D1)
   await updateConversationCount();

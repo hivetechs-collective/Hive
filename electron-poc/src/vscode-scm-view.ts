@@ -906,7 +906,7 @@ export class VSCodeSCMView {
             
             const container = document.createElement('div');
             container.innerHTML = submoduleInfo;
-            window.editorTabs.openCustomTab(`Submodule: ${path}`, container);
+            window.editorTabs.openCustomTab(`submodule-${path}`, `Submodule: ${path}`, container);
             console.log('[SCM] Submodule changes opened in editor tabs');
             
           } catch (error) {
@@ -930,7 +930,7 @@ export class VSCodeSCMView {
             `;
             const container = document.createElement('div');
             container.innerHTML = fallbackInfo;
-            window.editorTabs.openCustomTab(`Submodule: ${path}`, container);
+            window.editorTabs.openCustomTab(`submodule-${path}`, `Submodule: ${path}`, container);
           }
         }
       } else if (fileStatus && (fileStatus.working === 'M' || fileStatus.index === 'M' || 
