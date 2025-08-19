@@ -6,13 +6,12 @@
 import MemoryServiceServer from './server';
 
 const port = parseInt(process.env.MEMORY_SERVICE_PORT || '3457');
-const dbPath = process.env.MEMORY_DB_PATH;
 
 console.log('[MemoryService] Starting Memory Service...');
 console.log('[MemoryService] Port:', port);
-console.log('[MemoryService] Database:', dbPath || 'default');
+console.log('[MemoryService] Database: via IPC to main process');
 
-const server = new MemoryServiceServer(port, dbPath);
+const server = new MemoryServiceServer(port);
 
 // Start the server
 server.start().then(() => {

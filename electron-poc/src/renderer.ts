@@ -1053,7 +1053,7 @@ function openSettingsTab() {
 
 document.getElementById('memory-btn')?.addEventListener('click', () => {
   addLogEntry('🧠 Memory panel clicked', 'info');
-  addChatMessage('Memory management coming soon...', true);
+  openMemoryDashboard();
 });
 
 // Button handlers (using IPC like before)
