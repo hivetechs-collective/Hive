@@ -28,6 +28,7 @@ import './vscode-scm.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
+import { MemoryDashboard } from './components/memory-dashboard';
 import { NeuralConsciousness } from './neural-consciousness';
 import { analyticsDashboard } from './analytics';
 import { GitUI } from './git-ui';
@@ -2148,6 +2149,60 @@ function hideAnalyticsPanel(): void {
     }
 }
 
+// Memory Dashboard Management
+let memoryDashboardInstance: MemoryDashboard | null = null;
+
+async function openMemoryDashboard(): Promise<void> {
+    console.log('[Memory] Opening Memory Dashboard...');
+    
+    const container = document.getElementById('memory-container');
+    if (!container) {
+        console.error('[Memory] Memory container not found');
+        return;
+    }
+    
+    // Check if Memory Service is running, start if not
+    const isRunning = await window.electronAPI.isMemoryServiceRunning();
+    if (!isRunning) {
+        console.log('[Memory] Starting Memory Service...');
+        const started = await window.electronAPI.startMemoryService();
+        if (!started) {
+            console.error('[Memory] Failed to start Memory Service');
+            container.innerHTML = `
+                <div style="padding: 20px; color: #f48771;">
+                    <h3>Memory Service Failed to Start</h3>
+                    <p>Please check the console for errors.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        // Wait a moment for service to initialize
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Check if dashboard already exists
+    if (container.innerHTML.trim() === '') {
+        console.log('[Memory] Creating new Memory Dashboard...');
+        
+        // Clean up old instance if exists
+        if (memoryDashboardInstance) {
+            memoryDashboardInstance.destroy();
+            memoryDashboardInstance = null;
+        }
+        
+        // Create new dashboard
+        memoryDashboardInstance = new MemoryDashboard();
+        const dashboardElement = await memoryDashboardInstance.create();
+        container.innerHTML = '';
+        container.appendChild(dashboardElement);
+        
+        console.log('[Memory] Memory Dashboard created successfully');
+    } else {
+        console.log('[Memory] Memory Dashboard already rendered');
+    }
+}
+
 function hideAllPanels(): void {
     // Hide console output
     const consoleOutput = document.getElementById('console-output');
@@ -2592,6 +2647,9 @@ setTimeout(() => {
                         }
                     } else if (view === 'analytics' && analyticsPanel) {
                         showAnalyticsPanel();
+                    } else if (view === 'memory') {
+                        console.log('Opening Memory Dashboard...');
+                        openMemoryDashboard();
                     }
                 }
             }

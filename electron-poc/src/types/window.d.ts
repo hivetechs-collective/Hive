@@ -67,6 +67,14 @@ declare global {
       onMenuOpenFolder(callback: (folderPath: string) => void): void;
       onMenuNewFile(callback: () => void): void;
       onMenuSaveFile(callback: () => void): void;
+      
+      // Memory Service API
+      startMemoryService(): Promise<boolean>;
+      stopMemoryService(): Promise<void>;
+      isMemoryServiceRunning(): Promise<boolean>;
+      getMemoryStats(): Promise<any>;
+      getConnectedTools(): Promise<any[]>;
+      getMemoryActivity(limit?: number): Promise<any[]>;
     };
     
     // Global instances

@@ -2056,6 +2056,169 @@ ipcMain.handle('get-analytics', async () => {
   });
 });
 
+// ========== MEMORY SERVICE INTEGRATION ==========
+// Memory Service management - runs as child process
+let memoryServiceProcess: ChildProcess | null = null;
+let memoryServicePort = 3457;
+
+// Start Memory Service
+const startMemoryService = async (): Promise<boolean> => {
+  if (memoryServiceProcess) {
+    console.log('[Main] Memory Service already running');
+    return true;
+  }
+  
+  try {
+    console.log('[Main] Starting Memory Service...');
+    
+    // Get database path
+    const dbPath = path.join(os.homedir(), '.hive', 'hive-ai.db');
+    
+    // Start as child process
+    const scriptPath = path.join(__dirname, 'memory-service', 'index.js');
+    
+    memoryServiceProcess = spawn('node', [scriptPath], {
+      env: {
+        ...process.env,
+        MEMORY_SERVICE_PORT: memoryServicePort.toString(),
+        MEMORY_DB_PATH: dbPath
+      },
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc']
+    });
+    
+    // Handle stdout
+    memoryServiceProcess.stdout?.on('data', (data) => {
+      console.log(`[MemoryService] ${data}`);
+    });
+    
+    // Handle stderr
+    memoryServiceProcess.stderr?.on('data', (data) => {
+      console.error(`[MemoryService Error] ${data}`);
+    });
+    
+    // Handle process exit
+    memoryServiceProcess.on('exit', (code) => {
+      console.log(`[MemoryService] Process exited with code ${code}`);
+      memoryServiceProcess = null;
+    });
+    
+    // Wait for ready signal
+    return new Promise((resolve) => {
+      if (memoryServiceProcess) {
+        memoryServiceProcess.on('message', (msg: any) => {
+          if (msg.type === 'ready') {
+            console.log('[Main] Memory Service ready on port:', msg.port);
+            resolve(true);
+          }
+        });
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          if (memoryServiceProcess) {
+            console.log('[Main] Memory Service started (no ready signal)');
+            resolve(true);
+          } else {
+            resolve(false);
+          }
+        }, 5000);
+      } else {
+        resolve(false);
+      }
+    });
+    
+  } catch (error) {
+    console.error('[Main] Failed to start Memory Service:', error);
+    return false;
+  }
+};
+
+// Stop Memory Service
+const stopMemoryService = async (): Promise<void> => {
+  if (memoryServiceProcess) {
+    console.log('[Main] Stopping Memory Service...');
+    
+    // Send shutdown message
+    if (memoryServiceProcess.send) {
+      memoryServiceProcess.send({ type: 'shutdown' });
+    }
+    
+    // Give it time to shutdown gracefully
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Force kill if still running
+    if (memoryServiceProcess) {
+      memoryServiceProcess.kill();
+      memoryServiceProcess = null;
+    }
+  }
+};
+
+// Memory Service IPC handlers
+ipcMain.handle('memory-service-start', async () => {
+  return await startMemoryService();
+});
+
+ipcMain.handle('memory-service-stop', async () => {
+  await stopMemoryService();
+  return true;
+});
+
+ipcMain.handle('memory-service-status', async () => {
+  return memoryServiceProcess !== null;
+});
+
+ipcMain.handle('memory-service-stats', async () => {
+  try {
+    const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/stats`);
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (error) {
+    console.error('[Main] Failed to get memory stats:', error);
+  }
+  
+  // Return default stats if service is not available
+  return {
+    totalMemories: 0,
+    queriesToday: 0,
+    contributionsToday: 0,
+    connectedTools: 0,
+    hitRate: 0,
+    avgResponseTime: 0
+  };
+});
+
+ipcMain.handle('memory-service-tools', async () => {
+  try {
+    const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/tools`);
+    if (response.ok) {
+      const data = await response.json();
+      return data.tools || [];
+    }
+  } catch (error) {
+    console.error('[Main] Failed to get connected tools:', error);
+  }
+  return [];
+});
+
+ipcMain.handle('memory-service-activity', async (_, limit: number = 50) => {
+  try {
+    const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/activity?limit=${limit}`);
+    if (response.ok) {
+      const data = await response.json();
+      return data.activity || [];
+    }
+  } catch (error) {
+    console.error('[Main] Failed to get activity stream:', error);
+  }
+  return [];
+});
+
+// Clean up on app quit
+app.on('before-quit', async () => {
+  await stopMemoryService();
+});
+
 // Store reference to main window
 app.on('browser-window-created', (_, window) => {
   if (!mainWindow) {

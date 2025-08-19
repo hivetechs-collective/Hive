@@ -66,6 +66,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showMessageBox: (options: any) => ipcRenderer.invoke('show-message-box', options),
   setTitle: (title: string) => ipcRenderer.invoke('set-title', title),
   
+  // Memory Service API
+  startMemoryService: () => ipcRenderer.invoke('memory-service-start'),
+  stopMemoryService: () => ipcRenderer.invoke('memory-service-stop'),
+  isMemoryServiceRunning: () => ipcRenderer.invoke('memory-service-status'),
+  getMemoryStats: () => ipcRenderer.invoke('memory-service-stats'),
+  getConnectedTools: () => ipcRenderer.invoke('memory-service-tools'),
+  getMemoryActivity: (limit?: number) => ipcRenderer.invoke('memory-service-activity', limit),
+  
   // Menu event listeners
   onMenuOpenFolder: (callback: (folderPath: string) => void) => {
     ipcRenderer.on('menu-open-folder', (_, folderPath) => callback(folderPath));
