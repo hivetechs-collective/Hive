@@ -434,7 +434,8 @@ export class EnhancedGitManager {
    * Get diff for a specific file in a commit
    */
   async getFileDiff(commitHash: string, filePath: string): Promise<string> {
-    return await this.git.raw(['show', `${commitHash}:${filePath}`]);
+    // Get the diff of the file between the commit and its parent
+    return await this.git.raw(['diff', `${commitHash}~1..${commitHash}`, '--', filePath]);
   }
   
   /**
