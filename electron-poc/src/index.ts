@@ -394,19 +394,22 @@ const registerGitHandlers = () => {
       }
       
       // List modified files
-      result.files.forEach((file: any) => {
-        let status = '';
-        if (file.index === 'M' || file.working_dir === 'M') status = 'modified:';
-        else if (file.index === 'A') status = 'new file:';
-        else if (file.index === 'D' || file.working_dir === 'D') status = 'deleted:';
-        else if (file.working_dir === '?') status = 'untracked:';
-        
-        if (status) {
-          statusText += `${status}   ${file.path}\n`;
-        }
-      });
+      if (result.files && result.files.length > 0) {
+        result.files.forEach((file: any) => {
+          let status = '';
+          // Check both index and working_dir for changes
+          if (file.index === 'M' || file.working_dir === 'M') status = 'modified:';
+          else if (file.index === 'A') status = 'new file:';
+          else if (file.index === 'D' || file.working_dir === 'D') status = 'deleted:';
+          else if (file.working_dir === '?' || file.index === '?') status = 'untracked:';
+          
+          if (status) {
+            statusText += `${status}   ${file.path}\n`;
+          }
+        });
+      }
       
-      return statusText || 'No changes in submodule';
+      return statusText || 'Working directory clean';
     } catch (error) {
       console.error('[Git] Failed to get submodule status:', error);
       return `Error: ${error}`;
