@@ -643,62 +643,33 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                         }
                     }
                     
-                    // Check if we need to initialize or update the explorer
-                    if (currentOpenedFolder) {
-                        // If explorer doesn't exist, create it
-                        if (!window.fileExplorer) {
-                            console.log('Creating new file explorer for:', currentOpenedFolder);
-                            container.innerHTML = ''; // Clear any existing content
-                            window.fileExplorer = new VSCodeExplorerExact(container);
-                            window.fileExplorer.initialize(currentOpenedFolder);
-                            
-                            // Connect to editor tabs when files are selected
-                            window.fileExplorer.onFileSelect((filePath: string) => {
-                                console.log('File selected:', filePath);
-                                if (window.editorTabs) {
-                                    // Wrap in try-catch to prevent errors from bubbling to webpack
-                                    try {
-                                        window.editorTabs.openFile(filePath).catch((err: any) => {
-                                            console.error('Error opening file:', err);
-                                        });
-                                    } catch (err) {
-                                        console.error('Error calling openFile:', err);
-                                    }
-                                } else {
-                                    console.error('editorTabs not found');
+                    // Always create explorer if it doesn't exist (even without a folder)
+                    if (!window.fileExplorer) {
+                        console.log('Creating new file explorer, folder:', currentOpenedFolder || 'none');
+                        container.innerHTML = ''; // Clear any existing content
+                        window.fileExplorer = new VSCodeExplorerExact(container);
+                        
+                        // Connect to editor tabs when files are selected
+                        window.fileExplorer.onFileSelect((filePath: string) => {
+                            console.log('File selected:', filePath);
+                            if (window.editorTabs) {
+                                // Wrap in try-catch to prevent errors from bubbling to webpack
+                                try {
+                                    window.editorTabs.openFile(filePath).catch((err: any) => {
+                                        console.error('Error opening file:', err);
+                                    });
+                                } catch (err) {
+                                    console.error('Error calling openFile:', err);
                                 }
-                            });
-                        } else {
-                            // Explorer already exists, but we need to ensure it's showing the correct folder
-                            console.log('Explorer exists, reinitializing with:', currentOpenedFolder);
-                            window.fileExplorer.initialize(currentOpenedFolder);
-                        }
-                    } else {
-                        // Show VS Code-style welcome screen
-                        container.innerHTML = `
-                            <div class="welcome-view">
-                                <div class="welcome-content">
-                                    <p class="welcome-message">You have not yet opened a folder.</p>
-                                    <button class="welcome-button primary" onclick="window.openFolder()">
-                                        Open Folder
-                                    </button>
-                                    <p class="welcome-hint">
-                                        Opening a folder will close all currently open editors. To keep them open, add a folder instead.
-                                    </p>
-                                    <div class="welcome-section">
-                                        <p class="welcome-text">You can clone a repository locally.</p>
-                                        <button class="welcome-button" onclick="window.cloneRepository()">
-                                            Clone Repository
-                                        </button>
-                                    </div>
-                                    <p class="welcome-docs">
-                                        To learn more about how to use Git and source control in VS Code 
-                                        <a href="https://code.visualstudio.com/docs/editor/versioncontrol" target="_blank" class="welcome-link">read our docs</a>.
-                                    </p>
-                                </div>
-                            </div>
-                        `;
+                            } else {
+                                console.error('editorTabs not found');
+                            }
+                        });
                     }
+                    
+                    // Initialize/reinitialize with the current folder (or undefined for welcome screen)
+                    console.log('Initializing explorer with folder:', currentOpenedFolder || 'none');
+                    window.fileExplorer.initialize(currentOpenedFolder || undefined);
                     
                     // Connect add file/folder buttons
                     const addFileBtn = document.querySelector('.sidebar-actions button[title="New File"]');
