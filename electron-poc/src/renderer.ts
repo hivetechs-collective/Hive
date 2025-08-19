@@ -2856,6 +2856,24 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
         handleOpenFolder(folderPath);
     });
     
+    // Listen for reset state event (Cmd+R)
+    (window as any).electronAPI.onMenuResetState(async () => {
+        console.log('[Menu] Reset state requested before reload');
+        
+        // Clear Git folder state
+        if (window.gitAPI) {
+            await window.gitAPI.setFolder('');
+        }
+        
+        // Clear current folder
+        currentOpenedFolder = null;
+        
+        // Reset localStorage if needed
+        localStorage.removeItem('lastOpenedFolder');
+        
+        // The reload will happen after this
+    });
+    
     // Listen for close folder event
     (window as any).electronAPI.onMenuCloseFolder(async () => {
         console.log('[Menu] Close folder requested');

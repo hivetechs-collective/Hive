@@ -751,7 +751,21 @@ const createApplicationMenu = () => {
           }
         },
         { type: 'separator' },
-        { label: 'Reload', accelerator: 'CmdOrCtrl+R', role: 'reload' },
+        { 
+          label: 'Reload', 
+          accelerator: 'CmdOrCtrl+R', 
+          click: () => {
+            if (mainWindow) {
+              console.log('[Menu] Reloading with state reset...');
+              // Clear Git folder state before reload
+              mainWindow.webContents.send('menu-reset-state');
+              // Give it a moment to clear state, then reload
+              setTimeout(() => {
+                mainWindow.webContents.reload();
+              }, 100);
+            }
+          }
+        },
         { label: 'Force Reload', accelerator: 'CmdOrCtrl+Shift+R', role: 'forceReload' },
         { label: 'Toggle Developer Tools', accelerator: 'F12', role: 'toggleDevTools' },
         { type: 'separator' },

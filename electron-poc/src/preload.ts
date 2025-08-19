@@ -87,6 +87,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onMenuCloseTab: (callback: () => void) => {
     ipcRenderer.on('menu-close-tab', callback);
+  },
+  onMenuResetState: (callback: () => void) => {
+    ipcRenderer.on('menu-reset-state', callback);
   }
 });
 
