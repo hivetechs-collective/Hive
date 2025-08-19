@@ -394,12 +394,12 @@ const registerGitHandlers = () => {
       }
       
       // List modified files
-      result.files.forEach(file => {
+      result.files.forEach((file: any) => {
         let status = '';
-        if (file.index === 'M' || file.working === 'M') status = 'modified:';
+        if (file.index === 'M' || file.working_dir === 'M') status = 'modified:';
         else if (file.index === 'A') status = 'new file:';
-        else if (file.index === 'D' || file.working === 'D') status = 'deleted:';
-        else if (file.working === '?') status = 'untracked:';
+        else if (file.index === 'D' || file.working_dir === 'D') status = 'deleted:';
+        else if (file.working_dir === '?') status = 'untracked:';
         
         if (status) {
           statusText += `${status}   ${file.path}\n`;

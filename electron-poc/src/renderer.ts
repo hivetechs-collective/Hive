@@ -2722,6 +2722,11 @@ async function handleOpenFolder(folderPath: string) {
         const folderName = folderPath.split('/').pop() || folderPath;
         document.title = `Hive Consensus - ${folderName}`;
         
+        // Initialize Git manager with the new folder
+        if (window.gitAPI) {
+            await window.gitAPI.setFolder(folderPath);
+        }
+        
         // Update Git branch display in status bar
         updateGitStatusBar();
         

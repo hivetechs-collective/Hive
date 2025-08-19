@@ -1,3 +1,5 @@
+/// <reference path="./types/window.d.ts" />
+
 /**
  * VS Code Style Source Control View
  * Exact implementation matching VS Code's SCM panel
@@ -839,8 +841,8 @@ export class VSCodeSCMView {
             
             // Parse and format the status
             if (submoduleStatus) {
-              const lines = submoduleStatus.split('\n').filter(l => l.trim());
-              statusHtml = lines.map(line => {
+              const lines = submoduleStatus.split('\n').filter((l: string) => l.trim());
+              statusHtml = lines.map((line: string) => {
                 // Color code the status lines
                 if (line.includes('modified:')) {
                   return `<div style="color: #e2c08d;">📝 ${line}</div>`;
