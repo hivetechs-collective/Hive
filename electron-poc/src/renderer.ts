@@ -2242,10 +2242,11 @@ setTimeout(() => {
     // This ensures the welcome screen shows properly when no folder is open
     
     // Initialize enhanced Status Bar with Git integration
-    const statusBar = document.querySelector('.status-bar');
-    if (statusBar) {
-        (window as any).statusBar = new StatusBar(statusBar as HTMLElement);
-    }
+    // TEMPORARILY DISABLED: StatusBar class overwrites the user/plan/conversations center section
+    // const statusBar = document.querySelector('.status-bar');
+    // if (statusBar) {
+    //     (window as any).statusBar = new StatusBar(statusBar as HTMLElement);
+    // }
     
     // Initialize Editor Tabs immediately on startup (not just when explorer is clicked)
     if (!window.editorTabs) {
