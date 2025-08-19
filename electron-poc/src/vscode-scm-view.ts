@@ -826,29 +826,110 @@ export class VSCodeSCMView {
       const isSubmodule = path === 'dioxus-fork' || path === 'src/hive_ui';
       
       if (isSubmodule) {
-        // For submodules, show a summary view
+        // For submodules, show actual changes
         console.log('[SCM] Submodule detected:', path);
         if (window.editorTabs) {
-          const submoduleInfo = `
-            <div style="padding: 20px; font-family: var(--vscode-font-family);">
-              <h2>Submodule: ${path}</h2>
-              <p style="color: var(--vscode-descriptionForeground);">
-                This is a Git submodule with modified content.
-              </p>
-              <p style="margin-top: 20px;">
-                To see changes in this submodule:
-              </p>
-              <ol style="margin-top: 10px; line-height: 1.8;">
-                <li>Navigate to the submodule directory: <code>cd ${fullPath}</code></li>
-                <li>Check status: <code>git status</code></li>
-                <li>View diff: <code>git diff</code></li>
-              </ol>
-            </div>
-          `;
-          const container = document.createElement('div');
-          container.innerHTML = submoduleInfo;
-          window.editorTabs.openCustomTab(`Submodule: ${path}`, container);
-          console.log('[SCM] Submodule info opened in editor tabs');
+          try {
+            // Get submodule status and diff
+            const submoduleStatus = await window.gitAPI.getSubmoduleStatus(fullPath);
+            const submoduleDiff = await window.gitAPI.getSubmoduleDiff(fullPath);
+            
+            let statusHtml = '';
+            let diffHtml = '';
+            
+            // Parse and format the status
+            if (submoduleStatus) {
+              const lines = submoduleStatus.split('\n').filter(l => l.trim());
+              statusHtml = lines.map(line => {
+                // Color code the status lines
+                if (line.includes('modified:')) {
+                  return `<div style="color: #e2c08d;">📝 ${line}</div>`;
+                } else if (line.includes('new file:')) {
+                  return `<div style="color: #73c991;">➕ ${line}</div>`;
+                } else if (line.includes('deleted:')) {
+                  return `<div style="color: #f48771;">➖ ${line}</div>`;
+                } else if (line.includes('Your branch')) {
+                  return `<div style="color: #007acc; font-weight: bold;">${line}</div>`;
+                }
+                return `<div>${line}</div>`;
+              }).join('');
+            }
+            
+            // Format the diff with syntax highlighting
+            if (submoduleDiff) {
+              const diffLines = submoduleDiff.split('\n');
+              diffHtml = `<pre style="background: #1e1e1e; padding: 15px; border-radius: 4px; overflow-x: auto;">`;
+              
+              for (const line of diffLines) {
+                if (line.startsWith('+') && !line.startsWith('+++')) {
+                  diffHtml += `<span style="color: #73c991;">${this.escapeHtml(line)}</span>\n`;
+                } else if (line.startsWith('-') && !line.startsWith('---')) {
+                  diffHtml += `<span style="color: #f48771;">${this.escapeHtml(line)}</span>\n`;
+                } else if (line.startsWith('@@')) {
+                  diffHtml += `<span style="color: #007acc; font-weight: bold;">${this.escapeHtml(line)}</span>\n`;
+                } else if (line.startsWith('diff --git')) {
+                  diffHtml += `<span style="color: #e2c08d; font-weight: bold;">${this.escapeHtml(line)}</span>\n`;
+                } else {
+                  diffHtml += `<span>${this.escapeHtml(line)}</span>\n`;
+                }
+              }
+              diffHtml += `</pre>`;
+            }
+            
+            const submoduleInfo = `
+              <div style="padding: 20px; font-family: var(--vscode-font-family);">
+                <h2 style="margin-bottom: 20px;">Submodule: ${path}</h2>
+                
+                <div style="margin-bottom: 30px;">
+                  <h3 style="color: #007acc; margin-bottom: 10px;">Status</h3>
+                  <div style="background: #252526; padding: 15px; border-radius: 4px;">
+                    ${statusHtml || '<div style="color: #888;">No changes in submodule</div>'}
+                  </div>
+                </div>
+                
+                ${diffHtml ? `
+                <div>
+                  <h3 style="color: #007acc; margin-bottom: 10px;">Changes</h3>
+                  ${diffHtml}
+                </div>
+                ` : ''}
+                
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #3c3c3c;">
+                  <p style="color: #888; font-size: 12px;">
+                    Submodule path: ${fullPath}
+                  </p>
+                </div>
+              </div>
+            `;
+            
+            const container = document.createElement('div');
+            container.innerHTML = submoduleInfo;
+            window.editorTabs.openCustomTab(`Submodule: ${path}`, container);
+            console.log('[SCM] Submodule changes opened in editor tabs');
+            
+          } catch (error) {
+            console.error('[SCM] Failed to get submodule info:', error);
+            // Fallback to basic info if we can't get the status
+            const fallbackInfo = `
+              <div style="padding: 20px; font-family: var(--vscode-font-family);">
+                <h2>Submodule: ${path}</h2>
+                <p style="color: #f48771;">
+                  Failed to retrieve submodule status: ${error}
+                </p>
+                <p style="margin-top: 20px; color: var(--vscode-descriptionForeground);">
+                  This is a Git submodule. To see changes manually:
+                </p>
+                <ol style="margin-top: 10px; line-height: 1.8;">
+                  <li>Navigate to: <code>cd ${fullPath}</code></li>
+                  <li>Check status: <code>git status</code></li>
+                  <li>View diff: <code>git diff</code></li>
+                </ol>
+              </div>
+            `;
+            const container = document.createElement('div');
+            container.innerHTML = fallbackInfo;
+            window.editorTabs.openCustomTab(`Submodule: ${path}`, container);
+          }
         }
       } else if (fileStatus && (fileStatus.working === 'M' || fileStatus.index === 'M' || 
                          fileStatus.working === 'D' || fileStatus.index === 'D' ||
@@ -871,6 +952,12 @@ export class VSCodeSCMView {
     } catch (error) {
       console.error('[SCM] Failed to open file:', error);
     }
+  }
+  
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
   
   private async showDiffView(path: string, fileStatus: any) {

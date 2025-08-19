@@ -377,6 +377,56 @@ const registerGitHandlers = () => {
     await initGitManager(folderPath);
     return { success: true };
   });
+  
+  // Get submodule status
+  ipcMain.handle('git-submodule-status', async (_, submodulePath: string) => {
+    if (!gitManager) return '';
+    try {
+      // Create a new git instance for the submodule
+      const simpleGit = (await import('simple-git')).default;
+      const submoduleGit = simpleGit(submodulePath);
+      const result = await submoduleGit.status();
+      let statusText = '';
+      
+      // Format the status nicely
+      if (result.ahead || result.behind) {
+        statusText += `Your branch is ${result.ahead ? `ahead by ${result.ahead}` : ''} ${result.behind ? `behind by ${result.behind}` : ''}\n`;
+      }
+      
+      // List modified files
+      result.files.forEach(file => {
+        let status = '';
+        if (file.index === 'M' || file.working === 'M') status = 'modified:';
+        else if (file.index === 'A') status = 'new file:';
+        else if (file.index === 'D' || file.working === 'D') status = 'deleted:';
+        else if (file.working === '?') status = 'untracked:';
+        
+        if (status) {
+          statusText += `${status}   ${file.path}\n`;
+        }
+      });
+      
+      return statusText || 'No changes in submodule';
+    } catch (error) {
+      console.error('[Git] Failed to get submodule status:', error);
+      return `Error: ${error}`;
+    }
+  });
+  
+  // Get submodule diff
+  ipcMain.handle('git-submodule-diff', async (_, submodulePath: string) => {
+    if (!gitManager) return '';
+    try {
+      // Create a new git instance for the submodule
+      const simpleGit = (await import('simple-git')).default;
+      const submoduleGit = simpleGit(submodulePath);
+      const diff = await submoduleGit.diff();
+      return diff;
+    } catch (error) {
+      console.error('[Git] Failed to get submodule diff:', error);
+      return '';
+    }
+  });
 };
 
 const registerDialogHandlers = () => {

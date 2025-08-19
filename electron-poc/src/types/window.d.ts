@@ -46,6 +46,12 @@ declare global {
       createBranch(branchName: string): Promise<void>;
       getFileStatus(path: string): Promise<string | null>;
       initRepo(repoPath: string): Promise<any>;
+      getCommitFiles(hash: string): Promise<any>;
+      getFileDiff(commitHash: string, filePath: string): Promise<string>;
+      setFolder(folderPath: string): Promise<any>;
+      sync(): Promise<void>;
+      getSubmoduleStatus(submodulePath: string): Promise<string>;
+      getSubmoduleDiff(submodulePath: string): Promise<string>;
     };
     
     // Electron API
