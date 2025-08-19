@@ -2238,11 +2238,8 @@ setTimeout(() => {
         });
     }
     
-    // Initialize Git UI (VS Code style)
-    const gitContainer = document.getElementById('git-ui-container');
-    if (gitContainer) {
-        (window as any).gitUI = new VSCodeSCMView(gitContainer);
-    }
+    // Don't initialize Git UI here - it will be created when Source Control tab is clicked
+    // This ensures the welcome screen shows properly when no folder is open
     
     // Initialize enhanced Status Bar with Git integration
     const statusBar = document.querySelector('.status-bar');
@@ -2620,15 +2617,43 @@ async function handleOpenFolder(folderPath: string) {
         // Update Git manager with the new folder
         if (window.gitAPI) {
             await window.gitAPI.setFolder(folderPath);
-        }
-        
-        // Initialize/refresh the Git panel with the new folder
-        const gitContainer = document.getElementById('git-content');
-        if (gitContainer) {
-            // Clear existing Git UI and create a new one
-            gitContainer.innerHTML = '';
-            window.gitUI = new VSCodeSCMView(gitContainer);
-            window.scmView = window.gitUI;
+            
+            // Also refresh the Source Control view if it exists
+            const gitContainer = document.getElementById('git-content');
+            console.log('[Menu] Git container found:', !!gitContainer);
+            if (gitContainer) {
+                console.log('[Menu] Clearing and recreating SCM view...');
+                // Clear existing Git UI and recreate it with the new folder
+                window.gitUI = null;
+                window.scmView = null;
+                gitContainer.innerHTML = '';
+                
+                // Create new SCM view after a short delay to ensure Git status is ready
+                setTimeout(async () => {
+                    console.log('[Menu] Creating new VSCodeSCMView...');
+                    window.gitUI = new VSCodeSCMView(gitContainer);
+                    window.scmView = window.gitUI;
+                    console.log('[Menu] Source Control view refreshed for folder:', folderPath);
+                    
+                    // Force a refresh to ensure it loads
+                    if (window.scmView && window.scmView.refresh) {
+                        console.log('[Menu] Forcing SCM refresh...');
+                        await window.scmView.refresh();
+                    }
+                    
+                    // Give extra time for Git graph to initialize
+                    // The SCM view creates the graph after a delay
+                    setTimeout(() => {
+                        console.log('[Menu] Checking if Git graph needs refresh...');
+                        if ((window as any).gitGraph && (window as any).gitGraph.refresh) {
+                            console.log('[Menu] Refreshing Git graph...');
+                            (window as any).gitGraph.refresh();
+                        }
+                    }, 1500);
+                }, 500);
+            } else {
+                console.log('[Menu] Git container not found! SCM view may not be visible.');
+            }
         }
         
         // Update status bar with folder info
@@ -2772,14 +2797,20 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
 // Define global functions for opening folder and cloning repository
 window.openFolder = async () => {
     try {
+        console.log('[OpenFolder] Starting folder selection...');
         const result = await window.electronAPI.showOpenDialog({
             properties: ['openDirectory']
         });
         
+        console.log('[OpenFolder] Dialog result:', result);
+        
         if (!result.canceled && result.filePaths.length > 0) {
             const folderPath = result.filePaths[0];
+            console.log('[OpenFolder] Selected folder:', folderPath);
             // Use the same handleOpenFolder function that File > Open Folder uses
             handleOpenFolder(folderPath);
+        } else {
+            console.log('[OpenFolder] Folder selection was canceled');
         }
     } catch (error) {
         console.error('Failed to open folder:', error);

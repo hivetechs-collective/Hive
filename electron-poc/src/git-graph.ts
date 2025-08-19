@@ -344,6 +344,7 @@ export class GitGraphView {
     }
 
     private async loadCommits() {
+        console.log('[GitGraph] loadCommits called');
         try {
             // Get commit log with graph information
             const log = await window.gitAPI.getLog({
@@ -387,10 +388,18 @@ export class GitGraphView {
         console.log('[GitGraph] Found', lines.length, 'lines');
         
         for (const line of lines) {
-            if (line.startsWith('COMMIT_START|') && line.endsWith('|COMMIT_END')) {
+            // Handle lines with graph symbols (*, |, \, /) from --graph option
+            const trimmedLine = line.replace(/^[\s\*\|\\\/]+/, '').trim();
+            
+            if (trimmedLine.includes('COMMIT_START') && trimmedLine.includes('COMMIT_END')) {
+                console.log('[GitGraph] Processing line:', line.substring(0, 100));
+                console.log('[GitGraph] Trimmed line:', trimmedLine.substring(0, 100));
+                
                 // Remove markers and split by |
-                const cleanLine = line.replace('COMMIT_START|', '').replace('|COMMIT_END', '');
+                const cleanLine = trimmedLine.replace('COMMIT_START|', '').replace('|COMMIT_END', '');
                 const parts = cleanLine.split('|');
+                
+                console.log('[GitGraph] Parts count:', parts.length, 'Parts:', parts.slice(0, 5));
                 
                 if (parts.length >= 5) {
                     const commit: GitCommit = {
@@ -410,6 +419,8 @@ export class GitGraphView {
                     
                     console.log('[GitGraph] Parsed commit:', commit.abbrevHash, '-', commit.subject);
                     commits.push(commit);
+                } else {
+                    console.log('[GitGraph] Not enough parts in line:', parts.length);
                 }
             }
         }

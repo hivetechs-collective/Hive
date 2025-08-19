@@ -128,7 +128,7 @@ export class VSCodeSCMView {
               <button class="scm-toolbar-button" title="Pull${this.gitStatus?.behind ? ` (${this.gitStatus.behind} behind)` : ''}" onclick="window.scmView?.pull()">
                 <span class="codicon codicon-cloud-download"></span>
               </button>
-              <button class="scm-toolbar-button" title="Push${this.gitStatus?.ahead ? ` (${this.gitStatus.ahead} ahead)` : ''}" onclick="alert('Push clicked!'); window.scmView?.push()">
+              <button class="scm-toolbar-button" title="Push${this.gitStatus?.ahead ? ` (${this.gitStatus.ahead} ahead)` : ''}" onclick="window.scmView?.push()">
                 <span class="codicon codicon-cloud-upload"></span>
               </button>
               <button class="scm-toolbar-button" title="Sync Changes${this.gitStatus?.ahead || this.gitStatus?.behind ? ` (${this.gitStatus.ahead || 0}↑ ${this.gitStatus.behind || 0}↓)` : ''}" onclick="window.scmView?.sync()">
@@ -191,13 +191,19 @@ export class VSCodeSCMView {
       const graphContainer = document.getElementById('git-graph-container');
       console.log('[SCM] Git graph container found:', !!graphContainer);
       console.log('[SCM] Git graph view exists:', !!this.gitGraphView);
+      console.log('[SCM] Window gitGraph exists:', !!(window as any).gitGraph);
+      
       if (graphContainer && !this.gitGraphView) {
         console.log('[SCM] Creating new GitGraphView...');
         try {
           this.gitGraphView = new GitGraphView(graphContainer);
+          (window as any).gitGraph = this.gitGraphView; // Ensure global reference
           console.log('[SCM] GitGraphView created successfully');
           // Immediately refresh to load commits
-          this.gitGraphView.refresh();
+          setTimeout(() => {
+            console.log('[SCM] Calling refresh on Git graph...');
+            this.gitGraphView?.refresh();
+          }, 100);
         } catch (error) {
           console.error('[SCM] Failed to create GitGraphView:', error);
         }
@@ -205,7 +211,7 @@ export class VSCodeSCMView {
         console.log('[SCM] Git graph already exists, refreshing...');
         this.gitGraphView.refresh();
       }
-    }, 500); // Increased delay to ensure Git is fully ready
+    }, 1000); // Increased delay to ensure Git is fully ready
   }
 
   private groupResources(): ResourceGroup[] {
@@ -634,11 +640,6 @@ export class VSCodeSCMView {
 
     try {
       console.log('[SCM] About to call gitAPI.push()');
-      console.error('[SCM ERROR TEST] This should appear in console');
-      
-      // Try calling push and see what happens
-      const pushResult = await window.gitAPI.push();
-      console.log('[SCM] Push result:', pushResult);
       
       // Show progress with regular updates
       let progressInterval = setInterval(() => {
@@ -653,10 +654,10 @@ export class VSCodeSCMView {
         }
       }, 500);
       
-      // Add shorter timeout for testing - 10 seconds
+      // Add timeout for push operation - 30 seconds
       const pushPromise = window.gitAPI.push();
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Push operation timed out after 10 seconds')), 10000)
+        setTimeout(() => reject(new Error('Push operation timed out after 30 seconds')), 30000)
       );
       
       try {
