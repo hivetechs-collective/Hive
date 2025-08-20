@@ -336,9 +336,399 @@ curl https://api.openai.com/v1/codex/execute \
 | Free Tier | ❌ | ❌ | ✅ |
 | ChatGPT Login | ✅ | ❌ | ❌ |
 
+## MCP (Model Context Protocol) Support
+
+### Overview
+Codex CLI supports MCP servers for extending functionality and connecting to external tools and data sources. MCP integration allows Codex to interact with databases, APIs, and custom tools.
+
+### MCP Server Configuration
+
+#### Configuration File Location
+`~/.codex/config.toml`
+
+#### MCP Server Setup
+```toml
+[[mcp_servers]]
+name = "database"
+command = "node"
+args = ["./mcp-servers/database.js"]
+env = { DATABASE_URL = "${env:DATABASE_URL}" }
+
+[[mcp_servers]]
+name = "github"
+command = "python"
+args = ["-m", "github_mcp_server"]
+env = { GITHUB_TOKEN = "${env:GITHUB_TOKEN}" }
+```
+
+## Custom Model Providers
+
+### Provider Configuration
+```toml
+[model_providers.azure]
+name = "Azure OpenAI"
+base_url = "https://YOUR_PROJECT.openai.azure.com/openai"
+env_key = "AZURE_OPENAI_API_KEY"
+query_params = { api-version = "2025-04-01-preview" }
+wire_api = "responses"
+
+[model_providers.ollama]
+name = "Ollama"
+base_url = "http://localhost:11434"
+wire_api = "openai"
+no_auth = true
+
+[model_providers.openrouter]
+name = "OpenRouter"
+base_url = "https://openrouter.ai/api/v1"
+env_key = "OPENROUTER_API_KEY"
+wire_api = "openai"
+```
+
+## Configuration Profiles
+
+### Profile System
+Profiles allow you to save and switch between different configurations easily.
+
+```toml
+# Default profile
+model = "o4-mini"
+sandbox = "workspace-write"
+approval = "on-request"
+
+# Azure profile
+[profiles.azure]
+model_provider = "azure"
+model = "gpt-4.1"
+sandbox = "read-only"
+approval = "untrusted"
+
+# Local development profile
+[profiles.local]
+model_provider = "ollama"
+model = "codellama:34b"
+sandbox = "danger-full-access"
+approval = "never"
+
+# High-security profile
+[profiles.secure]
+model = "gpt-5"
+sandbox = "read-only"
+approval = "untrusted"
+```
+
+### Using Profiles
+```bash
+# Use specific profile
+codex --profile azure
+
+# Set default profile
+codex config set default_profile local
+```
+
+## AGENTS.md Context System
+
+### Overview
+Codex uses `AGENTS.md` files to provide project-specific instructions and context.
+
+### File Locations (Priority Order)
+1. Current directory: `./AGENTS.md`
+2. Parent directories (searched recursively)
+3. Project root: `<project>/AGENTS.md`
+4. Global: `~/.codex/AGENTS.md`
+
+### AGENTS.md Structure
+```markdown
+# Project Context
+
+## Architecture
+This is a Django application using PostgreSQL...
+
+## Coding Standards
+- Use PEP 8 for Python code
+- Write comprehensive docstrings
+- Include type hints
+
+## Security Requirements
+- Validate all inputs
+- Use prepared statements
+- Never log sensitive data
+
+## Custom Commands
+!test: Run pytest with coverage
+!deploy: Deploy to staging environment
+!lint: Run all linters and formatters
+```
+
+## Sandbox Modes
+
+### Security Levels
+```toml
+# Read-only mode (safest)
+sandbox = "read-only"
+
+# Workspace write (default)
+sandbox = "workspace-write"
+
+# Full system access (dangerous)
+sandbox = "danger-full-access"
+```
+
+### Approval Policies
+```toml
+# Always require approval
+approval = "untrusted"
+
+# Ask when needed (default)
+approval = "on-request"
+
+# Never ask (dangerous)
+approval = "never"
+```
+
+## Open Source Model Support
+
+### Local Model Configuration
+```bash
+# Use with Ollama
+codex --oss --model codellama:34b
+
+# Use with custom endpoint
+codex --oss --base-url http://localhost:8080 --model local-model
+```
+
+### Ollama Integration
+```toml
+[model_providers.ollama]
+name = "Ollama"
+base_url = "http://localhost:11434"
+wire_api = "openai"
+no_auth = true
+
+# Set as default
+default_model_provider = "ollama"
+```
+
+## Advanced Configuration
+
+### Complete Config Example
+```toml
+# ~/.codex/config.toml
+
+# Authentication
+preferred_auth_method = "chatgpt"  # or "apikey"
+api_key = "${env:OPENAI_API_KEY}"
+
+# Model settings
+model = "o4-mini"
+temperature = 0.7
+max_tokens = 4096
+
+# Security
+sandbox = "workspace-write"
+approval = "on-request"
+unsafe_commands = ["rm -rf", "format", "del /f"]
+
+# Context
+context_window = 128000
+smart_context = true
+include_git_diff = true
+
+# Performance
+stream = true
+cache_responses = true
+parallel_tools = true
+
+# UI
+theme = "dark"
+show_reasoning = true
+verbose = false
+
+# MCP Servers
+[[mcp_servers]]
+name = "memory"
+command = "node"
+args = ["./memory-mcp-bridge.js"]
+env = { MEMORY_SERVICE_URL = "http://localhost:3457" }
+
+# Profiles
+[profiles.production]
+model = "gpt-5"
+sandbox = "read-only"
+approval = "untrusted"
+
+[profiles.development]
+model = "o3"
+sandbox = "danger-full-access"
+approval = "never"
+```
+
+## Custom Tools and Extensions
+
+### Tool Registration
+```toml
+[[custom_tools]]
+name = "database_query"
+command = "python"
+args = ["./tools/db_query.py"]
+description = "Execute database queries"
+dangerous = false
+
+[[custom_tools]]
+name = "deploy"
+command = "bash"
+args = ["./scripts/deploy.sh"]
+description = "Deploy to production"
+dangerous = true
+requires_approval = true
+```
+
+### Hook Scripts
+```toml
+# Pre/post execution hooks
+[hooks]
+pre_command = "./hooks/pre_command.sh"
+post_command = "./hooks/post_command.sh"
+on_error = "./hooks/error_handler.py"
+on_approval = "./hooks/approval_logger.py"
+```
+
+## Memory Service Integration
+
+### Configuration
+```toml
+[memory_service]
+enabled = true
+endpoint = "http://localhost:3457"
+auth_token = "${env:MEMORY_TOKEN}"
+auto_sync = true
+sync_interval = 300
+```
+
+### Memory Commands
+```bash
+# Check memory status
+codex memory status
+
+# Clear project memory
+codex memory clear --project
+
+# Export memory
+codex memory export ./backup.json
+```
+
+## Multimodal Capabilities
+
+### Image Input
+```bash
+# Analyze screenshot
+codex "What's wrong with this UI?" --image screenshot.png
+
+# Multiple images
+codex "Compare these designs" --image design1.png design2.png
+
+# Clipboard image
+codex "Debug this error" --clipboard
+```
+
+### Diagram Understanding
+```bash
+# Architecture diagrams
+codex "Implement this architecture" --image architecture.svg
+
+# Flowcharts
+codex "Convert to code" --image flowchart.png
+```
+
+## Operating Modes
+
+### Suggest Mode
+```bash
+# Get suggestions without execution
+codex suggest "Optimize this function"
+```
+
+### Auto Edit Mode
+```bash
+# Edit files with approval
+codex edit "Refactor all classes to use dependency injection"
+```
+
+### Full Auto Mode
+```bash
+# Autonomous operation (dangerous)
+codex auto "Complete the TODO items in this project"
+```
+
+## Troubleshooting
+
+### Debug Mode
+```bash
+# Enable debug output
+codex --debug
+
+# Verbose logging
+codex --verbose
+
+# Show reasoning process
+codex --show-reasoning
+```
+
+### Common Issues
+
+1. **Model Not Available**
+   ```bash
+   # Check available models
+   codex models list
+   
+   # Update model list
+   codex models refresh
+   ```
+
+2. **MCP Server Connection Failed**
+   ```bash
+   # Test MCP server
+   codex mcp test <server-name>
+   
+   # View logs
+   codex mcp logs <server-name>
+   ```
+
+3. **Authentication Issues**
+   ```bash
+   # Re-authenticate
+   codex auth refresh
+   
+   # Switch auth method
+   codex config set preferred_auth_method apikey
+   ```
+
+## Best Practices
+
+1. **Security First**: Always use appropriate sandbox mode
+2. **Context Management**: Keep AGENTS.md files updated
+3. **Profile Usage**: Create profiles for different environments
+4. **Approval Workflow**: Never disable approval in production
+5. **Model Selection**: Use appropriate models for task complexity
+6. **Memory Integration**: Enable for better context retention
+7. **Version Control**: Commit config files for team consistency
+
+## VS Code Extension
+
+### Installation
+Search for "andromeda-codex" in VS Code marketplace
+
+### Features
+- Inline suggestions
+- Auto-edit mode
+- Multimodal input support
+- Integrated approval UI
+
 ## Links
 - [Getting Started Guide](https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started)
 - [GitHub Repository](https://github.com/openai/codex)
 - [NPM Package](https://www.npmjs.com/package/@openai/codex)
 - [OpenAI Platform](https://platform.openai.com)
 - [ChatGPT Subscription](https://chat.openai.com/subscription)
+- [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=openai.andromeda-codex)
+- [API Documentation](https://platform.openai.com/docs)
