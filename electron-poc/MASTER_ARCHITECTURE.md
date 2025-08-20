@@ -14,7 +14,8 @@
 11. [Performance & Optimization](#performance--optimization)
 12. [Development & Deployment](#development--deployment)
 13. [CLI Tools Management](#cli-tools-management)
-14. [Future Enhancements](#future-enhancements)
+14. [CLI Tools Management UI](#cli-tools-management-ui)
+15. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -709,6 +710,378 @@ next_sync_due: next update check time
 - Background checking on app startup
 - Event emissions for update availability
 - Non-blocking update downloads
+
+### Supported Agentic Coding CLIs
+Reference: `src/utils/AI_CLI_TOOLS_REGISTRY.md`
+
+The system supports 6 carefully selected agentic coding CLIs that provide autonomous coding capabilities:
+1. **Claude Code CLI** - Anthropic's terminal-native agent
+2. **Gemini CLI** - Google's free-tier agentic assistant (1000 requests/day)
+3. **Qwen Code** - Alibaba's open-source agent
+4. **OpenAI Codex CLI** - OpenAI's smart terminal assistant
+5. **Aider** - Git-integrated agentic editor
+6. **Cline** - Lightweight conversational agent
+
+---
+
+## CLI Tools Management UI
+
+### Overview
+The CLI Tools Management UI provides a visual, user-friendly interface for managing agentic coding CLI tools directly from the settings panel, inspired by VS Code's Extensions panel but optimized for CLI tool management.
+
+### UI Architecture
+
+#### Settings Modal Integration
+**Location**: `src/components/SettingsModal.tsx` (extension)
+**Tab Position**: Second tab after "General"
+**Access**: Settings icon → CLI Tools tab
+
+#### Component Structure
+```typescript
+src/components/
+├── settings/
+│   ├── CliToolsTab.tsx         # Main tab container
+│   ├── CliToolCard.tsx         # Individual tool card component
+│   ├── CliToolsGrid.tsx        # Responsive grid layout
+│   ├── InstallationProgress.tsx # Progress overlay component
+│   └── AdvancedOptions.tsx     # Advanced settings section
+```
+
+### Visual Design System
+
+#### Tool Card States
+Each CLI tool is represented by a card with multiple visual states:
+
+**1. Not Installed State**
+```
+┌─────────────────────────────────────┐
+│ [Icon] Tool Name                    │
+│ ○ Not Installed                     │
+│                                     │
+│ [Description text]                  │
+│                                     │
+│ [Install] [Learn More]              │
+└─────────────────────────────────────┘
+```
+
+**2. Installed State**
+```
+┌─────────────────────────────────────┐
+│ [Icon] Tool Name                    │
+│ ● Installed ✓ | v1.2.3             │
+│ Memory: Connected ✓                 │
+│                                     │
+│ Last updated: 2 hours ago           │
+│ Auto-update: Enabled                │
+│                                     │
+│ [Check Update] [Configure] [Remove] │
+└─────────────────────────────────────┘
+```
+
+**3. Installing State**
+```
+┌─────────────────────────────────────┐
+│ [Icon] Tool Name                    │
+│ ◐ Installing... 60%                 │
+│ ▓▓▓▓▓▓░░░░                         │
+│                                     │
+│ Downloading package...              │
+│                                     │
+│ [Cancel]                            │
+└─────────────────────────────────────┘
+```
+
+**4. Error State**
+```
+┌─────────────────────────────────────┐
+│ [Icon] Tool Name                    │
+│ ● Error                             │
+│                                     │
+│ ⚠️ Installation failed              │
+│ Python 3.8+ required                │
+│                                     │
+│ [Retry] [View Logs] [Get Help]      │
+└─────────────────────────────────────┘
+```
+
+#### Color Scheme & Icons
+```css
+/* Status Colors */
+--status-installed: #10b981;    /* Green */
+--status-not-installed: #6b7280; /* Gray */
+--status-installing: #3b82f6;    /* Blue */
+--status-error: #ef4444;         /* Red */
+--status-update: #f59e0b;        /* Amber */
+
+/* Tool Icons */
+Claude Code: 🤖
+Gemini CLI: ✨
+Qwen Code: 🐉
+OpenAI Codex: 🌟
+Aider: 🔧
+Cline: 💬
+```
+
+### Responsive Layout
+
+#### Desktop (>1024px)
+- 3-column grid layout
+- 340px card width
+- 16px gap between cards
+- Sidebar for filters/search
+
+#### Tablet (768-1024px)
+- 2-column grid layout
+- Flexible card width
+- Collapsible sidebar
+
+#### Mobile (<768px)
+- Single column layout
+- Full-width cards
+- Bottom sheet for filters
+
+### Interactive Features
+
+#### Smart Recommendations
+```typescript
+interface ToolRecommendation {
+  toolId: string;
+  reason: string;
+  badge: 'recommended' | 'popular' | 'free' | 'new';
+}
+
+// Display logic
+if (tool.id === 'gemini') {
+  showBadge('FREE', 'green');
+  showTooltip('1000 requests/day at no cost!');
+}
+```
+
+#### Batch Operations
+- Select multiple tools with checkboxes
+- Bulk install/update/remove actions
+- Progress tracking for batch operations
+
+#### Search & Filter
+```typescript
+interface FilterOptions {
+  status: 'all' | 'installed' | 'available' | 'updates';
+  integration: 'all' | 'memory-service' | 'standalone';
+  type: 'all' | 'npm' | 'python' | 'binary';
+}
+```
+
+### Installation Flow
+
+#### Pre-Installation Checks
+1. **Dependency Detection**
+   ```typescript
+   async checkDependencies(tool: CliTool): Promise<DependencyStatus> {
+     // Check Node.js version for npm tools
+     // Check Python version for pip tools
+     // Check git for extension tools
+     return { satisfied: boolean, missing: string[] };
+   }
+   ```
+
+2. **Permission Verification**
+   - Check write permissions to installation directory
+   - Detect if sudo/admin required
+   - Offer local installation alternative
+
+3. **Network Connectivity**
+   - Test package registry access
+   - Estimate download size
+   - Show expected installation time
+
+#### Installation Process
+```typescript
+interface InstallationStage {
+  stage: 'preparing' | 'downloading' | 'installing' | 'configuring' | 'verifying';
+  progress: number;
+  message: string;
+  eta?: number;
+}
+
+// Real-time updates via IPC
+ipcRenderer.on('cli-tool-progress', (event, update: InstallationStage) => {
+  updateProgressBar(update);
+  showStatusMessage(update.message);
+});
+```
+
+#### Post-Installation
+1. **Verification**
+   - Run version command
+   - Test basic functionality
+   - Verify PATH accessibility
+
+2. **Configuration**
+   - Auto-configure Memory Service integration
+   - Set up authentication if needed
+   - Create shell aliases if requested
+
+3. **Documentation**
+   - Show quick start guide
+   - Display common commands
+   - Link to full documentation
+
+### Advanced Options Panel
+
+#### Settings Categories
+```typescript
+interface AdvancedSettings {
+  installation: {
+    autoInstallRecommended: boolean;
+    useLocalNpm: boolean;
+    usePipx: boolean;
+    customInstallPath?: string;
+  };
+  updates: {
+    autoCheck: boolean;
+    autoInstall: boolean;
+    checkInterval: number; // hours
+    includePrerelease: boolean;
+  };
+  integration: {
+    memoryServiceAutoConnect: boolean;
+    shareUsageAnalytics: boolean;
+    enableExperimentalFeatures: boolean;
+  };
+}
+```
+
+#### Per-Tool Configuration
+- Custom environment variables
+- Model selection preferences
+- Rate limiting settings
+- API endpoint overrides
+
+### Authentication Management
+
+#### Auth Status Display
+```typescript
+type AuthStatus = 
+  | { type: 'none' }
+  | { type: 'required'; instructions: string }
+  | { type: 'configured'; validUntil?: Date }
+  | { type: 'invalid'; error: string };
+```
+
+#### Auth Configuration Flow
+1. **Detect auth requirement**
+2. **Show setup instructions**
+3. **Provide copy-to-clipboard commands**
+4. **Verify authentication**
+5. **Store credentials securely**
+
+### Error Handling & Recovery
+
+#### Common Error Scenarios
+```typescript
+const ERROR_HANDLERS = {
+  NETWORK_ERROR: {
+    message: 'Unable to download package',
+    actions: ['Retry', 'Use Proxy', 'Download Manually']
+  },
+  PERMISSION_DENIED: {
+    message: 'Installation requires elevated permissions',
+    actions: ['Use Local Install', 'Run as Admin', 'Change Directory']
+  },
+  DEPENDENCY_MISSING: {
+    message: 'Required dependency not found',
+    actions: ['Install Dependency', 'Use Alternative', 'Skip']
+  }
+};
+```
+
+#### Recovery Options
+- Automatic retry with exponential backoff
+- Alternative installation methods
+- Manual installation guides
+- Direct support links
+
+### Performance Optimization
+
+#### Lazy Loading
+- Load tool cards on scroll
+- Defer non-visible content rendering
+- Cache tool metadata locally
+
+#### Background Operations
+- Non-blocking installations
+- Parallel update checks
+- Queue management for batch operations
+
+#### Resource Management
+```typescript
+const RESOURCE_LIMITS = {
+  maxConcurrentInstalls: 2,
+  maxDownloadSpeed: undefined, // No limit by default
+  diskSpaceBuffer: 500 * 1024 * 1024, // 500MB
+  memoryLimit: 100 * 1024 * 1024, // 100MB per operation
+};
+```
+
+### Accessibility Features
+
+#### Keyboard Navigation
+- Tab through tool cards
+- Enter to install/configure
+- Space to select for batch operations
+- Escape to cancel operations
+
+#### Screen Reader Support
+- ARIA labels for all interactive elements
+- Status announcements for operations
+- Descriptive alt text for icons
+
+#### Visual Accessibility
+- High contrast mode support
+- Colorblind-friendly status indicators
+- Adjustable text size
+- Reduced motion options
+
+### Analytics & Telemetry
+
+#### Usage Metrics (Privacy-Respecting)
+```typescript
+interface ToolUsageMetrics {
+  toolId: string;
+  installedAt: Date;
+  lastUsed?: Date;
+  updateCount: number;
+  errorCount: number;
+}
+```
+
+#### Aggregated Statistics
+- Most popular tools
+- Average installation success rate
+- Common error patterns
+- Update adoption rates
+
+### Future UI Enhancements
+
+1. **Tool Marketplace**
+   - Community-contributed tool definitions
+   - User ratings and reviews
+   - Curated collections
+
+2. **Workspace Profiles**
+   - Save tool configurations per project
+   - Quick switch between setups
+   - Team sharing capabilities
+
+3. **Interactive Tutorials**
+   - Guided setup wizards
+   - Interactive command previews
+   - Video tutorials embedded
+
+4. **AI-Powered Recommendations**
+   - Suggest tools based on project type
+   - Recommend configurations
+   - Predict useful tool combinations
 
 ---
 
