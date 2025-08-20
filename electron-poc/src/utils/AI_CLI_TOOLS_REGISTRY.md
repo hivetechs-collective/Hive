@@ -1,154 +1,106 @@
-# AI CLI Tools Registry - August 2025
+# Agentic Coding CLI Tools Registry - August 2025
 
-## Complete List of Available AI/LLM CLI Tools
+## Overview
+This registry contains only CLI tools that function as **agentic coding assistants** - tools that can autonomously understand codebases, make multi-file changes, execute commands, and work interactively from the terminal, similar to Claude Code CLI.
 
-### Tier 1: Major Provider CLIs
+## Included Agentic Coding CLIs
 
-1. **Claude Code CLI** (Anthropic)
-   - Package: `@anthropic-ai/claude-code` 
-   - Install: `npm install -g @anthropic-ai/claude-code`
-   - Features: Terminal-native AI agent, Claude 3.7 Sonnet
-   - Pricing: Pro $20/month, Max $100/month
-   - Context: Standard Claude context windows
-   - Auth: Requires login with paid account
+### 1. **Claude Code CLI** (Anthropic)
+- **Package**: `@anthropic-ai/claude-code`
+- **Install**: `npm install -g @anthropic-ai/claude-code`
+- **Features**: Terminal-native AI agent, understands entire codebases, executes commands, makes coordinated multi-file changes
+- **Model**: Claude 3.7 Sonnet
+- **Pricing**: Pro $20/month, Max $100/month
+- **Auth**: Requires login with paid account
 
-2. **Gemini CLI** (Google)
-   - Package: `@google/gemini-cli`
-   - Install: `npm install -g @google/gemini-cli`
-   - Released: June 25, 2025
-   - Features: Open-source, 1M token context window
-   - Pricing: FREE - 1000 requests/day, 60/minute
-   - Model: Gemini 2.5 Pro
-   - Auth: Google account with free Gemini Code Assist license
+### 2. **Gemini CLI** (Google)
+- **Package**: `@google/gemini-cli`
+- **Install**: `npm install -g @google/gemini-cli`
+- **Released**: June 25, 2025
+- **Features**: Open-source agentic assistant, massive 1M token context window
+- **Model**: Gemini 2.5 Pro
+- **Pricing**: FREE - 1000 requests/day, 60/minute
+- **Auth**: Google account with free Gemini Code Assist license
 
-3. **Qwen Code** (Alibaba)
-   - Package: `@qwen-code/qwen-code`
-   - Install: `npm install -g @qwen-code/qwen-code`
-   - Released: July 2025
-   - Features: Forked from Gemini CLI, optimized for Qwen3-Coder
-   - Pricing: Free and open-source (Apache 2.0)
-   - Context: 256K native, 1M with extrapolation
-   - Auth: API key from Alibaba Cloud
+### 3. **Qwen Code** (Alibaba)
+- **Package**: `@qwen-code/qwen-code`
+- **Install**: `npm install -g @qwen-code/qwen-code`
+- **Released**: July 2025
+- **Features**: Forked from Gemini CLI, optimized for Qwen3-Coder models
+- **Context**: 256K native, 1M with extrapolation
+- **Pricing**: Free and open-source (Apache 2.0)
+- **Auth**: API key from Alibaba Cloud
 
-4. **OpenAI Codex CLI**
-   - Package: `@openai/codex-cli`
-   - Install: `npm install -g @openai/codex-cli`
-   - Features: Access to GPT-4.1, o3, o4-mini models
-   - Pricing: Pay-as-you-go via OpenAI API
-   - Auth: OpenAI account with credits
+### 4. **OpenAI Codex CLI**
+- **Package**: `@openai/codex-cli`
+- **Install**: `npm install -g @openai/codex-cli`
+- **Features**: Smart terminal assistant with shell and file system access
+- **Models**: GPT-4.1, o3, o4-mini
+- **Pricing**: Pay-as-you-go via OpenAI API
+- **Auth**: OpenAI account with credits
 
-5. **GitHub Copilot CLI**
-   - Extension: `github/gh-copilot`
-   - Install: `gh extension install github/gh-copilot`
-   - Requires: GitHub CLI (`brew install gh`)
-   - Pricing: Part of GitHub Copilot subscription
-   - Auth: GitHub account with Copilot license
+### 5. **Aider**
+- **Package**: `aider-chat`
+- **Install**: `pip install aider-chat`
+- **Features**: Git-integrated inline editing, seamless version control
+- **GitHub Stars**: 35.2k
+- **Pricing**: Uses your API keys (OpenAI, Claude, etc.)
+- **Auth**: API keys for chosen providers
 
-### Tier 2: Multi-Model CLI Tools
+### 6. **Cline**
+- **Package**: `@cline/cli` (tentative)
+- **Install**: `npm install -g @cline/cli`
+- **Features**: Lightweight conversational file editing, multi-turn interactions
+- **GitHub Stars**: 47.2k
+- **Pricing**: Uses your API keys
+- **Auth**: API keys for chosen providers
 
-6. **AIChat** (All-in-One)
-   - Package: `aichat`
-   - Install: `cargo install aichat` or `brew install aichat`
-   - Supports: 20+ providers (OpenAI, Claude, Gemini, Ollama, Groq, Mistral, Perplexity, Qwen, etc.)
-   - Features: Unified interface for all models
-   - Auth: Individual API keys per provider
+## Key Characteristics of Agentic Coding CLIs
 
-7. **LLM Tool** (Simon Willison)
-   - Package: `llm`
-   - Install: `pip install llm` or `brew install llm`
-   - Features: Plugin-based architecture
-   - Supports: OpenAI, Anthropic, Gemini, Mistral, Ollama, GitHub Models
-   - Auth: API keys via `llm keys set <provider>`
+These tools share common capabilities:
+- ✅ **Codebase Understanding**: Can analyze and understand entire projects
+- ✅ **Multi-file Operations**: Make coordinated changes across multiple files
+- ✅ **Command Execution**: Run terminal commands, tests, builds
+- ✅ **Interactive Sessions**: Maintain context across multiple prompts
+- ✅ **File System Access**: Read, write, and modify files directly
+- ✅ **Autonomous Actions**: Can work independently to complete tasks
 
-8. **Qodo Gen CLI**
-   - Package: `@qodo/gen`
-   - Install: `npm install -g @qodo/gen`
-   - Released: June 25, 2025
-   - Features: Agent framework for custom AI coding agents
-   - Auth: Qodo account
+## NOT Included (Different Tool Category)
 
-### Tier 3: Specialized/Alternative CLIs
-
-9. **Cline**
-   - GitHub Stars: 47.2k
-   - Install: Via GitHub releases
-   - Features: Lightweight conversational file editing
-   - Model Support: Multiple via API keys
-
-10. **Aider**
-    - GitHub Stars: 35.2k
-    - Install: `pip install aider-chat`
-    - Features: Git-integrated inline editing
-    - Model Support: OpenAI, Claude, others
-
-11. **Offline AI CLI**
-    - Package: `@offline-ai/cli`
-    - Install: `npm install -g @offline-ai/cli`
-    - Features: Local model support
-    - Models: LLaMA, Qwen, Gemma, Phi, GLM, Mistral
-
-### Tier 4: Provider-Specific Access (via AIChat/LLM)
-
-12. **Mistral** - Available through AIChat or LLM plugins
-13. **Groq** - Available through AIChat
-14. **Perplexity** - Available through AIChat
-15. **Cohere** - Available through AIChat
-16. **DeepSeek** - Available through AIChat
-17. **XAI Grok** - Available through AIChat
-
-## Installation Matrix
-
-| Tool | Method | Package Manager | Requires |
-|------|--------|----------------|----------|
-| Claude Code | NPM | npm/yarn | Node.js 18+ |
-| Gemini CLI | NPM | npm/yarn | Node.js 18+ |
-| Qwen Code | NPM | npm/yarn | Node.js 18+ |
-| OpenAI Codex | NPM | npm/yarn | Node.js 18+ |
-| GitHub Copilot | GH Extension | gh cli | GitHub CLI |
-| AIChat | Binary/Cargo | cargo/brew | Rust/Homebrew |
-| LLM Tool | Python | pip/pipx | Python 3.8+ |
-| Qodo Gen | NPM | npm/yarn | Node.js 18+ |
-| Aider | Python | pip/pipx | Python 3.8+ |
-| Offline AI | NPM | npm/yarn | Node.js 18+ |
+These tools were excluded as they don't provide full agentic coding capabilities:
+- **GitHub Copilot CLI**: Command suggestions, not full agentic coding
+- **AIChat**: Chat interface, not autonomous coding
+- **LLM Tool**: Prompt runner, not file editing
+- **Qodo Gen**: Agent framework, not standalone agent
+- **Offline AI CLI**: Local models interface, not coding agent
 
 ## Memory Service Integration Priority
 
 1. **Claude Code** - PRIMARY (Direct integration planned)
-2. **Gemini CLI** - HIGH (Popular, free tier)
-3. **Qwen Code** - HIGH (Open source, powerful)
-4. **OpenAI Codex** - MEDIUM
-5. **AIChat** - MEDIUM (Multi-model support)
-6. **LLM Tool** - MEDIUM (Extensible)
+2. **Gemini CLI** - HIGH (Popular, free tier, similar to Claude)
+3. **Qwen Code** - HIGH (Open source, forked from Gemini)
+4. **OpenAI Codex** - MEDIUM (Pay-per-use model)
+5. **Aider** - LOW (Python-based, different architecture)
+6. **Cline** - LOW (Different interaction model)
 
-## Implementation Notes
+## Installation Requirements
 
-### NPM-based Tools
-- Can be installed globally or locally
-- Local installation to `~/.hive/tools/node_modules` for sandboxing
+### NPM-based Tools (Claude, Gemini, Qwen, OpenAI)
+- Node.js 18+ required
+- Global or local installation options
 - Version management through npm
 
-### Python-based Tools
+### Python-based Tools (Aider)
+- Python 3.8+ required
 - Recommend pipx for isolation
 - Alternative: pip with --user flag
-- Version management through pip/pipx
-
-### Binary Tools
-- Direct download and extraction
-- Checksum verification recommended
-- Auto-update via GitHub releases API
-
-### Extension-based Tools
-- Require base tool (e.g., gh for GitHub Copilot)
-- Installation via base tool's extension manager
-- Updates managed by base tool
 
 ## Authentication Patterns
 
-1. **API Key**: OpenAI, Anthropic, Mistral, Groq
-2. **OAuth**: GitHub, Google
-3. **Cloud Account**: Alibaba (Qwen), Google (Gemini)
-4. **Subscription**: Claude Code, GitHub Copilot
-5. **Free/Open**: Offline AI, local models
+1. **Subscription-based**: Claude Code
+2. **Free with Account**: Gemini CLI
+3. **API Key**: Qwen Code, OpenAI Codex
+4. **BYO Keys**: Aider, Cline (use your own provider keys)
 
 ## Update Strategy
 
@@ -157,3 +109,27 @@
 - Store version in sync_metadata table
 - Notify user of available updates
 - Optional auto-update setting
+
+## Usage Examples
+
+```bash
+# Claude Code
+claude "Fix the TypeScript errors in this project"
+
+# Gemini CLI
+gemini "Add error handling to all API endpoints"
+
+# Qwen Code
+qwen-code "Refactor this code to use async/await"
+
+# OpenAI Codex
+codex "Write tests for the authentication module"
+
+# Aider
+aider "Update the README with new API documentation"
+
+# Cline
+cline "Convert this class to use functional components"
+```
+
+All these tools provide similar agentic coding experiences, allowing developers to work with AI assistants directly from their terminal to modify code, run commands, and complete complex programming tasks autonomously.

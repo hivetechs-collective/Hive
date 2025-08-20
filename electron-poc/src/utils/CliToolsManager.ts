@@ -72,9 +72,10 @@ export class CliToolsManager extends EventEmitter {
    * Initialize tool configurations
    */
   private initializeTools() {
-    // Tier 1: Major Provider CLIs
+    // Only include agentic coding CLIs that work like Claude Code
+    // These tools can understand codebases, make multi-file changes, and execute commands
     
-    // Claude Code CLI - Primary tool
+    // Claude Code CLI - Anthropic's agentic coding assistant
     this.tools.set('claude', {
       id: 'claude',
       name: 'Claude Code CLI',
@@ -88,7 +89,7 @@ export class CliToolsManager extends EventEmitter {
       memoryServiceIntegration: true
     });
 
-    // Gemini CLI - Google's free tier champion
+    // Gemini CLI - Google's agentic coding assistant (free tier)
     this.tools.set('gemini', {
       id: 'gemini',
       name: 'Gemini CLI',
@@ -102,7 +103,7 @@ export class CliToolsManager extends EventEmitter {
       memoryServiceIntegration: true
     });
 
-    // Qwen Code - Alibaba's powerful CLI
+    // Qwen Code - Alibaba's agentic coding assistant (forked from Gemini CLI)
     this.tools.set('qwen', {
       id: 'qwen',
       name: 'Qwen Code',
@@ -116,7 +117,7 @@ export class CliToolsManager extends EventEmitter {
       memoryServiceIntegration: true
     });
 
-    // OpenAI Codex CLI
+    // OpenAI Codex CLI - OpenAI's agentic coding assistant
     this.tools.set('openai', {
       id: 'openai',
       name: 'OpenAI Codex CLI',
@@ -130,61 +131,7 @@ export class CliToolsManager extends EventEmitter {
       memoryServiceIntegration: true
     });
 
-    // GitHub Copilot CLI
-    this.tools.set('gh-copilot', {
-      id: 'gh-copilot',
-      name: 'GitHub Copilot CLI',
-      command: 'gh',
-      checkCommand: 'gh copilot --version',
-      versionCommand: 'gh copilot --version',
-      authCheckCommand: 'gh auth status',
-      installCommand: 'gh extension install github/gh-copilot',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: true
-    });
-
-    // Tier 2: Multi-Model Tools
-
-    // AIChat - All-in-one solution
-    this.tools.set('aichat', {
-      id: 'aichat',
-      name: 'AIChat (Multi-Model)',
-      command: 'aichat',
-      checkCommand: 'which aichat || where aichat',
-      versionCommand: 'aichat --version',
-      installCommand: 'cargo install aichat',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: false
-    });
-
-    // LLM Tool by Simon Willison
-    this.tools.set('llm', {
-      id: 'llm',
-      name: 'LLM Tool',
-      command: 'llm',
-      checkCommand: 'which llm || where llm',
-      versionCommand: 'llm --version',
-      installCommand: 'pip install llm',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: false
-    });
-
-    // Qodo Gen CLI
-    this.tools.set('qodo', {
-      id: 'qodo',
-      name: 'Qodo Gen CLI',
-      command: 'qodo',
-      npmPackage: '@qodo/gen',
-      checkCommand: 'which qodo || where qodo',
-      versionCommand: 'qodo --version',
-      installCommand: 'npm install -g @qodo/gen',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: false
-    });
-
-    // Tier 3: Specialized Tools
-
-    // Aider - Git-integrated editing
+    // Aider - Git-aware agentic coding assistant
     this.tools.set('aider', {
       id: 'aider',
       name: 'Aider',
@@ -196,15 +143,14 @@ export class CliToolsManager extends EventEmitter {
       memoryServiceIntegration: false
     });
 
-    // Offline AI CLI - Local models
-    this.tools.set('offline-ai', {
-      id: 'offline-ai',
-      name: 'Offline AI CLI',
-      command: 'offline-ai',
-      npmPackage: '@offline-ai/cli',
-      checkCommand: 'which offline-ai || where offline-ai',
-      versionCommand: 'offline-ai --version',
-      installCommand: 'npm install -g @offline-ai/cli',
+    // Cline - Lightweight agentic coding assistant
+    this.tools.set('cline', {
+      id: 'cline',
+      name: 'Cline',
+      command: 'cline',
+      checkCommand: 'which cline || where cline',
+      versionCommand: 'cline --version',
+      installCommand: 'npm install -g @cline/cli',
       updateCheckInterval: 24,
       memoryServiceIntegration: false
     });
