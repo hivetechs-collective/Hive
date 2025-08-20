@@ -1098,6 +1098,346 @@ interface FilterOptions {
    - Detect if sudo/admin required
    - Offer local installation alternative
 
+---
+
+## Installation Detection & Dynamic UI Management
+
+### Overview
+The CLI Tools panel dynamically detects installed tools and updates the UI accordingly, providing real-time status updates and appropriate action buttons based on each tool's installation state.
+
+### Installation Detection System
+
+#### Detection Methods
+```typescript
+interface ToolDetector {
+  detectInstallation(tool: CliTool): Promise<InstallationInfo>;
+  watchForChanges(tool: CliTool, callback: (status: InstallationStatus) => void): void;
+  getVersion(tool: CliTool): Promise<string | null>;
+  getExecutablePath(tool: CliTool): Promise<string | null>;
+}
+
+interface InstallationInfo {
+  installed: boolean;
+  version?: string;
+  path?: string;
+  lastUpdated?: Date;
+  updateAvailable?: boolean;
+  memoryServiceConnected?: boolean;
+}
+```
+
+#### Detection Strategies by Tool Type
+
+**1. NPM-based Tools (Claude Code, Gemini CLI, Qwen Code, Cline)**
+```typescript
+async detectNpmTool(packageName: string): Promise<InstallationInfo> {
+  // Check global npm packages
+  const globalCheck = await exec('npm list -g --depth=0 ' + packageName);
+  
+  // Check local project packages
+  const localCheck = await exec('npm list --depth=0 ' + packageName);
+  
+  // Check PATH for executable
+  const pathCheck = await exec('which ' + toolExecutable);
+  
+  return {
+    installed: globalCheck.success || localCheck.success || pathCheck.success,
+    version: extractVersion(globalCheck.output),
+    path: pathCheck.output,
+    updateAvailable: await checkNpmUpdates(packageName)
+  };
+}
+```
+
+**2. Python-based Tools (Aider)**
+```typescript
+async detectPythonTool(packageName: string): Promise<InstallationInfo> {
+  // Check pip installations
+  const pipCheck = await exec('pip show ' + packageName);
+  
+  // Check pipx installations
+  const pipxCheck = await exec('pipx list | grep ' + packageName);
+  
+  // Check virtual environments
+  const venvCheck = await checkVirtualEnvs(packageName);
+  
+  return {
+    installed: pipCheck.success || pipxCheck.success || venvCheck.found,
+    version: extractPipVersion(pipCheck.output),
+    path: findPythonExecutable(packageName)
+  };
+}
+```
+
+### Dynamic UI State Management
+
+#### State Management Architecture
+```typescript
+interface CliToolsState {
+  tools: Map<string, ToolState>;
+  refreshInterval: number;
+  autoDetect: boolean;
+}
+
+interface ToolState {
+  id: string;
+  name: string;
+  installed: boolean;
+  version?: string;
+  status: 'not-installed' | 'installed' | 'installing' | 'updating' | 'error';
+  buttons: ButtonConfig[];
+  lastChecked: Date;
+}
+
+interface ButtonConfig {
+  label: string;
+  action: 'install' | 'update' | 'configure' | 'uninstall' | 'docs';
+  enabled: boolean;
+  variant: 'primary' | 'secondary' | 'danger';
+}
+```
+
+#### Button State Logic
+```typescript
+function getButtonsForTool(toolState: ToolState): ButtonConfig[] {
+  const buttons: ButtonConfig[] = [];
+  
+  if (!toolState.installed) {
+    // Not installed - show Install and Docs
+    buttons.push({
+      label: 'Install',
+      action: 'install',
+      enabled: true,
+      variant: 'primary'
+    });
+    buttons.push({
+      label: 'Docs',
+      action: 'docs',
+      enabled: true,
+      variant: 'secondary'
+    });
+  } else {
+    // Installed - show Configure, Update (if available), and Docs
+    buttons.push({
+      label: 'Configure',
+      action: 'configure',
+      enabled: true,
+      variant: 'secondary'
+    });
+    
+    if (toolState.updateAvailable) {
+      buttons.push({
+        label: 'Update',
+        action: 'update',
+        enabled: true,
+        variant: 'primary'
+      });
+    }
+    
+    buttons.push({
+      label: 'Docs',
+      action: 'docs',
+      enabled: true,
+      variant: 'secondary'
+    });
+  }
+  
+  return buttons;
+}
+```
+
+### Real-time Status Updates
+
+#### Polling System
+```typescript
+class ToolStatusPoller {
+  private intervals: Map<string, NodeJS.Timer> = new Map();
+  
+  startPolling(toolId: string, intervalMs: number = 30000) {
+    const interval = setInterval(async () => {
+      const status = await detectInstallation(toolId);
+      updateUIState(toolId, status);
+    }, intervalMs);
+    
+    this.intervals.set(toolId, interval);
+  }
+  
+  stopPolling(toolId: string) {
+    const interval = this.intervals.get(toolId);
+    if (interval) {
+      clearInterval(interval);
+      this.intervals.delete(toolId);
+    }
+  }
+}
+```
+
+#### File System Watchers
+```typescript
+class InstallationWatcher {
+  private watchers: Map<string, FSWatcher> = new Map();
+  
+  watchInstallationPaths(tool: CliTool) {
+    const pathsToWatch = [
+      '/usr/local/lib/node_modules',  // Global npm
+      '~/.npm-global',                 // User npm global
+      '/usr/local/bin',                // Binary installations
+      '~/.local/bin',                  // User binaries
+      './node_modules'                 // Local project
+    ];
+    
+    pathsToWatch.forEach(path => {
+      const watcher = fs.watch(path, (event, filename) => {
+        if (filename?.includes(tool.packageName)) {
+          this.handleInstallationChange(tool);
+        }
+      });
+      
+      this.watchers.set(`${tool.id}-${path}`, watcher);
+    });
+  }
+}
+```
+
+### UI Update Flow
+
+#### Update Sequence
+1. **Initial Load**
+   - Scan all tools for installation status
+   - Render cards with appropriate buttons
+   - Start polling for changes
+
+2. **Status Change Detection**
+   - File system watcher triggers
+   - Or polling interval completes
+   - Detection system checks new status
+
+3. **UI State Update**
+   - Compare new status with current state
+   - Update only changed elements
+   - Animate transitions smoothly
+
+4. **Button Configuration**
+   - Recalculate available actions
+   - Enable/disable buttons
+   - Update tooltips and labels
+
+#### React Component Example
+```tsx
+function CliToolCard({ tool }: { tool: CliTool }) {
+  const [state, setState] = useState<ToolState>(null);
+  
+  useEffect(() => {
+    // Initial detection
+    detectInstallation(tool).then(setState);
+    
+    // Set up polling
+    const interval = setInterval(() => {
+      detectInstallation(tool).then(setState);
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [tool]);
+  
+  const buttons = getButtonsForTool(state);
+  
+  return (
+    <Card>
+      <CardHeader>
+        <h3>{tool.name}</h3>
+        <StatusIndicator status={state.status} />
+      </CardHeader>
+      <CardBody>
+        {state.installed && <Version>{state.version}</Version>}
+        <Description>{tool.description}</Description>
+      </CardBody>
+      <CardFooter>
+        {buttons.map(button => (
+          <Button
+            key={button.action}
+            variant={button.variant}
+            onClick={() => handleAction(button.action, tool)}
+            disabled={!button.enabled}
+          >
+            {button.label}
+          </Button>
+        ))}
+      </CardFooter>
+    </Card>
+  );
+}
+```
+
+### Error Handling
+
+#### Detection Failures
+```typescript
+interface DetectionError {
+  tool: string;
+  error: Error;
+  fallbackAction: 'assume-not-installed' | 'use-cached' | 'show-error';
+}
+
+async function safeDetection(tool: CliTool): Promise<InstallationInfo> {
+  try {
+    return await detectInstallation(tool);
+  } catch (error) {
+    console.error(`Detection failed for ${tool.name}:`, error);
+    
+    // Try cached status
+    const cached = getCachedStatus(tool.id);
+    if (cached && Date.now() - cached.timestamp < 3600000) {
+      return cached.status;
+    }
+    
+    // Default to not installed
+    return { installed: false };
+  }
+}
+```
+
+### Performance Optimization
+
+#### Caching Strategy
+```typescript
+class DetectionCache {
+  private cache: Map<string, CachedStatus> = new Map();
+  private readonly TTL = 5 * 60 * 1000; // 5 minutes
+  
+  get(toolId: string): InstallationInfo | null {
+    const cached = this.cache.get(toolId);
+    if (!cached) return null;
+    
+    if (Date.now() - cached.timestamp > this.TTL) {
+      this.cache.delete(toolId);
+      return null;
+    }
+    
+    return cached.status;
+  }
+  
+  set(toolId: string, status: InstallationInfo) {
+    this.cache.set(toolId, {
+      status,
+      timestamp: Date.now()
+    });
+  }
+}
+```
+
+#### Batch Detection
+```typescript
+async function detectAllTools(): Promise<Map<string, InstallationInfo>> {
+  const tools = getAllTools();
+  
+  // Parallel detection with concurrency limit
+  const results = await pLimit(3)(
+    tools.map(tool => () => detectInstallation(tool))
+  );
+  
+  return new Map(tools.map((tool, i) => [tool.id, results[i]]));
+}
+
 3. **Network Connectivity**
    - Test package registry access
    - Estimate download size
