@@ -407,8 +407,45 @@ export class MemoryServiceServer {
       console.log('[MemoryService] Stats query result:', result);
       
       if (result && result[0]) {
+        const previousTotal = this.stats.totalMemories;
         this.stats.totalMemories = result[0].count || 0;
         console.log('[MemoryService] Total memories:', this.stats.totalMemories);
+        
+        // Track new contributions from consensus (database changes)
+        if (previousTotal > 0 && this.stats.totalMemories > previousTotal) {
+          const newContributions = this.stats.totalMemories - previousTotal;
+          this.stats.contributionsToday += newContributions;
+          console.log('[MemoryService] New contributions detected:', newContributions);
+          
+          // Log activity for consensus contributions
+          this.logActivity({
+            type: 'contribution',
+            source: 'consensus',
+            count: newContributions,
+            total: this.stats.totalMemories
+          });
+        }
+      }
+      
+      // Get today's messages count for more accurate tracking
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayTimestamp = Math.floor(todayStart.getTime() / 1000);
+      
+      try {
+        const todayResult = await this.queryDatabase(
+          'SELECT COUNT(*) as count FROM messages WHERE timestamp > ?',
+          [todayTimestamp]
+        );
+        
+        if (todayResult && todayResult[0]) {
+          // Use actual count from today as contributions
+          // This accounts for all sources including consensus
+          this.stats.contributionsToday = todayResult[0].count || 0;
+          console.log('[MemoryService] Messages added today:', this.stats.contributionsToday);
+        }
+      } catch (error) {
+        console.error('[MemoryService] Failed to get today\'s count:', error);
       }
     } catch (error) {
       console.error('[MemoryService] Stats update error:', error);
@@ -484,6 +521,13 @@ export class MemoryServiceServer {
             console.error('[MemoryService] Initial stats update failed:', err.message);
           });
         }, 1000);
+        
+        // Set up periodic stats updates to catch consensus contributions
+        setInterval(() => {
+          this.updateStats().catch(err => {
+            console.error('[MemoryService] Periodic stats update failed:', err.message);
+          });
+        }, 30000); // Update every 30 seconds
         
         resolve(true);
       });
