@@ -853,12 +853,36 @@ next_sync_due: next update check time
 Reference: `src/utils/AI_CLI_TOOLS_REGISTRY.md`
 
 The system supports 6 carefully selected agentic coding CLIs that provide autonomous coding capabilities:
+
 1. **Claude Code CLI** - Anthropic's terminal-native agent
+   - Documentation: [`docs/cli-tools/claude-code.md`](docs/cli-tools/claude-code.md)
+   - NPM: `@anthropic-ai/claude-code`
+   - Version: 1.0.85+
+
 2. **Gemini CLI** - Google's free-tier agentic assistant (1000 requests/day)
+   - Documentation: [`docs/cli-tools/gemini-cli.md`](docs/cli-tools/gemini-cli.md)
+   - NPM: `@google/gemini-cli`
+   - Version: 0.1.18+
+
 3. **Qwen Code** - Alibaba's open-source agent
+   - Documentation: [`docs/cli-tools/qwen-code.md`](docs/cli-tools/qwen-code.md)
+   - NPM: `@qwen-code/qwen-code`
+   - Version: 0.0.7+
+
 4. **OpenAI Codex CLI** - OpenAI's smart terminal assistant
+   - Documentation: [`docs/cli-tools/openai-codex.md`](docs/cli-tools/openai-codex.md)
+   - NPM: `@openai/codex`
+   - Version: 0.22.0+
+
 5. **Aider** - Git-integrated agentic editor
+   - Documentation: [`docs/cli-tools/aider.md`](docs/cli-tools/aider.md)
+   - PyPI: `aider-chat`
+   - Installation: `pip install aider-chat`
+
 6. **Cline** - Lightweight conversational agent
+   - Documentation: [`docs/cli-tools/cline.md`](docs/cli-tools/cline.md)
+   - NPM: `@yaegaki/cline-cli`
+   - Version: 0.1.1+
 
 ---
 

@@ -2174,13 +2174,6 @@ function renderCliToolsPanel() {
                 <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
                 <p style="color: #aaa; margin-bottom: 20px;">Install and manage AI-powered coding assistants</p>
                 
-                <!-- Memory Service Status -->
-                <div style="background: #2d2d30; padding: 12px 15px; border-radius: 6px; margin-bottom: 25px; border: 1px solid #3e3e42;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <div style="width: 8px; height: 8px; background: #4caf50; border-radius: 50%;"></div>
-                        <span style="color: #ccc; font-size: 13px;">Memory Service: Connected (Port 3457)</span>
-                    </div>
-                </div>
                 
                 <!-- CLI Tools Grid -->
                 <div class="cli-tools-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
@@ -2203,6 +2196,9 @@ function renderCliToolsPanel() {
                         <div style="margin-top: 12px; display: flex; gap: 8px;">
                             <button style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
                             <button style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
+                            <button onclick="window.open('https://docs.anthropic.com/en/docs/claude-code', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
+                                Docs
+                            </button>
                         </div>
                     </div>
                     
@@ -2221,8 +2217,11 @@ function renderCliToolsPanel() {
                                 <div><span style="color: #aaa;">Auth:</span> Google account</div>
                             </div>
                         </div>
-                        <div style="margin-top: 12px;">
-                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                            <button onclick="window.open('https://cloud.google.com/gemini/docs/codeassist/gemini-cli', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
+                                Docs
+                            </button>
                         </div>
                     </div>
                     
@@ -2241,8 +2240,11 @@ function renderCliToolsPanel() {
                                 <div><span style="color: #aaa;">License:</span> Apache 2.0</div>
                             </div>
                         </div>
-                        <div style="margin-top: 12px;">
-                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                            <button onclick="window.open('https://github.com/QwenLM/Qwen3-Coder', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official repository">
+                                Docs
+                            </button>
                         </div>
                     </div>
                     
@@ -2260,8 +2262,11 @@ function renderCliToolsPanel() {
                                 <div><span style="color: #aaa;">Auth:</span> OpenAI API key</div>
                             </div>
                         </div>
-                        <div style="margin-top: 12px;">
-                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                            <button onclick="window.open('https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
+                                Docs
+                            </button>
                         </div>
                     </div>
                     
@@ -2269,7 +2274,6 @@ function renderCliToolsPanel() {
                     <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
                         <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
                             Aider
-                            <span style="background: #fd7e14; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">35.2K ⭐</span>
                         </h4>
                         <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Git-integrated inline editing</div>
                         <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
@@ -2280,8 +2284,11 @@ function renderCliToolsPanel() {
                                 <div><span style="color: #aaa;">Auth:</span> BYO API keys</div>
                             </div>
                         </div>
-                        <div style="margin-top: 12px;">
-                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                            <button onclick="window.open('https://aider.chat/docs/', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
+                                Docs
+                            </button>
                         </div>
                     </div>
                     
@@ -2289,7 +2296,6 @@ function renderCliToolsPanel() {
                     <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
                         <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
                             Cline
-                            <span style="background: #fd7e14; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">47.2K ⭐</span>
                         </h4>
                         <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Lightweight conversational agent</div>
                         <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
@@ -2300,27 +2306,11 @@ function renderCliToolsPanel() {
                                 <div><span style="color: #aaa;">Auth:</span> BYO API keys</div>
                             </div>
                         </div>
-                        <div style="margin-top: 12px;">
-                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Activity Log -->
-                <div style="margin-top: 30px; background: #2d2d30; padding: 15px; border-radius: 6px; border: 1px solid #3e3e42;">
-                    <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 14px;">Recent Activity</h4>
-                    <div style="font-size: 11px; color: #888; line-height: 1.8;">
-                        <div style="display: flex; gap: 10px;">
-                            <span style="color: #666;">08:45</span>
-                            <span style="color: #aaa;">Claude Code connected to Memory Service</span>
-                        </div>
-                        <div style="display: flex; gap: 10px;">
-                            <span style="color: #666;">08:42</span>
-                            <span style="color: #aaa;">CLI Tools panel opened</span>
-                        </div>
-                        <div style="display: flex; gap: 10px;">
-                            <span style="color: #666;">08:40</span>
-                            <span style="color: #aaa;">Memory Service started on port 3457</span>
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                            <button onclick="window.open('https://cline.bot/', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
+                                Docs
+                            </button>
                         </div>
                     </div>
                 </div>
