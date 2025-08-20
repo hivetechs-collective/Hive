@@ -2464,69 +2464,6 @@ const stopMemoryService = async (): Promise<void> => {
   await processManager.stopProcess('memory-service');
 };
 
-// Register Memory Service IPC handlers
-const registerMemoryServiceHandlers = () => {
-  ipcMain.handle('memory-service-start', async () => {
-    return await startMemoryService();
-  });
-
-  ipcMain.handle('memory-service-stop', async () => {
-    await stopMemoryService();
-    return true;
-  });
-
-  ipcMain.handle('memory-service-status', async () => {
-    const status = processManager.getProcessStatus('memory-service');
-    return status?.status === 'running';
-  });
-
-  ipcMain.handle('memory-service-stats', async () => {
-    try {
-      const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/stats`);
-      if (response.ok) {
-        return await response.json();
-      }
-    } catch (error) {
-      console.error('[Main] Failed to get memory stats:', error);
-    }
-    
-    // Return default stats if service is not available
-    return {
-      totalMemories: 0,
-      queriesToday: 0,
-      contributionsToday: 0,
-      connectedTools: 0,
-      hitRate: 0,
-      avgResponseTime: 0
-    };
-  });
-
-  ipcMain.handle('memory-service-tools', async () => {
-    try {
-      const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/tools`);
-      if (response.ok) {
-        const data = await response.json();
-        return data.tools || [];
-      }
-    } catch (error) {
-      console.error('[Main] Failed to get connected tools:', error);
-    }
-    return [];
-  });
-
-  ipcMain.handle('memory-service-activity', async (_, limit: number = 50) => {
-    try {
-      const response = await fetch(`http://localhost:${memoryServicePort}/api/v1/memory/activity?limit=${limit}`);
-      if (response.ok) {
-        const data = await response.json();
-        return data.activity || [];
-      }
-    } catch (error) {
-      console.error('[Main] Failed to get activity stream:', error);
-    }
-    return [];
-  });
-};
 
 // Clean up on app quit
 app.on('before-quit', async () => {

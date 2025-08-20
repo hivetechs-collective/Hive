@@ -9,7 +9,7 @@ import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import fetch from 'node-fetch';
+// Remove node-fetch to avoid punycode deprecation warning
 import { EventEmitter } from 'events';
 
 const exec = promisify(execCallback);
@@ -41,7 +41,7 @@ export interface CliToolConfig {
 // Installation progress events
 export interface InstallProgress {
   tool: string;
-  status: 'checking' | 'downloading' | 'installing' | 'configuring' | 'complete' | 'error';
+  status: 'checking' | 'downloading' | 'installing' | 'configuring' | 'complete' | 'error' | 'uninstalling' | 'cancelled';
   progress?: number;
   message?: string;
   error?: Error;
@@ -52,7 +52,7 @@ export class CliToolsManager extends EventEmitter {
   private configPath: string;
   private tools: Map<string, CliToolConfig>;
   private status: Map<string, ToolStatus>;
-  private updateCheckTimers: Map<string, NodeJS.Timer>;
+  private updateCheckTimers: Map<string, any>;
   private db: any; // SQLite database connection
 
   constructor(database: any) {
@@ -631,7 +631,7 @@ export class CliToolsManager extends EventEmitter {
         this.db.run(`
           DELETE FROM sync_metadata 
           WHERE sync_type = ?
-        `, [tool.syncType || `${toolId}_cli_update`], (err: any) => {
+        `, [`${toolId}_cli_update`], (err: any) => {
           if (err) reject(err);
           else resolve(true);
         });
@@ -650,8 +650,7 @@ export class CliToolsManager extends EventEmitter {
     
     const status = this.status.get(toolId);
     if (status) {
-      delete status.installProgress;
-      delete status.installMessage;
+      // Clear any temporary installation state
       this.status.set(toolId, status);
     }
 

@@ -2560,8 +2560,12 @@ setTimeout(() => {
         panels.git = createPanel('git', 'SOURCE CONTROL', gitContent);
         editorArea.appendChild(panels.git);
         
-        // Settings
-        panels.settings = createPanel('settings', 'SETTINGS', '<div id="settings-container"></div>');
+        // Settings - Create without panel header since SettingsModal has its own
+        panels.settings = document.createElement('div');
+        panels.settings.id = 'settings-panel';
+        panels.settings.className = 'content-panel';
+        panels.settings.innerHTML = '<div id="settings-container"></div>';
+        panels.settings.style.display = 'none';
         editorArea.appendChild(panels.settings);
         
         // Memory - Create without panel header since Memory Dashboard has its own

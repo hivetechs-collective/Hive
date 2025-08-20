@@ -401,13 +401,151 @@ Memory Service (Express Server)
 ```typescript
 {
   totalMemories: 616,      // Total messages in database
-  queriesToday: 6,         // Actual consensus queries
-  contributionsToday: 5,   // Messages added today
-  connectedTools: 0,       // Currently connected tools
-  hitRate: 92,            // Query success rate
-  avgResponseTime: 45     // Milliseconds
+  queriesToday: 6,         // Actual consensus queries from conversation_usage table
+  contributionsToday: 5,   // Messages added today via consensus
+  connectedTools: 0,       // Currently connected external AI tools
+  hitRate: 92,            // Query success rate percentage
+  avgResponseTime: 45     // Milliseconds (exponential moving average)
 }
 ```
+
+### Memory Service Implementation Details
+
+#### Process Architecture
+- **Type**: Child process managed by ProcessManager
+- **Entry Point**: `src/memory-service/index.ts`
+- **Server**: `src/memory-service/server.ts`
+- **Port**: 3457 (with automatic fallback to 3458-3460)
+- **IPC Communication**: Fork with ts-node for TypeScript support
+
+#### Database Access Pattern
+```typescript
+// Child process sends query via IPC
+process.send({
+  type: 'db-query',
+  id: queryId,
+  sql: 'SELECT COUNT(*) FROM messages',
+  params: []
+});
+
+// Main process handles query
+handleMemoryServiceDbQuery(msg) {
+  db.all(msg.sql, msg.params, (err, rows) => {
+    childProcess.send({
+      type: 'db-result',
+      id: msg.id,
+      data: rows,
+      error: err
+    });
+  });
+}
+```
+
+#### Critical Files & Functions
+1. **Main Process** (`src/index.ts`):
+   - `initializeProcessManager()` - Line 862: Registers Memory Service
+   - `handleMemoryServiceDbQuery()` - Line 2420: Database query handler
+   - `startMemoryService()` - Line 2436: Start service via ProcessManager
+   - IPC handlers - Line 948: `memory-service-start`, `memory-service-stop`
+
+2. **ProcessManager** (`src/utils/ProcessManager.ts`):
+   - Port allocation using PortManager
+   - Health check monitoring
+   - Auto-restart on crash (max 5 attempts)
+   - IPC message routing
+
+3. **PortManager** (`src/utils/PortManager.ts`):
+   - `allocatePort()` - Ensures port availability
+   - `killProcessOnPort()` - Cleans up stuck processes
+   - `waitForService()` - Verifies service startup
+
+#### Common Issues & Solutions
+
+##### Issue: Memory Service Not Starting
+**Symptoms**: 
+- "Failed to start Memory Service" in console
+- Memory Dashboard shows "Service Inactive"
+
+**Troubleshooting**:
+1. Check port availability:
+   ```bash
+   lsof -i :3457
+   # Kill if occupied: kill -9 [PID]
+   ```
+
+2. Check for duplicate IPC handlers:
+   - Search for duplicate `registerMemoryServiceHandlers` functions
+   - Ensure only one registration in main process
+
+3. Verify ProcessManager registration:
+   - Check `initializeProcessManager()` is called in app.whenReady()
+   - Verify process config has correct script path
+
+##### Issue: Database Query Timeouts
+**Symptoms**:
+- "Database query timeout" errors
+- Stats not updating in dashboard
+
+**Root Causes**:
+- IPC channel not established
+- Main process database not initialized
+- Message handler not registered
+
+**Solution**:
+- Ensure `handleMemoryServiceDbQuery` is defined before process starts
+- Check database initialization completes before starting Memory Service
+
+##### Issue: Statistics Not Updating
+**Symptoms**:
+- Dashboard shows 0 for all metrics
+- "Failed to get today's count" in logs
+
+**SQL Queries Used**:
+```sql
+-- Total memories
+SELECT COUNT(*) as count FROM messages
+
+-- Messages added today
+SELECT COUNT(*) as count FROM messages 
+WHERE date(timestamp) = date('now')
+
+-- Actual queries today (not estimated)
+SELECT COUNT(*) as usage_count 
+FROM conversation_usage 
+WHERE date(timestamp, 'localtime') = date('now', 'localtime')
+```
+
+**Note**: `queriesToday` shows ACTUAL consensus queries from `conversation_usage` table, not approximations.
+
+#### Service Lifecycle
+
+1. **Startup Sequence**:
+   ```
+   App Ready → initializeProcessManager() → Register Memory Service
+   → User clicks Memory → IPC: memory-service-start 
+   → ProcessManager.startProcess() → Fork child process with ts-node
+   → Child sends 'ready' message → Port allocated → Service running
+   ```
+
+2. **Shutdown Sequence**:
+   ```
+   User closes Memory tab OR App quits
+   → IPC: memory-service-stop → Send 'shutdown' message to child
+   → Graceful shutdown (2s timeout) → SIGTERM if needed
+   → Port released → Process terminated
+   ```
+
+3. **Auto-Restart Logic**:
+   - Max 5 restart attempts
+   - 3 second delay between restarts
+   - Exponential backoff on repeated failures
+   - Port reallocation on each restart
+
+#### Health Monitoring
+- Health check endpoint: `http://localhost:3457/health`
+- Checked every 30 seconds by ProcessManager
+- Returns: `{ status, port, database, uptime }`
+- Auto-restart triggered on health check failures
 
 ---
 
