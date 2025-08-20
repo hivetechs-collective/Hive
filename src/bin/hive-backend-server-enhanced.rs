@@ -226,23 +226,10 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // Initialize consensus engine with database
-    // The ConsensusEngine will initialize its own AI helpers internally
-    let consensus_engine = if let Some(ref db) = database {
-        match ConsensusEngine::new(Some(db.clone())).await {
-            Ok(engine) => {
-                info!("✅ Consensus engine initialized with database and AI helpers");
-                Some(engine)
-            }
-            Err(e) => {
-                error!("Failed to initialize consensus engine: {}", e);
-                None
-            }
-        }
-    } else {
-        warn!("⚠️ Running without database - no consensus engine available");
-        None
-    };
+    // Defer consensus engine initialization to avoid blocking server startup
+    // We'll initialize it in the background after the server starts listening
+    let consensus_engine = None;
+    info!("⏳ Consensus engine will be initialized after server starts...");
     
     // AI helpers are now managed internally by ConsensusEngine
     let ai_helpers = None;
@@ -272,9 +259,38 @@ async fn main() -> anyhow::Result<()> {
     // Create shared state
     let state = Arc::new(AppState {
         consensus_engine: Arc::new(RwLock::new(consensus_engine)),
-        database: Arc::new(RwLock::new(database)),
+        database: Arc::new(RwLock::new(database.clone())),
         ai_helpers: Arc::new(RwLock::new(ai_helpers)),
         maintenance: Arc::new(RwLock::new(maintenance)),
+    });
+    
+    // Clone state for background initialization
+    let init_state = state.clone();
+    let init_database = database.clone();
+    
+    // Spawn background task to initialize consensus engine after server starts
+    tokio::spawn(async move {
+        // Wait a bit for the server to fully start
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+        
+        info!("🔄 Starting background initialization of consensus engine...");
+        
+        if let Some(ref db) = init_database {
+            info!("Database available for consensus engine initialization");
+            match ConsensusEngine::new(Some(db.clone())).await {
+                Ok(engine) => {
+                    info!("✅ Consensus engine initialized with database and AI helpers");
+                    info!("🔄 Setting consensus engine in shared state...");
+                    *init_state.consensus_engine.write().await = Some(engine);
+                    info!("✅ Consensus engine successfully set in shared state");
+                }
+                Err(e) => {
+                    error!("❌ Failed to initialize consensus engine: {}", e);
+                }
+            }
+        } else {
+            warn!("⚠️ No database available - consensus engine cannot be initialized");
+        }
     });
 
     // Build the router with WebSocket support
@@ -301,17 +317,37 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(state);
 
-    let addr = "0.0.0.0:8765";
-    info!("✅ Enhanced Backend Server running on http://{}", addr);
+    // Get port from environment variable or use default
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8765".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+    
+    // Log that we're about to start
+    info!("🚀 Starting Enhanced Backend Server on http://{}", addr);
     info!("🔌 WebSocket endpoint: ws://{}/ws", addr);
     info!("🧠 REST consensus: POST http://{}/api/consensus", addr);
     info!("🤖 AI routing: POST http://{}/api/ai-helper/route", addr);
     info!("📊 Multi-threaded processing enabled");
     info!("🔥 CPU overheating protection active");
     
-    axum::Server::bind(&addr.parse()?)
-        .serve(app.into_make_service())
-        .await?;
+    // Actually bind and start serving
+    // Create the service
+    let service = app.into_make_service();
+    
+    // Parse the address
+    let socket_addr = addr.parse()?;
+    
+    // Bind to the address
+    info!("⏳ Binding to {}...", addr);
+    
+    // Use axum::Server to bind and serve
+    // This will start accepting connections immediately after binding
+    let server = axum::Server::bind(&socket_addr);
+    
+    info!("✅ Server successfully bound to {}", addr);
+    info!("🚀 Server is now listening and ready to accept connections!");
+    
+    // Start serving - this blocks until the server shuts down
+    server.serve(service).await?;
 
     Ok(())
 }
@@ -445,14 +481,17 @@ async fn run_consensus_streaming(
         query, profile, conversation_id);
     
     // Check if engine is initialized
+    info!("Checking consensus engine state...");
     let engine_guard = state.consensus_engine.read().await;
+    info!("Acquired engine guard, checking if Some...");
     if engine_guard.is_none() {
-        error!("Consensus engine not initialized!");
+        error!("Consensus engine is None in shared state!");
         let _ = tx.send(WSMessage::Error {
             message: "Consensus engine not initialized. Please check database and configuration.".to_string(),
         });
         return;
     }
+    info!("✅ Consensus engine found in shared state!");
     
     let engine = engine_guard.as_ref().unwrap();
     info!("Consensus engine obtained, preparing to process...");

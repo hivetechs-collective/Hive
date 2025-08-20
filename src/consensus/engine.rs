@@ -160,19 +160,32 @@ impl ConsensusEngine {
             None
         };
         
-        // Initialize AI helpers if database is available
+        // Initialize AI helpers if database is available (with timeout to prevent hanging)
         let ai_helpers = if let Some(ref db) = database {
-            match AIHelperEcosystem::new_with_client(db.clone(), openrouter_client.clone()).await {
-                Ok(helpers) => {
-                    tracing::info!("AI Helper Ecosystem initialized successfully with OpenRouter access");
+            tracing::info!("🚀 Starting AI Helper initialization with 30 second timeout...");
+            let db_clone = db.clone();
+            let client_clone = openrouter_client.clone();
+            
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                AIHelperEcosystem::new_with_client(db_clone, client_clone)
+            ).await {
+                Ok(Ok(helpers)) => {
+                    tracing::info!("✅ AI Helper Ecosystem initialized successfully with OpenRouter access");
                     Some(Arc::new(helpers))
                 }
-                Err(e) => {
-                    tracing::warn!("Failed to initialize AI helpers: {}. Continuing without helpers.", e);
+                Ok(Err(e)) => {
+                    tracing::warn!("❌ Failed to initialize AI helpers: {}. Continuing without helpers.", e);
+                    None
+                }
+                Err(_) => {
+                    tracing::warn!("⏰ AI Helper initialization timed out after 30 seconds. Continuing without helpers.");
+                    tracing::info!("💡 This may be due to Python subprocess communication issues. Check stdio inheritance.");
                     None
                 }
             }
         } else {
+            tracing::warn!("⚠️ No database available - AI helpers cannot be initialized");
             None
         };
 

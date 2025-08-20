@@ -177,16 +177,30 @@ impl PythonModelService {
     
     /// Start the Python process
     async fn start(&self) -> Result<()> {
+        tracing::info!("🐍 Starting Python model service...");
+        tracing::info!("Python path: {}", self.config.python_path);
+        tracing::info!("Script path: {}", self.config.service_script);
+        
         let mut cmd = Command::new(&self.config.python_path);
         cmd.arg(&self.config.service_script)
             .arg("--model-cache-dir")
             .arg(&self.config.model_cache_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::piped())
+            // Critical: Kill the subprocess if parent dies
+            .kill_on_drop(true)
+            // Set environment to ensure Python subprocess works correctly
+            .env("PYTHONUNBUFFERED", "1")
+            .env("TRANSFORMERS_OFFLINE", "0")
+            .env("HF_HOME", &self.config.model_cache_dir);
+        
+        tracing::info!("🚀 Spawning Python subprocess with enhanced environment...");
         
         let mut child = cmd.spawn()
             .context("Failed to spawn Python model service")?;
+        
+        tracing::info!("✅ Python subprocess spawned with PID: {:?}", child.id());
         
         // Get stdin for sending requests
         let stdin = child.stdin.take()
@@ -195,6 +209,22 @@ impl PythonModelService {
         // Get stdout for receiving responses
         let stdout = child.stdout.take()
             .context("Failed to get stdout")?;
+        
+        // Get stderr for error monitoring
+        let stderr = child.stderr.take()
+            .context("Failed to get stderr")?;
+        
+        // Start stderr handler to capture Python errors
+        tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+            
+            while let Ok(Some(line)) = lines.next_line().await {
+                if !line.trim().is_empty() {
+                    tracing::warn!("🐍 Python stderr: {}", line);
+                }
+            }
+        });
         
         // Start response handler
         let response_handlers = self.response_handlers.clone();
@@ -231,8 +261,17 @@ impl PythonModelService {
     
     /// Wait for the service to be ready
     async fn wait_for_ready(&self) -> Result<()> {
+        tracing::info!("⏳ Waiting for Python service to be ready...");
+        
         let request_id = uuid::Uuid::new_v4().to_string();
-        let response = self.send_request(ModelRequest::HealthCheck { request_id }).await?;
+        
+        // Add timeout to health check to prevent hanging
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            self.send_request(ModelRequest::HealthCheck { request_id })
+        ).await
+        .context("Python service health check timed out after 10 seconds")?
+        .context("Python service health check failed")?;
         
         match response {
             ModelResponse::HealthResult { status, .. } => {

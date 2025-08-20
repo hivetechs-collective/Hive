@@ -1,4 +1,13 @@
 "use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GitExecutor = exports.GitError = exports.GitErrorCode = void 0;
 const child_process_1 = require("child_process");
@@ -53,13 +62,7 @@ class GitExecutor {
         this.repoPath = repoPath;
         this.gitPath = 'git';
         // Set up environment for Git
-        this.env = {
-            ...process.env,
-            GIT_TERMINAL_PROMPT: '0',
-            GIT_ASKPASS: '',
-            LANG: 'en_US.UTF-8',
-            LC_ALL: 'en_US.UTF-8',
-        };
+        this.env = Object.assign(Object.assign({}, process.env), { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' });
         // For macOS, ensure we use the credential helper
         if (process.platform === 'darwin') {
             this.env.GIT_ASKPASS = ''; // Let it use osxkeychain
@@ -143,171 +146,196 @@ class GitExecutor {
         }
         return undefined;
     }
-    async exec(args, options = {}) {
-        return new Promise((resolve, reject) => {
-            const child = this.spawn(args, options);
-            if (options.onSpawn) {
-                options.onSpawn(child);
-            }
-            let stdout = '';
-            let stderr = '';
-            const encoding = options.encoding || 'utf8';
-            if (child.stdout) {
-                child.stdout.setEncoding(encoding);
-                child.stdout.on('data', (data) => {
-                    stdout += data;
-                });
-            }
-            if (child.stderr) {
-                child.stderr.setEncoding(encoding);
-                child.stderr.on('data', (data) => {
-                    stderr += data;
-                });
-            }
-            if (options.input) {
-                child.stdin?.end(options.input, 'utf8');
-            }
-            // Handle cancellation
-            if (options.cancellationToken) {
-                const onAbort = () => {
-                    child.kill('SIGTERM');
-                    reject(new Error('Cancelled'));
-                };
-                if (options.cancellationToken.aborted) {
-                    onAbort();
-                    return;
+    exec(args, options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return new Promise((resolve, reject) => {
+                var _a;
+                const child = this.spawn(args, options);
+                if (options.onSpawn) {
+                    options.onSpawn(child);
                 }
-                options.cancellationToken.addEventListener('abort', onAbort, { once: true });
-            }
-            child.on('error', (err) => {
-                reject(new GitError({
-                    message: 'Failed to spawn git process',
-                    gitErrorCode: GitErrorCode.GitNotFound,
-                    gitCommand: args[0],
-                    gitArgs: args,
-                }));
-            });
-            child.on('close', (exitCode) => {
-                console.log(`[GitExecutor] Command completed with code ${exitCode}`);
-                const result = {
-                    exitCode: exitCode || 0,
-                    stdout,
-                    stderr,
-                };
-                if (exitCode !== 0) {
-                    const errorCode = this.detectGitErrorCode(stderr);
+                let stdout = '';
+                let stderr = '';
+                const encoding = options.encoding || 'utf8';
+                if (child.stdout) {
+                    child.stdout.setEncoding(encoding);
+                    child.stdout.on('data', (data) => {
+                        stdout += data;
+                    });
+                }
+                if (child.stderr) {
+                    child.stderr.setEncoding(encoding);
+                    child.stderr.on('data', (data) => {
+                        stderr += data;
+                    });
+                }
+                if (options.input) {
+                    (_a = child.stdin) === null || _a === void 0 ? void 0 : _a.end(options.input, 'utf8');
+                }
+                // Handle cancellation
+                if (options.cancellationToken) {
+                    const onAbort = () => {
+                        child.kill('SIGTERM');
+                        reject(new Error('Cancelled'));
+                    };
+                    if (options.cancellationToken.aborted) {
+                        onAbort();
+                        return;
+                    }
+                    options.cancellationToken.addEventListener('abort', onAbort, { once: true });
+                }
+                child.on('error', (err) => {
                     reject(new GitError({
-                        message: stderr || 'Git command failed',
-                        exitCode,
-                        stdout,
-                        stderr,
-                        gitErrorCode: errorCode,
+                        message: 'Failed to spawn git process',
+                        gitErrorCode: GitErrorCode.GitNotFound,
                         gitCommand: args[0],
                         gitArgs: args,
                     }));
-                }
-                else {
-                    resolve(result);
-                }
+                });
+                child.on('close', (exitCode) => {
+                    console.log(`[GitExecutor] Command completed with code ${exitCode}`);
+                    const result = {
+                        exitCode: exitCode || 0,
+                        stdout,
+                        stderr,
+                    };
+                    if (exitCode !== 0) {
+                        const errorCode = this.detectGitErrorCode(stderr);
+                        reject(new GitError({
+                            message: stderr || 'Git command failed',
+                            exitCode,
+                            stdout,
+                            stderr,
+                            gitErrorCode: errorCode,
+                            gitCommand: args[0],
+                            gitArgs: args,
+                        }));
+                    }
+                    else {
+                        resolve(result);
+                    }
+                });
             });
         });
     }
     // High-level Git operations using robust execution
-    async status() {
-        const result = await this.exec(['status', '--porcelain=v2', '--branch', '--untracked-files=all']);
-        return this.parseStatus(result.stdout);
+    status() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const result = yield this.exec(['status', '--porcelain=v2', '--branch', '--untracked-files=all']);
+            return this.parseStatus(result.stdout);
+        });
     }
-    async push(options = {}) {
-        const args = ['push'];
-        if (options.setUpstream) {
-            args.push('--set-upstream');
-        }
-        if (options.remote) {
-            args.push(options.remote);
-        }
-        if (options.branch) {
-            args.push(options.branch);
-        }
-        await this.exec(args);
+    push(options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = ['push'];
+            if (options.setUpstream) {
+                args.push('--set-upstream');
+            }
+            if (options.remote) {
+                args.push(options.remote);
+            }
+            if (options.branch) {
+                args.push(options.branch);
+            }
+            yield this.exec(args);
+        });
     }
-    async pull(options = {}) {
-        const args = ['pull'];
-        if (options.rebase) {
-            args.push('--rebase');
-        }
-        if (options.remote) {
-            args.push(options.remote);
-        }
-        if (options.branch) {
-            args.push(options.branch);
-        }
-        await this.exec(args);
+    pull(options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = ['pull'];
+            if (options.rebase) {
+                args.push('--rebase');
+            }
+            if (options.remote) {
+                args.push(options.remote);
+            }
+            if (options.branch) {
+                args.push(options.branch);
+            }
+            yield this.exec(args);
+        });
     }
-    async fetch(options = {}) {
-        const args = ['fetch'];
-        if (options.all) {
-            args.push('--all');
-        }
-        if (options.prune) {
-            args.push('--prune');
-        }
-        await this.exec(args);
+    fetch(options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = ['fetch'];
+            if (options.all) {
+                args.push('--all');
+            }
+            if (options.prune) {
+                args.push('--prune');
+            }
+            yield this.exec(args);
+        });
     }
-    async add(files) {
-        await this.exec(['add', '--', ...files]);
+    add(files) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.exec(['add', '--', ...files]);
+        });
     }
-    async reset(files) {
-        await this.exec(['reset', 'HEAD', '--', ...files]);
+    reset(files) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.exec(['reset', 'HEAD', '--', ...files]);
+        });
     }
-    async commit(message) {
-        await this.exec(['commit', '-m', message]);
+    commit(message) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.exec(['commit', '-m', message]);
+        });
     }
-    async checkout(target) {
-        await this.exec(['checkout', target]);
+    checkout(target) {
+        return __awaiter(this, void 0, void 0, function* () {
+            yield this.exec(['checkout', target]);
+        });
     }
-    async branch(options) {
-        const args = ['branch'];
-        if (options?.all) {
-            args.push('-a');
-        }
-        else if (options?.remotes) {
-            args.push('-r');
-        }
-        args.push('-vv'); // Verbose with upstream info
-        const result = await this.exec(args);
-        return this.parseBranches(result.stdout);
+    branch(options) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = ['branch'];
+            if (options === null || options === void 0 ? void 0 : options.all) {
+                args.push('-a');
+            }
+            else if (options === null || options === void 0 ? void 0 : options.remotes) {
+                args.push('-r');
+            }
+            args.push('-vv'); // Verbose with upstream info
+            const result = yield this.exec(args);
+            return this.parseBranches(result.stdout);
+        });
     }
-    async log(options = {}) {
-        const args = ['log'];
-        // Add graph option if requested (critical for graph view!)
-        if (options.graph) {
-            args.push('--graph');
-        }
-        if (options.maxCount) {
-            args.push(`-${options.maxCount}`);
-        }
-        else if (options.limit) {
-            args.push(`-${options.limit}`);
-        }
-        if (options.oneline) {
-            args.push('--oneline');
-        }
-        else {
-            args.push('--pretty=format:%H|%an|%ae|%ad|%s');
-        }
-        const result = await this.exec(args);
-        return result.stdout;
+    log(options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = ['log'];
+            // Add graph option if requested (critical for graph view!)
+            if (options.graph) {
+                args.push('--graph');
+            }
+            if (options.maxCount) {
+                args.push(`-${options.maxCount}`);
+            }
+            else if (options.limit) {
+                args.push(`-${options.limit}`);
+            }
+            if (options.oneline) {
+                args.push('--oneline');
+            }
+            else {
+                args.push('--pretty=format:%H|%an|%ae|%ad|%s');
+            }
+            const result = yield this.exec(args);
+            return result.stdout;
+        });
     }
-    async diff(options = {}) {
-        const args = ['diff'];
-        if (options.cached) {
-            args.push('--cached');
-        }
-        if (options.nameOnly) {
-            args.push('--name-only');
-        }
-        const result = await this.exec(args);
-        return result.stdout;
+    diff(options = {}) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const args = ['diff'];
+            if (options.cached) {
+                args.push('--cached');
+            }
+            if (options.nameOnly) {
+                args.push('--name-only');
+            }
+            const result = yield this.exec(args);
+            return result.stdout;
+        });
     }
     // Helper methods for parsing Git output
     parseStatus(output) {
@@ -398,3 +426,4 @@ class GitExecutor {
     }
 }
 exports.GitExecutor = GitExecutor;
+//# sourceMappingURL=git-executor.js.map

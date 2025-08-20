@@ -109,47 +109,158 @@ Infrastructure:
 
 ### Process Hierarchy
 ```
-Electron Main Process
+Electron Main Process (Orchestrator)
 ├── Memory Service (Node.js Child Process)
 │   ├── Express Server (Port 3457)
 │   ├── WebSocket Server
 │   └── IPC Channel to Main
-├── Backend Server (Rust - Port 3456)
-│   └── Consensus Engine
+├── WebSocket Backend Server (Port 8765)
+│   └── Consensus WebSocket Handler
 └── File Watchers
     └── Git Status Monitor
 ```
 
-### ProcessManager System
+### Enhanced ProcessManager System (Production-Ready)
 **Location**: `src/utils/ProcessManager.ts`
 
-**Features**:
-- Automatic process spawning
-- Health monitoring
-- Auto-restart on crash (configurable retries)
-- Graceful shutdown
-- IPC message routing
-- Port management integration
+**Core Responsibilities**:
+- **Unified Process Orchestration**: Manages ALL child processes as one cohesive unit
+- **Zero-Downtime Operations**: Automatic recovery ensures continuous service
+- **Production Reliability**: Health monitoring with configurable thresholds
+- **Multi-Process Type Support**: Handles Node.js, TypeScript, and binary executables
 
-**Process Lifecycle**:
+**Key Features**:
+
+#### 1. Process Registration & Configuration
 ```typescript
-1. Register Process → 
-2. Allocate Port (via PortManager) → 
-3. Spawn Child Process → 
-4. Monitor Health → 
-5. Handle Messages/Crashes → 
-6. Cleanup on Exit
+interface ProcessConfig {
+  name: string;                    // Unique process identifier
+  scriptPath: string;              // Path to executable/script
+  args?: string[];                 // Command line arguments
+  env?: NodeJS.ProcessEnv;         // Environment variables
+  port?: number;                   // Primary port allocation
+  alternativePorts?: number[];     // Fallback ports for conflicts
+  autoRestart?: boolean;           // Enable crash recovery
+  maxRestarts?: number;            // Retry limit (default: 5)
+  restartDelay?: number;           // Ms between restarts (default: 3000)
+  healthCheckUrl?: string;         // HTTP endpoint for health monitoring
+  healthCheckInterval?: number;    // Ms between health checks
+}
+```
+
+#### 2. Automatic Process Type Detection
+- **TypeScript Files (.ts)**: Uses `fork()` with ts-node for IPC support
+- **JavaScript Files (.js)**: Uses `fork()` for native IPC
+- **Binary Executables**: Uses `spawn()` with stdio pipes for stdout/stderr capture
+
+#### 3. Health Monitoring System
+- **HTTP Health Checks**: Periodic GET requests to configured endpoints
+- **Automatic Recovery**: Restarts unhealthy processes within limits
+- **Event-Driven Notifications**: Real-time status updates to renderer
+- **Reset on Recovery**: Clears restart count after successful health check
+
+#### 4. Unified Startup Sequence
+```typescript
+// On app.ready():
+1. Initialize ProcessManager with all configurations
+2. Start Memory Service (critical infrastructure)
+3. Start WebSocket Backend (consensus engine)
+4. Verify all processes healthy
+5. Enable renderer communication
+```
+
+#### 5. Graceful Shutdown Protocol
+```typescript
+// On app shutdown:
+1. Send shutdown message to all processes
+2. Wait for graceful termination (2s timeout)
+3. Force kill if necessary (SIGKILL)
+4. Release all allocated ports
+5. Clean up IPC channels
+```
+
+#### 6. IPC Message Routing
+- **Process → Main**: Database queries, status updates, ready signals
+- **Main → Process**: Shutdown commands, configuration updates
+- **Main → Renderer**: Process status, health updates, crash notifications
+
+#### 7. Event System
+```typescript
+processManager.on('process:starting', (name) => {})
+processManager.on('process:started', (name) => {})
+processManager.on('process:ready', (name, msg) => {})
+processManager.on('process:crashed', (name) => {})
+processManager.on('process:unhealthy', (name, error) => {})
+processManager.on('process:stopping', (name) => {})
+processManager.on('process:stopped', (name) => {})
+processManager.on('process:message', (name, msg) => {})
+```
+
+**Process Lifecycle State Machine**:
+```
+   ┌─────────┐
+   │ stopped │◄──────────────┐
+   └────┬────┘               │
+        │ startProcess()     │
+   ┌────▼────┐               │
+   │starting │               │
+   └────┬────┘               │
+        │ ready/timeout      │
+   ┌────▼────┐               │
+   │ running │───────────────┤
+   └────┬────┘  stopProcess()│
+        │ crash              │
+   ┌────▼────┐               │
+   │ crashed │───────────────┘
+   └─────────┘ auto-restart/stop
 ```
 
 ### PortManager System
 **Location**: `src/utils/PortManager.ts`
 
 **Features**:
-- Port availability checking
-- Automatic conflict resolution
-- Process killing on port conflicts
-- Alternative port selection
-- Port allocation tracking
+- **Port Availability Detection**: Checks if ports are in use
+- **Automatic Conflict Resolution**: Finds alternative ports
+- **Process Cleanup**: Kills conflicting processes if needed
+- **Alternative Port Selection**: Falls back to configured alternatives
+- **Port Registry**: Tracks allocations to prevent conflicts
+- **Service Wait**: Waits for services to bind to allocated ports
+
+### Integration with Main Architecture
+
+#### 1. Memory Service Integration
+```typescript
+processManager.registerProcess({
+  name: 'memory-service',
+  scriptPath: 'src/memory-service/index.ts',
+  port: 3457,
+  alternativePorts: [3458, 3459, 3460],
+  autoRestart: true,
+  healthCheckUrl: 'http://localhost:{port}/health',
+  healthCheckInterval: 30000
+});
+```
+
+#### 2. WebSocket Backend Integration
+```typescript
+processManager.registerProcess({
+  name: 'websocket-backend',
+  scriptPath: '/path/to/websocket-server',
+  port: 8765,
+  alternativePorts: [8766, 8767, 8768],
+  autoRestart: true,
+  healthCheckUrl: 'http://localhost:{port}/health',
+  healthCheckInterval: 30000
+});
+```
+
+#### 3. Benefits of Unified Process Management
+- **Single Point of Control**: All processes managed through one system
+- **Consistent Lifecycle**: Same startup/shutdown/restart logic for all
+- **Unified Monitoring**: Single dashboard for all process health
+- **Simplified Debugging**: Centralized logging and error handling
+- **Production Ready**: Built-in recovery and health monitoring
+- **User Experience**: Appears as single cohesive application
 
 ---
 

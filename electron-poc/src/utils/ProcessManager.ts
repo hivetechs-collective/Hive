@@ -79,15 +79,17 @@ export class ProcessManager extends EventEmitter {
     this.emit('process:starting', name);
     
     try {
-      // Allocate port if needed
+      // Allocate port if needed - PortManager will find an available port
       let port = config.port;
       if (port) {
+        // PortManager will intelligently find an available port
         port = await PortManager.allocatePort({
           port,
           serviceName: name,
           alternativePorts: config.alternativePorts
         });
         info.port = port;
+        console.log(`[ProcessManager] ${name} will use port ${port}`);
       }
       
       // Prepare environment
@@ -99,8 +101,9 @@ export class ProcessManager extends EventEmitter {
       
       console.log(`[ProcessManager] Starting ${name} on port ${port || 'N/A'}`);
       
-      // Spawn the process - handle TypeScript files with ts-node
+      // Spawn the process - handle different file types
       let childProcess: ChildProcess;
+      let binaryReadyPromise: Promise<boolean> | null = null;
       
       if (config.scriptPath.endsWith('.ts')) {
         // For TypeScript files, we need to use fork with ts-node to get IPC
@@ -112,13 +115,32 @@ export class ProcessManager extends EventEmitter {
           detached: false,
           execArgv: ['-r', tsNodePath]
         });
-      } else {
+      } else if (config.scriptPath.endsWith('.js')) {
         // For JavaScript files, use fork normally
         childProcess = fork(config.scriptPath, config.args || [], {
           env,
           silent: false,
           detached: false
         });
+      } else {
+        // For binary executables (Rust, Go, etc.), use spawn
+        console.log(`[ProcessManager] Spawning binary executable: ${config.scriptPath}`);
+        // Use 'inherit' for stdio to allow subprocess communication (e.g., Python processes spawned by AI Helpers)
+        // CRITICAL: AI Helpers spawn Python subprocesses that require full stdio access
+        childProcess = spawn(config.scriptPath, config.args || [], {
+          env,
+          stdio: 'inherit',  // Allow full stdio inheritance for subprocess communication
+          detached: false
+        });
+        
+        // With 'inherit' stdio, we can't capture output, so we won't have a binaryReadyPromise
+        // We'll rely solely on port checking for readiness detection
+        console.log(`[ProcessManager] Binary process ${name} spawned with inherited stdio`);
+        console.log(`[ProcessManager] Will use port checking for readiness (port ${port})`);
+        
+        // Note: childProcess.stdout and childProcess.stderr are null with 'inherit'
+        // These blocks won't execute with 'inherit' stdio, but keeping them for future reference
+        // if we need to switch back to captured stdio for debugging
       }
       
       info.process = childProcess;
@@ -147,31 +169,98 @@ export class ProcessManager extends EventEmitter {
         }
       });
       
-      // Wait for process to be ready - check for 'ready' message instead of port binding
-      // since the process uses IPC to signal readiness
-      const readyPromise = new Promise<boolean>((resolve) => {
-        const timeout = setTimeout(() => {
-          console.log(`[ProcessManager] Timeout waiting for ${name} ready signal`);
-          resolve(false);
-        }, 10000);
-        
-        const messageHandler = (msg: any) => {
-          if (msg.type === 'ready') {
-            clearTimeout(timeout);
-            resolve(true);
-          }
-        };
-        
-        childProcess.once('message', messageHandler);
-      });
+      // Wait for process to be ready - check for 'ready' message or port binding
+      // Binary processes like Rust servers may take longer to initialize
+      let isReady = false;
       
-      const isReady = await readyPromise;
-      if (!isReady && port) {
-        // Fallback to port check if no ready message
-        const portReady = await PortManager.waitForService(port, 5000);
-        if (!portReady) {
-          throw new Error(`Process ${name} failed to start properly`);
+      if (config.scriptPath.endsWith('.ts') || config.scriptPath.endsWith('.js')) {
+        // For Node.js processes, wait for IPC 'ready' message
+        const readyPromise = new Promise<boolean>((resolve) => {
+          const timeout = setTimeout(() => {
+            console.log(`[ProcessManager] Timeout waiting for ${name} ready signal (waited 15000ms)`);
+            resolve(false);
+          }, 15000);
+          
+          const messageHandler = (msg: any) => {
+            if (msg.type === 'ready') {
+              clearTimeout(timeout);
+              resolve(true);
+            }
+          };
+          
+          childProcess.once('message', messageHandler);
+        });
+        
+        isReady = await readyPromise;
+      } else if (binaryReadyPromise) {
+        // For binary processes with captured output, wait for our custom ready detection
+        const timeoutPromise = new Promise<boolean>((resolve) => {
+          setTimeout(() => {
+            console.log(`[ProcessManager] Timeout waiting for ${name} startup output (waited 30000ms)`);
+            resolve(false);
+          }, 30000);
+        });
+        
+        // Race between the binary ready promise and timeout (binaryReadyPromise is guaranteed to be non-null here)
+        isReady = await Promise.race([binaryReadyPromise!, timeoutPromise]);
+        
+        if (isReady) {
+          console.log(`[ProcessManager] Binary process ${name} confirmed ready via output detection`);
         }
+      } else {
+        // For binary processes with 'inherit' stdio, we can't capture output
+        console.log(`[ProcessManager] Binary process ${name} uses inherited stdio - will check port only`);
+      }
+      
+      // For processes without ready signal, check the port
+      if (!isReady && port) {
+        console.log(`[ProcessManager] Checking port ${port} for ${name}...`);
+        
+        // Binary servers may take longer to bind to port after process starts
+        // AI Helpers initialization can take time, so give them enough time to start
+        const isBinary = !config.scriptPath.endsWith('.ts') && !config.scriptPath.endsWith('.js');
+        
+        if (isBinary) {
+          // For binary processes, add initial delay to allow process to initialize
+          console.log(`[ProcessManager] Waiting 2 seconds for ${name} to initialize before port check...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        // Fast, efficient port checking (2025 best practice)
+        const maxWaitTime = isBinary ? 15000 : 3000; // 15s for binaries, 3s for Node.js
+        const checkInterval = 250; // Check every 250ms
+        const maxAttempts = Math.floor(maxWaitTime / checkInterval);
+        
+        let attempts = 0;
+        let portReady = false;
+        
+        // Simple, fast checking - no exponential backoff
+        while (attempts < maxAttempts && !portReady) {
+          attempts++;
+          
+          // Quick check if port is listening
+          portReady = await PortManager.waitForService(port, checkInterval);
+          
+          if (portReady) {
+            console.log(`[ProcessManager] ✅ Port ${port} is ready for ${name} (${attempts * checkInterval}ms)`);
+            break;
+          }
+          
+          // Only log occasionally to reduce noise
+          if (attempts === maxAttempts / 2) {
+            console.log(`[ProcessManager] Waiting for ${name} on port ${port}...`);
+          }
+        }
+        
+        if (!portReady) {
+          // Try to get more debug info before failing
+          const debugInfo = await this.debugProcess(name);
+          console.error(`[ProcessManager] Debug info for ${name}:`, JSON.stringify(debugInfo, null, 2));
+          
+          throw new Error(`Process ${name} failed to start properly - port ${port} not responding after ${attempts} attempts (${maxWaitTime}ms)`);
+        }
+        
+        isReady = true;
       }
       
       info.status = 'running';
@@ -278,6 +367,13 @@ export class ProcessManager extends EventEmitter {
     if (info.process) {
       info.process = null;
       info.pid = undefined;
+    }
+    
+    // CRITICAL: Release the port when process crashes
+    if (info.port) {
+      console.log(`[ProcessManager] Releasing port ${info.port} after ${name} crashed`);
+      PortManager.releasePort(name);
+      info.port = undefined;
     }
     
     // Stop health checks
@@ -392,6 +488,140 @@ export class ProcessManager extends EventEmitter {
    */
   getAllProcesses(): ProcessInfo[] {
     return Array.from(this.processes.values());
+  }
+  
+  /**
+   * Get comprehensive status report for all processes
+   */
+  getFullStatus(): {
+    processes: Array<{
+      name: string;
+      status: string;
+      pid?: number;
+      port?: number;
+      uptime?: number;
+      restartCount: number;
+      lastError?: string;
+      isPortListening?: boolean;
+    }>;
+    allocatedPorts: Map<string, number>;
+    summary: {
+      total: number;
+      running: number;
+      stopped: number;
+      crashed: number;
+      starting: number;
+    };
+  } {
+    const processes = Array.from(this.processes.values()).map(info => ({
+      name: info.name,
+      status: info.status,
+      pid: info.pid,
+      port: info.port,
+      uptime: info.lastStartTime ? Date.now() - info.lastStartTime.getTime() : undefined,
+      restartCount: info.restartCount,
+      lastError: info.lastError,
+      isPortListening: info.port ? !PortManager.isPortAvailable(info.port) : undefined
+    }));
+    
+    const summary = {
+      total: processes.length,
+      running: processes.filter(p => p.status === 'running').length,
+      stopped: processes.filter(p => p.status === 'stopped').length,
+      crashed: processes.filter(p => p.status === 'crashed').length,
+      starting: processes.filter(p => p.status === 'starting').length
+    };
+    
+    return {
+      processes,
+      allocatedPorts: PortManager.getAllocatedPorts(),
+      summary
+    };
+  }
+  
+  /**
+   * Get detailed debug information for a specific process
+   */
+  async debugProcess(name: string): Promise<{
+    config?: ProcessConfig;
+    info?: ProcessInfo;
+    portStatus?: {
+      allocated: boolean;
+      port?: number;
+      isListening: boolean;
+      canConnect: boolean;
+    };
+    healthCheck?: {
+      url?: string;
+      status: 'healthy' | 'unhealthy' | 'not-configured';
+      lastCheck?: Date;
+      error?: string;
+    };
+  }> {
+    const config = this.configs.get(name);
+    const info = this.processes.get(name);
+    
+    let portStatus;
+    if (info?.port) {
+      const isAvailable = await PortManager.isPortAvailable(info.port);
+      portStatus = {
+        allocated: true,
+        port: info.port,
+        isListening: !isAvailable,
+        canConnect: false
+      };
+      
+      // Try to connect to the port
+      try {
+        const testConnection = await PortManager.waitForService(info.port, 100);
+        portStatus.canConnect = testConnection;
+      } catch {
+        portStatus.canConnect = false;
+      }
+    }
+    
+    let healthCheck;
+    if (config?.healthCheckUrl) {
+      healthCheck = {
+        url: config.healthCheckUrl,
+        status: 'not-configured' as const,
+        error: 'Health check not yet implemented'
+      };
+    }
+    
+    return {
+      config,
+      info,
+      portStatus,
+      healthCheck
+    };
+  }
+  
+  /**
+   * Log detailed status to console
+   */
+  logStatus(): void {
+    const status = this.getFullStatus();
+    console.log('\n[ProcessManager] === Status Report ===');
+    console.log(`Summary: ${status.summary.running}/${status.summary.total} running`);
+    console.log('Processes:');
+    
+    status.processes.forEach(p => {
+      const uptimeStr = p.uptime ? `${Math.floor(p.uptime / 1000)}s` : 'N/A';
+      const portStr = p.port ? `:${p.port}` : '';
+      const pidStr = p.pid ? `PID:${p.pid}` : '';
+      const errorStr = p.lastError ? ` [Error: ${p.lastError}]` : '';
+      
+      console.log(`  - ${p.name}${portStr}: ${p.status} ${pidStr} (uptime: ${uptimeStr}, restarts: ${p.restartCount})${errorStr}`);
+    });
+    
+    if (status.allocatedPorts.size > 0) {
+      console.log('\nAllocated Ports:');
+      status.allocatedPorts.forEach((port, service) => {
+        console.log(`  - ${service}: ${port}`);
+      });
+    }
+    console.log('==================\n');
   }
   
   /**

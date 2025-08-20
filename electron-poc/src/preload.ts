@@ -74,6 +74,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getConnectedTools: () => ipcRenderer.invoke('memory-service-tools'),
   getMemoryActivity: (limit?: number) => ipcRenderer.invoke('memory-service-activity', limit),
   
+  // CLI Tool Detection
+  detectCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-detect', toolId),
+  detectAllCliTools: () => ipcRenderer.invoke('cli-tools-detect-all'),
+  
   // Menu event listeners
   onMenuOpenFolder: (callback: (folderPath: string) => void) => {
     ipcRenderer.on('menu-open-folder', (_, folderPath) => callback(folderPath));

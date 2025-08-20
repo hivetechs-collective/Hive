@@ -3,6 +3,32 @@
  * Layout: Left Sidebar | Center (with bottom Terminal) | Right Consensus Chat
  */
 
+// CLI Tool Types
+interface CliToolStatus {
+  id: string;
+  name: string;
+  installed: boolean;
+  version?: string;
+  path?: string;
+  memoryServiceConnected?: boolean;
+}
+
+interface CliToolCardInfo {
+  id: string;
+  name: string;
+  description: string;
+  status: CliToolStatus | null;
+  docsUrl: string;
+  badgeText?: string | null;
+  badgeColor?: string;
+}
+
+// Extend electronAPI type
+interface ExtendedElectronAPI {
+  detectCliTool(toolId: string): Promise<CliToolStatus | null>;
+  detectAllCliTools(): Promise<CliToolStatus[]>;
+}
+
 // DISABLE WEBPACK-DEV-SERVER ERROR OVERLAY
 (function() {
   if (typeof window !== 'undefined') {
@@ -2163,164 +2189,174 @@ function hideAnalyticsPanel(): void {
 }
 
 // CLI Tools Panel Management
-function renderCliToolsPanel() {
+async function renderCliToolsPanel() {
     const container = document.getElementById('cli-tools-container');
     if (container && container.innerHTML.trim() === '') {
         console.log('[CLI Tools] Rendering CLI Tools panel...');
         
-        // For now, create a placeholder UI - will be replaced with full component
+        // Show loading state first
         container.innerHTML = `
             <div class="cli-tools-panel" style="padding: 20px; height: 100%; overflow-y: auto; background: var(--vscode-editor-background);">
                 <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
                 <p style="color: #aaa; margin-bottom: 20px;">Install and manage AI-powered coding assistants</p>
-                
-                
-                <!-- CLI Tools Grid -->
                 <div class="cli-tools-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
-                    
-                    <!-- Claude Code Card -->
-                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
-                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
-                            Claude Code
-                            <span style="background: #007acc; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">INSTALLED</span>
-                        </h4>
-                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Anthropic's terminal-native AI agent</div>
-                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
-                                <div><span style="color: #aaa;">Version:</span> v2.1.0</div>
-                                <div><span style="color: #aaa;">Memory:</span> <span style="color: #4caf50;">Connected ✓</span></div>
-                                <div><span style="color: #aaa;">Model:</span> Claude 3.7 Sonnet</div>
-                                <div><span style="color: #aaa;">Last Used:</span> 2 hours ago</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
-                            <button style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
-                            <button onclick="window.open('https://docs.anthropic.com/en/docs/claude-code', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
-                                Docs
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Gemini CLI Card -->
-                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
-                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
-                            Gemini CLI
-                            <span style="background: #28a745; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">FREE</span>
-                        </h4>
-                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Google's free AI coding assistant (1000 req/day)</div>
-                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
-                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
-                                <div><span style="color: #aaa;">Model:</span> Gemini 2.5 Pro</div>
-                                <div><span style="color: #aaa;">Context:</span> 1M tokens</div>
-                                <div><span style="color: #aaa;">Auth:</span> Google account</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
-                            <button onclick="window.open('https://cloud.google.com/gemini/docs/codeassist/gemini-cli', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
-                                Docs
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Qwen Code Card -->
-                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
-                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
-                            Qwen Code
-                            <span style="background: #6c757d; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">OPEN SOURCE</span>
-                        </h4>
-                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Alibaba's open-source coding agent</div>
-                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
-                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
-                                <div><span style="color: #aaa;">Model:</span> Qwen3-Coder</div>
-                                <div><span style="color: #aaa;">Context:</span> 256K native</div>
-                                <div><span style="color: #aaa;">License:</span> Apache 2.0</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
-                            <button onclick="window.open('https://github.com/QwenLM/Qwen3-Coder', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official repository">
-                                Docs
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- OpenAI Codex Card -->
-                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
-                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
-                            OpenAI Codex
-                        </h4>
-                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">GPT-powered terminal assistant</div>
-                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
-                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
-                                <div><span style="color: #aaa;">Models:</span> GPT-4.1, o3, o4-mini</div>
-                                <div><span style="color: #aaa;">Pricing:</span> Pay-as-you-go</div>
-                                <div><span style="color: #aaa;">Auth:</span> OpenAI API key</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
-                            <button onclick="window.open('https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
-                                Docs
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Aider Card -->
-                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
-                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
-                            Aider
-                        </h4>
-                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Git-integrated inline editing</div>
-                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
-                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
-                                <div><span style="color: #aaa;">Install:</span> pip install aider-chat</div>
-                                <div><span style="color: #aaa;">Models:</span> Multiple providers</div>
-                                <div><span style="color: #aaa;">Auth:</span> BYO API keys</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
-                            <button onclick="window.open('https://aider.chat/docs/', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
-                                Docs
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Cline Card -->
-                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
-                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
-                            Cline
-                        </h4>
-                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Lightweight conversational agent</div>
-                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
-                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
-                                <div><span style="color: #aaa;">Install:</span> npm install -g @cline/cli</div>
-                                <div><span style="color: #aaa;">Models:</span> Multiple providers</div>
-                                <div><span style="color: #aaa;">Auth:</span> BYO API keys</div>
-                            </div>
-                        </div>
-                        <div style="margin-top: 12px; display: flex; gap: 8px;">
-                            <button style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
-                            <button onclick="window.open('https://cline.bot/', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">
-                                Docs
-                            </button>
-                        </div>
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: #888;">
+                        Detecting installed CLI tools...
                     </div>
                 </div>
             </div>
         `;
         
-        console.log('[CLI Tools] Panel rendered successfully');
+        try {
+            // Detect Claude Code installation status
+            const electronAPI = window.electronAPI as any as ExtendedElectronAPI;
+            const claudeCodeStatus = await electronAPI.detectCliTool('claude-code');
+            console.log('[CLI Tools] Claude Code status:', claudeCodeStatus);
+            
+            // Build the dynamic UI
+            const gridContainer = container.querySelector('.cli-tools-grid');
+            gridContainer.innerHTML = '';
+            
+            // Claude Code Card (dynamic)
+            gridContainer.appendChild(createCliToolCard({
+                id: 'claude-code',
+                name: 'Claude Code',
+                description: 'Anthropic\'s terminal-native AI agent',
+                status: claudeCodeStatus,
+                docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
+                badgeText: claudeCodeStatus?.installed ? 'INSTALLED' : null,
+                badgeColor: '#007acc'
+            }));
+            
+            // Other tools (static for now - will implement detection incrementally)
+            gridContainer.appendChild(createStaticToolCard('gemini-cli', 'Gemini CLI', 'Google\'s free AI coding assistant (1000 req/day)', 'FREE', '#28a745', 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli'));
+            gridContainer.appendChild(createStaticToolCard('qwen-code', 'Qwen Code', 'Alibaba\'s open-source coding agent', 'OPEN SOURCE', '#6c757d', 'https://github.com/QwenLM/Qwen3-Coder'));
+            gridContainer.appendChild(createStaticToolCard('openai-codex', 'OpenAI Codex', 'GPT-powered terminal assistant', null, null, 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started'));
+            gridContainer.appendChild(createStaticToolCard('aider', 'Aider', 'Git-integrated inline editing', null, null, 'https://aider.chat/docs/'));
+            gridContainer.appendChild(createStaticToolCard('cline', 'Cline', 'Lightweight conversational agent', null, null, 'https://cline.bot/'));
+            
+            console.log('[CLI Tools] Panel rendered successfully');
+        } catch (error) {
+            console.error('[CLI Tools] Error rendering panel:', error);
+            // Show error state
+            container.innerHTML = `
+                <div class="cli-tools-panel" style="padding: 20px; height: 100%; overflow-y: auto; background: var(--vscode-editor-background);">
+                    <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
+                    <p style="color: #f44336; margin-bottom: 20px;">Error loading CLI tools. Please try again.</p>
+                </div>
+            `;
+        }
     } else {
         console.log('[CLI Tools] Panel already rendered');
     }
+}
+
+// Helper function to create dynamic CLI tool cards
+function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
+    const { id, name, description, status, docsUrl, badgeText, badgeColor } = toolInfo;
+    const card = document.createElement('div');
+    card.className = 'cli-tool-card';
+    card.style.cssText = 'background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;';
+    
+    const isInstalled = status?.installed || false;
+    const version = status?.version;
+    const memoryConnected = status?.memoryServiceConnected || false;
+    
+    // Status badge
+    let statusBadge = '';
+    if (badgeText) {
+        statusBadge = `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${badgeText}</span>`;
+    }
+    
+    // Status details
+    let statusDetails = '';
+    if (isInstalled) {
+        statusDetails = `
+            <div><span style="color: #aaa;">Version:</span> ${version || 'Unknown'}</div>
+            <div><span style="color: #aaa;">Memory:</span> <span style="color: ${memoryConnected ? '#4caf50' : '#f44336'};">${memoryConnected ? 'Connected ✓' : 'Not connected'}</span></div>
+            <div><span style="color: #aaa;">Path:</span> ${status.path || 'Unknown'}</div>
+        `;
+    } else {
+        statusDetails = `
+            <div><span style="color: #aaa;">Status:</span> Not Installed</div>
+            <div><span style="color: #aaa;">Installation:</span> npm install -g ${id}</div>
+        `;
+    }
+    
+    // Buttons based on status
+    let buttons = '';
+    if (isInstalled) {
+        buttons = `
+            <button onclick="configureCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
+            <button onclick="updateCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
+        `;
+    } else {
+        buttons = `
+            <button onclick="installCliTool('${id}')" style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+        `;
+    }
+    buttons += `<button onclick="window.open('${docsUrl}', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">Docs</button>`;
+    
+    card.innerHTML = `
+        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+            ${name}${statusBadge}
+        </h4>
+        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">${description}</div>
+        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                ${statusDetails}
+            </div>
+        </div>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+            ${buttons}
+        </div>
+    `;
+    
+    return card;
+}
+
+// Helper function for static tool cards (temporary for other tools)
+function createStaticToolCard(id: string, name: string, description: string, badgeText: string | null, badgeColor: string | null, docsUrl: string): HTMLDivElement {
+    const card = document.createElement('div');
+    card.className = 'cli-tool-card';
+    card.style.cssText = 'background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;';
+    
+    const statusBadge = badgeText ? `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${badgeText}</span>` : '';
+    
+    card.innerHTML = `
+        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+            ${name}${statusBadge}
+        </h4>
+        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">${description}</div>
+        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
+                <div><span style="color: #aaa;">Detection:</span> Coming soon</div>
+            </div>
+        </div>
+        <div style="margin-top: 12px; display: flex; gap: 8px;">
+            <button onclick="alert('Installation coming soon')" style="flex: 1; padding: 6px; background: #6c757d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" disabled>Install</button>
+            <button onclick="window.open('${docsUrl}', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">Docs</button>
+        </div>
+    `;
+    
+    return card;
+}
+
+// CLI Tool Action Handlers (placeholders for now)
+function installCliTool(toolId: string): void {
+    console.log(`[CLI Tools] Install requested for ${toolId}`);
+    alert(`Installation for ${toolId} coming soon!`);
+}
+
+function configureCliTool(toolId: string): void {
+    console.log(`[CLI Tools] Configure requested for ${toolId}`);
+    alert(`Configuration for ${toolId} coming soon!`);
+}
+
+function updateCliTool(toolId: string): void {
+    console.log(`[CLI Tools] Update requested for ${toolId}`);
+    alert(`Update for ${toolId} coming soon!`);
 }
 
 // Memory Dashboard Management

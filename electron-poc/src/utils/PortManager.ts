@@ -127,64 +127,66 @@ export class PortManager {
    * Allocate a port for a service with automatic conflict resolution
    */
   static async allocatePort(config: PortConfig): Promise<number> {
-    const { port, serviceName, retryCount = 3, alternativePorts } = config;
+    const { port, serviceName, alternativePorts } = config;
     
-    // Check if service already has an allocated port
+    // Check if service already has an allocated port that's still free
     if (this.allocatedPorts.has(serviceName)) {
       const existingPort = this.allocatedPorts.get(serviceName)!;
       if (await this.isPortAvailable(existingPort)) {
+        console.log(`[PortManager] Reusing existing port ${existingPort} for ${serviceName}`);
         return existingPort;
       }
+      // Release the old allocation since it's no longer valid
+      this.allocatedPorts.delete(serviceName);
     }
     
-    for (let attempt = 0; attempt < retryCount; attempt++) {
-      try {
-        // Check if port is available
-        const isAvailable = await this.isPortAvailable(port);
-        
-        if (isAvailable) {
-          this.allocatedPorts.set(serviceName, port);
-          console.log(`[PortManager] Port ${port} allocated for ${serviceName}`);
-          return port;
-        }
-        
-        console.log(`[PortManager] Port ${port} is in use, attempting to clean up...`);
-        
-        // Try to kill the process using the port
-        const killed = await this.killProcessOnPort(port);
-        
-        if (killed) {
-          // Wait a bit more for port to be fully released
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Check again
-          if (await this.isPortAvailable(port)) {
-            this.allocatedPorts.set(serviceName, port);
-            console.log(`[PortManager] Port ${port} recovered for ${serviceName}`);
-            return port;
+    // Start with preferred port
+    let currentPort = port;
+    let portToUse: number | null = null;
+    
+    // Check preferred port first
+    if (await this.isPortAvailable(currentPort)) {
+      portToUse = currentPort;
+      console.log(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
+    } else {
+      console.log(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
+      
+      // Try alternative ports if provided
+      if (alternativePorts && alternativePorts.length > 0) {
+        for (const altPort of alternativePorts) {
+          if (await this.isPortAvailable(altPort)) {
+            portToUse = altPort;
+            console.log(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
+            break;
           }
-        }
-        
-        // If we can't use the preferred port, find an alternative
-        if (attempt === retryCount - 1) {
-          const availablePort = await this.findAvailablePort(port, alternativePorts);
-          this.allocatedPorts.set(serviceName, availablePort);
-          console.log(`[PortManager] Using alternative port ${availablePort} for ${serviceName}`);
-          return availablePort;
-        }
-        
-      } catch (error) {
-        console.error(`[PortManager] Error on attempt ${attempt + 1}:`, error);
-        if (attempt === retryCount - 1) {
-          throw error;
         }
       }
       
-      // Wait before retry
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // If still no port, scan for the next available port
+      if (!portToUse) {
+        currentPort = port + 1;
+        const maxPort = port + 100; // Search up to 100 ports ahead
+        
+        while (currentPort < maxPort) {
+          if (await this.isPortAvailable(currentPort)) {
+            portToUse = currentPort;
+            console.log(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
+            break;
+          }
+          currentPort++;
+        }
+      }
     }
     
-    throw new Error(`Failed to allocate port for ${serviceName} after ${retryCount} attempts`);
+    if (!portToUse) {
+      // This should never happen unless all 100 ports are taken
+      throw new Error(`Could not find any available port for ${serviceName} (searched ${port} to ${port + 100})`);
+    }
+    
+    // Allocate the port
+    this.allocatedPorts.set(serviceName, portToUse);
+    console.log(`[PortManager] ✅ Port ${portToUse} allocated for ${serviceName}`);
+    return portToUse;
   }
   
   /**
