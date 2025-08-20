@@ -1078,8 +1078,9 @@ const initializeCliToolsManager = () => {
 const registerCliToolsHandlers = () => {
   // Get all tool statuses
   ipcMain.handle('cli-tools-get-all-status', async () => {
-    if (!cliToolsManager) return new Map();
-    return Array.from(await cliToolsManager.getAllStatuses());
+    if (!cliToolsManager) return {};
+    const statuses = await cliToolsManager.getAllStatuses();
+    return Object.fromEntries(statuses);
   });
   
   // Get specific tool status
@@ -1092,18 +1093,61 @@ const registerCliToolsHandlers = () => {
   ipcMain.handle('cli-tools-install', async (_, toolId: string) => {
     if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
     await cliToolsManager.install(toolId);
+    return { success: true };
+  });
+  
+  // Uninstall a tool
+  ipcMain.handle('cli-tools-uninstall', async (_, toolId: string) => {
+    if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
+    await cliToolsManager.uninstall(toolId);
+    return { success: true };
   });
   
   // Update a tool
   ipcMain.handle('cli-tools-update', async (_, toolId: string) => {
     if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
     await cliToolsManager.update(toolId);
+    return { success: true };
   });
   
-  // Check for updates
-  ipcMain.handle('cli-tools-check-updates', async (_, toolId: string) => {
+  // Check for updates for a single tool
+  ipcMain.handle('cli-tools-check-update', async (_, toolId: string) => {
     if (!cliToolsManager) return false;
     return await cliToolsManager.checkForUpdates(toolId);
+  });
+  
+  // Check for updates for all tools
+  ipcMain.handle('cli-tools-check-all-updates', async () => {
+    if (!cliToolsManager) return {};
+    const updates = await cliToolsManager.checkAllUpdates();
+    return Object.fromEntries(updates);
+  });
+  
+  // Configure a tool (e.g., auth)
+  ipcMain.handle('cli-tools-configure', async (_, toolId: string) => {
+    if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
+    await cliToolsManager.configureTool(toolId);
+    return { success: true };
+  });
+  
+  // Cancel installation
+  ipcMain.handle('cli-tools-cancel-install', async (_, toolId: string) => {
+    if (!cliToolsManager) return;
+    cliToolsManager.cancelInstallation(toolId);
+    return { success: true };
+  });
+  
+  // Get installation logs
+  ipcMain.handle('cli-tools-get-logs', async (_, toolId: string) => {
+    if (!cliToolsManager) return [];
+    return cliToolsManager.getInstallationLogs(toolId);
+  });
+  
+  // Update settings
+  ipcMain.handle('cli-tools-update-settings', async (_, settings: any) => {
+    if (!cliToolsManager) return;
+    cliToolsManager.updateSettings(settings);
+    return { success: true };
   });
   
   // Get tool configuration
@@ -1114,9 +1158,33 @@ const registerCliToolsHandlers = () => {
   
   // Get all tools
   ipcMain.handle('cli-tools-get-all', async () => {
-    if (!cliToolsManager) return [];
-    return Array.from(cliToolsManager.getAllTools());
+    if (!cliToolsManager) return {};
+    const tools = cliToolsManager.getAllTools();
+    return Object.fromEntries(tools);
   });
+  
+  // Select directory (for custom install path)
+  ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory']
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  
+  // Forward progress events to renderer
+  if (cliToolsManager) {
+    cliToolsManager.on('install-progress', (data: any) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('cli-tool-progress', data);
+      }
+    });
+    
+    cliToolsManager.on('update-available', (data: any) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('cli-tool-update-available', data);
+      }
+    });
+  }
 };
 
 // This method will be called when Electron has finished

@@ -4,7 +4,7 @@
  * Primary focus: Claude Code CLI integration with Memory Service
  */
 
-import { execAsync } from 'child_process';
+import { exec as execCallback } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -12,7 +12,7 @@ import * as os from 'os';
 import fetch from 'node-fetch';
 import { EventEmitter } from 'events';
 
-const exec = promisify(execAsync);
+const exec = promisify(execCallback);
 
 // Tool status tracking
 export interface ToolStatus {
@@ -553,6 +553,159 @@ export class CliToolsManager extends EventEmitter {
    */
   public getAllTools(): Map<string, CliToolConfig> {
     return new Map(this.tools);
+  }
+
+  /**
+   * Uninstall a tool
+   */
+  public async uninstall(toolId: string): Promise<void> {
+    const tool = this.tools.get(toolId);
+    if (!tool) throw new Error(`Unknown tool: ${toolId}`);
+
+    this.emit('install-progress', {
+      tool: toolId,
+      status: 'uninstalling',
+      message: `Uninstalling ${tool.name}...`
+    } as InstallProgress);
+
+    try {
+      // Check if tool is installed
+      const installed = await this.checkInstalled(toolId);
+      if (!installed) {
+        throw new Error(`${tool.name} is not installed`);
+      }
+
+      // Uninstall based on package manager
+      if (tool.npmPackage) {
+        await exec(`npm uninstall -g ${tool.npmPackage}`);
+      } else if (tool.command === 'aider') {
+        await exec('pip uninstall -y aider-chat');
+      } else {
+        // For other tools, remove from local installation
+        const toolPath = path.join(this.toolsDir, toolId);
+        if (fs.existsSync(toolPath)) {
+          fs.rmSync(toolPath, { recursive: true, force: true });
+        }
+      }
+
+      // Remove from status
+      const status = this.status.get(toolId);
+      if (status) {
+        status.installed = false;
+        status.version = undefined;
+        status.path = undefined;
+        status.authenticated = false;
+        this.status.set(toolId, status);
+        await this.saveStatus();
+      }
+
+      // Remove from database
+      await this.removeFromDatabase(toolId);
+
+      this.emit('install-progress', {
+        tool: toolId,
+        status: 'complete',
+        message: `${tool.name} uninstalled successfully`
+      } as InstallProgress);
+
+    } catch (error) {
+      this.emit('install-progress', {
+        tool: toolId,
+        status: 'error',
+        message: `Failed to uninstall ${tool.name}`,
+        error: error as Error
+      } as InstallProgress);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove tool from database
+   */
+  private async removeFromDatabase(toolId: string): Promise<void> {
+    const tool = this.tools.get(toolId);
+    if (!tool || !this.db) return;
+
+    try {
+      await new Promise((resolve, reject) => {
+        this.db.run(`
+          DELETE FROM sync_metadata 
+          WHERE sync_type = ?
+        `, [tool.syncType || `${toolId}_cli_update`], (err: any) => {
+          if (err) reject(err);
+          else resolve(true);
+        });
+      });
+    } catch (error) {
+      console.error('[CliToolsManager] Failed to remove from database:', error);
+    }
+  }
+
+  /**
+   * Cancel an installation
+   */
+  public cancelInstallation(toolId: string): void {
+    // TODO: Implement cancellation logic
+    console.log(`[CliToolsManager] Cancelling installation of ${toolId}`);
+    
+    const status = this.status.get(toolId);
+    if (status) {
+      delete status.installProgress;
+      delete status.installMessage;
+      this.status.set(toolId, status);
+    }
+
+    this.emit('install-progress', {
+      tool: toolId,
+      status: 'cancelled',
+      message: 'Installation cancelled'
+    } as InstallProgress);
+  }
+
+  /**
+   * Get installation logs
+   */
+  public getInstallationLogs(toolId: string): string[] {
+    // TODO: Implement log storage and retrieval
+    return [`No logs available for ${toolId}`];
+  }
+
+  /**
+   * Configure tool authentication
+   */
+  public async configureTool(toolId: string): Promise<void> {
+    const tool = this.tools.get(toolId);
+    if (!tool) throw new Error(`Unknown tool: ${toolId}`);
+
+    // Special handling for Claude CLI
+    if (toolId === 'claude' && tool.memoryServiceIntegration) {
+      await this.configureMemoryServiceIntegration(toolId);
+    }
+
+    // TODO: Add configuration for other tools
+  }
+
+  /**
+   * Check all tools for updates
+   */
+  public async checkAllUpdates(): Promise<Map<string, boolean>> {
+    const updates = new Map<string, boolean>();
+    
+    for (const toolId of this.tools.keys()) {
+      const hasUpdate = await this.checkForUpdates(toolId);
+      updates.set(toolId, hasUpdate);
+    }
+    
+    return updates;
+  }
+
+  /**
+   * Update advanced settings
+   */
+  public updateSettings(settings: any): void {
+    // Update internal settings
+    // This would typically update configuration that affects installation behavior
+    console.log('[CliToolsManager] Settings updated:', settings);
   }
 }
 
