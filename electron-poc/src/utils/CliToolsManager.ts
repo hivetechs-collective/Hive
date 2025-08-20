@@ -72,17 +72,61 @@ export class CliToolsManager extends EventEmitter {
    * Initialize tool configurations
    */
   private initializeTools() {
+    // Tier 1: Major Provider CLIs
+    
     // Claude Code CLI - Primary tool
     this.tools.set('claude', {
       id: 'claude',
       name: 'Claude Code CLI',
       command: 'claude',
-      npmPackage: '@anthropic/claude-cli',
+      npmPackage: '@anthropic-ai/claude-code',
       checkCommand: 'which claude || where claude',
       versionCommand: 'claude --version',
       authCheckCommand: 'claude status',
-      installCommand: 'npm install -g @anthropic/claude-cli',
-      updateCheckInterval: 24, // Check daily
+      installCommand: 'npm install -g @anthropic-ai/claude-code',
+      updateCheckInterval: 24,
+      memoryServiceIntegration: true
+    });
+
+    // Gemini CLI - Google's free tier champion
+    this.tools.set('gemini', {
+      id: 'gemini',
+      name: 'Gemini CLI',
+      command: 'gemini',
+      npmPackage: '@google/gemini-cli',
+      checkCommand: 'which gemini || where gemini',
+      versionCommand: 'gemini --version',
+      authCheckCommand: 'gemini auth status',
+      installCommand: 'npm install -g @google/gemini-cli',
+      updateCheckInterval: 24,
+      memoryServiceIntegration: true
+    });
+
+    // Qwen Code - Alibaba's powerful CLI
+    this.tools.set('qwen', {
+      id: 'qwen',
+      name: 'Qwen Code',
+      command: 'qwen-code',
+      npmPackage: '@qwen-code/qwen-code',
+      checkCommand: 'which qwen-code || where qwen-code',
+      versionCommand: 'qwen-code --version',
+      authCheckCommand: 'qwen-code auth status',
+      installCommand: 'npm install -g @qwen-code/qwen-code',
+      updateCheckInterval: 24,
+      memoryServiceIntegration: true
+    });
+
+    // OpenAI Codex CLI
+    this.tools.set('openai', {
+      id: 'openai',
+      name: 'OpenAI Codex CLI',
+      command: 'codex',
+      npmPackage: '@openai/codex-cli',
+      checkCommand: 'which codex || where codex',
+      versionCommand: 'codex --version',
+      authCheckCommand: 'codex auth status',
+      installCommand: 'npm install -g @openai/codex-cli',
+      updateCheckInterval: 24,
       memoryServiceIntegration: true
     });
 
@@ -99,16 +143,70 @@ export class CliToolsManager extends EventEmitter {
       memoryServiceIntegration: true
     });
 
-    // OpenAI CLI
-    this.tools.set('openai', {
-      id: 'openai',
-      name: 'OpenAI CLI',
-      command: 'openai',
-      checkCommand: 'which openai || where openai',
-      versionCommand: 'openai --version',
-      installCommand: 'pip install openai-cli',
+    // Tier 2: Multi-Model Tools
+
+    // AIChat - All-in-one solution
+    this.tools.set('aichat', {
+      id: 'aichat',
+      name: 'AIChat (Multi-Model)',
+      command: 'aichat',
+      checkCommand: 'which aichat || where aichat',
+      versionCommand: 'aichat --version',
+      installCommand: 'cargo install aichat',
       updateCheckInterval: 24,
-      memoryServiceIntegration: true
+      memoryServiceIntegration: false
+    });
+
+    // LLM Tool by Simon Willison
+    this.tools.set('llm', {
+      id: 'llm',
+      name: 'LLM Tool',
+      command: 'llm',
+      checkCommand: 'which llm || where llm',
+      versionCommand: 'llm --version',
+      installCommand: 'pip install llm',
+      updateCheckInterval: 24,
+      memoryServiceIntegration: false
+    });
+
+    // Qodo Gen CLI
+    this.tools.set('qodo', {
+      id: 'qodo',
+      name: 'Qodo Gen CLI',
+      command: 'qodo',
+      npmPackage: '@qodo/gen',
+      checkCommand: 'which qodo || where qodo',
+      versionCommand: 'qodo --version',
+      installCommand: 'npm install -g @qodo/gen',
+      updateCheckInterval: 24,
+      memoryServiceIntegration: false
+    });
+
+    // Tier 3: Specialized Tools
+
+    // Aider - Git-integrated editing
+    this.tools.set('aider', {
+      id: 'aider',
+      name: 'Aider',
+      command: 'aider',
+      checkCommand: 'which aider || where aider',
+      versionCommand: 'aider --version',
+      installCommand: 'pip install aider-chat',
+      updateCheckInterval: 24,
+      memoryServiceIntegration: false
+    });
+
+    // Offline AI CLI - Local models
+    this.tools.set('offline-ai', {
+      id: 'offline-ai',
+      name: 'Offline AI CLI',
+      command: 'offline-ai',
+      npmPackage: '@offline-ai/cli',
+      checkCommand: 'which offline-ai || where offline-ai',
+      versionCommand: 'offline-ai --version',
+      installCommand: 'npm install -g @offline-ai/cli',
+      updateCheckInterval: 24,
+      memoryServiceIntegration: false
     });
   }
 
