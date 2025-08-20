@@ -393,9 +393,318 @@ npm run dev
 - [Discord Server](https://discord.gg/cline)
 - [Twitter/X](https://twitter.com/cline_ai)
 
+## MCP (Model Context Protocol) Support
+
+### Overview
+Cline has comprehensive MCP support, allowing it to extend capabilities through custom tools and integrations. Unlike other tools that only use community servers, Cline can dynamically create and install custom tools tailored to specific workflows.
+
+### MCP Server Configuration
+
+#### Settings File Location
+`cline_mcp_settings.json` in VS Code settings directory
+
+#### Configuration Structure
+```json
+{
+  "mcpServers": {
+    "jira-server": {
+      "command": "node",
+      "args": ["/path/to/jira-mcp-server.js"],
+      "env": {
+        "JIRA_API_KEY": "your_api_key",
+        "JIRA_HOST": "your-domain.atlassian.net"
+      },
+      "alwaysAllow": ["fetch_tickets", "create_ticket"],
+      "disabled": false,
+      "timeout": 60000
+    },
+    "aws-server": {
+      "command": "python",
+      "args": ["/path/to/aws-mcp-server.py"],
+      "env": {
+        "AWS_ACCESS_KEY_ID": "your_key",
+        "AWS_SECRET_ACCESS_KEY": "your_secret"
+      }
+    }
+  }
+}
+```
+
+### Dynamic Tool Creation
+
+#### Creating Custom Tools
+Simply ask Cline to create tools for your specific needs:
+
+```
+"Add a tool that fetches Jira tickets"
+"Add a tool that manages AWS EC2 instances"
+"Add a tool that pulls PagerDuty incidents"
+"Add a tool that queries our production database"
+```
+
+Cline will:
+1. Create a new MCP server implementation
+2. Install it into the extension
+3. Configure necessary environment variables
+4. Make it available for future tasks
+
+### Transport Types
+
+#### STDIO (Local Servers)
+```json
+{
+  "transport": "stdio",
+  "command": "node",
+  "args": ["./server.js"]
+}
+```
+
+#### SSE (Remote Servers)
+```json
+{
+  "transport": "sse",
+  "url": "https://api.example.com/mcp/sse"
+}
+```
+
+#### HTTP (REST APIs)
+```json
+{
+  "transport": "http",
+  "url": "https://api.example.com/mcp"
+}
+```
+
+### Advanced MCP Features (2025)
+
+#### Dynamic Tool Discovery
+Servers can change available tools on the fly based on:
+- Current project state
+- Workflow progression
+- Detected frameworks
+- User permissions
+
+#### Prompts and Workflows
+```json
+{
+  "prompts": {
+    "deploy": {
+      "name": "Deploy to Production",
+      "description": "Complete deployment workflow",
+      "parameters": {
+        "environment": "production",
+        "runTests": true
+      }
+    }
+  }
+}
+```
+
+Access via slash commands: `/mcp.servername.promptname`
+
+#### Sampling Capability
+MCP servers can make their own LLM requests using your model subscription:
+
+```json
+{
+  "sampling": {
+    "enabled": true,
+    "model": "inherit",  // Use user's configured model
+    "maxTokens": 1000
+  }
+}
+```
+
+### Managing MCP Servers
+
+#### UI Management
+1. Click "MCP Servers" icon in Cline's top navigation
+2. Select "Installed" tab
+3. Click "Advanced MCP Settings" for configuration
+
+#### Server Operations
+- **Add**: Install from marketplace or create custom
+- **Delete**: Click trash icon or "Delete Server" button
+- **Restart**: Click restart button for troubleshooting
+- **Disable**: Temporarily disable without removing
+
+#### Timeout Configuration
+- Default: 1 minute
+- Range: 30 seconds to 1 hour
+- Configure per server in settings
+
+### Available MCP Server Categories
+
+#### Development Tools
+- Git operations
+- Code formatting
+- Testing frameworks
+- Build systems
+
+#### Project Management
+- Jira integration
+- Linear tickets
+- GitHub issues
+- Azure DevOps
+
+#### Infrastructure
+- AWS management
+- Docker operations
+- Kubernetes control
+- Database queries
+
+#### Monitoring
+- PagerDuty incidents
+- Datadog metrics
+- CloudWatch logs
+- Prometheus queries
+
+### Creating Custom MCP Servers
+
+#### Basic Server Template
+```javascript
+// mcp-server.js
+const { Server } = require('@modelcontextprotocol/sdk');
+
+const server = new Server({
+  name: 'custom-server',
+  version: '1.0.0'
+});
+
+server.addTool({
+  name: 'fetch_data',
+  description: 'Fetch data from API',
+  parameters: {
+    type: 'object',
+    properties: {
+      endpoint: { type: 'string' }
+    }
+  },
+  handler: async (params) => {
+    // Implementation
+    return { data: result };
+  }
+});
+
+server.start();
+```
+
+#### Python Server Example
+```python
+# mcp_server.py
+from mcp import Server, Tool
+
+server = Server(
+    name="custom-server",
+    version="1.0.0"
+)
+
+@server.tool()
+async def fetch_data(endpoint: str):
+    """Fetch data from API"""
+    # Implementation
+    return {"data": result}
+
+if __name__ == "__main__":
+    server.run()
+```
+
+### Security Configuration
+
+#### Permission Management
+```json
+{
+  "permissions": {
+    "alwaysAllow": ["read_*"],
+    "alwaysDeny": ["delete_*"],
+    "requireConfirmation": ["write_*", "execute_*"]
+  }
+}
+```
+
+#### Environment Variables
+```json
+{
+  "env": {
+    "API_KEY": "${env:CLINE_API_KEY}",
+    "DATABASE_URL": "${secrets:database_url}"
+  }
+}
+```
+
+### Integration with Memory Service
+
+#### Configuration
+```json
+{
+  "mcpServers": {
+    "memory-service": {
+      "command": "node",
+      "args": ["./memory-mcp-bridge.js"],
+      "env": {
+        "MEMORY_SERVICE_URL": "http://localhost:3457",
+        "AUTH_TOKEN": "${env:MEMORY_AUTH_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+### Troubleshooting MCP
+
+#### Debug Mode
+```json
+{
+  "debug": true,
+  "logLevel": "verbose",
+  "logFile": "./mcp-debug.log"
+}
+```
+
+#### Common Issues
+1. **Server won't start**: Check command path and permissions
+2. **Timeout errors**: Increase timeout in settings
+3. **Authentication failures**: Verify environment variables
+4. **Tool not available**: Restart server or check configuration
+
+### Best Practices
+
+1. **Tool Naming**: Use descriptive, action-oriented names
+2. **Error Handling**: Implement comprehensive error messages
+3. **Logging**: Add detailed logging for debugging
+4. **Security**: Never hardcode credentials
+5. **Performance**: Implement caching for expensive operations
+6. **Documentation**: Document all custom tools thoroughly
+
+## VS Code Extension Features
+
+### Plan Mode
+When enabled, Cline creates a detailed plan before executing tasks:
+1. Analyzes requirements
+2. Creates step-by-step plan
+3. Gets user approval
+4. Executes incrementally
+
+### Diff View
+- Inline diff viewing for all changes
+- Accept/reject individual changes
+- Side-by-side comparison mode
+
+### Context Management
+- Automatic context optimization
+- Manual context clearing
+- Project-specific context storage
+
+### Keyboard Shortcuts
+- `Ctrl+Shift+C`: Open Cline panel
+- `Ctrl+L`: Clear chat
+- `Ctrl+Enter`: Send message
+- `Escape`: Cancel operation
+
 ## Links
 - [Cline Website](https://cline.bot/)
 - [GitHub - Main Project](https://github.com/cline/cline)
 - [NPM - CLI Package](https://www.npmjs.com/package/@yaegaki/cline-cli)
-- [Blog](https://cline.bot/blog)
-- [Documentation](https://cline.bot/docs)
+- [MCP Documentation](https://docs.cline.bot/mcp)
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=cline.cline)
+- [MCP Specification](https://modelcontextprotocol.com)
