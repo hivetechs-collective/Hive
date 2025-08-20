@@ -138,7 +138,7 @@ export class MemoryDashboard {
     
     container.innerHTML = `
       <div class="dashboard-header">
-        <h2>🧠 Universal Memory Infrastructure</h2>
+        <h2>Universal Memory Infrastructure</h2>
         <div class="dashboard-subtitle">
           Memory-as-a-Service for AI Development Tools
         </div>

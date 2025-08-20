@@ -373,9 +373,17 @@ document.body.innerHTML = `
         </button>
         <button class="activity-btn" data-view="memory" aria-label="Memory">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M21.67 14.24c-.21-.62-.64-1.12-1.21-1.41l-2.96-1.5V8.82c1.13-.45 1.92-1.55 1.92-2.84 0-1.68-1.37-3.05-3.05-3.05-1.68 0-3.05 1.37-3.05 3.05 0 1.29.79 2.39 1.92 2.84v2.51l-2.96 1.5c-.57.29-1 .79-1.21 1.41-.43 1.27.05 2.68 1.15 3.36l3.39 2.11c.4.25.85.37 1.3.37s.9-.12 1.3-.37l3.39-2.11c1.1-.68 1.58-2.09 1.07-3.36zM7.64 14.24c-.21-.62-.64-1.12-1.21-1.41l-2.96-1.5V8.82c1.13-.45 1.92-1.55 1.92-2.84C5.39 4.3 4.02 2.93 2.34 2.93S-.73 4.3-.73 5.98c0 1.29.79 2.39 1.92 2.84v2.51l-2.96 1.5c-.57.29-1 .79-1.21 1.41-.43 1.27.05 2.68 1.15 3.36l3.39 2.11c.4.25.85.37 1.3.37s.9-.12 1.3-.37l3.39-2.11c1.1-.68 1.58-2.09 1.07-3.36z"/>
+            <!-- Database/Memory icon similar to VS Code's database extension icon -->
+            <path d="M12 3C7.58 3 4 4.79 4 7s3.58 4 8 4 8-1.79 8-4-3.58-4-8-4zm0 6c-3.31 0-6-1.34-6-3s2.69-3 6-3 6 1.34 6 3-2.69 3-6 3z"/>
+            <path d="M4 9v3c0 2.21 3.58 4 8 4s8-1.79 8-4V9c-1.69 1.24-4.66 2-8 2s-6.31-.76-8-2z"/>
+            <path d="M4 14v3c0 2.21 3.58 4 8 4s8-1.79 8-4v-3c-1.69 1.24-4.66 2-8 2s-6.31-.76-8-2z"/>
+            <!-- Neural network nodes overlaid to represent AI memory -->
+            <circle cx="12" cy="7" r="1" opacity="0.8"/>
+            <circle cx="9" cy="12" r="0.5" opacity="0.6"/>
+            <circle cx="15" cy="12" r="0.5" opacity="0.6"/>
+            <circle cx="12" cy="17" r="0.5" opacity="0.6"/>
           </svg>
-          <span class="activity-tooltip">Memory</span>
+          <span class="activity-tooltip">Memory Service</span>
         </button>
       </div>
       
@@ -1052,7 +1060,7 @@ function openSettingsTab() {
 }
 
 document.getElementById('memory-btn')?.addEventListener('click', () => {
-  addLogEntry('🧠 Memory panel clicked', 'info');
+  addLogEntry('Memory Service panel clicked', 'info');
   openMemoryDashboard();
 });
 
