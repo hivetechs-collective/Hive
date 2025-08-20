@@ -13,6 +13,8 @@
 10. [Security & Authentication](#security--authentication)
 11. [Performance & Optimization](#performance--optimization)
 12. [Development & Deployment](#development--deployment)
+13. [CLI Tools Management](#cli-tools-management)
+14. [Future Enhancements](#future-enhancements)
 
 ---
 
@@ -613,6 +615,103 @@ Git Integration
 
 ---
 
+## CLI Tools Management
+
+### Overview
+The CLI Tools Management system provides automated installation, updates, and integration for AI-powered CLI tools, with a primary focus on Claude Code CLI integration with our Memory Service.
+
+### Architecture
+**Location**: `src/utils/CliToolsManager.ts`
+**Purpose**: Manage lifecycle of external AI CLI tools
+**Integration**: Direct connection to Memory Service for memory-as-a-service
+
+### Components
+
+#### CliToolsManager Class
+```typescript
+class CliToolsManager extends EventEmitter {
+  // Tool registry and status tracking
+  private tools: Map<string, CliToolConfig>
+  private status: Map<string, ToolStatus>
+  
+  // Lifecycle methods
+  public async install(toolId: string): Promise<void>
+  public async checkForUpdates(toolId: string): Promise<boolean>
+  public async update(toolId: string): Promise<void>
+  
+  // Memory Service integration
+  private async configureMemoryServiceIntegration(toolId: string)
+}
+```
+
+### Supported Tools
+1. **Claude Code CLI** (`@anthropic/claude-cli`)
+   - Primary integration with Memory Service
+   - Auto-configuration of memory endpoints
+   - Token-based authentication
+
+2. **GitHub Copilot CLI** (`gh copilot`)
+   - Extension-based installation
+   - Requires GitHub CLI prerequisite
+
+3. **OpenAI CLI** (`openai-cli`)
+   - Python-based installation
+   - API key configuration
+
+### Installation Flow
+```
+1. Check tool prerequisites
+2. Verify system dependencies
+3. Execute installation command (npm/pip/gh)
+4. Verify installation success
+5. Configure Memory Service integration (if applicable)
+6. Save status to database and config
+```
+
+### Memory Service Integration
+For Claude CLI specifically:
+1. Register tool with Memory Service API
+2. Receive authentication token
+3. Configure Claude CLI with:
+   - Memory Service endpoint (http://localhost:3457)
+   - Authentication token
+   - Auto-sync enabled
+
+### Database Integration
+Uses existing `sync_metadata` table:
+```sql
+-- Tool update tracking
+sync_type: 'claude_cli_update' | 'gh_copilot_cli_update' | etc.
+intelligence_version: installed tool version
+next_sync_due: next update check time
+```
+
+### IPC Handlers
+```typescript
+// Main process handlers
+'cli-tools:install': Install a specific tool
+'cli-tools:check-updates': Check for tool updates
+'cli-tools:get-status': Get all tool statuses
+'cli-tools:update': Update a specific tool
+```
+
+### Configuration Storage
+```
+~/.hive/
+├── cli-tools-config.json  # Tool status and versions
+└── tools/                  # Tool installation directory
+    ├── node_modules/       # Local npm installations
+    └── ...
+```
+
+### Auto-Update System
+- 24-hour update check interval
+- Background checking on app startup
+- Event emissions for update availability
+- Non-blocking update downloads
+
+---
+
 ## Future Enhancements
 
 ### Planned Features
@@ -624,6 +723,8 @@ Git Integration
 6. **Mobile Companion**: iOS/Android apps
 7. **Voice Interface**: Speech input/output
 8. **AI Agents**: Autonomous task execution
+9. **CLI Tools UI**: Settings panel for tool management
+10. **Extended CLI Support**: Additional AI CLI tools
 
 ### Architecture Evolution
 - Microservices migration
