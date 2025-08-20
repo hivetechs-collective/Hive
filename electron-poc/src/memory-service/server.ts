@@ -506,8 +506,8 @@ export class MemoryServiceServer {
 
   public start() {
     return new Promise((resolve) => {
-      // Create server and WebSocket when starting
-      this.server = http.createServer();
+      // Create server with Express app and WebSocket when starting
+      this.server = http.createServer(this.app);  // CRITICAL: Attach Express app to server!
       this.wss = new WebSocketServer({ server: this.server });
       this.setupWebSocket();
       

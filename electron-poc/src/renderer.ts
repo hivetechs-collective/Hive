@@ -486,7 +486,7 @@ document.body.innerHTML = `
         <div class="terminal-content" id="terminal-content">
           <div id="terminal-output">
             <div class="terminal-line">[${new Date().toLocaleTimeString()}] Hive Consensus initialized</div>
-            <div class="terminal-line">[${new Date().toLocaleTimeString()}] Backend server: http://localhost:8765</div>
+            <div class="terminal-line" id="backend-server-line">[${new Date().toLocaleTimeString()}] Backend server: discovering port...</div>
           </div>
         </div>
       </div>
@@ -1337,14 +1337,31 @@ document.getElementById('chat-input')?.addEventListener('keypress', (e) => {
 });
 
 // Initialize WebSocket connection for streaming
-function initializeWebSocket() {
+async function initializeWebSocket() {
   // Prevent multiple initializations
   if (consensusWebSocket) {
     console.log('WebSocket already initialized');
     return;
   }
   
-  const wsUrl = 'ws://127.0.0.1:8765/ws';
+  // Get dynamic backend port from IPC
+  let backendPort = 8765; // default fallback
+  try {
+    if ((window as any).backendAPI?.getBackendPort) {
+      backendPort = await (window as any).backendAPI.getBackendPort();
+      console.log('Got dynamic backend port:', backendPort);
+      
+      // Update the terminal display with actual port
+      const backendLine = document.getElementById('backend-server-line');
+      if (backendLine) {
+        backendLine.textContent = `[${new Date().toLocaleTimeString()}] Backend server: http://localhost:${backendPort}`;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to get dynamic backend port, using default:', error);
+  }
+  
+  const wsUrl = `ws://127.0.0.1:${backendPort}/ws`;
   
   console.log('Initializing WebSocket with URL:', wsUrl);
   consensusWebSocket = new ConsensusWebSocket(wsUrl, {

@@ -1452,7 +1452,9 @@ process.on('SIGTERM', async () => {
 // Set up IPC handlers for backend communication
 ipcMain.handle('backend-health', async () => {
   try {
-    const response = await fetch('http://localhost:8765/health');
+    const backendInfo = processManager.getProcessStatus('websocket-backend');
+    const backendPort = backendInfo?.port || 8765;
+    const response = await fetch(`http://localhost:${backendPort}/health`);
     return await response.json();
   } catch (error) {
     throw error;
@@ -1461,7 +1463,9 @@ ipcMain.handle('backend-health', async () => {
 
 ipcMain.handle('backend-test', async () => {
   try {
-    const response = await fetch('http://localhost:8765/test', {
+    const backendInfo = processManager.getProcessStatus('websocket-backend');
+    const backendPort = backendInfo?.port || 8765;
+    const response = await fetch(`http://localhost:${backendPort}/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify('Hello from Electron via IPC')
@@ -1474,7 +1478,9 @@ ipcMain.handle('backend-test', async () => {
 
 ipcMain.handle('backend-consensus', async (_, query: string) => {
   try {
-    const response = await fetch('http://localhost:8765/api/consensus', {
+    const backendInfo = processManager.getProcessStatus('websocket-backend');
+    const backendPort = backendInfo?.port || 8765;
+    const response = await fetch(`http://localhost:${backendPort}/api/consensus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query })
@@ -1487,7 +1493,9 @@ ipcMain.handle('backend-consensus', async (_, query: string) => {
 
 ipcMain.handle('backend-consensus-quick', async (_, data: {query: string, profile?: string}) => {
   try {
-    const response = await fetch('http://127.0.0.1:8765/api/consensus/quick', {
+    const backendInfo = processManager.getProcessStatus('websocket-backend');
+    const backendPort = backendInfo?.port || 8765;
+    const response = await fetch(`http://127.0.0.1:${backendPort}/api/consensus/quick`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)

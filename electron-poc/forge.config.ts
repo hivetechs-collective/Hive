@@ -57,6 +57,8 @@ const config: ForgeConfig = {
           },
         ],
       },
+      port: 9100, // Use port 9100 instead of default 9000 to avoid conflicts
+      loggerPort: 9101, // Logger port also needs to be different
     }),
     // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application

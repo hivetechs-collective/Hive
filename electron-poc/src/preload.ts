@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('backendAPI', {
   },
   async healthCheck(): Promise<any> {
     return ipcRenderer.invoke('backend-health');
+  },
+  async getBackendPort(): Promise<number> {
+    return ipcRenderer.invoke('websocket-backend-port');
   }
 });
 
