@@ -880,13 +880,21 @@ const initializeProcessManager = () => {
     // Health checks disabled - causing startup issues
   });
   
-  // Register WebSocket Consensus Backend with full port flexibility
+  // Register WebSocket Consensus Backend with bundled Python support
   const consensusBackendPath = path.join(
     '/Users/veronelazio/Developer/Private/hive',
     'target', 'debug', 'hive-backend-server-enhanced'
   );
   
   console.log('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
+  
+  // For now, use the actual venv Python from the hive directory
+  // TODO: In production, bundle a portable Python distribution
+  const bundledPythonPath = '/Users/veronelazio/Developer/Private/hive/venv/bin/python3';
+  const bundledModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+  
+  console.log('[ProcessManager] Bundled Python path:', bundledPythonPath);
+  console.log('[ProcessManager] Bundled model script:', bundledModelScript);
   
   processManager.registerProcess({
     name: 'websocket-backend',
@@ -895,7 +903,9 @@ const initializeProcessManager = () => {
     env: {
       PORT: '8765', // Will be overridden by actual allocated port
       RUST_LOG: 'info',
-      NODE_ENV: 'development'
+      NODE_ENV: 'development',
+      HIVE_BUNDLED_PYTHON: bundledPythonPath,
+      HIVE_BUNDLED_MODEL_SCRIPT: bundledModelScript
     },
     port: 8765,
     alternativePorts: Array.from({length: 100}, (_, i) => 8765 + i + 1), // Dynamic range: 8766-8865

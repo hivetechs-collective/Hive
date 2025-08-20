@@ -38,21 +38,37 @@ impl Default for PythonModelConfig {
             .join("hive")
             .join("models");
         
-        // Try to use virtual environment Python first
-        let python_path = if let Ok(current_dir) = std::env::current_dir() {
+        // Production mode: Use bundled Python from Electron app
+        // Development mode: Fall back to system Python
+        let python_path = if let Ok(bundled_python) = std::env::var("HIVE_BUNDLED_PYTHON") {
+            // Use the Python bundled with Electron app
+            tracing::info!("Using bundled Python from Electron: {}", bundled_python);
+            bundled_python
+        } else if let Ok(current_dir) = std::env::current_dir() {
+            // Development fallback: Check for venv in current directory
             let venv_python = current_dir.join("venv").join("bin").join("python3");
             if venv_python.exists() {
+                tracing::info!("Using venv Python: {}", venv_python.display());
                 venv_python.to_string_lossy().to_string()
             } else {
+                tracing::info!("Using system Python");
                 "python3".to_string()
             }
         } else {
             "python3".to_string()
         };
         
+        // Use bundled model service script if running from Electron
+        let service_script = if let Ok(bundled_script) = std::env::var("HIVE_BUNDLED_MODEL_SCRIPT") {
+            tracing::info!("Using bundled model service script: {}", bundled_script);
+            bundled_script
+        } else {
+            models_dir.join("model_service.py").to_string_lossy().to_string()
+        };
+        
         Self {
             python_path,
-            service_script: models_dir.join("model_service.py").to_string_lossy().to_string(),
+            service_script,
             model_cache_dir: models_dir.join("cache").to_string_lossy().to_string(),
             max_concurrent_requests: 4,
             request_timeout: std::time::Duration::from_secs(300), // 5 minutes for model downloads
