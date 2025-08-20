@@ -271,12 +271,14 @@ export class MemoryServiceServer {
       const sql = `
         SELECT 
           id,
-          user_message as content,
-          assistant_message as response,
+          content,
+          role,
+          stage,
+          model_used,
           timestamp,
           conversation_id
         FROM messages
-        WHERE user_message LIKE ?
+        WHERE content LIKE ?
         ORDER BY timestamp DESC
         LIMIT ?
       `;
