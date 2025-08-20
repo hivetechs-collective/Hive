@@ -228,7 +228,7 @@ class SafeLogger {
     this.rotateLogsIfNeeded();
   }
 
-  private log(level: LogLevel, levelName: string, message: string, meta?: any): void {
+  private writeLog(level: LogLevel, levelName: string, message: string, meta?: any): void {
     if (level < this.logLevel) return;
 
     const formatted = this.formatMessage(levelName, message, meta);
@@ -242,29 +242,29 @@ class SafeLogger {
 
   // Public logging methods
   public debug(message: string, meta?: any): void {
-    this.log(LogLevel.DEBUG, 'DEBUG', message, meta);
+    this.writeLog(LogLevel.DEBUG, 'DEBUG', message, meta);
   }
 
   public info(message: string, meta?: any): void {
-    this.log(LogLevel.INFO, 'INFO', message, meta);
+    this.writeLog(LogLevel.INFO, 'INFO', message, meta);
   }
 
   public warn(message: string, meta?: any): void {
-    this.log(LogLevel.WARN, 'WARN', message, meta);
+    this.writeLog(LogLevel.WARN, 'WARN', message, meta);
   }
 
   public error(message: string, meta?: any): void {
-    this.log(LogLevel.ERROR, 'ERROR', message, meta);
+    this.writeLog(LogLevel.ERROR, 'ERROR', message, meta);
   }
 
   public fatal(message: string, meta?: any): void {
-    this.log(LogLevel.FATAL, 'FATAL', message, meta);
+    this.writeLog(LogLevel.FATAL, 'FATAL', message, meta);
   }
 
   // Compatibility methods for easy migration from console
   public log(message: string, ...args: any[]): void {
     const meta = args.length > 0 ? args : undefined;
-    this.info(message, meta);
+    this.writeLog(LogLevel.INFO, 'INFO', message, meta);
   }
 
   public close(): void {
