@@ -153,7 +153,28 @@ interface ProcessConfig {
 }
 ```
 
-#### 2. Stdio Configuration (Critical for AI Helpers)
+#### 2. Dynamic Port Management System
+```typescript
+// PortManager ensures no port conflicts (src/utils/PortManager.ts)
+class PortManager {
+  // Finds next available port automatically
+  static async allocatePort(config: PortConfig): Promise<number> {
+    // Try preferred port first
+    if (await isPortAvailable(preferredPort)) return preferredPort;
+    
+    // Scan up to 100 ports ahead
+    for (let port = preferredPort + 1; port < preferredPort + 100; port++) {
+      if (await isPortAvailable(port)) return port;
+    }
+  }
+}
+
+// Frontend discovers ports dynamically via IPC
+const backendPort = await window.backendAPI.getBackendPort();
+const wsUrl = `ws://127.0.0.1:${backendPort}/ws`;
+```
+
+#### 3. Stdio Configuration (Critical for AI Helpers)
 ```typescript
 // For binary processes with Python subprocesses (AI Helpers)
 stdio: 'inherit'  // REQUIRED - Allows subprocess communication
@@ -961,9 +982,9 @@ App Root (renderer.ts)
 ```
 External AI Tools (Claude Code, Gemini, etc.)
          ↓
-    HTTP/REST API
+    HTTP/REST API (Dynamic Port)
          ↓
-Memory Service (Express Server)
+Memory Service (Express + HTTP Server)
          ↓
     IPC Channel
          ↓
@@ -971,6 +992,22 @@ Memory Service (Express Server)
          ↓
    SQLite Database
 ```
+
+### Critical Implementation Details
+
+#### Express Server Configuration
+The Memory Service uses Express for API routing but **MUST** attach the Express app to the HTTP server:
+```typescript
+// CRITICAL: Attach Express app to HTTP server
+this.server = http.createServer(this.app);  // NOT just http.createServer()
+this.wss = new WebSocketServer({ server: this.server });
+```
+
+#### Dynamic Port Allocation
+- Service starts on preferred port 3457
+- If unavailable, ProcessManager allocates next available port (3458-3557)
+- Port is communicated to main process via IPC
+- Frontend discovers port dynamically via IPC handlers
 
 ### Service Capabilities
 
@@ -2229,6 +2266,32 @@ interface ToolUsageMetrics {
 
 ---
 
+## Troubleshooting
+
+### Known Issues
+
+#### EPIPE Errors During Consensus Operations
+**Symptoms**: Uncaught Exception dialogs with "Error: write EPIPE" during consensus streaming
+**Cause**: Console.log statements in database callbacks when child process uses `stdio: 'inherit'`
+**Impact**: Makes app unusable due to constant error popups
+**Solution**: 
+- Remove or guard console.log statements in database operations
+- Use proper logging framework that handles pipe closures
+- Consider using `stdio: ['pipe', 'pipe', 'pipe']` with custom output handling
+
+#### Port Conflicts on Startup
+**Symptoms**: "EADDRINUSE" errors when starting the app
+**Cause**: Previous instance still running or port in use by another app
+**Solution**: 
+- App uses PortManager for automatic port allocation
+- Finds next available port (up to 100 ports ahead)
+- Never manually kill ports - let PortManager handle it
+
+#### Memory Service Not Responding
+**Symptoms**: Memory Service panel shows "Loading..." indefinitely
+**Cause**: Express app not attached to HTTP server
+**Solution**: Ensure `this.server = http.createServer(this.app)` in server.ts
+
 ## Future Enhancements
 
 ### Planned Features
@@ -2295,10 +2358,17 @@ electron-poc/
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
 **Last Updated**: 2025-08-20
-**Version**: 1.2.0
+**Version**: 1.3.0
 **Maintainer**: Hive Development Team
 
 ### Change Log
+- **v1.3.0 (2025-08-20)**: Critical Service Fixes & Dynamic Port Management
+  - **Fixed Memory Service**: Express app now properly attached to HTTP server
+  - **Dynamic Port Discovery**: Frontend discovers backend ports via IPC instead of hardcoded values
+  - **Webpack Port Configuration**: Moved Electron Forge webpack from port 9000 to 9100 to avoid conflicts
+  - **Enhanced Port Management**: All IPC handlers now use ProcessManager's dynamic port allocation
+  - **Known Issue**: EPIPE errors in consensus operations due to stdio inheritance conflicts
+
 - **v1.2.0 (2025-08-20)**: Python Runtime & AI Helpers Architecture
   - Implemented bundled Python runtime architecture for production
   - Added environment variable configuration for Python paths
