@@ -865,24 +865,71 @@ The system supports 6 carefully selected agentic coding CLIs that provide autono
 ## CLI Tools Management UI
 
 ### Overview
-The CLI Tools Management UI provides a visual, user-friendly interface for managing agentic coding CLI tools directly from the settings panel, inspired by VS Code's Extensions panel but optimized for CLI tool management.
+The CLI Tools Management UI provides a dedicated, independent panel for managing agentic coding CLI tools, with its own icon in the activity bar. This positions CLI Tools as a core feature alongside Memory Service, Analytics, and Settings - not buried within settings.
 
 ### UI Architecture
 
-#### Settings Modal Integration
-**Location**: `src/components/SettingsModal.tsx` (extension)
-**Tab Position**: Second tab after "General"
-**Access**: Settings icon → CLI Tools tab
+#### Independent Panel Design
+**Location**: `src/components/cli-tools-panel/`
+**Activity Bar Position**: Between Settings and Memory icons
+**Icon**: AI assistant robot face (recognizable AI symbol)
+**Access**: Direct click on AI CLI Tools icon in activity bar
 
 #### Component Structure
 ```typescript
 src/components/
-├── settings/
-│   ├── CliToolsTab.tsx         # Main tab container
+├── cli-tools-panel/
+│   ├── CliToolsPanel.tsx       # Main panel container
 │   ├── CliToolCard.tsx         # Individual tool card component
-│   ├── CliToolsGrid.tsx        # Responsive grid layout
-│   ├── InstallationProgress.tsx # Progress overlay component
-│   └── AdvancedOptions.tsx     # Advanced settings section
+│   ├── ToolsGrid.tsx           # 2x3 responsive grid layout
+│   ├── InstallationProgress.tsx # Real-time installation feedback
+│   ├── ConnectionStatus.tsx    # Memory Service connection indicator
+│   └── ActivityLog.tsx         # Recent actions and updates
+```
+
+### Activity Bar Integration
+
+#### Icon Design
+```svg
+<!-- Clean AI Assistant Icon - Positioned between Settings and Memory -->
+<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+  <path d="M12 2C10.9 2 10 2.9 10 4S10.9 6 12 6 14 5.1 14 4 13.1 2 12 2M12 7C9.24 7 7 9.24 7 12V19C7 20.66 8.34 22 10 22H14C15.66 22 17 20.66 17 19V12C17 9.24 14.76 7 12 7M9 12C9 10.34 10.34 9 12 9S15 10.34 15 12V13H9V12M9 15H15V19C15 19.55 14.55 20 14 20H10C9.45 20 9 19.55 9 19V15M10 16V18H11V16H10M13 16V18H14V16H13Z"/>
+</svg>
+```
+
+**Tooltip**: "AI CLI Tools - Manage AI coding assistants"
+**Keyboard Shortcut**: `Ctrl/Cmd + Shift + T` (for Tools)
+
+### Panel Layout
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ AI CLI TOOLS MANAGEMENT                           [─][□][×]│
+├─────────────────────────────────────────────────────────┤
+│                                                           │
+│ Memory Service: ● Connected (Port 3457)                  │
+│                                                           │
+│ ┌─────────────────────┬─────────────────────┬──────────┐│
+│ │ Claude Code         │ Gemini CLI          │ Qwen Code││
+│ │ [AI Icon]           │ [AI Icon]           │ [AI Icon]││
+│ │ ● Installed v2.1.0  │ ○ Not Installed     │ ● v1.0.5 ││
+│ │ Memory: Connected   │                     │ Memory: ✓ ││
+│ │ [Configure] [↻]     │ [Install]           │ [Update] ││
+│ └─────────────────────┴─────────────────────┴──────────┘│
+│                                                           │
+│ ┌─────────────────────┬─────────────────────┬──────────┐│
+│ │ OpenAI Codex        │ Aider               │ Cline    ││
+│ │ [AI Icon]           │ [AI Icon]           │ [AI Icon]││
+│ │ ○ Not Installed     │ ● Installed v0.21   │ ○ Not    ││
+│ │                     │ Memory: Disabled    │          ││
+│ │ [Install]           │ [Configure]         │ [Install]││
+│ └─────────────────────┴─────────────────────┴──────────┘│
+│                                                           │
+│ Activity Log:                                            │
+│ ├─ 08:45 Claude Code connected to Memory Service         │
+│ ├─ 08:42 Gemini CLI update available (v2.0)             │
+│ └─ 08:40 Panel opened                                    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Visual Design System

@@ -26,6 +26,7 @@ import './file-explorer.css';
 import './status-bar.css';
 import './vscode-scm.css';
 import hiveLogo from './Hive-Logo-small.jpg';
+import aiRobotIcon from './assets/ai-robot.png';
 import { SettingsModal } from './settings-modal';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { MemoryDashboard } from './components/memory-dashboard';
@@ -370,6 +371,12 @@ document.body.innerHTML = `
             <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
           </svg>
           <span class="activity-tooltip">Settings</span>
+        </button>
+        <button class="activity-btn" data-view="cli-tools" aria-label="AI CLI Tools">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M22 14H21C21 10.13 17.87 7 14 7H13V5.73C13.6 5.39 14 4.74 14 4C14 2.9 13.11 2 12 2S10 2.9 10 4C10 4.74 10.4 5.39 11 5.73V7H10C6.13 7 3 10.13 3 14H2C1.45 14 1 14.45 1 15V18C1 18.55 1.45 19 2 19H3V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V19H22C22.55 19 23 18.55 23 18V15C23 14.45 22.55 14 22 14M8.5 13C9.33 13 10 13.67 10 14.5S9.33 16 8.5 16S7 15.33 7 14.5S7.67 13 8.5 13M15.5 13C16.33 13 17 13.67 17 14.5S16.33 16 15.5 16S14 15.33 14 14.5S14.67 13 15.5 13M8 19L10 17H14L16 19H8Z"/>
+          </svg>
+          <span class="activity-tooltip">AI CLI Tools</span>
         </button>
         <button class="activity-btn" data-view="memory" aria-label="Memory">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -2155,6 +2162,177 @@ function hideAnalyticsPanel(): void {
     }
 }
 
+// CLI Tools Panel Management
+function renderCliToolsPanel() {
+    const container = document.getElementById('cli-tools-container');
+    if (container && container.innerHTML.trim() === '') {
+        console.log('[CLI Tools] Rendering CLI Tools panel...');
+        
+        // For now, create a placeholder UI - will be replaced with full component
+        container.innerHTML = `
+            <div class="cli-tools-panel" style="padding: 20px; height: 100%; overflow-y: auto; background: var(--vscode-editor-background);">
+                <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
+                <p style="color: #aaa; margin-bottom: 20px;">Install and manage AI-powered coding assistants</p>
+                
+                <!-- Memory Service Status -->
+                <div style="background: #2d2d30; padding: 12px 15px; border-radius: 6px; margin-bottom: 25px; border: 1px solid #3e3e42;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 8px; height: 8px; background: #4caf50; border-radius: 50%;"></div>
+                        <span style="color: #ccc; font-size: 13px;">Memory Service: Connected (Port 3457)</span>
+                    </div>
+                </div>
+                
+                <!-- CLI Tools Grid -->
+                <div class="cli-tools-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
+                    
+                    <!-- Claude Code Card -->
+                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
+                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+                            Claude Code
+                            <span style="background: #007acc; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">INSTALLED</span>
+                        </h4>
+                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Anthropic's terminal-native AI agent</div>
+                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                                <div><span style="color: #aaa;">Version:</span> v2.1.0</div>
+                                <div><span style="color: #aaa;">Memory:</span> <span style="color: #4caf50;">Connected ✓</span></div>
+                                <div><span style="color: #aaa;">Model:</span> Claude 3.7 Sonnet</div>
+                                <div><span style="color: #aaa;">Last Used:</span> 2 hours ago</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px; display: flex; gap: 8px;">
+                            <button style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
+                            <button style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Gemini CLI Card -->
+                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
+                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+                            Gemini CLI
+                            <span style="background: #28a745; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">FREE</span>
+                        </h4>
+                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Google's free AI coding assistant (1000 req/day)</div>
+                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
+                                <div><span style="color: #aaa;">Model:</span> Gemini 2.5 Pro</div>
+                                <div><span style="color: #aaa;">Context:</span> 1M tokens</div>
+                                <div><span style="color: #aaa;">Auth:</span> Google account</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Qwen Code Card -->
+                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
+                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+                            Qwen Code
+                            <span style="background: #6c757d; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">OPEN SOURCE</span>
+                        </h4>
+                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Alibaba's open-source coding agent</div>
+                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
+                                <div><span style="color: #aaa;">Model:</span> Qwen3-Coder</div>
+                                <div><span style="color: #aaa;">Context:</span> 256K native</div>
+                                <div><span style="color: #aaa;">License:</span> Apache 2.0</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        </div>
+                    </div>
+                    
+                    <!-- OpenAI Codex Card -->
+                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
+                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+                            OpenAI Codex
+                        </h4>
+                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">GPT-powered terminal assistant</div>
+                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
+                                <div><span style="color: #aaa;">Models:</span> GPT-4.1, o3, o4-mini</div>
+                                <div><span style="color: #aaa;">Pricing:</span> Pay-as-you-go</div>
+                                <div><span style="color: #aaa;">Auth:</span> OpenAI API key</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Aider Card -->
+                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
+                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+                            Aider
+                            <span style="background: #fd7e14; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">35.2K ⭐</span>
+                        </h4>
+                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Git-integrated inline editing</div>
+                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
+                                <div><span style="color: #aaa;">Install:</span> pip install aider-chat</div>
+                                <div><span style="color: #aaa;">Models:</span> Multiple providers</div>
+                                <div><span style="color: #aaa;">Auth:</span> BYO API keys</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Cline Card -->
+                    <div class="cli-tool-card" style="background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;">
+                        <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
+                            Cline
+                            <span style="background: #fd7e14; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">47.2K ⭐</span>
+                        </h4>
+                        <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">Lightweight conversational agent</div>
+                        <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
+                            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                                <div><span style="color: #aaa;">Status:</span> Not Installed</div>
+                                <div><span style="color: #aaa;">Install:</span> npm install -g @cline/cli</div>
+                                <div><span style="color: #aaa;">Models:</span> Multiple providers</div>
+                                <div><span style="color: #aaa;">Auth:</span> BYO API keys</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <button style="width: 100%; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Activity Log -->
+                <div style="margin-top: 30px; background: #2d2d30; padding: 15px; border-radius: 6px; border: 1px solid #3e3e42;">
+                    <h4 style="margin: 0 0 12px 0; color: #fff; font-size: 14px;">Recent Activity</h4>
+                    <div style="font-size: 11px; color: #888; line-height: 1.8;">
+                        <div style="display: flex; gap: 10px;">
+                            <span style="color: #666;">08:45</span>
+                            <span style="color: #aaa;">Claude Code connected to Memory Service</span>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <span style="color: #666;">08:42</span>
+                            <span style="color: #aaa;">CLI Tools panel opened</span>
+                        </div>
+                        <div style="display: flex; gap: 10px;">
+                            <span style="color: #666;">08:40</span>
+                            <span style="color: #aaa;">Memory Service started on port 3457</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        console.log('[CLI Tools] Panel rendered successfully');
+    } else {
+        console.log('[CLI Tools] Panel already rendered');
+    }
+}
+
 // Memory Dashboard Management
 let memoryDashboardInstance: MemoryDashboard | null = null;
 
@@ -2568,6 +2746,14 @@ setTimeout(() => {
         panels.settings.style.display = 'none';
         editorArea.appendChild(panels.settings);
         
+        // CLI Tools - Create without panel header for independent management
+        panels['cli-tools'] = document.createElement('div');
+        panels['cli-tools'].id = 'cli-tools-panel';
+        panels['cli-tools'].className = 'content-panel';
+        panels['cli-tools'].innerHTML = '<div id="cli-tools-container"></div>';
+        panels['cli-tools'].style.display = 'none';
+        editorArea.appendChild(panels['cli-tools']);
+        
         // Memory - Create without panel header since Memory Dashboard has its own
         panels.memory = document.createElement('div');
         panels.memory.id = 'memory-panel';
@@ -2661,6 +2847,9 @@ setTimeout(() => {
                         }
                     } else if (view === 'analytics' && analyticsPanel) {
                         showAnalyticsPanel();
+                    } else if (view === 'cli-tools') {
+                        console.log('Opening CLI Tools panel...');
+                        renderCliToolsPanel();
                     } else if (view === 'memory') {
                         console.log('Opening Memory Dashboard...');
                         openMemoryDashboard();
