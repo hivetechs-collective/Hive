@@ -431,8 +431,8 @@ export class MemoryServiceServer {
         console.error('[MemoryService] Failed to get today\'s count:', error);
       }
       
-      // Get today's conversation activity (queries approximation)
-      // Count from conversation_usage table for more accurate tracking
+      // Get today's actual queries from conversation_usage table
+      // Each entry = 1 consensus query (simple or full), no estimations
       try {
         const activityResult = await this.queryDatabase(
           `SELECT COUNT(*) as usage_count 
@@ -442,17 +442,14 @@ export class MemoryServiceServer {
         );
         
         if (activityResult && activityResult[0]) {
-          // Use actual conversation usage count
+          // Show actual conversation usage count - no approximations
           const usageToday = activityResult[0].usage_count || 0;
-          // Preserve in-memory counter if it's higher (from Memory Service API calls)
-          if (usageToday > 0 && this.stats.queriesToday === 0) {
-            // Each conversation use typically involves 2-3 queries to the consensus engine
-            this.stats.queriesToday = usageToday * 2; // More conservative estimate
-          }
-          console.log('[MemoryService] Conversation uses today:', usageToday);
+          // Always update with actual count from database
+          this.stats.queriesToday = usageToday;
+          console.log('[MemoryService] Actual queries today:', usageToday);
         }
       } catch (error) {
-        console.error('[MemoryService] Failed to get today\'s activity:', error);
+        console.error('[MemoryService] Failed to get today\'s query count:', error);
       }
     } catch (error) {
       console.error('[MemoryService] Stats update error:', error);
