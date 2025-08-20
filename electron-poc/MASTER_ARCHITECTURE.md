@@ -587,6 +587,167 @@ impl PythonModelService {
 
 ---
 
+## Python Runtime & AI Helpers Architecture
+
+### Overview
+The Electron app bundles a complete Python runtime with all ML dependencies to ensure AI Helpers work without requiring users to install Python or any packages. This is critical for production deployment.
+
+### Architecture Philosophy
+- **Self-Contained**: Everything needed ships with the app
+- **No System Dependencies**: Users don't need Python installed
+- **Platform-Agnostic**: Same approach works across macOS/Windows/Linux
+- **Production-Ready**: Works on clean systems out of the box
+
+### Directory Structure
+```
+electron-poc/
+├── resources/
+│   └── python-runtime/
+│       ├── venv/                    # Python virtual environment
+│       │   ├── bin/
+│       │   │   └── python3          # Python executable
+│       │   └── lib/
+│       │       └── python3.13/
+│       │           └── site-packages/
+│       │               ├── numpy/
+│       │               ├── torch/
+│       │               ├── transformers/
+│       │               └── sentence_transformers/
+│       └── models/
+│           └── model_service.py     # AI Helper service script
+```
+
+### Implementation Details
+
+#### 1. Environment Variable Configuration
+The Electron main process passes Python paths to the Rust backend via environment variables:
+```typescript
+// In electron-poc/src/index.ts
+const bundledPythonPath = '/path/to/venv/bin/python3';
+const bundledModelScript = path.join(app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+
+processManager.registerProcess({
+  name: 'websocket-backend',
+  env: {
+    HIVE_BUNDLED_PYTHON: bundledPythonPath,
+    HIVE_BUNDLED_MODEL_SCRIPT: bundledModelScript
+  }
+});
+```
+
+#### 2. Rust Backend Python Detection
+The Rust backend checks for bundled Python before falling back to system Python:
+```rust
+// In src/ai_helpers/python_models.rs
+let python_path = if let Ok(bundled_python) = std::env::var("HIVE_BUNDLED_PYTHON") {
+    // Production: Use bundled Python from Electron
+    tracing::info!("Using bundled Python from Electron: {}", bundled_python);
+    bundled_python
+} else if let Ok(current_dir) = std::env::current_dir() {
+    // Development: Check for venv
+    let venv_python = current_dir.join("venv").join("bin").join("python3");
+    if venv_python.exists() {
+        venv_python.to_string_lossy().to_string()
+    } else {
+        "python3".to_string()
+    }
+} else {
+    "python3".to_string()
+};
+```
+
+#### 3. Python Subprocess Management
+```rust
+// Critical configuration for subprocess communication
+let mut cmd = Command::new(&self.config.python_path);
+cmd.arg(&self.config.service_script)
+   .stdin(Stdio::piped())
+   .stdout(Stdio::piped())
+   .stderr(Stdio::piped())
+   .kill_on_drop(true)              // Clean termination
+   .env("PYTHONUNBUFFERED", "1")    // Real-time output
+   .env("TRANSFORMERS_OFFLINE", "0")
+   .env("HF_HOME", model_cache_dir);
+```
+
+### Package Dependencies
+The bundled Python includes these critical packages:
+- **numpy 2.3.1**: Numerical computing foundation
+- **torch 2.7.1**: PyTorch for neural networks
+- **transformers 4.53.2**: Hugging Face transformers
+- **sentence-transformers 5.0.0**: Sentence embeddings
+
+### Production Deployment Strategy
+
+#### Current Implementation (Development)
+- Uses Python venv with symlinks to system Python
+- Requires Python 3.13 installed on the system
+- Works for development and testing
+
+#### Target Implementation (Production)
+1. **Portable Python Distribution**
+   - Use py2app (macOS), py2exe (Windows), or PyInstaller
+   - Creates standalone Python without system dependencies
+   - No symlinks, fully self-contained
+
+2. **Alternative: Binary Compilation**
+   - Use Nuitka or PyOxidizer to compile Python to native binary
+   - Single executable file, no Python runtime needed
+   - Best performance and smallest size
+
+3. **Ultimate Goal: Pure Rust**
+   - Rewrite Python AI Helpers in Rust
+   - Use candle, tch, or ort for ML operations
+   - Single binary, optimal performance
+
+### Process Communication Flow
+```
+Electron Main Process
+    ↓ (Environment Variables)
+ProcessManager
+    ↓ (spawn with stdio: 'inherit')
+Rust Backend Process
+    ↓ (HIVE_BUNDLED_PYTHON env var)
+Python Subprocess (AI Helpers)
+    ↓ (JSON over stdin/stdout)
+Model Service (transformers, torch)
+```
+
+### Critical Requirements
+1. **Stdio Inheritance**: Binary processes MUST use `stdio: 'inherit'` for Python subprocess communication
+2. **Environment Variables**: Pass `PYTHONUNBUFFERED=1` for real-time output
+3. **Path Resolution**: Use absolute paths for Python executable and scripts
+4. **Error Handling**: 30-second timeout on AI Helper initialization
+5. **Process Cleanup**: Use `kill_on_drop(true)` to prevent orphan processes
+
+### Known Issues & Solutions
+
+#### Issue: Python Not Found
+**Symptom**: "Failed to spawn Python model service"
+**Solution**: Ensure HIVE_BUNDLED_PYTHON points to valid Python executable
+
+#### Issue: Module Import Errors
+**Symptom**: "ModuleNotFoundError: No module named 'numpy'"
+**Solution**: Verify all packages are installed in the bundled venv
+
+#### Issue: Subprocess Communication Failure
+**Symptom**: "AI Helpers required for mode detection"
+**Solution**: Ensure ProcessManager uses `stdio: 'inherit'` for binary processes
+
+### Testing the Bundled Python
+```bash
+# Verify Python executable
+$HIVE_BUNDLED_PYTHON --version
+
+# Test package imports
+$HIVE_BUNDLED_PYTHON -c "import numpy, torch, transformers; print('All packages loaded')"
+
+# Run model service directly
+$HIVE_BUNDLED_PYTHON $HIVE_BUNDLED_MODEL_SCRIPT --model-cache-dir ~/.hive/models
+```
+
+---
+
 ## Data Architecture
 
 ### Database Schema (SQLite)
@@ -2134,10 +2295,18 @@ electron-poc/
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
 **Last Updated**: 2025-08-20
-**Version**: 1.1.0
+**Version**: 1.2.0
 **Maintainer**: Hive Development Team
 
 ### Change Log
+- **v1.2.0 (2025-08-20)**: Python Runtime & AI Helpers Architecture
+  - Implemented bundled Python runtime architecture for production
+  - Added environment variable configuration for Python paths
+  - Created self-contained app structure with all ML dependencies
+  - Documented Python subprocess management and communication
+  - Added production deployment strategies (portable Python, binary compilation)
+  - Included troubleshooting guide for common Python/AI Helper issues
+
 - **v1.1.0 (2025-08-20)**: Major process architecture overhaul
   - Implemented parallel startup for all services
   - Fixed AI Helper subprocess communication via stdio inheritance
