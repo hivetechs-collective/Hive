@@ -111,25 +111,27 @@ Infrastructure:
 ```
 Electron Main Process (Orchestrator)
 ├── Memory Service (Node.js Child Process)
-│   ├── Express Server (Port 3457)
+│   ├── Express Server (Dynamic Port: 3457-3560)
 │   ├── WebSocket Server
 │   └── IPC Channel to Main
-├── WebSocket Backend Server (Port 8765)
-│   └── Consensus WebSocket Handler
+├── WebSocket Backend Server (Rust Binary)
+│   ├── Primary Port: 8765 (Dynamic: 8766-8865)
+│   ├── Consensus Engine with AI Helpers
+│   └── Deferred Initialization Architecture
 └── File Watchers
     └── Git Status Monitor
 ```
 
-### Enhanced ProcessManager System (Production-Ready)
+### Enhanced ProcessManager System (2025 Production Architecture)
 **Location**: `src/utils/ProcessManager.ts`
 
-**Core Responsibilities**:
-- **Unified Process Orchestration**: Manages ALL child processes as one cohesive unit
-- **Zero-Downtime Operations**: Automatic recovery ensures continuous service
-- **Production Reliability**: Health monitoring with configurable thresholds
-- **Multi-Process Type Support**: Handles Node.js, TypeScript, and binary executables
+**Core Philosophy**: 
+- **Parallel Everything**: All services start simultaneously (2025 best practice)
+- **Zero Blocking**: No service waits for another to start
+- **Dynamic Ports Only**: Never retry same port, always find next available
+- **Critical Path Protection**: Consensus engine never blocked by other services
 
-**Key Features**:
+**Key Improvements**:
 
 #### 1. Process Registration & Configuration
 ```typescript
@@ -138,93 +140,357 @@ interface ProcessConfig {
   scriptPath: string;              // Path to executable/script
   args?: string[];                 // Command line arguments
   env?: NodeJS.ProcessEnv;         // Environment variables
-  port?: number;                   // Primary port allocation
-  alternativePorts?: number[];     // Fallback ports for conflicts
+  port?: number;                   // Preferred port (not required)
+  alternativePorts?: number[];     // Large range for dynamic allocation
   autoRestart?: boolean;           // Enable crash recovery
   maxRestarts?: number;            // Retry limit (default: 5)
   restartDelay?: number;           // Ms between restarts (default: 3000)
   healthCheckUrl?: string;         // HTTP endpoint for health monitoring
   healthCheckInterval?: number;    // Ms between health checks
+  stdio?: StdioOptions;            // Critical for binary processes
+  detached?: boolean;              // Run independently of parent
+  priority?: 'critical' | 'high' | 'normal'; // Startup priority
 }
 ```
 
-#### 2. Automatic Process Type Detection
-- **TypeScript Files (.ts)**: Uses `fork()` with ts-node for IPC support
-- **JavaScript Files (.js)**: Uses `fork()` for native IPC
-- **Binary Executables**: Uses `spawn()` with stdio pipes for stdout/stderr capture
-
-#### 3. Health Monitoring System
-- **HTTP Health Checks**: Periodic GET requests to configured endpoints
-- **Automatic Recovery**: Restarts unhealthy processes within limits
-- **Event-Driven Notifications**: Real-time status updates to renderer
-- **Reset on Recovery**: Clears restart count after successful health check
-
-#### 4. Unified Startup Sequence
+#### 2. Stdio Configuration (Critical for AI Helpers)
 ```typescript
-// On app.ready():
-1. Initialize ProcessManager with all configurations
-2. Start Memory Service (critical infrastructure)
-3. Start WebSocket Backend (consensus engine)
-4. Verify all processes healthy
-5. Enable renderer communication
+// For binary processes with Python subprocesses (AI Helpers)
+stdio: 'inherit'  // REQUIRED - Allows subprocess communication
+
+// For Node.js processes with IPC
+stdio: 'pipe'     // Default for fork()
+
+// NEVER use for processes with subprocesses:
+stdio: ['ignore', 'pipe', 'pipe']  // Breaks AI Helper communication
 ```
 
-#### 5. Graceful Shutdown Protocol
+#### 3. Parallel Startup Architecture
 ```typescript
-// On app shutdown:
-1. Send shutdown message to all processes
-2. Wait for graceful termination (2s timeout)
-3. Force kill if necessary (SIGKILL)
-4. Release all allocated ports
-5. Clean up IPC channels
+async startAllProcesses(): Promise<void> {
+  const startupPromises: Promise<ProcessResult>[] = [];
+  
+  // Start ALL processes simultaneously
+  for (const [name, config] of this.processConfigs) {
+    startupPromises.push(this.startProcessAsync(name, config));
+  }
+  
+  // Wait for all to complete/fail
+  const results = await Promise.allSettled(startupPromises);
+  
+  // Log results but don't block on failures
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`Process ${index} failed:`, result.reason);
+    }
+  });
+}
 ```
 
-#### 6. IPC Message Routing
-- **Process → Main**: Database queries, status updates, ready signals
-- **Main → Process**: Shutdown commands, configuration updates
-- **Main → Renderer**: Process status, health updates, crash notifications
-
-#### 7. Event System
+#### 4. Dynamic Port Allocation (No Retries)
 ```typescript
-processManager.on('process:starting', (name) => {})
-processManager.on('process:started', (name) => {})
-processManager.on('process:ready', (name, msg) => {})
-processManager.on('process:crashed', (name) => {})
-processManager.on('process:unhealthy', (name, error) => {})
-processManager.on('process:stopping', (name) => {})
-processManager.on('process:stopped', (name) => {})
-processManager.on('process:message', (name, msg) => {})
+async allocatePort(config: PortConfig): Promise<number> {
+  let currentPort = config.preferredPort || config.alternativePorts[0];
+  const maxPort = currentPort + 100; // Scan up to 100 ports ahead
+  
+  // Never retry same port - always find next available
+  while (currentPort < maxPort) {
+    if (await this.isPortAvailable(currentPort)) {
+      return currentPort;
+    }
+    currentPort++;
+  }
+  
+  throw new Error(`No available ports in range ${config.preferredPort}-${maxPort}`);
+}
+
+// Port ranges for each service
+const PORT_RANGES = {
+  'memory-service': { 
+    preferred: 3457, 
+    range: [3457, 3560]  // 100+ alternatives
+  },
+  'websocket-backend': { 
+    preferred: 8765, 
+    range: [8765, 8865]  // 100+ alternatives
+  },
+  'analytics-service': {
+    preferred: 4567,
+    range: [4567, 4667]  // 100+ alternatives
+  }
+};
 ```
 
-**Process Lifecycle State Machine**:
-```
-   ┌─────────┐
-   │ stopped │◄──────────────┐
-   └────┬────┘               │
-        │ startProcess()     │
-   ┌────▼────┐               │
-   │starting │               │
-   └────┬────┘               │
-        │ ready/timeout      │
-   ┌────▼────┐               │
-   │ running │───────────────┤
-   └────┬────┘  stopProcess()│
-        │ crash              │
-   ┌────▼────┐               │
-   │ crashed │───────────────┘
-   └─────────┘ auto-restart/stop
+#### 5. Process Type Detection & Handling
+```typescript
+detectProcessType(scriptPath: string): ProcessType {
+  const ext = path.extname(scriptPath);
+  
+  if (ext === '.ts') return 'typescript';
+  if (ext === '.js') return 'javascript';
+  if (ext === '.rs' || !ext) return 'binary';  // Rust binaries
+  
+  return 'unknown';
+}
+
+async spawnProcess(config: ProcessConfig): Promise<ChildProcess> {
+  const type = this.detectProcessType(config.scriptPath);
+  
+  switch (type) {
+    case 'binary':
+      // Critical: Use 'inherit' for processes with subprocesses
+      return spawn(config.scriptPath, config.args, {
+        stdio: 'inherit',  // Allows AI Helper communication
+        env: { ...process.env, ...config.env },
+        detached: false
+      });
+      
+    case 'typescript':
+      // Use fork with ts-node for IPC support
+      return fork(config.scriptPath, config.args, {
+        execArgv: ['-r', 'ts-node/register'],
+        env: config.env,
+        silent: false
+      });
+      
+    default:
+      return fork(config.scriptPath, config.args, {
+        env: config.env,
+        silent: false
+      });
+  }
+}
 ```
 
-### PortManager System
+#### 6. Enhanced Status Reporting
+```typescript
+interface ProcessStatus {
+  name: string;
+  state: 'stopped' | 'starting' | 'running' | 'crashed' | 'unhealthy';
+  pid?: number;
+  port?: number;
+  uptime?: number;
+  restartCount: number;
+  lastError?: string;
+  memoryUsage?: number;
+  cpuUsage?: number;
+}
+
+// Comprehensive status methods
+getFullStatus(): {
+  processes: ProcessStatus[];
+  allocatedPorts: Map<string, number>;
+  summary: {
+    total: number;
+    running: number;
+    crashed: number;
+    unhealthy: number;
+  };
+}
+
+debugProcess(name: string): Promise<{
+  logs: string[];
+  environment: NodeJS.ProcessEnv;
+  connections: number;
+  threads: number;
+}>
+
+logStatus(): void {
+  console.log('╭─────────────────────────────────────────╮');
+  console.log('│         PROCESS MANAGER STATUS         │');
+  console.log('├─────────────────────────────────────────┤');
+  for (const [name, info] of this.processes) {
+    console.log(`│ ${name.padEnd(20)} │ ${info.state.padEnd(10)} │`);
+  }
+  console.log('╰─────────────────────────────────────────╯');
+}
+```
+
+#### 7. Startup Optimization Techniques
+```typescript
+// 1. Deferred Initialization (Backend)
+// Backend binds to port immediately, initializes consensus later
+async startBackend(): Promise<void> {
+  // Start server immediately
+  const server = await this.bindToPort(port);
+  
+  // Defer heavy initialization
+  setTimeout(() => {
+    this.initializeConsensusEngine();
+  }, 1000);
+}
+
+// 2. Parallel Service Discovery
+// Don't wait for services to be ready before starting others
+async startServices(): Promise<void> {
+  const services = ['memory', 'analytics', 'consensus'];
+  
+  // Start all at once
+  await Promise.all(services.map(s => this.startService(s)));
+  
+  // Check readiness in background
+  this.monitorReadiness(services);
+}
+
+// 3. Non-Blocking Health Checks
+// Health checks run in background, don't block startup
+scheduleHealthChecks(): void {
+  setInterval(async () => {
+    for (const [name, config] of this.processConfigs) {
+      // Non-blocking check
+      this.checkHealthAsync(name, config).catch(err => {
+        console.warn(`Health check failed for ${name}:`, err);
+      });
+    }
+  }, 30000);
+}
+```
+
+#### 8. AI Helper Integration Requirements
+```typescript
+// Critical configuration for AI Helper subprocess communication
+const CONSENSUS_CONFIG = {
+  name: 'websocket-backend',
+  scriptPath: '/path/to/hive-backend-server-enhanced',
+  stdio: 'inherit',  // MUST be 'inherit' for Python subprocess
+  env: {
+    RUST_LOG: 'info',
+    PORT: '8765',
+    PYTHONUNBUFFERED: '1',  // Critical for Python output
+    TRANSFORMERS_OFFLINE: '0',
+    HF_HOME: '~/.hive/models'
+  },
+  priority: 'critical',
+  initTimeout: 30000  // 30s timeout for AI Helper init
+};
+```
+
+#### 9. Process Crash Recovery Protocol
+```typescript
+async handleProcessCrash(name: string): Promise<void> {
+  const info = this.processes.get(name);
+  if (!info) return;
+  
+  // Release port immediately (no blocking)
+  if (info.port) {
+    PortManager.releasePort(name);
+    info.port = undefined;
+  }
+  
+  // Check restart eligibility
+  if (info.restartCount < info.maxRestarts) {
+    info.restartCount++;
+    
+    // Find new port (never reuse crashed port)
+    const newPort = await this.allocateNewPort(name);
+    
+    // Restart with new port
+    await this.startProcess(name, { ...info.config, port: newPort });
+  }
+}
+```
+
+#### 10. Event System (Enhanced)
+```typescript
+// New events for better monitoring
+processManager.on('port:allocated', (name, port) => {})
+processManager.on('port:released', (name, port) => {})
+processManager.on('startup:parallel', (services) => {})
+processManager.on('consensus:initializing', () => {})
+processManager.on('consensus:ready', () => {})
+processManager.on('ai-helpers:timeout', () => {})
+```
+
+### Advanced PortManager System
 **Location**: `src/utils/PortManager.ts`
 
-**Features**:
-- **Port Availability Detection**: Checks if ports are in use
-- **Automatic Conflict Resolution**: Finds alternative ports
-- **Process Cleanup**: Kills conflicting processes if needed
-- **Alternative Port Selection**: Falls back to configured alternatives
-- **Port Registry**: Tracks allocations to prevent conflicts
-- **Service Wait**: Waits for services to bind to allocated ports
+**2025 Best Practices**:
+- **No Retries**: If port in use, immediately try next
+- **Large Ranges**: 100+ alternative ports per service
+- **Smart Scanning**: Efficient port availability checking
+- **No Process Killing**: Never kill existing processes
+- **Parallel Allocation**: Allocate ports for all services at once
+
+### Parallel Startup Timeline
+```
+T+0ms    : App Ready Event
+T+1ms    : ProcessManager initialized
+T+2ms    : Start all processes in parallel
+           ├── Memory Service → Port scan 3457-3560
+           ├── Backend Server → Port scan 8765-8865  
+           └── Analytics (future) → Port scan 4567-4667
+T+100ms  : Port allocations complete
+T+150ms  : Processes spawned with allocated ports
+T+500ms  : Backend bound to port, serving health endpoint
+T+1000ms : Memory Service Express server ready
+T+1500ms : Backend starts consensus initialization (deferred)
+T+5000ms : Full system operational
+```
+
+### Critical Implementation Details
+
+#### Binary Process Communication Fix
+The most critical fix was changing stdio configuration for binary processes:
+```typescript
+// BROKEN - Prevents AI Helper Python subprocess communication
+stdio: ['ignore', 'pipe', 'pipe']
+
+// FIXED - Allows full subprocess communication
+stdio: 'inherit'
+```
+This single change resolved the "AI Helpers required for mode detection" error by allowing the Rust backend's Python subprocesses to communicate properly.
+
+#### Port Allocation Strategy
+```typescript
+// Old (Broken) - Retry same port with delays
+async allocatePort(port: number): Promise<number> {
+  for (let i = 0; i < 50; i++) {
+    if (await isAvailable(port)) return port;
+    await sleep(1000); // Wait and retry
+  }
+  throw new Error('Port unavailable after 50 attempts');
+}
+
+// New (Fixed) - Instant next port finding
+async allocatePort(preferred: number): Promise<number> {
+  let port = preferred;
+  while (port < preferred + 100) {
+    if (await isAvailable(port)) return port;
+    port++; // Immediately try next
+  }
+  throw new Error('No ports available in range');
+}
+```
+
+#### Consensus Engine Initialization
+```rust
+// Backend Server - Deferred initialization pattern
+async fn main() {
+  // 1. Bind to port immediately (fast)
+  let server = bind_server(port).await;
+  
+  // 2. Start serving health endpoint
+  tokio::spawn(health_endpoint());
+  
+  // 3. Defer consensus initialization
+  tokio::spawn(async move {
+    sleep(Duration::from_secs(1)).await;
+    
+    // Initialize with 30s timeout for AI Helpers
+    match timeout(Duration::from_secs(30), 
+                  ConsensusEngine::new()).await {
+      Ok(Ok(engine)) => {
+        *CONSENSUS_ENGINE.write().await = Some(engine);
+        info!("Consensus ready");
+      }
+      Err(_) => warn!("AI Helper init timeout")
+    }
+  });
+  
+  // 4. Server starts immediately
+  server.serve().await;
+}
+```
 
 ### Integration with Main Architecture
 
@@ -254,13 +520,70 @@ processManager.registerProcess({
 });
 ```
 
-#### 3. Benefits of Unified Process Management
+#### 3. AI Helper Python Subprocess Architecture
+```rust
+// In src/ai_helpers/python_models.rs
+pub struct PythonModelService {
+  process: Arc<Mutex<Option<Child>>>,
+  stdin: Arc<Mutex<Option<ChildStdin>>>,
+  response_handlers: Arc<RwLock<HashMap<String, Sender<Response>>>>
+}
+
+impl PythonModelService {
+  async fn start(&self) -> Result<()> {
+    let mut cmd = Command::new("python3");
+    cmd.arg("model_service.py")
+       .stdin(Stdio::piped())
+       .stdout(Stdio::piped())
+       .stderr(Stdio::piped())
+       .kill_on_drop(true)  // Critical: Clean subprocess termination
+       .env("PYTHONUNBUFFERED", "1")  // Critical: Real-time output
+       .env("TRANSFORMERS_OFFLINE", "0")
+       .env("HF_HOME", model_cache_dir);
+    
+    let mut child = cmd.spawn()?;
+    
+    // Capture stderr for debugging
+    let stderr = child.stderr.take().unwrap();
+    tokio::spawn(async move {
+      let reader = BufReader::new(stderr);
+      let mut lines = reader.lines();
+      while let Ok(Some(line)) = lines.next_line().await {
+        tracing::warn!("Python stderr: {}", line);
+      }
+    });
+    
+    // Handle stdout responses
+    let stdout = child.stdout.take().unwrap();
+    tokio::spawn(async move {
+      let reader = BufReader::new(stdout);
+      let mut lines = reader.lines();
+      while let Ok(Some(line)) = lines.next_line().await {
+        if let Ok(response) = serde_json::from_str(&line) {
+          // Route response to waiting handler
+          self.route_response(response).await;
+        }
+      }
+    });
+  }
+}
+```
+
+**Critical Requirements**:
+- Parent process MUST use `stdio: 'inherit'` in ProcessManager
+- Python subprocess MUST set `PYTHONUNBUFFERED=1`
+- Use `kill_on_drop(true)` to prevent orphan processes
+- Capture stderr separately for debugging
+- Add timeout wrappers for initialization
+
+#### 4. Benefits of Unified Process Management
 - **Single Point of Control**: All processes managed through one system
 - **Consistent Lifecycle**: Same startup/shutdown/restart logic for all
 - **Unified Monitoring**: Single dashboard for all process health
 - **Simplified Debugging**: Centralized logging and error handling
 - **Production Ready**: Built-in recovery and health monitoring
 - **User Experience**: Appears as single cohesive application
+- **2025 Performance**: Parallel startup, dynamic ports, zero blocking
 
 ---
 
@@ -1810,6 +2133,15 @@ electron-poc/
 
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
-**Last Updated**: 2025-08-19
-**Version**: 1.0.0
+**Last Updated**: 2025-08-20
+**Version**: 1.1.0
 **Maintainer**: Hive Development Team
+
+### Change Log
+- **v1.1.0 (2025-08-20)**: Major process architecture overhaul
+  - Implemented parallel startup for all services
+  - Fixed AI Helper subprocess communication via stdio inheritance
+  - Added dynamic port allocation with 100+ port ranges
+  - Introduced deferred consensus initialization
+  - Enhanced ProcessManager with comprehensive status reporting
+  - Documented 2025 best practices for process management
