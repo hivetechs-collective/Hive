@@ -432,24 +432,24 @@ export class MemoryServiceServer {
       }
       
       // Get today's conversation activity (queries approximation)
-      // Since usage_records isn't populated yet, we'll count today's messages as activity
+      // Count from conversation_usage table for more accurate tracking
       try {
         const activityResult = await this.queryDatabase(
-          `SELECT COUNT(DISTINCT conversation_id) as conversations_today 
-           FROM messages 
-           WHERE date(timestamp) = date('now')`,
+          `SELECT COUNT(*) as usage_count 
+           FROM conversation_usage 
+           WHERE date(timestamp, 'localtime') = date('now', 'localtime')`,
           []
         );
         
         if (activityResult && activityResult[0]) {
-          // Use conversations today as a proxy for queries
-          const conversationsToday = activityResult[0].conversations_today || 0;
+          // Use actual conversation usage count
+          const usageToday = activityResult[0].usage_count || 0;
           // Preserve in-memory counter if it's higher (from Memory Service API calls)
-          if (conversationsToday > 0 && this.stats.queriesToday === 0) {
-            // Set a reasonable estimate based on conversations
-            this.stats.queriesToday = conversationsToday * 3; // Estimate 3 queries per conversation
+          if (usageToday > 0 && this.stats.queriesToday === 0) {
+            // Each conversation use typically involves 2-3 queries to the consensus engine
+            this.stats.queriesToday = usageToday * 2; // More conservative estimate
           }
-          console.log('[MemoryService] Conversations today:', conversationsToday);
+          console.log('[MemoryService] Conversation uses today:', usageToday);
         }
       } catch (error) {
         console.error('[MemoryService] Failed to get today\'s activity:', error);
