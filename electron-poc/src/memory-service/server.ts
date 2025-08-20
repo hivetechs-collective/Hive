@@ -343,11 +343,13 @@ export class MemoryServiceServer {
     }
   };
 
-  private handleStats = (req: any, res: any) => {
-    // Update stats before returning
-    this.updateStats().catch(err => {
+  private handleStats = async (req: any, res: any) => {
+    // Update stats before returning for fresh data
+    try {
+      await this.updateStats();
+    } catch (err: any) {
       console.error('[MemoryService] Stats update error:', err.message);
-    });
+    }
     res.json(this.stats);
   };
 
@@ -526,14 +528,14 @@ export class MemoryServiceServer {
           this.updateStats().catch(err => {
             console.error('[MemoryService] Initial stats update failed:', err.message);
           });
-        }, 1000);
+        }, 500);
         
         // Set up periodic stats updates to catch consensus contributions
         setInterval(() => {
           this.updateStats().catch(err => {
             console.error('[MemoryService] Periodic stats update failed:', err.message);
           });
-        }, 30000); // Update every 30 seconds
+        }, 10000); // Update every 10 seconds for more responsive updates
         
         resolve(true);
       });
