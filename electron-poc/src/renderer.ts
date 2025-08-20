@@ -2566,8 +2566,12 @@ setTimeout(() => {
         panels.settings = createPanel('settings', 'SETTINGS', '<div id="settings-container"></div>');
         editorArea.appendChild(panels.settings);
         
-        // Memory
-        panels.memory = createPanel('memory', 'MEMORY', '<div id="memory-container"></div>');
+        // Memory - Create without panel header since Memory Dashboard has its own
+        panels.memory = document.createElement('div');
+        panels.memory.id = 'memory-panel';
+        panels.memory.className = 'content-panel';
+        panels.memory.innerHTML = '<div id="memory-container"></div>';
+        panels.memory.style.display = 'none';
         editorArea.appendChild(panels.memory);
         
         // Analytics panel already exists, just track it
