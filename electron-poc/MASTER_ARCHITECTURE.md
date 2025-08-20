@@ -2266,18 +2266,53 @@ interface ToolUsageMetrics {
 
 ---
 
+## Logging System
+
+### SafeLogger Architecture
+**Location**: `src/utils/SafeLogger.ts`
+
+The SafeLogger system provides production-ready logging with automatic EPIPE error handling, essential for Electron apps with child processes using `stdio: 'inherit'`.
+
+#### Key Features:
+- **EPIPE Error Handling**: Gracefully handles pipe errors without crashing
+- **Log Rotation**: Automatic rotation at 10MB with 5 file retention
+- **Log Levels**: DEBUG, INFO, WARN, ERROR, FATAL
+- **Dual Output**: Console (development) and file (always)
+- **Async Queue**: Non-blocking file writes with queue management
+- **Auto-cleanup**: Handles process exit gracefully
+
+#### Usage:
+```typescript
+import { logger } from './utils/SafeLogger';
+
+// Simple logging
+logger.info('Server started', { port: 3457 });
+logger.error('Connection failed', error);
+logger.warn('Deprecation warning');
+logger.debug('Debug information');
+
+// Compatibility with console
+logger.log('Simple message'); // Maps to info
+```
+
+#### Log File Location:
+- **macOS**: `~/Library/Application Support/Hive Consensus/logs/`
+- **Windows**: `%APPDATA%/Hive Consensus/logs/`
+- **Linux**: `~/.config/Hive Consensus/logs/`
+
+#### Log File Format:
+```
+hive-2025-08-20T19-30-45-123Z.log
+```
+
 ## Troubleshooting
 
 ### Known Issues
 
-#### EPIPE Errors During Consensus Operations
-**Symptoms**: Uncaught Exception dialogs with "Error: write EPIPE" during consensus streaming
-**Cause**: Console.log statements in database callbacks when child process uses `stdio: 'inherit'`
-**Impact**: Makes app unusable due to constant error popups
-**Solution**: 
-- Remove or guard console.log statements in database operations
-- Use proper logging framework that handles pipe closures
-- Consider using `stdio: ['pipe', 'pipe', 'pipe']` with custom output handling
+#### ~~EPIPE Errors During Consensus Operations~~ (FIXED in v1.4.0)
+**Previous Issue**: Uncaught Exception dialogs with "Error: write EPIPE" during consensus streaming
+**Root Cause**: Console.log statements in database callbacks when child process uses `stdio: 'inherit'`
+**Solution Implemented**: SafeLogger system that gracefully handles EPIPE errors without crashing
 
 #### Port Conflicts on Startup
 **Symptoms**: "EADDRINUSE" errors when starting the app
@@ -2358,16 +2393,22 @@ electron-poc/
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
 **Last Updated**: 2025-08-20
-**Version**: 1.3.0
+**Version**: 1.4.0
 **Maintainer**: Hive Development Team
 
 ### Change Log
+- **v1.4.0 (2025-08-20)**: Production Logging System & Code Cleanup
+  - **SafeLogger Implementation**: Production-ready logging system that handles EPIPE errors gracefully
+  - **Replaced All Console Statements**: 206 console.log/error statements replaced with SafeLogger
+  - **Log Rotation & Management**: Automatic log file rotation with 10MB max size and 5 file retention
+  - **Code Cleanup**: Removed duplicate Memory Service functions and orphaned code
+  - **Fixed EPIPE Errors**: No more uncaught exception dialogs during consensus operations
+  
 - **v1.3.0 (2025-08-20)**: Critical Service Fixes & Dynamic Port Management
   - **Fixed Memory Service**: Express app now properly attached to HTTP server
   - **Dynamic Port Discovery**: Frontend discovers backend ports via IPC instead of hardcoded values
   - **Webpack Port Configuration**: Moved Electron Forge webpack from port 9000 to 9100 to avoid conflicts
   - **Enhanced Port Management**: All IPC handlers now use ProcessManager's dynamic port allocation
-  - **Known Issue**: EPIPE errors in consensus operations due to stdio inheritance conflicts
 
 - **v1.2.0 (2025-08-20)**: Python Runtime & AI Helpers Architecture
   - Implemented bundled Python runtime architecture for production

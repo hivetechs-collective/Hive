@@ -11,6 +11,7 @@ import * as http from 'http';
 import path from 'path';
 import crypto from 'crypto';
 
+import { logger } from '../utils/SafeLogger';
 // Types
 interface MemoryQuery {
   client: string;
@@ -201,7 +202,7 @@ export class MemoryServiceServer {
     if (!this.wss) return;
     
     this.wss.on('connection', (ws: WebSocket) => {
-      console.log('[MemoryService] WebSocket client connected');
+      logger.info('[MemoryService] WebSocket client connected');
       
       // Send initial stats
       ws.send(JSON.stringify({
@@ -220,12 +221,12 @@ export class MemoryServiceServer {
             }));
           }
         } catch (error) {
-          console.error('[MemoryService] WebSocket message error:', error);
+          logger.error('[MemoryService] WebSocket message error:', error);
         }
       });
       
       ws.on('close', () => {
-        console.log('[MemoryService] WebSocket client disconnected');
+        logger.info('[MemoryService] WebSocket client disconnected');
       });
     });
   }
@@ -309,7 +310,7 @@ export class MemoryServiceServer {
       });
       
     } catch (error) {
-      console.error('[MemoryService] Query error:', error);
+      logger.error('[MemoryService] Query error:', error);
       res.status(500).json({ error: 'Query failed' });
     }
   };
@@ -338,7 +339,7 @@ export class MemoryServiceServer {
       });
       
     } catch (error) {
-      console.error('[MemoryService] Contribution error:', error);
+      logger.error('[MemoryService] Contribution error:', error);
       res.status(500).json({ error: 'Contribution failed' });
     }
   };
@@ -348,7 +349,7 @@ export class MemoryServiceServer {
     try {
       await this.updateStats();
     } catch (err: any) {
-      console.error('[MemoryService] Stats update error:', err.message);
+      logger.error('[MemoryService] Stats update error:', err.message);
     }
     res.json(this.stats);
   };
@@ -400,7 +401,7 @@ export class MemoryServiceServer {
 
   private async updateStats() {
     try {
-      console.log('[MemoryService] Updating stats, querying database...');
+      logger.info('[MemoryService] Updating stats, querying database...');
       
       // Get total memories count via IPC
       const result = await this.queryDatabase(
@@ -408,11 +409,11 @@ export class MemoryServiceServer {
         []
       );
       
-      console.log('[MemoryService] Stats query result:', result);
+      logger.info('[MemoryService] Stats query result:', result);
       
       if (result && result[0]) {
         this.stats.totalMemories = result[0].count || 0;
-        console.log('[MemoryService] Total memories:', this.stats.totalMemories);
+        logger.info('[MemoryService] Total memories:', this.stats.totalMemories);
       }
       
       // Get today's messages count (contributions from consensus)
@@ -425,10 +426,10 @@ export class MemoryServiceServer {
         if (todayResult && todayResult[0]) {
           // This shows messages added today via consensus
           this.stats.contributionsToday = todayResult[0].count || 0;
-          console.log('[MemoryService] Messages added today:', this.stats.contributionsToday);
+          logger.info('[MemoryService] Messages added today:', this.stats.contributionsToday);
         }
       } catch (error) {
-        console.error('[MemoryService] Failed to get today\'s count:', error);
+        logger.error('[MemoryService] Failed to get today\'s count:', error);
       }
       
       // Get today's actual queries from conversation_usage table
@@ -446,13 +447,13 @@ export class MemoryServiceServer {
           const usageToday = activityResult[0].usage_count || 0;
           // Always update with actual count from database
           this.stats.queriesToday = usageToday;
-          console.log('[MemoryService] Actual queries today:', usageToday);
+          logger.info('[MemoryService] Actual queries today:', usageToday);
         }
       } catch (error) {
-        console.error('[MemoryService] Failed to get today\'s query count:', error);
+        logger.error('[MemoryService] Failed to get today\'s query count:', error);
       }
     } catch (error) {
-      console.error('[MemoryService] Stats update error:', error);
+      logger.error('[MemoryService] Stats update error:', error);
     }
     
     // Connected tools count (in memory - resets on restart)
@@ -512,8 +513,8 @@ export class MemoryServiceServer {
       this.setupWebSocket();
       
       this.server.listen(this.port, () => {
-        console.log(`[MemoryService] Server running on http://localhost:${this.port}`);
-        console.log(`[MemoryService] WebSocket available on ws://localhost:${this.port}`);
+        logger.info(`[MemoryService] Server running on http://localhost:${this.port}`);
+        logger.info(`[MemoryService] WebSocket available on ws://localhost:${this.port}`);
         
         // Notify parent process we're ready
         if (process.send) {
@@ -523,14 +524,14 @@ export class MemoryServiceServer {
         // Update stats after a short delay to ensure IPC is ready
         setTimeout(() => {
           this.updateStats().catch(err => {
-            console.error('[MemoryService] Initial stats update failed:', err.message);
+            logger.error('[MemoryService] Initial stats update failed:', err.message);
           });
         }, 500);
         
         // Set up periodic stats updates to catch consensus contributions
         setInterval(() => {
           this.updateStats().catch(err => {
-            console.error('[MemoryService] Periodic stats update failed:', err.message);
+            logger.error('[MemoryService] Periodic stats update failed:', err.message);
           });
         }, 10000); // Update every 10 seconds for more responsive updates
         
@@ -543,7 +544,7 @@ export class MemoryServiceServer {
     return new Promise((resolve) => {
       if (this.server) {
         this.server.close(() => {
-          console.log('[MemoryService] Server stopped');
+          logger.info('[MemoryService] Server stopped');
           resolve(true);
         });
       } else {

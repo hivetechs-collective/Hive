@@ -12,6 +12,7 @@ import * as os from 'os';
 // Remove node-fetch to avoid punycode deprecation warning
 import { EventEmitter } from 'events';
 
+import { logger } from './SafeLogger';
 const exec = promisify(execCallback);
 
 // Tool status tracking
@@ -170,7 +171,7 @@ export class CliToolsManager extends EventEmitter {
         }
       }
     } catch (error) {
-      console.error('[CliToolsManager] Failed to load status:', error);
+      logger.error('[CliToolsManager] Failed to load status:', error);
     }
   }
 
@@ -183,7 +184,7 @@ export class CliToolsManager extends EventEmitter {
       fs.mkdirSync(path.dirname(this.configPath), { recursive: true });
       fs.writeFileSync(this.configPath, JSON.stringify(data, null, 2));
     } catch (error) {
-      console.error('[CliToolsManager] Failed to save status:', error);
+      logger.error('[CliToolsManager] Failed to save status:', error);
     }
   }
 
@@ -350,10 +351,10 @@ export class CliToolsManager extends EventEmitter {
         fs.mkdirSync(path.dirname(claudeConfigPath), { recursive: true });
         fs.writeFileSync(claudeConfigPath, JSON.stringify(claudeConfig, null, 2));
         
-        console.log('[CliToolsManager] Claude CLI registered with Memory Service');
+        logger.info('[CliToolsManager] Claude CLI registered with Memory Service');
       }
     } catch (error) {
-      console.error('[CliToolsManager] Failed to configure Memory Service:', error);
+      logger.error('[CliToolsManager] Failed to configure Memory Service:', error);
     }
   }
 
@@ -419,7 +420,7 @@ export class CliToolsManager extends EventEmitter {
         });
       });
     } catch (error) {
-      console.error('[CliToolsManager] Failed to save to database:', error);
+      logger.error('[CliToolsManager] Failed to save to database:', error);
     }
   }
 
@@ -446,7 +447,7 @@ export class CliToolsManager extends EventEmitter {
         }
       }
     } catch (error) {
-      console.error(`[CliToolsManager] Failed to check updates for ${toolId}:`, error);
+      logger.error(`[CliToolsManager] Failed to check updates for ${toolId}:`, error);
     }
 
     return false;
@@ -637,7 +638,7 @@ export class CliToolsManager extends EventEmitter {
         });
       });
     } catch (error) {
-      console.error('[CliToolsManager] Failed to remove from database:', error);
+      logger.error('[CliToolsManager] Failed to remove from database:', error);
     }
   }
 
@@ -646,7 +647,7 @@ export class CliToolsManager extends EventEmitter {
    */
   public cancelInstallation(toolId: string): void {
     // TODO: Implement cancellation logic
-    console.log(`[CliToolsManager] Cancelling installation of ${toolId}`);
+    logger.info(`[CliToolsManager] Cancelling installation of ${toolId}`);
     
     const status = this.status.get(toolId);
     if (status) {
@@ -704,7 +705,7 @@ export class CliToolsManager extends EventEmitter {
   public updateSettings(settings: any): void {
     // Update internal settings
     // This would typically update configuration that affects installation behavior
-    console.log('[CliToolsManager] Settings updated:', settings);
+    logger.info('[CliToolsManager] Settings updated:', settings);
   }
 }
 

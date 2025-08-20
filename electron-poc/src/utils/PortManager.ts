@@ -7,6 +7,7 @@ import * as net from 'net';
 import { exec, execSync } from 'child_process';
 import { promisify } from 'util';
 
+import { logger } from './SafeLogger';
 const execAsync = promisify(exec);
 
 export interface PortConfig {
@@ -87,7 +88,7 @@ export class PortManager {
       const pids = stdout.trim().split('\n').filter(Boolean);
       
       if (pids.length > 0) {
-        console.log(`[PortManager] Killing processes on port ${port}: ${pids.join(', ')}`);
+        logger.info(`[PortManager] Killing processes on port ${port}: ${pids.join(', ')}`);
         
         // Kill each process
         for (const pid of pids) {
@@ -106,7 +107,7 @@ export class PortManager {
             }
           } catch (error: any) {
             if (error.code !== 'ESRCH') { // Process doesn't exist
-              console.error(`[PortManager] Error killing process ${pid}:`, error.message);
+              logger.error(`[PortManager] Error killing process ${pid}:`, error.message);
             }
           }
         }
@@ -118,7 +119,7 @@ export class PortManager {
       
       return false;
     } catch (error) {
-      console.error('[PortManager] Error finding process on port:', error);
+      logger.error('[PortManager] Error finding process on port:', error);
       return false;
     }
   }
@@ -133,7 +134,7 @@ export class PortManager {
     if (this.allocatedPorts.has(serviceName)) {
       const existingPort = this.allocatedPorts.get(serviceName)!;
       if (await this.isPortAvailable(existingPort)) {
-        console.log(`[PortManager] Reusing existing port ${existingPort} for ${serviceName}`);
+        logger.info(`[PortManager] Reusing existing port ${existingPort} for ${serviceName}`);
         return existingPort;
       }
       // Release the old allocation since it's no longer valid
@@ -147,16 +148,16 @@ export class PortManager {
     // Check preferred port first
     if (await this.isPortAvailable(currentPort)) {
       portToUse = currentPort;
-      console.log(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
+      logger.info(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
     } else {
-      console.log(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
+      logger.info(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
       
       // Try alternative ports if provided
       if (alternativePorts && alternativePorts.length > 0) {
         for (const altPort of alternativePorts) {
           if (await this.isPortAvailable(altPort)) {
             portToUse = altPort;
-            console.log(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
+            logger.info(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
             break;
           }
         }
@@ -170,7 +171,7 @@ export class PortManager {
         while (currentPort < maxPort) {
           if (await this.isPortAvailable(currentPort)) {
             portToUse = currentPort;
-            console.log(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
+            logger.info(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
             break;
           }
           currentPort++;
@@ -185,7 +186,7 @@ export class PortManager {
     
     // Allocate the port
     this.allocatedPorts.set(serviceName, portToUse);
-    console.log(`[PortManager] ✅ Port ${portToUse} allocated for ${serviceName}`);
+    logger.info(`[PortManager] ✅ Port ${portToUse} allocated for ${serviceName}`);
     return portToUse;
   }
   
@@ -196,7 +197,7 @@ export class PortManager {
     if (this.allocatedPorts.has(serviceName)) {
       const port = this.allocatedPorts.get(serviceName)!;
       this.allocatedPorts.delete(serviceName);
-      console.log(`[PortManager] Released port ${port} for ${serviceName}`);
+      logger.info(`[PortManager] Released port ${port} for ${serviceName}`);
     }
   }
   
@@ -204,14 +205,14 @@ export class PortManager {
    * Clean up all allocated ports
    */
   static async cleanup(): Promise<void> {
-    console.log('[PortManager] Cleaning up all allocated ports...');
+    logger.info('[PortManager] Cleaning up all allocated ports...');
     
     for (const [serviceName, port] of this.allocatedPorts) {
       try {
         await this.killProcessOnPort(port);
-        console.log(`[PortManager] Cleaned up port ${port} for ${serviceName}`);
+        logger.info(`[PortManager] Cleaned up port ${port} for ${serviceName}`);
       } catch (error) {
-        console.error(`[PortManager] Error cleaning up ${serviceName}:`, error);
+        logger.error(`[PortManager] Error cleaning up ${serviceName}:`, error);
       }
     }
     

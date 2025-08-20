@@ -5,36 +5,37 @@
 
 import MemoryServiceServer from './server';
 
+import { logger } from '../utils/SafeLogger';
 const port = parseInt(process.env.MEMORY_SERVICE_PORT || '3457');
 
-console.log('[MemoryService] Starting Memory Service...');
-console.log('[MemoryService] Port:', port);
-console.log('[MemoryService] Database: via IPC to main process');
+logger.info('[MemoryService] Starting Memory Service...');
+logger.info('[MemoryService] Port:', port);
+logger.info('[MemoryService] Database: via IPC to main process');
 
 const server = new MemoryServiceServer(port);
 
 // Start the server
 server.start().then(() => {
-  console.log('[MemoryService] Service started successfully');
+  logger.info('[MemoryService] Service started successfully');
   
   // Send ready signal to parent process if running as child
   if (process.send) {
     process.send({ type: 'ready', port });
   }
 }).catch(error => {
-  console.error('[MemoryService] Failed to start:', error);
+  logger.error('[MemoryService] Failed to start:', error);
   process.exit(1);
 });
 
 // Handle shutdown gracefully
 process.on('SIGTERM', async () => {
-  console.log('[MemoryService] Received SIGTERM, shutting down...');
+  logger.info('[MemoryService] Received SIGTERM, shutting down...');
   await server.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('[MemoryService] Received SIGINT, shutting down...');
+  logger.info('[MemoryService] Received SIGINT, shutting down...');
   await server.stop();
   process.exit(0);
 });
