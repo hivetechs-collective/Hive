@@ -1052,9 +1052,7 @@ function openSettingsTab() {
   } else {
     console.error('[Settings] EditorTabs not available, falling back to modal');
     // Fallback - show the modal if tabs aren't available
-    if (!settingsModal.modalElement) {
-      settingsModal.initializeModal(document.body);
-    }
+    // Just try to show it, initializeModal will be called if needed
     settingsModal.showModal();
   }
 }

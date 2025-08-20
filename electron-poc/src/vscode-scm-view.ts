@@ -833,8 +833,8 @@ export class VSCodeSCMView {
         if (window.editorTabs) {
           try {
             // Get submodule status and diff
-            const submoduleStatus = await window.gitAPI.getSubmoduleStatus(fullPath);
-            const submoduleDiff = await window.gitAPI.getSubmoduleDiff(fullPath);
+            const submoduleStatus = await (window.gitAPI as any).getSubmoduleStatus(fullPath);
+            const submoduleDiff = await (window.gitAPI as any).getSubmoduleDiff(fullPath);
             
             let statusHtml = '';
             let diffHtml = '';
