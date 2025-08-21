@@ -34,7 +34,7 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
     env?: Record<string, string>;
   }) => {
     try {
-      logger.info(`[Terminal] Creating terminal process ${options.terminalId}`);
+      logger.info(`[Terminal] Creating terminal process ${options.terminalId} with command: ${options.command}`);
       
       // Check if terminal already exists
       if (terminalProcesses.has(options.terminalId)) {
@@ -66,7 +66,7 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
         
         const { exec } = require('child_process');
         const commandPath = await new Promise<string | null>((resolve) => {
-          exec(`which ${options.command}`, { env: { ...process.env, PATH: enhancedPath } }, (error, stdout) => {
+          exec(`which ${options.command}`, { env: { ...process.env, PATH: enhancedPath } }, (error: any, stdout: string) => {
             if (error || !stdout.trim()) {
               logger.warn(`[Terminal] Command '${options.command}' not found in PATH`);
               resolve(null);

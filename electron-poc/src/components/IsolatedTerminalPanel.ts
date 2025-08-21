@@ -518,6 +518,7 @@ export class IsolatedTerminalPanel {
         }
         
         // Create the terminal process
+        console.log(`[IsolatedTerminalPanel] Creating terminal for ${command} in ${workingDirectory}`);
         const result = await terminalAPI.createTerminalProcess({
             terminalId: tabId,
             command: command,
@@ -528,6 +529,7 @@ export class IsolatedTerminalPanel {
                 HIVE_INTEGRATION: 'true'
             }
         });
+        console.log(`[IsolatedTerminalPanel] Terminal creation result:`, result);
         
         if (!result.success) {
             // Handle common error cases with user-friendly messages
