@@ -473,6 +473,13 @@ body {
   overflow: hidden;
 }
 
+/* Isolated Terminal Panel - ensure it doesn't flex */
+.isolated-terminal-panel {
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  flex-basis: auto !important;
+}
+
 /* Left Sidebar - VS Code Style with Activity Bar + Panel */
 .sidebar {
   background: var(--background-primary);
