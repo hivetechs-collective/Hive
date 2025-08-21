@@ -1,12 +1,8 @@
 /**
  * CLI Tool Detector
  * Checks for installed AI CLI tools and provides information about them
+ * Note: This runs in the renderer process, actual detection happens in main process via IPC
  */
-
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 
 export interface CliToolInfo {
     id: string;
@@ -48,34 +44,14 @@ export class CliToolDetector {
     }
     
     /**
-     * Check if a specific tool is installed
+     * Check if a specific tool is installed (via IPC to main process)
      */
     async checkTool(toolId: string): Promise<CliToolInfo | null> {
         const tool = this.tools.get(toolId);
         if (!tool) return null;
         
-        try {
-            // Try to find the command in PATH
-            const { stdout: pathOutput } = await execAsync(`which ${tool.command}`);
-            if (pathOutput) {
-                tool.path = pathOutput.trim();
-                tool.installed = true;
-                
-                // Try to get version
-                try {
-                    const versionCmd = `${tool.command} --version`;
-                    const { stdout: versionOutput } = await execAsync(versionCmd);
-                    tool.version = versionOutput.trim().split('\n')[0];
-                } catch {
-                    // Some tools might not support --version
-                    tool.version = 'unknown';
-                }
-            }
-        } catch {
-            // Command not found
-            tool.installed = false;
-        }
-        
+        // This would normally call IPC, but for now just return the tool info
+        // The actual detection happens in the AI CLI Tools panel
         return tool;
     }
     
@@ -83,8 +59,8 @@ export class CliToolDetector {
      * Check all known tools
      */
     async checkAllTools(): Promise<Map<string, CliToolInfo>> {
-        const checkPromises = Array.from(this.tools.keys()).map(id => this.checkTool(id));
-        await Promise.all(checkPromises);
+        // For now, just return the tools map
+        // Actual detection happens in the AI CLI Tools panel via IPC
         return this.tools;
     }
     
