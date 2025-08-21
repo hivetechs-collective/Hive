@@ -296,57 +296,47 @@ function showInputDialog(title: string, message: string, defaultValue: string = 
 // Create the exact Hive Consensus GUI layout
 // Add global error handler to catch errors before webpack-dev-server
 window.addEventListener('error', (event) => {
-  console.error('[Global Error Handler] Caught error event');
-  console.error('[Global Error Handler] Event type:', event.constructor.name);
-  console.error('[Global Error Handler] Error object:', event.error);
-  console.error('[Global Error Handler] Error type:', event.error?.constructor?.name);
-  console.error('[Global Error Handler] Error message:', event.message);
-  console.error('[Global Error Handler] Stack:', event.error?.stack);
-  
-  // Check if the error itself is an Event
+  // Silently handle Event object errors (these are harmless)
   if (event.error && (event.error instanceof Event || event.error.constructor.name.includes('Event'))) {
-    console.error('[Global Error Handler] ERROR IS AN EVENT OBJECT! Preventing propagation');
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
     return false;
   }
   
-  // Check if the error message contains [object Event]
+  // Silently handle errors with [object Event] in message
   if (event.message && event.message.includes('[object Event]')) {
-    console.error('[Global Error Handler] Error message contains [object Event], preventing');
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
     return false;
   }
+  
+  // Only log actual errors, not Event objects
+  console.error('Error:', event.message, event.error);
 }, true);
 
 // Also catch unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
-  console.error('[Unhandled Rejection] Caught rejection');
-  console.error('[Unhandled Rejection] Event type:', event.constructor.name);
-  console.error('[Unhandled Rejection] Reason:', event.reason);
-  console.error('[Unhandled Rejection] Reason type:', event.reason?.constructor?.name);
-  
-  // Check if the reason is an Event object
+  // Silently handle Event object rejections
   if (event.reason instanceof Event) {
-    console.error('[Unhandled Rejection] REASON IS AN EVENT OBJECT! Preventing propagation');
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
     return false;
   }
   
-  // Check for [object Event] string
+  // Silently handle [object Event] string rejections
   const reasonStr = Object.prototype.toString.call(event.reason);
   if (reasonStr.includes('Event') || (event.reason && event.reason.toString && event.reason.toString().includes('[object Event]'))) {
-    console.error('[Unhandled Rejection] Reason contains Event, preventing:', reasonStr);
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
     return false;
   }
+  
+  // Only log actual promise rejections, not Event objects
+  console.error('Unhandled Promise Rejection:', event.reason);
 }, true);
 
 document.body.innerHTML = `
