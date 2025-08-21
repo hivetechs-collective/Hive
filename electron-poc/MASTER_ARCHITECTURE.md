@@ -1797,6 +1797,127 @@ interface FilterOptions {
 }
 ```
 
+### Launch Button Functionality
+
+#### Overview
+The Launch button provides seamless integration between installed CLI tools and the IDE's global project context. It appears for all installed tools and launches them in the appropriate terminal environment.
+
+#### Implementation Architecture
+
+**1. Global Project Context Integration**
+```typescript
+// Uses the same currentOpenedFolder variable shared across:
+- File Explorer
+- Source Control (Git)
+- Bottom Status Bar
+- Launch Button
+
+// Project context flow:
+currentOpenedFolder → Launch Button → Terminal Launch
+```
+
+**2. Launch Flow**
+```typescript
+async function launchCliTool(toolId: string): Promise<void> {
+  // Step 1: Check global project context
+  if (!currentOpenedFolder) {
+    // Prompt user to select folder
+    const result = await showOpenDialog({ properties: ['openDirectory'] });
+    if (result.filePaths[0]) {
+      currentOpenedFolder = result.filePaths[0];
+      await handleOpenFolder(result.filePaths[0]);
+    }
+  }
+  
+  // Step 2: Launch in project context
+  await electronAPI.launchCliTool(toolId, currentOpenedFolder);
+}
+```
+
+**3. Platform-Specific Terminal Launch**
+```typescript
+// macOS: AppleScript to open Terminal.app
+command = `osascript -e 'tell application "Terminal" to do script "cd \\"${projectPath}\\" && claude"'`;
+
+// Windows: Command Prompt
+command = `start cmd /k "cd /d ${projectPath} && claude"`;
+
+// Linux: Try multiple terminal emulators
+command = `gnome-terminal -- bash -c "cd '${projectPath}' && claude; exec bash"`;
+```
+
+#### Button States & UI
+
+**1. Installed Tool Buttons**
+```
+┌─────────────────────────────────────┐
+│ [Icon] Claude Code                  │
+│ ● Installed ✓ | v1.0.86            │
+│ Memory: Connected ✓                 │
+│                                     │
+│ [Launch] [Details] [Configure] [Update] │
+└─────────────────────────────────────┘
+```
+
+**2. Launch Button Behavior**
+- **Color**: Blue (#2196f3) - distinguishes from other actions
+- **Position**: First button for installed tools
+- **Status**: Shows "Launching..." during operation
+- **Success**: Brief "Running in: [folder]" confirmation
+
+**3. No Project Context Handling**
+```
+When no folder is open:
+1. Launch button clicked
+2. Status shows: "⚠️ Please open a project folder first"
+3. File dialog opens automatically
+4. User selects folder
+5. Global context updates (Explorer, Git, Status Bar)
+6. Tool launches in selected folder
+```
+
+#### IPC Communication
+
+**1. Renderer → Main Process**
+```typescript
+// preload.ts
+launchCliTool: (toolId: string, projectPath: string) => 
+  ipcRenderer.invoke('cli-tool-launch', toolId, projectPath)
+
+// index.ts handler
+ipcMain.handle('cli-tool-launch', async (_, toolId, projectPath) => {
+  await manager.launch(toolId, projectPath);
+  return { success: true };
+});
+```
+
+**2. CliToolsManager Implementation**
+```typescript
+public async launch(toolId: string, projectPath: string): Promise<void> {
+  // Verify tool is installed
+  const status = await this.getToolStatus(toolId);
+  if (!status.installed) {
+    throw new Error(`${tool.name} is not installed`);
+  }
+  
+  // Launch with platform-specific command
+  await this.launchClaudeCode(projectPath);
+}
+```
+
+#### Future Enhancements (Integrated Terminal)
+
+**1. Launch Options**
+- "Launch in Hive" - Integrated terminal tab
+- "Launch in Terminal" - External terminal (current implementation)
+
+**2. Integrated Terminal Requirements**
+- xterm.js or similar terminal emulator
+- PTY (pseudo-terminal) process management
+- Tab management alongside existing console
+- Proper ANSI color support
+- Terminal resize handling
+
 ### Installation Flow
 
 #### Pre-Installation Checks
