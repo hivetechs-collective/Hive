@@ -13,6 +13,24 @@ export interface CliToolInfo {
     path?: string;
 }
 
+export interface CliToolStatus {
+    id: string;
+    name: string;
+    installed: boolean;
+    version?: string;
+    path?: string;
+}
+
+// Placeholder function for Claude Code detection
+export async function detectClaudeCode(): Promise<CliToolStatus> {
+    // This will be replaced with IPC call to main process
+    return {
+        id: 'claude-code',
+        name: 'Claude Code',
+        installed: false
+    };
+}
+
 export class CliToolDetector {
     private tools: Map<string, CliToolInfo> = new Map();
     

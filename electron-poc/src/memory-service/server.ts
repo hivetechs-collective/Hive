@@ -71,7 +71,7 @@ interface MemoryStats {
 
 export class MemoryServiceServer {
   private app: express.Application;
-  private server: http.Server | null = null;
+  private server: http.Server<any, any> | null = null;
   private wss: WebSocketServer | null = null;
   private connectedTools: Map<string, ConnectedTool> = new Map();
   private activityStream: any[] = [];
@@ -508,11 +508,11 @@ export class MemoryServiceServer {
   public start() {
     return new Promise((resolve) => {
       // Create server with Express app and WebSocket when starting
-      this.server = http.createServer(this.app);  // CRITICAL: Attach Express app to server!
+      this.server = (http as any).createServer(this.app);  // CRITICAL: Attach Express app to server!
       this.wss = new WebSocketServer({ server: this.server });
       this.setupWebSocket();
       
-      this.server.listen(this.port, () => {
+      (this.server as any).listen(this.port, () => {
         logger.info(`[MemoryService] Server running on http://localhost:${this.port}`);
         logger.info(`[MemoryService] WebSocket available on ws://localhost:${this.port}`);
         
@@ -543,7 +543,7 @@ export class MemoryServiceServer {
   public stop() {
     return new Promise((resolve) => {
       if (this.server) {
-        this.server.close(() => {
+        (this.server as any).close(() => {
           logger.info('[MemoryService] Server stopped');
           resolve(true);
         });

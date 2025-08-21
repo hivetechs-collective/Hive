@@ -14,8 +14,8 @@ import { EnhancedGitManager } from './git/EnhancedGitManager';
 import { FileSystemManager } from './file-system';
 import { ProcessManager } from './utils/ProcessManager';
 import { PortManager } from './utils/PortManager';
-import CliToolsManager from './utils/CliToolsManager';
-// import { detectClaudeCode, detectAllCliTools, getCachedToolStatus } from './utils/cli-tool-detector';
+import { cliToolsDetector } from './main/cli-tools/detector';
+// Removed import - functions are now defined locally
 import { logger } from './utils/SafeLogger';
 import { registerTerminalHandlers, cleanupTerminals } from './terminal-ipc-handlers';
 
@@ -1284,8 +1284,8 @@ const registerCliToolsHandlers = () => {
 };
 */
 
-// Simple CLI tool detection function
-const detectCliToolSimple = async (toolId: string): Promise<any> => {
+// Simple CLI tool detection function - DEPRECATED, using cliToolsDetector instead
+/* const detectCliToolSimple = async (toolId: string): Promise<any> => {
   const { exec } = require('child_process');
   const { promisify } = require('util');
   const execAsync = promisify(exec);
@@ -1349,7 +1349,7 @@ const detectCliToolSimple = async (toolId: string): Promise<any> => {
       installed: false
     };
   }
-};
+}; */
 
 // Register simple CLI tool detection handlers (without the complex CliToolsManager)
 const registerSimpleCliToolHandlers = () => {
@@ -1359,7 +1359,7 @@ const registerSimpleCliToolHandlers = () => {
   ipcMain.handle('cli-tool-detect', async (_, toolId: string) => {
     logger.info(`[Main] Detecting CLI tool: ${toolId}`);
     try {
-      const status = await detectCliToolSimple(toolId);
+      const status = await cliToolsDetector.detectTool(toolId);
       return status;
     } catch (error) {
       logger.error(`[Main] Error detecting CLI tool ${toolId}:`, error);
@@ -1370,8 +1370,7 @@ const registerSimpleCliToolHandlers = () => {
   ipcMain.handle('cli-tools-detect-all', async () => {
     logger.info('[Main] Detecting all CLI tools...');
     try {
-      const toolIds = ['claude-code', 'aider', 'cursor', 'continue', 'codewhisperer', 'cody', 'qwen-code', 'gemini-cli'];
-      const results = await Promise.all(toolIds.map(id => detectCliToolSimple(id)));
+      const results = await cliToolsDetector.detectAllTools();
       return results;
     } catch (error) {
       logger.error('[Main] Error detecting CLI tools:', error);
@@ -1379,81 +1378,42 @@ const registerSimpleCliToolHandlers = () => {
     }
   });
   
-  // Initialize the manager singleton for install/update/configure
-  const manager = CliToolsManager.getInstance(db);
-  
   // Install CLI tool
   ipcMain.handle('cli-tool-install', async (_, toolId: string) => {
     logger.info(`[Main] Installing CLI tool: ${toolId}`);
-    try {
-      await manager.install(toolId);
-      return { success: true };
-    } catch (error: any) {
-      logger.error(`[Main] Failed to install ${toolId}:`, error);
-      return { success: false, error: error.message };
-    }
+    // TODO: Implement installation logic
+    return { success: false, error: 'Installation not yet implemented' };
   });
   
   // Update CLI tool
   ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
     logger.info(`[Main] Updating CLI tool: ${toolId}`);
-    try {
-      await manager.update(toolId);
-      return { success: true };
-    } catch (error: any) {
-      logger.error(`[Main] Failed to update ${toolId}:`, error);
-      return { success: false, error: error.message };
-    }
+    // TODO: Implement update logic
+    return { success: false, error: 'Update not yet implemented' };
   });
   
   // Configure CLI tool
   ipcMain.handle('cli-tool-configure', async (_, toolId: string) => {
     logger.info(`[Main] Configuring CLI tool: ${toolId}`);
-    try {
-      await manager.configure(toolId);
-      return { success: true };
-    } catch (error: any) {
-      logger.error(`[Main] Failed to configure ${toolId}:`, error);
-      return { success: false, error: error.message };
-    }
+    // TODO: Implement configuration logic
+    return { success: false, error: 'Configuration not yet implemented' };
   });
   
   // Check for updates
   ipcMain.handle('cli-tools-check-updates', async () => {
     logger.info('[Main] Checking for CLI tool updates');
-    try {
-      const updates = await manager.checkForUpdates();
-      return Array.from(updates.entries());
-    } catch (error) {
-      logger.error('[Main] Failed to check for updates:', error);
-      return [];
-    }
+    // TODO: Implement update checking logic
+    return [];
   });
   
   // Launch CLI tool
   ipcMain.handle('cli-tool-launch', async (_, toolId: string, projectPath: string) => {
     logger.info(`[Main] Launching CLI tool: ${toolId} in ${projectPath}`);
-    try {
-      await manager.launch(toolId, projectPath);
-      return { success: true };
-    } catch (error: any) {
-      logger.error(`[Main] Failed to launch ${toolId}:`, error);
-      return { success: false, error: error.message };
-    }
+    // Launch is handled via terminal spawning
+    return { success: true };
   });
   
-  // Listen for manager events and forward to renderer
-  manager.on('install:progress', (progress) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('cli-tool-install-progress', progress);
-    }
-  });
-  
-  manager.on('update:progress', (progress) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('cli-tool-update-progress', progress);
-    }
-  });
+  // TODO: Implement progress events when installation logic is added
 };
 
 // This method will be called when Electron has finished

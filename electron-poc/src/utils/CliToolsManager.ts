@@ -11,7 +11,18 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { logger } from './SafeLogger';
-import { detectClaudeCode, CliToolStatus } from './cli-tool-detector';
+// Import types from cli-tool-detector
+import type { CliToolStatus } from './cli-tool-detector';
+
+// Placeholder for detectClaudeCode - will use IPC instead
+async function detectClaudeCode(): Promise<CliToolStatus> {
+    // This will be replaced with IPC call to main process
+    return {
+        id: 'claude-code',
+        name: 'Claude Code',
+        installed: false
+    };
+}
 
 const execAsync = promisify(execCallback);
 const fsPromises = fs.promises;
