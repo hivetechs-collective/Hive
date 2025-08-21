@@ -3032,64 +3032,64 @@ setTimeout(() => {
         const leftResize = document.getElementById('isolated-terminal-resize-left');
         const rightResize = document.getElementById('isolated-terminal-resize-right');
         
+        // Use a shared state to avoid conflicts
+        let resizeState = {
+            isResizing: false,
+            handle: null as 'left' | 'right' | null,
+            startX: 0,
+            startWidth: 0
+        };
+        
         if (leftResize) {
-            let isResizing = false;
-            let startX = 0;
-            let startWidth = 0;
-            
             leftResize.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                startX = e.clientX;
-                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                resizeState.isResizing = true;
+                resizeState.handle = 'left';
+                resizeState.startX = e.clientX;
+                resizeState.startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
                 document.body.style.cursor = 'ew-resize';
                 e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                
-                // For left handle: dragging left (negative deltaX) should increase width
-                const deltaX = e.clientX - startX;
-                const newWidth = Math.min(Math.max(startWidth + (-deltaX), 200), 800);  // Negate deltaX so left drag increases width
-                isolatedTerminalPanel.style.width = newWidth + 'px';
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                }
             });
         }
         
         if (rightResize) {
-            let isResizing = false;
-            let startX = 0;
-            let startWidth = 0;
-            
             rightResize.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                startX = e.clientX;
-                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                resizeState.isResizing = true;
+                resizeState.handle = 'right';
+                resizeState.startX = e.clientX;
+                resizeState.startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
                 document.body.style.cursor = 'ew-resize';
                 e.preventDefault();
             });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                
-                const deltaX = e.clientX - startX;
-                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 800);
-                isolatedTerminalPanel.style.width = newWidth + 'px';
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                }
-            });
         }
+        
+        // Single mousemove handler for both
+        document.addEventListener('mousemove', (e) => {
+            if (!resizeState.isResizing) return;
+            
+            const deltaX = e.clientX - resizeState.startX;
+            let newWidth: number;
+            
+            if (resizeState.handle === 'left') {
+                // For left handle: dragging left should increase width, dragging right should decrease
+                // When dragging left, deltaX is negative, so we subtract it (which adds to width)
+                newWidth = resizeState.startWidth - deltaX;
+            } else {
+                // For right handle: dragging right should increase width
+                newWidth = resizeState.startWidth + deltaX;
+            }
+            
+            newWidth = Math.min(Math.max(newWidth, 200), 800);
+            isolatedTerminalPanel.style.width = newWidth + 'px';
+        });
+        
+        // Single mouseup handler
+        document.addEventListener('mouseup', () => {
+            if (resizeState.isResizing) {
+                resizeState.isResizing = false;
+                resizeState.handle = null;
+                document.body.style.cursor = '';
+            }
+        });
     }
     
     // Listen for menu events from main process
