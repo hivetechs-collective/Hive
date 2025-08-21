@@ -61,11 +61,17 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
         // If a specific command is provided (like 'claude'), run it within a shell
         shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
         
-        // Don't check if command exists - just try to run it with enhanced PATH
-        // The enhanced PATH will be set in the environment below
+        // For known CLI tools, use their full paths
+        let commandToRun = options.command;
+        if (options.command === 'claude') {
+          // Claude Code is typically at /opt/homebrew/bin/claude on M1 Macs
+          commandToRun = '/opt/homebrew/bin/claude';
+          logger.info(`[Terminal] Using full path for Claude Code: ${commandToRun}`);
+        }
+        
         // Run the command in an interactive shell
-        args = ['-i', '-c', `${options.command} ${(options.args || []).join(' ')}`];
-        logger.info(`[Terminal] Running command in interactive shell: ${options.command}`);
+        args = ['-i', '-c', `${commandToRun} ${(options.args || []).join(' ')}`];
+        logger.info(`[Terminal] Running command in interactive shell: ${commandToRun}`);
       } else {
         // Otherwise use the shell directly  
         shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
