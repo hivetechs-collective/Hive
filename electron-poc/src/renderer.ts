@@ -3042,10 +3042,12 @@ setTimeout(() => {
         
         if (leftResize) {
             leftResize.addEventListener('mousedown', (e) => {
+                console.log('[IsolatedTerminal] Left resize handle mousedown');
                 resizeState.isResizing = true;
                 resizeState.handle = 'left';
                 resizeState.startX = e.clientX;
                 resizeState.startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                console.log('[IsolatedTerminal] Start width:', resizeState.startWidth, 'Start X:', resizeState.startX);
                 document.body.style.cursor = 'ew-resize';
                 e.preventDefault();
             });
@@ -3070,12 +3072,14 @@ setTimeout(() => {
             let newWidth: number;
             
             if (resizeState.handle === 'left') {
-                // For left handle: use same calculation as consensus panel resize
-                // When dragging left, we want width to increase
-                const leftDeltaX = resizeState.startX - e.clientX;  // Reversed calculation like consensus panel
-                newWidth = resizeState.startWidth + leftDeltaX;
+                // For left handle: dragging left should INCREASE width
+                // deltaX is negative when dragging left, positive when dragging right
+                // So we SUBTRACT deltaX to get the correct behavior
+                newWidth = resizeState.startWidth - deltaX;
+                console.log('[IsolatedTerminal] Left resize - deltaX:', deltaX, 'newWidth:', newWidth);
             } else {
                 // For right handle: dragging right should increase width
+                // deltaX is positive when dragging right, negative when dragging left
                 newWidth = resizeState.startWidth + deltaX;
             }
             
