@@ -3048,8 +3048,8 @@ setTimeout(() => {
             document.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
                 
-                const deltaX = startX - e.clientX;
-                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 800);
+                const deltaX = e.clientX - startX;  // Changed: reversed the subtraction
+                const newWidth = Math.min(Math.max(startWidth - deltaX, 200), 800);  // Changed: subtract deltaX instead of add
                 isolatedTerminalPanel.style.width = newWidth + 'px';
             });
             
