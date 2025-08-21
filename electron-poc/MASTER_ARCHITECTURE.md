@@ -283,7 +283,44 @@ async spawnProcess(config: ProcessConfig): Promise<ChildProcess> {
 }
 ```
 
-#### 6. Enhanced Status Reporting
+#### 6. IPC Ready Message Handling (Critical Fix)
+```typescript
+// FIXED: Race condition where message handler intercepted ready signal
+// Solution: Create ready promise BEFORE setting up message handlers
+
+let readyResolver: ((value: boolean) => void) | null = null;
+let readyTimeout: NodeJS.Timeout | null = null;
+
+// Create ready promise first
+const readyPromise = (config.scriptPath.endsWith('.ts') || config.scriptPath.endsWith('.js')) 
+  ? new Promise<boolean>((resolve) => {
+      readyResolver = resolve;
+      readyTimeout = setTimeout(() => {
+        logger.info(`Timeout waiting for ${name} ready signal`);
+        resolve(false);
+      }, 15000);
+    })
+  : null;
+
+// THEN set up message handlers
+childProcess.on('message', (msg: any) => {
+  // Handle ready message first if waiting for it
+  if (readyResolver && msg.type === 'ready') {
+    if (readyTimeout) clearTimeout(readyTimeout);
+    readyResolver(true);
+    readyResolver = null; // Prevent double resolution
+  }
+  // Then handle normally
+  this.handleProcessMessage(name, msg);
+});
+
+// Wait for ready signal
+if (readyPromise) {
+  isReady = await readyPromise;
+}
+```
+
+#### 7. Enhanced Status Reporting
 ```typescript
 interface ProcessStatus {
   name: string;
@@ -2280,19 +2317,64 @@ The SafeLogger system provides production-ready logging with automatic EPIPE err
 - **Dual Output**: Console (development) and file (always)
 - **Async Queue**: Non-blocking file writes with queue management
 - **Auto-cleanup**: Handles process exit gracefully
+- **Cross-Process Support**: Works in both Electron main and child processes
 
-#### Usage:
+#### Implementation Details:
+
+**Dynamic Electron Detection** (Critical for child processes):
+```typescript
+// SafeLogger dynamically detects context
+if (options.logDir) {
+  this.logDir = options.logDir;
+} else {
+  try {
+    // Try Electron's app if available (main process)
+    const { app } = require('electron');
+    this.logDir = path.join(app.getPath('userData'), 'logs');
+  } catch {
+    // Fallback for child processes (Memory Service, etc.)
+    this.logDir = path.join(os.homedir(), '.hive-consensus', 'logs');
+  }
+}
+```
+
+**EPIPE Error Prevention**:
+```typescript
+private safeConsoleLog(level: string, message: string): void {
+  try {
+    if (process.stdout && process.stdout.writable) {
+      process.stdout.write(`[${level}] ${message}\n`);
+    }
+  } catch (error: any) {
+    // Silently ignore EPIPE errors - prevents crashes
+    if (error.code !== 'EPIPE' && error.code !== 'EBADF') {
+      // Non-EPIPE errors try stderr as fallback
+      if (process.stderr?.writable) {
+        process.stderr.write(`[LOGGER ERROR] ${error.message}\n`);
+      }
+    }
+  }
+}
+```
+
+#### Usage Best Practices:
 ```typescript
 import { logger } from './utils/SafeLogger';
 
-// Simple logging
-logger.info('Server started', { port: 3457 });
-logger.error('Connection failed', error);
-logger.warn('Deprecation warning');
-logger.debug('Debug information');
+// ALWAYS use template literals for multi-value logging
+logger.info(`Server started on port ${port}`);
+logger.error(`Connection failed: ${error.message}`);
 
-// Compatibility with console
-logger.log('Simple message'); // Maps to info
+// AVOID multi-parameter logging (causes TypeScript errors)
+// ❌ BAD: logger.info('Port', port, 'ready');
+// ✅ GOOD: logger.info(`Port ${port} ready`);
+
+// Structured logging with metadata
+logger.info('Request received', { 
+  method: 'POST', 
+  path: '/api/query',
+  userId: 123 
+});
 ```
 
 #### Log File Location:
@@ -2393,10 +2475,18 @@ electron-poc/
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
 **Last Updated**: 2025-08-20
-**Version**: 1.4.0
+**Version**: 1.5.0
 **Maintainer**: Hive Development Team
 
 ### Change Log
+- **v1.5.0 (2025-08-20)**: Memory Service Recovery & SafeLogger Cross-Process Support
+  - **Fixed Memory Service Startup**: Resolved IPC ready message race condition in ProcessManager
+  - **SafeLogger Cross-Process Support**: Dynamic Electron detection for main and child processes
+  - **Template Literal Logging**: Fixed all multi-parameter log statements to use template literals
+  - **IPC Ready Promise Fix**: Ready promise now created before message handlers to prevent interception
+  - **Child Process Logging**: SafeLogger now falls back to ~/.hive-consensus/logs for child processes
+  - **Memory Service Operational**: Successfully starts, connects via IPC, and queries database
+
 - **v1.4.0 (2025-08-20)**: Production Logging System & Code Cleanup
   - **SafeLogger Implementation**: Production-ready logging system that handles EPIPE errors gracefully
   - **Replaced All Console Statements**: 206 console.log/error statements replaced with SafeLogger
