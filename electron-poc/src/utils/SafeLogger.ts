@@ -7,7 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { app } from 'electron';
+import * as os from 'os';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -46,8 +46,19 @@ class SafeLogger {
     this.maxFileSize = options.maxFileSize ?? 10 * 1024 * 1024; // 10MB default
     this.maxFiles = options.maxFiles ?? 5;
     
-    // Use app userData directory for logs
-    this.logDir = options.logDir ?? path.join(app.getPath('userData'), 'logs');
+    // Use app userData directory for logs, or fallback to home directory for child processes
+    if (options.logDir) {
+      this.logDir = options.logDir;
+    } else {
+      try {
+        // Try to use Electron's app if available (main process)
+        const { app } = require('electron');
+        this.logDir = path.join(app.getPath('userData'), 'logs');
+      } catch {
+        // Fallback for child processes or when Electron is not available
+        this.logDir = path.join(os.homedir(), '.hive-consensus', 'logs');
+      }
+    }
     
     if (this.logToFile) {
       this.initializeFileLogging();

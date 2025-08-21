@@ -493,7 +493,7 @@ const registerFileSystemHandlers = () => {
     }
     logger.info('[Main] fs-get-tree called with root:', rootPath);
     const result = await fileSystemManager!.getFileTree(rootPath);
-    logger.info('[Main] fs-get-tree returning', result?.length || 0, 'items');
+    logger.info(`[Main] fs-get-tree returning ${result?.length || 0} items`);
     return result;
   });
 
@@ -501,7 +501,7 @@ const registerFileSystemHandlers = () => {
     if (!fileSystemManager) initFileSystemManager();
     logger.info('[Main] fs-get-directory called for:', dirPath);
     const result = await fileSystemManager!.getDirectoryContents(dirPath);
-    logger.info('[Main] fs-get-directory returning', result?.length || 0, 'items for', dirPath);
+    logger.info(`[Main] fs-get-directory returning ${result?.length || 0} items for ${dirPath}`);
     return result;
   });
 
@@ -575,7 +575,7 @@ const registerFileSystemHandlers = () => {
   ipcMain.handle('fs-move-file', async (_, sourcePath: string, targetPath: string) => {
     try {
       const fs = require('fs').promises;
-      logger.info('[Main] Moving:', sourcePath, 'to', targetPath);
+      logger.info(`[Main] Moving: ${sourcePath} to ${targetPath}`);
       await fs.rename(sourcePath, targetPath);
       logger.info('[Main] Move successful');
       return true;
@@ -1852,7 +1852,7 @@ ipcMain.handle('settings-test-keys', async (_, { openrouterKey, hiveKey }) => {
           } else {
             // Handle error responses
             const errorText = await response.text();
-            logger.error('License validation failed:', response.status, errorText);
+            logger.error(`License validation failed: ${response.status} - ${errorText}`);
             
             result.hiveValid = false;
             result.licenseInfo = {

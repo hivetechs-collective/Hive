@@ -71,7 +71,7 @@ interface MemoryStats {
 
 export class MemoryServiceServer {
   private app: express.Application;
-  private server: any | null = null;
+  private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private connectedTools: Map<string, ConnectedTool> = new Map();
   private activityStream: any[] = [];

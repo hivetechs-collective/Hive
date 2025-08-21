@@ -148,8 +148,32 @@ export class ProcessManager extends EventEmitter {
       info.pid = childProcess.pid;
       info.lastStartTime = new Date();
       
-      // Set up event handlers
+      // Wait for process to be ready - check for 'ready' message or port binding
+      // Binary processes like Rust servers may take longer to initialize
+      let isReady = false;
+      let readyResolver: ((value: boolean) => void) | null = null;
+      let readyTimeout: NodeJS.Timeout | null = null;
+      
+      // Create ready promise for Node.js processes BEFORE setting up message handlers
+      const readyPromise = (config.scriptPath.endsWith('.ts') || config.scriptPath.endsWith('.js')) 
+        ? new Promise<boolean>((resolve) => {
+            readyResolver = resolve;
+            readyTimeout = setTimeout(() => {
+              logger.info(`[ProcessManager] Timeout waiting for ${name} ready signal (waited 15000ms)`);
+              resolve(false);
+            }, 15000);
+          })
+        : null;
+      
+      // Set up event handlers - now the ready promise is already created
       childProcess.on('message', (msg: any) => {
+        // Handle ready message first if we're waiting for it
+        if (readyResolver && msg.type === 'ready') {
+          if (readyTimeout) clearTimeout(readyTimeout);
+          readyResolver(true);
+          readyResolver = null; // Clear so we don't resolve twice
+        }
+        // Then handle normally
         this.handleProcessMessage(name, msg);
       });
       
@@ -170,28 +194,8 @@ export class ProcessManager extends EventEmitter {
         }
       });
       
-      // Wait for process to be ready - check for 'ready' message or port binding
-      // Binary processes like Rust servers may take longer to initialize
-      let isReady = false;
-      
-      if (config.scriptPath.endsWith('.ts') || config.scriptPath.endsWith('.js')) {
+      if (readyPromise) {
         // For Node.js processes, wait for IPC 'ready' message
-        const readyPromise = new Promise<boolean>((resolve) => {
-          const timeout = setTimeout(() => {
-            logger.info(`[ProcessManager] Timeout waiting for ${name} ready signal (waited 15000ms)`);
-            resolve(false);
-          }, 15000);
-          
-          const messageHandler = (msg: any) => {
-            if (msg.type === 'ready') {
-              clearTimeout(timeout);
-              resolve(true);
-            }
-          };
-          
-          childProcess.once('message', messageHandler);
-        });
-        
         isReady = await readyPromise;
       } else if (binaryReadyPromise) {
         // For binary processes with captured output, wait for our custom ready detection
