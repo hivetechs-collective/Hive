@@ -42,49 +42,39 @@ export class FileSystemManager {
     }
 
     try {
-      console.log('[FileSystem] Scanning directory:', dirPath, 'depth:', currentDepth, 'maxDepth:', maxDepth);
+      // Remove console.log statements as they cause freeze with SafeLogger
       const entries = await readdir(dirPath, { withFileTypes: true });
-      console.log('[FileSystem] Found', entries.length, 'entries in', dirPath);
       const nodes: FileNode[] = [];
 
-      // Use Promise.all for parallel processing but limit concurrency
-      const BATCH_SIZE = 10;
-      for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-        const batch = entries.slice(i, i + BATCH_SIZE);
-        const batchNodes = await Promise.all(
-          batch.map(async (entry) => {
-            // Skip hidden files and node_modules for performance
-            if (entry.name.startsWith('.') || entry.name === 'node_modules') {
-              return null;
-            }
+      // Process entries without expensive stat calls
+      for (const entry of entries) {
+        // Skip hidden files, node_modules, and other heavy directories for performance
+        if (entry.name.startsWith('.') || 
+            entry.name === 'node_modules' || 
+            entry.name === 'dist' ||
+            entry.name === 'build' ||
+            entry.name === 'coverage' ||
+            entry.name === '.git' ||
+            entry.name === 'target') {
+          continue;
+        }
 
-            const fullPath = path.join(dirPath, entry.name);
-            const node: FileNode = {
-              name: entry.name,
-              path: fullPath,
-              type: entry.isDirectory() ? 'directory' : 'file'
-            };
+        const fullPath = path.join(dirPath, entry.name);
+        const node: FileNode = {
+          name: entry.name,
+          path: fullPath,
+          type: entry.isDirectory() ? 'directory' : 'file'
+        };
 
-            if (entry.isDirectory() && currentDepth < maxDepth - 1) {
-              // Lazy load children - don't load immediately
-              node.children = [];
-            }
+        if (entry.isDirectory() && currentDepth < maxDepth - 1) {
+          // Lazy load children - don't load immediately
+          node.children = [];
+        }
 
-            if (entry.isFile()) {
-              try {
-                const stats = await stat(fullPath);
-                node.size = stats.size;
-                node.modified = stats.mtime;
-              } catch (error) {
-                // Ignore stat errors
-              }
-            }
-
-            return node;
-          })
-        );
-
-        nodes.push(...batchNodes.filter(Boolean) as FileNode[]);
+        // Skip stat calls for files - this is the performance killer
+        // We can get size/modified info only when specifically needed
+        
+        nodes.push(node);
       }
 
       return nodes.sort((a, b) => {

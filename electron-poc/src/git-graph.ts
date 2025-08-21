@@ -350,7 +350,7 @@ export class GitGraphView {
         try {
             // Get commit log with graph information
             const log = await window.gitAPI.getLog({
-                maxCount: 200,
+                maxCount: 20,  // Reduced from 200 to prevent freezing
                 graph: true
             }) as string;
             

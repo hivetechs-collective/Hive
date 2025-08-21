@@ -205,7 +205,7 @@ export class VSCodeSCMView {
           setTimeout(() => {
             console.log('[SCM] Calling refresh on Git graph...');
             this.gitGraphView?.refresh();
-          }, 100);
+          }, 2000);  // Increased delay from 100ms to 2s to not block UI
         } catch (error) {
           console.error('[SCM] Failed to create GitGraphView:', error);
         }
