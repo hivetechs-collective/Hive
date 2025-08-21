@@ -69,9 +69,10 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
           logger.info(`[Terminal] Using full path for Claude Code: ${commandToRun}`);
         }
         
-        // Run the command in an interactive shell
-        args = ['-i', '-c', `${commandToRun} ${(options.args || []).join(' ')}`];
-        logger.info(`[Terminal] Running command in interactive shell: ${commandToRun}`);
+        // Run the command directly without interactive shell (which might interfere)
+        // Using -l (login shell) to ensure proper PATH is loaded
+        args = ['-l', '-c', `${commandToRun} ${(options.args || []).join(' ')}`];
+        logger.info(`[Terminal] Running command in login shell: ${commandToRun}`);
       } else {
         // Otherwise use the shell directly  
         shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
