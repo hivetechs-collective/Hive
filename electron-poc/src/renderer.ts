@@ -2305,6 +2305,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     let buttons = '';
     if (isInstalled) {
         buttons = `
+            <button onclick="launchCliTool('${id}')" style="flex: 1; padding: 6px; background: #2196f3; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Launch in current project">Launch</button>
             <button onclick="refreshCliToolDetails('${id}')" style="flex: 1; padding: 6px; background: #2d7d2d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Refresh tool details">Details</button>
             <button onclick="configureCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
             <button onclick="updateCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
@@ -2541,6 +2542,78 @@ async function updateCliTool(toolId: string): Promise<void> {
 }
 
 /**
+ * Launch a CLI tool in the current project context
+ */
+async function launchCliTool(toolId: string): Promise<void> {
+    console.log(`[CLI Tools] Launch requested for ${toolId}`);
+    
+    // Check if we have a project folder open
+    if (!currentOpenedFolder) {
+        // No folder open - prompt user to select one
+        console.log('[CLI Tools] No folder open, prompting user to select...');
+        
+        const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+            if (statusDiv) {
+                statusDiv.innerHTML = '⚠️ Please open a project folder first';
+                statusDiv.style.color = '#FF9800';
+            }
+        }
+        
+        // Open folder dialog
+        const result = await window.electronAPI.showOpenDialog({
+            properties: ['openDirectory']
+        });
+        if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
+            currentOpenedFolder = result.filePaths[0];
+            await handleOpenFolder(result.filePaths[0]);
+        } else {
+            return; // User cancelled
+        }
+    }
+    
+    // Show launching status  
+    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+    if (card) {
+        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+        if (statusDiv) {
+            statusDiv.innerHTML = '🚀 Launching...';
+            statusDiv.style.color = '#2196F3';
+        }
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        const result = await electronAPI.launchCliTool(toolId, currentOpenedFolder);
+        
+        if (result.success) {
+            console.log(`[CLI Tools] ${toolId} launched successfully in ${currentOpenedFolder}`);
+            
+            // Update status to show it's running
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    statusDiv.innerHTML = `✅ Running in: ${currentOpenedFolder.split('/').pop()}`;
+                    statusDiv.style.color = '#4CAF50';
+                    
+                    // Reset status after 5 seconds
+                    setTimeout(() => {
+                        renderCliToolsPanel();
+                    }, 5000);
+                }
+            }
+        } else {
+            console.error(`[CLI Tools] Failed to launch ${toolId}:`, result.error);
+            alert(`Failed to launch: ${result.error}`);
+        }
+    } catch (error) {
+        console.error(`[CLI Tools] Error launching ${toolId}:`, error);
+        alert(`Launch error: ${error}`);
+    }
+}
+
+/**
  * Refresh CLI tool details to show full status
  */
 async function refreshCliToolDetails(toolId: string): Promise<void> {
@@ -2597,6 +2670,7 @@ async function refreshCliToolDetails(toolId: string): Promise<void> {
 (window as any).configureCliTool = configureCliTool;
 (window as any).updateCliTool = updateCliTool;
 (window as any).refreshCliToolDetails = refreshCliToolDetails;
+(window as any).launchCliTool = launchCliTool;
 
 // Memory Dashboard Management
 let memoryDashboardInstance: MemoryDashboard | null = null;

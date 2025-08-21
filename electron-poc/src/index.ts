@@ -1360,6 +1360,18 @@ const registerSimpleCliToolHandlers = () => {
     }
   });
   
+  // Launch CLI tool
+  ipcMain.handle('cli-tool-launch', async (_, toolId: string, projectPath: string) => {
+    logger.info(`[Main] Launching CLI tool: ${toolId} in ${projectPath}`);
+    try {
+      await manager.launch(toolId, projectPath);
+      return { success: true };
+    } catch (error: any) {
+      logger.error(`[Main] Failed to launch ${toolId}:`, error);
+      return { success: false, error: error.message };
+    }
+  });
+  
   // Listen for manager events and forward to renderer
   manager.on('install:progress', (progress) => {
     if (mainWindow) {

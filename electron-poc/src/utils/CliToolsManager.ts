@@ -766,6 +766,63 @@ server.start();
   }
 
   /**
+   * Launch a CLI tool in a specific project directory
+   */
+  public async launch(toolId: string, projectPath: string): Promise<void> {
+    const tool = this.tools.get(toolId);
+    if (!tool) {
+      throw new Error(`Unknown tool: ${toolId}`);
+    }
+
+    logger.info(`[CliToolsManager] Launching ${tool.name} in ${projectPath}...`);
+
+    // Check if tool is installed
+    const status = await this.getToolStatus(toolId);
+    if (!status.installed) {
+      throw new Error(`${tool.name} is not installed. Please install it first.`);
+    }
+
+    // Special handling for Claude Code
+    if (toolId === 'claude-code') {
+      await this.launchClaudeCode(projectPath);
+    } else {
+      // Generic launch for other tools
+      throw new Error(`Launch not yet implemented for ${tool.name}`);
+    }
+  }
+
+  /**
+   * Launch Claude Code in a specific project directory
+   */
+  private async launchClaudeCode(projectPath: string): Promise<void> {
+    try {
+      // Open a new terminal window and launch Claude Code
+      // This uses platform-specific commands
+      const platform = process.platform;
+      let command: string;
+
+      if (platform === 'darwin') {
+        // macOS: Open Terminal and run claude
+        command = `osascript -e 'tell application "Terminal" to do script "cd \\"${projectPath}\\" && claude"'`;
+      } else if (platform === 'win32') {
+        // Windows: Open Command Prompt and run claude
+        command = `start cmd /k "cd /d ${projectPath} && claude"`;
+      } else {
+        // Linux: Try to open a terminal emulator
+        // This is a best-effort attempt as terminal emulators vary
+        command = `gnome-terminal -- bash -c "cd '${projectPath}' && claude; exec bash" || xterm -e "cd '${projectPath}' && claude; bash" || konsole -e "cd '${projectPath}' && claude"`;
+      }
+
+      logger.info(`[CliToolsManager] Executing launch command: ${command}`);
+      await this.executeCommand(command);
+      logger.info(`[CliToolsManager] Claude Code launched successfully in ${projectPath}`);
+    } catch (error) {
+      logger.error('[CliToolsManager] Failed to launch Claude Code:', error);
+      throw new Error(`Failed to launch Claude Code: ${error}`);
+    }
+  }
+
+  /**
    * Get all tools
    */
   public getAllTools(): Map<string, CliToolConfig> {
