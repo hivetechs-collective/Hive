@@ -1,6 +1,6 @@
 /**
- * CLI Tool Detection Utility
- * Safely detects installed AI CLI tools without modifying system
+ * CLI Tool Detector
+ * Checks for installed AI CLI tools and provides information about them
  */
 
 import { exec } from 'child_process';
@@ -8,116 +8,113 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-export interface CliToolStatus {
-  id: string;
-  name: string;
-  installed: boolean;
-  version?: string;
-  path?: string;
-  memoryServiceConnected?: boolean;
+export interface CliToolInfo {
+    id: string;
+    name: string;
+    command: string;
+    installed: boolean;
+    version?: string;
+    path?: string;
 }
 
-/**
- * Detect if Claude Code CLI is installed
- */
-export async function detectClaudeCode(): Promise<CliToolStatus> {
-  const status: CliToolStatus = {
-    id: 'claude-code',
-    name: 'Claude Code',
-    installed: false
-  };
-
-  try {
-    // Try to get version - this is the safest detection method
-    const { stdout } = await execAsync('claude --version 2>/dev/null');
+export class CliToolDetector {
+    private tools: Map<string, CliToolInfo> = new Map();
     
-    if (stdout) {
-      status.installed = true;
-      console.log('[CLI Detector] Claude Code version output:', stdout.trim());
-      // Extract version from output (format: "1.0.86 (Claude Code)")
-      const versionMatch = stdout.match(/(\d+\.\d+\.\d+)/);
-      if (versionMatch) {
-        status.version = versionMatch[1];
-        console.log('[CLI Detector] Detected version:', status.version);
-      } else {
-        console.log('[CLI Detector] Could not parse version from:', stdout);
-      }
+    constructor() {
+        this.initializeTools();
     }
-  } catch (error) {
-    // Command not found or other error - tool not installed
-    console.log('[CLI Detector] Claude Code not found:', error);
-  }
-
-  // Try to get the executable path
-  if (status.installed) {
-    try {
-      const { stdout: pathOutput } = await execAsync('which claude 2>/dev/null');
-      if (pathOutput) {
-        status.path = pathOutput.trim();
-      }
-    } catch {
-      // Path detection failed, but tool might still be installed
+    
+    /**
+     * Initialize the list of known tools
+     */
+    private initializeTools(): void {
+        const toolDefinitions: Array<{id: string, name: string, command: string}> = [
+            { id: 'claude-code', name: 'Claude Code', command: 'claude' },
+            { id: 'aider', name: 'Aider', command: 'aider' },
+            { id: 'cursor', name: 'Cursor', command: 'cursor' },
+            { id: 'continue', name: 'Continue', command: 'continue' },
+            { id: 'codewhisperer', name: 'Amazon Q', command: 'aws' },
+            { id: 'cody', name: 'Cody', command: 'cody' },
+            { id: 'qwen-code', name: 'Qwen Code', command: 'qwen' },
+            { id: 'gemini-cli', name: 'Gemini CLI', command: 'gemini' }
+        ];
+        
+        toolDefinitions.forEach(tool => {
+            this.tools.set(tool.id, {
+                ...tool,
+                installed: false
+            });
+        });
     }
-  }
-
-  // Check if Memory Service connection is configured
-  if (status.installed) {
-    status.memoryServiceConnected = await checkMemoryServiceConfig('claude-code');
-  }
-
-  return status;
+    
+    /**
+     * Check if a specific tool is installed
+     */
+    async checkTool(toolId: string): Promise<CliToolInfo | null> {
+        const tool = this.tools.get(toolId);
+        if (!tool) return null;
+        
+        try {
+            // Try to find the command in PATH
+            const { stdout: pathOutput } = await execAsync(`which ${tool.command}`);
+            if (pathOutput) {
+                tool.path = pathOutput.trim();
+                tool.installed = true;
+                
+                // Try to get version
+                try {
+                    const versionCmd = `${tool.command} --version`;
+                    const { stdout: versionOutput } = await execAsync(versionCmd);
+                    tool.version = versionOutput.trim().split('\n')[0];
+                } catch {
+                    // Some tools might not support --version
+                    tool.version = 'unknown';
+                }
+            }
+        } catch {
+            // Command not found
+            tool.installed = false;
+        }
+        
+        return tool;
+    }
+    
+    /**
+     * Check all known tools
+     */
+    async checkAllTools(): Promise<Map<string, CliToolInfo>> {
+        const checkPromises = Array.from(this.tools.keys()).map(id => this.checkTool(id));
+        await Promise.all(checkPromises);
+        return this.tools;
+    }
+    
+    /**
+     * Get info for a specific tool
+     */
+    getToolInfo(toolId: string): CliToolInfo | undefined {
+        return this.tools.get(toolId);
+    }
+    
+    /**
+     * Get all tools
+     */
+    getAllTools(): Map<string, CliToolInfo> {
+        return this.tools;
+    }
+    
+    /**
+     * Quick check if tool exists (synchronous, from cache)
+     */
+    isToolInstalled(toolId: string): boolean {
+        const tool = this.tools.get(toolId);
+        return tool ? tool.installed : false;
+    }
 }
 
-/**
- * Check if a CLI tool has Memory Service configured
- */
-async function checkMemoryServiceConfig(toolId: string): Promise<boolean> {
-  // For now, just check if Memory Service is running
-  // Later we can check actual tool configuration
-  try {
-    const response = await fetch('http://localhost:3457/health');
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
+// Export singleton instance for renderer process
+export const cliToolDetector = new CliToolDetector();
 
-/**
- * Detect all supported CLI tools
- */
-export async function detectAllCliTools(): Promise<CliToolStatus[]> {
-  const tools: CliToolStatus[] = [];
-  
-  // Start with Claude Code only
-  tools.push(await detectClaudeCode());
-  
-  // TODO: Add other tools incrementally
-  // tools.push(await detectGeminiCli());
-  // tools.push(await detectQwenCode());
-  // etc.
-  
-  return tools;
-}
-
-/**
- * Cache detection results to avoid repeated checks
- */
-const detectionCache = new Map<string, { status: CliToolStatus; timestamp: number }>();
-const CACHE_TTL = 30000; // 30 seconds
-
-export async function getCachedToolStatus(toolId: string): Promise<CliToolStatus | null> {
-  const cached = detectionCache.get(toolId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.status;
-  }
-  
-  // Cache miss or expired
-  let status: CliToolStatus | null = null;
-  
-  if (toolId === 'claude-code') {
-    status = await detectClaudeCode();
-    detectionCache.set(toolId, { status, timestamp: Date.now() });
-  }
-  
-  return status;
+// Make it available globally in renderer
+if (typeof window !== 'undefined') {
+    (window as any).cliToolDetector = cliToolDetector;
 }

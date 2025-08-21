@@ -6,7 +6,7 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import * as pty from 'node-pty';
 import { IPty } from 'node-pty';
-import { logger } from './logger';
+import { logger } from './utils/SafeLogger';
 
 interface TerminalProcess {
   terminalId: string;

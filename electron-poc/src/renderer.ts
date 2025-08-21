@@ -3,6 +3,9 @@
  * Layout: Left Sidebar | Center (with bottom Terminal) | Right Consensus Chat
  */
 
+// Import CLI tool detector
+import { cliToolDetector } from './utils/cli-tool-detector';
+
 // CLI Tool Types
 interface CliToolStatus {
   id: string;
@@ -3682,6 +3685,21 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
     
     console.log('[Menu] Menu event listeners registered');
 }
+
+// Initialize CLI tool detector on startup
+async function initializeCliToolDetector() {
+    console.log('[CliToolDetector] Checking for installed AI CLI tools...');
+    try {
+        await cliToolDetector.checkAllTools();
+        const tools = cliToolDetector.getAllTools();
+        console.log('[CliToolDetector] Tool detection complete:', tools);
+    } catch (error) {
+        console.error('[CliToolDetector] Error during tool detection:', error);
+    }
+}
+
+// Call on startup
+initializeCliToolDetector();
 
 // Define global functions for opening folder and cloning repository
 window.openFolder = async () => {

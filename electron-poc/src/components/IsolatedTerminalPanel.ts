@@ -5,13 +5,11 @@
 
 // We'll use dynamic import to avoid build issues for now
 let terminalManager: any = null;
-let TerminalInstance: any = null;
 
 // Try to load terminal manager if available
 try {
     const terminalModule = require('./terminal/TerminalManager');
     terminalManager = terminalModule.terminalManager;
-    TerminalInstance = terminalModule.TerminalInstance;
 } catch (e) {
     console.warn('[IsolatedTerminalPanel] TerminalManager not available yet, using fallback');
 }
@@ -22,7 +20,7 @@ interface TerminalTab {
     type: 'system-log' | 'terminal' | 'ai-tool';
     isActive: boolean;
     element?: HTMLElement;
-    terminalInstance?: TerminalInstance;
+    terminalInstance?: any; // Use any type to avoid TypeScript issues
     toolId?: string;
 }
 
@@ -453,6 +451,80 @@ export class IsolatedTerminalPanel {
     }
     
     /**
+     * Get the display name for a tool
+     */
+    private getToolName(toolId: string): string {
+        switch (toolId) {
+            case 'claude-code': return 'Claude Code';
+            case 'gemini-cli': return 'Gemini CLI';
+            case 'qwen-code': return 'Qwen Code';
+            case 'aider': return 'Aider';
+            case 'continue': return 'Continue';
+            case 'cursor': return 'Cursor';
+            case 'codewhisperer': return 'Amazon Q';
+            case 'cody': return 'Cody';
+            default: return toolId;
+        }
+    }
+    
+    /**
+     * Get installation instructions for a tool
+     */
+    private getInstallInstructions(toolId: string): string[] {
+        switch (toolId) {
+            case 'claude-code':
+                return [
+                    '1. Visit: https://claude.ai/download',
+                    '2. Download Claude Code for your platform',
+                    '3. Install Claude Code following the installer instructions',
+                    '4. The "claude" command should be available in your terminal'
+                ];
+            case 'aider':
+                return [
+                    '1. Ensure Python 3.7+ is installed',
+                    '2. Run: pip install aider-chat',
+                    '3. Verify installation: aider --version'
+                ];
+            case 'cursor':
+                return [
+                    '1. Visit: https://cursor.sh',
+                    '2. Download Cursor for your platform',
+                    '3. Install Cursor following the installer instructions'
+                ];
+            case 'continue':
+                return [
+                    '1. Install the Continue VS Code extension',
+                    '2. Or visit: https://continue.dev for standalone installation'
+                ];
+            case 'codewhisperer':
+                return [
+                    '1. Install the AWS Toolkit for VS Code',
+                    '2. Or visit: https://aws.amazon.com/q/ for more information'
+                ];
+            case 'cody':
+                return [
+                    '1. Visit: https://sourcegraph.com/cody',
+                    '2. Install the Cody extension for your IDE'
+                ];
+            case 'qwen-code':
+                return [
+                    '1. Ensure Python 3.7+ is installed',
+                    '2. Run: pip install qwen-code',
+                    '3. Verify installation: qwen --version'
+                ];
+            case 'gemini-cli':
+                return [
+                    '1. Visit the Gemini CLI repository',
+                    '2. Follow the installation instructions for your platform'
+                ];
+            default:
+                return [
+                    `Please install ${this.getToolName(toolId)} and ensure it's available in your PATH.`
+                ];
+        }
+    }
+    
+    /**
      * Launch the actual tool process via IPC
      */
     private async launchToolProcess(tabId: string, toolId: string, workingDirectory: string): Promise<void> {
@@ -480,7 +552,56 @@ export class IsolatedTerminalPanel {
         });
         
         if (!result.success) {
-            throw new Error(result.error || 'Failed to create terminal process');
+            // Handle common error cases with user-friendly messages
+            const errorMessage = result.error || 'Failed to create terminal process';
+            
+            if (errorMessage.includes('posix_spawnp failed') || errorMessage.includes('ENOENT')) {
+                // Tool not found in PATH - provide helpful instructions
+                const content = tab.element;
+                content.innerHTML = ''; // Clear loading message
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = 'padding: 20px; font-family: monospace; line-height: 1.6;';
+                
+                // Error header
+                const header = document.createElement('div');
+                header.style.cssText = 'color: #f44747; font-weight: bold; margin-bottom: 10px;';
+                header.textContent = `✗ ${this.getToolName(toolId)} not found`;
+                errorDiv.appendChild(header);
+                
+                // Explanation
+                const explanation = document.createElement('div');
+                explanation.style.cssText = 'color: #cccccc; margin-bottom: 15px;';
+                explanation.textContent = `The '${command}' command could not be found in your system PATH.`;
+                errorDiv.appendChild(explanation);
+                
+                // Installation instructions
+                const instructionsHeader = document.createElement('div');
+                instructionsHeader.style.cssText = 'color: #4ec9b0; font-weight: bold; margin-bottom: 10px;';
+                instructionsHeader.textContent = 'Installation Instructions:';
+                errorDiv.appendChild(instructionsHeader);
+                
+                const instructions = this.getInstallInstructions(toolId);
+                instructions.forEach(instruction => {
+                    const step = document.createElement('div');
+                    step.style.cssText = 'color: #cccccc; margin-left: 20px; margin-bottom: 5px;';
+                    step.textContent = instruction;
+                    errorDiv.appendChild(step);
+                });
+                
+                // Additional help
+                const helpDiv = document.createElement('div');
+                helpDiv.style.cssText = 'color: #969696; margin-top: 15px; font-style: italic;';
+                helpDiv.textContent = 'After installation, please restart this application and try again.';
+                errorDiv.appendChild(helpDiv);
+                
+                content.appendChild(errorDiv);
+                throw new Error(`${this.getToolName(toolId)} is not installed`);
+            } else if (errorMessage.includes('Permission denied')) {
+                throw new Error(`Permission denied to execute ${command}. Please check file permissions.`);
+            } else {
+                throw new Error(errorMessage);
+            }
         }
         
         // Set up data listener for this terminal
