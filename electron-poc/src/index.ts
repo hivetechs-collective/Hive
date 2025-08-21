@@ -15,7 +15,7 @@ import { FileSystemManager } from './file-system';
 import { ProcessManager } from './utils/ProcessManager';
 import { PortManager } from './utils/PortManager';
 import CliToolsManager from './utils/CliToolsManager';
-import { detectClaudeCode, detectAllCliTools, getCachedToolStatus } from './utils/cli-tool-detector';
+// import { detectClaudeCode, detectAllCliTools, getCachedToolStatus } from './utils/cli-tool-detector';
 import { logger } from './utils/SafeLogger';
 import { registerTerminalHandlers, cleanupTerminals } from './terminal-ipc-handlers';
 
@@ -1284,6 +1284,73 @@ const registerCliToolsHandlers = () => {
 };
 */
 
+// Simple CLI tool detection function
+const detectCliToolSimple = async (toolId: string): Promise<any> => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  
+  // Map tool IDs to commands
+  const toolCommands: Record<string, string> = {
+    'claude-code': 'claude',
+    'aider': 'aider',
+    'cursor': 'cursor',
+    'continue': 'continue',
+    'codewhisperer': 'aws',
+    'cody': 'cody',
+    'qwen-code': 'qwen',
+    'gemini-cli': 'gemini'
+  };
+  
+  const command = toolCommands[toolId];
+  if (!command) return null;
+  
+  try {
+    // Add common paths to PATH for detection
+    const pathAdditions = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+    const enhancedPath = [...new Set([...pathAdditions, ...(process.env.PATH || '').split(':')])].join(':');
+    
+    // Try to detect the tool with enhanced PATH
+    const { stdout } = await execAsync(`which ${command}`, { env: { ...process.env, PATH: enhancedPath } });
+    const path = stdout.trim();
+    
+    // Try to get version
+    let version = 'unknown';
+    try {
+      const { stdout: versionOut } = await execAsync(`${command} --version 2>&1`, { env: { ...process.env, PATH: enhancedPath } });
+      // Extract version from output (different tools have different formats)
+      const versionMatch = versionOut.match(/\d+\.\d+\.\d+/) || versionOut.match(/\d+\.\d+/);
+      if (versionMatch) {
+        version = versionMatch[0];
+      } else if (versionOut.includes('(Claude Code)')) {
+        // Special handling for Claude Code
+        const match = versionOut.match(/^([\d.]+)/);
+        if (match) version = match[1];
+      }
+      logger.info(`[CLI Detector] ${toolId} version output: ${versionOut.substring(0, 100)}`);
+      logger.info(`[CLI Detector] Detected version: ${version}`);
+    } catch (e) {
+      // Version command failed, but tool exists
+    }
+    
+    return {
+      id: toolId,
+      name: toolId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      installed: true,
+      version,
+      path,
+      memoryServiceConnected: false
+    };
+  } catch (error) {
+    // Tool not found
+    return {
+      id: toolId,
+      name: toolId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      installed: false
+    };
+  }
+};
+
 // Register simple CLI tool detection handlers (without the complex CliToolsManager)
 const registerSimpleCliToolHandlers = () => {
   logger.info('[Main] Registering simple CLI tool detection handlers');
@@ -1292,7 +1359,7 @@ const registerSimpleCliToolHandlers = () => {
   ipcMain.handle('cli-tool-detect', async (_, toolId: string) => {
     logger.info(`[Main] Detecting CLI tool: ${toolId}`);
     try {
-      const status = await getCachedToolStatus(toolId);
+      const status = await detectCliToolSimple(toolId);
       return status;
     } catch (error) {
       logger.error(`[Main] Error detecting CLI tool ${toolId}:`, error);
@@ -1303,8 +1370,9 @@ const registerSimpleCliToolHandlers = () => {
   ipcMain.handle('cli-tools-detect-all', async () => {
     logger.info('[Main] Detecting all CLI tools...');
     try {
-      const tools = await detectAllCliTools();
-      return tools;
+      const toolIds = ['claude-code', 'aider', 'cursor', 'continue', 'codewhisperer', 'cody', 'qwen-code', 'gemini-cli'];
+      const results = await Promise.all(toolIds.map(id => detectCliToolSimple(id)));
+      return results;
     } catch (error) {
       logger.error('[Main] Error detecting CLI tools:', error);
       return [];

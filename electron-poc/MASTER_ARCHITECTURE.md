@@ -2283,14 +2283,14 @@ class SystemLogManager {
 }
 ```
 
-**System Log Features**:
-- **Color Coding**: INFO (white), WARN (yellow), ERROR (red), DEBUG (gray)
-- **Filtering**: Show/hide log levels
-- **Search**: Real-time search with highlighting
-- **Export**: Save logs to file
-- **Performance**: Virtual scrolling for large logs
-- **Timestamps**: ISO format with milliseconds
-- **Copy**: Select and copy log entries
+**System Log Features (Current Implementation)**:
+- **Simple HTML Rendering**: Uses divs instead of xterm to avoid control characters
+- **Console Capture**: Intercepts console.log, console.error, console.warn
+- **Color Coding**: INFO (#569cd6), WARN (#dcdcaa), ERROR (#f44747)
+- **Auto-scroll**: Automatically scrolls to bottom for new entries
+- **Timestamps**: Shows time in toLocaleTimeString() format
+- **Clean Output**: Simple args.join(' ') for readable messages
+- **No xterm.js**: Avoids terminal control characters that cause display issues
 
 #### Terminal Features
 

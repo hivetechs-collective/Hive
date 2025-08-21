@@ -47,9 +47,22 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
       const args = options.args || [];
       const cwd = options.cwd || process.cwd();
       
-      // Merge environment variables
+      // Merge environment variables and ensure PATH includes common directories
+      const pathAdditions = [
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin',
+        '/usr/sbin',
+        '/sbin'
+      ];
+      
+      const currentPath = process.env.PATH || '';
+      const enhancedPath = [...new Set([...pathAdditions, ...currentPath.split(':')])].join(':');
+      
       const env = {
         ...process.env,
+        PATH: enhancedPath,
         ...options.env,
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor'
