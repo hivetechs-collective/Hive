@@ -3070,9 +3070,9 @@ setTimeout(() => {
             let newWidth: number;
             
             if (resizeState.handle === 'left') {
-                // For left handle: dragging left should increase width, dragging right should decrease
-                // When dragging left, deltaX is negative, so we subtract it (which adds to width)
-                newWidth = resizeState.startWidth - deltaX;
+                // For left handle: needs opposite behavior from right handle
+                // Using negative deltaX to reverse the direction
+                newWidth = resizeState.startWidth + (-deltaX);
             } else {
                 // For right handle: dragging right should increase width
                 newWidth = resizeState.startWidth + deltaX;
