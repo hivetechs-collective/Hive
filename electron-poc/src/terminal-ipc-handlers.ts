@@ -42,9 +42,22 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
         return { success: false, error: 'Terminal already exists' };
       }
 
-      // Determine shell to use
-      const shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
-      const args = options.args || [];
+      // Determine shell and command to use
+      let shell: string;
+      let args: string[];
+      
+      if (options.command && options.command !== 'bash' && options.command !== 'zsh' && options.command !== 'sh') {
+        // If a specific command is provided (like 'claude'), run it within a shell
+        shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
+        // Use -c to run the command and then stay interactive
+        args = ['-c', `${options.command} ${(options.args || []).join(' ')}; exec ${shell}`];
+        logger.info(`[Terminal] Running command in shell: ${options.command}`);
+      } else {
+        // Otherwise use the shell directly
+        shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
+        args = options.args || [];
+      }
+      
       const cwd = options.cwd || process.cwd();
       
       // Merge environment variables and ensure PATH includes common directories
