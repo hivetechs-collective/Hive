@@ -494,7 +494,7 @@ document.body.innerHTML = `
     </div>
 
     <!-- New Isolated Terminal Panel (Middle, between console and consensus) -->
-    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="position: relative; width: 400px; display: flex; flex-direction: column; background: #1e1e1e; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30;">
+    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="position: relative; width: 400px; flex-shrink: 0; flex-grow: 0; display: flex; flex-direction: column; background: #1e1e1e; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30;">
       <div class="resize-handle vertical-resize" id="isolated-terminal-resize-left" style="position: absolute; left: 0; width: 4px; height: 100%; cursor: ew-resize; z-index: 10;"></div>
       <div class="resize-handle vertical-resize" id="isolated-terminal-resize-right" style="position: absolute; right: 0; width: 4px; height: 100%; cursor: ew-resize; z-index: 10;"></div>
       
@@ -3042,12 +3042,10 @@ setTimeout(() => {
         
         if (leftResize) {
             leftResize.addEventListener('mousedown', (e) => {
-                console.log('[IsolatedTerminal] Left resize handle mousedown');
                 resizeState.isResizing = true;
                 resizeState.handle = 'left';
                 resizeState.startX = e.clientX;
                 resizeState.startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
-                console.log('[IsolatedTerminal] Start width:', resizeState.startWidth, 'Start X:', resizeState.startX);
                 document.body.style.cursor = 'ew-resize';
                 e.preventDefault();
             });
@@ -3074,7 +3072,6 @@ setTimeout(() => {
                 // For left handle: reverse the delta calculation
                 const deltaX = resizeState.startX - e.clientX;  // Reversed: startX - clientX
                 newWidth = resizeState.startWidth + deltaX;
-                console.log('[IsolatedTerminal] Left resize - deltaX:', deltaX, 'newWidth:', newWidth);
             } else {
                 // For right handle: normal delta calculation
                 const deltaX = e.clientX - resizeState.startX;  // Normal: clientX - startX
