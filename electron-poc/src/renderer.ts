@@ -493,10 +493,13 @@ document.body.innerHTML = `
       </div>
     </div>
 
-    <!-- New Isolated Terminal Panel (Middle, between console and consensus) -->
-    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="position: relative; width: 400px; flex-shrink: 0; flex-grow: 0; display: flex; flex-direction: column; background: #1e1e1e; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30;">
-      <div class="resize-handle vertical-resize" id="isolated-terminal-resize-left" style="position: absolute; left: 0; width: 4px; height: 100%; cursor: ew-resize; z-index: 10;"></div>
-      <div class="resize-handle vertical-resize" id="isolated-terminal-resize-right" style="position: absolute; right: 0; width: 4px; height: 100%; cursor: ew-resize; z-index: 10;"></div>
+    <!-- Isolated Terminal Panel (modeled after consensus panel) -->
+    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="width: 400px; background: #1e1e1e; display: flex; flex-direction: column; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30; position: relative;">
+      <!-- Collapse button for entire panel -->
+      <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel" style="position: absolute; left: 5px; top: 5px; z-index: 100; width: 20px; height: 20px; padding: 0; background: #007ACC; border: none; color: white; cursor: pointer; font-size: 16px; line-height: 1; border-radius: 2px;">−</button>
+      
+      <!-- Left resize handle (like consensus panel) -->
+      <div class="resize-handle vertical-resize" id="isolated-terminal-resize" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: ew-resize; z-index: 10;"></div>
       
       <!-- Terminal tabs header -->
       <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c;">
@@ -3028,107 +3031,59 @@ setTimeout(() => {
         (window as any).isolatedTerminal = new IsolatedTerminalPanel(isolatedTerminalPanel);
         console.log('✅ Isolated Terminal Panel initialized');
         
-        // Setup resize handlers for the isolated terminal panel
-        const leftResize = document.getElementById('isolated-terminal-resize-left');
-        const rightResize = document.getElementById('isolated-terminal-resize-right');
+        // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
+        const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
+        const consensusPanel = document.getElementById('consensus-chat');
         
-        // Use a shared state to avoid conflicts
-        let resizeState = {
-            isResizing: false,
-            handle: null as 'left' | 'right' | null,
-            startX: 0,
-            startWidth: 0
-        };
-        
-        // Get the center area to adjust it too
-        const centerArea = document.getElementById('center-area');
-        let centerStartWidth = 0;
-        
-        if (leftResize) {
-            console.log('[DEBUG] Left resize handle found:', leftResize);
-            leftResize.style.background = 'red'; // Make it visible for testing
-            leftResize.addEventListener('mousedown', (e) => {
-                console.log('[DEBUG] LEFT RESIZE MOUSEDOWN FIRED!');
-                resizeState.isResizing = true;
-                resizeState.handle = 'left';
-                resizeState.startX = e.clientX;
-                resizeState.startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
-                console.log('[DEBUG] Start width:', resizeState.startWidth, 'Start X:', resizeState.startX);
-                
-                // Store center area width at start of resize
-                if (centerArea) {
-                    centerStartWidth = centerArea.offsetWidth;
-                    console.log('[DEBUG] Center area start width:', centerStartWidth);
-                }
-                
+        if (isolatedTerminalResize && isolatedTerminalPanel) {
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+            
+            isolatedTerminalResize.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
                 document.body.style.cursor = 'ew-resize';
                 e.preventDefault();
             });
-        } else {
-            console.log('[DEBUG] LEFT RESIZE HANDLE NOT FOUND!');
-        }
-        
-        if (rightResize) {
-            rightResize.addEventListener('mousedown', (e) => {
-                resizeState.isResizing = true;
-                resizeState.handle = 'right';
-                resizeState.startX = e.clientX;
-                resizeState.startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
-                document.body.style.cursor = 'ew-resize';
-                e.preventDefault();
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                
+                // Use exact same formula as consensus panel (lines 3413-3414)
+                const deltaX = startX - e.clientX;
+                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 600);
+                isolatedTerminalPanel.style.width = newWidth + 'px';
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                }
             });
         }
         
-        // Single mousemove handler for both
-        document.addEventListener('mousemove', (e) => {
-            if (!resizeState.isResizing) return;
-            
-            let newWidth: number;
-            
-            if (resizeState.handle === 'left') {
-                // For left handle: reverse the delta calculation
-                const deltaX = resizeState.startX - e.clientX;  // Reversed: startX - clientX
-                newWidth = resizeState.startWidth + deltaX;
-                console.log('[DEBUG] Left drag - deltaX:', deltaX, 'newWidth:', newWidth);
-                
-                // CRITICAL: Also adjust the center area to prevent flex compensation
-                if (centerArea) {
-                    const widthChange = newWidth - resizeState.startWidth;
-                    const newCenterWidth = centerStartWidth - widthChange;
-                    centerArea.style.width = newCenterWidth + 'px';
-                    centerArea.style.flex = 'none';  // Disable flex temporarily
-                    console.log('[DEBUG] Setting center area width to:', newCenterWidth);
-                }
-            } else {
-                // For right handle: normal delta calculation
-                const deltaX = e.clientX - resizeState.startX;  // Normal: clientX - startX
-                newWidth = resizeState.startWidth + deltaX;
-            }
-            
-            newWidth = Math.min(Math.max(newWidth, 200), 800);
-            console.log('[DEBUG] Setting isolated terminal width to:', newWidth);
-            isolatedTerminalPanel.style.width = newWidth + 'px';
-            
-            // Also log the actual width after setting
-            const actualWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
-            console.log('[DEBUG] Actual isolated terminal width:', actualWidth);
-        });
+        // Isolated terminal panel collapse/expand (exactly like consensus panel)
+        const toggleIsolatedTerminal = document.getElementById('toggle-isolated-terminal');
         
-        // Single mouseup handler
-        document.addEventListener('mouseup', () => {
-            if (resizeState.isResizing) {
-                resizeState.isResizing = false;
-                resizeState.handle = null;
-                document.body.style.cursor = '';
-                
-                // Reset center area's flex
-                if (centerArea) {
-                    centerArea.style.flex = '';  // Reset to default
-                    centerArea.style.width = '';  // Clear explicit width
-                    console.log('[DEBUG] Reset center area flex');
+        if (toggleIsolatedTerminal && isolatedTerminalPanel) {
+            toggleIsolatedTerminal.addEventListener('click', () => {
+                const isCollapsed = isolatedTerminalPanel.classList.contains('collapsed');
+                if (isCollapsed) {
+                    isolatedTerminalPanel.classList.remove('collapsed');
+                    isolatedTerminalPanel.style.width = '400px';
+                    toggleIsolatedTerminal.textContent = '−';
+                    toggleIsolatedTerminal.title = 'Collapse Terminal Panel';
+                } else {
+                    isolatedTerminalPanel.classList.add('collapsed');
+                    isolatedTerminalPanel.style.width = '40px';
+                    toggleIsolatedTerminal.textContent = '+';
+                    toggleIsolatedTerminal.title = 'Expand Terminal Panel';
                 }
-            }
-        });
+            });
+        }
     }
     
     // Listen for menu events from main process

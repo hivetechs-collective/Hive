@@ -953,14 +953,29 @@ App Root (renderer.ts)
 ├── Header Bar
 │   ├── App Title
 │   └── Window Controls
-├── Sidebar (Collapsible)
+├── Activity Bar (Left Edge)
+│   ├── Explorer
+│   ├── Source Control
+│   ├── Extensions
+│   ├── Settings
+│   └── CLI Tools
+├── Sidebar Panel (Collapsible)
 │   ├── File Explorer
-│   └── Git Status View
+│   ├── Source Control View
+│   ├── Settings Panel
+│   └── CLI Tools Panel
 ├── Main Content Area
 │   ├── Editor Tabs
 │   │   ├── Code Editor (Monaco)
 │   │   ├── Git Diff View
 │   │   └── Memory Dashboard
+│   └── Terminal Section
+├── Isolated Terminal Panel (Resizable)
+│   ├── System Log Tab
+│   └── Terminal Tabs
+├── Consensus Panel (Right Side, Resizable)
+│   ├── Neural Consciousness
+│   ├── Progress Bars
 │   └── Chat Interface
 ├── Status Bar
 │   ├── Connection Status
@@ -977,7 +992,58 @@ App Root (renderer.ts)
 - **Local storage** for UI preferences
 - **Database** for persistent application state
 
+### Panel System Architecture
+
+#### Resizable Panel Implementation
+Our application uses a sophisticated panel system that provides VS Code-like flexibility:
+
+**Panel Types**:
+1. **Fixed Panels**: Activity Bar (48px width)
+2. **Collapsible Panels**: Sidebar (260px default, can collapse to 0)
+3. **Resizable Panels**: Isolated Terminal & Consensus (200-600px range)
+4. **Flex Panels**: Main content area (grows to fill available space)
+
+**Resize Mechanism**:
+- **Consensus Panel**: Left edge resize handle, fixed right edge
+  - Formula: `deltaX = startX - e.clientX; newWidth = startWidth + deltaX`
+  - Dragging left increases width, dragging right decreases
+  - Collapse button changes width to 40px (shows only button)
+  
+- **Isolated Terminal Panel**: Mirrors consensus panel behavior
+  - Left edge resize handle, right edge fixed against consensus panel
+  - Same resize formula as consensus panel for consistency
+  - Collapse/expand with -/+ buttons
+  - Width range: 200px min, 600px max
+
+**Layout Strategy**:
+```css
+.main-container {
+  display: flex;
+  flex-direction: row;
+}
+
+.isolated-terminal-panel {
+  flex-shrink: 0;  /* Prevent flex from overriding explicit width */
+  flex-grow: 0;
+  width: 400px;    /* Explicit width, controlled by resize */
+}
+```
+
+**Isolation Principles**:
+- Each panel component is completely self-contained
+- No cross-panel dependencies or state sharing
+- Resize operations don't affect other panels' internal state
+- CSS flex properties explicitly controlled to prevent interference
+
 ### UI Components
+
+#### Isolated Terminal Panel
+**Location**: `src/components/IsolatedTerminalPanel.ts`
+- Completely isolated component with zero impact on rest of app
+- Tab management system (System Log + dynamic terminals)
+- Console output capture for System Log
+- Prepared for xterm.js integration
+- Resizable with collapse/expand functionality
 
 #### File Explorer
 **Location**: `src/file-explorer.ts`

@@ -1062,6 +1062,16 @@ body {
   display: none !important;
 }
 
+/* Collapsed state for isolated terminal panel */
+.isolated-terminal-panel.collapsed {
+  width: 40px !important;
+  min-width: 40px !important;
+}
+
+.isolated-terminal-panel.collapsed > *:not(.panel-collapse-btn):not(.resize-handle) {
+  display: none;
+}
+
 /* Content Panels */
 .content-panel {
   display: none;
