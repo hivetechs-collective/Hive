@@ -61,37 +61,13 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
         // If a specific command is provided (like 'claude'), run it within a shell
         shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
         
-        // Check if command exists with enhanced PATH
-        const enhancedPath = [...new Set([...pathAdditions, ...(process.env.PATH || '').split(':')])].join(':');
-        
-        const { exec } = require('child_process');
-        const commandPath = await new Promise<string | null>((resolve) => {
-          exec(`which ${options.command}`, { env: { ...process.env, PATH: enhancedPath } }, (error: any, stdout: string) => {
-            if (error || !stdout.trim()) {
-              logger.warn(`[Terminal] Command '${options.command}' not found in PATH`);
-              resolve(null);
-            } else {
-              const path = stdout.trim();
-              logger.info(`[Terminal] Command '${options.command}' found at: ${path}`);
-              resolve(path);
-            }
-          });
-        });
-        
-        if (!commandPath) {
-          // Command not found, return error
-          return { 
-            success: false, 
-            error: `Command '${options.command}' not found in PATH. Please ensure it is installed.`
-          };
-        }
-        
-        // Use the full path to the command to ensure it's found
-        // Run in interactive mode
-        args = ['-i', '-c', `${commandPath} ${(options.args || []).join(' ')}`];
-        logger.info(`[Terminal] Running command in interactive shell: ${commandPath}`);
+        // Don't check if command exists - just try to run it with enhanced PATH
+        // The enhanced PATH will be set in the environment below
+        // Run the command in an interactive shell
+        args = ['-i', '-c', `${options.command} ${(options.args || []).join(' ')}`];
+        logger.info(`[Terminal] Running command in interactive shell: ${options.command}`);
       } else {
-        // Otherwise use the shell directly
+        // Otherwise use the shell directly  
         shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
         args = options.args || [];
       }
