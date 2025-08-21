@@ -114,33 +114,23 @@ export class IsolatedTerminalPanel {
                 // Attach terminal to DOM
                 terminalManager.attachToElement(tab.id, content);
                 
-                // Write initial messages
+                // Write initial message
+                const timestamp = new Date().toLocaleTimeString();
                 terminalManager.writeToTerminal(tab.id, 
-                    '\x1b[36m[INFO] Isolated Terminal System Initialized\r\n' +
-                    '\x1b[36m[INFO] System Log tab created\r\n' +
-                    '\x1b[96m[INFO] This is a completely isolated terminal panel\r\n' +
-                    '\x1b[96m[INFO] It will not affect any other part of the application\r\n'
+                    `\x1b[36m[${timestamp}] [INFO] System Log initialized\r\n`
                 );
                 
                 tab.terminalInstance = terminalInstance;
             } catch (e) {
                 console.warn('[IsolatedTerminalPanel] Failed to create xterm, using fallback', e);
                 // Fallback to simple HTML
-                content.innerHTML = `
-                    <div style="color: #569cd6;">[INFO] Isolated Terminal System Initialized</div>
-                    <div style="color: #569cd6;">[INFO] System Log tab created</div>
-                    <div style="color: #4ec9b0;">[INFO] This is a completely isolated terminal panel</div>
-                    <div style="color: #4ec9b0;">[INFO] It will not affect any other part of the application</div>
-                `;
+                const timestamp = new Date().toLocaleTimeString();
+                content.innerHTML = `<div style="color: #569cd6;">[${timestamp}] [INFO] System Log initialized</div>`;
             }
         } else {
             // Fallback when terminalManager not available
-            content.innerHTML = `
-                <div style="color: #569cd6;">[INFO] Isolated Terminal System Initialized</div>
-                <div style="color: #569cd6;">[INFO] System Log tab created</div>
-                <div style="color: #4ec9b0;">[INFO] This is a completely isolated terminal panel</div>
-                <div style="color: #4ec9b0;">[INFO] It will not affect any other part of the application</div>
-            `;
+            const timestamp = new Date().toLocaleTimeString();
+            content.innerHTML = `<div style="color: #569cd6;">[${timestamp}] [INFO] System Log initialized</div>`;
         }
         
         tab.element = content;
@@ -330,8 +320,14 @@ export class IsolatedTerminalPanel {
         // Override console methods to capture output
         console.log = (...args: any[]) => {
             const message = argsToString(args);
-            // Filter out certain noisy logs
-            if (!message.includes('WWWWWWW') && !message.includes('\u0000')) {
+            // Filter out certain noisy logs and empty/whitespace-only messages
+            const trimmed = message.trim();
+            if (trimmed.length > 0 && 
+                !message.includes('WWWWWWW') && 
+                !message.includes('\u0000') &&
+                !message.match(/^[\s\W]+$/) && // Skip whitespace/special chars only
+                !message.includes('��') && // Skip replacement characters
+                trimmed.length < 10000) { // Skip extremely long messages
                 this.addLogEntry(terminalId, 'INFO', message, fallbackElement);
             }
             originalLog.apply(console, args);
