@@ -1905,18 +1905,386 @@ public async launch(toolId: string, projectPath: string): Promise<void> {
 }
 ```
 
-#### Future Enhancements (Integrated Terminal)
+### Integrated Terminal System
 
-**1. Launch Options**
-- "Launch in Hive" - Integrated terminal tab
-- "Launch in Terminal" - External terminal (current implementation)
+#### Vision
+Transform the fixed bottom console into a powerful tabbed terminal system where users can run multiple AI tools simultaneously, each in its own named tab, alongside regular terminal sessions. This creates a unified workspace where all AI assistants are immediately accessible without window switching.
 
-**2. Integrated Terminal Requirements**
-- xterm.js or similar terminal emulator
-- PTY (pseudo-terminal) process management
-- Tab management alongside existing console
-- Proper ANSI color support
-- Terminal resize handling
+#### Terminal Tab Architecture
+
+**Tab Types & Naming Convention**:
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ Console | Claude | Gemini | Qwen | Codex | Aider | Cline | Terminal 1 | Terminal 2 | + │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+1. **Console Tab** (Always First)
+   - Fixed system log output
+   - Non-closeable
+   - Shows backend activity, memory service status, etc.
+
+2. **AI Tool Tabs** (Named by Tool)
+   - Claude, Gemini, Qwen, Codex, Aider, Cline
+   - Icon indicator for running state
+   - Color-coded for easy identification
+   - Closeable with confirmation if tool is running
+
+3. **Generic Terminal Tabs** (Numbered)
+   - Terminal 1, Terminal 2, etc.
+   - User-created for general commands
+   - Full shell access
+   - Closeable without confirmation
+
+#### Visual Design
+
+```
+Bottom Terminal Area (Resizable):
+┌────────────────────────────────────────────────────────────────────┐
+│ [Console] [🤖 Claude] [✨ Gemini] [🐉 Qwen] [Terminal 1] [+]       │
+├────────────────────────────────────────────────────────────────────┤
+│ ~/Developer/Private/hive $ claude                                   │
+│                                                                      │
+│ Welcome to Claude Code v1.0.86                                      │
+│ Connected to Memory Service ✓                                       │
+│                                                                      │
+│ You can ask me about your codebase or request changes.              │
+│ Type /help for available commands.                                  │
+│                                                                      │
+│ > How can I improve the performance of this React component?        │
+│                                                                      │
+│ I'll analyze your React component for performance improvements...   │
+│ [Claude's response continues...]                                    │
+│                                                                      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+#### Implementation Architecture
+
+**Core Technologies**:
+```typescript
+interface TerminalSystemDependencies {
+  'xterm': '^5.0.0',                    // Terminal emulator
+  'xterm-addon-fit': '^0.7.0',          // Auto-resize
+  'xterm-addon-web-links': '^0.8.0',    // Clickable links
+  'xterm-addon-search': '^0.12.0',      // Search in terminal
+  'node-pty': '^1.0.0',                 // Pseudo-terminal
+  '@xterm/addon-serialize': '^0.9.0'    // Session persistence
+}
+```
+
+**Service Architecture**:
+```typescript
+class IntegratedTerminalService {
+  private terminals: Map<string, TerminalInstance>;
+  private activeTerminalId: string;
+  private terminalCounter: number = 1;
+  
+  // Terminal Management
+  createAIToolTerminal(toolId: string, toolName: string): TerminalInstance;
+  createGenericTerminal(): TerminalInstance;
+  closeTerminal(terminalId: string): Promise<boolean>;
+  switchToTerminal(terminalId: string): void;
+  
+  // AI Tool Integration
+  launchToolInTerminal(toolId: string, projectPath: string): Promise<void>;
+  isToolRunning(toolId: string): boolean;
+  getToolTerminal(toolId: string): TerminalInstance | null;
+  
+  // Terminal Operations
+  sendCommand(terminalId: string, command: string): void;
+  clearTerminal(terminalId: string): void;
+  resizeTerminal(terminalId: string, cols: number, rows: number): void;
+}
+
+interface TerminalInstance {
+  id: string;
+  type: 'console' | 'ai-tool' | 'generic';
+  title: string;
+  icon?: string;
+  toolId?: string;
+  xterm: Terminal;
+  pty: IPty;
+  isActive: boolean;
+  createdAt: Date;
+  lastActivityAt: Date;
+}
+```
+
+#### Tab Management System
+
+**Tab Component Structure**:
+```typescript
+interface TerminalTab {
+  id: string;
+  title: string;
+  icon?: string;
+  type: 'console' | 'ai-tool' | 'generic';
+  isActive: boolean;
+  isRunning: boolean;
+  isCloseable: boolean;
+  badge?: {
+    text: string;
+    color: string;
+  };
+}
+
+// Tab rendering
+<div className="terminal-tabs">
+  <Tab 
+    key="console" 
+    title="Console" 
+    icon="📊" 
+    isCloseable={false}
+    isActive={activeTab === 'console'}
+  />
+  {aiToolTabs.map(tab => (
+    <Tab 
+      key={tab.id}
+      title={tab.title}
+      icon={getToolIcon(tab.toolId)}
+      isCloseable={true}
+      isActive={activeTab === tab.id}
+      badge={tab.isRunning ? { text: '●', color: 'green' } : null}
+    />
+  ))}
+  {genericTabs.map((tab, index) => (
+    <Tab 
+      key={tab.id}
+      title={`Terminal ${index + 1}`}
+      isCloseable={true}
+      isActive={activeTab === tab.id}
+    />
+  ))}
+  <NewTabButton onClick={createNewTerminal} />
+</div>
+```
+
+#### Launch Flow with Integrated Terminal
+
+**1. Launch Button Click**:
+```typescript
+async function launchCliTool(toolId: string, mode: 'integrated' | 'external' = 'integrated') {
+  if (mode === 'integrated') {
+    // Check if tool already has a terminal
+    const existingTerminal = terminalService.getToolTerminal(toolId);
+    
+    if (existingTerminal) {
+      // Switch to existing tab
+      terminalService.switchToTerminal(existingTerminal.id);
+      
+      // Optionally restart the tool
+      if (!terminalService.isToolRunning(toolId)) {
+        terminalService.sendCommand(existingTerminal.id, getToolCommand(toolId));
+      }
+    } else {
+      // Create new terminal tab for tool
+      const terminal = terminalService.createAIToolTerminal(toolId, getToolName(toolId));
+      
+      // Launch tool in terminal
+      await terminalService.launchToolInTerminal(toolId, currentOpenedFolder);
+    }
+  } else {
+    // External terminal launch (current implementation)
+    await electronAPI.launchCliTool(toolId, currentOpenedFolder);
+  }
+}
+```
+
+**2. Terminal Creation Process**:
+```typescript
+createAIToolTerminal(toolId: string, toolName: string): TerminalInstance {
+  // Create xterm instance
+  const xterm = new Terminal({
+    fontSize: 14,
+    fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+    theme: {
+      background: '#1e1e1e',
+      foreground: '#cccccc'
+    },
+    cursorBlink: true
+  });
+  
+  // Create PTY process
+  const pty = spawn(getShell(), [], {
+    name: 'xterm-256color',
+    cwd: currentOpenedFolder || process.env.HOME,
+    env: {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor'
+    }
+  });
+  
+  // Connect xterm to PTY
+  xterm.onData(data => pty.write(data));
+  pty.onData(data => xterm.write(data));
+  
+  // Create terminal instance
+  const instance: TerminalInstance = {
+    id: `${toolId}-${Date.now()}`,
+    type: 'ai-tool',
+    title: toolName,
+    icon: getToolIcon(toolId),
+    toolId,
+    xterm,
+    pty,
+    isActive: true,
+    createdAt: new Date(),
+    lastActivityAt: new Date()
+  };
+  
+  // Add to terminals map
+  this.terminals.set(instance.id, instance);
+  
+  // Create tab UI
+  this.createTab(instance);
+  
+  return instance;
+}
+```
+
+#### Terminal Features
+
+**1. Context Menu for Tabs**:
+```
+Right-click on tab:
+- Restart Tool (AI tabs only)
+- Clear Terminal
+- Copy Terminal Output
+- Split Right
+- Close Tab
+- Close Other Tabs
+- Close All Tabs
+```
+
+**2. Keyboard Shortcuts**:
+```
+Ctrl/Cmd + T: New Terminal
+Ctrl/Cmd + W: Close Current Tab
+Ctrl/Cmd + Tab: Next Tab
+Ctrl/Cmd + Shift + Tab: Previous Tab
+Ctrl/Cmd + 1-9: Switch to Tab N
+Ctrl/Cmd + Shift + C: Copy
+Ctrl/Cmd + Shift + V: Paste
+```
+
+**3. Terminal Persistence**:
+```typescript
+interface TerminalSession {
+  id: string;
+  toolId?: string;
+  buffer: string;
+  cwd: string;
+  env: Record<string, string>;
+  timestamp: Date;
+}
+
+// Save session on close
+saveTerminalSession(terminal: TerminalInstance): void {
+  const session: TerminalSession = {
+    id: terminal.id,
+    toolId: terminal.toolId,
+    buffer: terminal.xterm.serialize(),
+    cwd: terminal.pty.process.cwd(),
+    env: terminal.pty.process.env,
+    timestamp: new Date()
+  };
+  
+  localStorage.setItem(`terminal-session-${terminal.id}`, JSON.stringify(session));
+}
+
+// Restore on restart
+restoreTerminalSessions(): void {
+  const sessions = this.loadSavedSessions();
+  sessions.forEach(session => {
+    if (session.toolId) {
+      // Restore AI tool terminal
+      this.createAIToolTerminal(session.toolId, getToolName(session.toolId));
+    }
+  });
+}
+```
+
+#### UI/UX Enhancements
+
+**1. Tool Status Indicators**:
+- 🟢 Green dot: Tool running
+- 🟡 Yellow dot: Tool starting
+- 🔴 Red dot: Tool error
+- ⚫ Gray dot: Tool stopped
+
+**2. Tab Overflow Handling**:
+```
+When tabs exceed width:
+[<] Console | Claude | Gemini | ... | Terminal 2 [>] [+]
+    ^ Scroll arrows appear
+```
+
+**3. Split Terminal View**:
+```
+┌─────────────────┬─────────────────┐
+│ Claude          │ Gemini          │
+│                 │                 │
+│ > processing... │ > ready         │
+└─────────────────┴─────────────────┘
+```
+
+#### Migration Strategy
+
+**Phase 1: Infrastructure** (Week 1)
+- Install xterm.js and node-pty
+- Create TerminalService class
+- Basic terminal rendering in bottom panel
+
+**Phase 2: Tab System** (Week 2)
+- Implement tab UI components
+- Tab switching logic
+- Console tab integration
+
+**Phase 3: AI Tool Integration** (Week 3)
+- Modify Launch button to use integrated terminal
+- Tool-specific terminal creation
+- Running state management
+
+**Phase 4: Advanced Features** (Week 4)
+- Split view
+- Terminal persistence
+- Context menus
+- Keyboard shortcuts
+
+**Phase 5: Polish & Testing** (Week 5)
+- Performance optimization
+- Error handling
+- User preferences
+- Documentation
+
+#### Configuration Options
+
+```typescript
+interface TerminalSettings {
+  defaultLocation: 'integrated' | 'external';
+  fontSize: number;
+  fontFamily: string;
+  theme: 'dark' | 'light' | 'custom';
+  scrollback: number;
+  cursorStyle: 'block' | 'bar' | 'underline';
+  cursorBlink: boolean;
+  confirmCloseRunningTool: boolean;
+  restoreTerminalsOnStartup: boolean;
+  maxTabs: number;
+}
+```
+
+#### Benefits of This Approach
+
+1. **Unified Workspace**: All AI tools in one place
+2. **Quick Switching**: Tab-based navigation between tools
+3. **Parallel Usage**: Run multiple AI assistants simultaneously
+4. **Visual Clarity**: Named tabs with icons for easy identification
+5. **Flexibility**: Mix AI tools with regular terminals
+6. **Persistence**: Restore terminal sessions across restarts
+7. **Professional Feel**: IDE-grade terminal experience
 
 ### Installation Flow
 
