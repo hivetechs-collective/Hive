@@ -3070,9 +3070,10 @@ setTimeout(() => {
             let newWidth: number;
             
             if (resizeState.handle === 'left') {
-                // For left handle: needs opposite behavior from right handle
-                // Using negative deltaX to reverse the direction
-                newWidth = resizeState.startWidth + (-deltaX);
+                // For left handle: use same calculation as consensus panel resize
+                // When dragging left, we want width to increase
+                const leftDeltaX = resizeState.startX - e.clientX;  // Reversed calculation like consensus panel
+                newWidth = resizeState.startWidth + leftDeltaX;
             } else {
                 // For right handle: dragging right should increase width
                 newWidth = resizeState.startWidth + deltaX;
