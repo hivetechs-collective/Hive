@@ -3068,18 +3068,16 @@ setTimeout(() => {
         document.addEventListener('mousemove', (e) => {
             if (!resizeState.isResizing) return;
             
-            const deltaX = e.clientX - resizeState.startX;
             let newWidth: number;
             
             if (resizeState.handle === 'left') {
-                // For left handle: dragging left should INCREASE width
-                // deltaX is negative when dragging left, positive when dragging right
-                // So we SUBTRACT deltaX to get the correct behavior
-                newWidth = resizeState.startWidth - deltaX;
+                // For left handle: reverse the delta calculation
+                const deltaX = resizeState.startX - e.clientX;  // Reversed: startX - clientX
+                newWidth = resizeState.startWidth + deltaX;
                 console.log('[IsolatedTerminal] Left resize - deltaX:', deltaX, 'newWidth:', newWidth);
             } else {
-                // For right handle: dragging right should increase width
-                // deltaX is positive when dragging right, negative when dragging left
+                // For right handle: normal delta calculation
+                const deltaX = e.clientX - resizeState.startX;  // Normal: clientX - startX
                 newWidth = resizeState.startWidth + deltaX;
             }
             
