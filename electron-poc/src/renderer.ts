@@ -3048,8 +3048,9 @@ setTimeout(() => {
             document.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
                 
-                const deltaX = e.clientX - startX;  // Changed: reversed the subtraction
-                const newWidth = Math.min(Math.max(startWidth - deltaX, 200), 800);  // Changed: subtract deltaX instead of add
+                // For left handle: dragging left (negative deltaX) should increase width
+                const deltaX = e.clientX - startX;
+                const newWidth = Math.min(Math.max(startWidth + (-deltaX), 200), 800);  // Negate deltaX so left drag increases width
                 isolatedTerminalPanel.style.width = newWidth + 'px';
             });
             
