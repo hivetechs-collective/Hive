@@ -299,19 +299,51 @@ export class IsolatedTerminalPanel {
         const originalError = console.error;
         const originalWarn = console.warn;
 
+        // Helper to safely convert args to string
+        const argsToString = (args: any[]): string => {
+            return args.map(arg => {
+                if (typeof arg === 'string') return arg;
+                if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
+                if (arg === null) return 'null';
+                if (arg === undefined) return 'undefined';
+                
+                // For objects, try to get a readable representation
+                try {
+                    // Check if it's an error object
+                    if (arg instanceof Error) {
+                        return `${arg.name}: ${arg.message}`;
+                    }
+                    // For other objects, use JSON.stringify with limit
+                    const str = JSON.stringify(arg, null, 2);
+                    // Limit length to prevent huge outputs
+                    if (str.length > 500) {
+                        return str.substring(0, 497) + '...';
+                    }
+                    return str;
+                } catch (e) {
+                    // Circular reference or other stringify error
+                    return '[Object]';
+                }
+            }).join(' ');
+        };
+
         // Override console methods to capture output
         console.log = (...args: any[]) => {
-            this.addLogEntry(terminalId, 'INFO', args.join(' '), fallbackElement);
+            const message = argsToString(args);
+            // Filter out certain noisy logs
+            if (!message.includes('WWWWWWW') && !message.includes('\u0000')) {
+                this.addLogEntry(terminalId, 'INFO', message, fallbackElement);
+            }
             originalLog.apply(console, args);
         };
 
         console.error = (...args: any[]) => {
-            this.addLogEntry(terminalId, 'ERROR', args.join(' '), fallbackElement);
+            this.addLogEntry(terminalId, 'ERROR', argsToString(args), fallbackElement);
             originalError.apply(console, args);
         };
 
         console.warn = (...args: any[]) => {
-            this.addLogEntry(terminalId, 'WARN', args.join(' '), fallbackElement);
+            this.addLogEntry(terminalId, 'WARN', argsToString(args), fallbackElement);
             originalWarn.apply(console, args);
         };
     }
