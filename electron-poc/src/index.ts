@@ -14,7 +14,7 @@ import { EnhancedGitManager } from './git/EnhancedGitManager';
 import { FileSystemManager } from './file-system';
 import { ProcessManager } from './utils/ProcessManager';
 import { PortManager } from './utils/PortManager';
-import { CliToolsManager } from './utils/CliToolsManager';
+import CliToolsManager from './utils/CliToolsManager';
 import { detectClaudeCode, detectAllCliTools, getCachedToolStatus } from './utils/cli-tool-detector';
 import { logger } from './utils/SafeLogger';
 
@@ -859,7 +859,8 @@ let memoryServicePort = 3457;
 let websocketBackendPort = 8765; // Dynamic port for WebSocket backend
 
 // CLI Tools Manager for AI CLI integration
-let cliToolsManager: CliToolsManager | null = null;
+// Note: The manager is now initialized as a singleton in registerCliToolHandlers()
+// let cliToolsManager: CliToolsManager | null = null;  // DEPRECATED - using singleton pattern now
 
 // Initialize ProcessManager and register all managed processes
 const initializeProcessManager = () => {
@@ -1130,8 +1131,9 @@ const registerMemoryServiceHandlers = () => {
   });
 };
 
-// ========== CLI TOOLS MANAGEMENT ==========
-// Initialize CLI Tools Manager
+// ========== CLI TOOLS MANAGEMENT (DEPRECATED - NOW IN registerSimpleCliToolHandlers) ==========
+// Initialize CLI Tools Manager (DEPRECATED - using singleton pattern now)
+/* DEPRECATED - Now using singleton pattern in registerSimpleCliToolHandlers()
 const initializeCliToolsManager = () => {
   if (!db) {
     logger.error('[Main] Database not initialized for CLI Tools Manager');
@@ -1163,8 +1165,10 @@ const initializeCliToolsManager = () => {
   
   logger.info('[Main] CLI Tools Manager initialized');
 };
+*/
 
-// Register CLI Tools IPC handlers
+// Register CLI Tools IPC handlers (DEPRECATED - duplicate handlers now exist below)
+/* DEPRECATED - These handlers conflict with the new singleton implementation below
 const registerCliToolsHandlers = () => {
   // Get all tool statuses
   ipcMain.handle('cli-tools-get-all-status', async () => {
@@ -1276,6 +1280,7 @@ const registerCliToolsHandlers = () => {
     });
   }
 };
+*/
 
 // Register simple CLI tool detection handlers (without the complex CliToolsManager)
 const registerSimpleCliToolHandlers = () => {
@@ -1301,6 +1306,70 @@ const registerSimpleCliToolHandlers = () => {
     } catch (error) {
       logger.error('[Main] Error detecting CLI tools:', error);
       return [];
+    }
+  });
+  
+  // Initialize the manager singleton for install/update/configure
+  const manager = CliToolsManager.getInstance(db);
+  
+  // Install CLI tool
+  ipcMain.handle('cli-tool-install', async (_, toolId: string) => {
+    logger.info(`[Main] Installing CLI tool: ${toolId}`);
+    try {
+      await manager.install(toolId);
+      return { success: true };
+    } catch (error: any) {
+      logger.error(`[Main] Failed to install ${toolId}:`, error);
+      return { success: false, error: error.message };
+    }
+  });
+  
+  // Update CLI tool
+  ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
+    logger.info(`[Main] Updating CLI tool: ${toolId}`);
+    try {
+      await manager.update(toolId);
+      return { success: true };
+    } catch (error: any) {
+      logger.error(`[Main] Failed to update ${toolId}:`, error);
+      return { success: false, error: error.message };
+    }
+  });
+  
+  // Configure CLI tool
+  ipcMain.handle('cli-tool-configure', async (_, toolId: string) => {
+    logger.info(`[Main] Configuring CLI tool: ${toolId}`);
+    try {
+      await manager.configure(toolId);
+      return { success: true };
+    } catch (error: any) {
+      logger.error(`[Main] Failed to configure ${toolId}:`, error);
+      return { success: false, error: error.message };
+    }
+  });
+  
+  // Check for updates
+  ipcMain.handle('cli-tools-check-updates', async () => {
+    logger.info('[Main] Checking for CLI tool updates');
+    try {
+      const updates = await manager.checkForUpdates();
+      return Array.from(updates.entries());
+    } catch (error) {
+      logger.error('[Main] Failed to check for updates:', error);
+      return [];
+    }
+  });
+  
+  // Listen for manager events and forward to renderer
+  manager.on('install:progress', (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('cli-tool-install-progress', progress);
+    }
+  });
+  
+  manager.on('update:progress', (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('cli-tool-update-progress', progress);
     }
   });
 };

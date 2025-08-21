@@ -77,9 +77,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getConnectedTools: () => ipcRenderer.invoke('memory-service-tools'),
   getMemoryActivity: (limit?: number) => ipcRenderer.invoke('memory-service-activity', limit),
   
-  // CLI Tool Detection
+  // CLI Tool Management
   detectCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-detect', toolId),
   detectAllCliTools: () => ipcRenderer.invoke('cli-tools-detect-all'),
+  installCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-install', toolId),
+  updateCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-update', toolId),
+  configureCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-configure', toolId),
+  checkCliToolUpdates: () => ipcRenderer.invoke('cli-tools-check-updates'),
+  
+  // CLI Tool Events
+  onCliToolInstallProgress: (callback: (progress: any) => void) => {
+    ipcRenderer.on('cli-tool-install-progress', (_, progress) => callback(progress));
+  },
+  onCliToolUpdateProgress: (callback: (progress: any) => void) => {
+    ipcRenderer.on('cli-tool-update-progress', (_, progress) => callback(progress));
+  },
   
   // Menu event listeners
   onMenuOpenFolder: (callback: (folderPath: string) => void) => {

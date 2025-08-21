@@ -1,402 +1,715 @@
 /**
  * CLI Tools Manager
- * Handles installation, updates, and maintenance of AI CLI tools
- * Primary focus: Claude Code CLI integration with Memory Service
+ * Handles installation, updates, and configuration of AI CLI tools
+ * Integrates with Memory Service for seamless AI tool connectivity
  */
 
-import { exec as execCallback } from 'child_process';
+import { EventEmitter } from 'events';
+import { exec as execCallback, spawn } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-// Remove node-fetch to avoid punycode deprecation warning
-import { EventEmitter } from 'events';
-
 import { logger } from './SafeLogger';
-const exec = promisify(execCallback);
+import { detectClaudeCode, CliToolStatus } from './cli-tool-detector';
 
-// Tool status tracking
-export interface ToolStatus {
-  installed: boolean;
-  version?: string;
-  path?: string;
-  lastChecked?: Date;
-  updateAvailable?: boolean;
-  authenticated?: boolean;
-}
+const execAsync = promisify(execCallback);
+const fsPromises = fs.promises;
 
-// Tool configuration
 export interface CliToolConfig {
   id: string;
   name: string;
-  command: string;
-  npmPackage?: string;
-  checkCommand: string;
-  versionCommand: string;
-  authCheckCommand?: string;
+  description: string;
   installCommand: string;
-  updateCheckInterval: number; // hours
-  memoryServiceIntegration?: boolean;
+  updateCommand: string;
+  versionCommand: string;
+  checkCommand: string;
+  docsUrl: string;
+  requiresAuth: boolean;
+  memoryServiceIntegration: boolean;
 }
 
-// Installation progress events
 export interface InstallProgress {
-  tool: string;
-  status: 'checking' | 'downloading' | 'installing' | 'configuring' | 'complete' | 'error' | 'uninstalling' | 'cancelled';
+  toolId: string;
+  stage: 'checking' | 'installing' | 'configuring' | 'complete' | 'error';
+  message: string;
   progress?: number;
-  message?: string;
-  error?: Error;
 }
 
 export class CliToolsManager extends EventEmitter {
-  private toolsDir: string;
-  private configPath: string;
-  private tools: Map<string, CliToolConfig>;
-  private status: Map<string, ToolStatus>;
-  private updateCheckTimers: Map<string, any>;
+  private static instance: CliToolsManager;
+  private tools: Map<string, CliToolConfig> = new Map();
+  private configDir: string;
+  private configFile: string;
+  private memoryServiceEndpoint: string = 'http://localhost:3457';
   private db: any; // SQLite database connection
 
-  constructor(database: any) {
+  private constructor(database?: any) {
     super();
     this.db = database;
-    this.toolsDir = path.join(os.homedir(), '.hive', 'tools');
-    this.configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
-    this.tools = new Map();
-    this.status = new Map();
-    this.updateCheckTimers = new Map();
-    
+    this.configDir = path.join(os.homedir(), '.hive');
+    this.configFile = path.join(this.configDir, 'cli-tools-config.json');
     this.initializeTools();
-    this.loadStatus();
+    this.loadConfig();
   }
 
-  /**
-   * Initialize tool configurations
-   */
+  public static getInstance(database?: any): CliToolsManager {
+    if (!CliToolsManager.instance) {
+      CliToolsManager.instance = new CliToolsManager(database);
+    }
+    return CliToolsManager.instance;
+  }
+
   private initializeTools() {
-    // Only include agentic coding CLIs that work like Claude Code
-    // These tools can understand codebases, make multi-file changes, and execute commands
-    
-    // Claude Code CLI - Anthropic's agentic coding assistant
-    this.tools.set('claude', {
-      id: 'claude',
-      name: 'Claude Code CLI',
-      command: 'claude',
-      npmPackage: '@anthropic-ai/claude-code',
-      checkCommand: 'which claude || where claude',
-      versionCommand: 'claude --version',
-      authCheckCommand: 'claude status',
+    // Claude Code
+    this.tools.set('claude-code', {
+      id: 'claude-code',
+      name: 'Claude Code',
+      description: 'Anthropic\'s terminal-native AI agent',
       installCommand: 'npm install -g @anthropic-ai/claude-code',
-      updateCheckInterval: 24,
+      updateCommand: 'npm update -g @anthropic-ai/claude-code',
+      versionCommand: 'claude --version',
+      checkCommand: 'which claude || where claude',
+      docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
+      requiresAuth: true,
       memoryServiceIntegration: true
     });
 
-    // Gemini CLI - Google's agentic coding assistant (free tier)
-    this.tools.set('gemini', {
-      id: 'gemini',
+    // Gemini CLI
+    this.tools.set('gemini-cli', {
+      id: 'gemini-cli',
       name: 'Gemini CLI',
-      command: 'gemini',
-      npmPackage: '@google/gemini-cli',
-      checkCommand: 'which gemini || where gemini',
-      versionCommand: 'gemini --version',
-      authCheckCommand: 'gemini auth status',
+      description: 'Google\'s free-tier agentic assistant',
       installCommand: 'npm install -g @google/gemini-cli',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: true
+      updateCommand: 'npm update -g @google/gemini-cli',
+      versionCommand: 'gemini --version',
+      checkCommand: 'which gemini || where gemini',
+      docsUrl: 'https://ai.google.dev/gemini/docs',
+      requiresAuth: true,
+      memoryServiceIntegration: false
     });
 
-    // Qwen Code - Alibaba's agentic coding assistant (forked from Gemini CLI)
-    this.tools.set('qwen', {
-      id: 'qwen',
+    // Qwen Code
+    this.tools.set('qwen-code', {
+      id: 'qwen-code',
       name: 'Qwen Code',
-      command: 'qwen-code',
-      npmPackage: '@qwen-code/qwen-code',
-      checkCommand: 'which qwen-code || where qwen-code',
-      versionCommand: 'qwen-code --version',
-      authCheckCommand: 'qwen-code auth status',
+      description: 'Alibaba\'s open-source coding agent',
       installCommand: 'npm install -g @qwen-code/qwen-code',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: true
+      updateCommand: 'npm update -g @qwen-code/qwen-code',
+      versionCommand: 'qwen --version',
+      checkCommand: 'which qwen-code || where qwen-code',
+      docsUrl: 'https://github.com/QwenLM/Qwen3-Coder',
+      requiresAuth: false,
+      memoryServiceIntegration: false
     });
 
-    // OpenAI Codex CLI - OpenAI's agentic coding assistant
-    this.tools.set('openai', {
-      id: 'openai',
-      name: 'OpenAI Codex CLI',
-      command: 'codex',
-      npmPackage: '@openai/codex-cli',
-      checkCommand: 'which codex || where codex',
-      versionCommand: 'codex --version',
-      authCheckCommand: 'codex auth status',
-      installCommand: 'npm install -g @openai/codex-cli',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: true
-    });
-
-    // Aider - Git-aware agentic coding assistant
+    // Aider
     this.tools.set('aider', {
       id: 'aider',
       name: 'Aider',
-      command: 'aider',
-      checkCommand: 'which aider || where aider',
-      versionCommand: 'aider --version',
+      description: 'Git-integrated agentic editor',
       installCommand: 'pip install aider-chat',
-      updateCheckInterval: 24,
-      memoryServiceIntegration: false
-    });
-
-    // Cline - Lightweight agentic coding assistant
-    this.tools.set('cline', {
-      id: 'cline',
-      name: 'Cline',
-      command: 'cline',
-      checkCommand: 'which cline || where cline',
-      versionCommand: 'cline --version',
-      installCommand: 'npm install -g @cline/cli',
-      updateCheckInterval: 24,
+      updateCommand: 'pip install --upgrade aider-chat',
+      versionCommand: 'aider --version',
+      checkCommand: 'which aider || where aider',
+      docsUrl: 'https://aider.chat/docs/',
+      requiresAuth: true,
       memoryServiceIntegration: false
     });
   }
 
-  /**
-   * Load saved status from disk
-   */
-  private async loadStatus() {
+  private async loadConfig() {
     try {
-      if (fs.existsSync(this.configPath)) {
-        const data = fs.readFileSync(this.configPath, 'utf-8');
-        const saved = JSON.parse(data);
-        
-        for (const [toolId, status] of Object.entries(saved)) {
-          this.status.set(toolId, status as ToolStatus);
-        }
+      if (!fs.existsSync(this.configDir)) {
+        await fsPromises.mkdir(this.configDir, { recursive: true });
+      }
+
+      if (fs.existsSync(this.configFile)) {
+        const data = await fsPromises.readFile(this.configFile, 'utf-8');
+        const config = JSON.parse(data);
+        logger.info(`[CliToolsManager] Loaded config from ${this.configFile}`);
+        return config;
       }
     } catch (error) {
-      logger.error('[CliToolsManager] Failed to load status:', error);
+      logger.error('[CliToolsManager] Failed to load config:', error);
     }
+    return {};
   }
 
-  /**
-   * Save status to disk
-   */
-  private async saveStatus() {
+  private async saveConfig(config: any) {
     try {
-      const data = Object.fromEntries(this.status);
-      fs.mkdirSync(path.dirname(this.configPath), { recursive: true });
-      fs.writeFileSync(this.configPath, JSON.stringify(data, null, 2));
+      await fsPromises.writeFile(this.configFile, JSON.stringify(config, null, 2));
+      logger.info('[CliToolsManager] Config saved');
     } catch (error) {
-      logger.error('[CliToolsManager] Failed to save status:', error);
+      logger.error('[CliToolsManager] Failed to save config:', error);
     }
   }
 
   /**
-   * Check if a tool is installed
-   */
-  public async checkInstalled(toolId: string): Promise<boolean> {
-    const tool = this.tools.get(toolId);
-    if (!tool) return false;
-
-    try {
-      await exec(tool.checkCommand);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Get tool version
-   */
-  public async getVersion(toolId: string): Promise<string | undefined> {
-    const tool = this.tools.get(toolId);
-    if (!tool) return undefined;
-
-    try {
-      const { stdout } = await exec(tool.versionCommand);
-      const version = stdout.trim().match(/\d+\.\d+\.\d+/)?.[0];
-      return version;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Check if tool is authenticated
-   */
-  public async checkAuthenticated(toolId: string): Promise<boolean> {
-    const tool = this.tools.get(toolId);
-    if (!tool || !tool.authCheckCommand) return true;
-
-    try {
-      await exec(tool.authCheckCommand);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Install a tool
+   * Install a CLI tool
    */
   public async install(toolId: string): Promise<void> {
     const tool = this.tools.get(toolId);
-    if (!tool) throw new Error(`Unknown tool: ${toolId}`);
-
-    this.emit('install-progress', {
-      tool: toolId,
-      status: 'checking',
-      message: `Checking ${tool.name} installation...`
-    } as InstallProgress);
-
-    // Check if already installed
-    const installed = await this.checkInstalled(toolId);
-    if (installed) {
-      this.emit('install-progress', {
-        tool: toolId,
-        status: 'complete',
-        message: `${tool.name} is already installed`
-      } as InstallProgress);
-      
-      await this.updateStatus(toolId);
-      return;
+    if (!tool) {
+      throw new Error(`Unknown tool: ${toolId}`);
     }
 
-    // Check dependencies
-    if (toolId === 'gh-copilot') {
-      // Check if gh CLI is installed first
-      try {
-        await exec('gh --version');
-      } catch {
-        throw new Error('GitHub CLI (gh) must be installed first. Run: brew install gh');
-      }
-    }
-
-    this.emit('install-progress', {
-      tool: toolId,
-      status: 'installing',
-      message: `Installing ${tool.name}...`
+    logger.info(`[CliToolsManager] Installing ${tool.name}...`);
+    this.emit('install:progress', {
+      toolId,
+      stage: 'checking',
+      message: 'Checking prerequisites...'
     } as InstallProgress);
 
     try {
-      // Run installation command
-      await exec(tool.installCommand);
-      
+      // Check if already installed
+      const status = await this.getToolStatus(toolId);
+      if (status.installed) {
+        this.emit('install:progress', {
+          toolId,
+          stage: 'complete',
+          message: `${tool.name} is already installed (v${status.version})`
+        } as InstallProgress);
+        return;
+      }
+
+      // Check prerequisites
+      if (tool.installCommand.includes('npm')) {
+        await this.checkNodeVersion();
+      } else if (tool.installCommand.includes('pip')) {
+        await this.checkPythonVersion();
+      }
+
+      // Install the tool
+      this.emit('install:progress', {
+        toolId,
+        stage: 'installing',
+        message: `Installing ${tool.name}...`,
+        progress: 30
+      } as InstallProgress);
+
+      await this.executeCommand(tool.installCommand);
+
       // Verify installation
-      const nowInstalled = await this.checkInstalled(toolId);
-      if (!nowInstalled) {
+      const newStatus = await this.getToolStatus(toolId);
+      if (!newStatus.installed) {
         throw new Error('Installation verification failed');
       }
 
-      this.emit('install-progress', {
-        tool: toolId,
-        status: 'complete',
-        message: `${tool.name} installed successfully`
-      } as InstallProgress);
+      // Configure Memory Service integration if applicable
+      if (tool.memoryServiceIntegration) {
+        this.emit('install:progress', {
+          toolId,
+          stage: 'configuring',
+          message: 'Configuring Memory Service integration...',
+          progress: 80
+        } as InstallProgress);
 
-      await this.updateStatus(toolId);
-      
-      // If Claude CLI, configure Memory Service integration
-      if (toolId === 'claude' && tool.memoryServiceIntegration) {
         await this.configureMemoryServiceIntegration(toolId);
       }
-      
+
+      // Save installation info
+      const config = await this.loadConfig();
+      config[toolId] = {
+        installed: true,
+        version: newStatus.version,
+        installedAt: new Date().toISOString()
+      };
+      await this.saveConfig(config);
+
+      // Save to database if available
+      if (this.db) {
+        await this.saveToDatabase(toolId, newStatus);
+      }
+
+      this.emit('install:progress', {
+        toolId,
+        stage: 'complete',
+        message: `${tool.name} installed successfully!`,
+        progress: 100
+      } as InstallProgress);
+
+      logger.info(`[CliToolsManager] ${tool.name} installed successfully`);
     } catch (error) {
-      this.emit('install-progress', {
-        tool: toolId,
-        status: 'error',
-        message: `Failed to install ${tool.name}`,
-        error: error as Error
+      logger.error(`[CliToolsManager] Installation failed for ${toolId}:`, error);
+      this.emit('install:progress', {
+        toolId,
+        stage: 'error',
+        message: `Installation failed: ${error.message}`
       } as InstallProgress);
       throw error;
     }
   }
 
   /**
-   * Configure Memory Service integration for Claude CLI
+   * Update a CLI tool
    */
-  private async configureMemoryServiceIntegration(toolId: string): Promise<void> {
-    if (toolId !== 'claude') return;
+  public async update(toolId: string): Promise<void> {
+    const tool = this.tools.get(toolId);
+    if (!tool) {
+      throw new Error(`Unknown tool: ${toolId}`);
+    }
 
-    this.emit('install-progress', {
-      tool: toolId,
-      status: 'configuring',
-      message: 'Configuring Memory Service integration...'
-    } as InstallProgress);
+    logger.info(`[CliToolsManager] Updating ${tool.name}...`);
+    this.emit('update:progress', {
+      toolId,
+      stage: 'checking',
+      message: 'Checking for updates...'
+    });
 
     try {
-      // Register Claude CLI with Memory Service
-      const response = await fetch('http://localhost:3457/api/v1/memory/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toolName: 'Claude Code CLI' })
+      // Check if installed
+      const status = await this.getToolStatus(toolId);
+      if (!status.installed) {
+        throw new Error(`${tool.name} is not installed`);
+      }
+
+      const currentVersion = status.version;
+
+      // Run update command
+      this.emit('update:progress', {
+        toolId,
+        stage: 'installing',
+        message: `Updating ${tool.name}...`,
+        progress: 50
       });
 
-      if (response.ok) {
-        const { token } = await response.json();
-        
-        // Save token to Claude CLI config
-        const claudeConfigPath = path.join(os.homedir(), '.claude', 'config.json');
-        let claudeConfig: any = {};
-        
-        if (fs.existsSync(claudeConfigPath)) {
-          claudeConfig = JSON.parse(fs.readFileSync(claudeConfigPath, 'utf-8'));
-        }
-        
-        claudeConfig.memoryService = {
-          enabled: true,
-          endpoint: 'http://localhost:3457',
-          token: token,
-          autoSync: true
+      await this.executeCommand(tool.updateCommand);
+
+      // Check new version
+      const newStatus = await this.getToolStatus(toolId);
+      const newVersion = newStatus.version;
+
+      if (currentVersion === newVersion) {
+        this.emit('update:progress', {
+          toolId,
+          stage: 'complete',
+          message: `${tool.name} is already up to date (v${newVersion})`
+        });
+      } else {
+        // Update config
+        const config = await this.loadConfig();
+        config[toolId] = {
+          ...config[toolId],
+          version: newVersion,
+          updatedAt: new Date().toISOString()
         };
-        
-        fs.mkdirSync(path.dirname(claudeConfigPath), { recursive: true });
-        fs.writeFileSync(claudeConfigPath, JSON.stringify(claudeConfig, null, 2));
-        
-        logger.info('[CliToolsManager] Claude CLI registered with Memory Service');
+        await this.saveConfig(config);
+
+        this.emit('update:progress', {
+          toolId,
+          stage: 'complete',
+          message: `${tool.name} updated to v${newVersion}`,
+          progress: 100
+        });
       }
+
+      logger.info(`[CliToolsManager] ${tool.name} updated successfully`);
     } catch (error) {
-      logger.error('[CliToolsManager] Failed to configure Memory Service:', error);
+      logger.error(`[CliToolsManager] Update failed for ${toolId}:`, error);
+      this.emit('update:progress', {
+        toolId,
+        stage: 'error',
+        message: `Update failed: ${error.message}`
+      });
+      throw error;
     }
   }
 
   /**
-   * Update tool status
+   * Configure a CLI tool (especially Memory Service integration)
    */
-  private async updateStatus(toolId: string): Promise<void> {
+  public async configure(toolId: string): Promise<void> {
     const tool = this.tools.get(toolId);
-    if (!tool) return;
-
-    const status: ToolStatus = {
-      installed: await this.checkInstalled(toolId),
-      version: await this.getVersion(toolId),
-      lastChecked: new Date(),
-      authenticated: await this.checkAuthenticated(toolId)
-    };
-
-    // Find tool path
-    try {
-      const { stdout } = await exec(`which ${tool.command} || where ${tool.command}`);
-      status.path = stdout.trim().split('\n')[0];
-    } catch {
-      // Path not found
+    if (!tool) {
+      throw new Error(`Unknown tool: ${toolId}`);
     }
 
-    this.status.set(toolId, status);
-    await this.saveStatus();
+    logger.info(`[CliToolsManager] Configuring ${tool.name}...`);
+
+    try {
+      // Check if installed
+      const status = await this.getToolStatus(toolId);
+      if (!status.installed) {
+        throw new Error(`${tool.name} is not installed`);
+      }
+
+      if (tool.memoryServiceIntegration) {
+        await this.configureMemoryServiceIntegration(toolId);
+      }
+
+      // Tool-specific configuration
+      if (toolId === 'claude-code') {
+        await this.configureClaudeCode();
+      }
+
+      logger.info(`[CliToolsManager] ${tool.name} configured successfully`);
+    } catch (error) {
+      logger.error(`[CliToolsManager] Configuration failed for ${toolId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Configure Memory Service integration for a tool
+   */
+  private async configureMemoryServiceIntegration(toolId: string) {
+    try {
+      // Register with Memory Service
+      const response = await fetch(`${this.memoryServiceEndpoint}/api/v1/memory/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolName: toolId,
+          clientInfo: {
+            version: await this.getToolVersion(toolId),
+            platform: process.platform,
+            nodeVersion: process.version
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Memory Service registration failed: ${response.statusText}`);
+      }
+
+      const { token, endpoint } = await response.json();
+      logger.info(`[CliToolsManager] Registered ${toolId} with Memory Service`);
+
+      // Save the token for the tool
+      const config = await this.loadConfig();
+      config[toolId] = {
+        ...config[toolId],
+        memoryService: {
+          endpoint,
+          token,
+          connectedAt: new Date().toISOString()
+        }
+      };
+      await this.saveConfig(config);
+
+      // Configure the tool to use Memory Service
+      if (toolId === 'claude-code') {
+        await this.updateClaudeCodeConfig({ memoryService: { endpoint, token, enabled: true } });
+      }
+    } catch (error) {
+      logger.error(`[CliToolsManager] Memory Service integration failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Configure Claude Code specifically
+   */
+  private async configureClaudeCode() {
+    const claudeConfigPath = path.join(os.homedir(), '.claude', 'config.json');
     
-    // Save to database for tracking
-    await this.saveToDatabase(toolId, status);
+    try {
+      // Ensure directory exists
+      const claudeDir = path.dirname(claudeConfigPath);
+      if (!fs.existsSync(claudeDir)) {
+        await fsPromises.mkdir(claudeDir, { recursive: true });
+      }
+
+      // Load existing config or create new
+      let claudeConfig: any = {};
+      if (fs.existsSync(claudeConfigPath)) {
+        const data = await fsPromises.readFile(claudeConfigPath, 'utf-8');
+        claudeConfig = JSON.parse(data);
+      }
+
+      // Get Memory Service config
+      const config = await this.loadConfig();
+      const memoryConfig = config['claude-code']?.memoryService;
+
+      // Update Claude config with Memory Service
+      if (memoryConfig) {
+        claudeConfig.memoryService = {
+          endpoint: memoryConfig.endpoint,
+          token: memoryConfig.token,
+          enabled: true
+        };
+      }
+
+      // Enable MCP if available
+      claudeConfig.mcpServers = {
+        ...claudeConfig.mcpServers,
+        'hive-memory': {
+          command: 'npx',
+          args: ['@hive/mcp-memory-server', '--port', '3457']
+        }
+      };
+
+      // Save Claude config
+      await fsPromises.writeFile(claudeConfigPath, JSON.stringify(claudeConfig, null, 2));
+      logger.info('[CliToolsManager] Claude Code configuration updated');
+    } catch (error) {
+      logger.error('[CliToolsManager] Failed to configure Claude Code:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update Claude Code configuration
+   */
+  private async updateClaudeCodeConfig(updates: any) {
+    const claudeConfigPath = path.join(os.homedir(), '.claude', 'config.json');
+    const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
+    
+    try {
+      // Update main config
+      let config = {};
+      if (fs.existsSync(claudeConfigPath)) {
+        const data = await fsPromises.readFile(claudeConfigPath, 'utf-8');
+        config = JSON.parse(data);
+      }
+
+      // Merge updates
+      config = { ...config, ...updates };
+
+      // Ensure directory exists
+      const dir = path.dirname(claudeConfigPath);
+      if (!fs.existsSync(dir)) {
+        await fsPromises.mkdir(dir, { recursive: true });
+      }
+
+      await fsPromises.writeFile(claudeConfigPath, JSON.stringify(config, null, 2));
+      logger.info('[CliToolsManager] Claude Code config updated');
+
+      // Update MCP configuration if Memory Service is enabled
+      if (updates.memoryService && updates.memoryService.enabled) {
+        let mcpConfig: any = { servers: {} };
+        if (fs.existsSync(mcpConfigPath)) {
+          const mcpData = await fsPromises.readFile(mcpConfigPath, 'utf-8');
+          mcpConfig = JSON.parse(mcpData);
+        }
+
+        // Add Memory Service MCP server
+        mcpConfig.servers['hive-memory-service'] = {
+          command: 'node',
+          args: [
+            path.join(this.configDir, 'memory-service-mcp-wrapper.js')
+          ],
+          env: {
+            MEMORY_SERVICE_ENDPOINT: updates.memoryService.endpoint,
+            MEMORY_SERVICE_TOKEN: updates.memoryService.token
+          },
+          description: 'Hive Consensus Memory Service - AI memory and learning system'
+        };
+
+        await fsPromises.writeFile(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+        logger.info('[CliToolsManager] MCP configuration updated with Memory Service');
+
+        // Create the MCP wrapper script
+        await this.createMemoryServiceMCPWrapper(updates.memoryService);
+      }
+    } catch (error) {
+      logger.error('[CliToolsManager] Failed to update Claude Code config:', error);
+    }
+  }
+
+  /**
+   * Create MCP wrapper script for Memory Service
+   */
+  private async createMemoryServiceMCPWrapper(memoryService: any) {
+    const wrapperPath = path.join(this.configDir, 'memory-service-mcp-wrapper.js');
+    
+    const wrapperScript = `#!/usr/bin/env node
+/**
+ * MCP Wrapper for Hive Memory Service
+ * This script provides an MCP-compatible interface to the Memory Service
+ */
+
+const { Server } = require('@modelcontextprotocol/sdk');
+const fetch = require('node-fetch');
+
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || 'http://localhost:3457';
+const TOKEN = process.env.MEMORY_SERVICE_TOKEN;
+
+class MemoryServiceMCP extends Server {
+  constructor() {
+    super({
+      name: 'hive-memory-service',
+      version: '1.0.0',
+      description: 'Hive Consensus Memory Service'
+    });
+
+    this.registerTool({
+      name: 'query_memory',
+      description: 'Query the AI memory system for relevant learnings',
+      parameters: {
+        query: { type: 'string', required: true },
+        limit: { type: 'number', default: 5 }
+      },
+      handler: this.queryMemory.bind(this)
+    });
+
+    this.registerTool({
+      name: 'contribute_learning',
+      description: 'Contribute a new learning to the memory system',
+      parameters: {
+        type: { type: 'string', required: true },
+        category: { type: 'string', required: true },
+        content: { type: 'string', required: true },
+        code: { type: 'string' }
+      },
+      handler: this.contributeLearning.bind(this)
+    });
+  }
+
+  async queryMemory({ query, limit = 5 }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': 'claude-code-mcp'
+      },
+      body: JSON.stringify({
+        client: 'claude-code',
+        context: { file: process.cwd() },
+        query,
+        options: { limit }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async contributeLearning({ type, category, content, code }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': 'claude-code-mcp'
+      },
+      body: JSON.stringify({
+        source: 'claude-code',
+        learning: {
+          type,
+          category,
+          content,
+          code,
+          context: { file: process.cwd(), success: true }
+        }
+      })
+    });
+
+    return await response.json();
+  }
+}
+
+// Start the MCP server
+const server = new MemoryServiceMCP();
+server.start();
+`;
+
+    await fsPromises.writeFile(wrapperPath, wrapperScript, { mode: 0o755 });
+    logger.info('[CliToolsManager] Created Memory Service MCP wrapper');
+  }
+
+  /**
+   * Get tool status
+   */
+  public async getToolStatus(toolId: string): Promise<CliToolStatus> {
+    if (toolId === 'claude-code') {
+      return await detectClaudeCode();
+    }
+
+    // Generic detection for other tools
+    const tool = this.tools.get(toolId);
+    if (!tool) {
+      return {
+        id: toolId,
+        name: 'Unknown',
+        installed: false
+      };
+    }
+
+    try {
+      const { stdout } = await execAsync(tool.versionCommand + ' 2>/dev/null');
+      const versionMatch = stdout.match(/(\d+\.\d+\.\d+)/);
+      return {
+        id: toolId,
+        name: tool.name,
+        installed: true,
+        version: versionMatch ? versionMatch[1] : 'unknown'
+      };
+    } catch {
+      return {
+        id: toolId,
+        name: tool.name,
+        installed: false
+      };
+    }
+  }
+
+  /**
+   * Get tool version
+   */
+  private async getToolVersion(toolId: string): Promise<string> {
+    const status = await this.getToolStatus(toolId);
+    return status.version || 'unknown';
+  }
+
+  /**
+   * Check Node.js version
+   */
+  private async checkNodeVersion() {
+    try {
+      const { stdout } = await execAsync('node --version');
+      const version = stdout.trim();
+      const major = parseInt(version.split('.')[0].substring(1));
+      if (major < 18) {
+        throw new Error(`Node.js 18+ required (current: ${version})`);
+      }
+      logger.info(`[CliToolsManager] Node.js version OK: ${version}`);
+    } catch (error) {
+      throw new Error('Node.js 18+ is required for npm installations');
+    }
+  }
+
+  /**
+   * Check Python version
+   */
+  private async checkPythonVersion() {
+    try {
+      const { stdout } = await execAsync('python3 --version');
+      const version = stdout.trim();
+      logger.info(`[CliToolsManager] Python version OK: ${version}`);
+    } catch {
+      throw new Error('Python 3 is required for pip installations');
+    }
+  }
+
+  /**
+   * Execute command with progress tracking
+   */
+  private executeCommand(command: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      logger.info(`[CliToolsManager] Executing: ${command}`);
+      
+      execCallback(command, (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`[CliToolsManager] Command failed: ${stderr}`);
+          reject(error);
+        } else {
+          logger.info(`[CliToolsManager] Command succeeded`);
+          resolve();
+        }
+      });
+    });
   }
 
   /**
    * Save tool status to database
    */
-  private async saveToDatabase(toolId: string, status: ToolStatus): Promise<void> {
-    const tool = this.tools.get(toolId);
-    if (!tool || !this.db) return;
+  private async saveToDatabase(toolId: string, status: CliToolStatus): Promise<void> {
+    if (!this.db) return;
 
     const syncType = `${toolId}_cli_update`;
     const now = new Date().toISOString();
-    const nextCheck = new Date(Date.now() + tool.updateCheckInterval * 60 * 60 * 1000).toISOString();
 
     try {
       await new Promise((resolve, reject) => {
@@ -412,7 +725,7 @@ export class CliToolsManager extends EventEmitter {
           now,
           status.installed ? 'completed' : 'pending',
           status.version || 'unknown',
-          nextCheck,
+          new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           now
         ], (err: any) => {
           if (err) reject(err);
@@ -425,128 +738,31 @@ export class CliToolsManager extends EventEmitter {
   }
 
   /**
-   * Check for updates for a tool
+   * Check for updates for all installed tools
    */
-  public async checkForUpdates(toolId: string): Promise<boolean> {
-    const tool = this.tools.get(toolId);
-    if (!tool) return false;
-
-    try {
-      if (tool.npmPackage) {
-        // Check npm for latest version
-        const { stdout } = await exec(`npm view ${tool.npmPackage} version`);
-        const latestVersion = stdout.trim();
-        const currentVersion = await this.getVersion(toolId);
-        
-        if (currentVersion && latestVersion !== currentVersion) {
-          const status = this.status.get(toolId) || {} as ToolStatus;
-          status.updateAvailable = true;
-          this.status.set(toolId, status);
-          await this.saveStatus();
-          return true;
-        }
-      }
-    } catch (error) {
-      logger.error(`[CliToolsManager] Failed to check updates for ${toolId}:`, error);
-    }
-
-    return false;
-  }
-
-  /**
-   * Update a tool
-   */
-  public async update(toolId: string): Promise<void> {
-    const tool = this.tools.get(toolId);
-    if (!tool) throw new Error(`Unknown tool: ${toolId}`);
-
-    this.emit('install-progress', {
-      tool: toolId,
-      status: 'downloading',
-      message: `Updating ${tool.name}...`
-    } as InstallProgress);
-
-    try {
-      if (tool.npmPackage) {
-        await exec(`npm update -g ${tool.npmPackage}`);
-      }
-      
-      await this.updateStatus(toolId);
-      
-      this.emit('install-progress', {
-        tool: toolId,
-        status: 'complete',
-        message: `${tool.name} updated successfully`
-      } as InstallProgress);
-    } catch (error) {
-      this.emit('install-progress', {
-        tool: toolId,
-        status: 'error',
-        message: `Failed to update ${tool.name}`,
-        error: error as Error
-      } as InstallProgress);
-      throw error;
-    }
-  }
-
-  /**
-   * Start automatic update checking
-   */
-  public startAutoUpdateCheck(): void {
+  public async checkForUpdates(): Promise<Map<string, boolean>> {
+    const updates = new Map<string, boolean>();
+    
     for (const [toolId, tool] of this.tools) {
-      // Clear existing timer
-      const existingTimer = this.updateCheckTimers.get(toolId);
-      if (existingTimer) {
-        clearInterval(existingTimer);
-      }
-
-      // Set up new timer
-      const timer = setInterval(async () => {
-        const hasUpdate = await this.checkForUpdates(toolId);
-        if (hasUpdate) {
-          this.emit('update-available', { toolId, tool: tool.name });
+      try {
+        const status = await this.getToolStatus(toolId);
+        if (status.installed) {
+          // For npm packages, check latest version
+          if (tool.installCommand.includes('npm')) {
+            const packageName = tool.installCommand.match(/@[^@\s]+/)?.[0];
+            if (packageName) {
+              const { stdout } = await execAsync(`npm view ${packageName} version 2>/dev/null`);
+              const latestVersion = stdout.trim();
+              updates.set(toolId, latestVersion !== status.version);
+            }
+          }
         }
-      }, tool.updateCheckInterval * 60 * 60 * 1000);
-
-      this.updateCheckTimers.set(toolId, timer);
-      
-      // Also check immediately
-      this.checkForUpdates(toolId);
-    }
-  }
-
-  /**
-   * Stop automatic update checking
-   */
-  public stopAutoUpdateCheck(): void {
-    for (const timer of this.updateCheckTimers.values()) {
-      clearInterval(timer);
-    }
-    this.updateCheckTimers.clear();
-  }
-
-  /**
-   * Get all tool statuses
-   */
-  public async getAllStatuses(): Promise<Map<string, ToolStatus>> {
-    const statuses = new Map<string, ToolStatus>();
-    
-    for (const toolId of this.tools.keys()) {
-      await this.updateStatus(toolId);
-      const status = this.status.get(toolId);
-      if (status) {
-        statuses.set(toolId, status);
+      } catch (error) {
+        logger.error(`[CliToolsManager] Failed to check updates for ${toolId}:`, error);
       }
     }
-    
-    return statuses;
-  }
 
-  /**
-   * Get tool configuration
-   */
-  public getTool(toolId: string): CliToolConfig | undefined {
-    return this.tools.get(toolId);
+    return updates;
   }
 
   /**
@@ -554,158 +770,6 @@ export class CliToolsManager extends EventEmitter {
    */
   public getAllTools(): Map<string, CliToolConfig> {
     return new Map(this.tools);
-  }
-
-  /**
-   * Uninstall a tool
-   */
-  public async uninstall(toolId: string): Promise<void> {
-    const tool = this.tools.get(toolId);
-    if (!tool) throw new Error(`Unknown tool: ${toolId}`);
-
-    this.emit('install-progress', {
-      tool: toolId,
-      status: 'uninstalling',
-      message: `Uninstalling ${tool.name}...`
-    } as InstallProgress);
-
-    try {
-      // Check if tool is installed
-      const installed = await this.checkInstalled(toolId);
-      if (!installed) {
-        throw new Error(`${tool.name} is not installed`);
-      }
-
-      // Uninstall based on package manager
-      if (tool.npmPackage) {
-        await exec(`npm uninstall -g ${tool.npmPackage}`);
-      } else if (tool.command === 'aider') {
-        await exec('pip uninstall -y aider-chat');
-      } else {
-        // For other tools, remove from local installation
-        const toolPath = path.join(this.toolsDir, toolId);
-        if (fs.existsSync(toolPath)) {
-          fs.rmSync(toolPath, { recursive: true, force: true });
-        }
-      }
-
-      // Remove from status
-      const status = this.status.get(toolId);
-      if (status) {
-        status.installed = false;
-        status.version = undefined;
-        status.path = undefined;
-        status.authenticated = false;
-        this.status.set(toolId, status);
-        await this.saveStatus();
-      }
-
-      // Remove from database
-      await this.removeFromDatabase(toolId);
-
-      this.emit('install-progress', {
-        tool: toolId,
-        status: 'complete',
-        message: `${tool.name} uninstalled successfully`
-      } as InstallProgress);
-
-    } catch (error) {
-      this.emit('install-progress', {
-        tool: toolId,
-        status: 'error',
-        message: `Failed to uninstall ${tool.name}`,
-        error: error as Error
-      } as InstallProgress);
-      throw error;
-    }
-  }
-
-  /**
-   * Remove tool from database
-   */
-  private async removeFromDatabase(toolId: string): Promise<void> {
-    const tool = this.tools.get(toolId);
-    if (!tool || !this.db) return;
-
-    try {
-      await new Promise((resolve, reject) => {
-        this.db.run(`
-          DELETE FROM sync_metadata 
-          WHERE sync_type = ?
-        `, [`${toolId}_cli_update`], (err: any) => {
-          if (err) reject(err);
-          else resolve(true);
-        });
-      });
-    } catch (error) {
-      logger.error('[CliToolsManager] Failed to remove from database:', error);
-    }
-  }
-
-  /**
-   * Cancel an installation
-   */
-  public cancelInstallation(toolId: string): void {
-    // TODO: Implement cancellation logic
-    logger.info(`[CliToolsManager] Cancelling installation of ${toolId}`);
-    
-    const status = this.status.get(toolId);
-    if (status) {
-      // Clear any temporary installation state
-      this.status.set(toolId, status);
-    }
-
-    this.emit('install-progress', {
-      tool: toolId,
-      status: 'cancelled',
-      message: 'Installation cancelled'
-    } as InstallProgress);
-  }
-
-  /**
-   * Get installation logs
-   */
-  public getInstallationLogs(toolId: string): string[] {
-    // TODO: Implement log storage and retrieval
-    return [`No logs available for ${toolId}`];
-  }
-
-  /**
-   * Configure tool authentication
-   */
-  public async configureTool(toolId: string): Promise<void> {
-    const tool = this.tools.get(toolId);
-    if (!tool) throw new Error(`Unknown tool: ${toolId}`);
-
-    // Special handling for Claude CLI
-    if (toolId === 'claude' && tool.memoryServiceIntegration) {
-      await this.configureMemoryServiceIntegration(toolId);
-    }
-
-    // TODO: Add configuration for other tools
-  }
-
-  /**
-   * Check all tools for updates
-   */
-  public async checkAllUpdates(): Promise<Map<string, boolean>> {
-    const updates = new Map<string, boolean>();
-    
-    for (const toolId of this.tools.keys()) {
-      const hasUpdate = await this.checkForUpdates(toolId);
-      updates.set(toolId, hasUpdate);
-    }
-    
-    return updates;
-  }
-
-  /**
-   * Update advanced settings
-   */
-  public updateSettings(settings: any): void {
-    // Update internal settings
-    // This would typically update configuration that affects installation behavior
-    logger.info('[CliToolsManager] Settings updated:', settings);
   }
 }
 

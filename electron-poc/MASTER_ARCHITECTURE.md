@@ -1426,12 +1426,13 @@ Git Integration
 ## CLI Tools Management
 
 ### Overview
-The CLI Tools Management system provides automated installation, updates, and integration for AI-powered CLI tools, with a primary focus on Claude Code CLI integration with our Memory Service.
+The CLI Tools Management system provides automated installation, updates, and integration for AI-powered CLI tools, with seamless Memory Service integration via MCP (Model Context Protocol). This system enables one-click installation, configuration, and updates for AI coding assistants, making them feel "out of the box" integrated without user configuration.
 
 ### Architecture
 **Location**: `src/utils/CliToolsManager.ts`
-**Purpose**: Manage lifecycle of external AI CLI tools
-**Integration**: Direct connection to Memory Service for memory-as-a-service
+**Purpose**: Manage lifecycle of external AI CLI tools with full Memory Service integration
+**Integration**: Direct connection to Memory Service via REST API and MCP protocol
+**Detection**: `src/utils/cli-tool-detector.ts` - Real-time tool detection and version checking
 
 ### Components
 
@@ -1477,13 +1478,34 @@ class CliToolsManager extends EventEmitter {
 ```
 
 ### Memory Service Integration
-For Claude CLI specifically:
-1. Register tool with Memory Service API
-2. Receive authentication token
-3. Configure Claude CLI with:
-   - Memory Service endpoint (http://localhost:3457)
-   - Authentication token
-   - Auto-sync enabled
+
+#### MCP (Model Context Protocol) Integration
+For Claude Code and compatible tools:
+
+1. **Registration Flow**:
+   - Tool registers with Memory Service API (`POST /api/v1/memory/register`)
+   - Receives unique authentication token
+   - Token stored in `~/.hive/cli-tools-config.json`
+
+2. **MCP Configuration**:
+   - Automatically updates `~/.claude/.mcp.json`
+   - Creates MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
+   - Exposes two MCP tools:
+     - `query_memory`: Search AI memory system
+     - `contribute_learning`: Add new learnings
+
+3. **Authentication**:
+   - Bearer token authentication for all API calls
+   - Per-tool tokens for isolation and security
+   - Tokens persist across sessions
+
+4. **API Endpoints**:
+   ```
+   POST /api/v1/memory/query      - Query memories with context
+   POST /api/v1/memory/contribute - Contribute new learnings
+   GET  /api/v1/memory/stats      - Get memory statistics
+   GET  /api/v1/memory/tools      - List connected tools
+   ```
 
 ### Database Integration
 Uses existing `sync_metadata` table:
@@ -1496,12 +1518,38 @@ next_sync_due: next update check time
 
 ### IPC Handlers
 ```typescript
-// Main process handlers
-'cli-tools:install': Install a specific tool
-'cli-tools:check-updates': Check for tool updates
-'cli-tools:get-status': Get all tool statuses
-'cli-tools:update': Update a specific tool
+// Main process handlers (index.ts)
+'cli-tool-detect': Detect if a specific tool is installed
+'cli-tool-install': Install a specific tool
+'cli-tool-update': Update a specific tool to latest version
+'cli-tool-configure': Configure Memory Service integration
+'cli-tools-detect-all': Detect all supported tools
+'cli-tools-check-updates': Check for updates across all tools
 ```
+
+### UI Implementation
+
+#### Button Actions
+1. **Details Button** (Green):
+   - Refreshes tool status
+   - Shows version, path, and Memory status
+   - Restores full detail view after other actions
+
+2. **Configure Button** (Gray):
+   - Registers tool with Memory Service
+   - Generates authentication token
+   - Updates MCP configuration
+   - Shows "✅ Configured" on success
+
+3. **Update Button** (Gray):
+   - Executes `npm update -g @anthropic-ai/claude-code`
+   - Shows "⬆️ Updating..." during process
+   - Displays "✅ Up to date" when complete
+
+4. **Install Button** (Blue - for uninstalled tools):
+   - Runs appropriate package manager (npm/pip)
+   - Shows progress indicators
+   - Refreshes panel on completion
 
 ### Configuration Storage
 ```
@@ -1773,6 +1821,45 @@ interface FilterOptions {
 
 ### Overview
 The CLI Tools panel dynamically detects installed tools and updates the UI accordingly, providing real-time status updates and appropriate action buttons based on each tool's installation state.
+
+### Implementation Details (Completed)
+
+#### Claude Code Integration
+As of version 1.6.0, full Claude Code CLI integration has been implemented with the following features:
+
+1. **Real-time Detection**: 
+   - Detects Claude Code installation via `claude --version` command
+   - Parses version from output (e.g., "1.0.86 (Claude Code)")
+   - Shows installation path (`which claude`)
+
+2. **Functional Buttons**:
+   - **Details** (Green): Refreshes and displays full tool status including version, Memory Service connection, and path
+   - **Configure**: Registers with Memory Service, generates auth token, updates MCP config
+   - **Update**: Executes `npm update -g @anthropic-ai/claude-code` and shows progress
+   - **Docs**: Opens official Claude Code documentation
+
+3. **Memory Service MCP Integration**:
+   - Automatically creates MCP server configuration in `~/.claude/.mcp.json`
+   - Generates MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
+   - Unique authentication tokens per tool for security
+   - Exposes `query_memory` and `contribute_learning` MCP tools
+
+4. **Visual Feedback**:
+   - "⚙️ Configuring..." → "✅ Configured"
+   - "⬆️ Updating..." → "✅ Up to date"
+   - "🔄 Loading details..." → Full status display
+
+5. **Persistent Configuration**:
+   - Tool status saved in `~/.hive/cli-tools-config.json`
+   - Memory Service tokens stored securely
+   - MCP configuration persists across sessions
+
+#### Technical Implementation
+- **Manager**: `CliToolsManager` class (singleton pattern)
+- **Detection**: `cli-tool-detector.ts` with exec-based version checking
+- **IPC**: Main/renderer communication via Electron IPC
+- **UI Updates**: Dynamic DOM manipulation with data attributes
+- **Error Handling**: Try-catch blocks with user-friendly error messages
 
 ### Installation Detection System
 
@@ -2474,11 +2561,20 @@ electron-poc/
 
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
-**Last Updated**: 2025-08-20
-**Version**: 1.5.0
+**Last Updated**: 2025-08-21
+**Version**: 1.6.0
 **Maintainer**: Hive Development Team
 
 ### Change Log
+- **v1.6.0 (2025-08-21)**: Complete AI CLI Tools Integration with Memory Service
+  - **Claude Code Integration**: Full lifecycle management (install, update, configure)
+  - **MCP Protocol Support**: Automatic MCP server configuration for Memory Service
+  - **Token Authentication**: Secure per-tool authentication tokens
+  - **Visual UI Feedback**: Progress indicators and status updates
+  - **Details Button**: Refresh tool status and restore full details view
+  - **Persistent Configuration**: Tool configs saved in ~/.hive/cli-tools-config.json
+  - **Memory Service Bridge**: Claude Code can now query and contribute to AI memory
+
 - **v1.5.0 (2025-08-20)**: Memory Service Recovery & SafeLogger Cross-Process Support
   - **Fixed Memory Service Startup**: Resolved IPC ready message race condition in ProcessManager
   - **SafeLogger Cross-Process Support**: Dynamic Electron detection for main and child processes

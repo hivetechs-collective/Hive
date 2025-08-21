@@ -2273,6 +2273,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     const { id, name, description, status, docsUrl, badgeText, badgeColor } = toolInfo;
     const card = document.createElement('div');
     card.className = 'cli-tool-card';
+    card.setAttribute('data-tool-id', id);  // Add data attribute for button handlers
     card.style.cssText = 'background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;';
     
     const isInstalled = status?.installed || false;
@@ -2289,8 +2290,8 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     let statusDetails = '';
     if (isInstalled) {
         statusDetails = `
-            <div><span style="color: #aaa;">Version:</span> ${version || 'Unknown'}</div>
-            <div><span style="color: #aaa;">Memory:</span> <span style="color: ${memoryConnected ? '#4caf50' : '#f44336'};">${memoryConnected ? 'Connected ✓' : 'Not connected'}</span></div>
+            <div><span style="color: #aaa;">Version:</span> <span data-version="${id}">${version || 'Unknown'}</span></div>
+            <div><span style="color: #aaa;">Memory:</span> <span data-memory="${id}" style="color: ${memoryConnected ? '#4caf50' : '#f44336'};">${memoryConnected ? 'Connected ✓' : 'Not connected'}</span></div>
             <div><span style="color: #aaa;">Path:</span> ${status.path || 'Unknown'}</div>
         `;
     } else {
@@ -2304,6 +2305,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     let buttons = '';
     if (isInstalled) {
         buttons = `
+            <button onclick="refreshCliToolDetails('${id}')" style="flex: 1; padding: 6px; background: #2d7d2d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Refresh tool details">Details</button>
             <button onclick="configureCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
             <button onclick="updateCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
         `;
@@ -2320,7 +2322,7 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
         </h4>
         <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">${description}</div>
         <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+            <div class="tool-status" style="font-size: 11px; color: #888; line-height: 1.6;">
                 ${statusDetails}
             </div>
         </div>
@@ -2360,21 +2362,241 @@ function createStaticToolCard(id: string, name: string, description: string, bad
     return card;
 }
 
-// CLI Tool Action Handlers (placeholders for now)
-function installCliTool(toolId: string): void {
+// CLI Tool Action Handlers
+async function installCliTool(toolId: string): Promise<void> {
     console.log(`[CLI Tools] Install requested for ${toolId}`);
-    alert(`Installation for ${toolId} coming soon!`);
+    
+    // Show progress in the UI
+    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+    if (card) {
+        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+        if (statusDiv) {
+            statusDiv.innerHTML = '⏳ Installing...';
+            statusDiv.style.color = '#FFA500';
+        }
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        const result = await electronAPI.installCliTool(toolId);
+        
+        if (result.success) {
+            console.log(`[CLI Tools] ${toolId} installed successfully`);
+            // Refresh the tool status
+            await renderCliToolsPanel();
+        } else {
+            console.error(`[CLI Tools] Failed to install ${toolId}:`, result.error);
+            alert(`Failed to install: ${result.error}`);
+        }
+    } catch (error) {
+        console.error(`[CLI Tools] Error installing ${toolId}:`, error);
+        alert(`Installation error: ${error}`);
+    }
 }
 
-function configureCliTool(toolId: string): void {
+async function configureCliTool(toolId: string): Promise<void> {
     console.log(`[CLI Tools] Configure requested for ${toolId}`);
-    alert(`Configuration for ${toolId} coming soon!`);
+    
+    // Show progress in the UI
+    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+    if (card) {
+        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+        if (statusDiv) {
+            statusDiv.innerHTML = '⚙️ Configuring...';
+            statusDiv.style.color = '#FFA500';
+        }
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        const result = await electronAPI.configureCliTool(toolId);
+        
+        if (result && result.success) {
+            console.log(`[CLI Tools] ${toolId} configured successfully`);
+            
+            // Update UI immediately to show success
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    statusDiv.innerHTML = '✅ Configured';
+                    statusDiv.style.color = '#4ec9b0';
+                }
+            }
+            
+            // Show success message
+            if (toolId === 'claude-code') {
+                setTimeout(() => {
+                    alert('Claude Code has been configured with Memory Service integration! You can now use Claude Code with enhanced memory capabilities.');
+                }, 100);
+            } else {
+                setTimeout(() => {
+                    alert(`${toolId} configured successfully!`);
+                }, 100);
+            }
+            
+            // Don't refresh the entire panel, just update the Memory status
+            setTimeout(async () => {
+                if (card) {
+                    // Find and update the Memory status line using data attribute
+                    const memorySpan = card.querySelector(`span[data-memory="${toolId}"]`) as HTMLElement;
+                    if (memorySpan) {
+                        memorySpan.textContent = 'Connected ✓';
+                        memorySpan.style.color = '#4caf50';
+                    }
+                }
+            }, 500);
+        } else {
+            console.error(`[CLI Tools] Failed to configure ${toolId}:`, result?.error || 'Unknown error');
+            
+            // Update UI to show error
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    statusDiv.innerHTML = '❌ Config failed';
+                    statusDiv.style.color = '#f44747';
+                }
+            }
+            
+            if (result?.error) {
+                alert(`Failed to configure: ${result.error}`);
+            }
+        }
+    } catch (error) {
+        console.error(`[CLI Tools] Error configuring ${toolId}:`, error);
+        alert(`Configuration error: ${error}`);
+    }
 }
 
-function updateCliTool(toolId: string): void {
+async function updateCliTool(toolId: string): Promise<void> {
     console.log(`[CLI Tools] Update requested for ${toolId}`);
-    alert(`Update for ${toolId} coming soon!`);
+    
+    // Show progress in the UI
+    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+    if (card) {
+        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+        if (statusDiv) {
+            statusDiv.innerHTML = '⬆️ Updating...';
+            statusDiv.style.color = '#FFA500';
+        }
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        const result = await electronAPI.updateCliTool(toolId);
+        
+        if (result && result.success) {
+            console.log(`[CLI Tools] ${toolId} updated successfully`);
+            
+            // Update UI immediately to show success
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    statusDiv.innerHTML = '✅ Up to date';
+                    statusDiv.style.color = '#4ec9b0';
+                }
+            }
+            
+            // Don't refresh the entire panel, just update the version if needed
+            setTimeout(async () => {
+                // Re-detect to get updated version
+                const electronAPI = window.electronAPI as any;
+                const updatedStatus = await electronAPI.detectCliTool(toolId);
+                if (updatedStatus && updatedStatus.version && card) {
+                    const versionSpan = card.querySelector(`span[data-version="${toolId}"]`) as HTMLElement;
+                    if (versionSpan) {
+                        versionSpan.textContent = updatedStatus.version;
+                    }
+                }
+            }, 1000);
+        } else {
+            console.error(`[CLI Tools] Failed to update ${toolId}:`, result?.error || 'Unknown error');
+            
+            // Update UI to show error
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    statusDiv.innerHTML = '❌ Update failed';
+                    statusDiv.style.color = '#f44747';
+                }
+            }
+            
+            if (result?.error) {
+                alert(`Failed to update: ${result.error}`);
+            }
+        }
+    } catch (error) {
+        console.error(`[CLI Tools] Error updating ${toolId}:`, error);
+        
+        // Update UI to show error
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+            if (statusDiv) {
+                statusDiv.innerHTML = '❌ Error';
+                statusDiv.style.color = '#f44747';
+            }
+        }
+        
+        alert(`Update error: ${error}`);
+    }
 }
+
+/**
+ * Refresh CLI tool details to show full status
+ */
+async function refreshCliToolDetails(toolId: string): Promise<void> {
+    console.log(`[CLI Tools] Refreshing details for ${toolId}`);
+    
+    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+    if (!card) return;
+    
+    // Show loading state
+    const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+    if (statusDiv) {
+        statusDiv.innerHTML = '🔄 Loading details...';
+        statusDiv.style.color = '#FFA500';
+    }
+    
+    try {
+        // Re-detect the tool to get fresh status
+        const electronAPI = window.electronAPI as any;
+        const status = await electronAPI.detectCliTool(toolId);
+        
+        if (status && status.installed) {
+            // Rebuild the status details section
+            const statusDetailsHtml = `
+                <div><span style="color: #aaa;">Version:</span> <span data-version="${toolId}">${status.version || 'Unknown'}</span></div>
+                <div><span style="color: #aaa;">Memory:</span> <span data-memory="${toolId}" style="color: ${status.memoryServiceConnected ? '#4caf50' : '#f44336'};">${status.memoryServiceConnected ? 'Connected ✓' : 'Not connected'}</span></div>
+                <div><span style="color: #aaa;">Path:</span> ${status.path || 'Unknown'}</div>
+            `;
+            
+            // Update the status div with the full details
+            if (statusDiv) {
+                statusDiv.innerHTML = statusDetailsHtml;
+                statusDiv.style.color = '';
+            }
+            
+            console.log(`[CLI Tools] Details refreshed for ${toolId}:`, status);
+        } else {
+            // Tool not installed or error
+            if (statusDiv) {
+                statusDiv.innerHTML = '❌ Tool not found';
+                statusDiv.style.color = '#f44747';
+            }
+        }
+    } catch (error) {
+        console.error(`[CLI Tools] Error refreshing details for ${toolId}:`, error);
+        if (statusDiv) {
+            statusDiv.innerHTML = '❌ Error loading details';
+            statusDiv.style.color = '#f44747';
+        }
+    }
+}
+
+// Expose CLI tool functions to window for onclick handlers
+(window as any).installCliTool = installCliTool;
+(window as any).configureCliTool = configureCliTool;
+(window as any).updateCliTool = updateCliTool;
+(window as any).refreshCliToolDetails = refreshCliToolDetails;
 
 // Memory Dashboard Management
 let memoryDashboardInstance: MemoryDashboard | null = null;

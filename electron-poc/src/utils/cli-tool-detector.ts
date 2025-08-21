@@ -33,15 +33,19 @@ export async function detectClaudeCode(): Promise<CliToolStatus> {
     
     if (stdout) {
       status.installed = true;
-      // Extract version from output (format: "claude-code version X.X.X")
+      console.log('[CLI Detector] Claude Code version output:', stdout.trim());
+      // Extract version from output (format: "1.0.86 (Claude Code)")
       const versionMatch = stdout.match(/(\d+\.\d+\.\d+)/);
       if (versionMatch) {
         status.version = versionMatch[1];
+        console.log('[CLI Detector] Detected version:', status.version);
+      } else {
+        console.log('[CLI Detector] Could not parse version from:', stdout);
       }
     }
   } catch (error) {
     // Command not found or other error - tool not installed
-    console.log('[CLI Detector] Claude Code not found');
+    console.log('[CLI Detector] Claude Code not found:', error);
   }
 
   // Try to get the executable path
