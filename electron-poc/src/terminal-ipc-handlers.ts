@@ -135,8 +135,9 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
       return { success: true, pid: ptyProcess.pid };
 
     } catch (error: any) {
-      logger.error(`[Terminal] Failed to create terminal ${options.terminalId}:`, error);
-      return { success: false, error: error.message };
+      logger.error(`[Terminal] Failed to create terminal ${options.terminalId}:`, error.message || error);
+      logger.error(`[Terminal] Error details:`, error.stack || error);
+      return { success: false, error: error.message || String(error) };
     }
   });
 
