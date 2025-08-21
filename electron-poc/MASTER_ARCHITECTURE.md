@@ -2292,6 +2292,140 @@ class SystemLogManager {
 - **Clean Output**: Simple args.join(' ') for readable messages
 - **No xterm.js**: Avoids terminal control characters that cause display issues
 
+**System Log Filter Feature (Planned Enhancement)**:
+```
+┌────────────────────────────────────────────────────────────────────┐
+│ [📊 System Log] [🤖 Claude] [✨ Gemini] [Terminal 1] [+]           │
+├────────────────────────────────────────────────────────────────────┤
+│ ┌──────────────────────────────────────────────────────────────┐   │
+│ │ Filter: [All ▼] [❌ Errors] [⚠️ Warnings] [ℹ️ Info] [Clear]  │   │
+│ └──────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+│ [12:34:56] [INFO] System Log initialized                            │
+│ [12:34:57] [INFO] Memory Service started on port 3457               │
+│ [12:34:58] [WARN] WebSocket connection retry attempt 1              │
+│ [12:34:59] [ERROR] Failed to connect to backend: ECONNREFUSED       │
+│ [12:35:00] [INFO] WebSocket connected successfully                  │
+│                                                                      │
+│ Showing: 5 entries (2 INFO, 1 WARN, 1 ERROR) | Total: 142 entries  │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Filter Implementation Design**:
+```typescript
+interface SystemLogFilter {
+  level: 'all' | 'error' | 'warn' | 'info';
+  searchTerm?: string;
+}
+
+class SystemLogManager {
+  private allEntries: LogEntry[] = [];
+  private filteredEntries: LogEntry[] = [];
+  private currentFilter: SystemLogFilter = { level: 'all' };
+  
+  applyFilter(filter: SystemLogFilter): void {
+    this.currentFilter = filter;
+    this.filteredEntries = this.allEntries.filter(entry => {
+      // Level filter
+      if (filter.level !== 'all' && entry.level.toLowerCase() !== filter.level) {
+        return false;
+      }
+      // Search filter (optional future enhancement)
+      if (filter.searchTerm && !entry.message.includes(filter.searchTerm)) {
+        return false;
+      }
+      return true;
+    });
+    this.render();
+  }
+  
+  addEntry(level: string, message: string): void {
+    const entry = {
+      timestamp: new Date(),
+      level,
+      message
+    };
+    this.allEntries.push(entry);
+    
+    // Check if entry passes current filter
+    if (this.passesFilter(entry)) {
+      this.filteredEntries.push(entry);
+      this.renderEntry(entry);
+    }
+    
+    this.updateStats();
+  }
+  
+  clearLog(): void {
+    this.allEntries = [];
+    this.filteredEntries = [];
+    this.render();
+  }
+}
+```
+
+**UI Components**:
+1. **Filter Buttons**: Toggle buttons for each log level
+   - Visual state indication (pressed/unpressed)
+   - Single click to show only that level
+   - Click again to show all
+
+2. **Dropdown Alternative**: Single dropdown with options
+   - All Messages
+   - Errors Only
+   - Warnings Only  
+   - Info Only
+   
+3. **Clear Button**: Clears all log entries
+   - Confirmation dialog for safety
+   - Keyboard shortcut: Ctrl+L
+
+4. **Statistics Bar**: Shows filtered vs total count
+   - "Showing: X entries (Y errors, Z warnings) | Total: N entries"
+   - Updates in real-time
+
+**Visual Design**:
+```css
+.log-filter-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px;
+  background: var(--vscode-editorWidget-background);
+  border-bottom: 1px solid var(--vscode-editorWidget-border);
+}
+
+.filter-button {
+  padding: 4px 8px;
+  margin: 0 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-button.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.filter-button:hover:not(.active) {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.log-stats {
+  margin-left: auto;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+```
+
+**Keyboard Shortcuts**:
+- `Alt+E`: Show errors only
+- `Alt+W`: Show warnings only
+- `Alt+I`: Show info only
+- `Alt+A`: Show all
+- `Ctrl+L`: Clear log
+- `Ctrl+F`: Focus search box (future)
+
 #### Terminal Features
 
 **1. Context Menu for Tabs**:
