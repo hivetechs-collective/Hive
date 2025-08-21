@@ -45,31 +45,58 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
       // Determine shell and command to use
       let shell: string;
       let args: string[];
-      
-      if (options.command && options.command !== 'bash' && options.command !== 'zsh' && options.command !== 'sh') {
-        // If a specific command is provided (like 'claude'), run it within a shell
-        shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
-        // Use -c to run the command and then stay interactive
-        args = ['-c', `${options.command} ${(options.args || []).join(' ')}; exec ${shell}`];
-        logger.info(`[Terminal] Running command in shell: ${options.command}`);
-      } else {
-        // Otherwise use the shell directly
-        shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
-        args = options.args || [];
-      }
-      
       const cwd = options.cwd || process.cwd();
       
-      // Merge environment variables and ensure PATH includes common directories
+      // Setup enhanced PATH first
       const pathAdditions = [
         '/opt/homebrew/bin',
-        '/usr/local/bin',
+        '/usr/local/bin', 
         '/usr/bin',
         '/bin',
         '/usr/sbin',
         '/sbin'
       ];
       
+      if (options.command && options.command !== 'bash' && options.command !== 'zsh' && options.command !== 'sh') {
+        // If a specific command is provided (like 'claude'), run it within a shell
+        shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
+        
+        // Check if command exists with enhanced PATH
+        const enhancedPath = [...new Set([...pathAdditions, ...(process.env.PATH || '').split(':')])].join(':');
+        
+        const { exec } = require('child_process');
+        const commandPath = await new Promise<string | null>((resolve) => {
+          exec(`which ${options.command}`, { env: { ...process.env, PATH: enhancedPath } }, (error, stdout) => {
+            if (error || !stdout.trim()) {
+              logger.warn(`[Terminal] Command '${options.command}' not found in PATH`);
+              resolve(null);
+            } else {
+              const path = stdout.trim();
+              logger.info(`[Terminal] Command '${options.command}' found at: ${path}`);
+              resolve(path);
+            }
+          });
+        });
+        
+        if (!commandPath) {
+          // Command not found, return error
+          return { 
+            success: false, 
+            error: `Command '${options.command}' not found in PATH. Please ensure it is installed.`
+          };
+        }
+        
+        // Use the full path to the command to ensure it's found
+        // Run in interactive mode
+        args = ['-i', '-c', `${commandPath} ${(options.args || []).join(' ')}`];
+        logger.info(`[Terminal] Running command in interactive shell: ${commandPath}`);
+      } else {
+        // Otherwise use the shell directly
+        shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
+        args = options.args || [];
+      }
+      
+      // Merge environment variables - reuse the pathAdditions from above
       const currentPath = process.env.PATH || '';
       const enhancedPath = [...new Set([...pathAdditions, ...currentPath.split(':')])].join(':');
       
