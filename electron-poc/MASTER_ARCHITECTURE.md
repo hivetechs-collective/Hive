@@ -1915,14 +1915,17 @@ Transform the fixed bottom console into a powerful tabbed terminal system where 
 **Tab Types & Naming Convention**:
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ Console | Claude | Gemini | Qwen | Codex | Aider | Cline | Terminal 1 | Terminal 2 | + │
+│ System Log | Claude | Gemini | Qwen | Codex | Aider | Cline | Terminal 1 | Terminal 2 | + │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Console Tab** (Always First)
-   - Fixed system log output
-   - Non-closeable
-   - Shows backend activity, memory service status, etc.
+1. **System Log Tab** (Always First, Read-Only)
+   - Current console output preserved exactly as-is
+   - Read-only system messages and debugging info
+   - Non-closeable, non-interactive
+   - Shows backend activity, memory service status, process logs
+   - Auto-scrolls to bottom for latest messages
+   - Search functionality to find specific logs
 
 2. **AI Tool Tabs** (Named by Tool)
    - Claude, Gemini, Qwen, Codex, Aider, Cline
@@ -1941,7 +1944,24 @@ Transform the fixed bottom console into a powerful tabbed terminal system where 
 ```
 Bottom Terminal Area (Resizable):
 ┌────────────────────────────────────────────────────────────────────┐
-│ [Console] [🤖 Claude] [✨ Gemini] [🐉 Qwen] [Terminal 1] [+]       │
+│ [📊 System Log] [🤖 Claude] [✨ Gemini] [🐉 Qwen] [Terminal 1] [+] │
+├────────────────────────────────────────────────────────────────────┤
+│ [System Log Tab - Read Only]                                        │
+│ [INFO] [ProcessManager] websocket-backend started successfully      │
+│ [INFO] [MemoryService] Server running on http://localhost:3457      │
+│ [INFO] [Main] Memory Service ready on port: 3457                    │
+│ [INFO] [MemoryService] Stats query result: 142 memories             │
+│ [INFO] WebSocket reconnected successfully                           │
+│ [INFO] [Main] Detecting CLI tool: claude-code                       │
+│ [INFO] [CliToolsManager] Claude Code launched in /Users/dev/project │
+│ [INFO] [ProcessManager] All systems operational                     │
+│                                                                      │
+│ [Search: ____________________] [Clear] [Export Logs]                │
+└────────────────────────────────────────────────────────────────────┘
+
+When Claude tab is active:
+┌────────────────────────────────────────────────────────────────────┐
+│ [📊 System Log] [🤖 Claude] [✨ Gemini] [🐉 Qwen] [Terminal 1] [+] │
 ├────────────────────────────────────────────────────────────────────┤
 │ ~/Developer/Private/hive $ claude                                   │
 │                                                                      │
@@ -1999,12 +2019,13 @@ class IntegratedTerminalService {
 
 interface TerminalInstance {
   id: string;
-  type: 'console' | 'ai-tool' | 'generic';
+  type: 'system-log' | 'ai-tool' | 'generic';
   title: string;
   icon?: string;
   toolId?: string;
-  xterm: Terminal;
-  pty: IPty;
+  xterm?: Terminal;        // Optional for system-log
+  pty?: IPty;              // Optional for system-log
+  isReadOnly?: boolean;    // True for system-log
   isActive: boolean;
   createdAt: Date;
   lastActivityAt: Date;
@@ -2032,11 +2053,12 @@ interface TerminalTab {
 // Tab rendering
 <div className="terminal-tabs">
   <Tab 
-    key="console" 
-    title="Console" 
+    key="system-log" 
+    title="System Log" 
     icon="📊" 
     isCloseable={false}
-    isActive={activeTab === 'console'}
+    isActive={activeTab === 'system-log'}
+    isReadOnly={true}
   />
   {aiToolTabs.map(tab => (
     <Tab 
@@ -2143,6 +2165,66 @@ createAIToolTerminal(toolId: string, toolName: string): TerminalInstance {
   return instance;
 }
 ```
+
+#### System Log Tab Implementation
+
+**Special Handling for System Log**:
+```typescript
+class SystemLogManager {
+  private logBuffer: string[] = [];
+  private maxBufferSize: number = 10000; // Keep last 10k lines
+  private logElement: HTMLElement;
+  private searchTerm: string = '';
+  
+  appendLog(message: string, level: 'INFO' | 'WARN' | 'ERROR' | 'DEBUG') {
+    const timestamp = new Date().toISOString();
+    const formattedLog = `[${timestamp}] [${level}] ${message}`;
+    
+    // Add to buffer
+    this.logBuffer.push(formattedLog);
+    if (this.logBuffer.length > this.maxBufferSize) {
+      this.logBuffer.shift();
+    }
+    
+    // Update UI
+    this.renderLog();
+    
+    // Auto-scroll to bottom if user is near bottom
+    if (this.isNearBottom()) {
+      this.scrollToBottom();
+    }
+  }
+  
+  search(term: string) {
+    this.searchTerm = term;
+    this.renderLog();
+    this.highlightMatches();
+  }
+  
+  exportLogs() {
+    const blob = new Blob([this.logBuffer.join('\n')], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `system-logs-${Date.now()}.txt`;
+    a.click();
+  }
+  
+  clear() {
+    this.logBuffer = ['[System Log Cleared]'];
+    this.renderLog();
+  }
+}
+```
+
+**System Log Features**:
+- **Color Coding**: INFO (white), WARN (yellow), ERROR (red), DEBUG (gray)
+- **Filtering**: Show/hide log levels
+- **Search**: Real-time search with highlighting
+- **Export**: Save logs to file
+- **Performance**: Virtual scrolling for large logs
+- **Timestamps**: ISO format with milliseconds
+- **Copy**: Select and copy log entries
 
 #### Terminal Features
 
