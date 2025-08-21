@@ -102,36 +102,9 @@ export class IsolatedTerminalPanel {
         
         this.contentContainer.appendChild(content);
         
-        // Try to use xterm if available, otherwise fallback to simple div
-        if (terminalManager) {
-            try {
-                // Create xterm instance for System Log
-                const terminalInstance = terminalManager.createTerminal(tab.id, {
-                    title: '📊 System Log',
-                    type: 'system-log'
-                });
-                
-                // Attach terminal to DOM
-                terminalManager.attachToElement(tab.id, content);
-                
-                // Write initial message
-                const timestamp = new Date().toLocaleTimeString();
-                terminalManager.writeToTerminal(tab.id, 
-                    `\x1b[36m[${timestamp}] [INFO] System Log initialized\r\n`
-                );
-                
-                tab.terminalInstance = terminalInstance;
-            } catch (e) {
-                console.warn('[IsolatedTerminalPanel] Failed to create xterm, using fallback', e);
-                // Fallback to simple HTML
-                const timestamp = new Date().toLocaleTimeString();
-                content.innerHTML = `<div style="color: #569cd6;">[${timestamp}] [INFO] System Log initialized</div>`;
-            }
-        } else {
-            // Fallback when terminalManager not available
-            const timestamp = new Date().toLocaleTimeString();
-            content.innerHTML = `<div style="color: #569cd6;">[${timestamp}] [INFO] System Log initialized</div>`;
-        }
+        // For System Log, always use simple HTML div instead of xterm
+        // (xterm seems to be causing the strange characters issue)
+        content.innerHTML = `<div style="color: #569cd6;">[INFO] System Log initialized</div>`;
         
         tab.element = content;
         this.tabs.set(tab.id, tab);
@@ -289,57 +262,34 @@ export class IsolatedTerminalPanel {
         const originalError = console.error;
         const originalWarn = console.warn;
 
-        // Helper to safely convert args to string
-        const argsToString = (args: any[]): string => {
-            return args.map(arg => {
-                if (typeof arg === 'string') return arg;
-                if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
-                if (arg === null) return 'null';
-                if (arg === undefined) return 'undefined';
-                
-                // For objects, try to get a readable representation
-                try {
-                    // Check if it's an error object
-                    if (arg instanceof Error) {
-                        return `${arg.name}: ${arg.message}`;
-                    }
-                    // For other objects, use JSON.stringify with limit
-                    const str = JSON.stringify(arg, null, 2);
-                    // Limit length to prevent huge outputs
-                    if (str.length > 500) {
-                        return str.substring(0, 497) + '...';
-                    }
-                    return str;
-                } catch (e) {
-                    // Circular reference or other stringify error
-                    return '[Object]';
-                }
-            }).join(' ');
-        };
-
         // Override console methods to capture output
         console.log = (...args: any[]) => {
-            const message = argsToString(args);
-            // Filter out certain noisy logs and empty/whitespace-only messages
-            const trimmed = message.trim();
-            if (trimmed.length > 0 && 
-                !message.includes('WWWWWWW') && 
-                !message.includes('\u0000') &&
-                !message.match(/^[\s\W]+$/) && // Skip whitespace/special chars only
-                !message.includes('��') && // Skip replacement characters
-                trimmed.length < 10000) { // Skip extremely long messages
+            try {
+                const message = args.join(' ');
                 this.addLogEntry(terminalId, 'INFO', message, fallbackElement);
+            } catch (e) {
+                // Ignore any errors in logging
             }
             originalLog.apply(console, args);
         };
 
         console.error = (...args: any[]) => {
-            this.addLogEntry(terminalId, 'ERROR', argsToString(args), fallbackElement);
+            try {
+                const message = args.join(' ');
+                this.addLogEntry(terminalId, 'ERROR', message, fallbackElement);
+            } catch (e) {
+                // Ignore any errors in logging
+            }
             originalError.apply(console, args);
         };
 
         console.warn = (...args: any[]) => {
-            this.addLogEntry(terminalId, 'WARN', argsToString(args), fallbackElement);
+            try {
+                const message = args.join(' ');
+                this.addLogEntry(terminalId, 'WARN', message, fallbackElement);
+            } catch (e) {
+                // Ignore any errors in logging
+            }
             originalWarn.apply(console, args);
         };
     }
