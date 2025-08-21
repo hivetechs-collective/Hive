@@ -3040,15 +3040,32 @@ setTimeout(() => {
             startWidth: 0
         };
         
+        // Get the center area to adjust it too
+        const centerArea = document.getElementById('center-area');
+        let centerStartWidth = 0;
+        
         if (leftResize) {
+            console.log('[DEBUG] Left resize handle found:', leftResize);
+            leftResize.style.background = 'red'; // Make it visible for testing
             leftResize.addEventListener('mousedown', (e) => {
+                console.log('[DEBUG] LEFT RESIZE MOUSEDOWN FIRED!');
                 resizeState.isResizing = true;
                 resizeState.handle = 'left';
                 resizeState.startX = e.clientX;
                 resizeState.startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                console.log('[DEBUG] Start width:', resizeState.startWidth, 'Start X:', resizeState.startX);
+                
+                // Store center area width at start of resize
+                if (centerArea) {
+                    centerStartWidth = centerArea.offsetWidth;
+                    console.log('[DEBUG] Center area start width:', centerStartWidth);
+                }
+                
                 document.body.style.cursor = 'ew-resize';
                 e.preventDefault();
             });
+        } else {
+            console.log('[DEBUG] LEFT RESIZE HANDLE NOT FOUND!');
         }
         
         if (rightResize) {
@@ -3072,6 +3089,16 @@ setTimeout(() => {
                 // For left handle: reverse the delta calculation
                 const deltaX = resizeState.startX - e.clientX;  // Reversed: startX - clientX
                 newWidth = resizeState.startWidth + deltaX;
+                console.log('[DEBUG] Left drag - deltaX:', deltaX, 'newWidth:', newWidth);
+                
+                // CRITICAL: Also adjust the center area to prevent flex compensation
+                if (centerArea) {
+                    const widthChange = newWidth - resizeState.startWidth;
+                    const newCenterWidth = centerStartWidth - widthChange;
+                    centerArea.style.width = newCenterWidth + 'px';
+                    centerArea.style.flex = 'none';  // Disable flex temporarily
+                    console.log('[DEBUG] Setting center area width to:', newCenterWidth);
+                }
             } else {
                 // For right handle: normal delta calculation
                 const deltaX = e.clientX - resizeState.startX;  // Normal: clientX - startX
@@ -3079,7 +3106,12 @@ setTimeout(() => {
             }
             
             newWidth = Math.min(Math.max(newWidth, 200), 800);
+            console.log('[DEBUG] Setting isolated terminal width to:', newWidth);
             isolatedTerminalPanel.style.width = newWidth + 'px';
+            
+            // Also log the actual width after setting
+            const actualWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+            console.log('[DEBUG] Actual isolated terminal width:', actualWidth);
         });
         
         // Single mouseup handler
@@ -3088,6 +3120,13 @@ setTimeout(() => {
                 resizeState.isResizing = false;
                 resizeState.handle = null;
                 document.body.style.cursor = '';
+                
+                // Reset center area's flex
+                if (centerArea) {
+                    centerArea.style.flex = '';  // Reset to default
+                    centerArea.style.width = '';  // Clear explicit width
+                    console.log('[DEBUG] Reset center area flex');
+                }
             }
         });
     }
