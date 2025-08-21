@@ -424,18 +424,16 @@ export class IsolatedTerminalPanel {
         // Switch to the new tab
         this.switchToTab(tabId);
         
-        // TODO: Actually launch the tool process via IPC
-        // For now, just show a placeholder
-        setTimeout(() => {
-            const successMsg = document.createElement('div');
-            successMsg.style.color = '#4ec9b0';
-            successMsg.textContent = `✓ ${toolName} is ready (simulated - real process launching coming soon)`;
-            content.appendChild(successMsg);
-            
-            const promptMsg = document.createElement('div');
-            promptMsg.innerHTML = `<span style="color: #cccccc;">$ </span><span style="border-right: 2px solid #cccccc; animation: blink 1s infinite;">_</span>`;
-            content.appendChild(promptMsg);
-        }, 1500);
+        // Actually launch the tool process via IPC
+        this.launchToolProcess(tabId, toolId, workingDirectory).then(() => {
+            console.log(`[IsolatedTerminalPanel] Tool ${toolId} process launched`);
+        }).catch((error) => {
+            console.error(`[IsolatedTerminalPanel] Failed to launch ${toolId}:`, error);
+            const errorMsg = document.createElement('div');
+            errorMsg.style.color = '#f44747';
+            errorMsg.textContent = `✗ Failed to launch ${toolName}: ${error.message}`;
+            content.appendChild(errorMsg);
+        });
         
         return tabId;
     }
@@ -452,6 +450,112 @@ export class IsolatedTerminalPanel {
             case 'continue': return 'continue';
             default: return toolId;
         }
+    }
+    
+    /**
+     * Launch the actual tool process via IPC
+     */
+    private async launchToolProcess(tabId: string, toolId: string, workingDirectory: string): Promise<void> {
+        const terminalAPI = (window as any).terminalAPI;
+        if (!terminalAPI) {
+            throw new Error('Terminal API not available');
+        }
+        
+        const command = this.getToolCommand(toolId);
+        const tab = this.tabs.get(tabId);
+        if (!tab || !tab.element) {
+            throw new Error('Tab not found');
+        }
+        
+        // Create the terminal process
+        const result = await terminalAPI.createTerminalProcess({
+            terminalId: tabId,
+            command: command,
+            args: [],
+            cwd: workingDirectory,
+            env: {
+                MEMORY_SERVICE_URL: 'http://localhost:3457',
+                HIVE_INTEGRATION: 'true'
+            }
+        });
+        
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to create terminal process');
+        }
+        
+        // Set up data listener for this terminal
+        if (!this.terminalDataListenerSetup) {
+            this.setupTerminalDataListener();
+            this.terminalDataListenerSetup = true;
+        }
+        
+        console.log(`[IsolatedTerminalPanel] Process created for ${toolId}, PID: ${result.pid}`);
+    }
+    
+    private terminalDataListenerSetup = false;
+    
+    /**
+     * Set up global terminal data listener
+     */
+    private setupTerminalDataListener(): void {
+        const terminalAPI = (window as any).terminalAPI;
+        if (!terminalAPI) return;
+        
+        // Listen for terminal output
+        terminalAPI.onTerminalData((terminalId: string, data: string) => {
+            const tab = this.tabs.get(terminalId);
+            if (tab && tab.element) {
+                // Parse ANSI codes for basic coloring
+                const coloredData = this.parseAnsiToHtml(data);
+                
+                // Create a span for the new data
+                const span = document.createElement('span');
+                span.innerHTML = coloredData;
+                tab.element.appendChild(span);
+                
+                // Auto-scroll to bottom
+                tab.element.scrollTop = tab.element.scrollHeight;
+            }
+        });
+        
+        // Listen for terminal exit
+        terminalAPI.onTerminalExit((terminalId: string, code: number) => {
+            const tab = this.tabs.get(terminalId);
+            if (tab && tab.element) {
+                const exitMsg = document.createElement('div');
+                exitMsg.style.color = code === 0 ? '#4ec9b0' : '#f44747';
+                exitMsg.textContent = `\n[Process exited with code ${code}]`;
+                tab.element.appendChild(exitMsg);
+            }
+        });
+    }
+    
+    /**
+     * Basic ANSI to HTML converter
+     */
+    private parseAnsiToHtml(text: string): string {
+        // Very basic ANSI color support
+        return text
+            .replace(/\x1b\[0m/g, '</span>')
+            .replace(/\x1b\[30m/g, '<span style="color: #000000">')
+            .replace(/\x1b\[31m/g, '<span style="color: #cd3131">')
+            .replace(/\x1b\[32m/g, '<span style="color: #0dbc79">')
+            .replace(/\x1b\[33m/g, '<span style="color: #e5e510">')
+            .replace(/\x1b\[34m/g, '<span style="color: #2472c8">')
+            .replace(/\x1b\[35m/g, '<span style="color: #bc3fbc">')
+            .replace(/\x1b\[36m/g, '<span style="color: #11a8cd">')
+            .replace(/\x1b\[37m/g, '<span style="color: #e5e5e5">')
+            .replace(/\x1b\[90m/g, '<span style="color: #666666">')
+            .replace(/\x1b\[91m/g, '<span style="color: #f44747">')
+            .replace(/\x1b\[92m/g, '<span style="color: #4ec9b0">')
+            .replace(/\x1b\[93m/g, '<span style="color: #dcdcaa">')
+            .replace(/\x1b\[94m/g, '<span style="color: #3b8eea">')
+            .replace(/\x1b\[95m/g, '<span style="color: #d670d6">')
+            .replace(/\x1b\[96m/g, '<span style="color: #29b8db">')
+            .replace(/\x1b\[97m/g, '<span style="color: #e5e5e5">')
+            .replace(/\r\n/g, '\n')
+            .replace(/\n/g, '<br>')
+            .replace(/\r/g, '');
     }
     
     private addLogEntry(terminalId: string, level: string, message: string, fallbackElement?: HTMLElement): void {

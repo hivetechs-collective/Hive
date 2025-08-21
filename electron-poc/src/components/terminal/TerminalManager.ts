@@ -118,13 +118,13 @@ export class TerminalManager {
      */
     private async requestProcessCreation(terminalId: string, options: TerminalOptions): Promise<void> {
         try {
-            const electronAPI = (window as any).electronAPI;
-            if (!electronAPI || !electronAPI.createTerminalProcess) {
-                console.warn('[TerminalManager] Terminal IPC not available yet');
+            const terminalAPI = (window as any).terminalAPI;
+            if (!terminalAPI || !terminalAPI.createTerminalProcess) {
+                console.warn('[TerminalManager] Terminal API not available yet');
                 return;
             }
             
-            const result = await electronAPI.createTerminalProcess({
+            const result = await terminalAPI.createTerminalProcess({
                 terminalId,
                 command: options.command,
                 args: options.args,
@@ -162,17 +162,17 @@ export class TerminalManager {
         
         // Send terminal input to process
         instance.terminal.onData((data) => {
-            const electronAPI = (window as any).electronAPI;
-            if (electronAPI && electronAPI.writeToTerminal) {
-                electronAPI.writeToTerminal(terminalId, data);
+            const terminalAPI = (window as any).terminalAPI;
+            if (terminalAPI && terminalAPI.writeToTerminal) {
+                terminalAPI.writeToTerminal(terminalId, data);
             }
         });
         
         // Handle terminal resize
         instance.terminal.onResize((size) => {
-            const electronAPI = (window as any).electronAPI;
-            if (electronAPI && electronAPI.resizeTerminal) {
-                electronAPI.resizeTerminal(terminalId, size.cols, size.rows);
+            const terminalAPI = (window as any).terminalAPI;
+            if (terminalAPI && terminalAPI.resizeTerminal) {
+                terminalAPI.resizeTerminal(terminalId, size.cols, size.rows);
             }
         });
     }
@@ -237,9 +237,9 @@ export class TerminalManager {
         if (instance) {
             // Kill the process if it exists
             if (instance.processId) {
-                const electronAPI = (window as any).electronAPI;
-                if (electronAPI && electronAPI.killTerminalProcess) {
-                    await electronAPI.killTerminalProcess(terminalId);
+                const terminalAPI = (window as any).terminalAPI;
+                if (terminalAPI && terminalAPI.killTerminalProcess) {
+                    await terminalAPI.killTerminalProcess(terminalId);
                 }
             }
             
@@ -303,19 +303,19 @@ export class TerminalManager {
 export const terminalManager = new TerminalManager();
 
 // Set up IPC listeners for terminal data
-if (typeof window !== 'undefined' && (window as any).electronAPI) {
-    const electronAPI = (window as any).electronAPI;
+if (typeof window !== 'undefined' && (window as any).terminalAPI) {
+    const terminalAPI = (window as any).terminalAPI;
     
     // Listen for terminal output from main process
-    if (electronAPI.onTerminalData) {
-        electronAPI.onTerminalData((terminalId: string, data: string) => {
+    if (terminalAPI.onTerminalData) {
+        terminalAPI.onTerminalData((terminalId: string, data: string) => {
             terminalManager.writeToTerminal(terminalId, data);
         });
     }
     
     // Listen for terminal exit
-    if (electronAPI.onTerminalExit) {
-        electronAPI.onTerminalExit((terminalId: string, code: number) => {
+    if (terminalAPI.onTerminalExit) {
+        terminalAPI.onTerminalExit((terminalId: string, code: number) => {
             console.log(`[TerminalManager] Terminal ${terminalId} exited with code ${code}`);
             terminalManager.writeToTerminal(terminalId, `\r\n[Process exited with code ${code}]\r\n`);
         });

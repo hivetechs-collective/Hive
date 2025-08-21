@@ -185,3 +185,44 @@ contextBridge.exposeInMainWorld('fileAPI', {
     ipcRenderer.on('file-changed', (_, filePath) => callback(filePath));
   }
 });
+
+// Terminal API
+contextBridge.exposeInMainWorld('terminalAPI', {
+  // Create a new terminal process
+  createTerminalProcess: (options: {
+    terminalId: string;
+    command?: string;
+    args?: string[];
+    cwd?: string;
+    env?: Record<string, string>;
+  }) => safeInvoke('create-terminal-process', options),
+  
+  // Write data to terminal
+  writeToTerminal: (terminalId: string, data: string) => 
+    safeInvoke('write-to-terminal', terminalId, data),
+  
+  // Resize terminal
+  resizeTerminal: (terminalId: string, cols: number, rows: number) =>
+    safeInvoke('resize-terminal', terminalId, cols, rows),
+  
+  // Kill terminal process
+  killTerminalProcess: (terminalId: string) =>
+    safeInvoke('kill-terminal-process', terminalId),
+  
+  // Get terminal status
+  getTerminalStatus: (terminalId: string) =>
+    safeInvoke('get-terminal-status', terminalId),
+  
+  // List all terminals
+  listTerminals: () => safeInvoke('list-terminals'),
+  
+  // Listen for terminal output
+  onTerminalData: (callback: (terminalId: string, data: string) => void) => {
+    ipcRenderer.on('terminal-data', (_, terminalId, data) => callback(terminalId, data));
+  },
+  
+  // Listen for terminal exit
+  onTerminalExit: (callback: (terminalId: string, code: number) => void) => {
+    ipcRenderer.on('terminal-exit', (_, terminalId, code) => callback(terminalId, code));
+  }
+});
