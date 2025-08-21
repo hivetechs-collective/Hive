@@ -66,6 +66,7 @@ import { VSCodeFileExplorer } from './vs-file-explorer';
 import { VSCodeExplorerExact } from './vscode-explorer-exact';
 import { EditorTabs } from './editor-tabs';
 import { StatusBar } from './status-bar';
+import { IsolatedTerminalPanel } from './components/IsolatedTerminalPanel';
 
 // Current opened folder state
 let currentOpenedFolder: string | null = null;
@@ -489,6 +490,25 @@ document.body.innerHTML = `
             <div class="terminal-line" id="backend-server-line">[${new Date().toLocaleTimeString()}] Backend server: discovering port...</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- New Isolated Terminal Panel (Middle, between console and consensus) -->
+    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="position: relative; width: 400px; display: flex; flex-direction: column; background: #1e1e1e; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30;">
+      <div class="resize-handle vertical-resize" id="isolated-terminal-resize-left" style="position: absolute; left: 0; width: 4px; height: 100%; cursor: ew-resize; z-index: 10;"></div>
+      <div class="resize-handle vertical-resize" id="isolated-terminal-resize-right" style="position: absolute; right: 0; width: 4px; height: 100%; cursor: ew-resize; z-index: 10;"></div>
+      
+      <!-- Terminal tabs header -->
+      <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c;">
+        <div class="isolated-terminal-tabs" id="isolated-terminal-tabs" style="flex: 1; display: flex; align-items: center; overflow-x: auto;">
+          <!-- Tabs will be inserted here -->
+        </div>
+        <button class="isolated-terminal-new-tab" id="isolated-terminal-new-tab" title="New Terminal" style="padding: 0 10px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 18px;">+</button>
+      </div>
+      
+      <!-- Terminal content area -->
+      <div class="isolated-terminal-content" id="isolated-terminal-content" style="flex: 1; position: relative; background: #1a1a1a;">
+        <!-- Terminal instances will be inserted here -->
       </div>
     </div>
 
@@ -2999,6 +3019,75 @@ setTimeout(() => {
         if (editorArea) {
             window.editorTabs = new EditorTabs(editorArea);
             console.log('✅ Editor tabs initialized on startup');
+        }
+    }
+    
+    // Initialize Isolated Terminal Panel
+    const isolatedTerminalPanel = document.getElementById('isolated-terminal-panel');
+    if (isolatedTerminalPanel) {
+        (window as any).isolatedTerminal = new IsolatedTerminalPanel(isolatedTerminalPanel);
+        console.log('✅ Isolated Terminal Panel initialized');
+        
+        // Setup resize handlers for the isolated terminal panel
+        const leftResize = document.getElementById('isolated-terminal-resize-left');
+        const rightResize = document.getElementById('isolated-terminal-resize-right');
+        
+        if (leftResize) {
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+            
+            leftResize.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                document.body.style.cursor = 'ew-resize';
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                
+                const deltaX = startX - e.clientX;
+                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 800);
+                isolatedTerminalPanel.style.width = newWidth + 'px';
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                }
+            });
+        }
+        
+        if (rightResize) {
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+            
+            rightResize.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                document.body.style.cursor = 'ew-resize';
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                
+                const deltaX = e.clientX - startX;
+                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 800);
+                isolatedTerminalPanel.style.width = newWidth + 'px';
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                }
+            });
         }
     }
     
