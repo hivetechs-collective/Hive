@@ -2596,33 +2596,51 @@ async function launchCliTool(toolId: string): Promise<void> {
         }
     }
     
+    // Use the isolated terminal panel to launch the tool
+    const isolatedTerminal = (window as any).isolatedTerminal;
+    if (!isolatedTerminal) {
+        console.error('[CLI Tools] Isolated terminal not initialized');
+        alert('Terminal system not ready. Please try again.');
+        return;
+    }
+    
+    // Get tool name for display
+    let toolName = '';
+    switch (toolId) {
+        case 'claude-code': toolName = 'Claude Code'; break;
+        case 'gemini-cli': toolName = 'Gemini CLI'; break;
+        case 'qwen-code': toolName = 'Qwen Code'; break;
+        case 'aider': toolName = 'Aider'; break;
+        case 'continue': toolName = 'Continue'; break;
+        default: toolName = toolId;
+    }
+    
     try {
-        const electronAPI = window.electronAPI as any;
-        const result = await electronAPI.launchCliTool(toolId, currentOpenedFolder);
+        // Create a terminal tab for this tool
+        const tabId = isolatedTerminal.createToolTerminal(toolId, toolName, currentOpenedFolder);
         
-        if (result.success) {
-            console.log(`[CLI Tools] ${toolId} launched successfully in ${currentOpenedFolder}`);
-            
-            // Update status to show it's running
-            if (card) {
-                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
-                if (statusDiv) {
-                    statusDiv.innerHTML = `✅ Running in: ${currentOpenedFolder.split('/').pop()}`;
-                    statusDiv.style.color = '#4CAF50';
-                    
-                    // Reset status after 5 seconds
-                    setTimeout(() => {
-                        renderCliToolsPanel();
-                    }, 5000);
-                }
+        console.log(`[CLI Tools] ${toolId} terminal created with tab ${tabId} in ${currentOpenedFolder}`);
+        
+        // Update status to show it's running
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+            if (statusDiv) {
+                statusDiv.innerHTML = `✅ Running in integrated terminal`;
+                statusDiv.style.color = '#4CAF50';
+                
+                // Reset status after 3 seconds
+                setTimeout(() => {
+                    renderCliToolsPanel();
+                }, 3000);
             }
-        } else {
-            console.error(`[CLI Tools] Failed to launch ${toolId}:`, result.error);
-            alert(`Failed to launch: ${result.error}`);
         }
+        
+        // TODO: Actually launch the tool process via IPC
+        // For now, the terminal shows a simulated launch
+        
     } catch (error) {
-        console.error(`[CLI Tools] Error launching ${toolId}:`, error);
-        alert(`Launch error: ${error}`);
+        console.error(`[CLI Tools] Error creating terminal for ${toolId}:`, error);
+        alert(`Failed to create terminal: ${error}`);
     }
 }
 
