@@ -195,6 +195,7 @@ contextBridge.exposeInMainWorld('terminalAPI', {
     args?: string[];
     cwd?: string;
     env?: Record<string, string>;
+    toolId?: string;
   }) => safeInvoke('create-terminal-process', options),
   
   // Write data to terminal
@@ -222,7 +223,22 @@ contextBridge.exposeInMainWorld('terminalAPI', {
   },
   
   // Listen for terminal exit
-  onTerminalExit: (callback: (terminalId: string, code: number) => void) => {
+  onTerminalExit: (callback: (terminalId: string, code?: number) => void) => {
     ipcRenderer.on('terminal-exit', (_, terminalId, code) => callback(terminalId, code));
+  },
+  
+  // Listen for terminal created event
+  onTerminalCreated: (callback: (terminalInfo: any) => void) => {
+    ipcRenderer.on('terminal-created', (_, terminalInfo) => callback(terminalInfo));
+  },
+  
+  // Listen for terminal ready event
+  onTerminalReady: (callback: (terminalId: string, url: string) => void) => {
+    ipcRenderer.on('terminal-ready', (_, terminalId, url) => callback(terminalId, url));
+  },
+  
+  // Listen for terminal error event
+  onTerminalError: (callback: (terminalId: string, error: string) => void) => {
+    ipcRenderer.on('terminal-error', (_, terminalId, error) => callback(terminalId, error));
   }
 });

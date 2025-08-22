@@ -54,6 +54,28 @@ declare global {
       getSubmoduleDiff(submodulePath: string): Promise<string>;
     };
     
+    // Terminal API
+    terminalAPI: {
+      createTerminalProcess(options: {
+        terminalId: string;
+        command?: string;
+        args?: string[];
+        cwd?: string;
+        env?: Record<string, string>;
+        toolId?: string;
+      }): Promise<any>;
+      writeToTerminal(terminalId: string, data: string): Promise<any>;
+      resizeTerminal(terminalId: string, cols: number, rows: number): Promise<any>;
+      killTerminalProcess(terminalId: string): Promise<any>;
+      getTerminalStatus(terminalId: string): Promise<any>;
+      listTerminals(): Promise<any[]>;
+      onTerminalData(callback: (terminalId: string, data: string) => void): void;
+      onTerminalExit(callback: (terminalId: string, code?: number) => void): void;
+      onTerminalCreated(callback: (terminalInfo: any) => void): void;
+      onTerminalReady(callback: (terminalId: string, url: string) => void): void;
+      onTerminalError(callback: (terminalId: string, error: string) => void): void;
+    };
+    
     // Electron API
     electronAPI: {
       getAnalytics(): Promise<any>;
@@ -75,6 +97,13 @@ declare global {
       getMemoryStats(): Promise<any>;
       getConnectedTools(): Promise<any[]>;
       getMemoryActivity(limit?: number): Promise<any[]>;
+      
+      // Terminal Event Forwarding (for compatibility)
+      createTerminalProcess?: (options: any) => Promise<any>;
+      killTerminalProcess?: (terminalId: string) => Promise<any>;
+      onTerminalCreated?: (callback: (terminalInfo: any) => void) => void;
+      onTerminalReady?: (callback: (terminalId: string, url: string) => void) => void;
+      onTerminalExit?: (callback: (terminalId: string, code?: number) => void) => void;
     };
     
     // Global instances
@@ -82,6 +111,9 @@ declare global {
     editorTabs: any;
     gitUI: any;
     scmView: any;
+    
+    // Global variables
+    currentOpenedFolder?: string;
     
     // Global functions
     openFolder: () => Promise<void>;
