@@ -3049,7 +3049,7 @@ setTimeout(() => {
         console.log('✅ TTYD Terminal Panel initialized');
         
         // Listen for AI tool launch events from main process
-        window.electronAPI.on('launch-ai-tool-terminal', (data: {
+        window.electronAPI.onLaunchAIToolTerminal((data: {
             toolId: string;
             toolName: string;
             command: string;

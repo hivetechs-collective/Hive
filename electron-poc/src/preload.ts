@@ -83,7 +83,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-install', toolId),
   updateCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-update', toolId),
   configureCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-configure', toolId),
-  launchCliTool: (toolId: string, projectPath: string) => ipcRenderer.invoke('cli-tool-launch', toolId, projectPath),
+  launchCliTool: (toolId: string, projectPath?: string) => ipcRenderer.invoke('cli-tool-launch', toolId, projectPath),
   checkCliToolUpdates: () => ipcRenderer.invoke('cli-tools-check-updates'),
   
   // CLI Tool Events
@@ -92,6 +92,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onCliToolUpdateProgress: (callback: (progress: any) => void) => {
     ipcRenderer.on('cli-tool-update-progress', (_, progress) => callback(progress));
+  },
+  onLaunchAIToolTerminal: (callback: (data: any) => void) => {
+    ipcRenderer.on('launch-ai-tool-terminal', (_, data) => callback(data));
   },
   
   // Menu event listeners
