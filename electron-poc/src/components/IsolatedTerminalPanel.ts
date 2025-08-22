@@ -236,7 +236,9 @@ export class IsolatedTerminalPanel {
                 screenReaderMode: false,
                 // Shell integration
                 allowTransparency: false,
-                tabStopWidth: 8  // Standard tab width
+                tabStopWidth: 8,  // Standard tab width
+                // Enable alternate screen buffer for TUI apps
+                altClickMovesCursor: true
             });
             
             // Add fit addon to make terminal fill container
@@ -260,6 +262,17 @@ export class IsolatedTerminalPanel {
             // Fit terminal to container
             fitAddon.fit();
             
+            // Force terminal to handle control sequences properly
+            terminal.reset();
+            terminal.focus();
+            
+            // Ensure proper terminal dimensions are set
+            const dims = fitAddon.proposeDimensions();
+            if (dims) {
+                console.log(`[Terminal] Setting dimensions: ${dims.cols}x${dims.rows}`);
+                terminal.resize(dims.cols, dims.rows);
+            }
+            
             // Store terminal reference
             (tab as any).terminal = terminal;
             (tab as any).fitAddon = fitAddon;
@@ -282,6 +295,13 @@ export class IsolatedTerminalPanel {
                     // Listen for data from PTY and write to xterm
                     terminalAPI.onTerminalData((terminalId: string, data: string) => {
                         if (terminalId === tabId && terminal) {
+                            // Debug: Log control sequences
+                            if (data.includes('\r') || data.includes('\x1b[')) {
+                                const sequences = data.replace(/\x1b/g, '\\x1b')
+                                    .replace(/\r/g, '\\r')
+                                    .replace(/\n/g, '\\n');
+                                console.log(`[Terminal ${tabId}] Control sequences:`, sequences.substring(0, 100));
+                            }
                             terminal.write(data);
                         }
                     });
@@ -696,7 +716,9 @@ export class IsolatedTerminalPanel {
             convertEol: true,  // Convert line endings properly
             windowsMode: false,  // Use Unix-style line endings
             macOptionIsMeta: true,  // For macOS Option key
-            allowProposedApi: true  // Enable newer xterm.js features
+            allowProposedApi: true,  // Enable newer xterm.js features
+            // Enable alternate screen buffer for TUI apps
+            altClickMovesCursor: true
         });
         
         // Add fit addon to make terminal fill container
@@ -719,6 +741,17 @@ export class IsolatedTerminalPanel {
         
         // Fit terminal to container
         fitAddon.fit();
+        
+        // Force terminal to handle control sequences properly
+        terminal.reset();
+        terminal.focus();
+        
+        // Ensure proper terminal dimensions are set
+        const dims = fitAddon.proposeDimensions();
+        if (dims) {
+            console.log(`[Terminal] Setting dimensions: ${dims.cols}x${dims.rows}`);
+            terminal.resize(dims.cols, dims.rows);
+        }
         
         // Store terminal reference
         (tab as any).terminal = terminal;
@@ -796,6 +829,13 @@ export class IsolatedTerminalPanel {
         // Listen for data from PTY and write to xterm
         terminalAPI.onTerminalData((terminalId: string, data: string) => {
             if (terminalId === tabId && terminal) {
+                // Debug: Log control sequences
+                if (data.includes('\r') || data.includes('\x1b[')) {
+                    const sequences = data.replace(/\x1b/g, '\\x1b')
+                        .replace(/\r/g, '\\r')
+                        .replace(/\n/g, '\\n');
+                    console.log(`[Terminal ${tabId}] Control sequences:`, sequences.substring(0, 100));
+                }
                 terminal.write(data);
             }
         });
