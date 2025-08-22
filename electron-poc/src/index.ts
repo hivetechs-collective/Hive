@@ -98,6 +98,31 @@ const initDatabase = () => {
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
+
+  // Create AI tools launch tracking table
+  db.run(`CREATE TABLE IF NOT EXISTS ai_tool_launches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool_id TEXT NOT NULL,
+    repository_path TEXT NOT NULL,
+    launch_count INTEGER DEFAULT 1,
+    first_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    status TEXT DEFAULT 'active',
+    session_metadata TEXT,
+    user_id TEXT DEFAULT 'default',
+    tool_version TEXT,
+    launch_context TEXT,
+    UNIQUE(tool_id, repository_path, user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  )`);
+
+  // Create indexes for AI tools table
+  db.run(`CREATE INDEX IF NOT EXISTS idx_ai_tool_launches_lookup 
+    ON ai_tool_launches(tool_id, repository_path)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_ai_tool_launches_recent 
+    ON ai_tool_launches(last_launched_at DESC)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_ai_tool_launches_active 
+    ON ai_tool_launches(status) WHERE status = 'active'`);
 };
 
 // Toggle to switch between implementations
