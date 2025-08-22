@@ -158,6 +158,7 @@ const createWindow = (): void => {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false, // Allow HTTP requests to localhost for development
+      webviewTag: true, // Enable webview tags for ttyd terminals
     },
   });
 

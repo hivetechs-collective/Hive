@@ -66,11 +66,12 @@ export class TTYDManager extends EventEmitter {
     logger.info(`[TTYDManager] Creating terminal: ${config.title}`);
     
     // Allocate port through ProcessManager's PortManager
-    // Using 8100-8200 range to avoid conflicts with system services (e.g., ControlCenter uses 7000)
+    // Dynamic port allocation: Start from 7100 (avoiding common system ports like 7000)
+    // PortManager will automatically find the next available port if primary is taken
     const port = await PortManager.allocatePort({
-      port: 8100,  // Start from 8100 to avoid conflicts
+      port: 7100,  // Start from 7100 (after common system services)
       serviceName: `ttyd-${config.id}`,
-      alternativePorts: Array.from({ length: 100 }, (_, i) => 8100 + i)  // 8100-8199 range
+      alternativePorts: Array.from({ length: 900 }, (_, i) => 7100 + i)  // Large range: 7100-7999
     });
     
     logger.info(`[TTYDManager] Allocated port ${port} for ${config.title}`);
@@ -80,9 +81,9 @@ export class TTYDManager extends EventEmitter {
       '--port', port.toString(),
       '--interface', '127.0.0.1',  // Bind to localhost only for security
       '--writable',              // Allow input
-      '--check-origin', 'off',   // Allow Electron webview connection
-      '--base-path', `/terminal/${config.id}`,
-      '--title', config.title
+      // Note: --check-origin is a flag, not a key-value option
+      // '--base-path', `/terminal/${config.id}`,  // Commented out - may interfere with routing
+      // '--title', config.title  // Title doesn't exist as an option in ttyd
     ];
     
     // Add authentication if needed (for security in production)

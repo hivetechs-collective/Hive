@@ -205,7 +205,8 @@ export class TTYDTerminalPanel {
             
             if (result.success && result.terminal) {
                 console.log('[TTYDTerminalPanel] Terminal created successfully:', result.terminal);
-                this.addTerminalTab(result.terminal);
+                // Don't add tab here - the 'terminal-created' event will handle it
+                // to avoid duplicate tabs
             } else {
                 console.error('[TTYDTerminalPanel] Failed to create terminal:', result.error);
             }
@@ -291,24 +292,27 @@ export class TTYDTerminalPanel {
             display: none;
         `;
         
-        // Create iframe to embed ttyd terminal
-        const iframe = document.createElement('iframe');
-        iframe.src = terminalInfo.url;
-        iframe.style.cssText = `
+        // Create webview to embed ttyd terminal
+        // Using webview instead of iframe for better Electron integration
+        const webview = document.createElement('webview') as any;
+        webview.src = terminalInfo.url;
+        webview.style.cssText = `
             width: 100%;
             height: 100%;
             border: none;
             background: #1e1e1e;
         `;
         
-        // Security settings for iframe
-        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+        // Enable node integration for local content (safe for localhost)
+        webview.setAttribute('nodeintegration', 'true');
+        webview.setAttribute('disablewebsecurity', 'true');
+        webview.setAttribute('allowpopups', 'true');
         
-        content.appendChild(iframe);
+        content.appendChild(webview);
         this.contentContainer.appendChild(content);
         
         tab.element = content;
-        tab.webview = iframe;
+        tab.webview = webview;
         this.tabs.set(tab.id, tab);
         
         // Switch to the new tab
