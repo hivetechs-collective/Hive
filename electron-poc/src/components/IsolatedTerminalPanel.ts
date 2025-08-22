@@ -3,6 +3,9 @@
  * This component is designed to have zero impact on the rest of the application
  */
 
+// Import xterm.css for terminal styling
+import 'xterm/css/xterm.css';
+
 // We'll use dynamic import to avoid build issues for now
 let terminalManager: any = null;
 
@@ -114,7 +117,7 @@ export class IsolatedTerminalPanel {
         this.startConsoleCapture(tab.id, content);
     }
 
-    private createTerminalTab(): void {
+    private async createTerminalTab(): Promise<void> {
         const tabId = `terminal-${this.terminalCounter++}`;
         const tab: TerminalTab = {
             id: tabId,
@@ -160,7 +163,7 @@ export class IsolatedTerminalPanel {
         tabBtn.addEventListener('click', () => this.switchToTab(tabId));
         this.tabsContainer.appendChild(tabBtn);
 
-        // Create content area
+        // Create content area for xterm.js terminal
         const content = document.createElement('div');
         content.id = `isolated-content-${tabId}`;
         content.className = 'isolated-tab-content';
@@ -170,21 +173,8 @@ export class IsolatedTerminalPanel {
             left: 0;
             right: 0;
             bottom: 0;
-            padding: 10px;
-            overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 12px;
-            color: #cccccc;
             background: #000000;
             display: none;
-        `;
-        
-        // Add placeholder content for now
-        content.innerHTML = `
-            <div style="color: #4ec9b0;">$ Welcome to ${tab.title}</div>
-            <div style="color: #969696;">This will be a fully functional terminal once xterm.js is integrated</div>
-            <div style="color: #969696;">For now, it's just a placeholder showing isolation works</div>
-            <div style="color: #cccccc;">$ <span style="border-right: 2px solid #cccccc; animation: blink 1s infinite;">_</span></div>
         `;
         
         this.contentContainer.appendChild(content);
@@ -194,6 +184,89 @@ export class IsolatedTerminalPanel {
         
         // Switch to the new tab
         this.switchToTab(tabId);
+        
+        // Create a real xterm.js terminal
+        try {
+            // Import xterm and create a real terminal
+            const { Terminal } = await import('xterm');
+            const { FitAddon } = await import('xterm-addon-fit');
+            
+            // Create xterm.js terminal
+            const terminal = new Terminal({
+                fontSize: 13,
+                fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+                theme: {
+                    background: '#1e1e1e',
+                    foreground: '#cccccc',
+                    cursor: '#aeafad'
+                },
+                cursorBlink: true,
+                scrollback: 10000
+            });
+            
+            // Add fit addon to make terminal fill container
+            const fitAddon = new FitAddon();
+            terminal.loadAddon(fitAddon);
+            
+            // Open terminal in the tab's content element
+            terminal.open(tab.element);
+            fitAddon.fit();
+            
+            // Store terminal reference
+            (tab as any).terminal = terminal;
+            (tab as any).fitAddon = fitAddon;
+            
+            // Create the PTY process via IPC
+            const terminalAPI = (window as any).terminalAPI;
+            if (terminalAPI) {
+                // Use the user's home directory as default working directory
+                // In Electron renderer, we need to use a proper path, not /
+                const cwd = '/Users/veronelazio';  // Use actual home directory
+                const result = await terminalAPI.createTerminalProcess({
+                    terminalId: tabId,
+                    cwd: cwd
+                });
+                
+                if (result.success) {
+                    console.log(`[IsolatedTerminalPanel] Terminal ${tabId} created, PID: ${result.pid}`);
+                    
+                    // Connect xterm.js to the PTY process
+                    // Listen for data from PTY and write to xterm
+                    terminalAPI.onTerminalData((terminalId: string, data: string) => {
+                        if (terminalId === tabId && terminal) {
+                            terminal.write(data);
+                        }
+                    });
+                    
+                    // Send xterm input to PTY
+                    terminal.onData((data: string) => {
+                        terminalAPI.writeToTerminal(tabId, data);
+                    });
+                    
+                    // Handle terminal resize
+                    terminal.onResize((size: { cols: number; rows: number }) => {
+                        terminalAPI.resizeTerminal(tabId, size.cols, size.rows);
+                    });
+                    
+                    // Handle terminal exit
+                    terminalAPI.onTerminalExit((terminalId: string, code: number) => {
+                        if (terminalId === tabId && terminal) {
+                            terminal.write(`\r\n[Process exited with code ${code}]\r\n`);
+                        }
+                    });
+                } else {
+                    terminal.write(`\r\n\x1b[91mFailed to create terminal process: ${result.error}\x1b[0m\r\n`);
+                }
+            } else {
+                terminal.write(`\r\n\x1b[93mTerminal API not available\x1b[0m\r\n`);
+            }
+        } catch (error: any) {
+            console.error('[IsolatedTerminalPanel] Failed to create terminal:', error);
+            // Fallback to HTML if xterm.js fails
+            content.innerHTML = `
+                <div style="color: #f44747; padding: 10px;">Failed to create terminal: ${error.message}</div>
+            `;
+        }
     }
 
     private switchToTab(tabId: string): void {
@@ -222,18 +295,42 @@ export class IsolatedTerminalPanel {
         if (selectedTab) {
             if (selectedTab.element) {
                 selectedTab.element.style.display = 'block';
+                
+                // Resize xterm.js terminal if it exists
+                const terminal = (selectedTab as any).terminal;
+                const fitAddon = (selectedTab as any).fitAddon;
+                if (terminal && fitAddon) {
+                    setTimeout(() => fitAddon.fit(), 0);
+                }
             }
             selectedTab.isActive = true;
             this.activeTabId = tabId;
         }
     }
 
-    private closeTab(tabId: string): void {
+    private async closeTab(tabId: string): Promise<void> {
         // Don't allow closing the System Log tab
         if (tabId === 'system-log') return;
 
         const tab = this.tabs.get(tabId);
         if (tab) {
+            // Clean up terminal and PTY process
+            const terminal = (tab as any).terminal;
+            if (terminal) {
+                terminal.dispose();
+            }
+            
+            // Kill the PTY process via IPC
+            const terminalAPI = (window as any).terminalAPI;
+            if (terminalAPI) {
+                try {
+                    await terminalAPI.killTerminalProcess(tabId);
+                    console.log(`[IsolatedTerminalPanel] Killed terminal process for ${tabId}`);
+                } catch (error) {
+                    console.error(`[IsolatedTerminalPanel] Failed to kill terminal process for ${tabId}:`, error);
+                }
+            }
+            
             // Remove tab button
             const tabIndex = Array.from(this.tabs.keys()).indexOf(tabId);
             const tabBtn = this.tabsContainer.querySelector(`button:nth-child(${tabIndex + 1})`);
@@ -363,7 +460,7 @@ export class IsolatedTerminalPanel {
         tabBtn.addEventListener('click', () => this.switchToTab(tabId));
         this.tabsContainer.appendChild(tabBtn);
 
-        // Create content area
+        // Create content area for xterm.js terminal
         const content = document.createElement('div');
         content.id = `isolated-content-${tabId}`;
         content.className = 'isolated-tab-content';
@@ -373,23 +470,8 @@ export class IsolatedTerminalPanel {
             left: 0;
             right: 0;
             bottom: 0;
-            padding: 10px;
-            overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 12px;
-            color: #cccccc;
             background: #000000;
             display: none;
-        `;
-        
-        // Add initial content showing launch status
-        const folderName = workingDirectory.split('/').pop() || workingDirectory;
-        content.innerHTML = `
-            <div style="color: #4ec9b0;">$ cd ${workingDirectory}</div>
-            <div style="color: #4ec9b0;">$ ${this.getToolCommand(toolId)}</div>
-            <div style="color: #dcdcaa;">Launching ${toolName}...</div>
-            <div style="color: #969696;">Working directory: ${folderName}</div>
-            <div style="color: #969696;">Connecting to Memory Service at http://localhost:3457...</div>
         `;
         
         this.contentContainer.appendChild(content);
@@ -506,28 +588,52 @@ export class IsolatedTerminalPanel {
      * Launch the actual tool process via IPC
      */
     private async launchToolProcess(tabId: string, toolId: string, workingDirectory: string): Promise<void> {
+        const tab = this.tabs.get(tabId);
+        if (!tab || !tab.element) {
+            throw new Error('Tab not found');
+        }
+        
+        // Import xterm and create a real terminal
+        const { Terminal } = await import('xterm');
+        const { FitAddon } = await import('xterm-addon-fit');
+        
+        // Create xterm.js terminal
+        const terminal = new Terminal({
+            fontSize: 13,
+            fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+            theme: {
+                background: '#1e1e1e',
+                foreground: '#cccccc',
+                cursor: '#aeafad'
+            },
+            cursorBlink: true,
+            scrollback: 10000
+        });
+        
+        // Add fit addon to make terminal fill container
+        const fitAddon = new FitAddon();
+        terminal.loadAddon(fitAddon);
+        
+        // Open terminal in the tab's content element
+        terminal.open(tab.element);
+        fitAddon.fit();
+        
+        // Store terminal reference
+        (tab as any).terminal = terminal;
+        (tab as any).fitAddon = fitAddon;
+        
+        // Now create the PTY process via IPC
         const terminalAPI = (window as any).terminalAPI;
         if (!terminalAPI) {
             throw new Error('Terminal API not available');
         }
         
         const command = this.getToolCommand(toolId);
-        const tab = this.tabs.get(tabId);
-        if (!tab || !tab.element) {
-            throw new Error('Tab not found');
-        }
+        console.log(`[IsolatedTerminalPanel] Creating PTY process in ${workingDirectory}`);
         
-        // Create the terminal process
-        console.log(`[IsolatedTerminalPanel] Creating terminal for ${command} in ${workingDirectory}`);
         const result = await terminalAPI.createTerminalProcess({
             terminalId: tabId,
-            command: command,
-            args: [],
-            cwd: workingDirectory,
-            env: {
-                MEMORY_SERVICE_URL: 'http://localhost:3457',
-                HIVE_INTEGRATION: 'true'
-            }
+            cwd: workingDirectory
         });
         console.log(`[IsolatedTerminalPanel] Terminal creation result:`, result);
         
@@ -584,13 +690,33 @@ export class IsolatedTerminalPanel {
             }
         }
         
-        // Set up data listener for this terminal
-        if (!this.terminalDataListenerSetup) {
-            this.setupTerminalDataListener();
-            this.terminalDataListenerSetup = true;
-        }
+        // Connect xterm.js to the PTY process
+        // Listen for data from PTY and write to xterm
+        terminalAPI.onTerminalData((terminalId: string, data: string) => {
+            if (terminalId === tabId && terminal) {
+                terminal.write(data);
+            }
+        });
         
-        console.log(`[IsolatedTerminalPanel] Process created for ${toolId}, PID: ${result.pid}`);
+        // Send xterm input to PTY
+        terminal.onData((data: string) => {
+            terminalAPI.writeToTerminal(tabId, data);
+        });
+        
+        // Handle terminal exit
+        terminalAPI.onTerminalExit((terminalId: string, code: number) => {
+            if (terminalId === tabId && terminal) {
+                terminal.write(`\r\n[Process exited with code ${code}]\r\n`);
+            }
+        });
+        
+        console.log(`[IsolatedTerminalPanel] Terminal created, PID: ${result.pid}`);
+        
+        // Now send the command to the terminal (just type it like a user would)
+        console.log(`[IsolatedTerminalPanel] Sending command '${command}' to terminal`);
+        setTimeout(() => {
+            terminalAPI.writeToTerminal(tabId, `${command}\r`);
+        }, 500); // Small delay to ensure terminal is ready
     }
     
     private terminalDataListenerSetup = false;

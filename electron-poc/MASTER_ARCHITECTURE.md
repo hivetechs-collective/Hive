@@ -1971,10 +1971,13 @@ public async launch(toolId: string, projectPath: string): Promise<void> {
 }
 ```
 
-### Integrated Terminal System
+### Integrated Terminal System ✅ IMPLEMENTED
 
 #### Vision
 Transform the fixed bottom console into a powerful tabbed terminal system where users can run multiple AI tools simultaneously, each in its own named tab, alongside regular terminal sessions. This creates a unified workspace where all AI assistants are immediately accessible without window switching.
+
+#### Implementation Status: WORKING
+The terminal system is now fully functional with xterm.js UI and node-pty backend process management. Users can create multiple terminal tabs and launch AI tools directly within the integrated terminal panel.
 
 #### Terminal Tab Architecture
 
@@ -2054,10 +2057,46 @@ interface TerminalSystemDependencies {
   'xterm-addon-fit': '^0.7.0',          // Auto-resize
   'xterm-addon-web-links': '^0.8.0',    // Clickable links
   'xterm-addon-search': '^0.12.0',      // Search in terminal
-  'node-pty': '^1.0.0',                 // Pseudo-terminal
+  'node-pty': '^1.0.0',                 // Pseudo-terminal (CRITICAL: See implementation notes)
   '@xterm/addon-serialize': '^0.9.0'    // Session persistence
 }
 ```
+
+#### 🚨 CRITICAL IMPLEMENTATION DETAILS
+
+**Why Terminals Work Now - The Complete Solution**:
+
+1. **Native Module Compilation**: node-pty MUST be compiled for the exact Electron version
+   ```bash
+   npx electron-rebuild  # Run after npm install and any Electron updates
+   ```
+
+2. **Webpack Configuration**: node-pty CANNOT be bundled by webpack
+   ```typescript
+   // webpack.main.config.ts
+   externals: {
+     'node-pty': 'commonjs node-pty'  // Critical: Mark as external
+   }
+   ```
+
+3. **Working Directory**: NEVER use root (/) as working directory
+   ```typescript
+   // Always use user's home or project directory
+   const cwd = options.cwd || process.env.HOME || '/Users/veronelazio';
+   ```
+
+4. **Shell Selection**: Use system shells without login flag initially
+   ```typescript
+   // macOS: Use /bin/zsh or /bin/bash
+   // Avoid -l flag initially, add if needed for PATH setup
+   const shell = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash';
+   const args = [];  // Start simple, add flags if needed
+   ```
+
+5. **IPC Architecture**: Three-layer communication
+   ```
+   Renderer (xterm.js) ↔ Preload (IPC Bridge) ↔ Main (node-pty)
+   ```
 
 **Service Architecture**:
 ```typescript
@@ -2512,34 +2551,49 @@ When tabs exceed width:
 └─────────────────┴─────────────────┘
 ```
 
-#### Migration Strategy
+#### Implementation Status & Next Steps
 
-**Phase 1: Infrastructure** (Week 1)
-- Install xterm.js and node-pty
-- Create TerminalService class
-- Basic terminal rendering in bottom panel
+**✅ COMPLETED - Terminal Infrastructure**
+- xterm.js and node-pty installed and configured
+- Terminal IPC handlers implemented in main process
+- Tab system with dynamic terminal creation
+- Working PTY process management
+- Data flow between renderer and main process
+- Webpack configured to handle native modules
 
-**Phase 2: Tab System** (Week 2)
-- Implement tab UI components
-- Tab switching logic
-- Console tab integration
+**Current Implementation Files**:
+- `src/terminal-ipc-handlers.ts` - Main process terminal management
+- `src/components/IsolatedTerminalPanel.ts` - Terminal UI with tabs
+- `src/preload.ts` - Secure IPC bridge for terminal API
+- `webpack.main.config.ts` - Critical: node-pty marked as external
 
-**Phase 3: AI Tool Integration** (Week 3)
-- Modify Launch button to use integrated terminal
-- Tool-specific terminal creation
-- Running state management
+**🚧 IN PROGRESS - What's Needed Next**
 
-**Phase 4: Advanced Features** (Week 4)
-- Split view
-- Terminal persistence
-- Context menus
-- Keyboard shortcuts
+**Phase 1: AI Tool Integration** (Priority 1)
+- Connect "Launch" buttons to create named terminal tabs
+- Auto-execute tool commands (claude, gemini, etc.)
+- Tool-specific tab icons and names
+- Working directory management for tool context
 
-**Phase 5: Polish & Testing** (Week 5)
-- Performance optimization
-- Error handling
-- User preferences
-- Documentation
+**Phase 2: Terminal Enhancements** (Priority 2)
+- Dynamic home directory detection (remove hardcoded paths)
+- Login shell support for full PATH environment
+- Terminal resize handling with FitAddon
+- Copy/paste support with keyboard shortcuts
+- Search within terminal output
+
+**Phase 3: Professional Features** (Priority 3)
+- Terminal session persistence across app restarts
+- Context menus for tabs (restart, clear, copy)
+- Keyboard shortcuts (Ctrl+T new, Ctrl+W close)
+- Split terminal view support
+- Terminal themes and customization
+
+**Phase 4: Stability & Polish** (Priority 4)
+- Error recovery for crashed terminals
+- Better error messages for users
+- Terminal performance optimization
+- Debug logging system
 
 #### Configuration Options
 
