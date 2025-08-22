@@ -22,6 +22,7 @@ export class TTYDTerminalPanel {
     private tabs: Map<string, TTYDTerminalTab> = new Map();
     private activeTabId: string | null = null;
     private terminalCounter: number = 1;
+    private tabScrollOffset: number = 0;
 
     constructor(container: HTMLElement) {
         this.container = container;
@@ -49,6 +50,9 @@ export class TTYDTerminalPanel {
         
         // Listen for terminal creation events from main process
         this.setupIpcListeners();
+        
+        // Set up tab navigation arrows
+        this.setupTabNavigation();
     }
     
     private setupIpcListeners(): void {
@@ -102,6 +106,8 @@ export class TTYDTerminalPanel {
             display: flex;
             align-items: center;
             gap: 4px;
+            flex-shrink: 0;
+            white-space: nowrap;
         `;
         
         tabBtn.addEventListener('click', () => this.switchToTab(tab.id));
@@ -254,6 +260,8 @@ export class TTYDTerminalPanel {
             align-items: center;
             gap: 4px;
             position: relative;
+            flex-shrink: 0;
+            white-space: nowrap;
         `;
         
         // Add click handler for tab switching
@@ -314,6 +322,9 @@ export class TTYDTerminalPanel {
         
         // Switch to the new tab
         this.switchToTab(tab.id);
+        
+        // Update navigation arrows after adding tab
+        setTimeout(() => this.updateNavigationArrows(), 50);
     }
 
     private switchToTab(tabId: string): void {
@@ -350,6 +361,36 @@ export class TTYDTerminalPanel {
         }
 
         this.activeTabId = tabId;
+        
+        // Auto-scroll to show the active tab
+        this.scrollToTab(tabId);
+    }
+    
+    private scrollToTab(tabId: string): void {
+        const tabBtn = document.getElementById(`tab-btn-${tabId}`);
+        const wrapper = document.querySelector('.isolated-terminal-tabs-wrapper') as HTMLElement;
+        
+        if (!tabBtn || !wrapper) return;
+        
+        const tabLeft = tabBtn.offsetLeft;
+        const tabRight = tabLeft + tabBtn.offsetWidth;
+        const wrapperWidth = wrapper.offsetWidth;
+        const currentScroll = this.tabScrollOffset;
+        const visibleLeft = currentScroll;
+        const visibleRight = currentScroll + wrapperWidth;
+        
+        // If tab is not fully visible, scroll to show it
+        if (tabLeft < visibleLeft) {
+            // Scroll left to show the tab
+            this.tabScrollOffset = Math.max(0, tabLeft - 10); // 10px padding
+            this.tabsContainer.style.transform = `translateX(-${this.tabScrollOffset}px)`;
+            this.updateNavigationArrows();
+        } else if (tabRight > visibleRight) {
+            // Scroll right to show the tab
+            this.tabScrollOffset = Math.max(0, tabRight - wrapperWidth + 10); // 10px padding
+            this.tabsContainer.style.transform = `translateX(-${this.tabScrollOffset}px)`;
+            this.updateNavigationArrows();
+        }
     }
 
     private async closeTab(tabId: string): Promise<void> {
@@ -392,6 +433,9 @@ export class TTYDTerminalPanel {
                 this.switchToTab(remainingTabs[0]);
             }
         }
+        
+        // Update navigation arrows after removing tab
+        setTimeout(() => this.updateNavigationArrows(), 50);
     }
 
     // Public method to launch AI tool in terminal
@@ -412,6 +456,151 @@ export class TTYDTerminalPanel {
     // Get current active terminal ID
     public getActiveTerminalId(): string | null {
         return this.activeTabId;
+    }
+    
+    // Set up tab navigation arrows
+    private setupTabNavigation(): void {
+        const leftArrow = document.getElementById('tab-nav-left');
+        const rightArrow = document.getElementById('tab-nav-right');
+        const wrapper = document.querySelector('.isolated-terminal-tabs-wrapper') as HTMLElement;
+        
+        if (!leftArrow || !rightArrow || !wrapper) {
+            console.error('[TTYDTerminalPanel] Tab navigation elements not found');
+            return;
+        }
+        
+        // Add arrow hover effects
+        leftArrow.addEventListener('mouseenter', () => {
+            if (this.tabScrollOffset > 0) {
+                leftArrow.style.color = '#cccccc';
+            }
+        });
+        
+        leftArrow.addEventListener('mouseleave', () => {
+            leftArrow.style.color = '#969696';
+        });
+        
+        rightArrow.addEventListener('mouseenter', () => {
+            rightArrow.style.color = '#cccccc';
+        });
+        
+        rightArrow.addEventListener('mouseleave', () => {
+            rightArrow.style.color = '#969696';
+        });
+        
+        // Arrow click handlers
+        leftArrow.addEventListener('click', () => {
+            this.scrollTabs('left');
+        });
+        
+        rightArrow.addEventListener('click', () => {
+            this.scrollTabs('right');
+        });
+        
+        // Check if arrows are needed on resize
+        const resizeObserver = new ResizeObserver(() => {
+            this.updateNavigationArrows();
+        });
+        
+        resizeObserver.observe(wrapper);
+        resizeObserver.observe(this.tabsContainer);
+        
+        // Initial check
+        setTimeout(() => this.updateNavigationArrows(), 100);
+        
+        // Add keyboard shortcuts for tab navigation
+        document.addEventListener('keydown', (e) => {
+            // Ctrl/Cmd + Shift + Left/Right to navigate tabs
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    this.switchToPreviousTab();
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    this.switchToNextTab();
+                }
+            }
+        });
+    }
+    
+    private switchToPreviousTab(): void {
+        const tabIds = Array.from(this.tabs.keys());
+        const currentIndex = tabIds.indexOf(this.activeTabId || '');
+        if (currentIndex > 0) {
+            this.switchToTab(tabIds[currentIndex - 1]);
+        }
+    }
+    
+    private switchToNextTab(): void {
+        const tabIds = Array.from(this.tabs.keys());
+        const currentIndex = tabIds.indexOf(this.activeTabId || '');
+        if (currentIndex >= 0 && currentIndex < tabIds.length - 1) {
+            this.switchToTab(tabIds[currentIndex + 1]);
+        }
+    }
+    
+    private scrollTabs(direction: 'left' | 'right'): void {
+        const wrapper = document.querySelector('.isolated-terminal-tabs-wrapper') as HTMLElement;
+        if (!wrapper) return;
+        
+        const wrapperWidth = wrapper.offsetWidth;
+        const scrollAmount = Math.floor(wrapperWidth * 0.8); // Scroll 80% of visible width
+        
+        if (direction === 'left') {
+            this.tabScrollOffset = Math.max(0, this.tabScrollOffset - scrollAmount);
+        } else {
+            const maxScroll = this.tabsContainer.scrollWidth - wrapperWidth;
+            this.tabScrollOffset = Math.min(maxScroll, this.tabScrollOffset + scrollAmount);
+        }
+        
+        this.tabsContainer.style.transform = `translateX(-${this.tabScrollOffset}px)`;
+        this.updateNavigationArrows();
+    }
+    
+    private updateNavigationArrows(): void {
+        const leftArrow = document.getElementById('tab-nav-left');
+        const rightArrow = document.getElementById('tab-nav-right');
+        const wrapper = document.querySelector('.isolated-terminal-tabs-wrapper') as HTMLElement;
+        
+        if (!leftArrow || !rightArrow || !wrapper) return;
+        
+        const containerWidth = this.tabsContainer.scrollWidth;
+        const wrapperWidth = wrapper.offsetWidth;
+        const needsNavigation = containerWidth > wrapperWidth;
+        
+        if (needsNavigation) {
+            // Show arrows
+            leftArrow.style.display = 'flex';
+            rightArrow.style.display = 'flex';
+            
+            // Enable/disable based on scroll position
+            if (this.tabScrollOffset <= 0) {
+                leftArrow.style.opacity = '0.3';
+                leftArrow.style.cursor = 'default';
+                leftArrow.style.pointerEvents = 'none';
+            } else {
+                leftArrow.style.opacity = '1';
+                leftArrow.style.cursor = 'pointer';
+                leftArrow.style.pointerEvents = 'auto';
+            }
+            
+            const maxScroll = containerWidth - wrapperWidth;
+            if (this.tabScrollOffset >= maxScroll) {
+                rightArrow.style.opacity = '0.3';
+                rightArrow.style.cursor = 'default';
+                rightArrow.style.pointerEvents = 'none';
+            } else {
+                rightArrow.style.opacity = '1';
+                rightArrow.style.cursor = 'pointer';
+                rightArrow.style.pointerEvents = 'auto';
+            }
+        } else {
+            // Hide arrows when not needed
+            leftArrow.style.display = 'none';
+            rightArrow.style.display = 'none';
+            this.tabScrollOffset = 0;
+            this.tabsContainer.style.transform = 'translateX(0)';
+        }
     }
 }
 

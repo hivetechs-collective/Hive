@@ -499,9 +499,27 @@ document.body.innerHTML = `
       
       <!-- Terminal tabs header -->
       <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c;">
-        <div class="isolated-terminal-tabs" id="isolated-terminal-tabs" style="flex: 1; display: flex; align-items: center; overflow-x: auto;">
-          <!-- Tabs will be inserted here -->
+        <!-- Left arrow for tab navigation -->
+        <button class="tab-nav-arrow" id="tab-nav-left" title="Scroll tabs left" style="display: none; padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px; height: 100%;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+            <path d="M8 2 L4 6 L8 10" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+        </button>
+        
+        <!-- Tab container with overflow hidden -->
+        <div class="isolated-terminal-tabs-wrapper" style="flex: 1; position: relative; overflow: hidden;">
+          <div class="isolated-terminal-tabs" id="isolated-terminal-tabs" style="display: flex; align-items: center; transition: transform 0.3s ease; white-space: nowrap;">
+            <!-- Tabs will be inserted here -->
+          </div>
         </div>
+        
+        <!-- Right arrow for tab navigation -->
+        <button class="tab-nav-arrow" id="tab-nav-right" title="Scroll tabs right" style="display: none; padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px; height: 100%;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+            <path d="M4 2 L8 6 L4 10" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+        </button>
+        
         <button class="isolated-terminal-new-tab" id="isolated-terminal-new-tab" title="New Terminal" style="padding: 0 10px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 18px;">+</button>
       </div>
       
