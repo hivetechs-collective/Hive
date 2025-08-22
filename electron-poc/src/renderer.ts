@@ -492,13 +492,13 @@ document.body.innerHTML = `
     <!-- Isolated Terminal Panel (modeled after consensus panel) -->
     <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="width: 400px; background: #1e1e1e; display: flex; flex-direction: column; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30; position: relative;">
       <!-- Collapse button for entire panel -->
-      <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel" style="position: absolute; left: 5px; top: 5px; z-index: 100; width: 20px; height: 20px; padding: 0; background: #007ACC; border: none; color: white; cursor: pointer; font-size: 16px; line-height: 1; border-radius: 2px;">−</button>
+      <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel" style="position: absolute; left: 5px; top: 5px; z-index: 1000; width: 20px; height: 20px; padding: 0; background: #007ACC; border: none; color: white; cursor: pointer; font-size: 16px; line-height: 1; border-radius: 2px;">−</button>
       
       <!-- Left resize handle (like consensus panel) -->
       <div class="resize-handle vertical-resize" id="isolated-terminal-resize" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: ew-resize; z-index: 10;"></div>
       
       <!-- Terminal tabs header -->
-      <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c;">
+      <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c; padding-left: 30px;">
         <!-- Left arrow for tab navigation -->
         <button class="tab-nav-arrow" id="tab-nav-left" title="Scroll tabs left" style="display: none; padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px; height: 100%;">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
