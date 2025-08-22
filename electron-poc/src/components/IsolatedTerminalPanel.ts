@@ -118,10 +118,12 @@ export class IsolatedTerminalPanel {
     }
 
     private async createTerminalTab(): Promise<void> {
-        const tabId = `terminal-${this.terminalCounter++}`;
+        // Use timestamp suffix to ensure unique IDs even after counter reset
+        const terminalNum = this.terminalCounter++;
+        const tabId = `terminal-${terminalNum}-${Date.now()}`;
         const tab: TerminalTab = {
             id: tabId,
-            title: `Terminal ${this.terminalCounter - 1}`,
+            title: `Terminal ${terminalNum}`,
             type: 'terminal',
             isActive: false
         };
@@ -393,8 +395,9 @@ export class IsolatedTerminalPanel {
             this.tabs.delete(tabId);
 
             // Reset terminal counter if only system-log remains
+            // Check for any terminal tabs (terminal-N-timestamp format)
             const remainingTerminals = Array.from(this.tabs.keys()).filter(id => 
-                id !== 'system-log' && id.startsWith('terminal-')
+                id.startsWith('terminal-') && !id.startsWith('terminal-ai-tool-')
             );
             if (remainingTerminals.length === 0) {
                 this.terminalCounter = 1;
