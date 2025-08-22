@@ -1971,13 +1971,15 @@ public async launch(toolId: string, projectPath: string): Promise<void> {
 }
 ```
 
-### Integrated Terminal System ✅ IMPLEMENTED
+### Integrated Terminal System 🔄 TRANSITIONING TO TTYD
 
 #### Vision
 Transform the fixed bottom console into a powerful tabbed terminal system where users can run multiple AI tools simultaneously, each in its own named tab, alongside regular terminal sessions. This creates a unified workspace where all AI assistants are immediately accessible without window switching.
 
-#### Implementation Status: WORKING
-The terminal system is now fully functional with xterm.js UI and node-pty backend process management. Users can create multiple terminal tabs and launch AI tools directly within the integrated terminal panel.
+**Original Vision Alignment**: The ttyd approach actually fulfills our original vision better than xterm.js ever could. By providing real terminals that can handle any TUI application perfectly, we achieve the seamless AI tool integration we envisioned - where Claude Code, Aider, and other CLI tools work flawlessly within our IDE tabs.
+
+#### Implementation Status: TRANSITIONING TO TTYD
+The terminal system is being redesigned to use ttyd (terminal server) instead of xterm.js to provide real terminal emulation that properly handles sophisticated TUI applications like Claude Code. This approach delivers better compatibility with minimal maintenance overhead.
 
 #### Terminal Tab Architecture
 
@@ -2050,87 +2052,123 @@ When Claude tab is active:
 
 #### Implementation Architecture
 
-**Core Technologies**:
+**Core Technologies (TTYD Approach)**:
 ```typescript
 interface TerminalSystemDependencies {
-  'xterm': '^5.0.0',                    // Terminal emulator
-  'xterm-addon-fit': '^0.7.0',          // Auto-resize
-  'xterm-addon-web-links': '^0.8.0',    // Clickable links
-  'xterm-addon-search': '^0.12.0',      // Search in terminal
-  'node-pty': '^1.0.0',                 // Pseudo-terminal (CRITICAL: See implementation notes)
-  '@xterm/addon-serialize': '^0.9.0'    // Session persistence
+  'ttyd': 'latest',                      // Terminal server providing real terminals
+  'websocket': '^8.0.0',                 // WebSocket connection to ttyd
+  'node-pty': '^1.0.0',                  // For ttyd process management
+  'http-proxy': '^1.18.1',               // Proxy ttyd instances to tabs
 }
 ```
 
-#### 🚨 CRITICAL IMPLEMENTATION DETAILS
+**Why TTYD Over xterm.js**:
+1. **Real Terminal Emulation**: ttyd provides actual terminal processes, not JavaScript emulation
+2. **Perfect TUI Support**: Handles Claude Code, vim, tmux, and other TUI apps flawlessly
+3. **Zero Rendering Issues**: No % characters, no duplicate UI, no cursor problems
+4. **Low Maintenance**: Battle-tested solution used in production environments
+5. **Native Performance**: Direct terminal output without JavaScript translation overhead
 
-**Why Terminals Work Now - The Complete Solution**:
+#### 🚨 TTYD Terminal Server Architecture
 
-1. **Native Module Compilation**: node-pty MUST be compiled for the exact Electron version
-   ```bash
-   npx electron-rebuild  # Run after npm install and any Electron updates
+**How TTYD Integration Works**:
+
+1. **Terminal Server Instances**: Each tab runs its own ttyd instance
+   ```typescript
+   // Main process spawns ttyd for each terminal tab
+   const ttydProcess = spawn('ttyd', [
+     '--port', '0',           // Let OS assign port
+     '--once',                 // Single connection per instance
+     '--writable',            // Allow input
+     '--check-origin', 'off', // Allow Electron webview connection
+     '/bin/zsh'               // Shell to run
+   ]);
    ```
 
-2. **Webpack Configuration**: node-pty CANNOT be bundled by webpack
+2. **Dynamic Port Management**: Each ttyd gets a unique port
    ```typescript
-   // webpack.main.config.ts
-   externals: {
-     'node-pty': 'commonjs node-pty'  // Critical: Mark as external
+   class TTYDManager {
+     private instances: Map<string, TTYDInstance> = new Map();
+     private portPool: PortManager = new PortManager(7000, 8000);
+     
+     async createTerminal(tabId: string): Promise<string> {
+       const port = await this.portPool.getAvailablePort();
+       const instance = await this.spawnTTYD(port);
+       this.instances.set(tabId, instance);
+       return `http://localhost:${port}`;
+     }
    }
    ```
 
-3. **Working Directory**: NEVER use root (/) as working directory
+3. **WebView Integration**: Each tab embeds ttyd via webview
    ```typescript
-   // Always use user's home or project directory
-   const cwd = options.cwd || process.env.HOME || '/Users/veronelazio';
+   // Renderer process creates webview for each terminal tab
+   const terminalWebView = document.createElement('webview');
+   terminalWebView.src = ttydUrl;  // http://localhost:7001
+   terminalWebView.nodeintegration = false;
+   terminalWebView.style.width = '100%';
+   terminalWebView.style.height = '100%';
+   tabContent.appendChild(terminalWebView);
    ```
 
-4. **Shell Selection**: Use system shells without login flag initially
+4. **Seamless Tab Experience**: Appears as native terminal tabs
+   ```
+   Electron App → Tab Manager → TTYDManager → Multiple TTYD Instances
+                       ↓              ↓                ↓
+                  Tab UI Layer   Port Manager    WebView per Tab
+   ```
+
+5. **AI Tool Launch**: Direct command execution in real terminals
    ```typescript
-   // macOS: Use /bin/zsh or /bin/bash
-   // Avoid -l flag initially, add if needed for PATH setup
-   const shell = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash';
-   const args = [];  // Start simple, add flags if needed
-   ```
+   async launchClaudeCode(tabId: string) {
+     const ttydUrl = await this.createTerminal(tabId);
+     const webview = this.createWebView(ttydUrl);
+     
+     // Wait for terminal ready, then send command
+     webview.addEventListener('dom-ready', () => {
+       webview.executeJavaScript(`
+         // Send 'claude' command to terminal
+         window.term.paste('claude\\n');
+       `);
+     });
+   }
 
-5. **IPC Architecture**: Three-layer communication
-   ```
-   Renderer (xterm.js) ↔ Preload (IPC Bridge) ↔ Main (node-pty)
-   ```
-
-**Service Architecture**:
+**Service Architecture (TTYD-Based)**:
 ```typescript
-class IntegratedTerminalService {
-  private terminals: Map<string, TerminalInstance>;
+class TTYDTerminalService {
+  private terminals: Map<string, TTYDTerminalInstance>;
   private activeTerminalId: string;
   private terminalCounter: number = 1;
+  private ttydManager: TTYDManager;
   
   // Terminal Management
-  createAIToolTerminal(toolId: string, toolName: string): TerminalInstance;
-  createGenericTerminal(): TerminalInstance;
-  closeTerminal(terminalId: string): Promise<boolean>;
+  async createAIToolTerminal(toolId: string, toolName: string): Promise<TTYDTerminalInstance>;
+  async createGenericTerminal(): Promise<TTYDTerminalInstance>;
+  async closeTerminal(terminalId: string): Promise<boolean>;
   switchToTerminal(terminalId: string): void;
   
   // AI Tool Integration
-  launchToolInTerminal(toolId: string, projectPath: string): Promise<void>;
+  async launchToolInTerminal(toolId: string, projectPath: string): Promise<void>;
   isToolRunning(toolId: string): boolean;
-  getToolTerminal(toolId: string): TerminalInstance | null;
+  getToolTerminal(toolId: string): TTYDTerminalInstance | null;
   
-  // Terminal Operations
+  // Terminal Operations via WebView
   sendCommand(terminalId: string, command: string): void;
   clearTerminal(terminalId: string): void;
-  resizeTerminal(terminalId: string, cols: number, rows: number): void;
+  resizeTerminal(terminalId: string): void;  // Auto-handled by webview
 }
 
-interface TerminalInstance {
+interface TTYDTerminalInstance {
   id: string;
   type: 'system-log' | 'ai-tool' | 'generic';
   title: string;
   icon?: string;
   toolId?: string;
-  xterm?: Terminal;        // Optional for system-log
-  pty?: IPty;              // Optional for system-log
-  isReadOnly?: boolean;    // True for system-log
+  ttydUrl?: string;         // URL to ttyd instance (e.g., http://localhost:7001)
+  webview?: Electron.WebviewTag;  // WebView element embedding ttyd
+  ttydProcess?: ChildProcess;     // ttyd server process
+  port?: number;            // Port ttyd is running on
+  isReadOnly?: boolean;     // True for system-log
   isActive: boolean;
   createdAt: Date;
   lastActivityAt: Date;
@@ -2218,23 +2256,22 @@ async function launchCliTool(toolId: string, mode: 'integrated' | 'external' = '
 }
 ```
 
-**2. Terminal Creation Process**:
+**2. Terminal Creation Process (TTYD)**:
 ```typescript
-createAIToolTerminal(toolId: string, toolName: string): TerminalInstance {
-  // Create xterm instance
-  const xterm = new Terminal({
-    fontSize: 14,
-    fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-    theme: {
-      background: '#1e1e1e',
-      foreground: '#cccccc'
-    },
-    cursorBlink: true
-  });
+async createAIToolTerminal(toolId: string, toolName: string): Promise<TTYDTerminalInstance> {
+  // Get available port for ttyd
+  const port = await this.ttydManager.getAvailablePort();
   
-  // Create PTY process
-  const pty = spawn(getShell(), [], {
-    name: 'xterm-256color',
+  // Spawn ttyd process
+  const ttydProcess = spawn('ttyd', [
+    '--port', port.toString(),
+    '--once',                    // Single connection
+    '--writable',               // Allow input
+    '--check-origin', 'off',    // Allow Electron connection
+    '--base-path', `/terminal/${toolId}`,
+    '--title', toolName,
+    '/bin/zsh'                  // Use zsh for AI tools
+  ], {
     cwd: currentOpenedFolder || process.env.HOME,
     env: {
       ...process.env,
@@ -2243,19 +2280,28 @@ createAIToolTerminal(toolId: string, toolName: string): TerminalInstance {
     }
   });
   
-  // Connect xterm to PTY
-  xterm.onData(data => pty.write(data));
-  pty.onData(data => xterm.write(data));
+  // Wait for ttyd to be ready
+  await this.waitForPort(port);
+  
+  // Create webview for terminal
+  const webview = document.createElement('webview');
+  webview.src = `http://localhost:${port}`;
+  webview.style.width = '100%';
+  webview.style.height = '100%';
+  webview.nodeintegration = false;
+  webview.partition = 'persist:terminals';  // Isolated storage
   
   // Create terminal instance
-  const instance: TerminalInstance = {
+  const instance: TTYDTerminalInstance = {
     id: `${toolId}-${Date.now()}`,
     type: 'ai-tool',
     title: toolName,
     icon: getToolIcon(toolId),
     toolId,
-    xterm,
-    pty,
+    ttydUrl: `http://localhost:${port}`,
+    webview,
+    ttydProcess,
+    port,
     isActive: true,
     createdAt: new Date(),
     lastActivityAt: new Date()
@@ -2553,47 +2599,97 @@ When tabs exceed width:
 
 #### Implementation Status & Next Steps
 
-**✅ COMPLETED - Terminal Infrastructure**
-- xterm.js and node-pty installed and configured
-- Terminal IPC handlers implemented in main process
-- Tab system with dynamic terminal creation
-- Working PTY process management
-- Data flow between renderer and main process
-- Webpack configured to handle native modules
+**🔄 TRANSITIONING TO TTYD ARCHITECTURE**
 
-**Current Implementation Files**:
-- `src/terminal-ipc-handlers.ts` - Main process terminal management
-- `src/components/IsolatedTerminalPanel.ts` - Terminal UI with tabs
-- `src/preload.ts` - Secure IPC bridge for terminal API
-- `webpack.main.config.ts` - Critical: node-pty marked as external
+**Why We're Moving to TTYD**:
+1. **Claude Code Compatibility**: Perfect rendering of TUI applications without % characters or duplicate UI
+2. **Zero Maintenance**: Battle-tested terminal server used in production environments
+3. **True Terminal Emulation**: Real PTY processes, not JavaScript emulation
+4. **Native Performance**: Direct terminal I/O without translation overhead
+5. **Simplified Codebase**: Remove complex xterm.js workarounds and rendering hacks
 
-**🚧 IN PROGRESS - What's Needed Next**
+**TTYD Implementation Advantages**:
+- **Perfect TUI Support**: vim, tmux, Claude Code, and all cursor-based apps work flawlessly
+- **Isolation**: Each tab runs in its own ttyd instance with separate port
+- **Security**: WebView sandboxing with no nodeintegration
+- **Seamless Integration**: Appears as native tabs within the IDE
+- **Auto-Command Execution**: Can send commands directly to terminal on launch
 
-**Phase 1: AI Tool Integration** (Priority 1)
+**Current Implementation Files (To Be Updated)**:
+- `src/terminal-ipc-handlers.ts` → Will manage ttyd processes instead of node-pty
+- `src/components/IsolatedTerminalPanel.ts` → Will embed webviews instead of xterm.js
+- `src/preload.ts` → Simplified IPC for ttyd management
+- `webpack.main.config.ts` → Remove xterm dependencies, add ttyd management
+
+**TTYD Installation & Setup Requirements**:
+
+```bash
+# macOS Installation
+brew install ttyd
+
+# Linux Installation
+sudo apt-get install ttyd  # Debian/Ubuntu
+sudo yum install ttyd       # RHEL/CentOS
+
+# Windows Installation
+# Download binary from https://github.com/tsl0922/ttyd/releases
+```
+
+**TTYD Integration Steps**:
+
+1. **Install ttyd binary** (can be bundled with app or installed separately)
+2. **Port Management Service**: Create service to allocate ports for each terminal
+3. **WebView Implementation**: Replace xterm.js divs with webview elements
+4. **Process Management**: Spawn and manage ttyd processes per tab
+5. **Command Injection**: Send initial commands to terminals for AI tools
+6. **Cleanup**: Properly terminate ttyd processes when tabs close
+
+**🚧 IN PROGRESS - Implementation Phases**
+
+**Phase 1: TTYD Foundation** (Priority 1 - IMMEDIATE)
+- Install and bundle ttyd with application
+- Create TTYDManager service for process management
+- Implement port allocation system (7000-8000 range)
+- Replace terminal div containers with webview elements
+- Test basic terminal creation and display
+
+**Phase 2: AI Tool Integration** (Priority 2)
 - Connect "Launch" buttons to create named terminal tabs
-- Auto-execute tool commands (claude, gemini, etc.)
+- Auto-execute tool commands (claude, gemini, etc.) via ttyd
 - Tool-specific tab icons and names
 - Working directory management for tool context
 
-**Phase 2: Terminal Enhancements** (Priority 2)
-- Dynamic home directory detection (remove hardcoded paths)
-- Login shell support for full PATH environment
-- Terminal resize handling with FitAddon
-- Copy/paste support with keyboard shortcuts
-- Search within terminal output
+**Phase 3: Terminal Enhancements** (Priority 3)
+- WebView resize handling (automatic with ttyd)
+- Copy/paste support (native in ttyd terminals)
+- Search within terminal output (browser find functionality)
+- Terminal themes via ttyd CSS customization
 
-**Phase 3: Professional Features** (Priority 3)
-- Terminal session persistence across app restarts
-- Context menus for tabs (restart, clear, copy)
+**Phase 4: Professional Features** (Priority 4)
+- Terminal session persistence (ttyd reconnection)
+- Context menus for tabs (restart, clear, reload)
 - Keyboard shortcuts (Ctrl+T new, Ctrl+W close)
-- Split terminal view support
-- Terminal themes and customization
+- Split terminal view with multiple webviews
+- Custom ttyd themes and fonts
 
-**Phase 4: Stability & Polish** (Priority 4)
-- Error recovery for crashed terminals
-- Better error messages for users
-- Terminal performance optimization
-- Debug logging system
+**Phase 5: Stability & Polish** (Priority 5)
+- Error recovery for crashed ttyd instances
+- Health checks for ttyd processes
+- Automatic port reclamation
+- Debug logging for ttyd management
+
+**Key Benefits of TTYD Over xterm.js**:
+
+| Feature | xterm.js | TTYD |
+|---------|----------|------|
+| **Claude Code Rendering** | ❌ Broken (% chars, duplicate UI) | ✅ Perfect |
+| **vim/tmux Support** | ⚠️ Limited | ✅ Full |
+| **Maintenance Burden** | 🔴 High (constant fixes) | 🟢 Low |
+| **True Terminal** | ❌ JavaScript emulation | ✅ Real PTY |
+| **Performance** | ⚠️ JavaScript overhead | ✅ Native |
+| **TUI Applications** | ❌ Many issues | ✅ All work |
+| **Cursor Control** | ⚠️ Buggy | ✅ Perfect |
+| **ANSI Support** | ⚠️ Partial | ✅ Complete |
 
 #### Configuration Options
 
