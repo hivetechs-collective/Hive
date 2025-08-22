@@ -1,6 +1,7 @@
 /**
  * TTYDManager - Manages ttyd terminal server instances for tabbed terminals
  * Works with ProcessManager for port allocation and process lifecycle
+ * Updated: 12:49 PM - Added debug logging
  */
 
 import { ChildProcess, spawn } from 'child_process';
@@ -65,10 +66,11 @@ export class TTYDManager extends EventEmitter {
     logger.info(`[TTYDManager] Creating terminal: ${config.title}`);
     
     // Allocate port through ProcessManager's PortManager
+    // Using 8100-8200 range to avoid conflicts with system services (e.g., ControlCenter uses 7000)
     const port = await PortManager.allocatePort({
-      port: 7000,  // Start from 7000
+      port: 8100,  // Start from 8100 to avoid conflicts
       serviceName: `ttyd-${config.id}`,
-      alternativePorts: Array.from({ length: 100 }, (_, i) => 7000 + i)  // 7000-7099 range
+      alternativePorts: Array.from({ length: 100 }, (_, i) => 8100 + i)  // 8100-8199 range
     });
     
     logger.info(`[TTYDManager] Allocated port ${port} for ${config.title}`);
@@ -76,6 +78,7 @@ export class TTYDManager extends EventEmitter {
     // Prepare ttyd arguments
     const ttydArgs = [
       '--port', port.toString(),
+      '--interface', '127.0.0.1',  // Bind to localhost only for security
       '--writable',              // Allow input
       '--check-origin', 'off',   // Allow Electron webview connection
       '--base-path', `/terminal/${config.id}`,
@@ -101,6 +104,10 @@ export class TTYDManager extends EventEmitter {
       // Just start the shell normally
       ttydArgs.push('--', shell);
     }
+    
+    // Log the full command for debugging
+    logger.info(`[TTYDManager] Spawning ttyd: ${this.ttydBinaryPath} ${ttydArgs.join(' ')}`);
+    console.log(`[TTYDManager] Spawning ttyd: ${this.ttydBinaryPath} ${ttydArgs.join(' ')}`);
     
     // Spawn ttyd process
     const ttydProcess = spawn(this.ttydBinaryPath, ttydArgs, {
@@ -158,6 +165,9 @@ export class TTYDManager extends EventEmitter {
       ttydProcess.stderr.on('data', (data) => {
         // ttyd logs to stderr, but most of it is just info
         const message = data.toString();
+        // Always log stderr for debugging ttyd startup issues
+        logger.error(`[TTYDManager] ${config.title} stderr:`, message);
+        console.error(`[TTYDManager] ${config.title} stderr:`, message);
         if (message.includes('error') || message.includes('Error')) {
           logger.error(`[TTYDManager] ${config.title} stderr:`, message);
         } else {
