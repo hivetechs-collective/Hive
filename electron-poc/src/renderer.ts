@@ -2584,88 +2584,72 @@ async function updateCliTool(toolId: string): Promise<void> {
 async function launchCliTool(toolId: string): Promise<void> {
     console.log(`[CLI Tools] Launch requested for ${toolId}`);
     
-    // Check if we have a project folder open
-    if (!currentOpenedFolder) {
-        // No folder open - prompt user to select one
-        console.log('[CLI Tools] No folder open, prompting user to select...');
-        
-        const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
-        if (card) {
-            const statusDiv = card.querySelector('.tool-status') as HTMLElement;
-            if (statusDiv) {
-                statusDiv.innerHTML = '⚠️ Please open a project folder first';
-                statusDiv.style.color = '#FF9800';
-            }
-        }
-        
-        // Open folder dialog
-        const result = await window.electronAPI.showOpenDialog({
-            properties: ['openDirectory']
-        });
-        if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
-            currentOpenedFolder = result.filePaths[0];
-            (window as any).currentOpenedFolder = currentOpenedFolder;
-            await handleOpenFolder(result.filePaths[0]);
-        } else {
-            return; // User cancelled
-        }
-    }
-    
     // Show launching status  
     const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
     if (card) {
         const statusDiv = card.querySelector('.tool-status') as HTMLElement;
         if (statusDiv) {
-            statusDiv.innerHTML = '🚀 Launching...';
+            statusDiv.innerHTML = '📂 Select a folder to launch in...';
             statusDiv.style.color = '#2196F3';
         }
     }
     
-    // Use the isolated terminal panel to launch the tool
-    const isolatedTerminal = (window as any).isolatedTerminal;
-    if (!isolatedTerminal) {
-        console.error('[CLI Tools] Isolated terminal not initialized');
-        alert('Terminal system not ready. Please try again.');
-        return;
-    }
-    
-    // Get tool name for display
-    let toolName = '';
-    switch (toolId) {
-        case 'claude-code': toolName = 'Claude Code'; break;
-        case 'gemini-cli': toolName = 'Gemini CLI'; break;
-        case 'qwen-code': toolName = 'Qwen Code'; break;
-        case 'aider': toolName = 'Aider'; break;
-        case 'continue': toolName = 'Continue'; break;
-        default: toolName = toolId;
-    }
-    
     try {
-        // Create a terminal tab for this tool
-        const tabId = isolatedTerminal.createToolTerminal(toolId, toolName, currentOpenedFolder);
+        // Call the IPC handler which will:
+        // 1. Show folder selection dialog
+        // 2. Check database for previous launches
+        // 3. Determine command (claude vs claude --resume)
+        // 4. Send event to create terminal
+        const electronAPI = window.electronAPI as any;
+        const result = await electronAPI.launchCliTool(toolId);
         
-        console.log(`[CLI Tools] ${toolId} terminal created with tab ${tabId} in ${currentOpenedFolder}`);
+        if (result.success) {
+            console.log(`[CLI Tools] ${toolId} launched successfully with command: ${result.command}`);
+            
+            // Update status to show it's running
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    const resumeText = result.command?.includes('--resume') ? ' (resumed)' : '';
+                    statusDiv.innerHTML = `✅ Launched in ${result.path}${resumeText}`;
+                    statusDiv.style.color = '#4CAF50';
+                    
+                    // Reset status after 5 seconds
+                    setTimeout(() => {
+                        renderCliToolsPanel();
+                    }, 5000);
+                }
+            }
+        } else if (result.error) {
+            console.log(`[CLI Tools] Launch cancelled or failed: ${result.error}`);
+            
+            // Reset status
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    if (result.error === 'Folder selection canceled') {
+                        // User cancelled - just refresh the panel
+                        renderCliToolsPanel();
+                    } else {
+                        statusDiv.innerHTML = `❌ ${result.error}`;
+                        statusDiv.style.color = '#f44336';
+                        setTimeout(() => {
+                            renderCliToolsPanel();
+                        }, 3000);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`[CLI Tools] Error launching ${toolId}:`, error);
         
-        // Update status to show it's running
         if (card) {
             const statusDiv = card.querySelector('.tool-status') as HTMLElement;
             if (statusDiv) {
-                statusDiv.innerHTML = `✅ Running in integrated terminal`;
-                statusDiv.style.color = '#4CAF50';
-                
-                // Reset status after 3 seconds
-                setTimeout(() => {
-                    renderCliToolsPanel();
-                }, 3000);
+                statusDiv.innerHTML = `❌ Launch failed: ${error}`;
+                statusDiv.style.color = '#f44336';
             }
         }
-        
-        // TODO: Actually launch the tool process via IPC
-        // For now, the terminal shows a simulated launch
-        
-    } catch (error) {
-        console.error(`[CLI Tools] Error creating terminal for ${toolId}:`, error);
-        alert(`Failed to create terminal: ${error}`);
     }
 }
 
@@ -3063,6 +3047,22 @@ setTimeout(() => {
     if (isolatedTerminalPanel) {
         (window as any).isolatedTerminal = ttydTerminalPanel.initialize(isolatedTerminalPanel);
         console.log('✅ TTYD Terminal Panel initialized');
+        
+        // Listen for AI tool launch events from main process
+        window.electronAPI.on('launch-ai-tool-terminal', (data: {
+            toolId: string;
+            toolName: string;
+            command: string;
+            cwd: string;
+        }) => {
+            console.log('📦 Launching AI tool terminal:', data);
+            // Create a terminal with the AI tool
+            ttydTerminalPanel.createTerminal('ai-tool', {
+                toolId: data.toolId,
+                command: data.command,
+                cwd: data.cwd
+            });
+        });
         
         // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
         const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');

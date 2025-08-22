@@ -98,31 +98,6 @@ const initDatabase = () => {
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
   )`);
-
-  // Create AI tools launch tracking table
-  db.run(`CREATE TABLE IF NOT EXISTS ai_tool_launches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tool_id TEXT NOT NULL,
-    repository_path TEXT NOT NULL,
-    launch_count INTEGER DEFAULT 1,
-    first_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    last_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    status TEXT DEFAULT 'active',
-    session_metadata TEXT,
-    user_id TEXT DEFAULT 'default',
-    tool_version TEXT,
-    launch_context TEXT,
-    UNIQUE(tool_id, repository_path, user_id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-  )`);
-
-  // Create indexes for AI tools table
-  db.run(`CREATE INDEX IF NOT EXISTS idx_ai_tool_launches_lookup 
-    ON ai_tool_launches(tool_id, repository_path)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_ai_tool_launches_recent 
-    ON ai_tool_launches(last_launched_at DESC)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_ai_tool_launches_active 
-    ON ai_tool_launches(status) WHERE status = 'active'`);
 };
 
 // Toggle to switch between implementations
@@ -1437,11 +1412,72 @@ const registerSimpleCliToolHandlers = () => {
     return [];
   });
   
-  // Launch CLI tool
-  ipcMain.handle('cli-tool-launch', async (_, toolId: string, projectPath: string) => {
-    logger.info(`[Main] Launching CLI tool: ${toolId} in ${projectPath}`);
-    // Launch is handled via terminal spawning
-    return { success: true };
+  // Launch CLI tool with folder selection and resume detection
+  ipcMain.handle('cli-tool-launch', async (_, toolId: string, projectPath?: string) => {
+    logger.info(`[Main] Launching CLI tool: ${toolId}${projectPath ? ` in ${projectPath}` : ''}`);
+    
+    try {
+      // If no project path provided, show folder selection dialog
+      let selectedPath = projectPath;
+      if (!selectedPath) {
+        const result = await dialog.showOpenDialog(mainWindow!, {
+          properties: ['openDirectory'],
+          title: `Select folder to launch ${toolId === 'claude-code' ? 'Claude Code' : toolId}`,
+          buttonLabel: 'Launch Here'
+        });
+        
+        if (result.canceled || !result.filePaths[0]) {
+          logger.info('[Main] User canceled folder selection');
+          return { success: false, error: 'Folder selection canceled' };
+        }
+        
+        selectedPath = result.filePaths[0];
+      }
+      
+      logger.info(`[Main] Selected folder: ${selectedPath}`);
+      
+      // Import the AI tools database
+      const { AIToolsDatabase } = await import('./services/AIToolsDatabase');
+      const aiToolsDb = AIToolsDatabase.getInstance();
+      
+      // Check if tool has been launched in this repository before
+      const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
+      
+      // Determine the command to run
+      let command: string;
+      if (toolId === 'claude-code') {
+        command = hasBeenLaunched ? 'claude --resume' : 'claude';
+      } else {
+        // For other tools, just use their base command (they may not support --resume)
+        command = toolId.replace('-cli', '').replace('-code', '');
+      }
+      
+      logger.info(`[Main] Using command: ${command} (previously launched: ${hasBeenLaunched})`);
+      
+      // Record this launch in the database
+      aiToolsDb.recordLaunch(toolId, selectedPath, {
+        context: {
+          resumeUsed: hasBeenLaunched,
+          launchTime: new Date().toISOString()
+        }
+      });
+      
+      // Send IPC to renderer to create a terminal tab with the tool
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('launch-ai-tool-terminal', {
+          toolId: toolId,
+          toolName: toolId === 'claude-code' ? 'Claude Code' : toolId,
+          command: command,
+          cwd: selectedPath
+        });
+      }
+      
+      logger.info(`[Main] AI tool launch event sent for ${toolId} in ${selectedPath}`);
+      return { success: true, path: selectedPath, command: command };
+    } catch (error: any) {
+      logger.error(`[Main] Failed to launch ${toolId}:`, error);
+      return { success: false, error: error.message };
+    }
   });
   
   // TODO: Implement progress events when installation logic is added
