@@ -25,15 +25,18 @@ let mainWindowRef: Electron.BrowserWindow | null = null;
  * Register all terminal-related IPC handlers
  */
 export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): void {
+  console.log('[TerminalIPC] Registering TTYD terminal handlers');
   logger.info('[TerminalIPC] Registering TTYD terminal handlers');
   
   // Skip if already registered
   if (handlersRegistered) {
+    console.log('[TerminalIPC] Terminal IPC handlers already registered, skipping');
     logger.info('[TerminalIPC] Terminal IPC handlers already registered, skipping');
     return;
   }
   handlersRegistered = true;
   mainWindowRef = mainWindow;
+  console.log('[TerminalIPC] Handlers registered, mainWindow set');
 
   // Create a new terminal
   ipcMain.handle('create-terminal-process', async (event: IpcMainInvokeEvent, options: {
@@ -44,6 +47,8 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
     env?: Record<string, string>;
     toolId?: string;
   }) => {
+    logger.info('[TerminalIPC] create-terminal-process called with options:', options);
+    
     try {
       // Generate ID if not provided
       const id = options.terminalId || `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -179,6 +184,7 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
     }
   });
 
+  console.log('[TerminalIPC] TTYD terminal handlers registered successfully');
   logger.info('[TerminalIPC] TTYD terminal handlers registered');
 }
 

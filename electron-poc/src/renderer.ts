@@ -69,10 +69,13 @@ import { VSCodeFileExplorer } from './vs-file-explorer';
 import { VSCodeExplorerExact } from './vscode-explorer-exact';
 import { EditorTabs } from './editor-tabs';
 import { StatusBar } from './status-bar';
-import { IsolatedTerminalPanel } from './components/IsolatedTerminalPanel';
+import { ttydTerminalPanel } from './components/TTYDTerminalPanel';
 
 // Current opened folder state
 let currentOpenedFolder: string | null = null;
+
+// Expose to window for TTYDTerminalPanel
+(window as any).currentOpenedFolder = currentOpenedFolder;
 
 // Add welcome view styles
 const addWelcomeStyles = () => {
@@ -2583,6 +2586,7 @@ async function launchCliTool(toolId: string): Promise<void> {
         });
         if (result && !result.canceled && result.filePaths && result.filePaths.length > 0) {
             currentOpenedFolder = result.filePaths[0];
+            (window as any).currentOpenedFolder = currentOpenedFolder;
             await handleOpenFolder(result.filePaths[0]);
         } else {
             return; // User cancelled
@@ -3039,8 +3043,8 @@ setTimeout(() => {
     // Initialize Isolated Terminal Panel
     const isolatedTerminalPanel = document.getElementById('isolated-terminal-panel');
     if (isolatedTerminalPanel) {
-        (window as any).isolatedTerminal = new IsolatedTerminalPanel(isolatedTerminalPanel);
-        console.log('✅ Isolated Terminal Panel initialized');
+        (window as any).isolatedTerminal = ttydTerminalPanel.initialize(isolatedTerminalPanel);
+        console.log('✅ TTYD Terminal Panel initialized');
         
         // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
         const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
@@ -3446,6 +3450,7 @@ async function handleOpenFolder(folderPath: string) {
         
         // Update the current opened folder state
         currentOpenedFolder = folderPath;
+        (window as any).currentOpenedFolder = currentOpenedFolder;
         
         // Update window title with folder name
         const folderName = folderPath.split('/').pop() || folderPath;
@@ -3601,6 +3606,7 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
         
         // Clear current folder
         currentOpenedFolder = null;
+        (window as any).currentOpenedFolder = currentOpenedFolder;
         
         // Reset localStorage if needed
         localStorage.removeItem('lastOpenedFolder');
@@ -3613,6 +3619,7 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
         console.log('[Menu] Close folder requested');
         // Reset the current opened folder
         currentOpenedFolder = null;
+        (window as any).currentOpenedFolder = currentOpenedFolder;
         
         // Reset window title
         document.title = 'Hive Consensus';

@@ -38,7 +38,13 @@ export class TTYDTerminalPanel {
         // Set up new tab button
         const newTabBtn = document.getElementById('isolated-terminal-new-tab');
         if (newTabBtn) {
-            newTabBtn.addEventListener('click', () => this.createTerminalTab());
+            console.log('[TTYDTerminalPanel] Found new tab button, adding listener');
+            newTabBtn.addEventListener('click', () => {
+                console.log('[TTYDTerminalPanel] New tab button clicked');
+                this.createTerminalTab();
+            });
+        } else {
+            console.error('[TTYDTerminalPanel] New tab button not found!');
         }
         
         // Listen for terminal creation events from main process
@@ -47,13 +53,13 @@ export class TTYDTerminalPanel {
     
     private setupIpcListeners(): void {
         // Listen for terminal creation from main process
-        window.electronAPI.onTerminalCreated((event: any, terminalInfo: any) => {
+        window.terminalAPI.onTerminalCreated((terminalInfo: any) => {
             console.log('[TTYDTerminalPanel] Terminal created:', terminalInfo);
             this.addTerminalTab(terminalInfo);
         });
         
         // Listen for terminal ready events
-        window.electronAPI.onTerminalReady((event: any, terminalId: string, url: string) => {
+        window.terminalAPI.onTerminalReady((terminalId: string, url: string) => {
             console.log('[TTYDTerminalPanel] Terminal ready:', terminalId, url);
             const tab = this.tabs.get(terminalId);
             if (tab && tab.webview) {
@@ -63,7 +69,7 @@ export class TTYDTerminalPanel {
         });
         
         // Listen for terminal close events
-        window.electronAPI.onTerminalExit((event: any, terminalId: string) => {
+        window.terminalAPI.onTerminalExit((terminalId: string) => {
             console.log('[TTYDTerminalPanel] Terminal exited:', terminalId);
             this.removeTab(terminalId);
         });
@@ -183,15 +189,19 @@ export class TTYDTerminalPanel {
 
     async createTerminalTab(toolId?: string, command?: string): Promise<void> {
         const terminalId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        console.log('[TTYDTerminalPanel] createTerminalTab called with toolId:', toolId, 'command:', command);
         
         try {
+            console.log('[TTYDTerminalPanel] Calling window.terminalAPI.createTerminalProcess...');
             // Request terminal creation from main process
-            const result = await window.electronAPI.createTerminalProcess({
+            const result = await window.terminalAPI.createTerminalProcess({
                 terminalId,
                 toolId,
                 command,
                 cwd: window.currentOpenedFolder || undefined
             });
+            
+            console.log('[TTYDTerminalPanel] createTerminalProcess result:', result);
             
             if (result.success && result.terminal) {
                 console.log('[TTYDTerminalPanel] Terminal created successfully:', result.terminal);
@@ -347,7 +357,7 @@ export class TTYDTerminalPanel {
 
         // Close the terminal in the backend
         try {
-            await window.electronAPI.killTerminalProcess(tabId);
+            await window.terminalAPI.killTerminalProcess(tabId);
         } catch (error) {
             console.error('[TTYDTerminalPanel] Error closing terminal:', error);
         }
