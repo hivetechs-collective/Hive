@@ -190,26 +190,76 @@ export class IsolatedTerminalPanel {
             // Import xterm and create a real terminal
             const { Terminal } = await import('xterm');
             const { FitAddon } = await import('xterm-addon-fit');
+            const { Unicode11Addon } = await import('@xterm/addon-unicode11');
+            const { WebLinksAddon } = await import('@xterm/addon-web-links');
             
-            // Create xterm.js terminal
+            // Create xterm.js terminal with proper ANSI support
             const terminal = new Terminal({
                 fontSize: 13,
                 fontFamily: 'Menlo, Monaco, "Courier New", monospace',
                 theme: {
                     background: '#1e1e1e',
                     foreground: '#cccccc',
-                    cursor: '#aeafad'
+                    cursor: '#aeafad',
+                    // Better ANSI color support for Claude Code
+                    black: '#000000',
+                    red: '#cc0000',
+                    green: '#4e9a06',
+                    yellow: '#c4a000',
+                    blue: '#3465a4',
+                    magenta: '#75507b',
+                    cyan: '#06989a',
+                    white: '#d3d7cf',
+                    brightBlack: '#555753',
+                    brightRed: '#ef2929',
+                    brightGreen: '#8ae234',
+                    brightYellow: '#fce94f',
+                    brightBlue: '#729fcf',
+                    brightMagenta: '#ad7fa8',
+                    brightCyan: '#34e2e2',
+                    brightWhite: '#eeeeec'
                 },
                 cursorBlink: true,
-                scrollback: 10000
+                scrollback: 10000,
+                // Better handling of control sequences
+                convertEol: true,  // Convert line endings properly
+                windowsMode: false,  // Use Unix-style line endings
+                macOptionIsMeta: true,  // For macOS Option key
+                allowProposedApi: true,  // Enable newer xterm.js features
+                // Proper handling of carriage returns for spinners
+                logLevel: 'off',  // Disable debug logging
+                fastScrollModifier: 'shift',  // Use shift for fast scroll
+                rightClickSelectsWord: true,
+                // Additional settings for better compatibility
+                letterSpacing: 0,  // Normal letter spacing
+                lineHeight: 1.0,  // Normal line height
+                cursorStyle: 'block',  // Block cursor like traditional terminals
+                cursorWidth: 1,
+                screenReaderMode: false,
+                // Shell integration
+                allowTransparency: false,
+                tabStopWidth: 8  // Standard tab width
             });
             
             // Add fit addon to make terminal fill container
             const fitAddon = new FitAddon();
             terminal.loadAddon(fitAddon);
             
+            // Add Unicode support for better character rendering
+            const unicode11Addon = new Unicode11Addon();
+            terminal.loadAddon(unicode11Addon);
+            
+            // Add web links support for clickable URLs
+            const webLinksAddon = new WebLinksAddon();
+            terminal.loadAddon(webLinksAddon);
+            
             // Open terminal in the tab's content element
             terminal.open(tab.element);
+            
+            // Activate Unicode version 11 support (type cast for compatibility)
+            unicode11Addon.activate(terminal as any);
+            
+            // Fit terminal to container
             fitAddon.fit();
             
             // Store terminal reference
@@ -402,6 +452,7 @@ export class IsolatedTerminalPanel {
         if (this.tabs.has(tabId)) {
             // Just switch to existing tab
             this.switchToTab(tabId);
+            console.log(`[IsolatedTerminalPanel] Tab ${tabId} already exists, switching to it`);
             return tabId;
         }
         
@@ -593,29 +644,76 @@ export class IsolatedTerminalPanel {
             throw new Error('Tab not found');
         }
         
+        // Check if terminal already exists for this tab
+        if ((tab as any).terminal) {
+            console.log(`[IsolatedTerminalPanel] Terminal already exists for ${tabId}, not creating a new one`);
+            return;
+        }
+        
         // Import xterm and create a real terminal
         const { Terminal } = await import('xterm');
         const { FitAddon } = await import('xterm-addon-fit');
+        const { Unicode11Addon } = await import('@xterm/addon-unicode11');
+        const { WebLinksAddon } = await import('@xterm/addon-web-links');
         
-        // Create xterm.js terminal
+        // Create xterm.js terminal with proper ANSI support
         const terminal = new Terminal({
             fontSize: 13,
             fontFamily: 'Menlo, Monaco, "Courier New", monospace',
             theme: {
                 background: '#1e1e1e',
                 foreground: '#cccccc',
-                cursor: '#aeafad'
+                cursor: '#aeafad',
+                // Better ANSI color support for Claude Code
+                black: '#000000',
+                red: '#cc0000',
+                green: '#4e9a06',
+                yellow: '#c4a000',
+                blue: '#3465a4',
+                magenta: '#75507b',
+                cyan: '#06989a',
+                white: '#d3d7cf',
+                brightBlack: '#555753',
+                brightRed: '#ef2929',
+                brightGreen: '#8ae234',
+                brightYellow: '#fce94f',
+                brightBlue: '#729fcf',
+                brightMagenta: '#ad7fa8',
+                brightCyan: '#34e2e2',
+                brightWhite: '#eeeeec'
             },
             cursorBlink: true,
-            scrollback: 10000
+            scrollback: 10000,
+            // Better handling of control sequences
+            convertEol: true,  // Convert line endings properly
+            windowsMode: false,  // Use Unix-style line endings
+            macOptionIsMeta: true,  // For macOS Option key
+            allowProposedApi: true,  // Enable newer xterm.js features
+            // Proper handling of carriage returns for spinners
+            logLevel: 'off',  // Disable debug logging
+            fastScrollModifier: 'shift',  // Use shift for fast scroll
+            rightClickSelectsWord: true
         });
         
         // Add fit addon to make terminal fill container
         const fitAddon = new FitAddon();
         terminal.loadAddon(fitAddon);
         
+        // Add Unicode support for better character rendering
+        const unicode11Addon = new Unicode11Addon();
+        terminal.loadAddon(unicode11Addon);
+        
+        // Add web links support for clickable URLs
+        const webLinksAddon = new WebLinksAddon();
+        terminal.loadAddon(webLinksAddon);
+        
         // Open terminal in the tab's content element
         terminal.open(tab.element);
+        
+        // Activate Unicode version 11 support (type cast for compatibility)
+        unicode11Addon.activate(terminal as any);
+        
+        // Fit terminal to container
         fitAddon.fit();
         
         // Store terminal reference

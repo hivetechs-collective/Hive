@@ -138,6 +138,13 @@ const initFileSystemManager = () => {
 };
 
 const createWindow = (): void => {
+  // Don't create duplicate windows
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    logger.info('[Main] Window already exists, focusing it');
+    mainWindow.focus();
+    return;
+  }
+
   // Create the browser window.
   mainWindow = new BrowserWindow({
     height: 600,
@@ -160,11 +167,9 @@ const createWindow = (): void => {
   // Open the DevTools.
   // mainWindow.webContents.openDevTools(); // Disabled to prevent warning overlay
   
-  // Register IPC handlers here after window creation
-  registerGitHandlers();
-  registerFileSystemHandlers();
+  // Register terminal handlers (needs mainWindow reference)
+  // This is safe to call multiple times as it updates the window reference
   registerTerminalHandlers(mainWindow);
-  // Memory service handlers will be registered later
   
   // Create application menu
   createApplicationMenu();
@@ -1429,6 +1434,12 @@ app.on('ready', async () => {
   // This ensures they're available when the renderer process starts
   registerMemoryServiceHandlers();
   
+  // Register other IPC handlers once at app startup (not in createWindow)
+  // This prevents duplicate handler registration errors
+  registerGitHandlers();
+  registerFileSystemHandlers();
+  registerDialogHandlers();
+  
   // Start all processes in PARALLEL for fast startup (2025 best practice)
   logger.info('[Main] 🚀 Starting all managed processes in parallel...');
   
@@ -1513,8 +1524,8 @@ app.on('ready', async () => {
   // initGitManager(); 
   createWindow();
   
-  // Register dialog handlers (Git and FileSystem handlers are already registered in createWindow)
-  registerDialogHandlers();
+  // Dialog handlers are now registered in createWindow
+  // registerDialogHandlers();  // Removed - already registered in createWindow
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

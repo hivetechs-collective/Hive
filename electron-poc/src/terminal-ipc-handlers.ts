@@ -95,7 +95,12 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
       PATH: enhancedPath,
       ...options.env,
       TERM: 'xterm-256color',
-      COLORTERM: 'truecolor'
+      COLORTERM: 'truecolor',
+      // Disable zsh's EOL marker that shows % for missing newlines
+      PROMPT_EOL_MARK: '',
+      // Better terminal compatibility
+      LANG: process.env.LANG || 'en_US.UTF-8',
+      LC_ALL: process.env.LC_ALL || 'en_US.UTF-8'
     };
 
     logger.info(`[Terminal] Creating shell: ${shell} in ${cwd}`);
