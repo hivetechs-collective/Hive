@@ -58,21 +58,18 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
       ];
       
       if (options.command && options.command !== 'bash' && options.command !== 'zsh' && options.command !== 'sh') {
-        // If a specific command is provided (like 'claude'), run it within a shell
-        shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
-        
-        // For known CLI tools, use their full paths
-        let commandToRun = options.command;
+        // If a specific command is provided (like 'claude'), run it directly
         if (options.command === 'claude') {
-          // Claude Code is typically at /opt/homebrew/bin/claude on M1 Macs
-          commandToRun = '/opt/homebrew/bin/claude';
-          logger.info(`[Terminal] Using full path for Claude Code: ${commandToRun}`);
+          // Claude Code - run it directly without a shell wrapper
+          shell = '/opt/homebrew/bin/claude';
+          args = options.args || [];
+          logger.info(`[Terminal] Running Claude Code directly: ${shell}`);
+        } else {
+          // Other commands - run in a shell
+          shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash';
+          args = ['-l', '-c', `${options.command} ${(options.args || []).join(' ')}`];
+          logger.info(`[Terminal] Running command in login shell: ${options.command}`);
         }
-        
-        // Run the command directly without interactive shell (which might interfere)
-        // Using -l (login shell) to ensure proper PATH is loaded
-        args = ['-l', '-c', `${commandToRun} ${(options.args || []).join(' ')}`];
-        logger.info(`[Terminal] Running command in login shell: ${commandToRun}`);
       } else {
         // Otherwise use the shell directly  
         shell = options.command || (process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || '/bin/bash');
@@ -137,7 +134,9 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
 
     } catch (error: any) {
       logger.error(`[Terminal] Failed to create terminal ${options.terminalId}:`, error.message || error);
-      logger.error(`[Terminal] Error details:`, error.stack || error);
+      logger.error(`[Terminal] Error details:`, JSON.stringify(error, null, 2));
+      logger.error(`[Terminal] Error stack:`, error.stack || 'No stack trace');
+      logger.error(`[Terminal] Error code:`, error.code || 'No error code');
       return { success: false, error: error.message || String(error) };
     }
   });
