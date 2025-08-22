@@ -122,8 +122,13 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
       
       // Check if terminal already exists
       if (terminalProcesses.has(options.terminalId)) {
-        logger.warn(`[Terminal] Terminal ${options.terminalId} already exists`);
-        return { success: false, error: 'Terminal already exists' };
+        logger.info(`[Terminal] Terminal ${options.terminalId} already exists, returning existing process`);
+        const existingProcess = terminalProcesses.get(options.terminalId);
+        return { 
+          success: true, 
+          pid: existingProcess?.pty.pid,
+          message: 'Using existing terminal process'
+        };
       }
 
       logger.info(`[Terminal] About to spawn PTY with shell=${shell}, args=${JSON.stringify(args)}, cwd=${cwd}`);

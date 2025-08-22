@@ -226,10 +226,6 @@ export class IsolatedTerminalPanel {
                 windowsMode: false,  // Use Unix-style line endings
                 macOptionIsMeta: true,  // For macOS Option key
                 allowProposedApi: true,  // Enable newer xterm.js features
-                // Proper handling of carriage returns for spinners
-                logLevel: 'off',  // Disable debug logging
-                fastScrollModifier: 'shift',  // Use shift for fast scroll
-                rightClickSelectsWord: true,
                 // Additional settings for better compatibility
                 letterSpacing: 0,  // Normal letter spacing
                 lineHeight: 1.0,  // Normal line height
@@ -395,6 +391,15 @@ export class IsolatedTerminalPanel {
 
             // Remove from map
             this.tabs.delete(tabId);
+
+            // Reset terminal counter if only system-log remains
+            const remainingTerminals = Array.from(this.tabs.keys()).filter(id => 
+                id !== 'system-log' && id.startsWith('terminal-')
+            );
+            if (remainingTerminals.length === 0) {
+                this.terminalCounter = 1;
+                console.log('[IsolatedTerminalPanel] All terminals closed, resetting counter to 1');
+            }
 
             // If this was the active tab, switch to system log
             if (this.activeTabId === tabId) {
@@ -688,11 +693,7 @@ export class IsolatedTerminalPanel {
             convertEol: true,  // Convert line endings properly
             windowsMode: false,  // Use Unix-style line endings
             macOptionIsMeta: true,  // For macOS Option key
-            allowProposedApi: true,  // Enable newer xterm.js features
-            // Proper handling of carriage returns for spinners
-            logLevel: 'off',  // Disable debug logging
-            fastScrollModifier: 'shift',  // Use shift for fast scroll
-            rightClickSelectsWord: true
+            allowProposedApi: true  // Enable newer xterm.js features
         });
         
         // Add fit addon to make terminal fill container
