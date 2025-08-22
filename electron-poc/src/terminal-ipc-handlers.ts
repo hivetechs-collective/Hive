@@ -12,14 +12,25 @@ import { logger } from './utils/SafeLogger';
 const processManager = new ProcessManager();
 const ttydManager = new TTYDManager(processManager);
 
-// Terminal counter for generic terminals
-let terminalCounter = 1;
+// Track active terminal numbers to reuse closed ones
+const activeTerminalNumbers = new Set<number>();
 
 // Track if handlers are already registered
 let handlersRegistered = false;
 
 // Store reference to main window for events
 let mainWindowRef: Electron.BrowserWindow | null = null;
+
+/**
+ * Get the next available terminal number
+ */
+function getNextTerminalNumber(): number {
+  let num = 1;
+  while (activeTerminalNumbers.has(num)) {
+    num++;
+  }
+  return num;
+}
 
 /**
  * Register all terminal-related IPC handlers
@@ -37,6 +48,18 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
   handlersRegistered = true;
   mainWindowRef = mainWindow;
   console.log('[TerminalIPC] Handlers registered, mainWindow set');
+  
+  // Clean up terminals when the main window actually navigates/reloads
+  // Only cleanup if navigating away from the app, not when webviews load
+  mainWindow.webContents.on('will-navigate', async (event, url) => {
+    // Only cleanup if it's the main window navigation, not webview navigation
+    if (!url.includes('localhost:7') && !url.includes('localhost:8')) {
+      logger.info('[TerminalIPC] Main window navigating, cleaning up terminals...');
+      await ttydManager.cleanup();
+      // Clear all active terminal numbers on reload
+      activeTerminalNumbers.clear();
+    }
+  });
 
   // Create a new terminal
   ipcMain.handle('create-terminal-process', async (event: IpcMainInvokeEvent, options: {
@@ -55,12 +78,15 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
       
       // Determine title
       let title: string;
+      let terminalNumber: number | undefined;
       if (options.toolId) {
         // Use tool name as title
         title = getToolDisplayName(options.toolId);
       } else {
-        // Generic terminal
-        title = `Terminal ${terminalCounter++}`;
+        // Generic terminal - get next available number
+        terminalNumber = getNextTerminalNumber();
+        activeTerminalNumbers.add(terminalNumber);
+        title = `Terminal ${terminalNumber}`;
       }
       
       // Create terminal via TTYDManager
@@ -84,6 +110,11 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
           port: terminal.port,
           toolId: terminal.toolId
         });
+      }
+      
+      // Store terminal number in the terminal object for cleanup later
+      if (terminalNumber !== undefined) {
+        terminal.terminalNumber = terminalNumber;
       }
       
       return {
@@ -125,6 +156,12 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
   // Kill terminal process
   ipcMain.handle('kill-terminal-process', async (event: IpcMainInvokeEvent, terminalId: string) => {
     try {
+      // Get terminal info before closing to extract terminal number
+      const terminal = ttydManager.getTerminal(terminalId);
+      if (terminal && terminal.terminalNumber) {
+        activeTerminalNumbers.delete(terminal.terminalNumber);
+      }
+      
       const success = await ttydManager.closeTerminal(terminalId);
       logger.info(`[TerminalIPC] Closed terminal: ${terminalId}`);
       return { success };
@@ -173,6 +210,12 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
   });
   
   ttydManager.on('terminal:closed', (terminalId) => {
+    // Clean up terminal number when terminal closes on its own
+    const terminal = ttydManager.getTerminal(terminalId);
+    if (terminal && terminal.terminalNumber) {
+      activeTerminalNumbers.delete(terminal.terminalNumber);
+    }
+    
     if (mainWindowRef && !mainWindowRef.isDestroyed()) {
       mainWindowRef.webContents.send('terminal-exit', terminalId);
     }

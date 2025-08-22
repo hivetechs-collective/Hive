@@ -30,6 +30,7 @@ export interface TTYDInstance {
   status: 'starting' | 'running' | 'stopping' | 'stopped';
   createdAt: Date;
   config: TTYDConfig;
+  terminalNumber?: number;  // Track terminal number for reuse
 }
 
 export class TTYDManager extends EventEmitter {

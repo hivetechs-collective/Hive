@@ -54,8 +54,9 @@ export class TTYDTerminalPanel {
     private setupIpcListeners(): void {
         // Listen for terminal creation from main process
         window.terminalAPI.onTerminalCreated((terminalInfo: any) => {
-            console.log('[TTYDTerminalPanel] Terminal created:', terminalInfo);
-            this.addTerminalTab(terminalInfo);
+            console.log('[TTYDTerminalPanel] Terminal created event:', terminalInfo);
+            // Don't add tab here - we handle it in createTerminalTab to avoid duplicates
+            // This event is mainly for external terminal creation (e.g., from AI tools)
         });
         
         // Listen for terminal ready events
@@ -86,6 +87,7 @@ export class TTYDTerminalPanel {
         // Create tab button
         const tabBtn = document.createElement('button');
         tabBtn.className = 'isolated-tab active';
+        tabBtn.id = `tab-btn-${tab.id}`;  // Add ID for System Log tab too
         tabBtn.innerHTML = `
             <span>${tab.title}</span>
         `;
@@ -205,8 +207,8 @@ export class TTYDTerminalPanel {
             
             if (result.success && result.terminal) {
                 console.log('[TTYDTerminalPanel] Terminal created successfully:', result.terminal);
-                // Don't add tab here - the 'terminal-created' event will handle it
-                // to avoid duplicate tabs
+                // Add the terminal tab here since we control when it's called
+                this.addTerminalTab(result.terminal);
             } else {
                 console.error('[TTYDTerminalPanel] Failed to create terminal:', result.error);
             }
@@ -270,13 +272,8 @@ export class TTYDTerminalPanel {
             });
         }
         
-        // Insert before the new tab button
-        const newTabBtn = document.getElementById('isolated-terminal-new-tab');
-        if (newTabBtn && newTabBtn.parentNode) {
-            newTabBtn.parentNode.insertBefore(tabBtn, newTabBtn);
-        } else {
-            this.tabsContainer.appendChild(tabBtn);
-        }
+        // Append to the tabs container (which is separate from the new tab button)
+        this.tabsContainer.appendChild(tabBtn);
 
         // Create content area with iframe for ttyd
         const content = document.createElement('div');
