@@ -1833,16 +1833,17 @@ class TTYDManager {
 }
 ```
 
-### Button Functionality Matrix
+### Button Functionality Matrix (Updated August 2025)
 
 | Button | Purpose | Visual State | IPC Handler | Result |
 |--------|---------|--------------|-------------|---------|
-| **Install** | Install tool | Blue, primary | `cli-tool-install` | Tool installed, auto-configured |
-| **Launch** | Open in terminal | Blue, primary | `cli-tool-launch` | Terminal with tool running |
+| **Install** | Install + Configure | Blue, primary | `cli-tool-install` | Tool installed, Memory Service configured automatically |
+| **Launch** | Open in terminal | Blue, primary | `cli-tool-launch` | Terminal with tool running (smart setup for Grok) |
 | **Details** | Refresh status | Green, secondary | `cli-tool-detect` | Updated version/status |
-| **Configure** | Setup Memory Service | Gray, secondary | `cli-tool-configure` | MCP configured, token saved |
 | **Update** | Update to latest | Gray, secondary | `cli-tool-update` | Latest version installed |
 | **Docs** | Open documentation | Gray, minimal | N/A (opens URL) | Browser with docs |
+
+**Note**: Configure button removed in favor of automatic configuration during installation
 
 ### File System Organization
 

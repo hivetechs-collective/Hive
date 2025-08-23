@@ -89,13 +89,77 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
         title = `Terminal ${terminalNumber}`;
       }
       
+      // Handle special Grok setup wizard
+      let actualCommand = options.command;
+      if (options.command === 'grok:setup') {
+        // Create an interactive setup script for Grok
+        logger.info('[TerminalIPC] Launching Grok setup wizard');
+        
+        // Create a multi-line bash script that guides the user through setup
+        actualCommand = `bash -c '
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "                 🚀 Grok CLI Setup Wizard"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Welcome to Grok CLI! Let'\''s get you set up."
+echo ""
+echo "To use Grok, you need an API key from X.AI"
+echo ""
+echo "📝 Steps to get your API key:"
+echo "   1. Visit https://x.ai"
+echo "   2. Sign in or create an account"
+echo "   3. Navigate to API settings"
+echo "   4. Generate a new API key"
+echo ""
+echo "Once you have your API key, you have several options:"
+echo ""
+echo "Option 1: Set as environment variable (recommended)"
+echo "   export GROK_API_KEY=\"your_api_key_here\""
+echo ""
+echo "Option 2: Save in configuration file"
+echo "   mkdir -p ~/.grok"
+echo "   echo '\''{ \"apiKey\": \"your_api_key_here\" }'\'' > ~/.grok/user-settings.json"
+echo ""
+echo "Option 3: Use command line flag"
+echo "   grok --api-key your_api_key_here"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+read -p "Would you like to set up your API key now? (y/n): " response
+if [ \"$response\" = \"y\" ] || [ \"$response\" = \"Y\" ]; then
+  echo ""
+  echo "Please enter your Grok API key:"
+  read -s api_key
+  echo ""
+  if [ -n \"$api_key\" ]; then
+    mkdir -p ~/.grok
+    echo \"{ \\\"apiKey\\\": \\\"$api_key\\\" }\" > ~/.grok/user-settings.json
+    echo "✅ API key saved to ~/.grok/user-settings.json"
+    echo ""
+    echo "🎉 Setup complete! Launching Grok CLI..."
+    echo ""
+    sleep 2
+    exec grok
+  else
+    echo "❌ No API key entered. Please set it up manually."
+    echo ""
+    echo "When ready, you can launch Grok with: grok"
+  fi
+else
+  echo ""
+  echo "You can set up your API key later using one of the options above."
+  echo "When ready, launch Grok with: grok"
+fi
+'`;
+      }
+      
       // Create terminal via TTYDManager
       const terminal = await ttydManager.createTerminal({
         id,
         title,
         toolId: options.toolId,
         cwd: options.cwd || process.env.HOME || '/Users/veronelazio',
-        command: options.command,
+        command: actualCommand,
         env: options.env
       });
       
@@ -244,7 +308,8 @@ function getToolDisplayName(toolId: string): string {
     'openai-codex': 'Codex',
     'codex': 'Codex',
     'cline': 'Cline',
-    'cline-cli': 'Cline'
+    'cline-cli': 'Cline',
+    'grok': 'Grok'
   };
   
   return toolNames[toolId] || toolId;

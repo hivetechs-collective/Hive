@@ -2252,7 +2252,59 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
         container.innerHTML = `
             <div class="cli-tools-panel" style="padding: 20px; height: 100%; overflow-y: auto; background: var(--vscode-editor-background);">
                 <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
-                <p style="color: #aaa; margin-bottom: 20px;">Install and manage AI-powered coding assistants</p>
+                <p style="color: #aaa; margin-bottom: 10px;">Install and manage AI-powered coding assistants</p>
+                
+                <!-- Batch Action Buttons -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
+                    <button onclick="installAllCliTools()" style="
+                        padding: 8px 16px;
+                        background: #007acc;
+                        color: #fff;
+                        border: none;
+                        border-radius: 3px;
+                        font-size: 13px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: background 0.2s ease;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    " onmouseover="this.style.background='#1e8ad6'" 
+                       onmouseout="this.style.background='#007acc'">
+                        <span style="font-size: 16px;">📦</span>
+                        <span>Install All Tools</span>
+                    </button>
+                    <button onclick="updateAllCliTools()" style="
+                        padding: 8px 16px;
+                        background: #2d7d2d;
+                        color: #fff;
+                        border: none;
+                        border-radius: 3px;
+                        font-size: 13px;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: background 0.2s ease;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    " onmouseover="this.style.background='#3a9a3a'" 
+                       onmouseout="this.style.background='#2d7d2d'">
+                        <span style="font-size: 16px;">↻</span>
+                        <span>Update All Tools</span>
+                    </button>
+                    <div id="batch-status" style="
+                        display: none;
+                        align-items: center;
+                        padding: 8px 12px;
+                        background: #1e1e1e;
+                        border: 1px solid #3e3e42;
+                        border-radius: 3px;
+                        color: #ccc;
+                        font-size: 12px;
+                        margin-left: auto;
+                    "></div>
+                </div>
+                
                 <div class="cli-tools-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
                     <div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: #888;">
                         Detecting installed CLI tools...
@@ -2394,7 +2446,6 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
         buttons = `
             <button onclick="launchCliTool('${id}')" style="flex: 1; padding: 6px; background: #2196f3; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Launch in current project">Launch</button>
             <button onclick="refreshCliToolDetails('${id}')" style="flex: 1; padding: 6px; background: #2d7d2d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Refresh tool details">Details</button>
-            <button onclick="configureCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
             <button onclick="updateCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
         `;
     } else {
@@ -2482,9 +2533,16 @@ async function installCliTool(toolId: string): Promise<void> {
     }
 }
 
+// DEPRECATED: Configuration is now done automatically during installation
+// This function is kept for backward compatibility but should not be called
 async function configureCliTool(toolId: string): Promise<void> {
-    console.log(`[CLI Tools] Configure requested for ${toolId}`);
+    console.log(`[CLI Tools] Configure requested for ${toolId} - DEPRECATED: Configuration is now automatic during installation`);
     
+    // Since configuration is now automatic, just show a message
+    alert(`${toolId} is already configured! Configuration is now done automatically during installation.`);
+    return;
+    
+    /* OLD CODE - PRESERVED FOR REFERENCE
     // Show progress in the UI
     const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
     if (card) {
@@ -2553,6 +2611,7 @@ async function configureCliTool(toolId: string): Promise<void> {
         console.error(`[CLI Tools] Error configuring ${toolId}:`, error);
         alert(`Configuration error: ${error}`);
     }
+    */
 }
 
 async function updateCliTool(toolId: string): Promise<void> {
@@ -2619,6 +2678,224 @@ async function updateCliTool(toolId: string): Promise<void> {
         alert(`Update error: ${error}`);
     }
 }
+
+/**
+ * Install all AI CLI tools in sequence
+ */
+async function installAllCliTools(): Promise<void> {
+    console.log('[CLI Tools] Installing all tools...');
+    
+    // List of tools to install (in order)
+    const toolsToInstall = [
+        'claude-code',
+        'gemini-cli', 
+        'qwen-code',
+        'openai-codex',
+        'cline',
+        'grok'
+    ];
+    
+    // Show status
+    const statusDiv = document.getElementById('batch-status');
+    if (statusDiv) {
+        statusDiv.style.display = 'flex';
+        statusDiv.innerHTML = '⏳ Checking tools...';
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        let installedCount = 0;
+        let skippedCount = 0;
+        let failedCount = 0;
+        
+        for (const toolId of toolsToInstall) {
+            // Check if already installed
+            const status = await electronAPI.detectCliTool(toolId);
+            
+            if (status?.installed) {
+                console.log(`[CLI Tools] ${toolId} already installed, skipping`);
+                skippedCount++;
+                if (statusDiv) {
+                    statusDiv.innerHTML = `⏳ ${toolId} already installed (${installedCount} installed, ${skippedCount} skipped)`;
+                }
+                continue;
+            }
+            
+            // Install the tool
+            if (statusDiv) {
+                statusDiv.innerHTML = `📦 Installing ${toolId}... (${installedCount} installed so far)`;
+            }
+            
+            try {
+                const result = await electronAPI.installCliTool(toolId);
+                
+                if (result?.success) {
+                    installedCount++;
+                    console.log(`[CLI Tools] Successfully installed ${toolId}`);
+                    
+                    // Update the specific card UI
+                    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+                    if (card) {
+                        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                        if (statusDiv) {
+                            statusDiv.innerHTML = '✅ Installed';
+                            statusDiv.style.color = '#4ec9b0';
+                        }
+                    }
+                } else {
+                    failedCount++;
+                    console.error(`[CLI Tools] Failed to install ${toolId}:`, result?.error);
+                }
+            } catch (error) {
+                failedCount++;
+                console.error(`[CLI Tools] Error installing ${toolId}:`, error);
+            }
+        }
+        
+        // Final status
+        if (statusDiv) {
+            if (failedCount === 0) {
+                statusDiv.innerHTML = `✅ Complete! ${installedCount} installed, ${skippedCount} already installed`;
+                statusDiv.style.color = '#4ec9b0';
+            } else {
+                statusDiv.innerHTML = `⚠️ Complete with errors: ${installedCount} installed, ${skippedCount} skipped, ${failedCount} failed`;
+                statusDiv.style.color = '#ffa500';
+            }
+            
+            // Hide status after 5 seconds
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Refresh the entire panel to show updated statuses
+        setTimeout(() => {
+            renderCliToolsPanel(true);
+        }, 1000);
+        
+    } catch (error) {
+        console.error('[CLI Tools] Error in batch install:', error);
+        if (statusDiv) {
+            statusDiv.innerHTML = `❌ Error: ${error}`;
+            statusDiv.style.color = '#f44747';
+        }
+    }
+}
+
+/**
+ * Update all installed AI CLI tools in sequence
+ */
+async function updateAllCliTools(): Promise<void> {
+    console.log('[CLI Tools] Updating all tools...');
+    
+    // List of tools to update (in order)
+    const toolsToUpdate = [
+        'claude-code',
+        'gemini-cli',
+        'qwen-code', 
+        'openai-codex',
+        'cline',
+        'grok'
+    ];
+    
+    // Show status
+    const statusDiv = document.getElementById('batch-status');
+    if (statusDiv) {
+        statusDiv.style.display = 'flex';
+        statusDiv.innerHTML = '⏳ Checking for updates...';
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        let updatedCount = 0;
+        let skippedCount = 0;
+        let failedCount = 0;
+        
+        for (const toolId of toolsToUpdate) {
+            // Check if installed
+            const status = await electronAPI.detectCliTool(toolId);
+            
+            if (!status?.installed) {
+                console.log(`[CLI Tools] ${toolId} not installed, skipping update`);
+                skippedCount++;
+                continue;
+            }
+            
+            // Update the tool
+            if (statusDiv) {
+                statusDiv.innerHTML = `🔄 Updating ${toolId}... (${updatedCount} updated so far)`;
+            }
+            
+            try {
+                const result = await electronAPI.updateCliTool(toolId);
+                
+                if (result?.success) {
+                    updatedCount++;
+                    console.log(`[CLI Tools] Successfully updated ${toolId} to version ${result.version}`);
+                    
+                    // Update the specific card UI
+                    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+                    if (card) {
+                        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                        if (statusDiv) {
+                            statusDiv.innerHTML = '✅ Updated';
+                            statusDiv.style.color = '#4ec9b0';
+                        }
+                        
+                        // Update version display if present
+                        const versionSpan = card.querySelector('span[style*="color: #4ec9b0"]') as HTMLElement;
+                        if (versionSpan && result.version) {
+                            versionSpan.textContent = `v${result.version}`;
+                        }
+                    }
+                } else {
+                    // Could be no update available, which is not a failure
+                    if (result?.error?.includes('already up to date')) {
+                        console.log(`[CLI Tools] ${toolId} already up to date`);
+                    } else {
+                        failedCount++;
+                        console.error(`[CLI Tools] Failed to update ${toolId}:`, result?.error);
+                    }
+                }
+            } catch (error) {
+                failedCount++;
+                console.error(`[CLI Tools] Error updating ${toolId}:`, error);
+            }
+        }
+        
+        // Final status
+        if (statusDiv) {
+            if (failedCount === 0) {
+                statusDiv.innerHTML = `✅ Complete! ${updatedCount} updated, ${skippedCount} not installed`;
+                statusDiv.style.color = '#4ec9b0';
+            } else {
+                statusDiv.innerHTML = `⚠️ Complete with errors: ${updatedCount} updated, ${skippedCount} skipped, ${failedCount} failed`;
+                statusDiv.style.color = '#ffa500';
+            }
+            
+            // Hide status after 5 seconds
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Refresh the entire panel to show updated statuses
+        setTimeout(() => {
+            renderCliToolsPanel(true);
+        }, 1000);
+        
+    } catch (error) {
+        console.error('[CLI Tools] Error in batch update:', error);
+        if (statusDiv) {
+            statusDiv.innerHTML = `❌ Error: ${error}`;
+            statusDiv.style.color = '#f44747';
+        }
+    }
+}
+
+// Make functions available globally
+(window as any).installAllCliTools = installAllCliTools;
+(window as any).updateAllCliTools = updateAllCliTools;
 
 /**
  * Launch a CLI tool in the current project context

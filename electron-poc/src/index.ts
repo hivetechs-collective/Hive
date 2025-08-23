@@ -6,6 +6,7 @@ app.setName('Hive Consensus');
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import * as crypto from 'crypto';
 import { Database } from 'sqlite3';
 import { spawn, ChildProcess } from 'child_process';
 import { GitManager } from './git-manager';
@@ -1469,7 +1470,219 @@ const registerSimpleCliToolHandlers = () => {
         logger.info(`[Main] Clearing detector cache for ${toolId} after successful install`);
         cliToolsDetector.clearCache(toolId);
         
-        logger.info(`[Main] ${toolConfig.name} installed successfully, version: ${version}`);
+        // SEAMLESS CONFIGURATION: Automatically configure the tool after installation
+        logger.info(`[Main] Automatically configuring ${toolId} after installation...`);
+        
+        // 1. Special configuration for Cline - set up OpenRouter API key
+        if (toolId === 'cline') {
+          logger.info('[Main] Configuring Cline with OpenRouter API key from Hive');
+          
+          if (db) {
+            const apiKeyRow = await new Promise<any>((resolve) => {
+              db!.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+                resolve(row);
+              });
+            });
+            
+            if (apiKeyRow && apiKeyRow.value) {
+              const openrouterKey = apiKeyRow.value;
+              const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+              
+              if (!fs.existsSync(clineConfigDir)) {
+                fs.mkdirSync(clineConfigDir, { recursive: true });
+              }
+              
+              // Create Cline settings file
+              const clineSettingsPath = path.join(clineConfigDir, 'cline_cli_settings.json');
+              const clineSettings = {
+                globalState: {
+                  apiProvider: 'openrouter',
+                  openRouterApiKey: openrouterKey,
+                  apiModelId: '',  // Let user choose model
+                  autoApprovalSettings: {
+                    enabled: false,
+                    actions: {
+                      readFiles: false,
+                      editFiles: false,
+                      executeSafeCommands: false,
+                      useMcp: false
+                    },
+                    maxRequests: 20
+                  }
+                },
+                settings: {
+                  'cline.enableCheckpoints': false
+                }
+              };
+              
+              fs.writeFileSync(clineSettingsPath, JSON.stringify(clineSettings, null, 2));
+              
+              // Create keys file
+              const keysPath = path.join(clineConfigDir, 'keys.json');
+              fs.writeFileSync(keysPath, JSON.stringify({ openRouterApiKey: openrouterKey }, null, 2));
+              
+              // Create storage directory
+              const storageDir = path.join(clineConfigDir, 'storage');
+              if (!fs.existsSync(storageDir)) {
+                fs.mkdirSync(storageDir, { recursive: true });
+              }
+              
+              logger.info('[Main] Cline configured with OpenRouter API key');
+            }
+          }
+        }
+        
+        // 2. Register with Memory Service for all tools (except those that don't need it)
+        const toolsWithoutMemoryService = ['cursor', 'continue', 'codewhisperer', 'cody'];
+        
+        if (!toolsWithoutMemoryService.includes(toolId)) {
+          logger.info(`[Main] Registering ${toolId} with Memory Service`);
+          
+          try {
+            // Get memory service configuration
+            const memoryServiceEndpoint = process.env.MEMORY_SERVICE_ENDPOINT || 'http://localhost:11437';
+            const token = crypto.randomBytes(32).toString('hex');
+            
+            // Create MCP wrapper for the tool
+            const mcpWrapperDir = path.join(os.homedir(), '.hive', 'mcp-wrappers');
+            if (!fs.existsSync(mcpWrapperDir)) {
+              fs.mkdirSync(mcpWrapperDir, { recursive: true });
+            }
+            
+            const wrapperPath = path.join(mcpWrapperDir, `${toolId}-memory-service.js`);
+            const wrapperContent = `#!/usr/bin/env node
+// Auto-generated MCP wrapper for ${toolId} to connect with Hive Memory Service
+
+const { McpServer } = require('@modelcontextprotocol/server');
+
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}';
+const TOKEN = process.env.MEMORY_SERVICE_TOKEN || '${token}';
+
+class MemoryServiceMCP extends McpServer {
+  constructor() {
+    super({
+      name: 'hive-memory-service',
+      version: '1.0.0',
+      description: 'Hive Consensus Memory Service - AI memory and learning system'
+    });
+  }
+
+  async start() {
+    await super.start();
+    
+    this.registerTool({
+      name: 'query_memory',
+      description: 'Query the AI memory system for relevant learnings',
+      parameters: {
+        query: { type: 'string', required: true },
+        limit: { type: 'number', default: 5 }
+      },
+      handler: this.queryMemory.bind(this)
+    });
+
+    this.registerTool({
+      name: 'contribute_learning',
+      description: 'Contribute a new learning to the memory system',
+      parameters: {
+        type: { type: 'string', required: true },
+        category: { type: 'string', required: true },
+        content: { type: 'string', required: true },
+        code: { type: 'string' }
+      },
+      handler: this.contributeLearning.bind(this)
+    });
+  }
+
+  async queryMemory({ query, limit = 5 }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        client: '${toolId}',
+        context: { file: process.cwd() },
+        query,
+        options: { limit }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async contributeLearning({ type, category, content, code }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        source: '${toolId}',
+        learning: {
+          type,
+          category,
+          content,
+          code,
+          context: { file: process.cwd(), success: true }
+        }
+      })
+    });
+
+    return await response.json();
+  }
+}
+
+// Start the MCP server
+const server = new MemoryServiceMCP();
+server.start();
+`;
+            
+            fs.writeFileSync(wrapperPath, wrapperContent);
+            fs.chmodSync(wrapperPath, '755');
+            
+            // Update MCP configuration for Claude Code
+            const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
+            let mcpConfig: any = { servers: {} };
+            
+            if (fs.existsSync(mcpConfigPath)) {
+              try {
+                mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+              } catch {
+                mcpConfig = { servers: {} };
+              }
+            }
+            
+            // Add or update the memory service server
+            mcpConfig.servers['hive-memory-service'] = {
+              command: 'node',
+              args: [wrapperPath],
+              env: {
+                MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+                MEMORY_SERVICE_TOKEN: token
+              },
+              description: 'Hive Consensus Memory Service - AI memory and learning system'
+            };
+            
+            // Ensure directory exists
+            const mcpDir = path.dirname(mcpConfigPath);
+            if (!fs.existsSync(mcpDir)) {
+              fs.mkdirSync(mcpDir, { recursive: true });
+            }
+            
+            fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+            
+            logger.info(`[Main] Successfully registered ${toolId} with Memory Service`);
+          } catch (configError) {
+            logger.warn(`[Main] Could not configure Memory Service for ${toolId}:`, configError);
+            // Non-fatal error - tool is still installed
+          }
+        }
+        
+        logger.info(`[Main] ${toolConfig.name} installed and configured successfully, version: ${version}`);
         return { success: true, version, message: `Installed ${toolConfig.name} version ${version}` };
         
       } catch (error: any) {
@@ -1521,7 +1734,8 @@ const registerSimpleCliToolHandlers = () => {
         'gemini-cli': '@google/gemini-cli',
         'qwen-code': '@qwen-code/qwen-code',
         'openai-codex': '@openai/codex',
-        'cline': '@yaegaki/cline-cli'
+        'cline': '@yaegaki/cline-cli',
+        'grok': '@vibe-kit/grok-cli'
       };
       
       const packageName = npmPackages[toolId];
@@ -2080,8 +2294,34 @@ server.start();
       } else if (toolId === 'openai-codex') {
         command = 'codex';
       } else if (toolId === 'grok') {
-        // Grok CLI uses interactive mode by default
-        command = 'grok';
+        // SMART GROK LAUNCH: Check if API key is configured
+        // Grok stores config in ~/.grok/user-settings.json
+        const grokConfigPath = path.join(os.homedir(), '.grok', 'user-settings.json');
+        let hasGrokApiKey = false;
+        
+        if (fs.existsSync(grokConfigPath)) {
+          try {
+            const grokConfig = JSON.parse(fs.readFileSync(grokConfigPath, 'utf-8'));
+            hasGrokApiKey = !!(grokConfig.apiKey || process.env.GROK_API_KEY);
+          } catch {
+            // Config exists but couldn't be parsed
+          }
+        }
+        
+        // Check environment variable as fallback
+        if (!hasGrokApiKey && process.env.GROK_API_KEY) {
+          hasGrokApiKey = true;
+        }
+        
+        if (!hasGrokApiKey) {
+          // First-time launch: We'll create a setup wizard in the terminal
+          logger.info('[Main] Grok API key not configured, will launch setup wizard');
+          // We'll handle this in the terminal creation with a special flag
+          command = 'grok:setup';  // Special command to trigger our setup wizard
+        } else {
+          // Normal launch - API key is configured
+          command = 'grok';
+        }
       } else if (toolId === 'cline') {
         // Always sync Cline configuration with latest OpenRouter API key from Hive
         apiKeyRow = await new Promise<any>((resolve) => {
