@@ -1972,9 +1972,142 @@ describe('CLI Tool Integration', () => {
 
 ### Replication Guide for New AI CLI Tools
 
-#### Step-by-Step Implementation for Each New Tool
+#### CRITICAL: Pre-Implementation Research Phase
 
-##### Step 1: Add Tool Definition
+##### ⚠️ MANDATORY FIRST STEP: Read Existing Tool Documentation
+
+Before implementing ANY new AI CLI tool, you MUST become an expert by studying our existing comprehensive documentation:
+
+1. **READ Our Complete Local Documentation FIRST**
+   ```
+   docs/cli-tools/
+   ├── claude-code.md     # ✅ 500+ lines - ALREADY WRITTEN
+   ├── gemini-cli.md      # ✅ Complete docs - ALREADY WRITTEN
+   ├── qwen-code.md       # ✅ Full guide - ALREADY WRITTEN
+   ├── openai-codex.md    # ✅ Detailed docs - ALREADY WRITTEN
+   ├── aider.md           # ✅ Comprehensive - ALREADY WRITTEN
+   └── cline.md           # ✅ Full coverage - ALREADY WRITTEN
+   ```
+   
+   **DO NOT START CODING WITHOUT READING THE DOCS!**
+   
+   Each document contains:
+   - Installation methods and prerequisites
+   - Authentication flows and API key setup
+   - Command-line flags and options
+   - Configuration file locations and formats
+   - Advanced features (MCP, hooks, sessions)
+   - Pricing and limitations
+   - Troubleshooting guides
+   - SDK integration examples
+
+2. **Understand Unique Tool Characteristics**
+   - **Authentication Methods**: OAuth, API keys, tokens, browser-based
+   - **Command Variations**: Tool command vs package name differences
+   - **Special Flags**: `--resume`, `--continue`, `--no-git`, etc.
+   - **Configuration Files**: Tool-specific config locations and formats
+   - **Environment Variables**: Required env vars for operation
+   - **Prerequisites**: System dependencies, language runtimes
+   - **Limitations**: Rate limits, free tiers, usage quotas
+
+3. **Document Advanced Options**
+   ```typescript
+   interface ToolAdvancedOptions {
+     // Claude Code specific
+     claudeCode: {
+       resumeSupport: true,
+       mcp: true,
+       hooks: true,
+       customInstructions: true,
+       contextWindow: 200000
+     },
+     
+     // Gemini specific
+     geminiCli: {
+       freeQuota: 1000,  // requests per day
+       requiresGoogleAuth: true,
+       regionRestrictions: ['US', 'EU']
+     },
+     
+     // Aider specific
+     aider: {
+       gitIntegration: 'deep',
+       editFormat: 'diff' | 'whole',
+       repoMapStyle: 'tree' | 'tags',
+       voiceMode: true
+     }
+   }
+   ```
+
+4. **Research Tool-Specific Features**
+   - **MCP Support**: Not all tools support Model Context Protocol
+   - **Hooks System**: Tool-specific event hooks (PreToolUse, PostToolUse)
+   - **Session Management**: Resume, continue, or stateless
+   - **Context Management**: How each tool handles context limits
+   - **Cost Structure**: Free tier limits, paid features
+   - **Model Selection**: Available models and routing logic
+
+5. **Test Tool Manually First**
+   ```bash
+   # Install and test manually before automation
+   npm install -g @anthropic-ai/claude-code
+   claude --version
+   claude doctor  # Tool-specific diagnostics
+   claude --help  # Understand all flags
+   
+   # Test advanced features
+   claude --resume  # Session continuation
+   claude mcp list  # MCP servers
+   /hooks          # Hook configuration
+   ```
+
+##### Example: Claude Code Deep Dive
+
+From `docs/cli-tools/claude-code.md`, we learn:
+- **MCP Servers**: Supports stdio, SSE, and HTTP transports
+- **Hooks**: 8 different hook events for workflow customization
+- **Authentication**: OAuth via browser OR API key
+- **Special Commands**: `/memory`, `/hooks`, `/mcp`
+- **Auto-Update**: Has built-in auto-update mechanism
+- **Context**: 200K token window
+- **Resume**: Supports `--resume` for session continuation
+
+This knowledge informs our implementation:
+```typescript
+if (toolId === 'claude-code') {
+  // Claude-specific implementation based on documentation
+  config.supportsResume = true;
+  config.hasMCP = true;
+  config.hasHooks = true;
+  config.authMethods = ['oauth', 'api-key'];
+  config.versionCommand = 'claude --version';
+  config.versionPattern = /claude-code\/(\d+\.\d+\.\d+)/;
+  config.diagnosticCommand = 'claude doctor';
+  config.configLocation = '~/.claude/config.json';
+}
+```
+
+#### Implementation Workflow for Each New Tool
+
+##### 📚 Step 0: BECOME AN EXPERT (Required Reading)
+```bash
+# STOP! Before writing any code:
+cat docs/cli-tools/[tool-name].md  # READ ENTIRE DOCUMENT
+
+# Example for Gemini:
+cat docs/cli-tools/gemini-cli.md   # Understand Gemini's free tier, auth, limits
+```
+
+After reading, you should know:
+- ✅ Package name vs command name
+- ✅ Version command and output format
+- ✅ Authentication requirements
+- ✅ Special flags and options
+- ✅ Configuration file locations
+- ✅ MCP compatibility
+- ✅ Unique features and limitations
+
+##### Step 1: Add Tool Definition (ONLY after becoming an expert)
 **File**: `src/utils/AI_CLI_TOOLS_REGISTRY.md`
 
 ```typescript
