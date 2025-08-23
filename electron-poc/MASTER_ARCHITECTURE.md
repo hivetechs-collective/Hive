@@ -1970,6 +1970,38 @@ describe('CLI Tool Integration', () => {
 4. **Permission Checks**: Graceful degradation without sudo
 5. **Audit Logging**: All operations logged for security review
 
+### Architectural Principles for AI CLI Tools
+
+**1. Separation of Concerns**:
+   - **Hive's Role**: Installation, detection, launching, UI management
+   - **Tool's Role**: Authentication, configuration, API keys, actual work
+   - **Exception**: Cline (we manage its OpenRouter key for user convenience)
+
+**2. Non-Invasive Integration**:
+   - Tools work exactly as they do standalone
+   - No modification of tool behavior
+   - No parsing of tool output
+   - Pure terminal hosting
+
+**3. User Experience First**:
+   - One-click installation with progress feedback
+   - Automatic detection on startup
+   - Clear visual states (installed, updating, error)
+   - Immediate UI updates (cache clearing fix)
+   - Sensible defaults (tools manage own config)
+
+**4. Error Recovery**:
+   - Graceful degradation without sudo
+   - Clear error messages with suggestions
+   - Retry mechanisms for transient failures
+   - Process cleanup on app exit
+
+**5. Performance Optimization**:
+   - Lazy detection (on-demand, not at startup)
+   - 5-minute cache for version info
+   - Parallel operations where possible
+   - Non-blocking async operations
+
 ### Replication Guide for New AI CLI Tools
 
 #### CRITICAL: Pre-Implementation Research Phase
@@ -2061,6 +2093,70 @@ Before implementing ANY new AI CLI tool, you MUST become an expert by studying o
    /hooks          # Hook configuration
    ```
 
+##### Current AI CLI Tools Implementation Status
+
+**Integrated Tools (As of August 2025)**:
+
+| Tool | Package | Command | Version Detection | Special Handling | Status |
+|------|---------|---------|-------------------|------------------|---------|
+| **Claude Code** | `@anthropic-ai/claude-code` | `claude` | `/claude-code\/(\d+\.\d+\.\d+)/` | `--resume` support, MCP integration | ✅ Complete |
+| **Gemini CLI** | `@google/gemini-cli` | `gemini` | `/Gemini CLI v(\d+\.\d+\.\d+)/` | Free tier (1000 req/day), No `--resume` | ✅ Complete |
+| **Qwen Code** | `@alibaba/qwen-code` | `qwen` | `/(?:qwen\/\|v?)(\d+\.\d+\.\d+)/` | Self-managed auth | ✅ Complete |
+| **OpenAI Codex** | `@openai/codex-cli` | `codex` | `/codex-cli (\d+\.\d+\.\d+)/` | Self-managed auth | ✅ Complete |
+| **Cline** | `@yaegaki/cline-cli` | `cline-cli` | `/(\d+\.\d+\.\d+)/` | **Special: Uses Hive's OpenRouter API key** | ✅ Complete |
+| **Grok CLI** | `@vibe-kit/grok-cli` | `grok` | `/(\d+\.\d+\.\d+)/` | MCP support, Morph Fast Apply (4500 tokens/sec) | ✅ Complete |
+
+**Key Implementation Patterns**:
+
+1. **Self-Managed Tools** (Default Pattern):
+   - Claude Code, Gemini CLI, Qwen Code, OpenAI Codex, Grok CLI
+   - Handle their own API keys and authentication
+   - We just spawn them in terminals
+   - Users configure directly within the tool
+
+2. **Hive-Managed Tools** (Special Case):
+   - **Cline only** - We manage its API configuration
+   - Uses Hive's OpenRouter API key from database
+   - Dynamically syncs configuration on every launch
+   - Environment variables passed: `OPENAI_API_KEY`, `OPEN_ROUTER_API_KEY`, `OPENROUTER_API_KEY`
+
+3. **Version Detection Nuances**:
+   ```typescript
+   // Each tool has unique version output format
+   if (toolId === 'claude-code') {
+     // Outputs: claude-code/1.0.86
+     const match = output.match(/claude-code\/(\d+\.\d+\.\d+)/);
+   } else if (toolId === 'gemini-cli') {
+     // Outputs: Gemini CLI v2.0.0
+     const match = output.match(/Gemini CLI v(\d+\.\d+\.\d+)/);
+   } else if (toolId === 'qwen-code') {
+     // Outputs: qwen/1.5.0 or v1.5.0
+     const match = output.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
+   }
+   ```
+
+4. **Launch Command Patterns**:
+   ```typescript
+   // Claude Code supports resume
+   if (toolId === 'claude-code') {
+     command = hasBeenLaunched ? 'claude --resume' : 'claude';
+   }
+   // Gemini doesn't support resume
+   else if (toolId === 'gemini-cli') {
+     command = 'gemini';  // Always base command
+   }
+   // Cline needs special handling
+   else if (toolId === 'cline') {
+     command = 'cline-cli task';  // Interactive mode
+     // Plus API key configuration...
+   }
+   ```
+
+5. **Memory Service Integration**:
+   - All tools can connect to Memory Service via MCP
+   - Configuration creates MCP wrapper at `~/.hive/memory-service-mcp-wrapper.js`
+   - Token stored in `~/.hive/cli-tools-config.json`
+
 ##### Example: Claude Code Deep Dive
 
 From `docs/cli-tools/claude-code.md`, we learn:
@@ -2086,6 +2182,49 @@ if (toolId === 'claude-code') {
   config.configLocation = '~/.claude/config.json';
 }
 ```
+
+##### Lessons Learned from AI CLI Tools Integration
+
+**1. UI Refresh Bug (Critical Fix)**:
+   - **Problem**: After installation, UI showed "Not Installed" until app refresh
+   - **Solution**: Clear detector cache after install/update
+   ```typescript
+   // CRITICAL FIX in src/index.ts
+   logger.info(`[Main] Clearing detector cache for ${toolId} after successful install`);
+   cliToolsDetector.clearCache(toolId);
+   ```
+
+**2. Cline API Key Management (Unique Pattern)**:
+   - **Challenge**: Cline is provider-agnostic, users need to configure provider
+   - **Solution**: Use Hive's existing OpenRouter API key
+   - **Implementation**: 
+     - Read key from database: `SELECT value FROM configurations WHERE key = 'openrouter_api_key'`
+     - Write to `~/.cline_cli/cline_cli_settings.json`
+     - Pass via environment variables on launch
+   - **Bug Workaround**: Cline CLI looks for `OPENAI_API_KEY` even when configured for OpenRouter
+
+**3. Terminal Launch Sequencing**:
+   - **Issue**: Launching tool before folder context set causes confusion
+   - **Fix**: Two-step process with delay
+   ```typescript
+   // FIRST: Update global folder context
+   mainWindow.webContents.send('menu-open-folder', selectedPath);
+   
+   // THEN: After delay, launch terminal
+   setTimeout(() => {
+     mainWindow.webContents.send('launch-ai-tool-terminal', {...});
+   }, 100);
+   ```
+
+**4. Version Detection Variations**:
+   - Each tool outputs version differently
+   - Generic regex `(\d+\.\d+\.\d+)` works for most
+   - Special cases documented per tool
+
+**5. TTYD vs xterm.js Decision**:
+   - **xterm.js issues**: % characters, duplicate UI, cursor problems with TUI apps
+   - **TTYD benefits**: Real terminals, perfect TUI support, low maintenance
+   - **Result**: Complete migration to TTYD for all terminals
 
 #### Implementation Workflow for Each New Tool
 
