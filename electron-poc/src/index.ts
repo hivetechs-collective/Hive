@@ -924,22 +924,42 @@ function updateAllMCPConfigurations(actualPort: number) {
       }
     }
     
-    // Update Grok MCP configuration
+    // Update or create Grok MCP configuration
     const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
-    if (fs.existsSync(grokMcpPath)) {
+    const grokToken = config['grok']?.memoryService?.token;
+    
+    if (grokToken) {
       try {
-        const grokMcp = JSON.parse(fs.readFileSync(grokMcpPath, 'utf-8'));
-        if (grokMcp.servers?.['hive-memory-service']) {
-          const grokToken = config['grok']?.memoryService?.token;
-          if (grokToken) {
-            grokMcp.servers['hive-memory-service'].env = {
-              MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
-              MEMORY_SERVICE_TOKEN: grokToken
-            };
-            fs.writeFileSync(grokMcpPath, JSON.stringify(grokMcp, null, 2));
-            logger.info('[Main] Updated Grok MCP configuration');
+        let grokMcp: any = { servers: {} };
+        
+        // Read existing config if it exists
+        if (fs.existsSync(grokMcpPath)) {
+          try {
+            grokMcp = JSON.parse(fs.readFileSync(grokMcpPath, 'utf-8'));
+          } catch {
+            grokMcp = { servers: {} };
           }
         }
+        
+        // Add or update the memory service server
+        grokMcp.servers['hive-memory-service'] = {
+          transport: 'stdio',
+          command: 'node',
+          args: [wrapperPath],
+          env: {
+            MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+            MEMORY_SERVICE_TOKEN: grokToken
+          }
+        };
+        
+        // Ensure directory exists
+        const grokDir = path.dirname(grokMcpPath);
+        if (!fs.existsSync(grokDir)) {
+          fs.mkdirSync(grokDir, { recursive: true });
+        }
+        
+        fs.writeFileSync(grokMcpPath, JSON.stringify(grokMcp, null, 2));
+        logger.info('[Main] Updated/Created Grok MCP configuration');
       } catch (err) {
         logger.error('[Main] Failed to update Grok MCP config:', err);
       }

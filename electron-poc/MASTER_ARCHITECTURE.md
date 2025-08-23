@@ -2830,17 +2830,33 @@ class CliToolsManager extends EventEmitter {
 
 ### Supported Tools
 1. **Claude Code CLI** (`@anthropic/claude-cli`)
-   - Primary integration with Memory Service
+   - Primary integration with Memory Service via MCP
    - Auto-configuration of memory endpoints
    - Token-based authentication
+   - MCP config at `~/.claude/.mcp.json`
 
-2. **GitHub Copilot CLI** (`gh copilot`)
-   - Extension-based installation
-   - Requires GitHub CLI prerequisite
+2. **Grok CLI** (`@vibe-kit/grok-cli`)
+   - Full MCP support for Memory Service integration
+   - Custom setup wizard for API key configuration
+   - MCP config at `~/.grok/mcp-config.json`
+   - User settings at `~/.grok/user-settings.json`
+   - Supports Morph Fast Apply (4,500+ tokens/sec)
 
-3. **OpenAI CLI** (`openai-cli`)
+3. **Gemini CLI** (`@caretdev/gemini-cli`)
+   - Memory Service integration via tokens
+   - Auto-configuration support
+
+4. **Qwen Code** (`@qwen-code/qwen-code`)
+   - Memory Service integration
+   - Token-based authentication
+
+5. **OpenAI Codex** (`openai-codex`)
    - Python-based installation
    - API key configuration
+
+6. **Cline** (`cline`)
+   - OpenRouter API key configuration
+   - Memory Service integration
 
 ### Installation Flow
 ```
@@ -2851,12 +2867,47 @@ class CliToolsManager extends EventEmitter {
 5. **Automatic Configuration Phase**:
    a. Register with Memory Service (generates unique token)
    b. Create MCP wrapper script at ~/.hive/memory-service-mcp-wrapper.js
-   c. Update tool's MCP configuration (e.g., ~/.claude/.mcp.json)
+   c. Update tool's MCP configuration:
+      - Claude Code: ~/.claude/.mcp.json
+      - Grok: ~/.grok/mcp-config.json
    d. For Cline: Set OpenRouter API key in ~/.cline/config.json
-   e. For Grok: Detect API key presence, prepare setup wizard if needed
+   e. For Grok: Launch interactive setup wizard if API key missing
 6. Clear cache to trigger UI refresh
 7. Save status to database and config
 ```
+
+### Grok-Specific Setup Wizard
+
+**Location**: `src/terminal-ipc-handlers.ts`
+
+When Grok is launched without an API key, a custom interactive setup wizard is triggered:
+
+1. **Wizard Script Generation**:
+   - Creates temporary bash script in `/tmp`
+   - Guides user through API key setup
+   - Shows clear steps to obtain key from https://console.x.ai/team/default/api-keys
+   - Displays API key during entry for verification (not hidden)
+   - Shows partial key mask after entry for confirmation
+
+2. **Terminal Launch**:
+   ```typescript
+   if (options.command === 'grok:setup') {
+     // Create interactive setup script
+     const scriptContent = `#!/bin/bash
+     echo "🚀 Grok CLI Setup Wizard"
+     echo "Please enter your API key (visible for verification):"
+     read api_key
+     # Save to user settings
+     echo "{\"apiKey\": \"\$api_key\", ...}" > ~/.grok/user-settings.json
+     `;
+     // Launch in TTYD terminal for interactive experience
+   }
+   ```
+
+3. **Post-Setup Configuration**:
+   - Creates `~/.grok/user-settings.json` with API key
+   - Generates `~/.grok/mcp-config.json` for Memory Service
+   - Updates with dynamic port on each app startup
 
 ### Uninstall Flow
 ```
@@ -2884,8 +2935,10 @@ For Claude Code and compatible tools:
    - Token immediately usable for authenticated API calls
 
 2. **MCP Configuration**:
-   - Automatically updates `~/.claude/.mcp.json`
-   - Creates MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
+   - Automatically updates tool-specific MCP configs:
+     - Claude Code: `~/.claude/.mcp.json`
+     - Grok: `~/.grok/mcp-config.json`
+   - Creates shared MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
    - Wrapper script uses `@modelcontextprotocol/sdk` for MCP server
    - Exposes two MCP tools:
      - `query_memory`: Search AI memory system for relevant learnings
@@ -2912,6 +2965,113 @@ For Claude Code and compatible tools:
    GET  /api/v1/memory/stats      - Get memory statistics
    GET  /api/v1/memory/tools      - List connected tools
    ```
+
+#### Dynamic Port Handling for MCP
+
+**Problem**: Memory Service uses dynamic port allocation (3457-3560) but MCP configs need the actual port.
+
+**Solution**: Automatic MCP configuration updates on every app startup.
+
+1. **Port Discovery Flow**:
+   ```typescript
+   // When Memory Service starts
+   processManager.on('process:message', (name, msg) => {
+     if (name === 'memory-service' && msg.type === 'ready') {
+       memoryServicePort = msg.port;  // Actual allocated port
+       updateAllMCPConfigurations(memoryServicePort);
+     }
+   });
+   ```
+
+2. **MCP Configuration Update Process** (`updateAllMCPConfigurations`):
+   - Reads current tool tokens from `~/.hive/cli-tools-config.json`
+   - Updates MCP wrapper fallback endpoint with actual port
+   - Updates Claude Code MCP config with dynamic endpoint
+   - Updates Grok MCP config with dynamic endpoint
+   - Maintains existing authentication tokens
+
+3. **Files Updated on Each Startup**:
+   ```
+   ~/.hive/memory-service-mcp-wrapper.js  - Fallback endpoint updated
+   ~/.claude/.mcp.json                    - Environment variables updated
+   ~/.grok/mcp-config.json               - Environment variables updated
+   ```
+
+4. **Grok-Specific MCP Configuration**:
+   
+   **IMPORTANT**: Grok is unique among our AI CLI tools - it uses its own MCP configuration file at `~/.grok/mcp-config.json` rather than reading from the shared `~/.hive/cli-tools-config.json`.
+   
+   ```json
+   // ~/.grok/mcp-config.json
+   {
+     "servers": {
+       "hive-memory-service": {
+         "transport": "stdio",
+         "command": "node",
+         "args": ["/Users/.../.hive/memory-service-mcp-wrapper.js"],
+         "env": {
+           "MEMORY_SERVICE_ENDPOINT": "http://localhost:<dynamic-port>",
+           "MEMORY_SERVICE_TOKEN": "<unique-token>"
+         }
+       }
+     }
+   }
+   ```
+   
+   **Key Differences for Grok**:
+   - Configuration location: `~/.grok/mcp-config.json` (not `~/.hive/cli-tools-config.json`)
+   - Auto-creation: File is created on app startup if token exists in cli-tools-config.json
+   - Detection: Memory service connection check must look in Grok's unique location
+   - Token storage: Initially saved to cli-tools-config.json, then propagated to MCP config
+
+5. **Port Allocation Strategy**:
+   - Preferred port: 3457
+   - Fallback range: 3458-3560
+   - Never hardcoded in configurations
+   - Always discovered at runtime
+
+#### Implementation Details & Lessons Learned
+
+**Critical Discovery**: Grok requires special handling throughout the system:
+
+1. **Configuration Dual-Storage Pattern**:
+   - Token initially stored in `~/.hive/cli-tools-config.json` (like other tools)
+   - MCP config must be at `~/.grok/mcp-config.json` (Grok-specific)
+   - Synchronization happens on every app startup
+
+2. **Auto-Creation vs Update-Only**:
+   ```typescript
+   // In updateAllMCPConfigurations (src/index.ts)
+   // Claude Code: Only updates if file exists
+   if (fs.existsSync(claudeMcpPath)) { /* update */ }
+   
+   // Grok: Creates file if missing (critical difference!)
+   if (grokToken) {
+     // Always create/update, don't check existence first
+     fs.writeFileSync(grokMcpPath, JSON.stringify(grokMcp, null, 2));
+   }
+   ```
+
+3. **Detection Fallback Pattern**:
+   ```typescript
+   // In checkMemoryServiceConnection (src/main/cli-tools/detector.ts)
+   if (toolId === 'grok') {
+     // Primary: Check ~/.grok/mcp-config.json
+     // Fallback: Check ~/.hive/cli-tools-config.json
+     // This dual-check ensures detection works during transition
+   }
+   ```
+
+4. **Tool Registry Update Required**:
+   - Must add 'grok' to memory service check list in detector
+   - Easy to miss because other tools were hardcoded in condition
+
+**Key Architectural Decisions**:
+- ✅ Keep token in cli-tools-config.json for centralized management
+- ✅ Auto-create Grok's MCP config on startup for seamless experience
+- ✅ Support both config locations in detector for robustness
+- ✅ Log all MCP operations for debugging
+- ❌ Don't assume all tools use same config pattern
 
 ### Database Integration
 Uses existing `sync_metadata` table:
@@ -3518,6 +3678,55 @@ src/components/
 ```
 
 ### Visual Design System
+
+#### HiveTechs Theme Integration
+Based on the HiveTechs website's premium Paddle-inspired dark theme, the AI CLI Tools interface features:
+
+**Color Palette**:
+- Primary Yellow: `#FFC107` - Main brand color for CTAs and highlights
+- Secondary Blue: `#007BFF` - Accent color for gradients
+- Dark Background: `#0E1414` - Main application background
+- Card Background: `#1A1F1F` - Tool cards and panels
+- Border Color: `rgba(255, 193, 7, 0.2)` - Subtle yellow-tinted borders
+- Text Primary: `#E0E0E0` - Main text
+- Text Secondary: `#AAA` - Muted labels
+
+**Button Styling**:
+```css
+/* Premium gradient buttons */
+.tool-button {
+  background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%);
+  box-shadow: 0 4px 6px rgba(255, 193, 7, 0.25);
+  border: none;
+  color: #0E1414;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tool-button:hover {
+  background: linear-gradient(135deg, #FFD54F 0%, #1976D2 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(255, 193, 7, 0.35);
+}
+
+/* Secondary actions */
+.tool-button-secondary {
+  background: transparent;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  color: #FFC107;
+}
+
+.tool-button-secondary:hover {
+  background: rgba(255, 193, 7, 0.1);
+  border-color: #FFC107;
+}
+```
+
+**Batch Operation Buttons** (Install All, Update All, Uninstall All):
+- Positioned at top of tools panel for easy access
+- Use consistent gradient theming
+- Include appropriate icons (codicon-cloud-download, codicon-sync, codicon-trash)
+- Confirmation dialogs for destructive operations
 
 #### Tool Card States
 Each CLI tool is represented by a card with multiple visual states:
@@ -6293,8 +6502,20 @@ electron-poc/
   - **Gemini CLI Integration**: Full implementation with FREE tier support
   - **Qwen Code Integration**: Package/binary name mismatch discovered and documented
   - **OpenAI Codex Integration**: GPT-5 and multimodal support implemented
-  - **UI Refresh Bug Documented**: Persistent issue affecting all tools after install
-  - **Memory Service Display Bug**: Cache issue after configuration identified
+- **v1.7.1 (2025-08-23)**: Grok MCP Integration & Dynamic Port Handling
+  - **Grok MCP Support**: Full Model Context Protocol integration for Grok CLI
+  - **Dynamic Port Configuration**: Automatic MCP config updates on app startup
+  - **Port Discovery**: Memory Service port (3457-3560) tracked and propagated
+  - **Multi-Tool MCP**: Support for both Claude Code and Grok MCP configurations
+  - **Setup Wizard Enhancement**: Interactive Grok API key configuration
+  - **Token Persistence**: Unique authentication tokens maintained across restarts
+  - **updateAllMCPConfigurations**: Function to sync all tool configs with actual port
+  - **Grok Auto-Creation Fix**: MCP config now created if missing on startup
+  - **Grok Detection Fix**: Added 'grok' to memory service connection check list
+  - **Dual-Location Support**: Detector checks both ~/.grok and ~/.hive for configs
+  - **UI Theming**: Applied HiveTechs gradient theme to all AI CLI tool buttons
+  - **Batch Operations**: Added Install All, Update All, Uninstall All buttons
+  - **Tool Reordering**: Cline moved to bottom as least-used tool
   - **Comprehensive Lessons Learned**: Documentation of all quirks and workarounds
 - **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
   - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts

@@ -118,7 +118,7 @@ export class CliToolsDetector {
       }
       
       // Check for memory service connection (for supported tools)
-      if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' || toolId === 'openai-codex' || toolId === 'cline') {
+      if (toolId === 'claude-code' || toolId === 'gemini-cli' || toolId === 'qwen-code' || toolId === 'openai-codex' || toolId === 'cline' || toolId === 'grok') {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       
@@ -187,23 +187,55 @@ export class CliToolsDetector {
    */
   private async checkMemoryServiceConnection(toolId: string): Promise<boolean> {
     try {
-      // Check if we have a config file with token
-      const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
-      if (!fs.existsSync(configPath)) {
-        logger.debug(`[CliToolsDetector] No config file found for memory service check`);
-        return false;
+      let token: string | undefined;
+      let endpoint: string | undefined;
+      
+      // Grok is unique - it uses its own MCP config file
+      if (toolId === 'grok') {
+        const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
+        if (fs.existsSync(grokMcpPath)) {
+          try {
+            const grokMcp = JSON.parse(fs.readFileSync(grokMcpPath, 'utf-8'));
+            const memoryServer = grokMcp.servers?.['hive-memory-service'];
+            if (memoryServer?.env) {
+              token = memoryServer.env.MEMORY_SERVICE_TOKEN;
+              endpoint = memoryServer.env.MEMORY_SERVICE_ENDPOINT;
+            }
+          } catch (e) {
+            logger.debug(`[CliToolsDetector] Failed to parse Grok MCP config:`, e);
+          }
+        }
+        
+        if (!token) {
+          // Fallback to checking cli-tools-config.json for Grok
+          const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+          if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            token = config[toolId]?.memoryService?.token;
+            endpoint = config[toolId]?.memoryService?.endpoint;
+          }
+        }
+      } else {
+        // Other tools use the standard cli-tools-config.json
+        const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+        if (!fs.existsSync(configPath)) {
+          logger.debug(`[CliToolsDetector] No config file found for memory service check`);
+          return false;
+        }
+        
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        const toolConfig = config[toolId];
+        token = toolConfig?.memoryService?.token;
+        endpoint = toolConfig?.memoryService?.endpoint;
       }
       
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      const toolConfig = config[toolId];
-      
-      if (!toolConfig?.memoryService?.token) {
+      if (!token) {
         logger.debug(`[CliToolsDetector] No memory service token found for ${toolId}`);
         return false;
       }
       
       // Check if the token is valid by querying the Memory Service
-      const memoryServicePort = toolConfig.memoryService.endpoint?.match(/:(\d+)/)?.[1] || '3457';
+      const memoryServicePort = endpoint?.match(/:(\d+)/)?.[1] || '3457';
       
       // Use node's http module instead of fetch for compatibility
       const http = require('http');
@@ -215,7 +247,7 @@ export class CliToolsDetector {
           path: '/api/v1/memory/stats',
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${toolConfig.memoryService.token}`,
+            'Authorization': `Bearer ${token}`,
             'X-Client-Name': toolId
           },
           timeout: 2000
