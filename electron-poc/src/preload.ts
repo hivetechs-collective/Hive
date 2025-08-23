@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   detectAllCliTools: () => ipcRenderer.invoke('cli-tools-detect-all'),
   installCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-install', toolId),
   updateCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-update', toolId),
+  uninstallCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-uninstall', toolId),
   configureCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-configure', toolId),
   launchCliTool: (toolId: string, projectPath?: string) => ipcRenderer.invoke('cli-tool-launch', toolId, projectPath),
   checkCliToolUpdates: () => ipcRenderer.invoke('cli-tools-check-updates'),

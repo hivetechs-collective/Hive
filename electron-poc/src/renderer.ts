@@ -2447,6 +2447,9 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
             <button onclick="launchCliTool('${id}')" style="flex: 1; padding: 6px; background: #2196f3; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Launch in current project">Launch</button>
             <button onclick="refreshCliToolDetails('${id}')" style="flex: 1; padding: 6px; background: #2d7d2d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Refresh tool details">Details</button>
             <button onclick="updateCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
+            <button onclick="uninstallCliTool('${id}')" style="flex: 1; padding: 6px; background: #d73a49; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Uninstall this tool"
+                onmouseover="this.style.background='#cb2431'" 
+                onmouseout="this.style.background='#d73a49'">Uninstall</button>
         `;
     } else {
         buttons = `
@@ -2893,9 +2896,88 @@ async function updateAllCliTools(): Promise<void> {
     }
 }
 
+/**
+ * Uninstall a CLI tool
+ */
+async function uninstallCliTool(toolId: string): Promise<void> {
+    console.log(`[CLI Tools] Uninstall requested for ${toolId}`);
+    
+    // Confirm with user first
+    const toolName = (window as any).CLI_TOOLS_REGISTRY?.[toolId]?.name || toolId;
+    const confirmed = confirm(`Are you sure you want to uninstall ${toolName}?\n\nThis will remove the tool globally from your system.`);
+    
+    if (!confirmed) {
+        console.log(`[CLI Tools] Uninstall canceled for ${toolId}`);
+        return;
+    }
+    
+    // Show progress in the UI
+    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+    if (card) {
+        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+        if (statusDiv) {
+            statusDiv.innerHTML = '🗑️ Uninstalling...';
+            statusDiv.style.color = '#FFA500';
+        }
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        const result = await electronAPI.uninstallCliTool(toolId);
+        
+        if (result && result.success) {
+            console.log(`[CLI Tools] ${toolId} uninstalled successfully`);
+            
+            // Update UI immediately to show not installed
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    statusDiv.innerHTML = '✅ Uninstalled';
+                    statusDiv.style.color = '#4ec9b0';
+                }
+            }
+            
+            // Refresh the panel after a short delay to update buttons
+            setTimeout(() => {
+                renderCliToolsPanel(true);
+            }, 1500);
+            
+        } else {
+            console.error(`[CLI Tools] Failed to uninstall ${toolId}:`, result?.error || 'Unknown error');
+            
+            // Update UI to show error
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                if (statusDiv) {
+                    statusDiv.innerHTML = '❌ Uninstall failed';
+                    statusDiv.style.color = '#f44747';
+                }
+            }
+            
+            if (result?.error) {
+                alert(`Failed to uninstall ${toolName}: ${result.error}`);
+            }
+        }
+    } catch (error) {
+        console.error(`[CLI Tools] Error uninstalling ${toolId}:`, error);
+        
+        // Update UI to show error
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+            if (statusDiv) {
+                statusDiv.innerHTML = '❌ Error';
+                statusDiv.style.color = '#f44747';
+            }
+        }
+        
+        alert(`Uninstall error: ${error}`);
+    }
+}
+
 // Make functions available globally
 (window as any).installAllCliTools = installAllCliTools;
 (window as any).updateAllCliTools = updateAllCliTools;
+(window as any).uninstallCliTool = uninstallCliTool;
 
 /**
  * Launch a CLI tool in the current project context

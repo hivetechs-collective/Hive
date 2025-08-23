@@ -2848,8 +2848,28 @@ class CliToolsManager extends EventEmitter {
 2. Verify system dependencies
 3. Execute installation command (npm/pip/gh)
 4. Verify installation success
-5. Configure Memory Service integration (if applicable)
-6. Save status to database and config
+5. **Automatic Configuration Phase**:
+   a. Register with Memory Service (generates unique token)
+   b. Create MCP wrapper script at ~/.hive/memory-service-mcp-wrapper.js
+   c. Update tool's MCP configuration (e.g., ~/.claude/.mcp.json)
+   d. For Cline: Set OpenRouter API key in ~/.cline/config.json
+   e. For Grok: Detect API key presence, prepare setup wizard if needed
+6. Clear cache to trigger UI refresh
+7. Save status to database and config
+```
+
+### Uninstall Flow
+```
+1. Show confirmation dialog to user
+2. Map tool ID to package name
+3. Execute uninstall command (npm uninstall -g / pip uninstall)
+4. Clean up tool-specific configurations:
+   a. Remove Cline config file (~/.cline/config.json)
+   b. Preserve Grok API keys for potential reinstall
+   c. Keep Memory Service registration for reuse
+5. Clear tool from detection cache
+6. Verify tool is no longer accessible
+7. Update UI to show uninstalled state
 ```
 
 ### Memory Service Integration
@@ -2906,28 +2926,44 @@ next_sync_due: next update check time
 ```typescript
 // Main process handlers (index.ts)
 'cli-tool-detect': Detect if a specific tool is installed
-'cli-tool-install': Install a specific tool
+'cli-tool-install': Install a specific tool with automatic configuration
 'cli-tool-update': Update a specific tool to latest version
-'cli-tool-configure': Configure Memory Service integration
+'cli-tool-configure': Configure Memory Service integration (deprecated - now automatic)
+'cli-tool-uninstall': Uninstall a specific tool with cleanup
 'cli-tools-detect-all': Detect all supported tools
 'cli-tools-check-updates': Check for updates across all tools
+'cli-tool-launch': Launch tool with smart configuration detection
 ```
 
 ### UI Implementation
 
-#### Button Actions
+#### Batch Operations (Top of Panel)
+1. **Install All Tools Button** (Blue):
+   - Installs all 6 AI CLI tools in sequence
+   - Skips already installed tools automatically
+   - Shows progress counter (e.g., "Installing 3 of 6...")
+   - Automatically configures Memory Service for compatible tools
+   - Configures Cline with OpenRouter API key from settings
+   - Displays summary (e.g., "✅ Installed 4, skipped 2")
+
+2. **Update All Tools Button** (Gray):
+   - Updates ONLY installed tools to latest versions
+   - Skips tools that are not installed
+   - Shows progress during batch update
+   - Displays update summary with version changes
+
+#### Individual Tool Card Actions
 1. **Details Button** (Green):
    - Refreshes tool status
    - Shows version, path, and Memory status
    - Restores full detail view after other actions
 
-2. **Configure Button** (Gray):
-   - Registers tool with Memory Service via POST `/api/v1/memory/register`
-   - Generates unique authentication token (64-byte hex string)
-   - Saves token to `~/.hive/cli-tools-config.json`
-   - Creates/updates MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
-   - Updates Claude's MCP configuration at `~/.claude/.mcp.json`
-   - Shows "✅ Configured" on success
+2. **Configure Button** (REMOVED - Now Automatic):
+   - **DEPRECATED**: Configuration now happens automatically during installation
+   - Memory Service registration occurs seamlessly after install
+   - MCP configuration updates without user intervention
+   - Cline receives OpenRouter API key from Hive settings automatically
+   - Grok launches interactive setup wizard on first run if unconfigured
 
 3. **Update Button** (Gray):
    - **Purpose**: Updates CLI tools to their latest versions
@@ -2941,7 +2977,19 @@ next_sync_due: next update check time
 4. **Install Button** (Blue - for uninstalled tools):
    - Runs appropriate package manager (npm/pip)
    - Shows progress indicators
-   - Refreshes panel on completion
+   - **Automatically configures Memory Service** after successful installation
+   - **For Cline**: Sets OpenRouter API key from Hive settings
+   - **For Grok**: Detects missing API key and launches setup wizard
+   - Refreshes panel on completion with configuration status
+
+5. **Uninstall Button** (Red - for installed tools):
+   - Shows confirmation dialog before proceeding
+   - Runs `npm uninstall -g <package>` or `pip uninstall <package>`
+   - Clears tool from cache after uninstall
+   - **Preserves user configurations** (e.g., Grok API keys)
+   - Removes Cline config file if present
+   - Verifies tool was successfully removed
+   - Updates UI to show uninstalled state
 
 ### Configuration Storage
 ```
@@ -2957,6 +3005,111 @@ next_sync_due: next update check time
 - Background checking on app startup
 - Event emissions for update availability
 - Non-blocking update downloads
+- Batch update capability for all installed tools
+
+### Smart Configuration System
+
+#### Automatic Memory Service Integration
+After any tool installation:
+1. Tool is automatically registered with Memory Service
+2. Unique authentication token generated (64-byte hex)
+3. MCP wrapper script created/updated
+4. Tool's MCP configuration updated
+5. No user intervention required
+
+#### Tool-Specific Configurations
+
+**Cline OpenRouter Integration**:
+- Automatically receives API key from Hive settings
+- Creates `~/.cline/config.json` with OpenRouter credentials
+- Enables access to 400+ AI models immediately
+
+**Grok Setup Wizard**:
+- Detects missing API key on launch
+- Provides interactive terminal wizard
+- Guides through X.AI account setup
+- Saves credentials securely
+- Falls back to manual configuration if needed
+
+##### Grok Setup Wizard Implementation
+**Location**: `src/terminal-ipc-handlers.ts` (lines 95-209)
+
+The Grok setup wizard provides a seamless first-time configuration experience:
+
+```typescript
+// Detection logic in main process
+if (!fs.existsSync(grokConfigPath) || !grokConfig.apiKey) {
+  // Launch setup wizard instead of regular Grok
+  command = 'grok:setup';
+}
+
+// Wizard script generation
+const scriptContent = `#!/bin/bash
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "                 🚀 Grok CLI Setup Wizard"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "Welcome to Grok CLI! Let's get you set up."
+echo ""
+echo "To use Grok, you need an API key from X.AI"
+echo ""
+echo "📝 Steps to get your API key:"
+echo "   1. Visit https://x.ai"
+echo "   2. Sign in or create an account"
+echo "   3. Navigate to API settings"
+echo "   4. Generate a new API key"
+echo ""
+read -p "Would you like to set up your API key now? (y/n): " response
+
+if [[ "$response" =~ ^[Yy]$ ]]; then
+  echo "Please enter your Grok API key:"
+  read -s api_key
+  
+  # Use Python to safely merge with existing config
+  python3 -c "
+import json
+import sys
+
+try:
+    with open('$HOME/.grok/user-settings.json', 'r') as f:
+        settings = json.load(f)
+except:
+    settings = {}
+
+settings['apiKey'] = '$api_key'
+if 'baseURL' not in settings:
+    settings['baseURL'] = 'https://api.x.ai/v1'
+if 'defaultModel' not in settings:
+    settings['defaultModel'] = 'grok-4-latest'
+
+with open('$HOME/.grok/user-settings.json', 'w') as f:
+    json.dump(settings, f, indent=2)
+print('✅ API key added to existing configuration')
+"
+  
+  echo ""
+  echo "🎉 Setup complete! Launching Grok CLI..."
+  sleep 2
+  exec grok
+fi
+`;
+
+// Write to temporary file and execute
+const scriptPath = path.join(os.tmpdir(), `grok-setup-${Date.now()}.sh`);
+fs.writeFileSync(scriptPath, scriptContent);
+fs.chmodSync(scriptPath, '755');
+
+// Launch in terminal with cleanup
+actualCommand = `bash ${scriptPath}; rm -f ${scriptPath}`;
+```
+
+**Features**:
+1. **Smart Detection**: Checks for existing `~/.grok/user-settings.json` and API key
+2. **Interactive Flow**: User-friendly prompts with clear instructions
+3. **Secure Input**: Uses `read -s` for password-style API key entry
+4. **Config Preservation**: Merges new API key with existing settings using Python JSON
+5. **Automatic Launch**: Starts Grok CLI after successful configuration
+6. **Fallback Options**: Provides manual configuration instructions if user declines
 
 ### Supported Agentic Coding CLIs
 Reference: `src/utils/AI_CLI_TOOLS_REGISTRY.md`
@@ -2992,6 +3145,14 @@ The system supports 6 carefully selected agentic coding CLIs that provide autono
    - Documentation: [`docs/cli-tools/cline.md`](docs/cli-tools/cline.md)
    - NPM: `@yaegaki/cline-cli`
    - Version: 0.1.1+
+   - **Auto-configuration**: Receives OpenRouter API key from Hive settings
+
+7. **Grok CLI** - xAI's powerful terminal agent
+   - Documentation: [`docs/grok-cli-documentation.md`](docs/grok-cli-documentation.md)
+   - NPM: `@vibe-kit/grok-cli`
+   - Version: 0.0.23+
+   - **Smart Setup**: Interactive wizard for first-time API key configuration
+   - **MCP Support**: Advanced Model Context Protocol integration
 
 ### Update Button Architecture
 
@@ -3090,11 +3251,14 @@ sequenceDiagram
 ##### NPM-based Tools
 - **Claude Code**: `@anthropic-ai/claude-code`
 - **Gemini CLI**: `@google/gemini-cli`
-- **Qwen Code**: `@qwen-code/qwen-code`
+- **Qwen Code**: `@qwen-code/qwen-code` (command: `qwen`)
 - **OpenAI Codex**: `@openai/codex`
 - **Cline**: `@yaegaki/cline-cli`
+- **Grok CLI**: `@vibe-kit/grok-cli`
 
+**Install Command**: `npm install -g <package-name>@latest`
 **Update Command**: `npm update -g <package-name>`
+**Uninstall Command**: `npm uninstall -g <package-name>`
 
 ##### Python/pip-based Tools
 - **Aider**: `aider-chat`
@@ -3295,6 +3459,32 @@ src/components/
 **Tooltip**: "AI CLI Tools - Manage AI coding assistants"
 **Keyboard Shortcut**: `Ctrl/Cmd + Shift + T` (for Tools)
 
+### Batch Operations UI
+
+#### Top Control Bar
+```
+┌─────────────────────────────────────────────────────────┐
+│ AI CLI TOOLS MANAGEMENT                                  │
+├─────────────────────────────────────────────────────────┤
+│ [🚀 Install All Tools] [🔄 Update All Tools]             │
+│ Memory Service: ● Connected (Port 3457)                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Install All Tools Button**:
+- Icon: 🚀 (rocket for quick setup)
+- Color: Blue (#3b82f6)
+- Hover: "Install all 6 AI CLI tools"
+- Progress: "Installing 3 of 6..."
+- Complete: "✅ Installed 4, skipped 2"
+
+**Update All Tools Button**:
+- Icon: 🔄 (refresh for updates)
+- Color: Gray (#6b7280)
+- Hover: "Update all installed tools"
+- Progress: "Updating 3 tools..."
+- Complete: "✅ Updated 3 tools"
+
 ### Panel Layout
 
 ```
@@ -3354,7 +3544,7 @@ Each CLI tool is represented by a card with multiple visual states:
 │ Last updated: 2 hours ago           │
 │ Auto-update: Enabled                │
 │                                     │
-│ [Check Update] [Configure] [Remove] │
+│ [Details] [Update] [Uninstall]      │
 └─────────────────────────────────────┘
 ```
 

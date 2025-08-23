@@ -1889,6 +1889,144 @@ server.start();
     }
   });
   
+  // Uninstall CLI tool
+  ipcMain.handle('cli-tool-uninstall', async (_, toolId: string) => {
+    logger.info(`[Main] Uninstalling CLI tool: ${toolId}`);
+    
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      // Get tool configuration from registry
+      const toolConfig = CLI_TOOLS_REGISTRY[toolId];
+      
+      if (!toolConfig) {
+        logger.error(`[Main] Unknown tool ID for uninstall: ${toolId}`);
+        return { success: false, error: `Unknown tool: ${toolId}` };
+      }
+      
+      // Map tool IDs to npm package names
+      const npmPackages: Record<string, string> = {
+        'claude-code': '@anthropic-ai/claude-code',
+        'gemini-cli': '@google/gemini-cli',
+        'qwen-code': '@qwen-code/qwen-code',
+        'openai-codex': '@openai/codex',
+        'cline': '@yaegaki/cline-cli',
+        'grok': '@vibe-kit/grok-cli'
+      };
+      
+      const packageName = npmPackages[toolId];
+      
+      if (!packageName) {
+        logger.error(`[Main] No package mapping for tool: ${toolId}`);
+        return { success: false, error: `Cannot uninstall ${toolConfig.name}: package mapping not found` };
+      }
+      
+      // Enhanced PATH for finding npm
+      const enhancedPath = `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`;
+      
+      logger.info(`[Main] Running uninstall command: npm uninstall -g ${packageName}`);
+      
+      try {
+        // Run the uninstall command
+        const { stdout, stderr } = await execAsync(`npm uninstall -g ${packageName}`, {
+          env: { ...process.env, PATH: enhancedPath },
+          timeout: 60000 // 1 minute timeout for uninstall
+        });
+        
+        logger.info(`[Main] Uninstall output: ${stdout}`);
+        if (stderr && !stderr.includes('WARN') && !stderr.includes('warning')) {
+          logger.warn(`[Main] Uninstall stderr: ${stderr}`);
+        }
+        
+        // Verify uninstallation by checking if command still exists
+        try {
+          await execAsync(`which ${toolConfig.command}`, {
+            env: { ...process.env, PATH: enhancedPath },
+            timeout: 5000
+          });
+          
+          // If we get here, the command still exists - uninstall may have failed
+          logger.warn(`[Main] Command ${toolConfig.command} still exists after uninstall`);
+          
+          // Try to determine if it's a different installation
+          const { stdout: pathOutput } = await execAsync(`which ${toolConfig.command}`, {
+            env: { ...process.env, PATH: enhancedPath }
+          });
+          
+          if (pathOutput.includes('/usr/local/bin') || pathOutput.includes('/opt/homebrew/bin')) {
+            // It's still in a global location, uninstall might have failed
+            return { 
+              success: false, 
+              error: `Tool appears to still be installed at ${pathOutput.trim()}. You may need to uninstall manually.` 
+            };
+          }
+        } catch {
+          // Command not found - uninstall was successful
+          logger.info(`[Main] Command ${toolConfig.command} no longer exists - uninstall successful`);
+        }
+        
+        // CRITICAL FIX: Clear the detector cache for this tool so UI refresh works
+        logger.info(`[Main] Clearing detector cache for ${toolId} after successful uninstall`);
+        cliToolsDetector.clearCache(toolId);
+        
+        // Also clean up any configuration files if they exist
+        if (toolId === 'cline') {
+          // Clean up Cline configuration
+          const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+          if (fs.existsSync(clineConfigDir)) {
+            logger.info(`[Main] Removing Cline configuration directory: ${clineConfigDir}`);
+            try {
+              fs.rmSync(clineConfigDir, { recursive: true, force: true });
+            } catch (e) {
+              logger.warn(`[Main] Could not remove Cline config directory:`, e);
+            }
+          }
+        } else if (toolId === 'grok') {
+          // Optionally clean up Grok configuration (but keep API key for reinstall)
+          logger.info(`[Main] Keeping Grok configuration at ~/.grok for potential reinstall`);
+        }
+        
+        logger.info(`[Main] ${toolConfig.name} uninstalled successfully`);
+        return { success: true, message: `${toolConfig.name} has been uninstalled` };
+        
+      } catch (error: any) {
+        logger.error(`[Main] Failed to uninstall ${toolConfig.name}:`, error);
+        
+        // Check for specific error conditions
+        if (error.message?.includes('EACCES') || error.message?.includes('permission')) {
+          return { 
+            success: false, 
+            error: 'Permission denied. Try running the app with elevated permissions or uninstall manually with: npm uninstall -g ' + packageName 
+          };
+        }
+        
+        // Check if npm is not found
+        if (error.message?.includes('npm: command not found')) {
+          return { 
+            success: false, 
+            error: 'npm not found. Please ensure Node.js and npm are installed.' 
+          };
+        }
+        
+        // Check if package is not installed
+        if (error.message?.includes('not found') || error.message?.includes('missing')) {
+          // This might actually be a success case - tool is already not installed
+          logger.info(`[Main] Tool may already be uninstalled: ${error.message}`);
+          cliToolsDetector.clearCache(toolId);
+          return { success: true, message: `${toolConfig.name} was not installed or has been removed` };
+        }
+        
+        return { success: false, error: error.message || 'Uninstall failed' };
+      }
+      
+    } catch (error: any) {
+      logger.error(`[Main] Unexpected error uninstalling ${toolId}:`, error);
+      return { success: false, error: error.message || 'Unexpected error occurred' };
+    }
+  });
+  
   // Configure CLI tool
   ipcMain.handle('cli-tool-configure', async (_, toolId: string) => {
     logger.info(`[Main] Configuring CLI tool: ${toolId}`);
