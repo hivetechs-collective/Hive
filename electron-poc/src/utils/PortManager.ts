@@ -40,7 +40,8 @@ export class PortManager {
         resolve(true);
       });
       
-      server.listen(port, '127.0.0.1');
+      // Check on all interfaces (0.0.0.0) to catch servers listening on any interface
+      server.listen(port, '0.0.0.0');
     });
   }
   
@@ -238,9 +239,10 @@ export class PortManager {
     
     while (Date.now() - startTime < timeout) {
       try {
-        const isInUse = !(await this.isPortAvailable(port));
-        if (isInUse) {
-          // Port is in use, service is likely ready
+        // Try to connect to the port to see if something is listening
+        const isListening = await this.isPortListening(port);
+        if (isListening) {
+          // Port is listening, service is likely ready
           // Try to make a health check request
           try {
             const response = await fetch(`http://localhost:${port}/health`);
@@ -248,7 +250,7 @@ export class PortManager {
               return true;
             }
           } catch {
-            // Service might not have HTTP endpoint yet
+            // Service might not have HTTP endpoint yet, but port is listening
           }
           
           // Port is at least bound
@@ -262,6 +264,34 @@ export class PortManager {
     }
     
     return false;
+  }
+
+  /**
+   * Check if a port is listening by trying to connect to it
+   */
+  private static async isPortListening(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const client = new net.Socket();
+      
+      const timeout = setTimeout(() => {
+        client.destroy();
+        resolve(false);
+      }, 100);
+      
+      client.once('connect', () => {
+        clearTimeout(timeout);
+        client.destroy();
+        resolve(true);
+      });
+      
+      client.once('error', () => {
+        clearTimeout(timeout);
+        resolve(false);
+      });
+      
+      // Try to connect to localhost on the port
+      client.connect(port, 'localhost');
+    });
   }
 }
 

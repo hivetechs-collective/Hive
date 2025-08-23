@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hive Consensus - Loading</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: #0E1414;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    
+    .startup-container {
+      text-align: center;
+      width: 600px;
+      max-height: 500px;
+      animation: fadeIn 0.5s ease-out;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-evenly;
+      padding: 20px;
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    /* Neural Network Canvas */
+    #neural-canvas {
+      width: 250px;
+      height: 250px;
+      margin: 0 auto 20px;
+      filter: drop-shadow(0 0 30px rgba(255, 193, 7, 0.2));
+      flex-shrink: 0;
+    }
+    
+    /* App Title */
+    .app-title {
+      color: #FFC107;
+      font-size: 24px;
+      font-weight: 300;
+      letter-spacing: 4px;
+      margin-bottom: 30px;
+      text-shadow: 0 0 20px rgba(255, 193, 7, 0.3);
+      flex-shrink: 0;
+    }
+    
+    /* Progress Bar */
+    .progress-container {
+      width: 70%;
+      height: 4px;
+      background: rgba(26, 31, 33, 0.8);
+      margin: 0 auto 20px;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+      flex-shrink: 0;
+    }
+    
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #FFC107, #FFD54F, #FFC107);
+      background-size: 200% 100%;
+      width: 0%;
+      transition: width 0.4s ease-out;
+      animation: shimmer 2s linear infinite;
+      border-radius: 4px;
+      box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+    }
+    
+    @keyframes shimmer {
+      0% {
+        background-position: -200% 0;
+      }
+      100% {
+        background-position: 200% 0;
+      }
+    }
+    
+    /* Status Text */
+    .status-text {
+      color: #9CA3AF;
+      font-size: 14px;
+      min-height: 20px;
+      transition: opacity 0.3s ease;
+      margin-top: 10px;
+      flex-shrink: 0;
+      width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .status-text.changing {
+      opacity: 0.5;
+    }
+    
+    /* Loading Dots Animation */
+    .loading-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    
+    @keyframes dots {
+      0%, 20% {
+        content: '';
+      }
+      40% {
+        content: '.';
+      }
+      60% {
+        content: '..';
+      }
+      80%, 100% {
+        content: '...';
+      }
+    }
+    
+    /* Error State */
+    .error-container {
+      display: none;
+      color: #EF4444;
+      margin-top: 30px;
+      padding: 20px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+    }
+    
+    .error-container.visible {
+      display: block;
+      animation: fadeIn 0.3s ease-out;
+    }
+    
+    .error-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    
+    .error-message {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    
+    /* Version Info */
+    .version-info {
+      color: #4B5563;
+      font-size: 12px;
+      opacity: 0.6;
+      margin-top: auto;
+      padding-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="startup-container">
+    <!-- Neural Network Canvas -->
+    <canvas id="neural-canvas"></canvas>
+    
+    <!-- App Title -->
+    <div class="app-title">HIVE CONSENSUS</div>
+    
+    <!-- Progress Bar -->
+    <div class="progress-container">
+      <div class="progress-bar" id="progress"></div>
+    </div>
+    
+    <!-- Status Text -->
+    <div class="status-text" id="status">
+      <span id="status-message">Initializing</span><span class="loading-dots"></span>
+    </div>
+    
+    <!-- Error Container (Hidden by default) -->
+    <div class="error-container" id="error-container">
+      <div class="error-title">Startup Failed</div>
+      <div class="error-message" id="error-message"></div>
+    </div>
+    
+    <!-- Version Info -->
+    <div class="version-info">Version 1.8.0</div>
+  </div>
+  
+  <script src="startup-neural.js"></script>
+</body>
+</html>

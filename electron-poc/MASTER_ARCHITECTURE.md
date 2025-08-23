@@ -28,6 +28,7 @@ Hive Consensus is an advanced AI-powered development environment that combines:
 - **VS Code-like Development Environment** in Electron
 - **Deep Git Integration** with visual source control
 - **Real-time Collaboration** between human and AI
+- **Visual Startup Experience** with neural network animation (v1.8.0)
 
 ### Technology Stack
 ```
@@ -121,6 +122,371 @@ Electron Main Process (Orchestrator)
 └── File Watchers
     └── Git Status Monitor
 ```
+
+### Startup Orchestrator System (v2.0.0 - Event-Driven Architecture)
+**Location**: `src/startup/StartupOrchestrator.ts`
+
+The StartupOrchestrator provides a sophisticated visual loading experience with real-time progress reporting from ProcessManager, ensuring all services are fully initialized before displaying the main application.
+
+#### Core Philosophy: No Timeouts, Only Real Status
+- **NO ARBITRARY TIMEOUTS**: System waits as long as needed for services to be ready
+- **EVENT-DRIVEN PROGRESS**: ProcessManager reports actual status, not estimated times
+- **CONTINUOUS MONITORING**: Real-time updates flow from services to visual display
+- **GRACEFUL DEGRADATION**: Optional services can fail without blocking startup
+
+#### Architectural Components
+
+##### 1. StartupOrchestrator Class
+**Location**: `src/startup/StartupOrchestrator.ts`
+
+```typescript
+class StartupOrchestrator {
+  private splashWindow: BrowserWindow | null = null;
+  private mainWindow: BrowserWindow | null = null;
+  private startTime: number = Date.now();
+  private initFunctions: {
+    initDatabase: () => void;
+    initializeProcessManager: () => void;
+    registerMemoryServiceHandlers: () => void;
+    registerGitHandlers: () => void;
+    registerFileSystemHandlers: () => void;
+    registerDialogHandlers: () => void;
+    registerSimpleCliToolHandlers: () => void;
+    processManager: ProcessManager;
+  };
+  
+  // Service definitions with NO verify functions - ProcessManager handles everything
+  private requiredServices: ServiceCheck[] = [
+    { id: 'database', name: 'Database', init: async () => {...}, weight: 15, required: true },
+    { id: 'processManager', name: 'Process Manager', init: async () => {...}, weight: 10, required: true },
+    { id: 'ipcHandlers', name: 'IPC Handlers', init: async () => {...}, weight: 10, required: true },
+    { id: 'memoryService', name: 'Memory Service', init: async () => {...}, weight: 20, required: false },
+    { id: 'backendServer', name: 'Backend Server & Consensus Engine', init: async () => {...}, weight: 25, required: true },
+    { id: 'cliTools', name: 'AI CLI Tools', init: async () => {...}, weight: 15, required: false }
+  ];
+}
+```
+
+##### 2. Visual Display Architecture
+
+###### Splash Window Configuration
+```typescript
+splashWindow = new BrowserWindow({
+  width: 600,
+  height: 500,
+  frame: false,           // No window chrome
+  center: true,          // Center on screen
+  resizable: false,      // Fixed size
+  backgroundColor: '#0E1414',  // Match app theme
+  alwaysOnTop: true,     // Stay above other windows
+  skipTaskbar: true,     // Don't show in taskbar
+  webPreferences: {
+    nodeIntegration: false,
+    contextIsolation: true,
+    preload: path.join(__dirname, '..', '..', 'startup-preload.js')
+  }
+});
+```
+
+###### Visual Layout (Fixed Positioning)
+```css
+.startup-container {
+  width: 600px;
+  max-height: 500px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);  /* Perfect centering */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-evenly;
+  padding: 20px;
+}
+
+/* Prevents text from appearing off-screen */
+.status-text {
+  min-height: 20px;
+  flex-shrink: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+```
+
+##### 3. ProcessManager Integration
+
+###### Event-Driven Progress Reporting
+```typescript
+// ProcessManager emits detailed progress events
+processManager.emit('process:progress', {
+  name: 'websocket-backend',
+  status: 'initializing' | 'database' | 'consensus' | 'models' | 'ai-helpers' | 'waiting' | 'ready',
+  message: 'Human-readable status message',
+  port: 8765,
+  percent?: number  // Optional progress percentage
+});
+
+// StartupOrchestrator listens and updates display
+const progressHandler = (data: any) => {
+  if (data.name === 'websocket-backend') {
+    switch (data.status) {
+      case 'starting':
+        this.updateSplash(70, 'Starting backend server...');
+        break;
+      case 'database':
+        this.updateSplash(78, 'Connecting to database...');
+        break;
+      case 'consensus':
+        this.updateSplash(80, 'Initializing consensus engine...');
+        break;
+      case 'models':
+        this.updateSplash(85, 'Syncing AI models from OpenRouter...');
+        break;
+      case 'ai-helpers':
+        this.updateSplash(88, 'Loading AI helpers...');
+        break;
+      case 'waiting':
+        this.updateSplash(92, 'Waiting for services to be ready...');
+        break;
+      case 'ready':
+        this.updateSplash(95, `Backend ready on port ${data.port}`);
+        break;
+    }
+  }
+};
+```
+
+###### No-Timeout Service Verification
+```typescript
+// OLD (removed): Timeout-based verification
+// const verified = await this.waitForService(service.verify, timeout);
+
+// NEW: ProcessManager handles all verification internally
+await this.startBackendServer();  // Returns only when TRULY ready
+
+// ProcessManager's infinite loop until ready
+while (!portReady) {
+  attempts++;
+  portReady = await PortManager.waitForService(port, checkInterval);
+  
+  if (portReady) {
+    this.emit('process:progress', { name, status: 'ready', message: `Service ready on port ${port}`, port });
+    break;
+  }
+  
+  // Report progress every 2.5 seconds
+  if (attempts % 10 === 0) {
+    const elapsed = attempts * checkInterval;
+    this.emit('process:progress', {
+      name,
+      status: 'waiting',
+      message: `Waiting for service to start... (${Math.round(elapsed/1000)}s)`,
+      port
+    });
+  }
+}
+```
+
+##### 4. Neural Network Animation System
+
+###### Animation Architecture
+```javascript
+class StartupNeuralNetwork {
+  constructor(canvas) {
+    this.neurons = [];     // Array of neuron objects
+    this.connections = []; // Array of connection objects
+    this.pulses = [];     // Active signal pulses
+  }
+  
+  initializeNetwork() {
+    // Creates 4-layer network matching consensus engine stages
+    // Generator → Refiner → Validator → Curator
+    const layers = [
+      { count: 4, y: 0.2 },   // Input layer
+      { count: 6, y: 0.4 },   // Hidden layer 1
+      { count: 6, y: 0.6 },   // Hidden layer 2
+      { count: 3, y: 0.8 }    // Output layer
+    ];
+  }
+  
+  updateProgress(percent) {
+    // Progressively illuminates neurons based on startup progress
+    const activeNeurons = Math.floor((this.neurons.length * percent) / 100);
+    this.neurons.forEach((neuron, i) => {
+      neuron.brightness = i < activeNeurons ? 
+        0.3 + (0.7 * (percent / 100)) : 0.1;
+    });
+  }
+}
+```
+
+##### 5. Dynamic Port Allocation
+
+###### Port Management Without Hardcoding
+```typescript
+// StartupOrchestrator NEVER hardcodes ports
+verify: async () => {
+  // Get dynamic port from ProcessManager
+  const info = this.initFunctions.processManager.getProcessStatus('websocket-backend');
+  if (info?.port) {
+    return this.checkHealth(`http://localhost:${info.port}/health`);
+  }
+  return false;
+}
+
+// ProcessManager allocates ports dynamically
+const port = await PortManager.allocatePort({
+  port: config.port || 8765,  // Preferred, not required
+  serviceName: name,
+  alternativePorts: config.alternativePorts
+});
+```
+
+###### Port Detection Strategy
+```typescript
+// New isPortListening method - connects to check if port is ready
+private static async isPortListening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const client = new net.Socket();
+    const timeout = setTimeout(() => {
+      client.destroy();
+      resolve(false);
+    }, 100);
+    
+    client.once('connect', () => {
+      clearTimeout(timeout);
+      client.destroy();
+      resolve(true);  // Port is listening!
+    });
+    
+    client.once('error', () => {
+      clearTimeout(timeout);
+      resolve(false);
+    });
+    
+    client.connect(port, 'localhost');
+  });
+}
+```
+
+#### Service Initialization Flow
+
+1. **Database Initialization** (15% weight)
+   - Clean up orphaned processes via PidTracker
+   - Initialize SQLite connection
+   - No network calls, always fast
+
+2. **Process Manager Setup** (10% weight)
+   - Register service configurations
+   - Initialize port management
+   - Set up event emitters
+
+3. **IPC Handler Registration** (10% weight)
+   - Memory Service handlers
+   - Git integration handlers
+   - File system handlers
+   - Dialog handlers
+   - CLI tool handlers
+   - WebSocket backend port handler
+
+4. **Memory Service Launch** (20% weight - Optional)
+   - Dynamic port allocation (3457-3560 range)
+   - Express server initialization
+   - WebSocket server setup
+   - Can fail without blocking startup
+
+5. **Backend Server Launch** (25% weight - Required)
+   - Dynamic port allocation (8765-8865 range)
+   - Database connection
+   - Consensus engine initialization
+   - Model syncing from OpenRouter
+   - AI helper ecosystem setup
+   - Python subprocess for ML models
+
+6. **CLI Tools Detection** (15% weight - Optional)
+   - Detect installed AI CLI tools
+   - Version checking
+   - Path resolution
+
+#### Progress Reporting Chain
+
+```
+Backend Server Process → Console Output
+                      ↓
+         ProcessManager (monitors output)
+                      ↓
+         Emits 'process:progress' events
+                      ↓
+         StartupOrchestrator (listening)
+                      ↓
+         Updates splash window via IPC
+                      ↓
+         Visual feedback to user
+```
+
+#### Error Handling Philosophy
+
+- **No Timeout Failures**: Services never fail due to arbitrary time limits
+- **Required vs Optional**: Only required services can block startup
+- **Graceful Degradation**: App launches even if optional services fail
+- **User Feedback**: Clear error messages displayed on splash screen
+- **Auto-Recovery**: ProcessManager handles service restarts automatically
+
+#### Performance Characteristics
+
+- **Typical Startup**: 3-5 seconds with all services
+- **Slow Network**: May take 10-30 seconds for model syncing
+- **No Upper Limit**: System waits indefinitely if needed
+- **User Can Cancel**: Close splash window to abort startup
+
+#### Files Structure
+```
+electron-poc/
+├── startup.html                    # Splash screen HTML (fixed positioning)
+├── startup-neural.js               # Neural network animation engine
+├── startup-preload.js              # IPC bridge for progress updates
+├── src/
+│   └── startup/
+│       └── StartupOrchestrator.ts # Main orchestration logic
+└── src/utils/
+    ├── ProcessManager.ts           # Event-driven process management
+    └── PortManager.ts              # Dynamic port allocation
+```
+
+#### Key Improvements in v2.0.0
+
+1. **Removed ALL Timeouts**: No `waitForService` with timeout parameters
+2. **Event-Driven Updates**: Real-time progress from ProcessManager
+3. **Fixed Visual Positioning**: Text always visible on screen
+4. **Dynamic Port Discovery**: No hardcoded ports anywhere
+5. **Continuous Monitoring**: ProcessManager reports until ready
+6. **Better Error Recovery**: Services can restart without user intervention
+7. **Professional UX**: Smooth, informative, never stuck
+
+#### Terminal Panel Visual Fix (Resolved Issues)
+
+##### The 9-Row Terminal Problem (SOLVED)
+- **Issue**: TTYD terminals would get stuck at 9 rows when window minimized/maximized
+- **Root Cause**: WebView reload attempts failed with ERR_FAILED, terminal size set server-side
+- **Solution**: Removed all resize handlers and webview reloading, using fixed flexbox layout
+
+##### CSS Architecture for Terminal Panels
+```css
+/* Fixed width panel - no manual dragging */
+.isolated-terminal-panel {
+  flex: 0 0 450px;  /* No grow, no shrink, fixed 450px */
+  transition: flex 0.2s ease;
+}
+
+/* Auto-expand when center collapsed */
+.isolated-terminal-panel.expanded {
+  flex: 1 1 auto;  /* Take all available space */
+}
+```
+
+This architecture ensures the startup experience is smooth, informative, and reliable - taking exactly as long as needed with continuous visual feedback.
 
 ### Enhanced ProcessManager System (2025 Production Architecture)
 **Location**: `src/utils/ProcessManager.ts`

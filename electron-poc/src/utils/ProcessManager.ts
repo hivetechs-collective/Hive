@@ -227,6 +227,14 @@ export class ProcessManager extends EventEmitter {
       if (!isReady && port) {
         logger.info(`[ProcessManager] Checking port ${port} for ${name}...`);
         
+        // Emit progress event
+        this.emit('process:progress', {
+          name,
+          status: 'port-check',
+          message: `Checking port ${port}...`,
+          port
+        });
+        
         // Binary servers may take longer to bind to port after process starts
         // AI Helpers initialization can take time, so give them enough time to start
         const isBinary = !config.scriptPath.endsWith('.ts') && !config.scriptPath.endsWith('.js');
@@ -234,19 +242,25 @@ export class ProcessManager extends EventEmitter {
         if (isBinary) {
           // For binary processes, add initial delay to allow process to initialize
           logger.info(`[ProcessManager] Waiting 2 seconds for ${name} to initialize before port check...`);
+          this.emit('process:progress', {
+            name,
+            status: 'initializing',
+            message: 'Service initializing...',
+            port
+          });
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
         
-        // Fast, efficient port checking (2025 best practice)
-        const maxWaitTime = isBinary ? 15000 : 3000; // 15s for binaries, 3s for Node.js
+        // Keep checking until the service is ready - no arbitrary timeouts
         const checkInterval = 250; // Check every 250ms
-        const maxAttempts = Math.floor(maxWaitTime / checkInterval);
+        // We'll keep checking indefinitely until the service is ready
+        // The user can cancel if they want, but we won't timeout
         
         let attempts = 0;
         let portReady = false;
         
-        // Simple, fast checking - no exponential backoff
-        while (attempts < maxAttempts && !portReady) {
+        // Keep checking until the service is ready - no timeout
+        while (!portReady) {
           attempts++;
           
           // Quick check if port is listening
@@ -254,23 +268,33 @@ export class ProcessManager extends EventEmitter {
           
           if (portReady) {
             logger.info(`[ProcessManager] ✅ Port ${port} is ready for ${name} (${attempts * checkInterval}ms)`);
+            this.emit('process:progress', {
+              name,
+              status: 'ready',
+              message: `Service ready on port ${port}`,
+              port
+            });
             break;
           }
           
-          // Only log occasionally to reduce noise
-          if (attempts === maxAttempts / 2) {
-            logger.info(`[ProcessManager] Waiting for ${name} on port ${port}...`);
+          // Report progress periodically (every 2.5 seconds)
+          if (attempts % 10 === 0) {
+            const elapsed = attempts * checkInterval;
+            this.emit('process:progress', {
+              name,
+              status: 'waiting',
+              message: `Waiting for service to start... (${Math.round(elapsed/1000)}s)`,
+              port
+            });
+            
+            // Log occasionally
+            if (attempts % 40 === 0) {
+              logger.info(`[ProcessManager] Still waiting for ${name} on port ${port}... (${Math.round(elapsed/1000)}s)`);
+            }
           }
         }
         
-        if (!portReady) {
-          // Try to get more debug info before failing
-          const debugInfo = await this.debugProcess(name);
-          logger.error(`[ProcessManager] Debug info for ${name}:`, JSON.stringify(debugInfo, null, 2));
-          
-          throw new Error(`Process ${name} failed to start properly - port ${port} not responding after ${attempts} attempts (${maxWaitTime}ms)`);
-        }
-        
+        // If we get here, the service is ready
         isReady = true;
       }
       
