@@ -488,7 +488,7 @@ body {
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: row; /* Changed to row for activity bar + panel */
-  min-width: 48px; /* Minimum width for activity bar only */
+  min-width: 56px; /* Increased width for larger AI CLI icons */
   flex-shrink: 0;
   position: relative;
   z-index: 35;
@@ -514,7 +514,7 @@ body {
   align-items: center;
   justify-content: flex-start;
   height: 100%;
-  width: 48px;
+  width: 56px;
   padding: 8px 0;
   gap: 4px;
   background: var(--background-primary);
@@ -528,14 +528,16 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
   width: 100%;
+  padding: 8px 0;
 }
 
 /* AI CLI Quick Launch Buttons */
 .cli-quick-launch {
-  opacity: 0.7;
-  transition: opacity 0.3s, transform 0.2s;
+  opacity: 1;
+  transition: transform 0.2s;
+  filter: brightness(1.1);
 }
 
 .cli-quick-launch:hover {
@@ -544,7 +546,8 @@ body {
 }
 
 .cli-quick-launch img {
-  filter: grayscale(20%);
+  filter: none;
+  opacity: 1;
   transition: filter 0.3s;
 }
 
@@ -689,8 +692,8 @@ body {
 }
 
 .activity-btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 4px;
