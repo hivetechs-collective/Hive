@@ -129,13 +129,13 @@ if [[ "$response" =~ ^[Yy]$ ]]; then
   
   if [ -n "$api_key" ]; then
     # Show the key for verification (masked partially for security)
-    key_length=${#api_key}
-    if [ $key_length -gt 10 ]; then
+    key_length=\${#api_key}
+    if [ \$key_length -gt 10 ]; then
       # Show first 7 chars and last 4 chars with asterisks in between
-      first_part=${api_key:0:7}
-      last_part=${api_key: -4}
-      masked_middle=$(printf '*%.0s' {1..8})
-      echo "🔑 API Key to be saved: ${first_part}${masked_middle}${last_part}"
+      first_part=\${api_key:0:7}
+      last_part=\${api_key: -4}
+      masked_middle=\$(printf '*%.0s' {1..8})
+      echo "🔑 API Key to be saved: \${first_part}\${masked_middle}\${last_part}"
     else
       echo "🔑 API Key to be saved: [key too short, might be invalid]"
     fi
