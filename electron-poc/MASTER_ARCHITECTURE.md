@@ -1195,6 +1195,19 @@ The application's DOM (Document Object Model) is a tree structure that defines t
   - Contains Explorer, Git, Settings, CLI Tools views
   - Only one view visible at a time
 
+- **TTYD Terminal Panel**: Can collapse to 40px (v1.7.5)
+  - Toggle button shows + when collapsed, − when expanded
+  - Maintains user-defined width when expanded
+  - Auto-expands with `expand-to-fill` class when center collapses
+  
+- **Consensus Panel**: Can collapse to 40px
+  - Toggle button shows + when collapsed, − when expanded
+  - Maintains user-defined width when expanded
+  
+- **Center Area**: Can collapse to 40px (v1.7.5)
+  - Toggle button shows + when collapsed, − when expanded
+  - Adjacent panels auto-expand to fill space when collapsed
+
 **3. Resizable Panels**
 - **TTYD Terminal Panel**: 
   - Initial width: 400px
@@ -1209,9 +1222,11 @@ The application's DOM (Document Object Model) is a tree structure that defines t
   - Resize handle on left edge
 
 **4. Flexible Panels**
-- **Center Area**: Takes remaining space
+- **Center Area**: Takes remaining space (when not collapsed)
   - Formula: `windowWidth - leftSidebar - ttydPanel - consensusPanel`
-  - Protected minimum: 400px (prevents collapse)
+  - Protected minimum: 400px (prevents collapse during resize)
+  - Can be manually collapsed to 40px via toggle button
+  - Contains editor tabs, analysis reports, and settings views
 
 ##### Resize Mechanism Implementation
 
@@ -1219,7 +1234,7 @@ The application's DOM (Document Object Model) is a tree structure that defines t
 Each resizable panel has a 4px wide vertical drag handle positioned on its left edge:
 
 ```javascript
-// Resize handle setup (lines 3870-3908 in renderer.ts)
+// Resize handle setup (lines 3875-3920 in renderer.ts)
 const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
 let isResizing = false;
 let startX = 0;
@@ -1780,6 +1795,35 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
 ### Memory Management
 - Efficient IPC message passing
 - Streaming for large files
+
+### ResizeObserver Performance (v1.7.5)
+**Problem**: ResizeObserver loop errors when callbacks trigger synchronous DOM changes
+**Solution**: Use requestAnimationFrame to defer DOM updates
+
+```typescript
+// INCORRECT - Causes loop errors
+const resizeObserver = new ResizeObserver(() => {
+    updateNavigationArrows(); // Synchronous DOM changes
+});
+
+// CORRECT - Deferred updates
+let resizeAnimationFrame: number | null = null;
+const resizeObserver = new ResizeObserver(() => {
+    if (resizeAnimationFrame !== null) {
+        cancelAnimationFrame(resizeAnimationFrame);
+    }
+    resizeAnimationFrame = requestAnimationFrame(() => {
+        updateNavigationArrows(); // Deferred DOM changes
+        resizeAnimationFrame = null;
+    });
+});
+```
+
+**Benefits**:
+- Eliminates "loop completed with undelivered notifications" errors
+- Improves performance by batching DOM updates
+- Prevents infinite resize loops
+- Ensures smooth 60 FPS animations
 - Pagination for lists
 - Resource cleanup on unmount
 
@@ -6890,6 +6934,17 @@ electron-poc/
   - **Layout Strategy**: Detailed flexbox implementation and CSS architecture
   - **Performance Guidelines**: Added DOM optimization and memory management best practices
   - **Accessibility Features**: Documented keyboard navigation and ARIA attributes
+- **v1.7.5 (2025-08-23)**: Center Area Collapse, Unified Toggle Styling & ResizeObserver Fixes
+  - **Center Area Collapse**: Implemented collapsible center/editor area matching consensus panel behavior
+  - **Toggle Button Unification**: All panels now use identical discrete toggle styling (removed blue TTYD styling)
+  - **Auto-Expand Behavior**: Panels automatically expand to fill space when others collapse
+  - **Expand-to-Fill Class**: Added CSS class for dynamic panel space distribution
+  - **ResizeObserver Fix**: Resolved loop errors using requestAnimationFrame for deferred DOM updates
+  - **TypeScript Fixes**: Resolved variable naming conflicts and redeclaration issues
+  - **Panel Variable Refactor**: Used unique names for different panel element references
+  - **Collapse State Persistence**: All three main panels (TTYD, Center, Consensus) maintain collapse state
+  - **Toggle Icons**: Consistent + (collapsed) and − (expanded) symbols across all panels
+  - **Performance Improvement**: Eliminated ResizeObserver notification delivery errors
 - **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
   - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts
   - **Unified Cleanup Function**: Single performCleanup() prevents duplicate handlers
