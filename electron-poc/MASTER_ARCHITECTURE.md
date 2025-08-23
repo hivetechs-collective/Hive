@@ -2072,6 +2072,57 @@ interface TerminalSystemDependencies {
   'node-pty': '^1.0.0',                  // Shell process spawning
   'tree-kill': '^1.2.2',                 // Process cleanup
   'portfinder': '^1.0.32',               // Dynamic port allocation
+  'better-sqlite3': '^9.6.0',            // AI tools launch tracking database
+}
+```
+
+**TTYD Terminal Server Manager**:
+```typescript
+// src/services/TTYDManager.ts
+export class TTYDManager extends EventEmitter {
+  private instances: Map<string, TTYDInstance> = new Map();
+  
+  async createTerminal(config: TTYDConfig): Promise<TTYDInstance> {
+    // 1. Dynamic port allocation (7100-7999 range)
+    const port = await PortManager.allocatePort({
+      port: 7100,
+      serviceName: `ttyd-${config.id}`,
+      alternativePorts: Array.from({ length: 900 }, (_, i) => 7100 + i)
+    });
+    
+    // 2. Prepare ttyd arguments
+    const ttydArgs = [
+      '--port', port.toString(),
+      '--interface', '127.0.0.1',  // Security: localhost only
+      '--writable'                  // Allow input
+    ];
+    
+    // 3. Handle command execution with delay
+    if (config.command) {
+      const initCommand = `sleep 0.5 && ${config.command}`;
+      ttydArgs.push('--', shell, '-c', `${initCommand}; exec ${shell} -i`);
+    }
+    
+    // 4. Spawn ttyd process
+    const ttydProcess = spawn('ttyd', ttydArgs, {
+      cwd: config.cwd || process.env.HOME,
+      env: {
+        ...process.env,
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor'
+      }
+    });
+    
+    // 5. Return terminal instance with URL
+    return {
+      id: config.id,
+      title: config.title,
+      port,
+      url: `http://localhost:${port}`,
+      process: ttydProcess,
+      status: 'running'
+    };
+  }
 }
 ```
 
@@ -2234,6 +2285,109 @@ interface TerminalSystemDependencies {
      
      return terminal;
    }
+
+#### Terminal Panel UI Architecture (TTYDTerminalPanel)
+
+**Complete Implementation with Tab Management**:
+```typescript
+// src/components/TTYDTerminalPanel.ts
+export class TTYDTerminalPanel {
+  private tabs: Map<string, TerminalTab> = new Map();
+  private activeTabId: string | null = null;
+  private terminalCounter = 0;
+  private usedNumbers = new Set<number>();
+  
+  async createTerminalTab(
+    toolId?: string,
+    command?: string,
+    cwd?: string
+  ): Promise<TerminalTab> {
+    // Generate unique ID and determine tab title
+    const tabId = toolId || `terminal-${Date.now()}`;
+    let title: string;
+    
+    if (toolId) {
+      // AI tool tabs: Named by tool
+      const toolNames: Record<string, string> = {
+        'claude-code': 'Claude',
+        'gemini-cli': 'Gemini',
+        'qwen-code': 'Qwen',
+        'aider': 'Aider',
+        'cline': 'Cline'
+      };
+      title = toolNames[toolId] || 'Tool';
+    } else {
+      // Generic terminals: Smart number reuse
+      const nextNumber = this.getNextAvailableNumber();
+      title = `Terminal ${nextNumber}`;
+    }
+    
+    // Create terminal via IPC
+    const result = await window.terminalAPI.createTerminalProcess({
+      terminalId: tabId,
+      command,
+      cwd,
+      toolId
+    });
+    
+    // Create tab UI
+    const tab = this.createTabElement(tabId, title, toolId);
+    
+    // Create webview for ttyd
+    const webview = this.createWebview(result.url);
+    
+    // Store tab info
+    this.tabs.set(tabId, {
+      id: tabId,
+      title,
+      toolId,
+      element: tab,
+      webview,
+      url: result.url
+    });
+    
+    // Activate the new tab
+    this.activateTab(tabId);
+    
+    return this.tabs.get(tabId)!;
+  }
+  
+  private getNextAvailableNumber(): number {
+    // Smart number reuse: Find lowest available number
+    let number = 1;
+    while (this.usedNumbers.has(number)) {
+      number++;
+    }
+    this.usedNumbers.add(number);
+    return number;
+  }
+  
+  private handleTabNavigation(): void {
+    // Check if tabs overflow container
+    const container = this.tabsContainer;
+    const isOverflowing = container.scrollWidth > container.clientWidth;
+    
+    // Show/hide navigation arrows
+    this.leftArrow.style.display = isOverflowing ? 'flex' : 'none';
+    this.rightArrow.style.display = isOverflowing ? 'flex' : 'none';
+    
+    // Smooth scroll on arrow click (80% viewport)
+    this.leftArrow.onclick = () => {
+      container.scrollBy({
+        left: -container.clientWidth * 0.8,
+        behavior: 'smooth'
+      });
+    };
+    
+    this.rightArrow.onclick = () => {
+      container.scrollBy({
+        left: container.clientWidth * 0.8,
+        behavior: 'smooth'
+      });
+    };
+  }
+}
+```
 
 #### Terminal Panel UI Architecture (TTYDTerminalPanel)
 
@@ -3014,6 +3168,178 @@ interface TerminalSettings {
 
 ---
 
+## AI Tools Launch System with Resume Detection
+
+### Overview
+The AI Tools Launch System provides intelligent per-repository tracking for AI development tools, automatically detecting when to use resume flags based on launch history. This ensures seamless continuation of work across sessions.
+
+### Architecture Components
+
+#### 1. AIToolsDatabase Service
+**Location**: `src/services/AIToolsDatabase.ts`
+**Database**: `~/.hive/hive-ai.db`
+
+```typescript
+export class AIToolsDatabase {
+  private db: Database.Database;
+  private static instance: AIToolsDatabase | null = null;
+  
+  // Singleton pattern for global access
+  public static getInstance(): AIToolsDatabase {
+    if (!AIToolsDatabase.instance) {
+      AIToolsDatabase.instance = new AIToolsDatabase();
+    }
+    return AIToolsDatabase.instance;
+  }
+  
+  // Core methods for launch tracking
+  hasBeenLaunchedBefore(toolId: string, repositoryPath: string): boolean;
+  recordLaunch(toolId: string, repositoryPath: string, metadata?: any): boolean;
+  getLaunchInfo(toolId: string, repositoryPath: string): AIToolLaunch | null;
+  getRepositoryLaunches(repositoryPath: string): AIToolLaunch[];
+  getUsageStats(): UsageStatistics;
+}
+```
+
+#### 2. Database Schema
+```sql
+CREATE TABLE ai_tool_launches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tool_id TEXT NOT NULL,                -- 'claude-code', 'gemini-cli', etc.
+  repository_path TEXT NOT NULL,        -- Absolute path to project
+  launch_count INTEGER DEFAULT 1,       -- Number of launches
+  first_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  last_launched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  status TEXT DEFAULT 'active',         -- 'active', 'closed', 'crashed'
+  session_metadata TEXT,                 -- JSON session data
+  user_id TEXT DEFAULT 'default',
+  tool_version TEXT,
+  launch_context TEXT,
+  UNIQUE(tool_id, repository_path, user_id)
+);
+
+-- Performance indexes
+CREATE INDEX idx_ai_tool_launches_lookup 
+  ON ai_tool_launches(tool_id, repository_path);
+CREATE INDEX idx_ai_tool_launches_recent 
+  ON ai_tool_launches(last_launched_at DESC);
+```
+
+#### 3. IPC Communication Flow
+```typescript
+// Main Process (src/index.ts)
+ipcMain.handle('cli-tool-launch', async (_, toolId: string) => {
+  // 1. Show folder selection dialog
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: `Select folder to launch ${getToolName(toolId)}`,
+    properties: ['openDirectory'],
+    defaultPath: process.env.HOME
+  });
+  
+  if (canceled || !filePaths.length) return;
+  
+  const selectedPath = filePaths[0];
+  
+  // 2. Check launch history
+  const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
+  
+  // 3. Determine command
+  const command = hasBeenLaunched ? 
+    getResumeCommand(toolId) : 
+    getLaunchCommand(toolId);
+  
+  // 4. Send to renderer for terminal creation
+  mainWindow.webContents.send('launch-ai-tool-terminal', {
+    toolId,
+    toolName: getToolName(toolId),
+    command,
+    cwd: selectedPath
+  });
+  
+  // 5. Record launch for future resume detection
+  aiToolsDb.recordLaunch(toolId, selectedPath, {
+    version: await getToolVersion(toolId),
+    context: { source: 'ui-launch-button' }
+  });
+});
+
+// Renderer Process (src/renderer.ts)
+window.electronAPI.onLaunchAIToolTerminal((data) => {
+  const terminal = window.isolatedTerminal;
+  if (terminal) {
+    // Create named terminal tab with command
+    terminal.createTerminalTab(data.toolId, data.command, data.cwd);
+  }
+});
+```
+
+#### 4. Resume Detection Logic
+```typescript
+const RESUME_COMMANDS = {
+  'claude-code': {
+    initial: 'claude',
+    resume: 'claude --resume'
+  },
+  'gemini-cli': {
+    initial: 'gemini',
+    resume: 'gemini --continue'
+  },
+  'qwen-code': {
+    initial: 'qwen',
+    resume: 'qwen --restore'
+  },
+  'aider': {
+    initial: 'aider',
+    resume: 'aider --yes-always'
+  },
+  'cline': {
+    initial: 'cline',
+    resume: 'cline --resume-session'
+  }
+};
+```
+
+### Launch Button UI Integration
+
+#### Button States
+```typescript
+interface LaunchButtonState {
+  idle: {
+    text: '🚀 Launch',
+    class: 'btn-primary',
+    enabled: true
+  },
+  launching: {
+    text: '⏳ Launching...',
+    class: 'btn-primary disabled',
+    enabled: false
+  },
+  error: {
+    text: '❌ Launch Failed',
+    class: 'btn-danger',
+    enabled: true
+  }
+}
+```
+
+#### Visual Feedback Flow
+1. **User clicks Launch** → Button shows "⏳ Launching..."
+2. **Folder dialog opens** → User selects project directory
+3. **Database check** → Determines if resume flag needed
+4. **Terminal tab opens** → Named by tool (Claude, Gemini, etc.)
+5. **Command executes** → With 0.5s delay for shell readiness
+6. **Button returns to idle** → Ready for next launch
+
+### Benefits of Resume Detection
+
+1. **Context Preservation**: AI tools can resume previous conversations
+2. **Efficiency**: No need to re-explain project context
+3. **Automatic**: Users don't need to remember resume flags
+4. **Per-Repository**: Each project maintains its own history
+5. **Cross-Session**: Works across app restarts
+
+---
+
 ## Installation Detection & Dynamic UI Management
 
 ### Overview
@@ -3021,33 +3347,87 @@ The CLI Tools panel dynamically detects installed tools and updates the UI accor
 
 ### Implementation Details (Completed)
 
-#### Claude Code Integration
-As of version 1.6.0, full Claude Code CLI integration has been implemented with the following features:
+#### Claude Code Integration with Resume Detection
+As of version 1.6.0, full Claude Code CLI integration has been implemented with intelligent per-repository launch tracking and resume detection:
 
 1. **Real-time Detection**: 
    - Detects Claude Code installation via `claude --version` command
    - Parses version from output (e.g., "1.0.86 (Claude Code)")
    - Shows installation path (`which claude`)
 
-2. **Functional Buttons**:
-   - **Details** (Green): Refreshes and displays full tool status including version, Memory Service connection, and path
-   - **Configure**: Registers with Memory Service, generates auth token, updates MCP config
-   - **Update**: Executes `npm update -g @anthropic-ai/claude-code` and shows progress
+2. **Launch Button with Resume Detection**:
+   - **Launch** (Blue): Opens folder selector and launches Claude in new terminal tab
+   - **First Launch**: Executes `claude` command in selected folder
+   - **Subsequent Launches**: Automatically adds `--resume` flag for same folder
+   - **Per-Repository Tracking**: Database tracks launches by repository path
+   - **Smart Terminal Naming**: AI tool tabs named by tool (Claude, Gemini, etc.)
+
+3. **AI Tools Database Architecture**:
+   ```typescript
+   // Database: ~/.hive/hive-ai.db
+   interface AIToolLaunch {
+     tool_id: string;           // 'claude-code', 'gemini-cli', etc.
+     repository_path: string;    // Absolute path to project folder
+     launch_count: number;       // Times launched in this repository
+     first_launched_at: string;  // ISO timestamp of first launch
+     last_launched_at: string;   // ISO timestamp of last launch
+     status: 'active' | 'closed' | 'crashed';
+     session_metadata?: string;  // JSON data about session
+   }
+   ```
+
+4. **Terminal Launch Flow**:
+   ```typescript
+   // 1. User clicks Launch button
+   await electronAPI.launchCliTool('claude-code');
+   
+   // 2. Main process shows folder dialog
+   const { canceled, filePaths } = await dialog.showOpenDialog({
+     properties: ['openDirectory']
+   });
+   
+   // 3. Check launch history in database
+   const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(
+     'claude-code', selectedPath
+   );
+   
+   // 4. Determine command based on history
+   const command = hasBeenLaunched ? 'claude --resume' : 'claude';
+   
+   // 5. Send event to renderer to create terminal tab
+   mainWindow.webContents.send('launch-ai-tool-terminal', {
+     toolId: 'claude-code',
+     toolName: 'Claude',
+     command: command,
+     cwd: selectedPath
+   });
+   
+   // 6. Record launch in database for future resume detection
+   aiToolsDb.recordLaunch('claude-code', selectedPath);
+   ```
+
+5. **Functional Buttons**:
+   - **Launch**: Folder selection → Resume detection → Terminal creation
+   - **Details** (Green): Refreshes and displays full tool status
+   - **Configure**: Registers with Memory Service, updates MCP config
+   - **Update**: Executes `npm update -g @anthropic-ai/claude-code`
    - **Docs**: Opens official Claude Code documentation
 
-3. **Memory Service MCP Integration**:
+6. **Memory Service MCP Integration**:
    - Automatically creates MCP server configuration in `~/.claude/.mcp.json`
    - Generates MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
    - Unique authentication tokens per tool for security
    - Exposes `query_memory` and `contribute_learning` MCP tools
 
-4. **Visual Feedback**:
+7. **Visual Feedback**:
+   - "🚀 Launching..." → Terminal tab opens with tool name
    - "⚙️ Configuring..." → "✅ Configured"
    - "⬆️ Updating..." → "✅ Up to date"
    - "🔄 Loading details..." → Full status display
 
-5. **Persistent Configuration**:
+8. **Persistent Configuration**:
    - Tool status saved in `~/.hive/cli-tools-config.json`
+   - Launch history saved in `~/.hive/hive-ai.db`
    - Memory Service tokens stored securely
    - MCP configuration persists across sessions
 
