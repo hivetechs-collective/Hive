@@ -3060,11 +3060,12 @@ setTimeout(() => {
                 // Get the TTYDTerminalPanel instance and create a terminal
                 const terminal = (window as any).isolatedTerminal;
                 if (terminal) {
-                    terminal.createTerminal('ai-tool', {
-                        toolId: data.toolId,
-                        command: data.command,
-                        cwd: data.cwd
-                    });
+                    // Update the current folder for the terminal
+                    (window as any).currentOpenedFolder = data.cwd;
+                    // Call createTerminalTab with toolId and command
+                    terminal.createTerminalTab(data.toolId, data.command);
+                } else {
+                    console.error('[Renderer] Terminal panel not initialized');
                 }
             });
         }
