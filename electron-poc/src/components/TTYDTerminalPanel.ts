@@ -587,17 +587,33 @@ export class TTYDTerminalPanel {
     
     private setupKeyboardShortcuts(): void {
         // Add keyboard shortcuts for terminal control
+        // Use capture phase to intercept before other handlers
         document.addEventListener('keydown', (e) => {
-            // Ctrl/Cmd + R to refresh active terminal (fix symbol distortion)
-            if ((e.ctrlKey || e.metaKey) && e.key === 'r' && !e.shiftKey) {
-                // Check if the TTYD panel is visible and has focus
+            // Use Ctrl/Cmd + Shift + R for terminal refresh (avoids conflict with browser refresh)
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
+                // Check if the TTYD panel is visible
                 const isolatedPanel = document.querySelector('.isolated-terminal-panel');
                 if (isolatedPanel && !isolatedPanel.classList.contains('collapsed')) {
                     e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[TTYDTerminalPanel] Refresh shortcut triggered');
                     this.refreshActiveTerminal();
+                    return false;
                 }
             }
-        });
+            
+            // Alternative: F5 key for refresh when terminal panel is visible
+            if (e.key === 'F5') {
+                const isolatedPanel = document.querySelector('.isolated-terminal-panel');
+                if (isolatedPanel && !isolatedPanel.classList.contains('collapsed')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[TTYDTerminalPanel] F5 refresh triggered');
+                    this.refreshActiveTerminal();
+                    return false;
+                }
+            }
+        }, true); // Use capture phase
     }
     
     public refreshActiveTerminal(): void {

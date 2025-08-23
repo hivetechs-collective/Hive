@@ -569,6 +569,13 @@ document.body.innerHTML = `
           </svg>
         </button>
         
+        <!-- Refresh button for fixing symbol distortion -->
+        <button class="isolated-terminal-refresh" id="isolated-terminal-refresh" title="Refresh Terminal (Cmd+Shift+R or F5)" style="padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px;">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+            <path d="M12 7a5 5 0 1 1-1.5-3.5L9 5h4V1l-1.5 1.5A6 6 0 1 0 13 7h-1z"/>
+          </svg>
+        </button>
+        
         <button class="isolated-terminal-new-tab" id="isolated-terminal-new-tab" title="New Terminal" style="padding: 0 10px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 18px;">+</button>
       </div>
       
@@ -3848,6 +3855,26 @@ setTimeout(() => {
     if (isolatedTerminalPanelElement) {
         (window as any).isolatedTerminal = ttydTerminalPanel.initialize(isolatedTerminalPanelElement);
         console.log('✅ TTYD Terminal Panel initialized');
+        
+        // Add click handler for refresh button
+        const refreshBtn = document.getElementById('isolated-terminal-refresh');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                console.log('[Renderer] Refresh button clicked');
+                const terminal = (window as any).isolatedTerminal;
+                if (terminal && terminal.refreshActiveTerminal) {
+                    terminal.refreshActiveTerminal();
+                }
+            });
+            
+            // Add hover effect
+            refreshBtn.addEventListener('mouseenter', () => {
+                (refreshBtn as HTMLElement).style.color = '#cccccc';
+            });
+            refreshBtn.addEventListener('mouseleave', () => {
+                (refreshBtn as HTMLElement).style.color = '#969696';
+            });
+        }
         
         // Listen for AI tool launch events from main process
         if (window.electronAPI.onLaunchAIToolTerminal) {
