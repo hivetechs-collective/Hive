@@ -1119,46 +1119,307 @@ App Root (renderer.ts)
 
 ### Panel System Architecture
 
-#### Resizable Panel Implementation
-Our application uses a sophisticated panel system that provides VS Code-like flexibility:
+#### Complete DOM Structure and Layout System
 
-**Panel Types**:
-1. **Fixed Panels**: Activity Bar (48px width - optimized for AI CLI icons)
-2. **Collapsible Panels**: Sidebar (260px default, can collapse to 0)
-3. **Resizable Panels**: Isolated Terminal & Consensus (200-600px range)
-4. **Flex Panels**: Main content area (grows to fill available space)
+##### DOM Hierarchy
+The application's DOM (Document Object Model) is a tree structure that defines the entire user interface. All panels, buttons, and interactive elements are nodes in this tree, created dynamically by JavaScript when the application starts.
 
-**Resize Mechanism**:
-- **Consensus Panel**: Left edge resize handle, fixed right edge
-  - Formula: `deltaX = startX - e.clientX; newWidth = startWidth + deltaX`
-  - Dragging left increases width, dragging right decreases
-  - Collapse button changes width to 40px (shows only button)
+```html
+<body>
+  <div class="hive-consensus-gui">
+    <!-- Title Bar (Fixed Height: 30px) -->
+    <div class="title-bar">
+      <div class="title-bar-left"></div>
+      <div class="title-bar-center">
+        <img src="logo" /> Hive Consensus
+      </div>
+      <div class="title-bar-right"></div>
+    </div>
+    
+    <!-- Main Content Area (Flexbox Container) -->
+    <div class="main-content">
+      <!-- Left Sidebar (Fixed + Collapsible) -->
+      <div class="sidebar" id="left-sidebar">
+        <div class="activity-bar-unified">         <!-- 48px wide -->
+          <button class="activity-btn">...</button> <!-- Explorer, Git, etc -->
+          <div class="ai-cli-icons-section">       <!-- AI Tool Icons -->
+          <div class="sidebar-bottom-section">     <!-- Settings at bottom -->
+        </div>
+        <div class="sidebar-panel">                <!-- 260px collapsible -->
+          <div id="explorer-sidebar">...</div>
+          <div id="git-sidebar">...</div>
+        </div>
+      </div>
+      
+      <!-- Center Area (Flexible Width) -->
+      <div class="center-area" id="center-area">
+        <div class="editor-area">...</div>
+        <div id="analytics-panel">...</div>
+        <div class="terminal-section" style="display:none">...</div>
+      </div>
+      
+      <!-- TTYD Terminal Panel (Resizable: 200-1200px) -->
+      <div class="isolated-terminal-panel" id="isolated-terminal-panel">
+        <button class="panel-collapse-btn">−</button>
+        <div class="resize-handle vertical-resize"></div>
+        <div class="isolated-terminal-header">...</div>
+        <div class="isolated-terminal-content">...</div>
+      </div>
+      
+      <!-- Consensus Panel (Resizable: 300-800px) -->
+      <div class="consensus-chat-panel" id="consensus-chat">
+        <button class="panel-collapse-btn">−</button>
+        <div class="resize-handle vertical-resize"></div>
+        <div id="neural-consciousness-container">...</div>
+        <div class="progress-section">...</div>
+        <div class="chat-area">...</div>
+      </div>
+    </div>
+    
+    <!-- Status Bar (Fixed Height: 22px) -->
+    <div class="status-bar">...</div>
+  </div>
+</body>
+```
+
+##### Panel Types and Specifications
+
+**1. Fixed Panels**
+- **Activity Bar**: 48px width, never resizes
+- **Title Bar**: 30px height, spans full width
+- **Status Bar**: 22px height, spans full width
+
+**2. Collapsible Panels**
+- **Sidebar Panel**: 260px default width, can collapse to 0
+  - Toggled by activity buttons
+  - Contains Explorer, Git, Settings, CLI Tools views
+  - Only one view visible at a time
+
+**3. Resizable Panels**
+- **TTYD Terminal Panel**: 
+  - Initial width: 400px
+  - Min width: 200px
+  - Max width: 1200px (increased from 600px)
+  - Resize handle on left edge
   
-- **Isolated Terminal Panel**: Mirrors consensus panel behavior
-  - Left edge resize handle, right edge fixed against consensus panel
-  - Same resize formula as consensus panel for consistency
-  - Collapse/expand with -/+ buttons
-  - Width range: 200px min, 600px max
+- **Consensus Panel**:
+  - Initial width: 400px
+  - Min width: 300px
+  - Max width: 800px (increased from 600px)
+  - Resize handle on left edge
 
-**Layout Strategy**:
-```css
-.main-container {
-  display: flex;
-  flex-direction: row;
-}
+**4. Flexible Panels**
+- **Center Area**: Takes remaining space
+  - Formula: `windowWidth - leftSidebar - ttydPanel - consensusPanel`
+  - Protected minimum: 400px (prevents collapse)
 
-.isolated-terminal-panel {
-  flex-shrink: 0;  /* Prevent flex from overriding explicit width */
-  flex-grow: 0;
-  width: 400px;    /* Explicit width, controlled by resize */
+##### Resize Mechanism Implementation
+
+**Drag Handle System**
+Each resizable panel has a 4px wide vertical drag handle positioned on its left edge:
+
+```javascript
+// Resize handle setup (lines 3870-3908 in renderer.ts)
+const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
+let isResizing = false;
+let startX = 0;
+let startWidth = 0;
+
+// Mouse down: Start resize
+isolatedTerminalResize.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    startX = e.clientX;
+    startWidth = parseInt(window.getComputedStyle(panel).width, 10);
+    document.body.style.cursor = 'ew-resize';
+});
+
+// Mouse move: Calculate new width
+document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    
+    const deltaX = startX - e.clientX;  // Negative when dragging left
+    const newWidth = startWidth + deltaX; // Increases when dragging left
+    
+    // Apply constraints
+    const constrainedWidth = Math.min(Math.max(newWidth, MIN), MAX);
+    
+    // Check center area minimum
+    if (centerAreaWouldBeTooSmall) return;
+    
+    panel.style.width = constrainedWidth + 'px';
+});
+```
+
+**Resize Formula Explanation**
+- `deltaX = startX - e.clientX`: Calculates mouse movement
+  - Negative value when dragging left (expanding panel)
+  - Positive value when dragging right (shrinking panel)
+- `newWidth = startWidth + deltaX`: Updates panel width
+  - Panel grows when dragging left
+  - Panel shrinks when dragging right
+
+**Center Area Protection**
+The center area has a protected minimum width of 400px to ensure usability:
+
+```javascript
+// Calculate remaining space for center area
+const windowWidth = window.innerWidth;
+const sidebarWidth = document.getElementById('left-sidebar')?.offsetWidth || 0;
+const terminalWidth = newWidth; // Proposed new width
+const consensusWidth = document.getElementById('consensus-chat')?.offsetWidth || 0;
+const remainingWidth = windowWidth - sidebarWidth - terminalWidth - consensusWidth;
+
+// Only apply resize if center area maintains minimum
+if (remainingWidth >= 400) {
+    panel.style.width = newWidth + 'px';
 }
 ```
 
-**Isolation Principles**:
-- Each panel component is completely self-contained
-- No cross-panel dependencies or state sharing
-- Resize operations don't affect other panels' internal state
-- CSS flex properties explicitly controlled to prevent interference
+##### Layout Strategy and CSS
+
+**Flexbox Layout**
+The main container uses flexbox for horizontal layout:
+
+```css
+.main-content {
+    display: flex;
+    flex-direction: row;
+    height: calc(100vh - 52px); /* Full height minus title and status bars */
+}
+
+/* Fixed width panels */
+.sidebar {
+    flex-shrink: 0;
+    width: 308px; /* 48px activity bar + 260px sidebar panel */
+}
+
+/* Flexible center area */
+.center-area {
+    flex: 1; /* Takes remaining space */
+    min-width: 400px; /* Protected minimum */
+    overflow: hidden;
+}
+
+/* Resizable panels - fixed width, no flex */
+.isolated-terminal-panel,
+.consensus-chat-panel {
+    flex-shrink: 0;
+    flex-grow: 0;
+    position: relative;
+}
+```
+
+**Z-Index Layering**
+```css
+.resize-handle { z-index: 10; }      /* Above content */
+.panel-collapse-btn { z-index: 1000; } /* Above everything */
+.activity-tooltip { z-index: 10000; }  /* Tooltips on top */
+```
+
+##### Panel Collapse/Expand Behavior
+
+**Collapse States**
+- **Collapsed Width**: 40px (shows only collapse button)
+- **Expanded Width**: Returns to previous width before collapse
+- **Animation**: No transition (instant for performance)
+
+**Collapse Implementation**
+```javascript
+toggleButton.addEventListener('click', () => {
+    const isCollapsed = panel.classList.contains('collapsed');
+    if (isCollapsed) {
+        panel.classList.remove('collapsed');
+        panel.style.width = '400px'; // Or saved width
+        toggleButton.textContent = '−';
+    } else {
+        panel.classList.add('collapsed');
+        panel.style.width = '40px';
+        toggleButton.textContent = '+';
+    }
+});
+```
+
+##### Responsive Behavior
+
+**Window Resize Handling**
+The layout automatically adjusts when the window is resized:
+- Fixed panels maintain their sizes
+- Resizable panels maintain their absolute widths
+- Center area flexes to fill remaining space
+- If center area would be < 400px, rightmost panels may be auto-collapsed
+
+**Minimum Window Width**
+Recommended minimum: 1400px for all panels visible
+- Left sidebar: 308px
+- Center area: 400px (minimum)
+- TTYD panel: 400px (default)
+- Consensus panel: 400px (default)
+- Total: 1508px
+
+##### Panel Interaction Flows
+
+**1. Opening TTYD Terminal**
+- User drags left edge of TTYD panel
+- Mouse movement tracked, width calculated
+- Center area checked for minimum width
+- Panel expands up to 1200px maximum
+- Content reflows automatically
+
+**2. Switching Sidebar Views**
+- User clicks activity button (Explorer, Git, etc.)
+- Previous view hidden (display: none)
+- New view shown (display: block)
+- Sidebar panel expands if collapsed
+- Content initializes if first time
+
+**3. Collapsing Panels**
+- User clicks collapse button (−)
+- Panel width animates to 40px
+- Button changes to (+)
+- Center area expands to fill space
+- Panel content hidden but maintained in DOM
+
+##### Performance Considerations
+
+**DOM Optimization**
+- Panels use `display: none` when hidden (removes from render tree)
+- Content virtualization for large lists (file explorer, git changes)
+- Resize operations use RAF (requestAnimationFrame) for smoothness
+- Event delegation for dynamic content
+
+**Memory Management**
+- Hidden panels maintain state but release render resources
+- Terminal instances destroyed when tabs closed
+- Event listeners properly cleaned up on panel destroy
+
+##### Accessibility Features
+
+**Keyboard Navigation**
+- Tab order follows visual layout
+- Escape key closes modals and panels
+- Arrow keys navigate within panels
+- F6 cycles between major panels
+
+**ARIA Attributes**
+```html
+<button aria-label="Explorer" role="button" aria-pressed="true">
+<div role="region" aria-label="File Explorer">
+<div role="tree" aria-label="Project files">
+```
+
+##### Browser Compatibility
+
+**Supported Browsers** (via Electron Chromium)
+- Chrome/Chromium 100+
+- All modern CSS features available
+- No polyfills needed
+
+**CSS Features Used**
+- Flexbox for layout
+- CSS Grid for complex components
+- CSS Variables for theming
+- calc() for dynamic sizing
+- position: sticky for headers
 
 ### UI Components
 
@@ -6539,7 +6800,7 @@ electron-poc/
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
 **Last Updated**: 2025-08-23
-**Version**: 1.7.3
+**Version**: 1.7.4
 **Maintainer**: Hive Development Team
 
 ### Change Log
@@ -6618,6 +6879,17 @@ electron-poc/
   - **CSS Filter Strategy**: Intelligent use of invert() for black icons while preserving colored logos
   - **Activity Bar Width**: Optimized at 48px (initially expanded to 56px, then reverted)
   - **Hover Effects**: Consistent brightness(1.1) filter across all icons for unified interaction
+- **v1.7.4 (2025-08-23)**: Enhanced Panel Resize System & Complete DOM Documentation
+  - **TTYD Panel Expansion**: Increased max width from 600px to 1200px for better terminal usage
+  - **Consensus Panel Width**: Increased max width from 600px to 800px for improved readability
+  - **Center Area Protection**: Added 400px minimum width constraint to prevent collapse
+  - **Smart Resize Logic**: Panels only resize if center area maintains minimum width
+  - **Complete DOM Documentation**: Added comprehensive section on DOM structure and panel architecture
+  - **Panel Type Specifications**: Documented all four panel types (Fixed, Collapsible, Resizable, Flexible)
+  - **Resize Mechanism Details**: Full documentation of drag handle system and formulas
+  - **Layout Strategy**: Detailed flexbox implementation and CSS architecture
+  - **Performance Guidelines**: Added DOM optimization and memory management best practices
+  - **Accessibility Features**: Documented keyboard navigation and ARIA attributes
 - **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
   - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts
   - **Unified Cleanup Function**: Single performCleanup() prevents duplicate handlers

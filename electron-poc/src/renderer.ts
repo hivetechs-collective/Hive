@@ -3886,10 +3886,25 @@ setTimeout(() => {
             document.addEventListener('mousemove', (e) => {
                 if (!isResizing) return;
                 
-                // Use exact same formula as consensus panel (lines 3413-3414)
+                // Calculate new width with increased maximum (1200px instead of 600px)
                 const deltaX = startX - e.clientX;
-                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 600);
-                isolatedTerminalPanel.style.width = newWidth + 'px';
+                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 1200);
+                
+                // Ensure center area maintains minimum width of 400px
+                const centerArea = document.getElementById('center-area');
+                if (centerArea) {
+                    const windowWidth = window.innerWidth;
+                    const sidebarWidth = document.getElementById('left-sidebar')?.offsetWidth || 0;
+                    const consensusWidth = document.getElementById('consensus-chat')?.offsetWidth || 0;
+                    const remainingWidth = windowWidth - sidebarWidth - newWidth - consensusWidth;
+                    
+                    // Only apply the new width if center area would have at least 400px
+                    if (remainingWidth >= 400) {
+                        isolatedTerminalPanel.style.width = newWidth + 'px';
+                    }
+                } else {
+                    isolatedTerminalPanel.style.width = newWidth + 'px';
+                }
             });
             
             document.addEventListener('mouseup', () => {
@@ -4233,8 +4248,23 @@ function setupResizeHandles() {
             if (!isResizing) return;
             
             const deltaX = startX - e.clientX;
-            const newWidth = Math.min(Math.max(startWidth + deltaX, 300), 600);
-            consensusPanel.style.width = newWidth + 'px';
+            const newWidth = Math.min(Math.max(startWidth + deltaX, 300), 800);
+            
+            // Ensure center area maintains minimum width of 400px
+            const centerArea = document.getElementById('center-area');
+            if (centerArea) {
+                const windowWidth = window.innerWidth;
+                const sidebarWidth = document.getElementById('left-sidebar')?.offsetWidth || 0;
+                const terminalWidth = document.getElementById('isolated-terminal-panel')?.offsetWidth || 0;
+                const remainingWidth = windowWidth - sidebarWidth - terminalWidth - newWidth;
+                
+                // Only apply the new width if center area would have at least 400px
+                if (remainingWidth >= 400) {
+                    consensusPanel.style.width = newWidth + 'px';
+                }
+            } else {
+                consensusPanel.style.width = newWidth + 'px';
+            }
         });
         
         document.addEventListener('mouseup', () => {
