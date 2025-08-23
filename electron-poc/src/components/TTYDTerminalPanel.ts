@@ -616,6 +616,62 @@ export class TTYDTerminalPanel {
         }, true); // Use capture phase
     }
     
+    private fixPanelLayout(): void {
+        // Fix the panel layout after window state changes
+        const panel = document.querySelector('.isolated-terminal-panel') as HTMLElement;
+        const contentContainer = document.getElementById('isolated-terminal-content');
+        const tabsContainer = document.getElementById('isolated-terminal-tabs');
+        
+        if (!panel || !contentContainer || !tabsContainer) return;
+        
+        // Reset any weird dimensions
+        const tabsHeight = 35; // Height of the tabs bar
+        
+        // Ensure content container fills the panel properly
+        contentContainer.style.position = 'relative';
+        contentContainer.style.width = '100%';
+        contentContainer.style.height = `calc(100% - ${tabsHeight}px)`;
+        contentContainer.style.top = 'auto';
+        contentContainer.style.left = 'auto';
+        
+        // Ensure tabs container has proper height
+        tabsContainer.parentElement!.style.height = `${tabsHeight}px`;
+        tabsContainer.parentElement!.style.minHeight = `${tabsHeight}px`;
+        tabsContainer.parentElement!.style.maxHeight = `${tabsHeight}px`;
+        
+        // Force all webviews to recalculate their dimensions
+        this.tabs.forEach((tab) => {
+            if (tab.element) {
+                tab.element.style.position = 'absolute';
+                tab.element.style.top = '0';
+                tab.element.style.left = '0';
+                tab.element.style.right = '0';
+                tab.element.style.bottom = '0';
+                tab.element.style.width = '100%';
+                tab.element.style.height = '100%';
+                
+                // If it's the active tab, ensure it's visible
+                if (tab.isActive) {
+                    tab.element.style.display = 'block';
+                } else {
+                    tab.element.style.display = 'none';
+                }
+            }
+            
+            // Also refresh the webview if it's active
+            if (tab.webview && tab.isActive) {
+                const webview = tab.webview as any;
+                // Trigger a visual update
+                webview.style.width = '99%';
+                requestAnimationFrame(() => {
+                    webview.style.width = '100%';
+                });
+            }
+        });
+        
+        console.log('[TTYDTerminalPanel] Layout fixed after window state change');
+    }
+    
     public refreshActiveTerminal(): void {
         // Manually refresh the active terminal to fix symbol distortion
         if (!this.activeTabId) return;
@@ -651,6 +707,42 @@ export class TTYDTerminalPanel {
         // Observe the container for size changes
         let resizeTimeout: NodeJS.Timeout | null = null;
         let resizeCompleteTimeout: NodeJS.Timeout | null = null;
+        
+        // Handle window minimize/maximize events
+        let lastWindowState = 'normal';
+        
+        // Detect when window is restored from minimize
+        window.addEventListener('resize', () => {
+            const currentWidth = window.innerWidth;
+            const currentHeight = window.innerHeight;
+            
+            // Check if window was likely minimized (very small) and now restored
+            if (lastWindowState === 'minimized' && currentWidth > 100 && currentHeight > 100) {
+                console.log('[TTYDTerminalPanel] Window restored from minimize, fixing layout');
+                
+                // Force recalculate the panel dimensions
+                setTimeout(() => {
+                    this.fixPanelLayout();
+                }, 100);
+            }
+            
+            // Update state
+            if (currentWidth < 100 || currentHeight < 100) {
+                lastWindowState = 'minimized';
+            } else {
+                lastWindowState = 'normal';
+            }
+        });
+        
+        // Also listen for visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) {
+                console.log('[TTYDTerminalPanel] Document became visible, checking layout');
+                setTimeout(() => {
+                    this.fixPanelLayout();
+                }, 100);
+            }
+        });
         
         const resizeObserver = new ResizeObserver(() => {
             // Debounce resize events to avoid excessive redraws

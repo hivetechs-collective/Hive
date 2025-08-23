@@ -2242,6 +2242,21 @@ body {
   border-bottom-color: #007acc !important;
 }
 
+/* Isolated Terminal Panel Layout Fix */
+.isolated-terminal-panel {
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 100px;
+  max-height: 100%;
+}
+
+.isolated-terminal-content {
+  flex: 1 1 auto !important;
+  position: relative !important;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* TTYD Terminal Tab Styling */
 .ttyd-tab-btn {
   padding: 6px 12px;
