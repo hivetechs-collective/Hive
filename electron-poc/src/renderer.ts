@@ -2250,68 +2250,84 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
         
         // Show loading state first
         container.innerHTML = `
-            <div class="cli-tools-panel" style="padding: 20px; height: 100%; overflow-y: auto; background: var(--vscode-editor-background);">
-                <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
-                <p style="color: #aaa; margin-bottom: 10px;">Install and manage AI-powered coding assistants</p>
+            <div class="cli-tools-panel" style="padding: 24px; height: 100%; overflow-y: auto; background: linear-gradient(135deg, #0E1414 0%, #181E21 100%);">
+                <div style="margin-bottom: 24px;">
+                    <h2 style="
+                        margin: 0 0 8px 0; 
+                        color: #FFC107; 
+                        font-size: 24px; 
+                        font-weight: 700;
+                        text-shadow: 0 2px 4px rgba(255, 193, 7, 0.2);
+                    ">AI CLI Tools Management</h2>
+                    <p style="
+                        color: #9CA3AF; 
+                        margin: 0;
+                        font-size: 14px;
+                        font-weight: 500;
+                    ">Install and manage AI-powered coding assistants</p>
+                </div>
                 
                 <!-- Batch Action Buttons -->
-                <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
+                <div style="display: flex; gap: 12px; margin-bottom: 24px; align-items: center;">
                     <button onclick="installAllCliTools()" style="
-                        padding: 8px 16px;
-                        background: linear-gradient(0deg, #0e639c, #1177bb);
-                        color: #fff;
-                        border: 1px solid #1e6ba8;
-                        border-radius: 4px;
-                        font-size: 12px;
+                        padding: 10px 20px;
+                        background: linear-gradient(135deg, #FFC107 0%, #FFAD00 100%);
+                        color: #0E1414;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 13px;
                         font-weight: 600;
                         cursor: pointer;
-                        transition: all 0.15s ease;
+                        transition: all 0.2s ease;
                         display: flex;
                         align-items: center;
-                        gap: 6px;
-                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-                    " onmouseover="this.style.background='linear-gradient(0deg, #1177bb, #2489ce)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.3)'" 
-                       onmouseout="this.style.background='linear-gradient(0deg, #0e639c, #1177bb)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 2px rgba(0,0,0,0.2)'">
-                        <span class="codicon codicon-cloud-download" style="font-size: 14px;"></span>
+                        gap: 8px;
+                        box-shadow: 0 4px 6px rgba(255, 193, 7, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3);
+                        transform: translateY(0);
+                    " onmouseover="this.style.background='linear-gradient(135deg, #FFD54F 0%, #FFC107 100%)'; this.style.transform='translateY(-2px) scale(1.02)'; this.style.boxShadow='0 6px 12px rgba(255, 193, 7, 0.35), 0 2px 4px rgba(0, 0, 0, 0.4)'" 
+                       onmouseout="this.style.background='linear-gradient(135deg, #FFC107 0%, #FFAD00 100%)'; this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 4px 6px rgba(255, 193, 7, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3)'">
+                        <span class="codicon codicon-cloud-download" style="font-size: 16px;"></span>
                         <span>Install All Tools</span>
                     </button>
                     <button onclick="updateAllCliTools()" style="
-                        padding: 8px 16px;
-                        background: linear-gradient(0deg, #388a34, #45a642);
+                        padding: 10px 20px;
+                        background: linear-gradient(135deg, #007BFF 0%, #0056b3 100%);
                         color: #fff;
-                        border: 1px solid #2e7d32;
-                        border-radius: 4px;
-                        font-size: 12px;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 13px;
                         font-weight: 600;
                         cursor: pointer;
-                        transition: all 0.15s ease;
+                        transition: all 0.2s ease;
                         display: flex;
                         align-items: center;
-                        gap: 6px;
-                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-                    " onmouseover="this.style.background='linear-gradient(0deg, #45a642, #52c550)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.3)'" 
-                       onmouseout="this.style.background='linear-gradient(0deg, #388a34, #45a642)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 2px rgba(0,0,0,0.2)'">
-                        <span class="codicon codicon-sync" style="font-size: 14px;"></span>
+                        gap: 8px;
+                        box-shadow: 0 4px 6px rgba(0, 123, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3);
+                        transform: translateY(0);
+                    " onmouseover="this.style.background='linear-gradient(135deg, #2489ce 0%, #007BFF 100%)'; this.style.transform='translateY(-2px) scale(1.02)'; this.style.boxShadow='0 6px 12px rgba(0, 123, 255, 0.35), 0 2px 4px rgba(0, 0, 0, 0.4)'" 
+                       onmouseout="this.style.background='linear-gradient(135deg, #007BFF 0%, #0056b3 100%)'; this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 4px 6px rgba(0, 123, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3)'">
+                        <span class="codicon codicon-sync" style="font-size: 16px;"></span>
                         <span>Update All Tools</span>
                     </button>
                     <button onclick="uninstallAllCliTools()" style="
-                        padding: 8px 16px;
-                        background: linear-gradient(0deg, #5a1e1e, #6e2424);
-                        color: #fff;
-                        border: 1px solid #632424;
-                        border-radius: 4px;
-                        font-size: 12px;
+                        padding: 10px 20px;
+                        background: #1E2427;
+                        color: #9CA3AF;
+                        border: 1px solid #2D3336;
+                        border-radius: 8px;
+                        font-size: 13px;
                         font-weight: 600;
                         cursor: pointer;
-                        transition: all 0.15s ease;
+                        transition: all 0.2s ease;
                         display: flex;
                         align-items: center;
-                        gap: 6px;
-                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
-                    " onmouseover="this.style.background='linear-gradient(0deg, #6e2424, #832929)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.3)'" 
-                       onmouseout="this.style.background='linear-gradient(0deg, #5a1e1e, #6e2424)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 2px rgba(0,0,0,0.2)'">
-                        <span class="codicon codicon-trash" style="font-size: 14px;"></span>
-                        <span>Uninstall All Tools</span>
+                        gap: 8px;
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+                        transform: translateY(0);
+                    " onmouseover="this.style.background='#2D3336'; this.style.color='#ef4444'; this.style.borderColor='#ef4444'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 6px rgba(239, 68, 68, 0.2)'" 
+                       onmouseout="this.style.background='#1E2427'; this.style.color='#9CA3AF'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)'">
+                        <span class="codicon codicon-trash" style="font-size: 16px;"></span>
+                        <span>Uninstall All</span>
                     </button>
                     <div id="batch-status" style="
                         display: none;
@@ -2435,7 +2451,26 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     const card = document.createElement('div');
     card.className = 'cli-tool-card';
     card.setAttribute('data-tool-id', id);  // Add data attribute for button handlers
-    card.style.cssText = 'background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;';
+    card.style.cssText = `
+        background: linear-gradient(135deg, #1E2427 0%, #181E21 100%); 
+        border: 1px solid #2D3336; 
+        border-radius: 12px; 
+        padding: 20px; 
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    `;
+    
+    // Add hover effect to card
+    card.onmouseover = () => {
+        card.style.transform = 'translateY(-2px)';
+        card.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
+        card.style.borderColor = '#3e444a';
+    };
+    card.onmouseout = () => {
+        card.style.transform = 'translateY(0)';
+        card.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
+        card.style.borderColor = '#2D3336';
+    };
     
     const isInstalled = status?.installed || false;
     const version = status?.version;
@@ -2468,89 +2503,92 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
         buttons = `
             <button onclick="launchCliTool('${id}')" style="
                 flex: 1; 
-                padding: 6px 10px; 
-                background: linear-gradient(0deg, #0e639c, #1177bb); 
+                padding: 8px 12px; 
+                background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); 
                 color: #fff; 
-                border: 1px solid rgba(255,255,255,0.1); 
-                border-radius: 3px; 
+                border: none; 
+                border-radius: 8px; 
                 font-size: 11px; 
-                font-weight: 500;
+                font-weight: 600;
                 cursor: pointer; 
-                transition: all 0.15s ease;
-            " onmouseover="this.style.background='linear-gradient(0deg, #1177bb, #2489ce)'; this.style.transform='translateY(-1px)'" 
-               onmouseout="this.style.background='linear-gradient(0deg, #0e639c, #1177bb)'; this.style.transform='translateY(0)'" 
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 6px rgba(255, 193, 7, 0.25);
+            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(255, 193, 7, 0.35)'" 
+               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(255, 193, 7, 0.25)'" 
                title="Launch in current project">Launch</button>
             <button onclick="refreshCliToolDetails('${id}')" style="
                 flex: 1; 
-                padding: 6px 10px; 
-                background: #3e3e42; 
-                color: #cccccc; 
-                border: 1px solid rgba(255,255,255,0.1); 
-                border-radius: 3px; 
+                padding: 8px 12px; 
+                background: #1E2427; 
+                color: #FFD54F; 
+                border: 1px solid #2D3336; 
+                border-radius: 8px; 
                 font-size: 11px; 
                 font-weight: 500;
                 cursor: pointer; 
-                transition: all 0.15s ease;
-            " onmouseover="this.style.background='#45454a'; this.style.color='#ffffff'" 
-               onmouseout="this.style.background='#3e3e42'; this.style.color='#cccccc'" 
+                transition: all 0.2s ease;
+            " onmouseover="this.style.background='#2D3336'; this.style.borderColor='#FFC107'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='#1E2427'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
                title="Refresh tool details">Details</button>
             <button onclick="updateCliTool('${id}')" style="
                 flex: 1; 
-                padding: 6px 10px; 
-                background: linear-gradient(0deg, #388a34, #45a642); 
+                padding: 8px 12px; 
+                background: linear-gradient(135deg, #8A2BE2 0%, #007BFF 100%); 
                 color: #fff; 
-                border: 1px solid rgba(255,255,255,0.1); 
-                border-radius: 3px; 
+                border: none; 
+                border-radius: 8px; 
                 font-size: 11px; 
-                font-weight: 500;
+                font-weight: 600;
                 cursor: pointer; 
-                transition: all 0.15s ease;
-            " onmouseover="this.style.background='linear-gradient(0deg, #45a642, #52c550)'; this.style.transform='translateY(-1px)'" 
-               onmouseout="this.style.background='linear-gradient(0deg, #388a34, #45a642)'; this.style.transform='translateY(0)'">Update</button>
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 6px rgba(138, 43, 226, 0.25);
+            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(138, 43, 226, 0.35)'" 
+               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(138, 43, 226, 0.25)'">Update</button>
             <button onclick="uninstallCliTool('${id}')" style="
                 flex: 1; 
-                padding: 6px 10px; 
-                background: linear-gradient(0deg, #5a1e1e, #6e2424); 
-                color: #fff; 
-                border: 1px solid rgba(255,255,255,0.1); 
-                border-radius: 3px; 
+                padding: 8px 12px; 
+                background: #1E2427; 
+                color: #FF6B6B; 
+                border: 1px solid #2D3336; 
+                border-radius: 8px; 
                 font-size: 11px; 
                 font-weight: 500;
                 cursor: pointer; 
-                transition: all 0.15s ease;
-            " onmouseover="this.style.background='linear-gradient(0deg, #6e2424, #832929)'; this.style.transform='translateY(-1px)'" 
-               onmouseout="this.style.background='linear-gradient(0deg, #5a1e1e, #6e2424)'; this.style.transform='translateY(0)'" 
+                transition: all 0.2s ease;
+            " onmouseover="this.style.background='#CC3D3D'; this.style.color='white'; this.style.borderColor='#CC3D3D'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='#1E2427'; this.style.color='#FF6B6B'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
                title="Uninstall this tool">Uninstall</button>
         `;
     } else {
         buttons = `
             <button onclick="installCliTool('${id}')" style="
                 flex: 1; 
-                padding: 6px 10px; 
-                background: linear-gradient(0deg, #0e639c, #1177bb); 
+                padding: 8px 12px; 
+                background: linear-gradient(135deg, #28A745 0%, #20C997 100%); 
                 color: #fff; 
-                border: 1px solid rgba(255,255,255,0.1); 
-                border-radius: 3px; 
+                border: none; 
+                border-radius: 8px; 
                 font-size: 11px; 
-                font-weight: 500;
+                font-weight: 600;
                 cursor: pointer; 
-                transition: all 0.15s ease;
-            " onmouseover="this.style.background='linear-gradient(0deg, #1177bb, #2489ce)'; this.style.transform='translateY(-1px)'" 
-               onmouseout="this.style.background='linear-gradient(0deg, #0e639c, #1177bb)'; this.style.transform='translateY(0)'">Install</button>
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 6px rgba(40, 167, 69, 0.25);
+            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(40, 167, 69, 0.35)'" 
+               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(40, 167, 69, 0.25)'">Install</button>
         `;
     }
     buttons += `<button onclick="window.open('${docsUrl}', '_blank')" style="
-        padding: 6px 12px; 
-        background: #252526; 
-        color: #8b8b8c; 
-        border: 1px solid #3e3e42; 
-        border-radius: 3px; 
+        padding: 8px 12px; 
+        background: #1E2427; 
+        color: #FFD54F; 
+        border: 1px solid #2D3336; 
+        border-radius: 8px; 
         font-size: 11px; 
         font-weight: 500;
         cursor: pointer; 
-        transition: all 0.15s ease;
-    " onmouseover="this.style.background='#2d2d30'; this.style.color='#cccccc'" 
-       onmouseout="this.style.background='#252526'; this.style.color='#8b8b8c'" 
+        transition: all 0.2s ease;
+    " onmouseover="this.style.background='#2D3336'; this.style.borderColor='#FFC107'; this.style.transform='translateY(-1px)'" 
+       onmouseout="this.style.background='#1E2427'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
        title="View official documentation">Docs</button>`;
     
     card.innerHTML = `
@@ -2575,7 +2613,26 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
 function createStaticToolCard(id: string, name: string, description: string, badgeText: string | null, badgeColor: string | null, docsUrl: string): HTMLDivElement {
     const card = document.createElement('div');
     card.className = 'cli-tool-card';
-    card.style.cssText = 'background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;';
+    card.style.cssText = `
+        background: linear-gradient(135deg, #1E2427 0%, #181E21 100%); 
+        border: 1px solid #2D3336; 
+        border-radius: 12px; 
+        padding: 20px; 
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    `;
+    
+    // Add hover effect to card
+    card.onmouseover = () => {
+        card.style.transform = 'translateY(-2px)';
+        card.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
+        card.style.borderColor = '#3e444a';
+    };
+    card.onmouseout = () => {
+        card.style.transform = 'translateY(0)';
+        card.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
+        card.style.borderColor = '#2D3336';
+    };
     
     const statusBadge = badgeText ? `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${badgeText}</span>` : '';
     
