@@ -36,6 +36,7 @@ exports.PortManager = void 0;
 const net = __importStar(require("net"));
 const child_process_1 = require("child_process");
 const util_1 = require("util");
+const SafeLogger_1 = require("./SafeLogger");
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
 class PortManager {
     /**
@@ -97,7 +98,7 @@ class PortManager {
                 const { stdout } = yield execAsync(`lsof -i :${port} -t 2>/dev/null || true`);
                 const pids = stdout.trim().split('\n').filter(Boolean);
                 if (pids.length > 0) {
-                    console.log(`[PortManager] Killing processes on port ${port}: ${pids.join(', ')}`);
+                    SafeLogger_1.logger.info(`[PortManager] Killing processes on port ${port}: ${pids.join(', ')}`);
                     // Kill each process
                     for (const pid of pids) {
                         try {
@@ -115,7 +116,7 @@ class PortManager {
                         }
                         catch (error) {
                             if (error.code !== 'ESRCH') { // Process doesn't exist
-                                console.error(`[PortManager] Error killing process ${pid}:`, error.message);
+                                SafeLogger_1.logger.error(`[PortManager] Error killing process ${pid}:`, error.message);
                             }
                         }
                     }
@@ -126,7 +127,7 @@ class PortManager {
                 return false;
             }
             catch (error) {
-                console.error('[PortManager] Error finding process on port:', error);
+                SafeLogger_1.logger.error('[PortManager] Error finding process on port:', error);
                 return false;
             }
         });
@@ -141,7 +142,7 @@ class PortManager {
             if (this.allocatedPorts.has(serviceName)) {
                 const existingPort = this.allocatedPorts.get(serviceName);
                 if (yield this.isPortAvailable(existingPort)) {
-                    console.log(`[PortManager] Reusing existing port ${existingPort} for ${serviceName}`);
+                    SafeLogger_1.logger.info(`[PortManager] Reusing existing port ${existingPort} for ${serviceName}`);
                     return existingPort;
                 }
                 // Release the old allocation since it's no longer valid
@@ -153,16 +154,16 @@ class PortManager {
             // Check preferred port first
             if (yield this.isPortAvailable(currentPort)) {
                 portToUse = currentPort;
-                console.log(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
+                SafeLogger_1.logger.info(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
             }
             else {
-                console.log(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
+                SafeLogger_1.logger.info(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
                 // Try alternative ports if provided
                 if (alternativePorts && alternativePorts.length > 0) {
                     for (const altPort of alternativePorts) {
                         if (yield this.isPortAvailable(altPort)) {
                             portToUse = altPort;
-                            console.log(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
+                            SafeLogger_1.logger.info(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
                             break;
                         }
                     }
@@ -174,7 +175,7 @@ class PortManager {
                     while (currentPort < maxPort) {
                         if (yield this.isPortAvailable(currentPort)) {
                             portToUse = currentPort;
-                            console.log(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
+                            SafeLogger_1.logger.info(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
                             break;
                         }
                         currentPort++;
@@ -187,7 +188,7 @@ class PortManager {
             }
             // Allocate the port
             this.allocatedPorts.set(serviceName, portToUse);
-            console.log(`[PortManager] ✅ Port ${portToUse} allocated for ${serviceName}`);
+            SafeLogger_1.logger.info(`[PortManager] ✅ Port ${portToUse} allocated for ${serviceName}`);
             return portToUse;
         });
     }
@@ -198,7 +199,7 @@ class PortManager {
         if (this.allocatedPorts.has(serviceName)) {
             const port = this.allocatedPorts.get(serviceName);
             this.allocatedPorts.delete(serviceName);
-            console.log(`[PortManager] Released port ${port} for ${serviceName}`);
+            SafeLogger_1.logger.info(`[PortManager] Released port ${port} for ${serviceName}`);
         }
     }
     /**
@@ -206,14 +207,14 @@ class PortManager {
      */
     static cleanup() {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log('[PortManager] Cleaning up all allocated ports...');
+            SafeLogger_1.logger.info('[PortManager] Cleaning up all allocated ports...');
             for (const [serviceName, port] of this.allocatedPorts) {
                 try {
                     yield this.killProcessOnPort(port);
-                    console.log(`[PortManager] Cleaned up port ${port} for ${serviceName}`);
+                    SafeLogger_1.logger.info(`[PortManager] Cleaned up port ${port} for ${serviceName}`);
                 }
                 catch (error) {
-                    console.error(`[PortManager] Error cleaning up ${serviceName}:`, error);
+                    SafeLogger_1.logger.error(`[PortManager] Error cleaning up ${serviceName}:`, error);
                 }
             }
             this.allocatedPorts.clear();

@@ -519,6 +519,44 @@ body {
   gap: 4px;
   background: var(--background-primary);
   border-right: 1px solid var(--border-color);
+  position: relative;
+  padding-bottom: 60px; /* Space for fixed settings button */
+}
+
+/* AI CLI Icons Section */
+.ai-cli-icons-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+/* AI CLI Quick Launch Buttons */
+.cli-quick-launch {
+  opacity: 0.7;
+  transition: opacity 0.3s, transform 0.2s;
+}
+
+.cli-quick-launch:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.cli-quick-launch img {
+  filter: grayscale(20%);
+  transition: filter 0.3s;
+}
+
+.cli-quick-launch:hover img {
+  filter: grayscale(0%) drop-shadow(0 0 3px rgba(255, 193, 7, 0.5));
+}
+
+/* Bottom Section for Settings */
+.sidebar-bottom-section {
+  background: var(--background-primary);
+  border-top: 1px solid var(--border-color);
+  padding: 4px 0;
 }
 
 /* Sidebar Panel - VS Code style panel area */

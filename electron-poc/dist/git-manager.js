@@ -99,13 +99,13 @@ class GitManager {
                 };
             }
             try {
-                // Fetch first to get accurate ahead/behind counts
-                try {
-                    yield this.git.fetch();
-                }
-                catch (fetchError) {
-                    console.log('Fetch failed (may be offline):', fetchError);
-                }
+                // Skip fetch on initial load - it's too slow and blocks the UI
+                // We can fetch in the background later if needed
+                // try {
+                //   await this.git.fetch();
+                // } catch (fetchError) {
+                //   console.log('Fetch failed (may be offline):', fetchError);
+                // }
                 const status = yield this.git.status();
                 const files = [];
                 // Process all file statuses

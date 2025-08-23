@@ -17,6 +17,8 @@ exports.ProcessManager = void 0;
 const child_process_1 = require("child_process");
 const events_1 = require("events");
 const PortManager_1 = require("./PortManager");
+const PidTracker_1 = require("./PidTracker");
+const SafeLogger_1 = require("./SafeLogger");
 class ProcessManager extends events_1.EventEmitter {
     constructor() {
         super();
@@ -37,7 +39,7 @@ class ProcessManager extends events_1.EventEmitter {
             status: 'stopped',
             restartCount: 0
         });
-        console.log(`[ProcessManager] Registered process: ${config.name}`);
+        SafeLogger_1.logger.info(`[ProcessManager] Registered process: ${config.name}`);
     }
     /**
      * Start a managed process
@@ -50,7 +52,7 @@ class ProcessManager extends events_1.EventEmitter {
             }
             const info = this.processes.get(name);
             if (info.status === 'running') {
-                console.log(`[ProcessManager] Process ${name} is already running`);
+                SafeLogger_1.logger.info(`[ProcessManager] Process ${name} is already running`);
                 return true;
             }
             info.status = 'starting';
@@ -66,11 +68,11 @@ class ProcessManager extends events_1.EventEmitter {
                         alternativePorts: config.alternativePorts
                     });
                     info.port = port;
-                    console.log(`[ProcessManager] ${name} will use port ${port}`);
+                    SafeLogger_1.logger.info(`[ProcessManager] ${name} will use port ${port}`);
                 }
                 // Prepare environment
                 const env = Object.assign(Object.assign(Object.assign({}, process.env), config.env), (port ? { PORT: port.toString(), MEMORY_SERVICE_PORT: port.toString() } : {}));
-                console.log(`[ProcessManager] Starting ${name} on port ${port || 'N/A'}`);
+                SafeLogger_1.logger.info(`[ProcessManager] Starting ${name} on port ${port || 'N/A'}`);
                 // Spawn the process - handle different file types
                 let childProcess;
                 let binaryReadyPromise = null;
@@ -95,7 +97,7 @@ class ProcessManager extends events_1.EventEmitter {
                 }
                 else {
                     // For binary executables (Rust, Go, etc.), use spawn
-                    console.log(`[ProcessManager] Spawning binary executable: ${config.scriptPath}`);
+                    SafeLogger_1.logger.info(`[ProcessManager] Spawning binary executable: ${config.scriptPath}`);
                     // Use 'inherit' for stdio to allow subprocess communication (e.g., Python processes spawned by AI Helpers)
                     // CRITICAL: AI Helpers spawn Python subprocesses that require full stdio access
                     childProcess = (0, child_process_1.spawn)(config.scriptPath, config.args || [], {
@@ -105,8 +107,8 @@ class ProcessManager extends events_1.EventEmitter {
                     });
                     // With 'inherit' stdio, we can't capture output, so we won't have a binaryReadyPromise
                     // We'll rely solely on port checking for readiness detection
-                    console.log(`[ProcessManager] Binary process ${name} spawned with inherited stdio`);
-                    console.log(`[ProcessManager] Will use port checking for readiness (port ${port})`);
+                    SafeLogger_1.logger.info(`[ProcessManager] Binary process ${name} spawned with inherited stdio`);
+                    SafeLogger_1.logger.info(`[ProcessManager] Will use port checking for readiness (port ${port})`);
                     // Note: childProcess.stdout and childProcess.stderr are null with 'inherit'
                     // These blocks won't execute with 'inherit' stdio, but keeping them for future reference
                     // if we need to switch back to captured stdio for debugging
@@ -114,17 +116,44 @@ class ProcessManager extends events_1.EventEmitter {
                 info.process = childProcess;
                 info.pid = childProcess.pid;
                 info.lastStartTime = new Date();
-                // Set up event handlers
+                // Track the PID for cleanup on crash/restart
+                if (childProcess.pid) {
+                    PidTracker_1.PidTracker.addPid(childProcess.pid, name);
+                }
+                // Wait for process to be ready - check for 'ready' message or port binding
+                // Binary processes like Rust servers may take longer to initialize
+                let isReady = false;
+                let readyResolver = null;
+                let readyTimeout = null;
+                // Create ready promise for Node.js processes BEFORE setting up message handlers
+                const readyPromise = (config.scriptPath.endsWith('.ts') || config.scriptPath.endsWith('.js'))
+                    ? new Promise((resolve) => {
+                        readyResolver = resolve;
+                        readyTimeout = setTimeout(() => {
+                            SafeLogger_1.logger.info(`[ProcessManager] Timeout waiting for ${name} ready signal (waited 15000ms)`);
+                            resolve(false);
+                        }, 15000);
+                    })
+                    : null;
+                // Set up event handlers - now the ready promise is already created
                 childProcess.on('message', (msg) => {
+                    // Handle ready message first if we're waiting for it
+                    if (readyResolver && msg.type === 'ready') {
+                        if (readyTimeout)
+                            clearTimeout(readyTimeout);
+                        readyResolver(true);
+                        readyResolver = null; // Clear so we don't resolve twice
+                    }
+                    // Then handle normally
                     this.handleProcessMessage(name, msg);
                 });
                 childProcess.on('error', (error) => {
-                    console.error(`[ProcessManager] Process ${name} error:`, error);
+                    SafeLogger_1.logger.error(`[ProcessManager] Process ${name} error:`, error);
                     info.lastError = error.message;
                     this.handleProcessCrash(name);
                 });
                 childProcess.on('exit', (code, signal) => {
-                    console.log(`[ProcessManager] Process ${name} exited with code ${code}, signal ${signal}`);
+                    SafeLogger_1.logger.info(`[ProcessManager] Process ${name} exited with code ${code}, signal ${signal}`);
                     if (!this.shutdownInProgress && info.status !== 'stopping') {
                         this.handleProcessCrash(name);
                     }
@@ -133,53 +162,37 @@ class ProcessManager extends events_1.EventEmitter {
                         this.emit('process:stopped', name);
                     }
                 });
-                // Wait for process to be ready - check for 'ready' message or port binding
-                // Binary processes like Rust servers may take longer to initialize
-                let isReady = false;
-                if (config.scriptPath.endsWith('.ts') || config.scriptPath.endsWith('.js')) {
+                if (readyPromise) {
                     // For Node.js processes, wait for IPC 'ready' message
-                    const readyPromise = new Promise((resolve) => {
-                        const timeout = setTimeout(() => {
-                            console.log(`[ProcessManager] Timeout waiting for ${name} ready signal (waited 15000ms)`);
-                            resolve(false);
-                        }, 15000);
-                        const messageHandler = (msg) => {
-                            if (msg.type === 'ready') {
-                                clearTimeout(timeout);
-                                resolve(true);
-                            }
-                        };
-                        childProcess.once('message', messageHandler);
-                    });
                     isReady = yield readyPromise;
                 }
                 else if (binaryReadyPromise) {
                     // For binary processes with captured output, wait for our custom ready detection
                     const timeoutPromise = new Promise((resolve) => {
                         setTimeout(() => {
-                            console.log(`[ProcessManager] Timeout waiting for ${name} startup output (waited 30000ms)`);
+                            SafeLogger_1.logger.info(`[ProcessManager] Timeout waiting for ${name} startup output (waited 30000ms)`);
                             resolve(false);
                         }, 30000);
                     });
                     // Race between the binary ready promise and timeout (binaryReadyPromise is guaranteed to be non-null here)
                     isReady = yield Promise.race([binaryReadyPromise, timeoutPromise]);
                     if (isReady) {
-                        console.log(`[ProcessManager] Binary process ${name} confirmed ready via output detection`);
+                        SafeLogger_1.logger.info(`[ProcessManager] Binary process ${name} confirmed ready via output detection`);
                     }
                 }
                 else {
                     // For binary processes with 'inherit' stdio, we can't capture output
-                    console.log(`[ProcessManager] Binary process ${name} uses inherited stdio - will check port only`);
+                    SafeLogger_1.logger.info(`[ProcessManager] Binary process ${name} uses inherited stdio - will check port only`);
                 }
                 // For processes without ready signal, check the port
                 if (!isReady && port) {
-                    console.log(`[ProcessManager] Checking port ${port} for ${name}...`);
+                    SafeLogger_1.logger.info(`[ProcessManager] Checking port ${port} for ${name}...`);
                     // Binary servers may take longer to bind to port after process starts
                     // AI Helpers initialization can take time, so give them enough time to start
                     const isBinary = !config.scriptPath.endsWith('.ts') && !config.scriptPath.endsWith('.js');
                     if (isBinary) {
                         // For binary processes, add initial delay to allow process to initialize
-                        console.log(`[ProcessManager] Waiting 2 seconds for ${name} to initialize before port check...`);
+                        SafeLogger_1.logger.info(`[ProcessManager] Waiting 2 seconds for ${name} to initialize before port check...`);
                         yield new Promise(resolve => setTimeout(resolve, 2000));
                     }
                     // Fast, efficient port checking (2025 best practice)
@@ -194,18 +207,18 @@ class ProcessManager extends events_1.EventEmitter {
                         // Quick check if port is listening
                         portReady = yield PortManager_1.PortManager.waitForService(port, checkInterval);
                         if (portReady) {
-                            console.log(`[ProcessManager] ✅ Port ${port} is ready for ${name} (${attempts * checkInterval}ms)`);
+                            SafeLogger_1.logger.info(`[ProcessManager] ✅ Port ${port} is ready for ${name} (${attempts * checkInterval}ms)`);
                             break;
                         }
                         // Only log occasionally to reduce noise
                         if (attempts === maxAttempts / 2) {
-                            console.log(`[ProcessManager] Waiting for ${name} on port ${port}...`);
+                            SafeLogger_1.logger.info(`[ProcessManager] Waiting for ${name} on port ${port}...`);
                         }
                     }
                     if (!portReady) {
                         // Try to get more debug info before failing
                         const debugInfo = yield this.debugProcess(name);
-                        console.error(`[ProcessManager] Debug info for ${name}:`, JSON.stringify(debugInfo, null, 2));
+                        SafeLogger_1.logger.error(`[ProcessManager] Debug info for ${name}:`, JSON.stringify(debugInfo, null, 2));
                         throw new Error(`Process ${name} failed to start properly - port ${port} not responding after ${attempts} attempts (${maxWaitTime}ms)`);
                     }
                     isReady = true;
@@ -216,11 +229,11 @@ class ProcessManager extends events_1.EventEmitter {
                 if (config.healthCheckUrl && config.healthCheckInterval) {
                     this.startHealthCheck(name);
                 }
-                console.log(`[ProcessManager] Process ${name} started successfully (PID: ${info.pid})`);
+                SafeLogger_1.logger.info(`[ProcessManager] Process ${name} started successfully (PID: ${info.pid})`);
                 return true;
             }
             catch (error) {
-                console.error(`[ProcessManager] Failed to start ${name}:`, error.message);
+                SafeLogger_1.logger.error(`[ProcessManager] Failed to start ${name}:`, error.message);
                 info.status = 'crashed';
                 info.lastError = error.message;
                 this.emit('process:failed', name, error);
@@ -259,11 +272,15 @@ class ProcessManager extends events_1.EventEmitter {
                         // Wait for process to exit
                         yield new Promise(resolve => setTimeout(resolve, 1000));
                     }
+                    // Remove PID tracking
+                    if (info.pid) {
+                        PidTracker_1.PidTracker.removePid(info.pid);
+                    }
                     info.process = null;
                     info.pid = undefined;
                 }
                 catch (error) {
-                    console.error(`[ProcessManager] Error stopping ${name}:`, error);
+                    SafeLogger_1.logger.error(`[ProcessManager] Error stopping ${name}:`, error);
                 }
             }
             // Release port
@@ -273,7 +290,7 @@ class ProcessManager extends events_1.EventEmitter {
             }
             info.status = 'stopped';
             this.emit('process:stopped', name);
-            console.log(`[ProcessManager] Process ${name} stopped`);
+            SafeLogger_1.logger.info(`[ProcessManager] Process ${name} stopped`);
             return true;
         });
     }
@@ -282,7 +299,7 @@ class ProcessManager extends events_1.EventEmitter {
      */
     restartProcess(name) {
         return __awaiter(this, void 0, void 0, function* () {
-            console.log(`[ProcessManager] Restarting ${name}...`);
+            SafeLogger_1.logger.info(`[ProcessManager] Restarting ${name}...`);
             yield this.stopProcess(name);
             yield new Promise(resolve => setTimeout(resolve, 1000));
             return this.startProcess(name);
@@ -299,12 +316,16 @@ class ProcessManager extends events_1.EventEmitter {
             this.emit('process:crashed', name);
             // Clean up process reference
             if (info.process) {
+                // Remove PID tracking
+                if (info.pid) {
+                    PidTracker_1.PidTracker.removePid(info.pid);
+                }
                 info.process = null;
                 info.pid = undefined;
             }
             // CRITICAL: Release the port when process crashes
             if (info.port) {
-                console.log(`[ProcessManager] Releasing port ${info.port} after ${name} crashed`);
+                SafeLogger_1.logger.info(`[ProcessManager] Releasing port ${info.port} after ${name} crashed`);
                 PortManager_1.PortManager.releasePort(name);
                 info.port = undefined;
             }
@@ -316,18 +337,18 @@ class ProcessManager extends events_1.EventEmitter {
                 if (info.restartCount < maxRestarts) {
                     info.restartCount++;
                     const delay = config.restartDelay || 3000;
-                    console.log(`[ProcessManager] Auto-restarting ${name} in ${delay}ms (attempt ${info.restartCount}/${maxRestarts})`);
+                    SafeLogger_1.logger.info(`[ProcessManager] Auto-restarting ${name} in ${delay}ms (attempt ${info.restartCount}/${maxRestarts})`);
                     setTimeout(() => __awaiter(this, void 0, void 0, function* () {
                         if (!this.shutdownInProgress) {
                             const success = yield this.startProcess(name);
                             if (!success) {
-                                console.error(`[ProcessManager] Failed to restart ${name}`);
+                                SafeLogger_1.logger.error(`[ProcessManager] Failed to restart ${name}`);
                             }
                         }
                     }), delay);
                 }
                 else {
-                    console.error(`[ProcessManager] Process ${name} exceeded max restart attempts`);
+                    SafeLogger_1.logger.error(`[ProcessManager] Process ${name} exceeded max restart attempts`);
                     this.emit('process:failed', name, new Error('Max restarts exceeded'));
                 }
             }
@@ -337,7 +358,7 @@ class ProcessManager extends events_1.EventEmitter {
      * Handle messages from child processes
      */
     handleProcessMessage(name, message) {
-        console.log(`[ProcessManager] Message from ${name}:`, message);
+        SafeLogger_1.logger.info(`[ProcessManager] Message from ${name}:`, message);
         if (message.type === 'ready') {
             const info = this.processes.get(name);
             info.status = 'running';
@@ -372,7 +393,7 @@ class ProcessManager extends events_1.EventEmitter {
                     }
                 }
                 catch (error) {
-                    console.error(`[ProcessManager] Health check failed for ${name}:`, error.message);
+                    SafeLogger_1.logger.error(`[ProcessManager] Health check failed for ${name}:`, error.message);
                     this.emit('process:unhealthy', name, error);
                     // Restart if health check fails
                     if (config.autoRestart) {
@@ -478,23 +499,23 @@ class ProcessManager extends events_1.EventEmitter {
      */
     logStatus() {
         const status = this.getFullStatus();
-        console.log('\n[ProcessManager] === Status Report ===');
-        console.log(`Summary: ${status.summary.running}/${status.summary.total} running`);
-        console.log('Processes:');
+        SafeLogger_1.logger.info('\n[ProcessManager] === Status Report ===');
+        SafeLogger_1.logger.info(`Summary: ${status.summary.running}/${status.summary.total} running`);
+        SafeLogger_1.logger.info('Processes:');
         status.processes.forEach(p => {
             const uptimeStr = p.uptime ? `${Math.floor(p.uptime / 1000)}s` : 'N/A';
             const portStr = p.port ? `:${p.port}` : '';
             const pidStr = p.pid ? `PID:${p.pid}` : '';
             const errorStr = p.lastError ? ` [Error: ${p.lastError}]` : '';
-            console.log(`  - ${p.name}${portStr}: ${p.status} ${pidStr} (uptime: ${uptimeStr}, restarts: ${p.restartCount})${errorStr}`);
+            SafeLogger_1.logger.info(`  - ${p.name}${portStr}: ${p.status} ${pidStr} (uptime: ${uptimeStr}, restarts: ${p.restartCount})${errorStr}`);
         });
         if (status.allocatedPorts.size > 0) {
-            console.log('\nAllocated Ports:');
+            SafeLogger_1.logger.info('\nAllocated Ports:');
             status.allocatedPorts.forEach((port, service) => {
-                console.log(`  - ${service}: ${port}`);
+                SafeLogger_1.logger.info(`  - ${service}: ${port}`);
             });
         }
-        console.log('==================\n');
+        SafeLogger_1.logger.info('==================\n');
     }
     /**
      * Set up shutdown handlers
@@ -505,13 +526,13 @@ class ProcessManager extends events_1.EventEmitter {
                 return;
             }
             this.shutdownInProgress = true;
-            console.log('[ProcessManager] Shutting down all processes...');
+            SafeLogger_1.logger.info('[ProcessManager] Shutting down all processes...');
             // Stop all processes
             const stopPromises = Array.from(this.processes.keys()).map(name => this.stopProcess(name, false));
             yield Promise.all(stopPromises);
             // Clean up ports
             yield PortManager_1.PortManager.cleanup();
-            console.log('[ProcessManager] All processes stopped');
+            SafeLogger_1.logger.info('[ProcessManager] All processes stopped');
         });
         // Handle various shutdown signals
         process.on('SIGTERM', shutdown);

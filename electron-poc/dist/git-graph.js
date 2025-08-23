@@ -340,7 +340,7 @@ class GitGraphView {
             try {
                 // Get commit log with graph information
                 const log = yield window.gitAPI.getLog({
-                    maxCount: 200,
+                    maxCount: 20,
                     graph: true
                 });
                 console.log('[GitGraph] Raw log received:', log ? log.substring(0, 500) : 'empty');

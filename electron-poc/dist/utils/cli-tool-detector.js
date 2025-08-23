@@ -1,7 +1,8 @@
 "use strict";
 /**
- * CLI Tool Detection Utility
- * Safely detects installed AI CLI tools without modifying system
+ * CLI Tool Detector
+ * Checks for installed AI CLI tools and provides information about them
+ * Note: This runs in the renderer process, actual detection happens in main process via IPC
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -13,107 +14,90 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCachedToolStatus = exports.detectAllCliTools = exports.detectClaudeCode = void 0;
-const child_process_1 = require("child_process");
-const util_1 = require("util");
-const execAsync = (0, util_1.promisify)(child_process_1.exec);
-/**
- * Detect if Claude Code CLI is installed
- */
+exports.cliToolDetector = exports.CliToolDetector = exports.detectClaudeCode = void 0;
+// Placeholder function for Claude Code detection
 function detectClaudeCode() {
     return __awaiter(this, void 0, void 0, function* () {
-        const status = {
+        // This will be replaced with IPC call to main process
+        return {
             id: 'claude-code',
             name: 'Claude Code',
             installed: false
         };
-        try {
-            // Try to get version - this is the safest detection method
-            const { stdout } = yield execAsync('claude --version 2>/dev/null');
-            if (stdout) {
-                status.installed = true;
-                // Extract version from output (format: "claude-code version X.X.X")
-                const versionMatch = stdout.match(/(\d+\.\d+\.\d+)/);
-                if (versionMatch) {
-                    status.version = versionMatch[1];
-                }
-            }
-        }
-        catch (error) {
-            // Command not found or other error - tool not installed
-            console.log('[CLI Detector] Claude Code not found');
-        }
-        // Try to get the executable path
-        if (status.installed) {
-            try {
-                const { stdout: pathOutput } = yield execAsync('which claude 2>/dev/null');
-                if (pathOutput) {
-                    status.path = pathOutput.trim();
-                }
-            }
-            catch (_a) {
-                // Path detection failed, but tool might still be installed
-            }
-        }
-        // Check if Memory Service connection is configured
-        if (status.installed) {
-            status.memoryServiceConnected = yield checkMemoryServiceConfig('claude-code');
-        }
-        return status;
     });
 }
 exports.detectClaudeCode = detectClaudeCode;
-/**
- * Check if a CLI tool has Memory Service configured
- */
-function checkMemoryServiceConfig(toolId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // For now, just check if Memory Service is running
-        // Later we can check actual tool configuration
-        try {
-            const response = yield fetch('http://localhost:3457/health');
-            return response.ok;
-        }
-        catch (_a) {
-            return false;
-        }
-    });
+class CliToolDetector {
+    constructor() {
+        this.tools = new Map();
+        this.initializeTools();
+    }
+    /**
+     * Initialize the list of known tools
+     */
+    initializeTools() {
+        const toolDefinitions = [
+            { id: 'claude-code', name: 'Claude Code', command: 'claude' },
+            { id: 'aider', name: 'Aider', command: 'aider' },
+            { id: 'cursor', name: 'Cursor', command: 'cursor' },
+            { id: 'continue', name: 'Continue', command: 'continue' },
+            { id: 'codewhisperer', name: 'Amazon Q', command: 'aws' },
+            { id: 'cody', name: 'Cody', command: 'cody' },
+            { id: 'qwen-code', name: 'Qwen Code', command: 'qwen' },
+            { id: 'gemini-cli', name: 'Gemini CLI', command: 'gemini' }
+        ];
+        toolDefinitions.forEach(tool => {
+            this.tools.set(tool.id, Object.assign(Object.assign({}, tool), { installed: false }));
+        });
+    }
+    /**
+     * Check if a specific tool is installed (via IPC to main process)
+     */
+    checkTool(toolId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const tool = this.tools.get(toolId);
+            if (!tool)
+                return null;
+            // This would normally call IPC, but for now just return the tool info
+            // The actual detection happens in the AI CLI Tools panel
+            return tool;
+        });
+    }
+    /**
+     * Check all known tools
+     */
+    checkAllTools() {
+        return __awaiter(this, void 0, void 0, function* () {
+            // For now, just return the tools map
+            // Actual detection happens in the AI CLI Tools panel via IPC
+            return this.tools;
+        });
+    }
+    /**
+     * Get info for a specific tool
+     */
+    getToolInfo(toolId) {
+        return this.tools.get(toolId);
+    }
+    /**
+     * Get all tools
+     */
+    getAllTools() {
+        return this.tools;
+    }
+    /**
+     * Quick check if tool exists (synchronous, from cache)
+     */
+    isToolInstalled(toolId) {
+        const tool = this.tools.get(toolId);
+        return tool ? tool.installed : false;
+    }
 }
-/**
- * Detect all supported CLI tools
- */
-function detectAllCliTools() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const tools = [];
-        // Start with Claude Code only
-        tools.push(yield detectClaudeCode());
-        // TODO: Add other tools incrementally
-        // tools.push(await detectGeminiCli());
-        // tools.push(await detectQwenCode());
-        // etc.
-        return tools;
-    });
+exports.CliToolDetector = CliToolDetector;
+// Export singleton instance for renderer process
+exports.cliToolDetector = new CliToolDetector();
+// Make it available globally in renderer
+if (typeof window !== 'undefined') {
+    window.cliToolDetector = exports.cliToolDetector;
 }
-exports.detectAllCliTools = detectAllCliTools;
-/**
- * Cache detection results to avoid repeated checks
- */
-const detectionCache = new Map();
-const CACHE_TTL = 30000; // 30 seconds
-function getCachedToolStatus(toolId) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const cached = detectionCache.get(toolId);
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-            return cached.status;
-        }
-        // Cache miss or expired
-        let status = null;
-        if (toolId === 'claude-code') {
-            status = yield detectClaudeCode();
-            detectionCache.set(toolId, { status, timestamp: Date.now() });
-        }
-        return status;
-    });
-}
-exports.getCachedToolStatus = getCachedToolStatus;
 //# sourceMappingURL=cli-tool-detector.js.map

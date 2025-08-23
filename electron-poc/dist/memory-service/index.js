@@ -17,30 +17,31 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const server_1 = __importDefault(require("./server"));
+const SafeLogger_1 = require("../utils/SafeLogger");
 const port = parseInt(process.env.MEMORY_SERVICE_PORT || '3457');
-console.log('[MemoryService] Starting Memory Service...');
-console.log('[MemoryService] Port:', port);
-console.log('[MemoryService] Database: via IPC to main process');
+SafeLogger_1.logger.info('[MemoryService] Starting Memory Service...');
+SafeLogger_1.logger.info('[MemoryService] Port:', port);
+SafeLogger_1.logger.info('[MemoryService] Database: via IPC to main process');
 const server = new server_1.default(port);
 // Start the server
 server.start().then(() => {
-    console.log('[MemoryService] Service started successfully');
+    SafeLogger_1.logger.info('[MemoryService] Service started successfully');
     // Send ready signal to parent process if running as child
     if (process.send) {
         process.send({ type: 'ready', port });
     }
 }).catch(error => {
-    console.error('[MemoryService] Failed to start:', error);
+    SafeLogger_1.logger.error('[MemoryService] Failed to start:', error);
     process.exit(1);
 });
 // Handle shutdown gracefully
 process.on('SIGTERM', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('[MemoryService] Received SIGTERM, shutting down...');
+    SafeLogger_1.logger.info('[MemoryService] Received SIGTERM, shutting down...');
     yield server.stop();
     process.exit(0);
 }));
 process.on('SIGINT', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('[MemoryService] Received SIGINT, shutting down...');
+    SafeLogger_1.logger.info('[MemoryService] Received SIGINT, shutting down...');
     yield server.stop();
     process.exit(0);
 }));

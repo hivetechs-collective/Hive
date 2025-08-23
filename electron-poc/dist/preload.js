@@ -33,6 +33,11 @@ electron_1.contextBridge.exposeInMainWorld('backendAPI', {
         return __awaiter(this, void 0, void 0, function* () {
             return electron_1.ipcRenderer.invoke('backend-health');
         });
+    },
+    getBackendPort() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return electron_1.ipcRenderer.invoke('websocket-backend-port');
+        });
     }
 });
 // WebSocket proxy API
@@ -91,9 +96,25 @@ electron_1.contextBridge.exposeInMainWorld('electronAPI', {
     getMemoryStats: () => electron_1.ipcRenderer.invoke('memory-service-stats'),
     getConnectedTools: () => electron_1.ipcRenderer.invoke('memory-service-tools'),
     getMemoryActivity: (limit) => electron_1.ipcRenderer.invoke('memory-service-activity', limit),
-    // CLI Tool Detection
+    // CLI Tool Management
     detectCliTool: (toolId) => electron_1.ipcRenderer.invoke('cli-tool-detect', toolId),
     detectAllCliTools: () => electron_1.ipcRenderer.invoke('cli-tools-detect-all'),
+    installCliTool: (toolId) => electron_1.ipcRenderer.invoke('cli-tool-install', toolId),
+    updateCliTool: (toolId) => electron_1.ipcRenderer.invoke('cli-tool-update', toolId),
+    uninstallCliTool: (toolId) => electron_1.ipcRenderer.invoke('cli-tool-uninstall', toolId),
+    configureCliTool: (toolId) => electron_1.ipcRenderer.invoke('cli-tool-configure', toolId),
+    launchCliTool: (toolId, projectPath) => electron_1.ipcRenderer.invoke('cli-tool-launch', toolId, projectPath),
+    checkCliToolUpdates: () => electron_1.ipcRenderer.invoke('cli-tools-check-updates'),
+    // CLI Tool Events
+    onCliToolInstallProgress: (callback) => {
+        electron_1.ipcRenderer.on('cli-tool-install-progress', (_, progress) => callback(progress));
+    },
+    onCliToolUpdateProgress: (callback) => {
+        electron_1.ipcRenderer.on('cli-tool-update-progress', (_, progress) => callback(progress));
+    },
+    onLaunchAIToolTerminal: (callback) => {
+        electron_1.ipcRenderer.on('launch-ai-tool-terminal', (_, data) => callback(data));
+    },
     // Menu event listeners
     onMenuOpenFolder: (callback) => {
         electron_1.ipcRenderer.on('menu-open-folder', (_, folderPath) => callback(folderPath));
@@ -181,6 +202,41 @@ electron_1.contextBridge.exposeInMainWorld('fileAPI', {
     fileExists: (filePath) => safeInvoke('fs-file-exists', filePath),
     onFileChanged: (callback) => {
         electron_1.ipcRenderer.on('file-changed', (_, filePath) => callback(filePath));
+    }
+});
+// Terminal API
+electron_1.contextBridge.exposeInMainWorld('terminalAPI', {
+    // Create a new terminal process
+    createTerminalProcess: (options) => safeInvoke('create-terminal-process', options),
+    // Write data to terminal
+    writeToTerminal: (terminalId, data) => safeInvoke('write-to-terminal', terminalId, data),
+    // Resize terminal
+    resizeTerminal: (terminalId, cols, rows) => safeInvoke('resize-terminal', terminalId, cols, rows),
+    // Kill terminal process
+    killTerminalProcess: (terminalId) => safeInvoke('kill-terminal-process', terminalId),
+    // Get terminal status
+    getTerminalStatus: (terminalId) => safeInvoke('get-terminal-status', terminalId),
+    // List all terminals
+    listTerminals: () => safeInvoke('list-terminals'),
+    // Listen for terminal output
+    onTerminalData: (callback) => {
+        electron_1.ipcRenderer.on('terminal-data', (_, terminalId, data) => callback(terminalId, data));
+    },
+    // Listen for terminal exit
+    onTerminalExit: (callback) => {
+        electron_1.ipcRenderer.on('terminal-exit', (_, terminalId, code) => callback(terminalId, code));
+    },
+    // Listen for terminal created event
+    onTerminalCreated: (callback) => {
+        electron_1.ipcRenderer.on('terminal-created', (_, terminalInfo) => callback(terminalInfo));
+    },
+    // Listen for terminal ready event
+    onTerminalReady: (callback) => {
+        electron_1.ipcRenderer.on('terminal-ready', (_, terminalId, url) => callback(terminalId, url));
+    },
+    // Listen for terminal error event
+    onTerminalError: (callback) => {
+        electron_1.ipcRenderer.on('terminal-error', (_, terminalId, error) => callback(terminalId, error));
     }
 });
 //# sourceMappingURL=preload.js.map

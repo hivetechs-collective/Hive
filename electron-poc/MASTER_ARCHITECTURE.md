@@ -1083,7 +1083,7 @@ App Root (renderer.ts)
 │   │   ├── Code Editor (Monaco)
 │   │   ├── Git Diff View
 │   │   └── Memory Dashboard
-│   └── Terminal Section
+│   └── Terminal Section (Hidden - replaced by System Log in TTYD)
 ├── Isolated Terminal Panel (Resizable)
 │   ├── System Log Tab
 │   └── Terminal Tabs
@@ -3728,6 +3728,41 @@ Based on the HiveTechs website's premium Paddle-inspired dark theme, the AI CLI 
 - Include appropriate icons (codicon-cloud-download, codicon-sync, codicon-trash)
 - Confirmation dialogs for destructive operations
 
+#### AI CLI Tool Icons and Branding
+
+**Resource Location**: `/electron-poc/resources/ai-cli-icons/`
+
+**Icon Collection Status**:
+
+| Tool | Icon File | Source | Format | Status |
+|------|-----------|--------|--------|--------|
+| **Claude Code** | `claude.svg` | Wikipedia/Wikimedia Commons | SVG (85 bytes) | ✅ Official |
+| **Gemini CLI** | `gemini.svg` | Wikipedia/Wikimedia Commons | SVG (6.7KB) | ✅ Official |
+| **Grok** | `grok.svg` | Wikipedia/Wikimedia Commons | SVG (96 bytes) | ✅ Official |
+| **Qwen Code** | `qwen.svg` | Custom placeholder | SVG (477 bytes) | 🔄 Placeholder |
+| **OpenAI Codex** | `openai.svg` | Wikipedia/Wikimedia Commons | SVG (2.9KB) | ✅ Official |
+| **Cline** | `cline.svg` | Custom placeholder | SVG (745 bytes) | 🔄 Placeholder |
+
+**Sidebar Quick Launch Implementation** (Planned):
+1. **Location**: Left activity bar, below existing navigation icons
+2. **Layout**: Vertical stack of 24x24px icons with 8px spacing
+3. **Interaction**:
+   - Single click: Launch tool if installed, show install prompt if not
+   - Right-click: Context menu (Launch, Update, Uninstall, Configure)
+   - Hover: Tooltip showing tool name, version, and status
+4. **Visual States**:
+   - Installed: Full opacity with subtle glow
+   - Not Installed: 50% opacity
+   - Running: Animated pulse effect
+   - Update Available: Small badge indicator
+
+**Icon Design Guidelines**:
+- Consistent 24x24px display size
+- 2px padding within container
+- HiveTechs yellow (#FFC107) hover highlight
+- Smooth 0.3s transitions for all interactions
+- Respect original brand colors in icons
+
 #### Tool Card States
 Each CLI tool is represented by a card with multiple visual states:
 
@@ -3962,6 +3997,8 @@ public async launch(toolId: string, projectPath: string): Promise<void> {
 
 #### Vision
 Transform the fixed bottom console into a powerful tabbed terminal system where users can run multiple AI tools simultaneously, each in its own named tab, alongside regular terminal sessions. This creates a unified workspace where all AI assistants are immediately accessible without window switching.
+
+**Note**: The original basic HTML terminal section at the bottom center has been hidden (`display: none`) as of v1.7.2, since all logging functionality has been consolidated into the System Log tab within the TTYD terminal panel. The code remains in place but hidden for potential future use.
 
 **Original Vision Alignment**: The ttyd approach actually fulfills our original vision better than xterm.js ever could. By providing real terminals that can handle any TUI application perfectly, we achieve the seamless AI tool integration we envisioned - where Claude Code, Aider, and other CLI tools work flawlessly within our IDE tabs.
 
@@ -6502,6 +6539,14 @@ electron-poc/
   - **Gemini CLI Integration**: Full implementation with FREE tier support
   - **Qwen Code Integration**: Package/binary name mismatch discovered and documented
   - **OpenAI Codex Integration**: GPT-5 and multimodal support implemented
+- **v1.7.2 (2025-08-23)**: UI Consolidation & Icon Resources
+  - **Terminal Consolidation**: Hidden basic HTML terminal section at bottom center
+  - **System Log Primary**: All logging now goes through System Log tab in TTYD panel
+  - **Cleaner UI**: Removed redundant terminal display for better workspace
+  - **Code Preserved**: Terminal section code kept but hidden for potential future use
+  - **AI CLI Icons**: Downloaded and stored official logos for all AI CLI tools
+  - **Icon Resources**: Created `/resources/ai-cli-icons/` with SVG logos
+  - **Sidebar Planning**: Documented quick launch implementation for left activity bar
 - **v1.7.1 (2025-08-23)**: Grok MCP Integration & Dynamic Port Handling
   - **Grok MCP Support**: Full Model Context Protocol integration for Grok CLI
   - **Dynamic Port Configuration**: Automatic MCP config updates on app startup

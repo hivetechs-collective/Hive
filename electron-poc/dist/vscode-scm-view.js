@@ -213,7 +213,7 @@ class VSCodeSCMView {
                         var _a;
                         console.log('[SCM] Calling refresh on Git graph...');
                         (_a = this.gitGraphView) === null || _a === void 0 ? void 0 : _a.refresh();
-                    }, 100);
+                    }, 2000); // Increased delay from 100ms to 2s to not block UI
                 }
                 catch (error) {
                     console.error('[SCM] Failed to create GitGraphView:', error);

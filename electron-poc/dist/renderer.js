@@ -17,6 +17,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 var _a, _b, _c, _d, _e, _f, _g;
 Object.defineProperty(exports, "__esModule", { value: true });
+// Import CLI tool detector
+const cli_tool_detector_1 = require("./utils/cli-tool-detector");
 // DISABLE WEBPACK-DEV-SERVER ERROR OVERLAY
 (function () {
     if (typeof window !== 'undefined') {
@@ -50,8 +52,11 @@ const vscode_scm_view_1 = require("./vscode-scm-view");
 require("./notification.css");
 const vscode_explorer_exact_1 = require("./vscode-explorer-exact");
 const editor_tabs_1 = require("./editor-tabs");
+const TTYDTerminalPanel_1 = require("./components/TTYDTerminalPanel");
 // Current opened folder state
 let currentOpenedFolder = null;
+// Expose to window for TTYDTerminalPanel
+window.currentOpenedFolder = currentOpenedFolder;
 // Add welcome view styles
 const addWelcomeStyles = () => {
     if (!document.getElementById('welcome-view-styles')) {
@@ -263,54 +268,42 @@ function showInputDialog(title, message, defaultValue = '') {
 // Create the exact Hive Consensus GUI layout
 // Add global error handler to catch errors before webpack-dev-server
 window.addEventListener('error', (event) => {
-    var _a, _b, _c;
-    console.error('[Global Error Handler] Caught error event');
-    console.error('[Global Error Handler] Event type:', event.constructor.name);
-    console.error('[Global Error Handler] Error object:', event.error);
-    console.error('[Global Error Handler] Error type:', (_b = (_a = event.error) === null || _a === void 0 ? void 0 : _a.constructor) === null || _b === void 0 ? void 0 : _b.name);
-    console.error('[Global Error Handler] Error message:', event.message);
-    console.error('[Global Error Handler] Stack:', (_c = event.error) === null || _c === void 0 ? void 0 : _c.stack);
-    // Check if the error itself is an Event
+    // Silently handle Event object errors (these are harmless)
     if (event.error && (event.error instanceof Event || event.error.constructor.name.includes('Event'))) {
-        console.error('[Global Error Handler] ERROR IS AN EVENT OBJECT! Preventing propagation');
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         return false;
     }
-    // Check if the error message contains [object Event]
+    // Silently handle errors with [object Event] in message
     if (event.message && event.message.includes('[object Event]')) {
-        console.error('[Global Error Handler] Error message contains [object Event], preventing');
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         return false;
     }
+    // Only log actual errors, not Event objects
+    console.error('Error:', event.message, event.error);
 }, true);
 // Also catch unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
-    var _a, _b;
-    console.error('[Unhandled Rejection] Caught rejection');
-    console.error('[Unhandled Rejection] Event type:', event.constructor.name);
-    console.error('[Unhandled Rejection] Reason:', event.reason);
-    console.error('[Unhandled Rejection] Reason type:', (_b = (_a = event.reason) === null || _a === void 0 ? void 0 : _a.constructor) === null || _b === void 0 ? void 0 : _b.name);
-    // Check if the reason is an Event object
+    // Silently handle Event object rejections
     if (event.reason instanceof Event) {
-        console.error('[Unhandled Rejection] REASON IS AN EVENT OBJECT! Preventing propagation');
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         return false;
     }
-    // Check for [object Event] string
+    // Silently handle [object Event] string rejections
     const reasonStr = Object.prototype.toString.call(event.reason);
     if (reasonStr.includes('Event') || (event.reason && event.reason.toString && event.reason.toString().includes('[object Event]'))) {
-        console.error('[Unhandled Rejection] Reason contains Event, preventing:', reasonStr);
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
         return false;
     }
+    // Only log actual promise rejections, not Event objects
+    console.error('Unhandled Promise Rejection:', event.reason);
 }, true);
 document.body.innerHTML = `
 <div class="hive-consensus-gui">
@@ -349,24 +342,12 @@ document.body.innerHTML = `
         
         <div class="sidebar-divider"></div>
         
-        <!-- Analytics, Settings, Memory Section -->
+        <!-- Analytics, Memory and CLI Tools Section -->
         <button class="activity-btn" data-view="analytics" aria-label="Analytics">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
             <path d="M3 13h2v8H3zm4-8h2v16H7zm4-2h2v18h-2zm4 4h2v14h-2zm4-2h2v16h-2z"/>
           </svg>
           <span class="activity-tooltip">Analytics</span>
-        </button>
-        <button class="activity-btn" data-view="settings" aria-label="Settings">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
-          </svg>
-          <span class="activity-tooltip">Settings</span>
-        </button>
-        <button class="activity-btn" data-view="cli-tools" aria-label="AI CLI Tools">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M22 14H21C21 10.13 17.87 7 14 7H13V5.73C13.6 5.39 14 4.74 14 4C14 2.9 13.11 2 12 2S10 2.9 10 4C10 4.74 10.4 5.39 11 5.73V7H10C6.13 7 3 10.13 3 14H2C1.45 14 1 14.45 1 15V18C1 18.55 1.45 19 2 19H3V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V19H22C22.55 19 23 18.55 23 18V15C23 14.45 22.55 14 22 14M8.5 13C9.33 13 10 13.67 10 14.5S9.33 16 8.5 16S7 15.33 7 14.5S7.67 13 8.5 13M15.5 13C16.33 13 17 13.67 17 14.5S16.33 16 15.5 16S14 15.33 14 14.5S14.67 13 15.5 13M8 19L10 17H14L16 19H8Z"/>
-          </svg>
-          <span class="activity-tooltip">AI CLI Tools</span>
         </button>
         <button class="activity-btn" data-view="memory" aria-label="Memory">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -382,6 +363,53 @@ document.body.innerHTML = `
           </svg>
           <span class="activity-tooltip">Memory Service</span>
         </button>
+        <button class="activity-btn" data-view="cli-tools" aria-label="AI CLI Tools">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M22 14H21C21 10.13 17.87 7 14 7H13V5.73C13.6 5.39 14 4.74 14 4C14 2.9 13.11 2 12 2S10 2.9 10 4C10 4.74 10.4 5.39 11 5.73V7H10C6.13 7 3 10.13 3 14H2C1.45 14 1 14.45 1 15V18C1 18.55 1.45 19 2 19H3V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V19H22C22.55 19 23 18.55 23 18V15C23 14.45 22.55 14 22 14M8.5 13C9.33 13 10 13.67 10 14.5S9.33 16 8.5 16S7 15.33 7 14.5S7.67 13 8.5 13M15.5 13C16.33 13 17 13.67 17 14.5S16.33 16 15.5 16S14 15.33 14 14.5S14.67 13 15.5 13M8 19L10 17H14L16 19H8Z"/>
+          </svg>
+          <span class="activity-tooltip">AI CLI Tools</span>
+        </button>
+        
+        <div class="sidebar-divider"></div>
+        
+        <!-- AI CLI Tool Quick Launch Icons -->
+        <div class="ai-cli-icons-section">
+          <button class="activity-btn cli-quick-launch" data-tool="claude-code" aria-label="Claude Code">
+            <img src="resources/ai-cli-icons/claude.svg" width="20" height="20" alt="Claude" />
+            <span class="activity-tooltip">Claude Code</span>
+          </button>
+          <button class="activity-btn cli-quick-launch" data-tool="gemini-cli" aria-label="Gemini CLI">
+            <img src="resources/ai-cli-icons/gemini.svg" width="20" height="20" alt="Gemini" />
+            <span class="activity-tooltip">Gemini CLI</span>
+          </button>
+          <button class="activity-btn cli-quick-launch" data-tool="grok" aria-label="Grok">
+            <img src="resources/ai-cli-icons/grok.svg" width="20" height="20" alt="Grok" />
+            <span class="activity-tooltip">Grok CLI</span>
+          </button>
+          <button class="activity-btn cli-quick-launch" data-tool="qwen-code" aria-label="Qwen Code">
+            <img src="resources/ai-cli-icons/qwen.svg" width="20" height="20" alt="Qwen" />
+            <span class="activity-tooltip">Qwen Code</span>
+          </button>
+          <button class="activity-btn cli-quick-launch" data-tool="openai-codex" aria-label="OpenAI Codex">
+            <img src="resources/ai-cli-icons/openai.svg" width="20" height="20" alt="OpenAI" />
+            <span class="activity-tooltip">OpenAI Codex</span>
+          </button>
+          <button class="activity-btn cli-quick-launch" data-tool="cline" aria-label="Cline">
+            <img src="resources/ai-cli-icons/cline.svg" width="20" height="20" alt="Cline" />
+            <span class="activity-tooltip">Cline</span>
+          </button>
+        </div>
+        
+        <!-- Bottom section with fixed positioning -->
+        <div class="sidebar-bottom-section" style="position: absolute; bottom: 0; width: 100%;">
+          <div class="sidebar-divider"></div>
+          <button class="activity-btn" data-view="settings" aria-label="Settings">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+            </svg>
+            <span class="activity-tooltip">Settings</span>
+          </button>
+        </div>
       </div>
       
       <!-- Sidebar Panel Content (VS Code style) -->
@@ -437,8 +465,8 @@ document.body.innerHTML = `
         <!-- Analytics content will be mounted here -->
       </div>
 
-      <!-- Terminal Section (Bottom, resizable) -->
-      <div class="terminal-section" id="terminal-section" style="height: 200px;">
+      <!-- Terminal Section (Bottom, resizable) - Hidden since we use System Log in TTYD panel -->
+      <div class="terminal-section" id="terminal-section" style="height: 200px; display: none;">
         <div class="resize-handle horizontal-resize" id="terminal-resize"></div>
         <div class="terminal-header">
           <button class="collapse-btn" id="toggle-terminal" title="Toggle Terminal">−</button>
@@ -450,9 +478,49 @@ document.body.innerHTML = `
         <div class="terminal-content" id="terminal-content">
           <div id="terminal-output">
             <div class="terminal-line">[${new Date().toLocaleTimeString()}] Hive Consensus initialized</div>
-            <div class="terminal-line">[${new Date().toLocaleTimeString()}] Backend server: http://localhost:8765</div>
+            <div class="terminal-line" id="backend-server-line">[${new Date().toLocaleTimeString()}] Backend server: discovering port...</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Isolated Terminal Panel (modeled after consensus panel) -->
+    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="width: 400px; background: #1e1e1e; display: flex; flex-direction: column; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30; position: relative;">
+      <!-- Collapse button for entire panel -->
+      <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel" style="position: absolute; left: 5px; top: 5px; z-index: 1000; width: 20px; height: 20px; padding: 0; background: #007ACC; border: none; color: white; cursor: pointer; font-size: 16px; line-height: 1; border-radius: 2px;">−</button>
+      
+      <!-- Left resize handle (like consensus panel) -->
+      <div class="resize-handle vertical-resize" id="isolated-terminal-resize" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: ew-resize; z-index: 10;"></div>
+      
+      <!-- Terminal tabs header -->
+      <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c; padding-left: 30px;">
+        <!-- Left arrow for tab navigation -->
+        <button class="tab-nav-arrow" id="tab-nav-left" title="Scroll tabs left" style="display: none; padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px; height: 100%;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+            <path d="M8 2 L4 6 L8 10" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+        </button>
+        
+        <!-- Tab container with overflow hidden -->
+        <div class="isolated-terminal-tabs-wrapper" style="flex: 1; position: relative; overflow: hidden;">
+          <div class="isolated-terminal-tabs" id="isolated-terminal-tabs" style="display: flex; align-items: center; transition: transform 0.3s ease; white-space: nowrap;">
+            <!-- Tabs will be inserted here -->
+          </div>
+        </div>
+        
+        <!-- Right arrow for tab navigation -->
+        <button class="tab-nav-arrow" id="tab-nav-right" title="Scroll tabs right" style="display: none; padding: 0 8px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 14px; height: 100%;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+            <path d="M4 2 L8 6 L4 10" stroke="currentColor" stroke-width="2" fill="none"/>
+          </svg>
+        </button>
+        
+        <button class="isolated-terminal-new-tab" id="isolated-terminal-new-tab" title="New Terminal" style="padding: 0 10px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 18px;">+</button>
+      </div>
+      
+      <!-- Terminal content area -->
+      <div class="isolated-terminal-content" id="isolated-terminal-content" style="flex: 1; position: relative; background: #1a1a1a;">
+        <!-- Terminal instances will be inserted here -->
       </div>
     </div>
 
@@ -1235,230 +1303,249 @@ runConsensusViaREST = (query) => __awaiter(void 0, void 0, void 0, function* () 
 });
 // Initialize WebSocket connection for streaming
 function initializeWebSocket() {
-    // Prevent multiple initializations
-    if (consensusWebSocket) {
-        console.log('WebSocket already initialized');
-        return;
-    }
-    const wsUrl = 'ws://127.0.0.1:8765/ws';
-    console.log('Initializing WebSocket with URL:', wsUrl);
-    consensusWebSocket = new consensus_websocket_1.ConsensusWebSocket(wsUrl, {
-        onConnectionStateChange: (connected) => {
-            if (connected) {
-                addLogEntry('✅ WebSocket connected for streaming', 'success');
-            }
-            else {
-                addLogEntry('⚠️ WebSocket disconnected', 'warning');
-            }
-        },
-        onProfileLoaded: (name, models) => {
-            activeProfile = { name, models };
-            const profileDisplay = document.getElementById('active-profile-name');
-            if (profileDisplay) {
-                profileDisplay.textContent = name;
-            }
-            // Update model displays
-            if (models.length >= 4) {
-                updateModelDisplay('generator', models[0]);
-                updateModelDisplay('refiner', models[1]);
-                updateModelDisplay('validator', models[2]);
-                updateModelDisplay('curator', models[3]);
-            }
-            addLogEntry(`📋 Profile loaded: ${name}`, 'info');
-        },
-        onStageStarted: (stage, model) => {
-            const stageName = stage.toLowerCase();
-            updateStageStatus(stageName, 'running');
-            updateStageProgress(stageName, 25); // Start at 25% when stage begins
-            updateModelDisplay(stageName, model);
-            addLogEntry(`▶️ ${stage} started with ${model}`, 'info');
-            currentStreamContent.set(stageName, '');
-            // Reset current stage tokens when a new stage starts
-            currentStageTokens = 0;
-            // Update Neural Consciousness for each consensus stage
-            if (neuralConsciousness) {
-                switch (stageName) {
-                    case 'generator':
-                        neuralConsciousness.updatePhase('generator');
-                        break;
-                    case 'refiner':
-                        neuralConsciousness.updatePhase('refiner');
-                        break;
-                    case 'validator':
-                        neuralConsciousness.updatePhase('validator');
-                        break;
-                    case 'curator':
-                        neuralConsciousness.updatePhase('curator');
-                        break;
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        // Prevent multiple initializations
+        if (consensusWebSocket) {
+            console.log('WebSocket already initialized');
+            return;
+        }
+        // Get dynamic backend port from IPC
+        let backendPort = 8765; // default fallback
+        try {
+            if ((_a = window.backendAPI) === null || _a === void 0 ? void 0 : _a.getBackendPort) {
+                backendPort = yield window.backendAPI.getBackendPort();
+                console.log('Got dynamic backend port:', backendPort);
+                // Update the terminal display with actual port
+                const backendLine = document.getElementById('backend-server-line');
+                if (backendLine) {
+                    backendLine.textContent = `[${new Date().toLocaleTimeString()}] Backend server: http://localhost:${backendPort}`;
                 }
             }
-        },
-        onStreamChunk: (stage, chunk) => {
-            // Show streaming output immediately as it arrives
-            const stageName = stage.toLowerCase();
-            const chatContent = document.getElementById('chat-content');
-            // Find or create message for this stage
-            let stageMessage = chatContent === null || chatContent === void 0 ? void 0 : chatContent.querySelector(`.streaming-${stageName}`);
-            if (!stageMessage) {
-                // Create new message container for this stage with enhanced styling
-                const message = document.createElement('div');
-                message.className = `chat-message assistant streaming streaming-${stageName}`;
-                const timestamp = new Date().toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                });
-                message.innerHTML = `
+        }
+        catch (error) {
+            console.warn('Failed to get dynamic backend port, using default:', error);
+        }
+        const wsUrl = `ws://127.0.0.1:${backendPort}/ws`;
+        console.log('Initializing WebSocket with URL:', wsUrl);
+        consensusWebSocket = new consensus_websocket_1.ConsensusWebSocket(wsUrl, {
+            onConnectionStateChange: (connected) => {
+                if (connected) {
+                    addLogEntry('✅ WebSocket connected for streaming', 'success');
+                }
+                else {
+                    addLogEntry('⚠️ WebSocket disconnected', 'warning');
+                }
+            },
+            onProfileLoaded: (name, models) => {
+                activeProfile = { name, models };
+                const profileDisplay = document.getElementById('active-profile-name');
+                if (profileDisplay) {
+                    profileDisplay.textContent = name;
+                }
+                // Update model displays
+                if (models.length >= 4) {
+                    updateModelDisplay('generator', models[0]);
+                    updateModelDisplay('refiner', models[1]);
+                    updateModelDisplay('validator', models[2]);
+                    updateModelDisplay('curator', models[3]);
+                }
+                addLogEntry(`📋 Profile loaded: ${name}`, 'info');
+            },
+            onStageStarted: (stage, model) => {
+                const stageName = stage.toLowerCase();
+                updateStageStatus(stageName, 'running');
+                updateStageProgress(stageName, 25); // Start at 25% when stage begins
+                updateModelDisplay(stageName, model);
+                addLogEntry(`▶️ ${stage} started with ${model}`, 'info');
+                currentStreamContent.set(stageName, '');
+                // Reset current stage tokens when a new stage starts
+                currentStageTokens = 0;
+                // Update Neural Consciousness for each consensus stage
+                if (neuralConsciousness) {
+                    switch (stageName) {
+                        case 'generator':
+                            neuralConsciousness.updatePhase('generator');
+                            break;
+                        case 'refiner':
+                            neuralConsciousness.updatePhase('refiner');
+                            break;
+                        case 'validator':
+                            neuralConsciousness.updatePhase('validator');
+                            break;
+                        case 'curator':
+                            neuralConsciousness.updatePhase('curator');
+                            break;
+                    }
+                }
+            },
+            onStreamChunk: (stage, chunk) => {
+                // Show streaming output immediately as it arrives
+                const stageName = stage.toLowerCase();
+                const chatContent = document.getElementById('chat-content');
+                // Find or create message for this stage
+                let stageMessage = chatContent === null || chatContent === void 0 ? void 0 : chatContent.querySelector(`.streaming-${stageName}`);
+                if (!stageMessage) {
+                    // Create new message container for this stage with enhanced styling
+                    const message = document.createElement('div');
+                    message.className = `chat-message assistant streaming streaming-${stageName}`;
+                    const timestamp = new Date().toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+                    message.innerHTML = `
           <div class="message-time">${timestamp} <span class="stage-badge">${stage}</span></div>
           <div class="message-content"></div>
         `;
-                chatContent === null || chatContent === void 0 ? void 0 : chatContent.appendChild(message);
-                stageMessage = message;
-            }
-            // Accumulate content first
-            const currentContent = currentStreamContent.get(stageName) || '';
-            const newContent = currentContent + chunk;
-            currentStreamContent.set(stageName, newContent);
-            // Update the entire content (replacing, not appending)
-            const contentEl = stageMessage.querySelector('.message-content');
-            if (contentEl) {
-                // Enhanced markdown to HTML conversion
-                let htmlContent = convertMarkdownToHTML(newContent);
-                // Replace entire content (not append)
-                contentEl.innerHTML = htmlContent;
-            }
-            // Always auto-scroll to show the newest content
-            autoScrollChat();
-        },
-        onStageProgress: (stage, percentage, tokens) => {
-            const stageName = stage.toLowerCase();
-            // Ensure minimum 25% when running, cap at 95% until complete
-            const adjustedPercentage = Math.max(25, Math.min(95, percentage));
-            updateStageProgress(stageName, adjustedPercentage);
-            // Track current stage tokens for display (these are cumulative within the stage)
-            currentStageTokens = tokens;
-            // Don't add to totalTokens here - will be added when stage completes
-            // This prevents the exponential accumulation bug
-            updateConsensusStats();
-        },
-        onStageCompleted: (stage, tokens, cost) => {
-            const stageName = stage.toLowerCase();
-            updateStageStatus(stageName, 'completed');
-            updateStageProgress(stageName, 100);
-            // Add this stage's tokens to the total (only once per stage)
-            totalTokens += tokens;
-            totalCost += cost;
-            // Reset current stage tokens since this stage is done
-            currentStageTokens = 0;
-            updateConsensusStats();
-            // Track stage metrics for analytics
-            trackStageCompletion(stageName, tokens, cost);
-            addLogEntry(`✅ ${stage} completed (${tokens} tokens, ${(0, consensus_websocket_1.formatCost)(cost)})`, 'success');
-        },
-        onConsensusComplete: (result, finalTokens, finalCost) => {
-            // Prevent duplicate completion messages
-            if (!isProcessing) {
-                console.warn('Consensus complete called but not processing, ignoring');
-                return;
-            }
-            totalTokens = finalTokens;
-            totalCost = finalCost;
-            updateConsensusStats();
-            // Save analytics data for the dashboard
-            saveConsensusAnalytics(finalTokens, finalCost);
-            // Mark as no longer processing
-            isProcessing = false;
-            // Show final completion animation before hiding
-            if (neuralConsciousness) {
-                // Trigger completion phase with grand finale
-                neuralConsciousness.showCompletion().then(() => {
-                    // Hide after completion animation finishes
-                    setTimeout(() => {
-                        neuralConsciousness.hide();
-                    }, 2000);
+                    chatContent === null || chatContent === void 0 ? void 0 : chatContent.appendChild(message);
+                    stageMessage = message;
+                }
+                // Accumulate content first
+                const currentContent = currentStreamContent.get(stageName) || '';
+                const newContent = currentContent + chunk;
+                currentStreamContent.set(stageName, newContent);
+                // Update the entire content (replacing, not appending)
+                const contentEl = stageMessage.querySelector('.message-content');
+                if (contentEl) {
+                    // Enhanced markdown to HTML conversion
+                    let htmlContent = convertMarkdownToHTML(newContent);
+                    // Replace entire content (not append)
+                    contentEl.innerHTML = htmlContent;
+                }
+                // Always auto-scroll to show the newest content
+                autoScrollChat();
+            },
+            onStageProgress: (stage, percentage, tokens) => {
+                const stageName = stage.toLowerCase();
+                // Ensure minimum 25% when running, cap at 95% until complete
+                const adjustedPercentage = Math.max(25, Math.min(95, percentage));
+                updateStageProgress(stageName, adjustedPercentage);
+                // Track current stage tokens for display (these are cumulative within the stage)
+                currentStageTokens = tokens;
+                // Don't add to totalTokens here - will be added when stage completes
+                // This prevents the exponential accumulation bug
+                updateConsensusStats();
+            },
+            onStageCompleted: (stage, tokens, cost) => {
+                const stageName = stage.toLowerCase();
+                updateStageStatus(stageName, 'completed');
+                updateStageProgress(stageName, 100);
+                // Add this stage's tokens to the total (only once per stage)
+                totalTokens += tokens;
+                totalCost += cost;
+                // Reset current stage tokens since this stage is done
+                currentStageTokens = 0;
+                updateConsensusStats();
+                // Track stage metrics for analytics
+                trackStageCompletion(stageName, tokens, cost);
+                addLogEntry(`✅ ${stage} completed (${tokens} tokens, ${(0, consensus_websocket_1.formatCost)(cost)})`, 'success');
+            },
+            onConsensusComplete: (result, finalTokens, finalCost) => {
+                // Prevent duplicate completion messages
+                if (!isProcessing) {
+                    console.warn('Consensus complete called but not processing, ignoring');
+                    return;
+                }
+                totalTokens = finalTokens;
+                totalCost = finalCost;
+                updateConsensusStats();
+                // Save analytics data for the dashboard
+                saveConsensusAnalytics(finalTokens, finalCost);
+                // Mark as no longer processing
+                isProcessing = false;
+                // Show final completion animation before hiding
+                if (neuralConsciousness) {
+                    // Trigger completion phase with grand finale
+                    neuralConsciousness.showCompletion().then(() => {
+                        // Hide after completion animation finishes
+                        setTimeout(() => {
+                            neuralConsciousness.hide();
+                        }, 2000);
+                    });
+                }
+                // Remove all streaming indicators
+                const chatContent = document.getElementById('chat-content');
+                const streamingMessages = chatContent === null || chatContent === void 0 ? void 0 : chatContent.querySelectorAll('.streaming');
+                streamingMessages === null || streamingMessages === void 0 ? void 0 : streamingMessages.forEach(msg => {
+                    msg.classList.remove('streaming');
+                    // Remove stage-specific streaming classes
+                    msg.className = msg.className.replace(/streaming-\w+/g, '').trim();
                 });
-            }
-            // Remove all streaming indicators
-            const chatContent = document.getElementById('chat-content');
-            const streamingMessages = chatContent === null || chatContent === void 0 ? void 0 : chatContent.querySelectorAll('.streaming');
-            streamingMessages === null || streamingMessages === void 0 ? void 0 : streamingMessages.forEach(msg => {
-                msg.classList.remove('streaming');
-                // Remove stage-specific streaming classes
-                msg.className = msg.className.replace(/streaming-\w+/g, '').trim();
-            });
-            // Add final consensus result if provided (only once)
-            if (result && result.trim()) {
-                const finalMessage = document.createElement('div');
-                finalMessage.className = 'chat-message assistant consensus-final';
-                const timestamp = new Date().toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                });
-                finalMessage.innerHTML = `
+                // Add final consensus result if provided (only once)
+                if (result && result.trim()) {
+                    const finalMessage = document.createElement('div');
+                    finalMessage.className = 'chat-message assistant consensus-final';
+                    const timestamp = new Date().toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+                    finalMessage.innerHTML = `
           <div class="message-time">${timestamp} <span class="stage-badge">🎆 Final Consensus</span></div>
           <div class="message-content">${convertMarkdownToHTML(result)}</div>
         `;
-                chatContent === null || chatContent === void 0 ? void 0 : chatContent.appendChild(finalMessage);
-                // Add assistant response to conversation history for context
-                conversationHistory.push({ role: 'assistant', content: result });
-                // Store the Q&A pair for this conversation
-                if (conversationHistory.length >= 2) {
-                    const lastUserMessage = conversationHistory[conversationHistory.length - 2];
-                    if (lastUserMessage.role === 'user') {
-                        conversationMessages.push({
-                            question: lastUserMessage.content,
-                            answer: result
-                        });
+                    chatContent === null || chatContent === void 0 ? void 0 : chatContent.appendChild(finalMessage);
+                    // Add assistant response to conversation history for context
+                    conversationHistory.push({ role: 'assistant', content: result });
+                    // Store the Q&A pair for this conversation
+                    if (conversationHistory.length >= 2) {
+                        const lastUserMessage = conversationHistory[conversationHistory.length - 2];
+                        if (lastUserMessage.role === 'user') {
+                            conversationMessages.push({
+                                question: lastUserMessage.content,
+                                answer: result
+                            });
+                        }
                     }
+                    addLogEntry(`💾 Conversation context updated (${conversationHistory.length} messages)`, 'info');
                 }
-                addLogEntry(`💾 Conversation context updated (${conversationHistory.length} messages)`, 'info');
+                // Auto-scroll to ensure the complete result is visible
+                autoScrollChat();
+                addLogEntry(`🎯 Consensus complete! Total: ${(0, consensus_websocket_1.formatTokens)(finalTokens)} tokens, ${(0, consensus_websocket_1.formatCost)(finalCost)}`, 'success');
+                addLogEntry(`📝 Conversation ID: ${currentConversationId}`, 'info');
+                // Update usage count
+                dailyUsageCount++;
+                updateConversationCount();
+                // Reset processing state
+                isProcessing = false;
+                currentStreamContent.clear();
+            },
+            onError: (message) => {
+                addLogEntry(`❌ Error: ${message}`, 'error');
+                resetStageStatus();
+                isProcessing = false;
+                // Hide Neural Consciousness on error
+                if (neuralConsciousness) {
+                    neuralConsciousness.hide();
+                }
+            },
+            onAIHelperDecision: (directMode, reason) => {
+                addLogEntry(`🤖 AI Helper: ${reason}`, 'info');
+                // If Direct mode, mark other stages as skipped
+                if (directMode) {
+                    ['refiner', 'validator', 'curator'].forEach(stage => {
+                        updateStageStatus(stage, 'completed');
+                        updateModelDisplay(stage, 'skipped (direct mode)');
+                    });
+                }
             }
-            // Auto-scroll to ensure the complete result is visible
-            autoScrollChat();
-            addLogEntry(`🎯 Consensus complete! Total: ${(0, consensus_websocket_1.formatTokens)(finalTokens)} tokens, ${(0, consensus_websocket_1.formatCost)(finalCost)}`, 'success');
-            addLogEntry(`📝 Conversation ID: ${currentConversationId}`, 'info');
-            // Update usage count
-            dailyUsageCount++;
-            updateConversationCount();
-            // Reset processing state
-            isProcessing = false;
-            currentStreamContent.clear();
-        },
-        onError: (message) => {
-            addLogEntry(`❌ Error: ${message}`, 'error');
-            resetStageStatus();
-            isProcessing = false;
-            // Hide Neural Consciousness on error
-            if (neuralConsciousness) {
-                neuralConsciousness.hide();
+        });
+        consensusWebSocket.connect();
+        console.log('WebSocket connect() called, waiting for connection...');
+        // Force check connection status after a short delay
+        setTimeout(() => {
+            console.log('Checking WebSocket connection status...');
+            if (consensusWebSocket.isConnected()) {
+                console.log('✅ WebSocket is connected!');
+                addLogEntry('✅ WebSocket connected and ready', 'success');
             }
-        },
-        onAIHelperDecision: (directMode, reason) => {
-            addLogEntry(`🤖 AI Helper: ${reason}`, 'info');
-            // If Direct mode, mark other stages as skipped
-            if (directMode) {
-                ['refiner', 'validator', 'curator'].forEach(stage => {
-                    updateStageStatus(stage, 'completed');
-                    updateModelDisplay(stage, 'skipped (direct mode)');
-                });
+            else {
+                console.log('❌ WebSocket failed to connect');
+                addLogEntry('⚠️ WebSocket not connected - messages will use REST API', 'warning');
             }
-        }
+        }, 500);
     });
-    consensusWebSocket.connect();
-    console.log('WebSocket connect() called, waiting for connection...');
-    // Force check connection status after a short delay
-    setTimeout(() => {
-        console.log('Checking WebSocket connection status...');
-        if (consensusWebSocket.isConnected()) {
-            console.log('✅ WebSocket is connected!');
-            addLogEntry('✅ WebSocket connected and ready', 'success');
-        }
-        else {
-            console.log('❌ WebSocket failed to connect');
-            addLogEntry('⚠️ WebSocket not connected - messages will use REST API', 'warning');
-        }
-    }, 500);
 }
 function updateModelDisplay(stage, model) {
     const modelElement = document.getElementById(`${stage}-model`);
@@ -2044,16 +2131,105 @@ function hideAnalyticsPanel() {
     }
 }
 // CLI Tools Panel Management
-function renderCliToolsPanel() {
+function renderCliToolsPanel(forceRefresh = false) {
     return __awaiter(this, void 0, void 0, function* () {
         const container = document.getElementById('cli-tools-container');
-        if (container && container.innerHTML.trim() === '') {
+        if (container && (container.innerHTML.trim() === '' || forceRefresh)) {
             console.log('[CLI Tools] Rendering CLI Tools panel...');
             // Show loading state first
             container.innerHTML = `
-            <div class="cli-tools-panel" style="padding: 20px; height: 100%; overflow-y: auto; background: var(--vscode-editor-background);">
-                <h2 style="margin: 0 0 10px 0; color: #fff;">AI CLI Tools Management</h2>
-                <p style="color: #aaa; margin-bottom: 20px;">Install and manage AI-powered coding assistants</p>
+            <div class="cli-tools-panel" style="padding: 24px; height: 100%; overflow-y: auto; background: linear-gradient(135deg, #0E1414 0%, #181E21 100%);">
+                <div style="margin-bottom: 24px;">
+                    <h2 style="
+                        margin: 0 0 8px 0; 
+                        color: #FFC107; 
+                        font-size: 24px; 
+                        font-weight: 700;
+                        text-shadow: 0 2px 4px rgba(255, 193, 7, 0.2);
+                    ">AI CLI Tools Management</h2>
+                    <p style="
+                        color: #9CA3AF; 
+                        margin: 0;
+                        font-size: 14px;
+                        font-weight: 500;
+                    ">Install and manage AI-powered coding assistants</p>
+                </div>
+                
+                <!-- Batch Action Buttons -->
+                <div style="display: flex; gap: 12px; margin-bottom: 24px; align-items: center;">
+                    <button onclick="installAllCliTools()" style="
+                        padding: 10px 20px;
+                        background: linear-gradient(135deg, #FFC107 0%, #FFAD00 100%);
+                        color: #0E1414;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        box-shadow: 0 4px 6px rgba(255, 193, 7, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3);
+                        transform: translateY(0);
+                    " onmouseover="this.style.background='linear-gradient(135deg, #FFD54F 0%, #FFC107 100%)'; this.style.transform='translateY(-2px) scale(1.02)'; this.style.boxShadow='0 6px 12px rgba(255, 193, 7, 0.35), 0 2px 4px rgba(0, 0, 0, 0.4)'" 
+                       onmouseout="this.style.background='linear-gradient(135deg, #FFC107 0%, #FFAD00 100%)'; this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 4px 6px rgba(255, 193, 7, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3)'">
+                        <span class="codicon codicon-cloud-download" style="font-size: 16px;"></span>
+                        <span>Install All Tools</span>
+                    </button>
+                    <button onclick="updateAllCliTools()" style="
+                        padding: 10px 20px;
+                        background: linear-gradient(135deg, #007BFF 0%, #0056b3 100%);
+                        color: #fff;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        box-shadow: 0 4px 6px rgba(0, 123, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3);
+                        transform: translateY(0);
+                    " onmouseover="this.style.background='linear-gradient(135deg, #2489ce 0%, #007BFF 100%)'; this.style.transform='translateY(-2px) scale(1.02)'; this.style.boxShadow='0 6px 12px rgba(0, 123, 255, 0.35), 0 2px 4px rgba(0, 0, 0, 0.4)'" 
+                       onmouseout="this.style.background='linear-gradient(135deg, #007BFF 0%, #0056b3 100%)'; this.style.transform='translateY(0) scale(1)'; this.style.boxShadow='0 4px 6px rgba(0, 123, 255, 0.25), 0 1px 3px rgba(0, 0, 0, 0.3)'">
+                        <span class="codicon codicon-sync" style="font-size: 16px;"></span>
+                        <span>Update All Tools</span>
+                    </button>
+                    <button onclick="uninstallAllCliTools()" style="
+                        padding: 10px 20px;
+                        background: #1E2427;
+                        color: #9CA3AF;
+                        border: 1px solid #2D3336;
+                        border-radius: 8px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.2s ease;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+                        transform: translateY(0);
+                    " onmouseover="this.style.background='#2D3336'; this.style.color='#ef4444'; this.style.borderColor='#ef4444'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 6px rgba(239, 68, 68, 0.2)'" 
+                       onmouseout="this.style.background='#1E2427'; this.style.color='#9CA3AF'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0, 0, 0, 0.2)'">
+                        <span class="codicon codicon-trash" style="font-size: 16px;"></span>
+                        <span>Uninstall All</span>
+                    </button>
+                    <div id="batch-status" style="
+                        display: none;
+                        align-items: center;
+                        padding: 8px 12px;
+                        background: #1e1e1e;
+                        border: 1px solid #3e3e42;
+                        border-radius: 3px;
+                        color: #ccc;
+                        font-size: 12px;
+                        margin-left: auto;
+                    "></div>
+                </div>
+                
                 <div class="cli-tools-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px;">
                     <div style="grid-column: 1 / -1; text-align: center; padding: 20px; color: #888;">
                         Detecting installed CLI tools...
@@ -2079,12 +2255,61 @@ function renderCliToolsPanel() {
                     badgeText: (claudeCodeStatus === null || claudeCodeStatus === void 0 ? void 0 : claudeCodeStatus.installed) ? 'INSTALLED' : null,
                     badgeColor: '#007acc'
                 }));
-                // Other tools (static for now - will implement detection incrementally)
-                gridContainer.appendChild(createStaticToolCard('gemini-cli', 'Gemini CLI', 'Google\'s free AI coding assistant (1000 req/day)', 'FREE', '#28a745', 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli'));
-                gridContainer.appendChild(createStaticToolCard('qwen-code', 'Qwen Code', 'Alibaba\'s open-source coding agent', 'OPEN SOURCE', '#6c757d', 'https://github.com/QwenLM/Qwen3-Coder'));
-                gridContainer.appendChild(createStaticToolCard('openai-codex', 'OpenAI Codex', 'GPT-powered terminal assistant', null, null, 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started'));
-                gridContainer.appendChild(createStaticToolCard('aider', 'Aider', 'Git-integrated inline editing', null, null, 'https://aider.chat/docs/'));
-                gridContainer.appendChild(createStaticToolCard('cline', 'Cline', 'Lightweight conversational agent', null, null, 'https://cline.bot/'));
+                // Gemini CLI - now with full detection and functionality
+                const geminiStatus = yield electronAPI.detectCliTool('gemini-cli');
+                gridContainer.appendChild(createCliToolCard({
+                    id: 'gemini-cli',
+                    name: 'Gemini CLI',
+                    description: 'Google\'s free AI coding assistant with 1M token context',
+                    status: geminiStatus,
+                    docsUrl: 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli',
+                    badgeText: 'FREE',
+                    badgeColor: '#28a745'
+                }));
+                // Qwen Code - now with full detection and functionality
+                const qwenStatus = yield electronAPI.detectCliTool('qwen-code');
+                gridContainer.appendChild(createCliToolCard({
+                    id: 'qwen-code',
+                    name: 'Qwen Code',
+                    description: 'AI-powered command-line workflow tool (2000 req/day free)',
+                    status: qwenStatus,
+                    docsUrl: 'https://github.com/QwenLM/qwen-code',
+                    badgeText: 'FREE 2K/DAY',
+                    badgeColor: '#FF6600' // Orange color for Alibaba
+                }));
+                // OpenAI Codex - now with full detection and functionality
+                const codexStatus = yield electronAPI.detectCliTool('openai-codex');
+                gridContainer.appendChild(createCliToolCard({
+                    id: 'openai-codex',
+                    name: 'OpenAI Codex',
+                    description: 'OpenAI\'s agentic coding CLI with GPT-5 and o-series models',
+                    status: codexStatus,
+                    docsUrl: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
+                    badgeText: (codexStatus === null || codexStatus === void 0 ? void 0 : codexStatus.installed) ? 'INSTALLED' : null,
+                    badgeColor: '#007acc'
+                }));
+                // Grok CLI - xAI powered terminal agent with MCP support
+                const grokStatus = yield electronAPI.detectCliTool('grok');
+                gridContainer.appendChild(createCliToolCard({
+                    id: 'grok',
+                    name: 'Grok CLI',
+                    description: 'xAI Grok-powered terminal agent with MCP support',
+                    status: grokStatus,
+                    docsUrl: 'https://github.com/superagent-ai/grok-cli',
+                    badgeText: 'MCP',
+                    badgeColor: '#ff6b6b'
+                }));
+                // Cline - now with full detection and functionality (moved to bottom)
+                const clineStatus = yield electronAPI.detectCliTool('cline');
+                gridContainer.appendChild(createCliToolCard({
+                    id: 'cline',
+                    name: 'Cline',
+                    description: 'Task-based AI assistant with 47k+ GitHub stars',
+                    status: clineStatus,
+                    docsUrl: 'https://cline.bot',
+                    badgeText: '47K ⭐',
+                    badgeColor: '#28a745'
+                }));
                 console.log('[CLI Tools] Panel rendered successfully');
             }
             catch (error) {
@@ -2099,7 +2324,7 @@ function renderCliToolsPanel() {
             }
         }
         else {
-            console.log('[CLI Tools] Panel already rendered');
+            console.log('[CLI Tools] Panel already rendered (use forceRefresh=true to refresh)');
         }
     });
 }
@@ -2108,7 +2333,26 @@ function createCliToolCard(toolInfo) {
     const { id, name, description, status, docsUrl, badgeText, badgeColor } = toolInfo;
     const card = document.createElement('div');
     card.className = 'cli-tool-card';
-    card.style.cssText = 'background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;';
+    card.setAttribute('data-tool-id', id); // Add data attribute for button handlers
+    card.style.cssText = `
+        background: linear-gradient(135deg, #1E2427 0%, #181E21 100%); 
+        border: 1px solid #2D3336; 
+        border-radius: 12px; 
+        padding: 20px; 
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    `;
+    // Add hover effect to card
+    card.onmouseover = () => {
+        card.style.transform = 'translateY(-2px)';
+        card.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
+        card.style.borderColor = '#3e444a';
+    };
+    card.onmouseout = () => {
+        card.style.transform = 'translateY(0)';
+        card.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
+        card.style.borderColor = '#2D3336';
+    };
     const isInstalled = (status === null || status === void 0 ? void 0 : status.installed) || false;
     const version = status === null || status === void 0 ? void 0 : status.version;
     const memoryConnected = (status === null || status === void 0 ? void 0 : status.memoryServiceConnected) || false;
@@ -2121,8 +2365,8 @@ function createCliToolCard(toolInfo) {
     let statusDetails = '';
     if (isInstalled) {
         statusDetails = `
-            <div><span style="color: #aaa;">Version:</span> ${version || 'Unknown'}</div>
-            <div><span style="color: #aaa;">Memory:</span> <span style="color: ${memoryConnected ? '#4caf50' : '#f44336'};">${memoryConnected ? 'Connected ✓' : 'Not connected'}</span></div>
+            <div><span style="color: #aaa;">Version:</span> <span data-version="${id}">${version || 'Unknown'}</span></div>
+            <div><span style="color: #aaa;">Memory:</span> <span data-memory="${id}" style="color: ${memoryConnected ? '#4caf50' : '#f44336'};">${memoryConnected ? 'Connected ✓' : 'Not connected'}</span></div>
             <div><span style="color: #aaa;">Path:</span> ${status.path || 'Unknown'}</div>
         `;
     }
@@ -2136,23 +2380,103 @@ function createCliToolCard(toolInfo) {
     let buttons = '';
     if (isInstalled) {
         buttons = `
-            <button onclick="configureCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Configure</button>
-            <button onclick="updateCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
+            <button onclick="launchCliTool('${id}')" style="
+                flex: 1; 
+                padding: 8px 12px; 
+                background: linear-gradient(135deg, #FFC107 0%, #007BFF 100%); 
+                color: #fff; 
+                border: none; 
+                border-radius: 8px; 
+                font-size: 11px; 
+                font-weight: 600;
+                cursor: pointer; 
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 6px rgba(255, 193, 7, 0.25);
+            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(255, 193, 7, 0.35)'" 
+               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(255, 193, 7, 0.25)'" 
+               title="Launch in current project">Launch</button>
+            <button onclick="refreshCliToolDetails('${id}')" style="
+                flex: 1; 
+                padding: 8px 12px; 
+                background: #1E2427; 
+                color: #FFD54F; 
+                border: 1px solid #2D3336; 
+                border-radius: 8px; 
+                font-size: 11px; 
+                font-weight: 500;
+                cursor: pointer; 
+                transition: all 0.2s ease;
+            " onmouseover="this.style.background='#2D3336'; this.style.borderColor='#FFC107'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='#1E2427'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
+               title="Refresh tool details">Details</button>
+            <button onclick="updateCliTool('${id}')" style="
+                flex: 1; 
+                padding: 8px 12px; 
+                background: linear-gradient(135deg, #8A2BE2 0%, #007BFF 100%); 
+                color: #fff; 
+                border: none; 
+                border-radius: 8px; 
+                font-size: 11px; 
+                font-weight: 600;
+                cursor: pointer; 
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 6px rgba(138, 43, 226, 0.25);
+            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(138, 43, 226, 0.35)'" 
+               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(138, 43, 226, 0.25)'">Update</button>
+            <button onclick="uninstallCliTool('${id}')" style="
+                flex: 1; 
+                padding: 8px 12px; 
+                background: #1E2427; 
+                color: #FF6B6B; 
+                border: 1px solid #2D3336; 
+                border-radius: 8px; 
+                font-size: 11px; 
+                font-weight: 500;
+                cursor: pointer; 
+                transition: all 0.2s ease;
+            " onmouseover="this.style.background='#CC3D3D'; this.style.color='white'; this.style.borderColor='#CC3D3D'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='#1E2427'; this.style.color='#FF6B6B'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
+               title="Uninstall this tool">Uninstall</button>
         `;
     }
     else {
         buttons = `
-            <button onclick="installCliTool('${id}')" style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+            <button onclick="installCliTool('${id}')" style="
+                flex: 1; 
+                padding: 8px 12px; 
+                background: linear-gradient(135deg, #28A745 0%, #20C997 100%); 
+                color: #fff; 
+                border: none; 
+                border-radius: 8px; 
+                font-size: 11px; 
+                font-weight: 600;
+                cursor: pointer; 
+                transition: all 0.2s ease;
+                box-shadow: 0 4px 6px rgba(40, 167, 69, 0.25);
+            " onmouseover="this.style.transform='scale(1.05) translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(40, 167, 69, 0.35)'" 
+               onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 4px 6px rgba(40, 167, 69, 0.25)'">Install</button>
         `;
     }
-    buttons += `<button onclick="window.open('${docsUrl}', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">Docs</button>`;
+    buttons += `<button onclick="window.open('${docsUrl}', '_blank')" style="
+        padding: 8px 12px; 
+        background: #1E2427; 
+        color: #FFD54F; 
+        border: 1px solid #2D3336; 
+        border-radius: 8px; 
+        font-size: 11px; 
+        font-weight: 500;
+        cursor: pointer; 
+        transition: all 0.2s ease;
+    " onmouseover="this.style.background='#2D3336'; this.style.borderColor='#FFC107'; this.style.transform='translateY(-1px)'" 
+       onmouseout="this.style.background='#1E2427'; this.style.borderColor='#2D3336'; this.style.transform='translateY(0)'" 
+       title="View official documentation">Docs</button>`;
     card.innerHTML = `
         <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
             ${name}${statusBadge}
         </h4>
         <div style="color: #aaa; font-size: 12px; margin-bottom: 12px;">${description}</div>
         <div style="border-top: 1px solid #3e3e42; padding-top: 10px; margin-top: 10px;">
-            <div style="font-size: 11px; color: #888; line-height: 1.6;">
+            <div class="tool-status" style="font-size: 11px; color: #888; line-height: 1.6;">
                 ${statusDetails}
             </div>
         </div>
@@ -2166,7 +2490,25 @@ function createCliToolCard(toolInfo) {
 function createStaticToolCard(id, name, description, badgeText, badgeColor, docsUrl) {
     const card = document.createElement('div');
     card.className = 'cli-tool-card';
-    card.style.cssText = 'background: #2d2d30; border: 1px solid #3e3e42; border-radius: 6px; padding: 15px; cursor: pointer; transition: all 0.2s;';
+    card.style.cssText = `
+        background: linear-gradient(135deg, #1E2427 0%, #181E21 100%); 
+        border: 1px solid #2D3336; 
+        border-radius: 12px; 
+        padding: 20px; 
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    `;
+    // Add hover effect to card
+    card.onmouseover = () => {
+        card.style.transform = 'translateY(-2px)';
+        card.style.boxShadow = '0 8px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08)';
+        card.style.borderColor = '#3e444a';
+    };
+    card.onmouseout = () => {
+        card.style.transform = 'translateY(0)';
+        card.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05)';
+        card.style.borderColor = '#2D3336';
+    };
     const statusBadge = badgeText ? `<span style="background: ${badgeColor}; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; margin-left: 8px;">${badgeText}</span>` : '';
     card.innerHTML = `
         <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
@@ -2186,19 +2528,678 @@ function createStaticToolCard(id, name, description, badgeText, badgeColor, docs
     `;
     return card;
 }
-// CLI Tool Action Handlers (placeholders for now)
+// CLI Tool Action Handlers
 function installCliTool(toolId) {
-    console.log(`[CLI Tools] Install requested for ${toolId}`);
-    alert(`Installation for ${toolId} coming soon!`);
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[CLI Tools] Install requested for ${toolId}`);
+        // Show progress in the UI
+        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status');
+            if (statusDiv) {
+                statusDiv.innerHTML = '⏳ Installing...';
+                statusDiv.style.color = '#FFA500';
+            }
+        }
+        try {
+            const electronAPI = window.electronAPI;
+            const result = yield electronAPI.installCliTool(toolId);
+            if (result.success) {
+                console.log(`[CLI Tools] ${toolId} installed successfully`);
+                // Force refresh the entire panel to update status
+                yield renderCliToolsPanel(true);
+            }
+            else {
+                console.error(`[CLI Tools] Failed to install ${toolId}:`, result.error);
+                alert(`Failed to install: ${result.error}`);
+            }
+        }
+        catch (error) {
+            console.error(`[CLI Tools] Error installing ${toolId}:`, error);
+            alert(`Installation error: ${error}`);
+        }
+    });
 }
+// DEPRECATED: Configuration is now done automatically during installation
+// This function is kept for backward compatibility but should not be called
 function configureCliTool(toolId) {
-    console.log(`[CLI Tools] Configure requested for ${toolId}`);
-    alert(`Configuration for ${toolId} coming soon!`);
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[CLI Tools] Configure requested for ${toolId} - DEPRECATED: Configuration is now automatic during installation`);
+        // Since configuration is now automatic, just show a message
+        alert(`${toolId} is already configured! Configuration is now done automatically during installation.`);
+        return;
+        /* OLD CODE - PRESERVED FOR REFERENCE
+        // Show progress in the UI
+        const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+            if (statusDiv) {
+                statusDiv.innerHTML = '⚙️ Configuring...';
+                statusDiv.style.color = '#FFA500';
+            }
+        }
+        
+        try {
+            const electronAPI = window.electronAPI as any;
+            const result = await electronAPI.configureCliTool(toolId);
+            
+            if (result && result.success) {
+                console.log(`[CLI Tools] ${toolId} configured successfully`);
+                
+                // Update UI immediately to show success
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '✅ Configured';
+                        statusDiv.style.color = '#4ec9b0';
+                    }
+                }
+                
+                // Show success message
+                if (toolId === 'claude-code') {
+                    setTimeout(() => {
+                        alert('Claude Code has been configured with Memory Service integration! You can now use Claude Code with enhanced memory capabilities.');
+                    }, 100);
+                } else {
+                    setTimeout(() => {
+                        alert(`${toolId} configured successfully!`);
+                    }, 100);
+                }
+                
+                // Don't refresh the entire panel, just update the Memory status
+                setTimeout(async () => {
+                    if (card) {
+                        // Find and update the Memory status line using data attribute
+                        const memorySpan = card.querySelector(`span[data-memory="${toolId}"]`) as HTMLElement;
+                        if (memorySpan) {
+                            memorySpan.textContent = 'Connected ✓';
+                            memorySpan.style.color = '#4caf50';
+                        }
+                    }
+                }, 500);
+            } else {
+                console.error(`[CLI Tools] Failed to configure ${toolId}:`, result?.error || 'Unknown error');
+                
+                // Update UI to show error
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '❌ Config failed';
+                        statusDiv.style.color = '#f44747';
+                    }
+                }
+                
+                if (result?.error) {
+                    alert(`Failed to configure: ${result.error}`);
+                }
+            }
+        } catch (error) {
+            console.error(`[CLI Tools] Error configuring ${toolId}:`, error);
+            alert(`Configuration error: ${error}`);
+        }
+        */
+    });
 }
 function updateCliTool(toolId) {
-    console.log(`[CLI Tools] Update requested for ${toolId}`);
-    alert(`Update for ${toolId} coming soon!`);
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[CLI Tools] Update requested for ${toolId}`);
+        // Show progress in the UI
+        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status');
+            if (statusDiv) {
+                statusDiv.innerHTML = '⬆️ Updating...';
+                statusDiv.style.color = '#FFA500';
+            }
+        }
+        try {
+            const electronAPI = window.electronAPI;
+            const result = yield electronAPI.updateCliTool(toolId);
+            if (result && result.success) {
+                console.log(`[CLI Tools] ${toolId} updated successfully`);
+                // Update UI immediately to show success
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status');
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '✅ Up to date';
+                        statusDiv.style.color = '#4ec9b0';
+                    }
+                }
+                // Force refresh the panel to show updated version
+                setTimeout(() => __awaiter(this, void 0, void 0, function* () {
+                    yield renderCliToolsPanel(true);
+                }), 1000);
+            }
+            else {
+                console.error(`[CLI Tools] Failed to update ${toolId}:`, (result === null || result === void 0 ? void 0 : result.error) || 'Unknown error');
+                // Update UI to show error
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status');
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '❌ Update failed';
+                        statusDiv.style.color = '#f44747';
+                    }
+                }
+                if (result === null || result === void 0 ? void 0 : result.error) {
+                    alert(`Failed to update: ${result.error}`);
+                }
+            }
+        }
+        catch (error) {
+            console.error(`[CLI Tools] Error updating ${toolId}:`, error);
+            // Update UI to show error
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status');
+                if (statusDiv) {
+                    statusDiv.innerHTML = '❌ Error';
+                    statusDiv.style.color = '#f44747';
+                }
+            }
+            alert(`Update error: ${error}`);
+        }
+    });
 }
+/**
+ * Install all AI CLI tools in sequence
+ */
+function installAllCliTools() {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log('[CLI Tools] Installing all tools...');
+        // List of tools to install (in order)
+        const toolsToInstall = [
+            'claude-code',
+            'gemini-cli',
+            'qwen-code',
+            'openai-codex',
+            'grok',
+            'cline' // Moved to last as least likely to be used
+        ];
+        // Show status
+        const statusDiv = document.getElementById('batch-status');
+        if (statusDiv) {
+            statusDiv.style.display = 'flex';
+            statusDiv.innerHTML = '⏳ Checking tools...';
+        }
+        try {
+            const electronAPI = window.electronAPI;
+            let installedCount = 0;
+            let skippedCount = 0;
+            let failedCount = 0;
+            for (const toolId of toolsToInstall) {
+                // Check if already installed
+                const status = yield electronAPI.detectCliTool(toolId);
+                if (status === null || status === void 0 ? void 0 : status.installed) {
+                    console.log(`[CLI Tools] ${toolId} already installed, skipping`);
+                    skippedCount++;
+                    if (statusDiv) {
+                        statusDiv.innerHTML = `⏳ ${toolId} already installed (${installedCount} installed, ${skippedCount} skipped)`;
+                    }
+                    continue;
+                }
+                // Install the tool
+                if (statusDiv) {
+                    statusDiv.innerHTML = `📦 Installing ${toolId}... (${installedCount} installed so far)`;
+                }
+                try {
+                    const result = yield electronAPI.installCliTool(toolId);
+                    if (result === null || result === void 0 ? void 0 : result.success) {
+                        installedCount++;
+                        console.log(`[CLI Tools] Successfully installed ${toolId}`);
+                        // Update the specific card UI
+                        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+                        if (card) {
+                            const statusDiv = card.querySelector('.tool-status');
+                            if (statusDiv) {
+                                statusDiv.innerHTML = '✅ Installed';
+                                statusDiv.style.color = '#4ec9b0';
+                            }
+                        }
+                    }
+                    else {
+                        failedCount++;
+                        console.error(`[CLI Tools] Failed to install ${toolId}:`, result === null || result === void 0 ? void 0 : result.error);
+                    }
+                }
+                catch (error) {
+                    failedCount++;
+                    console.error(`[CLI Tools] Error installing ${toolId}:`, error);
+                }
+            }
+            // Final status
+            if (statusDiv) {
+                if (failedCount === 0) {
+                    statusDiv.innerHTML = `✅ Complete! ${installedCount} installed, ${skippedCount} already installed`;
+                    statusDiv.style.color = '#4ec9b0';
+                }
+                else {
+                    statusDiv.innerHTML = `⚠️ Complete with errors: ${installedCount} installed, ${skippedCount} skipped, ${failedCount} failed`;
+                    statusDiv.style.color = '#ffa500';
+                }
+                // Hide status after 5 seconds
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+            // Refresh the entire panel to show updated statuses
+            setTimeout(() => {
+                renderCliToolsPanel(true);
+            }, 1000);
+        }
+        catch (error) {
+            console.error('[CLI Tools] Error in batch install:', error);
+            if (statusDiv) {
+                statusDiv.innerHTML = `❌ Error: ${error}`;
+                statusDiv.style.color = '#f44747';
+            }
+        }
+    });
+}
+/**
+ * Update all installed AI CLI tools in sequence
+ */
+function updateAllCliTools() {
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log('[CLI Tools] Updating all tools...');
+        // List of tools to update (in order)
+        const toolsToUpdate = [
+            'claude-code',
+            'gemini-cli',
+            'qwen-code',
+            'openai-codex',
+            'grok',
+            'cline' // Moved to last as least likely to be used
+        ];
+        // Show status
+        const statusDiv = document.getElementById('batch-status');
+        if (statusDiv) {
+            statusDiv.style.display = 'flex';
+            statusDiv.innerHTML = '⏳ Checking for updates...';
+        }
+        try {
+            const electronAPI = window.electronAPI;
+            let updatedCount = 0;
+            let skippedCount = 0;
+            let failedCount = 0;
+            for (const toolId of toolsToUpdate) {
+                // Check if installed
+                const status = yield electronAPI.detectCliTool(toolId);
+                if (!(status === null || status === void 0 ? void 0 : status.installed)) {
+                    console.log(`[CLI Tools] ${toolId} not installed, skipping update`);
+                    skippedCount++;
+                    continue;
+                }
+                // Update the tool
+                if (statusDiv) {
+                    statusDiv.innerHTML = `🔄 Updating ${toolId}... (${updatedCount} updated so far)`;
+                }
+                try {
+                    const result = yield electronAPI.updateCliTool(toolId);
+                    if (result === null || result === void 0 ? void 0 : result.success) {
+                        updatedCount++;
+                        console.log(`[CLI Tools] Successfully updated ${toolId} to version ${result.version}`);
+                        // Update the specific card UI
+                        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+                        if (card) {
+                            const statusDiv = card.querySelector('.tool-status');
+                            if (statusDiv) {
+                                statusDiv.innerHTML = '✅ Updated';
+                                statusDiv.style.color = '#4ec9b0';
+                            }
+                            // Update version display if present
+                            const versionSpan = card.querySelector('span[style*="color: #4ec9b0"]');
+                            if (versionSpan && result.version) {
+                                versionSpan.textContent = `v${result.version}`;
+                            }
+                        }
+                    }
+                    else {
+                        // Could be no update available, which is not a failure
+                        if ((_a = result === null || result === void 0 ? void 0 : result.error) === null || _a === void 0 ? void 0 : _a.includes('already up to date')) {
+                            console.log(`[CLI Tools] ${toolId} already up to date`);
+                        }
+                        else {
+                            failedCount++;
+                            console.error(`[CLI Tools] Failed to update ${toolId}:`, result === null || result === void 0 ? void 0 : result.error);
+                        }
+                    }
+                }
+                catch (error) {
+                    failedCount++;
+                    console.error(`[CLI Tools] Error updating ${toolId}:`, error);
+                }
+            }
+            // Final status
+            if (statusDiv) {
+                if (failedCount === 0) {
+                    statusDiv.innerHTML = `✅ Complete! ${updatedCount} updated, ${skippedCount} not installed`;
+                    statusDiv.style.color = '#4ec9b0';
+                }
+                else {
+                    statusDiv.innerHTML = `⚠️ Complete with errors: ${updatedCount} updated, ${skippedCount} skipped, ${failedCount} failed`;
+                    statusDiv.style.color = '#ffa500';
+                }
+                // Hide status after 5 seconds
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+            // Refresh the entire panel to show updated statuses
+            setTimeout(() => {
+                renderCliToolsPanel(true);
+            }, 1000);
+        }
+        catch (error) {
+            console.error('[CLI Tools] Error in batch update:', error);
+            if (statusDiv) {
+                statusDiv.innerHTML = `❌ Error: ${error}`;
+                statusDiv.style.color = '#f44747';
+            }
+        }
+    });
+}
+/**
+ * Uninstall a CLI tool
+ */
+function uninstallCliTool(toolId) {
+    var _a, _b;
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[CLI Tools] Uninstall requested for ${toolId}`);
+        // Confirm with user first
+        const toolName = ((_b = (_a = window.CLI_TOOLS_REGISTRY) === null || _a === void 0 ? void 0 : _a[toolId]) === null || _b === void 0 ? void 0 : _b.name) || toolId;
+        const confirmed = confirm(`Are you sure you want to uninstall ${toolName}?\n\nThis will remove the tool globally from your system.`);
+        if (!confirmed) {
+            console.log(`[CLI Tools] Uninstall canceled for ${toolId}`);
+            return;
+        }
+        // Show progress in the UI
+        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status');
+            if (statusDiv) {
+                statusDiv.innerHTML = '🗑️ Uninstalling...';
+                statusDiv.style.color = '#FFA500';
+            }
+        }
+        try {
+            const electronAPI = window.electronAPI;
+            const result = yield electronAPI.uninstallCliTool(toolId);
+            if (result && result.success) {
+                console.log(`[CLI Tools] ${toolId} uninstalled successfully`);
+                // Update UI immediately to show not installed
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status');
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '✅ Uninstalled';
+                        statusDiv.style.color = '#4ec9b0';
+                    }
+                }
+                // Refresh the panel after a short delay to update buttons
+                setTimeout(() => {
+                    renderCliToolsPanel(true);
+                }, 1500);
+            }
+            else {
+                console.error(`[CLI Tools] Failed to uninstall ${toolId}:`, (result === null || result === void 0 ? void 0 : result.error) || 'Unknown error');
+                // Update UI to show error
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status');
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '❌ Uninstall failed';
+                        statusDiv.style.color = '#f44747';
+                    }
+                }
+                if (result === null || result === void 0 ? void 0 : result.error) {
+                    alert(`Failed to uninstall ${toolName}: ${result.error}`);
+                }
+            }
+        }
+        catch (error) {
+            console.error(`[CLI Tools] Error uninstalling ${toolId}:`, error);
+            // Update UI to show error
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status');
+                if (statusDiv) {
+                    statusDiv.innerHTML = '❌ Error';
+                    statusDiv.style.color = '#f44747';
+                }
+            }
+            alert(`Uninstall error: ${error}`);
+        }
+    });
+}
+/**
+ * Uninstall all installed AI CLI tools in sequence
+ */
+function uninstallAllCliTools() {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log('[CLI Tools] Uninstalling all tools...');
+        // Confirm with user first
+        const confirmed = confirm('Are you sure you want to uninstall ALL AI CLI tools?\n\nThis will remove all tools globally from your system.\nYour configurations will be preserved for potential reinstallation.');
+        if (!confirmed) {
+            console.log('[CLI Tools] Batch uninstall canceled');
+            return;
+        }
+        // List of tools to uninstall (in order)
+        const toolsToUninstall = [
+            'claude-code',
+            'gemini-cli',
+            'qwen-code',
+            'openai-codex',
+            'grok',
+            'cline' // Moved to last as least likely to be used
+        ];
+        // Show status
+        const statusDiv = document.getElementById('batch-status');
+        if (statusDiv) {
+            statusDiv.style.display = 'flex';
+            statusDiv.innerHTML = '⏳ Checking installed tools...';
+        }
+        try {
+            const electronAPI = window.electronAPI;
+            let uninstalledCount = 0;
+            let skippedCount = 0;
+            let failedCount = 0;
+            for (const toolId of toolsToUninstall) {
+                // Check if installed
+                const status = yield electronAPI.detectCliTool(toolId);
+                if (!(status === null || status === void 0 ? void 0 : status.installed)) {
+                    console.log(`[CLI Tools] ${toolId} not installed, skipping`);
+                    skippedCount++;
+                    continue;
+                }
+                // Uninstall the tool
+                if (statusDiv) {
+                    statusDiv.innerHTML = `🗑️ Uninstalling ${toolId}... (${uninstalledCount} uninstalled so far)`;
+                }
+                try {
+                    const result = yield electronAPI.uninstallCliTool(toolId);
+                    if (result === null || result === void 0 ? void 0 : result.success) {
+                        uninstalledCount++;
+                        console.log(`[CLI Tools] Successfully uninstalled ${toolId}`);
+                        // Update the specific card UI
+                        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+                        if (card) {
+                            const statusDiv = card.querySelector('.tool-status');
+                            if (statusDiv) {
+                                statusDiv.innerHTML = '✅ Uninstalled';
+                                statusDiv.style.color = '#4ec9b0';
+                            }
+                        }
+                    }
+                    else {
+                        failedCount++;
+                        console.error(`[CLI Tools] Failed to uninstall ${toolId}:`, result === null || result === void 0 ? void 0 : result.error);
+                    }
+                }
+                catch (error) {
+                    failedCount++;
+                    console.error(`[CLI Tools] Error uninstalling ${toolId}:`, error);
+                }
+            }
+            // Final status
+            if (statusDiv) {
+                if (failedCount === 0) {
+                    statusDiv.innerHTML = `✅ Complete! ${uninstalledCount} uninstalled, ${skippedCount} not installed`;
+                    statusDiv.style.color = '#4ec9b0';
+                }
+                else {
+                    statusDiv.innerHTML = `⚠️ Complete with errors: ${uninstalledCount} uninstalled, ${skippedCount} skipped, ${failedCount} failed`;
+                    statusDiv.style.color = '#ffa500';
+                }
+                // Hide status after 5 seconds
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+            // Refresh the entire panel to show updated statuses
+            setTimeout(() => {
+                renderCliToolsPanel(true);
+            }, 1000);
+        }
+        catch (error) {
+            console.error('[CLI Tools] Error in batch uninstall:', error);
+            if (statusDiv) {
+                statusDiv.innerHTML = `❌ Error: ${error}`;
+                statusDiv.style.color = '#f44747';
+            }
+        }
+    });
+}
+// Make functions available globally
+window.installAllCliTools = installAllCliTools;
+window.updateAllCliTools = updateAllCliTools;
+window.uninstallAllCliTools = uninstallAllCliTools;
+window.uninstallCliTool = uninstallCliTool;
+/**
+ * Launch a CLI tool in the current project context
+ */
+function launchCliTool(toolId) {
+    var _a;
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[CLI Tools] Launch requested for ${toolId}`);
+        // Show launching status  
+        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+        if (card) {
+            const statusDiv = card.querySelector('.tool-status');
+            if (statusDiv) {
+                statusDiv.innerHTML = '📂 Select a folder to launch in...';
+                statusDiv.style.color = '#2196F3';
+            }
+        }
+        try {
+            // Call the IPC handler which will:
+            // 1. Show folder selection dialog
+            // 2. Check database for previous launches
+            // 3. Determine command (claude vs claude --resume)
+            // 4. Send event to create terminal
+            const electronAPI = window.electronAPI;
+            const result = yield electronAPI.launchCliTool(toolId);
+            if (result.success) {
+                console.log(`[CLI Tools] ${toolId} launched successfully with command: ${result.command}`);
+                // Update status to show it's running
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status');
+                    if (statusDiv) {
+                        const resumeText = ((_a = result.command) === null || _a === void 0 ? void 0 : _a.includes('--resume')) ? ' (resumed)' : '';
+                        statusDiv.innerHTML = `✅ Launched in ${result.path}${resumeText}`;
+                        statusDiv.style.color = '#4CAF50';
+                        // Reset status after 5 seconds
+                        setTimeout(() => {
+                            renderCliToolsPanel();
+                        }, 5000);
+                    }
+                }
+            }
+            else if (result.error) {
+                console.log(`[CLI Tools] Launch cancelled or failed: ${result.error}`);
+                // Reset status
+                if (card) {
+                    const statusDiv = card.querySelector('.tool-status');
+                    if (statusDiv) {
+                        if (result.error === 'Folder selection canceled') {
+                            // User cancelled - just refresh the panel
+                            renderCliToolsPanel();
+                        }
+                        else {
+                            statusDiv.innerHTML = `❌ ${result.error}`;
+                            statusDiv.style.color = '#f44336';
+                            setTimeout(() => {
+                                renderCliToolsPanel();
+                            }, 3000);
+                        }
+                    }
+                }
+            }
+        }
+        catch (error) {
+            console.error(`[CLI Tools] Error launching ${toolId}:`, error);
+            if (card) {
+                const statusDiv = card.querySelector('.tool-status');
+                if (statusDiv) {
+                    statusDiv.innerHTML = `❌ Launch failed: ${error}`;
+                    statusDiv.style.color = '#f44336';
+                }
+            }
+        }
+    });
+}
+/**
+ * Refresh CLI tool details to show full status
+ */
+function refreshCliToolDetails(toolId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`[CLI Tools] Refreshing details for ${toolId}`);
+        const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+        if (!card)
+            return;
+        // Show loading state
+        const statusDiv = card.querySelector('.tool-status');
+        if (statusDiv) {
+            statusDiv.innerHTML = '🔄 Loading details...';
+            statusDiv.style.color = '#FFA500';
+        }
+        try {
+            // Re-detect the tool to get fresh status
+            const electronAPI = window.electronAPI;
+            const status = yield electronAPI.detectCliTool(toolId);
+            if (status && status.installed) {
+                // Rebuild the status details section
+                const statusDetailsHtml = `
+                <div><span style="color: #aaa;">Version:</span> <span data-version="${toolId}">${status.version || 'Unknown'}</span></div>
+                <div><span style="color: #aaa;">Memory:</span> <span data-memory="${toolId}" style="color: ${status.memoryServiceConnected ? '#4caf50' : '#f44336'};">${status.memoryServiceConnected ? 'Connected ✓' : 'Not connected'}</span></div>
+                <div><span style="color: #aaa;">Path:</span> ${status.path || 'Unknown'}</div>
+            `;
+                // Update the status div with the full details
+                if (statusDiv) {
+                    statusDiv.innerHTML = statusDetailsHtml;
+                    statusDiv.style.color = '';
+                }
+                console.log(`[CLI Tools] Details refreshed for ${toolId}:`, status);
+            }
+            else {
+                // Tool not installed or error
+                if (statusDiv) {
+                    statusDiv.innerHTML = '❌ Tool not found';
+                    statusDiv.style.color = '#f44747';
+                }
+            }
+        }
+        catch (error) {
+            console.error(`[CLI Tools] Error refreshing details for ${toolId}:`, error);
+            if (statusDiv) {
+                statusDiv.innerHTML = '❌ Error loading details';
+                statusDiv.style.color = '#f44747';
+            }
+        }
+    });
+}
+// Expose CLI tool functions to window for onclick handlers
+window.installCliTool = installCliTool;
+window.configureCliTool = configureCliTool;
+window.updateCliTool = updateCliTool;
+window.refreshCliToolDetails = refreshCliToolDetails;
+window.launchCliTool = launchCliTool;
 // Memory Dashboard Management
 let memoryDashboardInstance = null;
 function openMemoryDashboard() {
@@ -2465,6 +3466,77 @@ setTimeout(() => {
             console.log('✅ Editor tabs initialized on startup');
         }
     }
+    // Initialize Isolated Terminal Panel
+    const isolatedTerminalPanel = document.getElementById('isolated-terminal-panel');
+    if (isolatedTerminalPanel) {
+        window.isolatedTerminal = TTYDTerminalPanel_1.ttydTerminalPanel.initialize(isolatedTerminalPanel);
+        console.log('✅ TTYD Terminal Panel initialized');
+        // Listen for AI tool launch events from main process
+        if (window.electronAPI.onLaunchAIToolTerminal) {
+            window.electronAPI.onLaunchAIToolTerminal((data) => {
+                console.log('📦 Launching AI tool terminal:', data);
+                // Get the TTYDTerminalPanel instance and create a terminal
+                const terminal = window.isolatedTerminal;
+                if (terminal) {
+                    // Note: The global folder context is already updated by the main process
+                    // via the 'menu-open-folder' event before this terminal launch event
+                    // Call createTerminalTab with toolId, command, and optional env
+                    terminal.createTerminalTab(data.toolId, data.command, data.env);
+                }
+                else {
+                    console.error('[Renderer] Terminal panel not initialized');
+                }
+            });
+        }
+        // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
+        const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
+        const consensusPanel = document.getElementById('consensus-chat');
+        if (isolatedTerminalResize && isolatedTerminalPanel) {
+            let isResizing = false;
+            let startX = 0;
+            let startWidth = 0;
+            isolatedTerminalResize.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                document.body.style.cursor = 'ew-resize';
+                e.preventDefault();
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing)
+                    return;
+                // Use exact same formula as consensus panel (lines 3413-3414)
+                const deltaX = startX - e.clientX;
+                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 600);
+                isolatedTerminalPanel.style.width = newWidth + 'px';
+            });
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                }
+            });
+        }
+        // Isolated terminal panel collapse/expand (exactly like consensus panel)
+        const toggleIsolatedTerminal = document.getElementById('toggle-isolated-terminal');
+        if (toggleIsolatedTerminal && isolatedTerminalPanel) {
+            toggleIsolatedTerminal.addEventListener('click', () => {
+                const isCollapsed = isolatedTerminalPanel.classList.contains('collapsed');
+                if (isCollapsed) {
+                    isolatedTerminalPanel.classList.remove('collapsed');
+                    isolatedTerminalPanel.style.width = '400px';
+                    toggleIsolatedTerminal.textContent = '−';
+                    toggleIsolatedTerminal.title = 'Collapse Terminal Panel';
+                }
+                else {
+                    isolatedTerminalPanel.classList.add('collapsed');
+                    isolatedTerminalPanel.style.width = '40px';
+                    toggleIsolatedTerminal.textContent = '+';
+                    toggleIsolatedTerminal.title = 'Expand Terminal Panel';
+                }
+            });
+        }
+    }
     // Listen for menu events from main process
     setupMenuEventListeners();
     // File Explorer and Editor Tabs are already initialized in showSidebarPanel
@@ -2682,6 +3754,18 @@ setTimeout(() => {
     }
     // Add resize functionality
     setupResizeHandles();
+    // Add click handlers for AI CLI quick launch buttons - use the same launchCliTool function as Launch buttons
+    const cliQuickLaunchButtons = document.querySelectorAll('.cli-quick-launch');
+    cliQuickLaunchButtons.forEach(btn => {
+        btn.addEventListener('click', () => __awaiter(void 0, void 0, void 0, function* () {
+            const toolId = btn.getAttribute('data-tool');
+            if (!toolId)
+                return;
+            // Use the exact same launchCliTool function that the Launch buttons use
+            console.log(`[Sidebar] Launching ${toolId} via quick launch icon...`);
+            yield window.launchCliTool(toolId);
+        }));
+    });
     // Menu events are handled via window.addEventListener for messages from main process
     // This would need to be set up in preload script if we want menu events
 }, 200);
@@ -2786,9 +3870,11 @@ function setupResizeHandles() {
 function handleOpenFolder(folderPath) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            console.log('[Menu] Opening folder:', folderPath);
+            console.log('[handleOpenFolder] Opening folder:', folderPath);
+            console.log('[handleOpenFolder] Previous folder:', currentOpenedFolder);
             // Update the current opened folder state
             currentOpenedFolder = folderPath;
+            window.currentOpenedFolder = currentOpenedFolder;
             // Update window title with folder name
             const folderName = folderPath.split('/').pop() || folderPath;
             document.title = `Hive Consensus - ${folderName}`;
@@ -2930,6 +4016,7 @@ if (typeof window !== 'undefined' && window.electronAPI) {
         }
         // Clear current folder
         currentOpenedFolder = null;
+        window.currentOpenedFolder = currentOpenedFolder;
         // Reset localStorage if needed
         localStorage.removeItem('lastOpenedFolder');
         // The reload will happen after this
@@ -2939,6 +4026,7 @@ if (typeof window !== 'undefined' && window.electronAPI) {
         console.log('[Menu] Close folder requested');
         // Reset the current opened folder
         currentOpenedFolder = null;
+        window.currentOpenedFolder = currentOpenedFolder;
         // Reset window title
         document.title = 'Hive Consensus';
         // Hide Git branch display in status bar
@@ -2999,6 +4087,22 @@ if (typeof window !== 'undefined' && window.electronAPI) {
     });
     console.log('[Menu] Menu event listeners registered');
 }
+// Initialize CLI tool detector on startup
+function initializeCliToolDetector() {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log('[CliToolDetector] Checking for installed AI CLI tools...');
+        try {
+            yield cli_tool_detector_1.cliToolDetector.checkAllTools();
+            const tools = cli_tool_detector_1.cliToolDetector.getAllTools();
+            console.log('[CliToolDetector] Tool detection complete:', tools);
+        }
+        catch (error) {
+            console.error('[CliToolDetector] Error during tool detection:', error);
+        }
+    });
+}
+// Call on startup
+initializeCliToolDetector();
 // Define global functions for opening folder and cloning repository
 window.openFolder = () => __awaiter(void 0, void 0, void 0, function* () {
     try {

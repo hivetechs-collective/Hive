@@ -34,14 +34,19 @@ electron_1.app.setName('Hive Consensus');
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const os = __importStar(require("os"));
+const crypto = __importStar(require("crypto"));
 const sqlite3_1 = require("sqlite3");
 const git_manager_1 = require("./git-manager");
 const git_manager_v2_1 = require("./git-manager-v2");
 const EnhancedGitManager_1 = require("./git/EnhancedGitManager");
 const file_system_1 = require("./file-system");
 const ProcessManager_1 = require("./utils/ProcessManager");
-const CliToolsManager_1 = require("./utils/CliToolsManager");
-const cli_tool_detector_1 = require("./utils/cli-tool-detector");
+const PidTracker_1 = require("./utils/PidTracker");
+const detector_1 = require("./main/cli-tools/detector");
+const cli_tools_1 = require("./shared/types/cli-tools");
+// Removed import - functions are now defined locally
+const SafeLogger_1 = require("./utils/SafeLogger");
+const terminal_ipc_handlers_1 = require("./terminal-ipc-handlers");
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
     electron_1.app.quit();
@@ -114,22 +119,22 @@ let gitManager = null;
 // Initialize Git manager - pass no path when no folder is open
 const initGitManager = (folderPath) => __awaiter(void 0, void 0, void 0, function* () {
     if (!folderPath) {
-        console.log('[Main] No folder path provided, GitManager will return null status');
+        SafeLogger_1.logger.info('[Main] No folder path provided, GitManager will return null status');
         // Don't create a manager when no folder is open
         gitManager = null;
         return;
     }
     if (GIT_MANAGER_VERSION === 2) {
-        console.log('[Main] Using EnhancedGitManager with authentication support for:', folderPath);
+        SafeLogger_1.logger.info('[Main] Using EnhancedGitManager with authentication support for:', folderPath);
         gitManager = new EnhancedGitManager_1.EnhancedGitManager(folderPath);
         yield gitManager.initialize();
     }
     else if (GIT_MANAGER_VERSION === 1) {
-        console.log('[Main] Using GitManagerV2 with VS Code-style implementation');
+        SafeLogger_1.logger.info('[Main] Using GitManagerV2 with VS Code-style implementation');
         gitManager = new git_manager_v2_1.GitManagerV2(folderPath);
     }
     else {
-        console.log('[Main] Using old GitManager with simple-git');
+        SafeLogger_1.logger.info('[Main] Using old GitManager with simple-git');
         gitManager = new git_manager_1.GitManager(folderPath);
     }
 });
@@ -140,6 +145,12 @@ const initFileSystemManager = () => {
     fileSystemManager = new file_system_1.FileSystemManager();
 };
 const createWindow = () => {
+    // Don't create duplicate windows
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        SafeLogger_1.logger.info('[Main] Window already exists, focusing it');
+        mainWindow.focus();
+        return;
+    }
     // Create the browser window.
     mainWindow = new electron_1.BrowserWindow({
         height: 600,
@@ -152,17 +163,17 @@ const createWindow = () => {
             preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
             nodeIntegration: false,
             contextIsolation: true,
-            webSecurity: false, // Allow HTTP requests to localhost for development
+            webSecurity: false,
+            webviewTag: true, // Enable webview tags for ttyd terminals
         },
     });
     // and load the index.html of the app.
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
     // Open the DevTools.
     // mainWindow.webContents.openDevTools(); // Disabled to prevent warning overlay
-    // Register IPC handlers here after window creation
-    registerGitHandlers();
-    registerFileSystemHandlers();
-    // Memory service handlers will be registered later
+    // Register terminal handlers (needs mainWindow reference)
+    // This is safe to call multiple times as it updates the window reference
+    (0, terminal_ipc_handlers_1.registerTerminalHandlers)(mainWindow);
     // Create application menu
     createApplicationMenu();
 };
@@ -171,26 +182,26 @@ const registerGitHandlers = () => {
     electron_1.ipcMain.handle('git-status', () => __awaiter(void 0, void 0, void 0, function* () {
         if (!gitManager) {
             // No folder is open, return null to show welcome screen
-            console.log('[Main] git-status: No folder open, returning null');
+            SafeLogger_1.logger.info('[Main] git-status: No folder open, returning null');
             return null;
         }
         return yield gitManager.getStatus();
     }));
     electron_1.ipcMain.handle('git-branches', () => __awaiter(void 0, void 0, void 0, function* () {
         if (!gitManager) {
-            console.log('[Main] git-branches: No folder open, returning empty');
+            SafeLogger_1.logger.info('[Main] git-branches: No folder open, returning empty');
             return { all: [], branches: {}, current: null, detached: false };
         }
         return yield gitManager.getBranches();
     }));
     electron_1.ipcMain.handle('git-log', (_, options) => __awaiter(void 0, void 0, void 0, function* () {
         if (!gitManager) {
-            console.log('[Main] git-log: No folder open, returning empty');
+            SafeLogger_1.logger.info('[Main] git-log: No folder open, returning empty');
             return '';
         }
-        console.log('[Main] git-log called with options:', options);
+        SafeLogger_1.logger.info('[Main] git-log called with options:', options);
         const result = yield gitManager.getLog(options || {});
-        console.log('[Main] git-log returning:', result ? result.substring(0, 100) + '...' : 'empty');
+        SafeLogger_1.logger.info('[Main] git-log returning:', result ? result.substring(0, 100) + '...' : 'empty');
         return result;
     }));
     electron_1.ipcMain.handle('git-diff', (_, file) => __awaiter(void 0, void 0, void 0, function* () {
@@ -228,14 +239,14 @@ const registerGitHandlers = () => {
         return yield gitManager.discard(files);
     }));
     electron_1.ipcMain.handle('git-push', () => __awaiter(void 0, void 0, void 0, function* () {
-        console.log('[Main] git-push IPC called');
+        SafeLogger_1.logger.info('[Main] git-push IPC called');
         if (!gitManager) {
             throw new Error('No folder open');
         }
         try {
             if (gitManager instanceof EnhancedGitManager_1.EnhancedGitManager) {
                 const result = yield gitManager.push();
-                console.log('[Main] git-push result:', result);
+                SafeLogger_1.logger.info('[Main] git-push result:', result);
                 if (!result.success) {
                     throw new Error(result.error || 'Push failed');
                 }
@@ -243,12 +254,12 @@ const registerGitHandlers = () => {
             }
             else {
                 const result = yield gitManager.push();
-                console.log('[Main] git-push completed successfully');
+                SafeLogger_1.logger.info('[Main] git-push completed successfully');
                 return result;
             }
         }
         catch (error) {
-            console.error('[Main] git-push failed:', error);
+            SafeLogger_1.logger.error('[Main] git-push failed:', error);
             throw error;
         }
     }));
@@ -268,14 +279,14 @@ const registerGitHandlers = () => {
         }
     }));
     electron_1.ipcMain.handle('git-sync', () => __awaiter(void 0, void 0, void 0, function* () {
-        console.log('[Main] git-sync IPC called');
+        SafeLogger_1.logger.info('[Main] git-sync IPC called');
         if (!gitManager) {
             throw new Error('No folder open');
         }
         try {
             if (gitManager instanceof EnhancedGitManager_1.EnhancedGitManager) {
                 const result = yield gitManager.sync();
-                console.log('[Main] git-sync result:', result);
+                SafeLogger_1.logger.info('[Main] git-sync result:', result);
                 if (!result.success) {
                     throw new Error(result.error || 'Sync failed');
                 }
@@ -283,19 +294,19 @@ const registerGitHandlers = () => {
             }
             else if (gitManager instanceof git_manager_v2_1.GitManagerV2) {
                 const result = yield gitManager.sync();
-                console.log('[Main] git-sync completed successfully');
+                SafeLogger_1.logger.info('[Main] git-sync completed successfully');
                 return result;
             }
             else {
                 // Fallback for old GitManager - do pull then push
                 yield gitManager.pull();
                 yield gitManager.push();
-                console.log('[Main] git-sync (pull+push) completed successfully');
+                SafeLogger_1.logger.info('[Main] git-sync (pull+push) completed successfully');
                 return;
             }
         }
         catch (error) {
-            console.error('[Main] git-sync failed:', error);
+            SafeLogger_1.logger.error('[Main] git-sync failed:', error);
             throw error;
         }
     }));
@@ -366,11 +377,11 @@ const registerGitHandlers = () => {
     }));
     // Update Git manager when folder changes
     electron_1.ipcMain.handle('git-set-folder', (_, folderPath) => __awaiter(void 0, void 0, void 0, function* () {
-        console.log('[Git] Setting folder to:', folderPath || '(none)');
+        SafeLogger_1.logger.info('[Git] Setting folder to:', folderPath || '(none)');
         // If empty string or null, clear the git manager
         if (!folderPath) {
             gitManager = null;
-            console.log('[Git] Cleared Git manager - no folder open');
+            SafeLogger_1.logger.info('[Git] Cleared Git manager - no folder open');
             return { success: true };
         }
         // Initialize with the new folder
@@ -412,7 +423,7 @@ const registerGitHandlers = () => {
             return statusText || 'Working directory clean';
         }
         catch (error) {
-            console.error('[Git] Failed to get submodule status:', error);
+            SafeLogger_1.logger.error('[Git] Failed to get submodule status:', error);
             return `Error: ${error}`;
         }
     }));
@@ -428,7 +439,7 @@ const registerGitHandlers = () => {
             return diff;
         }
         catch (error) {
-            console.error('[Git] Failed to get submodule diff:', error);
+            SafeLogger_1.logger.error('[Git] Failed to get submodule diff:', error);
             return '';
         }
     }));
@@ -478,20 +489,20 @@ const registerFileSystemHandlers = () => {
             initFileSystemManager();
         // Only return files if a root path is explicitly provided
         if (!rootPath) {
-            console.log('[Main] fs-get-tree called without root path, returning empty');
+            SafeLogger_1.logger.info('[Main] fs-get-tree called without root path, returning empty');
             return [];
         }
-        console.log('[Main] fs-get-tree called with root:', rootPath);
+        SafeLogger_1.logger.info('[Main] fs-get-tree called with root:', rootPath);
         const result = yield fileSystemManager.getFileTree(rootPath);
-        console.log('[Main] fs-get-tree returning', (result === null || result === void 0 ? void 0 : result.length) || 0, 'items');
+        SafeLogger_1.logger.info(`[Main] fs-get-tree returning ${(result === null || result === void 0 ? void 0 : result.length) || 0} items`);
         return result;
     }));
     electron_1.ipcMain.handle('fs-get-directory', (_, dirPath) => __awaiter(void 0, void 0, void 0, function* () {
         if (!fileSystemManager)
             initFileSystemManager();
-        console.log('[Main] fs-get-directory called for:', dirPath);
+        SafeLogger_1.logger.info('[Main] fs-get-directory called for:', dirPath);
         const result = yield fileSystemManager.getDirectoryContents(dirPath);
-        console.log('[Main] fs-get-directory returning', (result === null || result === void 0 ? void 0 : result.length) || 0, 'items for', dirPath);
+        SafeLogger_1.logger.info(`[Main] fs-get-directory returning ${(result === null || result === void 0 ? void 0 : result.length) || 0} items for ${dirPath}`);
         return result;
     }));
     electron_1.ipcMain.handle('fs-read-file', (_, filePath) => __awaiter(void 0, void 0, void 0, function* () {
@@ -536,13 +547,13 @@ const registerFileSystemHandlers = () => {
             const fs = require('fs').promises;
             const path = require('path');
             const filePath = path.join(dirPath, fileName);
-            console.log('[Main] Creating file:', filePath);
+            SafeLogger_1.logger.info('[Main] Creating file:', filePath);
             yield fs.writeFile(filePath, '', 'utf8');
-            console.log('[Main] File created successfully:', filePath);
+            SafeLogger_1.logger.info('[Main] File created successfully:', filePath);
             return true;
         }
         catch (error) {
-            console.error('[Main] Failed to create file:', error);
+            SafeLogger_1.logger.error('[Main] Failed to create file:', error);
             throw error;
         }
     }));
@@ -551,26 +562,26 @@ const registerFileSystemHandlers = () => {
             const fs = require('fs').promises;
             const path = require('path');
             const folderPath = path.join(dirPath, folderName);
-            console.log('[Main] Creating folder:', folderPath);
+            SafeLogger_1.logger.info('[Main] Creating folder:', folderPath);
             yield fs.mkdir(folderPath, { recursive: true });
-            console.log('[Main] Folder created successfully:', folderPath);
+            SafeLogger_1.logger.info('[Main] Folder created successfully:', folderPath);
             return true;
         }
         catch (error) {
-            console.error('[Main] Failed to create folder:', error);
+            SafeLogger_1.logger.error('[Main] Failed to create folder:', error);
             throw error;
         }
     }));
     electron_1.ipcMain.handle('fs-move-file', (_, sourcePath, targetPath) => __awaiter(void 0, void 0, void 0, function* () {
         try {
             const fs = require('fs').promises;
-            console.log('[Main] Moving:', sourcePath, 'to', targetPath);
+            SafeLogger_1.logger.info(`[Main] Moving: ${sourcePath} to ${targetPath}`);
             yield fs.rename(sourcePath, targetPath);
-            console.log('[Main] Move successful');
+            SafeLogger_1.logger.info('[Main] Move successful');
             return true;
         }
         catch (error) {
-            console.error('[Main] Failed to move file:', error);
+            SafeLogger_1.logger.error('[Main] Failed to move file:', error);
             throw error;
         }
     }));
@@ -752,7 +763,7 @@ const createApplicationMenu = () => {
                     accelerator: 'CmdOrCtrl+R',
                     click: () => {
                         if (mainWindow) {
-                            console.log('[Menu] Reloading with state reset...');
+                            SafeLogger_1.logger.info('[Menu] Reloading with state reset...');
                             // Clear Git folder state before reload
                             mainWindow.webContents.send('menu-reset-state');
                             // Give it a moment to clear state, then reload
@@ -842,7 +853,96 @@ const processManager = new ProcessManager_1.ProcessManager();
 let memoryServicePort = 3457;
 let websocketBackendPort = 8765; // Dynamic port for WebSocket backend
 // CLI Tools Manager for AI CLI integration
-let cliToolsManager = null;
+// Note: The manager is now initialized as a singleton in registerCliToolHandlers()
+// let cliToolsManager: CliToolsManager | null = null;  // DEPRECATED - using singleton pattern now
+// Function to update MCP configurations for all tools with the actual Memory Service port
+// This must be defined before initializeProcessManager where it's used
+function updateAllMCPConfigurations(actualPort) {
+    var _a, _b, _c, _d, _e;
+    const memoryServiceEndpoint = `http://localhost:${actualPort}`;
+    SafeLogger_1.logger.info(`[Main] Updating MCP configurations with Memory Service endpoint: ${memoryServiceEndpoint}`);
+    try {
+        // Read the CLI tools config to get tokens for each tool
+        const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+        if (!fs.existsSync(configPath)) {
+            SafeLogger_1.logger.info('[Main] No CLI tools config found, skipping MCP updates');
+            return;
+        }
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        // Update MCP wrapper with the correct endpoint
+        const wrapperPath = path.join(os.homedir(), '.hive', 'memory-service-mcp-wrapper.js');
+        if (fs.existsSync(wrapperPath)) {
+            // Read the wrapper and update the ENDPOINT fallback
+            let wrapperContent = fs.readFileSync(wrapperPath, 'utf-8');
+            // Replace the hardcoded endpoint in the fallback
+            wrapperContent = wrapperContent.replace(/const ENDPOINT = process\.env\.MEMORY_SERVICE_ENDPOINT \|\| '[^']+'/, `const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}'`);
+            fs.writeFileSync(wrapperPath, wrapperContent);
+            SafeLogger_1.logger.info('[Main] Updated MCP wrapper with dynamic endpoint');
+        }
+        // Update Claude Code MCP configuration
+        const claudeMcpPath = path.join(os.homedir(), '.claude', '.mcp.json');
+        if (fs.existsSync(claudeMcpPath)) {
+            try {
+                const claudeMcp = JSON.parse(fs.readFileSync(claudeMcpPath, 'utf-8'));
+                if ((_a = claudeMcp.servers) === null || _a === void 0 ? void 0 : _a['hive-memory-service']) {
+                    const claudeToken = (_c = (_b = config['claude-code']) === null || _b === void 0 ? void 0 : _b.memoryService) === null || _c === void 0 ? void 0 : _c.token;
+                    if (claudeToken) {
+                        claudeMcp.servers['hive-memory-service'].env = {
+                            MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+                            MEMORY_SERVICE_TOKEN: claudeToken
+                        };
+                        fs.writeFileSync(claudeMcpPath, JSON.stringify(claudeMcp, null, 2));
+                        SafeLogger_1.logger.info('[Main] Updated Claude Code MCP configuration');
+                    }
+                }
+            }
+            catch (err) {
+                SafeLogger_1.logger.error('[Main] Failed to update Claude MCP config:', err);
+            }
+        }
+        // Update or create Grok MCP configuration
+        const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
+        const grokToken = (_e = (_d = config['grok']) === null || _d === void 0 ? void 0 : _d.memoryService) === null || _e === void 0 ? void 0 : _e.token;
+        if (grokToken) {
+            try {
+                let grokMcp = { servers: {} };
+                // Read existing config if it exists
+                if (fs.existsSync(grokMcpPath)) {
+                    try {
+                        grokMcp = JSON.parse(fs.readFileSync(grokMcpPath, 'utf-8'));
+                    }
+                    catch (_f) {
+                        grokMcp = { servers: {} };
+                    }
+                }
+                // Add or update the memory service server
+                grokMcp.servers['hive-memory-service'] = {
+                    transport: 'stdio',
+                    command: 'node',
+                    args: [wrapperPath],
+                    env: {
+                        MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+                        MEMORY_SERVICE_TOKEN: grokToken
+                    }
+                };
+                // Ensure directory exists
+                const grokDir = path.dirname(grokMcpPath);
+                if (!fs.existsSync(grokDir)) {
+                    fs.mkdirSync(grokDir, { recursive: true });
+                }
+                fs.writeFileSync(grokMcpPath, JSON.stringify(grokMcp, null, 2));
+                SafeLogger_1.logger.info('[Main] Updated/Created Grok MCP configuration');
+            }
+            catch (err) {
+                SafeLogger_1.logger.error('[Main] Failed to update Grok MCP config:', err);
+            }
+        }
+        // We could add similar updates for other tools here if they support MCP
+    }
+    catch (error) {
+        SafeLogger_1.logger.error('[Main] Failed to update MCP configurations:', error);
+    }
+}
 // Initialize ProcessManager and register all managed processes
 const initializeProcessManager = () => {
     // Register Memory Service configuration with ts-node
@@ -862,9 +962,15 @@ const initializeProcessManager = () => {
         restartDelay: 500 // Reduced for faster recovery
         // Health checks disabled - causing startup issues
     });
-    // Register WebSocket Consensus Backend with full port flexibility
+    // Register WebSocket Consensus Backend with bundled Python support
     const consensusBackendPath = path.join('/Users/veronelazio/Developer/Private/hive', 'target', 'debug', 'hive-backend-server-enhanced');
-    console.log('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
+    SafeLogger_1.logger.info('[ProcessManager] Registering WebSocket backend at:', consensusBackendPath);
+    // For now, use the actual venv Python from the hive directory
+    // TODO: In production, bundle a portable Python distribution
+    const bundledPythonPath = '/Users/veronelazio/Developer/Private/hive/venv/bin/python3';
+    const bundledModelScript = path.join(electron_1.app.getAppPath(), 'resources', 'python-runtime', 'models', 'model_service.py');
+    SafeLogger_1.logger.info('[ProcessManager] Bundled Python path:', bundledPythonPath);
+    SafeLogger_1.logger.info('[ProcessManager] Bundled model script:', bundledModelScript);
     processManager.registerProcess({
         name: 'websocket-backend',
         scriptPath: consensusBackendPath,
@@ -872,7 +978,9 @@ const initializeProcessManager = () => {
         env: {
             PORT: '8765',
             RUST_LOG: 'info',
-            NODE_ENV: 'development'
+            NODE_ENV: 'development',
+            HIVE_BUNDLED_PYTHON: bundledPythonPath,
+            HIVE_BUNDLED_MODEL_SCRIPT: bundledModelScript
         },
         port: 8765,
         alternativePorts: Array.from({ length: 100 }, (_, i) => 8765 + i + 1),
@@ -885,8 +993,10 @@ const initializeProcessManager = () => {
     processManager.on('process:message', (name, msg) => {
         if (name === 'memory-service') {
             if (msg.type === 'ready') {
-                console.log('[Main] Memory Service ready on port:', msg.port);
+                SafeLogger_1.logger.info('[Main] Memory Service ready on port:', msg.port);
                 memoryServicePort = msg.port || memoryServicePort;
+                // Update MCP configurations for all tools with the actual dynamic port
+                updateAllMCPConfigurations(memoryServicePort);
             }
             else if (msg.type === 'db-query') {
                 handleMemoryServiceDbQuery(msg);
@@ -894,7 +1004,7 @@ const initializeProcessManager = () => {
         }
         else if (name === 'websocket-backend') {
             if (msg.type === 'ready') {
-                console.log('[Main] WebSocket backend ready on port:', msg.port);
+                SafeLogger_1.logger.info('[Main] WebSocket backend ready on port:', msg.port);
                 // Store the actual port for WebSocket connections
                 websocketBackendPort = msg.port;
             }
@@ -902,15 +1012,15 @@ const initializeProcessManager = () => {
     });
     // Listen for process status changes
     processManager.on('process:crashed', (name) => {
-        console.error(`[Main] Process ${name} crashed`);
+        SafeLogger_1.logger.error(`[Main] Process ${name} crashed`);
         mainWindow === null || mainWindow === void 0 ? void 0 : mainWindow.webContents.send('process-status', { name, status: 'crashed' });
     });
     processManager.on('process:started', (name) => {
-        console.log(`[Main] Process ${name} started`);
+        SafeLogger_1.logger.info(`[Main] Process ${name} started`);
         mainWindow === null || mainWindow === void 0 ? void 0 : mainWindow.webContents.send('process-status', { name, status: 'running' });
     });
     processManager.on('process:unhealthy', (name, error) => {
-        console.error(`[Main] Process ${name} health check failed:`, error.message);
+        SafeLogger_1.logger.error(`[Main] Process ${name} health check failed:`, error.message);
         mainWindow === null || mainWindow === void 0 ? void 0 : mainWindow.webContents.send('process-health', { name, healthy: false, error: error.message });
     });
 };
@@ -957,14 +1067,14 @@ const sendToMemoryService = (message) => {
         processInfo.process.send(message);
     }
     else {
-        console.error('[Main] Memory Service process not available for IPC');
+        SafeLogger_1.logger.error('[Main] Memory Service process not available for IPC');
     }
 };
 // Handle database queries from Memory Service
 const handleMemoryServiceDbQuery = (msg) => {
-    console.log('[Main] Received db-query from Memory Service:', msg.sql);
+    SafeLogger_1.logger.info('[Main] Received db-query from Memory Service:', msg.sql);
     if (!db) {
-        console.error('[Main] Database not initialized');
+        SafeLogger_1.logger.error('[Main] Database not initialized');
         sendToMemoryService({
             type: 'db-result',
             id: msg.id,
@@ -975,7 +1085,7 @@ const handleMemoryServiceDbQuery = (msg) => {
     }
     // Execute query with callback-based sqlite3
     db.all(msg.sql, msg.params, (error, rows) => {
-        console.log('[Main] Database query result:', error ? `Error: ${error.message}` : `${(rows === null || rows === void 0 ? void 0 : rows.length) || 0} rows`);
+        SafeLogger_1.logger.info('[Main] Database query result:', error ? `Error: ${error.message}` : `${(rows === null || rows === void 0 ? void 0 : rows.length) || 0} rows`);
         sendToMemoryService({
             type: 'db-result',
             id: msg.id,
@@ -986,19 +1096,19 @@ const handleMemoryServiceDbQuery = (msg) => {
 };
 // Register Memory Service IPC handlers
 const registerMemoryServiceHandlers = () => {
-    console.log('[Main] Registering Memory Service IPC handlers');
+    SafeLogger_1.logger.info('[Main] Registering Memory Service IPC handlers');
     electron_1.ipcMain.handle('memory-service-start', () => __awaiter(void 0, void 0, void 0, function* () {
-        console.log('[Main] IPC: memory-service-start');
+        SafeLogger_1.logger.info('[Main] IPC: memory-service-start');
         const status = processManager.getProcessStatus('memory-service');
         if (status && status.status === 'running') {
-            console.log('[Main] Memory Service already running');
+            SafeLogger_1.logger.info('[Main] Memory Service already running');
             return true;
         }
         try {
-            console.log('[Main] Starting Memory Service as child process...');
+            SafeLogger_1.logger.info('[Main] Starting Memory Service as child process...');
             // Use ts-node to run TypeScript directly from source directory
             const scriptPath = path.join(electron_1.app.getAppPath(), 'src', 'memory-service', 'index.ts');
-            console.log('[Main] Memory Service script path:', scriptPath);
+            SafeLogger_1.logger.info('[Main] Memory Service script path:', scriptPath);
             // Start using ProcessManager
             const started = yield processManager.startProcess('memory-service');
             if (started) {
@@ -1011,18 +1121,18 @@ const registerMemoryServiceHandlers = () => {
             return started;
         }
         catch (error) {
-            console.error('[Main] Failed to start Memory Service:', error);
+            SafeLogger_1.logger.error('[Main] Failed to start Memory Service:', error);
             return false;
         }
     }));
     electron_1.ipcMain.handle('memory-service-stop', () => __awaiter(void 0, void 0, void 0, function* () {
-        console.log('[Main] IPC: memory-service-stop');
+        SafeLogger_1.logger.info('[Main] IPC: memory-service-stop');
         return yield processManager.stopProcess('memory-service');
     }));
     electron_1.ipcMain.handle('memory-service-status', () => __awaiter(void 0, void 0, void 0, function* () {
         const status = processManager.getProcessStatus('memory-service');
         const isRunning = (status === null || status === void 0 ? void 0 : status.status) === 'running';
-        console.log('[Main] IPC: memory-service-status, result:', isRunning);
+        SafeLogger_1.logger.info('[Main] IPC: memory-service-status, result:', isRunning);
         return isRunning;
     }));
     electron_1.ipcMain.handle('memory-service-stats', () => __awaiter(void 0, void 0, void 0, function* () {
@@ -1033,7 +1143,7 @@ const registerMemoryServiceHandlers = () => {
             }
         }
         catch (error) {
-            console.error('[Main] Failed to get memory stats:', error);
+            SafeLogger_1.logger.error('[Main] Failed to get memory stats:', error);
         }
         // Return default stats if service is not available
         return {
@@ -1054,7 +1164,7 @@ const registerMemoryServiceHandlers = () => {
             }
         }
         catch (error) {
-            console.error('[Main] Failed to get connected tools:', error);
+            SafeLogger_1.logger.error('[Main] Failed to get connected tools:', error);
         }
         return [];
     }));
@@ -1067,189 +1177,1399 @@ const registerMemoryServiceHandlers = () => {
             }
         }
         catch (error) {
-            console.error('[Main] Failed to get activity stream:', error);
+            SafeLogger_1.logger.error('[Main] Failed to get activity stream:', error);
         }
         return [];
     }));
 };
-// ========== CLI TOOLS MANAGEMENT ==========
-// Initialize CLI Tools Manager
+// ========== CLI TOOLS MANAGEMENT (DEPRECATED - NOW IN registerSimpleCliToolHandlers) ==========
+// Initialize CLI Tools Manager (DEPRECATED - using singleton pattern now)
+/* DEPRECATED - Now using singleton pattern in registerSimpleCliToolHandlers()
 const initializeCliToolsManager = () => {
-    if (!db) {
-        console.error('[Main] Database not initialized for CLI Tools Manager');
-        return;
+  if (!db) {
+    logger.error('[Main] Database not initialized for CLI Tools Manager');
+    return;
+  }
+  
+  cliToolsManager = new CliToolsManager(db);
+  
+  // Set up event listeners
+  cliToolsManager.on('install-progress', (progress) => {
+    // Forward progress to renderer
+    if (mainWindow) {
+      mainWindow.webContents.send('cli-install-progress', progress);
     }
-    cliToolsManager = new CliToolsManager_1.CliToolsManager(db);
-    // Set up event listeners
-    cliToolsManager.on('install-progress', (progress) => {
-        // Forward progress to renderer
-        if (mainWindow) {
-            mainWindow.webContents.send('cli-install-progress', progress);
-        }
-    });
-    cliToolsManager.on('update-available', (info) => {
-        // Notify renderer about available updates
-        if (mainWindow) {
-            mainWindow.webContents.send('cli-update-available', info);
-        }
-    });
-    // Start automatic update checking
-    cliToolsManager.startAutoUpdateCheck();
-    // Register IPC handlers
-    registerCliToolsHandlers();
-    console.log('[Main] CLI Tools Manager initialized');
+  });
+  
+  cliToolsManager.on('update-available', (info) => {
+    // Notify renderer about available updates
+    if (mainWindow) {
+      mainWindow.webContents.send('cli-update-available', info);
+    }
+  });
+  
+  // Start automatic update checking
+  cliToolsManager.startAutoUpdateCheck();
+  
+  // Register IPC handlers
+  registerCliToolsHandlers();
+  
+  logger.info('[Main] CLI Tools Manager initialized');
 };
-// Register CLI Tools IPC handlers
+*/
+// Register CLI Tools IPC handlers (DEPRECATED - duplicate handlers now exist below)
+/* DEPRECATED - These handlers conflict with the new singleton implementation below
 const registerCliToolsHandlers = () => {
-    // Get all tool statuses
-    electron_1.ipcMain.handle('cli-tools-get-all-status', () => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return {};
-        const statuses = yield cliToolsManager.getAllStatuses();
-        return Object.fromEntries(statuses);
-    }));
-    // Get specific tool status
-    electron_1.ipcMain.handle('cli-tools-check-installed', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return false;
-        return yield cliToolsManager.checkInstalled(toolId);
-    }));
-    // Install a tool
-    electron_1.ipcMain.handle('cli-tools-install', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            throw new Error('CLI Tools Manager not initialized');
-        yield cliToolsManager.install(toolId);
-        return { success: true };
-    }));
-    // Uninstall a tool
-    electron_1.ipcMain.handle('cli-tools-uninstall', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            throw new Error('CLI Tools Manager not initialized');
-        yield cliToolsManager.uninstall(toolId);
-        return { success: true };
-    }));
-    // Update a tool
-    electron_1.ipcMain.handle('cli-tools-update', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            throw new Error('CLI Tools Manager not initialized');
-        yield cliToolsManager.update(toolId);
-        return { success: true };
-    }));
-    // Check for updates for a single tool
-    electron_1.ipcMain.handle('cli-tools-check-update', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return false;
-        return yield cliToolsManager.checkForUpdates(toolId);
-    }));
-    // Check for updates for all tools
-    electron_1.ipcMain.handle('cli-tools-check-all-updates', () => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return {};
-        const updates = yield cliToolsManager.checkAllUpdates();
-        return Object.fromEntries(updates);
-    }));
-    // Configure a tool (e.g., auth)
-    electron_1.ipcMain.handle('cli-tools-configure', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            throw new Error('CLI Tools Manager not initialized');
-        yield cliToolsManager.configureTool(toolId);
-        return { success: true };
-    }));
-    // Cancel installation
-    electron_1.ipcMain.handle('cli-tools-cancel-install', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return;
-        cliToolsManager.cancelInstallation(toolId);
-        return { success: true };
-    }));
-    // Get installation logs
-    electron_1.ipcMain.handle('cli-tools-get-logs', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return [];
-        return cliToolsManager.getInstallationLogs(toolId);
-    }));
-    // Update settings
-    electron_1.ipcMain.handle('cli-tools-update-settings', (_, settings) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return;
-        cliToolsManager.updateSettings(settings);
-        return { success: true };
-    }));
-    // Get tool configuration
-    electron_1.ipcMain.handle('cli-tools-get-config', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return null;
-        return cliToolsManager.getTool(toolId);
-    }));
-    // Get all tools
-    electron_1.ipcMain.handle('cli-tools-get-all', () => __awaiter(void 0, void 0, void 0, function* () {
-        if (!cliToolsManager)
-            return {};
-        const tools = cliToolsManager.getAllTools();
-        return Object.fromEntries(tools);
-    }));
-    // Select directory (for custom install path)
-    electron_1.ipcMain.handle('select-directory', () => __awaiter(void 0, void 0, void 0, function* () {
-        const result = yield electron_1.dialog.showOpenDialog({
-            properties: ['openDirectory', 'createDirectory']
-        });
-        return result.canceled ? null : result.filePaths[0];
-    }));
-    // Forward progress events to renderer
-    if (cliToolsManager) {
-        cliToolsManager.on('install-progress', (data) => {
-            if (mainWindow) {
-                mainWindow.webContents.send('cli-tool-progress', data);
-            }
-        });
-        cliToolsManager.on('update-available', (data) => {
-            if (mainWindow) {
-                mainWindow.webContents.send('cli-tool-update-available', data);
-            }
-        });
-    }
+  // Get all tool statuses
+  ipcMain.handle('cli-tools-get-all-status', async () => {
+    if (!cliToolsManager) return {};
+    const statuses = await cliToolsManager.getAllStatuses();
+    return Object.fromEntries(statuses);
+  });
+  
+  // Get specific tool status
+  ipcMain.handle('cli-tools-check-installed', async (_, toolId: string) => {
+    if (!cliToolsManager) return false;
+    return await cliToolsManager.checkInstalled(toolId);
+  });
+  
+  // Install a tool
+  ipcMain.handle('cli-tools-install', async (_, toolId: string) => {
+    if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
+    await cliToolsManager.install(toolId);
+    return { success: true };
+  });
+  
+  // Uninstall a tool
+  ipcMain.handle('cli-tools-uninstall', async (_, toolId: string) => {
+    if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
+    await cliToolsManager.uninstall(toolId);
+    return { success: true };
+  });
+  
+  // Update a tool
+  ipcMain.handle('cli-tools-update', async (_, toolId: string) => {
+    if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
+    await cliToolsManager.update(toolId);
+    return { success: true };
+  });
+  
+  // Check for updates for a single tool
+  ipcMain.handle('cli-tools-check-update', async (_, toolId: string) => {
+    if (!cliToolsManager) return false;
+    return await cliToolsManager.checkForUpdates(toolId);
+  });
+  
+  // Check for updates for all tools
+  ipcMain.handle('cli-tools-check-all-updates', async () => {
+    if (!cliToolsManager) return {};
+    const updates = await cliToolsManager.checkAllUpdates();
+    return Object.fromEntries(updates);
+  });
+  
+  // Configure a tool (e.g., auth)
+  ipcMain.handle('cli-tools-configure', async (_, toolId: string) => {
+    if (!cliToolsManager) throw new Error('CLI Tools Manager not initialized');
+    await cliToolsManager.configureTool(toolId);
+    return { success: true };
+  });
+  
+  // Cancel installation
+  ipcMain.handle('cli-tools-cancel-install', async (_, toolId: string) => {
+    if (!cliToolsManager) return;
+    cliToolsManager.cancelInstallation(toolId);
+    return { success: true };
+  });
+  
+  // Get installation logs
+  ipcMain.handle('cli-tools-get-logs', async (_, toolId: string) => {
+    if (!cliToolsManager) return [];
+    return cliToolsManager.getInstallationLogs(toolId);
+  });
+  
+  // Update settings
+  ipcMain.handle('cli-tools-update-settings', async (_, settings: any) => {
+    if (!cliToolsManager) return;
+    cliToolsManager.updateSettings(settings);
+    return { success: true };
+  });
+  
+  // Get tool configuration
+  ipcMain.handle('cli-tools-get-config', async (_, toolId: string) => {
+    if (!cliToolsManager) return null;
+    return cliToolsManager.getTool(toolId);
+  });
+  
+  // Get all tools
+  ipcMain.handle('cli-tools-get-all', async () => {
+    if (!cliToolsManager) return {};
+    const tools = cliToolsManager.getAllTools();
+    return Object.fromEntries(tools);
+  });
+  
+  // Select directory (for custom install path)
+  ipcMain.handle('select-directory', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory']
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  
+  // Forward progress events to renderer
+  if (cliToolsManager) {
+    cliToolsManager.on('install-progress', (data: any) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('cli-tool-progress', data);
+      }
+    });
+    
+    cliToolsManager.on('update-available', (data: any) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('cli-tool-update-available', data);
+      }
+    });
+  }
 };
+*/
+// Simple CLI tool detection function - DEPRECATED, using cliToolsDetector instead
+/* const detectCliToolSimple = async (toolId: string): Promise<any> => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  
+  // Map tool IDs to commands
+  const toolCommands: Record<string, string> = {
+    'claude-code': 'claude',
+    'aider': 'aider',
+    'cursor': 'cursor',
+    'continue': 'continue',
+    'codewhisperer': 'aws',
+    'cody': 'cody',
+    'qwen-code': 'qwen',
+    'gemini-cli': 'gemini'
+  };
+  
+  const command = toolCommands[toolId];
+  if (!command) return null;
+  
+  try {
+    // Add common paths to PATH for detection
+    const pathAdditions = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
+    const enhancedPath = [...new Set([...pathAdditions, ...(process.env.PATH || '').split(':')])].join(':');
+    
+    // Try to detect the tool with enhanced PATH
+    const { stdout } = await execAsync(`which ${command}`, { env: { ...process.env, PATH: enhancedPath } });
+    const path = stdout.trim();
+    
+    // Try to get version
+    let version = 'unknown';
+    try {
+      const { stdout: versionOut } = await execAsync(`${command} --version 2>&1`, { env: { ...process.env, PATH: enhancedPath } });
+      // Extract version from output (different tools have different formats)
+      const versionMatch = versionOut.match(/\d+\.\d+\.\d+/) || versionOut.match(/\d+\.\d+/);
+      if (versionMatch) {
+        version = versionMatch[0];
+      } else if (versionOut.includes('(Claude Code)')) {
+        // Special handling for Claude Code
+        const match = versionOut.match(/^([\d.]+)/);
+        if (match) version = match[1];
+      }
+      logger.info(`[CLI Detector] ${toolId} version output: ${versionOut.substring(0, 100)}`);
+      logger.info(`[CLI Detector] Detected version: ${version}`);
+    } catch (e) {
+      // Version command failed, but tool exists
+    }
+    
+    return {
+      id: toolId,
+      name: toolId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      installed: true,
+      version,
+      path,
+      memoryServiceConnected: false
+    };
+  } catch (error) {
+    // Tool not found
+    return {
+      id: toolId,
+      name: toolId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      installed: false
+    };
+  }
+}; */
 // Register simple CLI tool detection handlers (without the complex CliToolsManager)
 const registerSimpleCliToolHandlers = () => {
-    console.log('[Main] Registering simple CLI tool detection handlers');
+    SafeLogger_1.logger.info('[Main] Registering simple CLI tool detection handlers');
     // CLI Tool Detection Handlers
     electron_1.ipcMain.handle('cli-tool-detect', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
-        console.log(`[Main] Detecting CLI tool: ${toolId}`);
+        SafeLogger_1.logger.info(`[Main] Detecting CLI tool: ${toolId}`);
         try {
-            const status = yield (0, cli_tool_detector_1.getCachedToolStatus)(toolId);
+            const status = yield detector_1.cliToolsDetector.detectTool(toolId);
             return status;
         }
         catch (error) {
-            console.error(`[Main] Error detecting CLI tool ${toolId}:`, error);
+            SafeLogger_1.logger.error(`[Main] Error detecting CLI tool ${toolId}:`, error);
             return null;
         }
     }));
     electron_1.ipcMain.handle('cli-tools-detect-all', () => __awaiter(void 0, void 0, void 0, function* () {
-        console.log('[Main] Detecting all CLI tools...');
+        SafeLogger_1.logger.info('[Main] Detecting all CLI tools...');
         try {
-            const tools = yield (0, cli_tool_detector_1.detectAllCliTools)();
-            return tools;
+            const results = yield detector_1.cliToolsDetector.detectAllTools();
+            return results;
         }
         catch (error) {
-            console.error('[Main] Error detecting CLI tools:', error);
+            SafeLogger_1.logger.error('[Main] Error detecting CLI tools:', error);
             return [];
         }
     }));
+    // Install CLI tool
+    electron_1.ipcMain.handle('cli-tool-install', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b, _c, _d;
+        SafeLogger_1.logger.info(`[Main] Installing CLI tool: ${toolId}`);
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            // Get tool configuration from registry
+            const toolConfig = cli_tools_1.CLI_TOOLS_REGISTRY[toolId];
+            if (!toolConfig) {
+                SafeLogger_1.logger.error(`[Main] Unknown tool ID for installation: ${toolId}`);
+                return { success: false, error: `Unknown tool: ${toolId}` };
+            }
+            if (!toolConfig.installCommand) {
+                SafeLogger_1.logger.error(`[Main] No installation command defined for: ${toolId}`);
+                return { success: false, error: `Installation not available for ${toolConfig.name}` };
+            }
+            // Enhanced PATH for finding package managers
+            const enhancedPath = `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`;
+            SafeLogger_1.logger.info(`[Main] Running installation command: ${toolConfig.installCommand}`);
+            try {
+                // Run the installation command
+                const { stdout, stderr } = yield execAsync(toolConfig.installCommand, {
+                    env: Object.assign(Object.assign({}, process.env), { PATH: enhancedPath }),
+                    timeout: 120000 // 2 minutes timeout for installation
+                });
+                SafeLogger_1.logger.info(`[Main] Installation output: ${stdout}`);
+                if (stderr && !stderr.includes('WARN') && !stderr.includes('warning')) {
+                    SafeLogger_1.logger.warn(`[Main] Installation stderr: ${stderr}`);
+                }
+                // Verify installation by checking if command exists
+                let version = 'Unknown';
+                try {
+                    if (toolConfig.versionCommand) {
+                        const versionResult = yield execAsync(toolConfig.versionCommand, {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: enhancedPath }),
+                            timeout: 5000
+                        });
+                        // Extract version based on tool
+                        if (toolId === 'gemini-cli') {
+                            const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
+                            version = match ? match[1] : 'Unknown';
+                        }
+                        else if (toolId === 'claude-code') {
+                            const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
+                            version = match ? match[1] : 'Unknown';
+                        }
+                        else if (toolId === 'qwen-code') {
+                            const match = versionResult.stdout.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
+                            version = match ? match[1] : 'Unknown';
+                        }
+                        else if (toolId === 'openai-codex') {
+                            const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
+                            version = match ? match[1] : 'Unknown';
+                        }
+                        else if (toolId === 'cline') {
+                            // Cline outputs just version number like "0.0.1"
+                            const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+                            version = match ? match[1] : 'Unknown';
+                        }
+                        else if (toolId === 'grok') {
+                            // Grok CLI outputs version number like "0.0.23"
+                            const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+                            version = match ? match[1] : 'Unknown';
+                        }
+                        else {
+                            // Generic version extraction
+                            const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+                            version = match ? match[1] : 'Unknown';
+                        }
+                    }
+                }
+                catch (versionError) {
+                    SafeLogger_1.logger.warn(`[Main] Could not get version after installation:`, versionError);
+                }
+                // CRITICAL FIX: Clear the detector cache for this tool so UI refresh works
+                SafeLogger_1.logger.info(`[Main] Clearing detector cache for ${toolId} after successful install`);
+                detector_1.cliToolsDetector.clearCache(toolId);
+                // SEAMLESS CONFIGURATION: Automatically configure the tool after installation
+                SafeLogger_1.logger.info(`[Main] Automatically configuring ${toolId} after installation...`);
+                // 1. Special configuration for Cline - set up OpenRouter API key
+                if (toolId === 'cline') {
+                    SafeLogger_1.logger.info('[Main] Configuring Cline with OpenRouter API key from Hive');
+                    if (db) {
+                        const apiKeyRow = yield new Promise((resolve) => {
+                            db.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+                                resolve(row);
+                            });
+                        });
+                        if (apiKeyRow && apiKeyRow.value) {
+                            const openrouterKey = apiKeyRow.value;
+                            const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+                            if (!fs.existsSync(clineConfigDir)) {
+                                fs.mkdirSync(clineConfigDir, { recursive: true });
+                            }
+                            // Create Cline settings file
+                            const clineSettingsPath = path.join(clineConfigDir, 'cline_cli_settings.json');
+                            const clineSettings = {
+                                globalState: {
+                                    apiProvider: 'openrouter',
+                                    openRouterApiKey: openrouterKey,
+                                    apiModelId: '',
+                                    autoApprovalSettings: {
+                                        enabled: false,
+                                        actions: {
+                                            readFiles: false,
+                                            editFiles: false,
+                                            executeSafeCommands: false,
+                                            useMcp: false
+                                        },
+                                        maxRequests: 20
+                                    }
+                                },
+                                settings: {
+                                    'cline.enableCheckpoints': false
+                                }
+                            };
+                            fs.writeFileSync(clineSettingsPath, JSON.stringify(clineSettings, null, 2));
+                            // Create keys file
+                            const keysPath = path.join(clineConfigDir, 'keys.json');
+                            fs.writeFileSync(keysPath, JSON.stringify({ openRouterApiKey: openrouterKey }, null, 2));
+                            // Create storage directory
+                            const storageDir = path.join(clineConfigDir, 'storage');
+                            if (!fs.existsSync(storageDir)) {
+                                fs.mkdirSync(storageDir, { recursive: true });
+                            }
+                            SafeLogger_1.logger.info('[Main] Cline configured with OpenRouter API key');
+                        }
+                    }
+                }
+                // 2. Register with Memory Service for all tools (except those that don't need it)
+                const toolsWithoutMemoryService = ['cursor', 'continue', 'codewhisperer', 'cody'];
+                if (!toolsWithoutMemoryService.includes(toolId)) {
+                    SafeLogger_1.logger.info(`[Main] Registering ${toolId} with Memory Service`);
+                    try {
+                        // Get memory service configuration
+                        const memoryServiceEndpoint = process.env.MEMORY_SERVICE_ENDPOINT || 'http://localhost:11437';
+                        const token = crypto.randomBytes(32).toString('hex');
+                        // Create MCP wrapper for the tool
+                        const mcpWrapperDir = path.join(os.homedir(), '.hive', 'mcp-wrappers');
+                        if (!fs.existsSync(mcpWrapperDir)) {
+                            fs.mkdirSync(mcpWrapperDir, { recursive: true });
+                        }
+                        const wrapperPath = path.join(mcpWrapperDir, `${toolId}-memory-service.js`);
+                        const wrapperContent = `#!/usr/bin/env node
+// Auto-generated MCP wrapper for ${toolId} to connect with Hive Memory Service
+
+const { McpServer } = require('@modelcontextprotocol/server');
+
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}';
+const TOKEN = process.env.MEMORY_SERVICE_TOKEN || '${token}';
+
+class MemoryServiceMCP extends McpServer {
+  constructor() {
+    super({
+      name: 'hive-memory-service',
+      version: '1.0.0',
+      description: 'Hive Consensus Memory Service - AI memory and learning system'
+    });
+  }
+
+  async start() {
+    await super.start();
+    
+    this.registerTool({
+      name: 'query_memory',
+      description: 'Query the AI memory system for relevant learnings',
+      parameters: {
+        query: { type: 'string', required: true },
+        limit: { type: 'number', default: 5 }
+      },
+      handler: this.queryMemory.bind(this)
+    });
+
+    this.registerTool({
+      name: 'contribute_learning',
+      description: 'Contribute a new learning to the memory system',
+      parameters: {
+        type: { type: 'string', required: true },
+        category: { type: 'string', required: true },
+        content: { type: 'string', required: true },
+        code: { type: 'string' }
+      },
+      handler: this.contributeLearning.bind(this)
+    });
+  }
+
+  async queryMemory({ query, limit = 5 }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        client: '${toolId}',
+        context: { file: process.cwd() },
+        query,
+        options: { limit }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async contributeLearning({ type, category, content, code }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        source: '${toolId}',
+        learning: {
+          type,
+          category,
+          content,
+          code,
+          context: { file: process.cwd(), success: true }
+        }
+      })
+    });
+
+    return await response.json();
+  }
+}
+
+// Start the MCP server
+const server = new MemoryServiceMCP();
+server.start();
+`;
+                        fs.writeFileSync(wrapperPath, wrapperContent);
+                        fs.chmodSync(wrapperPath, '755');
+                        // Update MCP configuration for Claude Code
+                        const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
+                        let mcpConfig = { servers: {} };
+                        if (fs.existsSync(mcpConfigPath)) {
+                            try {
+                                mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+                            }
+                            catch (_e) {
+                                mcpConfig = { servers: {} };
+                            }
+                        }
+                        // Add or update the memory service server
+                        mcpConfig.servers['hive-memory-service'] = {
+                            command: 'node',
+                            args: [wrapperPath],
+                            env: {
+                                MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+                                MEMORY_SERVICE_TOKEN: token
+                            },
+                            description: 'Hive Consensus Memory Service - AI memory and learning system'
+                        };
+                        // Ensure directory exists
+                        const mcpDir = path.dirname(mcpConfigPath);
+                        if (!fs.existsSync(mcpDir)) {
+                            fs.mkdirSync(mcpDir, { recursive: true });
+                        }
+                        fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+                        SafeLogger_1.logger.info(`[Main] Successfully registered ${toolId} with Memory Service`);
+                    }
+                    catch (configError) {
+                        SafeLogger_1.logger.warn(`[Main] Could not configure Memory Service for ${toolId}:`, configError);
+                        // Non-fatal error - tool is still installed
+                    }
+                }
+                SafeLogger_1.logger.info(`[Main] ${toolConfig.name} installed and configured successfully, version: ${version}`);
+                return { success: true, version, message: `Installed ${toolConfig.name} version ${version}` };
+            }
+            catch (error) {
+                SafeLogger_1.logger.error(`[Main] Failed to install ${toolConfig.name}:`, error);
+                // Check for specific error conditions
+                if (((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('EACCES')) || ((_b = error.message) === null || _b === void 0 ? void 0 : _b.includes('permission'))) {
+                    return {
+                        success: false,
+                        error: `Permission denied. Try running: sudo ${toolConfig.installCommand}`
+                    };
+                }
+                if ((_c = error.message) === null || _c === void 0 ? void 0 : _c.includes('npm: command not found')) {
+                    return {
+                        success: false,
+                        error: 'npm not found. Please install Node.js first.'
+                    };
+                }
+                if ((_d = error.message) === null || _d === void 0 ? void 0 : _d.includes('pip: command not found')) {
+                    return {
+                        success: false,
+                        error: 'pip not found. Please install Python first.'
+                    };
+                }
+                return { success: false, error: error.message || 'Installation failed' };
+            }
+        }
+        catch (error) {
+            SafeLogger_1.logger.error(`[Main] Unexpected error installing ${toolId}:`, error);
+            return { success: false, error: error.message || 'Unexpected error occurred' };
+        }
+    }));
+    // Update CLI tool
+    electron_1.ipcMain.handle('cli-tool-update', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
+        var _f, _g, _h, _j;
+        SafeLogger_1.logger.info(`[Main] Updating CLI tool: ${toolId}`);
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            // Map tool IDs to their NPM packages
+            const npmPackages = {
+                'claude-code': '@anthropic-ai/claude-code',
+                'gemini-cli': '@google/gemini-cli',
+                'qwen-code': '@qwen-code/qwen-code',
+                'openai-codex': '@openai/codex',
+                'cline': '@yaegaki/cline-cli',
+                'grok': '@vibe-kit/grok-cli'
+            };
+            const packageName = npmPackages[toolId];
+            if (!packageName) {
+                SafeLogger_1.logger.error(`[Main] Unknown tool ID for update: ${toolId}`);
+                return { success: false, error: `Unknown tool: ${toolId}` };
+            }
+            // For Python-based tools like aider, use pip
+            if (toolId === 'aider') {
+                SafeLogger_1.logger.info(`[Main] Updating ${toolId} via pip...`);
+                const command = 'pip install --upgrade aider-chat';
+                try {
+                    const { stdout, stderr } = yield execAsync(command, {
+                        env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                    });
+                    SafeLogger_1.logger.info(`[Main] Pip update output: ${stdout}`);
+                    if (stderr && !stderr.includes('WARNING')) {
+                        SafeLogger_1.logger.warn(`[Main] Pip update stderr: ${stderr}`);
+                    }
+                    // Get updated version
+                    const versionResult = yield execAsync('aider --version', {
+                        env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                    });
+                    const version = ((_f = versionResult.stdout.trim().match(/\d+\.\d+\.\d+/)) === null || _f === void 0 ? void 0 : _f[0]) || 'Unknown';
+                    SafeLogger_1.logger.info(`[Main] ${toolId} updated successfully to version ${version}`);
+                    return { success: true, version, message: `Updated to version ${version}` };
+                }
+                catch (error) {
+                    SafeLogger_1.logger.error(`[Main] Failed to update ${toolId}:`, error);
+                    return { success: false, error: error.message || 'Update failed' };
+                }
+            }
+            // For NPM-based tools
+            SafeLogger_1.logger.info(`[Main] Updating ${toolId} via npm...`);
+            // Use npm update to get the latest version
+            const updateCommand = `npm update -g ${packageName}`;
+            try {
+                SafeLogger_1.logger.info(`[Main] Running: ${updateCommand}`);
+                const { stdout, stderr } = yield execAsync(updateCommand, {
+                    env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                });
+                SafeLogger_1.logger.info(`[Main] NPM update output: ${stdout}`);
+                if (stderr && !stderr.includes('npm WARN')) {
+                    SafeLogger_1.logger.warn(`[Main] NPM update stderr: ${stderr}`);
+                }
+                // Get the updated version
+                let version = 'Unknown';
+                try {
+                    // For Claude Code, use claude --version
+                    if (toolId === 'claude-code') {
+                        const versionResult = yield execAsync('claude --version', {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                        });
+                        // Parse version from output like "claude-code/1.0.86 darwin-arm64 node-v23.6.0"
+                        const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
+                        version = match ? match[1] : 'Unknown';
+                    }
+                    else if (toolId === 'gemini-cli') {
+                        // For Gemini CLI, use gemini --version
+                        const versionResult = yield execAsync('gemini --version', {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                        });
+                        // Parse version from output - expecting format like "gemini-cli/0.1.18" or similar
+                        const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
+                        version = match ? match[1] : 'Unknown';
+                    }
+                    else if (toolId === 'qwen-code') {
+                        // For Qwen Code, use qwen --version
+                        const versionResult = yield execAsync('qwen --version', {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                        });
+                        // Parse version from output
+                        const match = versionResult.stdout.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
+                        version = match ? match[1] : 'Unknown';
+                    }
+                    else if (toolId === 'openai-codex') {
+                        // For OpenAI Codex, use codex --version
+                        const versionResult = yield execAsync('codex --version', {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                        });
+                        // Parse version from output
+                        const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
+                        version = match ? match[1] : 'Unknown';
+                    }
+                    else if (toolId === 'cline') {
+                        // For Cline, use cline-cli --version
+                        const versionResult = yield execAsync('cline-cli --version', {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                        });
+                        // Parse version from output
+                        const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+                        version = match ? match[1] : 'Unknown';
+                    }
+                    else if (toolId === 'grok') {
+                        // For Grok CLI, use grok --version
+                        const versionResult = yield execAsync('grok --version', {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                        });
+                        // Parse version from output
+                        const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+                        version = match ? match[1] : 'Unknown';
+                    }
+                    else {
+                        // For other tools, try to get version from npm list
+                        const listResult = yield execAsync(`npm list -g ${packageName} --depth=0`, {
+                            env: Object.assign(Object.assign({}, process.env), { PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` })
+                        });
+                        const versionMatch = listResult.stdout.match(new RegExp(`${packageName}@(\\d+\\.\\d+\\.\\d+)`));
+                        version = versionMatch ? versionMatch[1] : 'Unknown';
+                    }
+                }
+                catch (versionError) {
+                    SafeLogger_1.logger.warn(`[Main] Could not get version for ${toolId}:`, versionError);
+                }
+                // CRITICAL FIX: Clear the detector cache for this tool so UI refresh works
+                SafeLogger_1.logger.info(`[Main] Clearing detector cache for ${toolId} after successful update`);
+                detector_1.cliToolsDetector.clearCache(toolId);
+                SafeLogger_1.logger.info(`[Main] ${toolId} updated successfully to version ${version}`);
+                return { success: true, version, message: `Updated to version ${version}` };
+            }
+            catch (error) {
+                SafeLogger_1.logger.error(`[Main] Failed to update ${toolId}:`, error);
+                // Check if it's a permission error
+                if (((_g = error.message) === null || _g === void 0 ? void 0 : _g.includes('EACCES')) || ((_h = error.message) === null || _h === void 0 ? void 0 : _h.includes('permission'))) {
+                    return {
+                        success: false,
+                        error: 'Permission denied. Try running the app with elevated permissions or update manually with: ' + updateCommand
+                    };
+                }
+                // Check if npm is not found
+                if ((_j = error.message) === null || _j === void 0 ? void 0 : _j.includes('npm: command not found')) {
+                    return {
+                        success: false,
+                        error: 'npm not found. Please ensure Node.js and npm are installed.'
+                    };
+                }
+                return { success: false, error: error.message || 'Update failed' };
+            }
+        }
+        catch (error) {
+            SafeLogger_1.logger.error(`[Main] Unexpected error updating ${toolId}:`, error);
+            return { success: false, error: error.message || 'Unexpected error occurred' };
+        }
+    }));
+    // Uninstall CLI tool
+    electron_1.ipcMain.handle('cli-tool-uninstall', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
+        var _k, _l, _m, _o, _p;
+        SafeLogger_1.logger.info(`[Main] Uninstalling CLI tool: ${toolId}`);
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            // Get tool configuration from registry
+            const toolConfig = cli_tools_1.CLI_TOOLS_REGISTRY[toolId];
+            if (!toolConfig) {
+                SafeLogger_1.logger.error(`[Main] Unknown tool ID for uninstall: ${toolId}`);
+                return { success: false, error: `Unknown tool: ${toolId}` };
+            }
+            // Map tool IDs to npm package names
+            const npmPackages = {
+                'claude-code': '@anthropic-ai/claude-code',
+                'gemini-cli': '@google/gemini-cli',
+                'qwen-code': '@qwen-code/qwen-code',
+                'openai-codex': '@openai/codex',
+                'cline': '@yaegaki/cline-cli',
+                'grok': '@vibe-kit/grok-cli'
+            };
+            const packageName = npmPackages[toolId];
+            if (!packageName) {
+                SafeLogger_1.logger.error(`[Main] No package mapping for tool: ${toolId}`);
+                return { success: false, error: `Cannot uninstall ${toolConfig.name}: package mapping not found` };
+            }
+            // Enhanced PATH for finding npm
+            const enhancedPath = `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`;
+            SafeLogger_1.logger.info(`[Main] Running uninstall command: npm uninstall -g ${packageName}`);
+            try {
+                // Run the uninstall command
+                const { stdout, stderr } = yield execAsync(`npm uninstall -g ${packageName}`, {
+                    env: Object.assign(Object.assign({}, process.env), { PATH: enhancedPath }),
+                    timeout: 60000 // 1 minute timeout for uninstall
+                });
+                SafeLogger_1.logger.info(`[Main] Uninstall output: ${stdout}`);
+                if (stderr && !stderr.includes('WARN') && !stderr.includes('warning')) {
+                    SafeLogger_1.logger.warn(`[Main] Uninstall stderr: ${stderr}`);
+                }
+                // Verify uninstallation by checking if command still exists
+                try {
+                    yield execAsync(`which ${toolConfig.command}`, {
+                        env: Object.assign(Object.assign({}, process.env), { PATH: enhancedPath }),
+                        timeout: 5000
+                    });
+                    // If we get here, the command still exists - uninstall may have failed
+                    SafeLogger_1.logger.warn(`[Main] Command ${toolConfig.command} still exists after uninstall`);
+                    // Try to determine if it's a different installation
+                    const { stdout: pathOutput } = yield execAsync(`which ${toolConfig.command}`, {
+                        env: Object.assign(Object.assign({}, process.env), { PATH: enhancedPath })
+                    });
+                    if (pathOutput.includes('/usr/local/bin') || pathOutput.includes('/opt/homebrew/bin')) {
+                        // It's still in a global location, uninstall might have failed
+                        return {
+                            success: false,
+                            error: `Tool appears to still be installed at ${pathOutput.trim()}. You may need to uninstall manually.`
+                        };
+                    }
+                }
+                catch (_q) {
+                    // Command not found - uninstall was successful
+                    SafeLogger_1.logger.info(`[Main] Command ${toolConfig.command} no longer exists - uninstall successful`);
+                }
+                // CRITICAL FIX: Clear the detector cache for this tool so UI refresh works
+                SafeLogger_1.logger.info(`[Main] Clearing detector cache for ${toolId} after successful uninstall`);
+                detector_1.cliToolsDetector.clearCache(toolId);
+                // Also clean up any configuration files if they exist
+                if (toolId === 'cline') {
+                    // Clean up Cline configuration
+                    const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+                    if (fs.existsSync(clineConfigDir)) {
+                        SafeLogger_1.logger.info(`[Main] Removing Cline configuration directory: ${clineConfigDir}`);
+                        try {
+                            fs.rmSync(clineConfigDir, { recursive: true, force: true });
+                        }
+                        catch (e) {
+                            SafeLogger_1.logger.warn(`[Main] Could not remove Cline config directory:`, e);
+                        }
+                    }
+                }
+                else if (toolId === 'grok') {
+                    // Optionally clean up Grok configuration (but keep API key for reinstall)
+                    SafeLogger_1.logger.info(`[Main] Keeping Grok configuration at ~/.grok for potential reinstall`);
+                }
+                SafeLogger_1.logger.info(`[Main] ${toolConfig.name} uninstalled successfully`);
+                return { success: true, message: `${toolConfig.name} has been uninstalled` };
+            }
+            catch (error) {
+                SafeLogger_1.logger.error(`[Main] Failed to uninstall ${toolConfig.name}:`, error);
+                // Check for specific error conditions
+                if (((_k = error.message) === null || _k === void 0 ? void 0 : _k.includes('EACCES')) || ((_l = error.message) === null || _l === void 0 ? void 0 : _l.includes('permission'))) {
+                    return {
+                        success: false,
+                        error: 'Permission denied. Try running the app with elevated permissions or uninstall manually with: npm uninstall -g ' + packageName
+                    };
+                }
+                // Check if npm is not found
+                if ((_m = error.message) === null || _m === void 0 ? void 0 : _m.includes('npm: command not found')) {
+                    return {
+                        success: false,
+                        error: 'npm not found. Please ensure Node.js and npm are installed.'
+                    };
+                }
+                // Check if package is not installed
+                if (((_o = error.message) === null || _o === void 0 ? void 0 : _o.includes('not found')) || ((_p = error.message) === null || _p === void 0 ? void 0 : _p.includes('missing'))) {
+                    // This might actually be a success case - tool is already not installed
+                    SafeLogger_1.logger.info(`[Main] Tool may already be uninstalled: ${error.message}`);
+                    detector_1.cliToolsDetector.clearCache(toolId);
+                    return { success: true, message: `${toolConfig.name} was not installed or has been removed` };
+                }
+                return { success: false, error: error.message || 'Uninstall failed' };
+            }
+        }
+        catch (error) {
+            SafeLogger_1.logger.error(`[Main] Unexpected error uninstalling ${toolId}:`, error);
+            return { success: false, error: error.message || 'Unexpected error occurred' };
+        }
+    }));
+    // Configure CLI tool
+    electron_1.ipcMain.handle('cli-tool-configure', (_, toolId) => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info(`[Main] Configuring CLI tool: ${toolId}`);
+        try {
+            // Special handling for Cline - automatically configure with OpenRouter API key
+            if (toolId === 'cline') {
+                SafeLogger_1.logger.info('[Main] Special configuration for Cline - using OpenRouter API key from Hive');
+                // Get OpenRouter API key from Hive's database
+                if (!db) {
+                    SafeLogger_1.logger.error('[Main] Database not initialized');
+                    return {
+                        success: false,
+                        error: 'Database not initialized. Please restart the application.'
+                    };
+                }
+                const apiKeyRow = yield new Promise((resolve, reject) => {
+                    db.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+                        if (err)
+                            reject(err);
+                        else
+                            resolve(row);
+                    });
+                });
+                if (!apiKeyRow || !apiKeyRow.value) {
+                    SafeLogger_1.logger.error('[Main] No OpenRouter API key found in Hive configuration');
+                    return {
+                        success: false,
+                        error: 'OpenRouter API key not configured in Hive. Please configure it in Settings first.'
+                    };
+                }
+                const openrouterKey = apiKeyRow.value;
+                SafeLogger_1.logger.info('[Main] Found OpenRouter API key in Hive configuration');
+                // Create Cline configuration directory if it doesn't exist
+                const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+                if (!fs.existsSync(clineConfigDir)) {
+                    fs.mkdirSync(clineConfigDir, { recursive: true });
+                }
+                // Create Cline settings file with OpenRouter configuration
+                const clineSettingsPath = path.join(clineConfigDir, 'cline_cli_settings.json');
+                // Read existing settings if they exist to preserve user preferences
+                let existingSettings = {};
+                if (fs.existsSync(clineSettingsPath)) {
+                    try {
+                        existingSettings = JSON.parse(fs.readFileSync(clineSettingsPath, 'utf-8'));
+                    }
+                    catch (e) {
+                        SafeLogger_1.logger.warn('[Main] Could not parse existing Cline settings, creating new');
+                    }
+                }
+                const clineSettings = {
+                    globalState: Object.assign(Object.assign({}, existingSettings.globalState), { apiProvider: 'openrouter', apiModelId: '', openRouterApiKey: openrouterKey, awsRegion: '', awsUseCrossRegionInference: '', awsBedrockUsePromptCache: '', awsBedrockEndpoint: '', awsProfile: '', awsUseProfile: '', vertexProjectId: '', vertexRegion: '', openAiBaseUrl: '', openAiModelId: '', openAiModelInfo: '', ollamaModelId: '', ollamaBaseUrl: '', ollamaApiOptionsCtxNum: '', lmStudioModelId: '', lmStudioBaseUrl: '', anthropicBaseUrl: '', azureApiVersion: '', openRouterModelId: '', openRouterModelInfo: '', openRouterProviderSorting: '', liteLlmBaseUrl: '', liteLlmModelId: '', qwenApiLine: '', requestyModelId: '', requestyModelInfo: '', togetherModelId: '', asksageApiUrl: '', thinkingBudgetTokens: '', reasoningEffort: '', favoritedModelIds: '', autoApprovalSettings: {
+                            enabled: false,
+                            actions: {
+                                readFiles: false,
+                                editFiles: false,
+                                executeSafeCommands: false,
+                                useMcp: false
+                            },
+                            maxRequests: 20
+                        } }),
+                    settings: {
+                        'cline.enableCheckpoints': false
+                    }
+                };
+                // Write the configuration file
+                fs.writeFileSync(clineSettingsPath, JSON.stringify(clineSettings, null, 2));
+                // Create a keys file for Cline with the OpenRouter API key
+                // Cline reads API keys from a separate keys file
+                const keysPath = path.join(clineConfigDir, 'keys.json');
+                const keysContent = {
+                    openRouterApiKey: openrouterKey
+                };
+                fs.writeFileSync(keysPath, JSON.stringify(keysContent, null, 2));
+                // Also create storage directory if it doesn't exist
+                const storageDir = path.join(clineConfigDir, 'storage');
+                if (!fs.existsSync(storageDir)) {
+                    fs.mkdirSync(storageDir, { recursive: true });
+                }
+                SafeLogger_1.logger.info('[Main] Successfully configured Cline with OpenRouter API key from Hive');
+                // Continue with Memory Service configuration for all tools
+            }
+            // 1. Get Memory Service port from ProcessManager
+            const memoryServiceInfo = processManager.getProcessStatus('memory-service');
+            const memoryServicePort = (memoryServiceInfo === null || memoryServiceInfo === void 0 ? void 0 : memoryServiceInfo.port) || 3457;
+            const memoryServiceEndpoint = `http://localhost:${memoryServicePort}`;
+            // 2. Register with Memory Service to get a token
+            const http = require('http');
+            const crypto = require('crypto');
+            const registerPromise = new Promise((resolve, reject) => {
+                const postData = JSON.stringify({
+                    toolName: toolId
+                });
+                const options = {
+                    hostname: 'localhost',
+                    port: memoryServicePort,
+                    path: '/api/v1/memory/register',
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(postData)
+                    }
+                };
+                const req = http.request(options, (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => data += chunk);
+                    res.on('end', () => {
+                        try {
+                            const result = JSON.parse(data);
+                            if (result.token) {
+                                resolve(result);
+                            }
+                            else {
+                                reject(new Error('No token received from Memory Service'));
+                            }
+                        }
+                        catch (e) {
+                            reject(e);
+                        }
+                    });
+                });
+                req.on('error', reject);
+                req.write(postData);
+                req.end();
+            });
+            const registrationResult = yield registerPromise;
+            const token = registrationResult.token;
+            // 3. Save token to cli-tools-config.json
+            const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+            let config = {};
+            if (fs.existsSync(configPath)) {
+                config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            }
+            config[toolId] = Object.assign(Object.assign({}, config[toolId]), { memoryService: {
+                    endpoint: memoryServiceEndpoint,
+                    token: token,
+                    connectedAt: new Date().toISOString()
+                } });
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+            // 4. Create MCP wrapper script
+            const wrapperPath = path.join(os.homedir(), '.hive', 'memory-service-mcp-wrapper.js');
+            const wrapperContent = `#!/usr/bin/env node
+/**
+ * MCP Wrapper for Hive Memory Service
+ * This script provides an MCP-compatible interface to the Memory Service
+ */
+
+const { Server } = require('@modelcontextprotocol/sdk');
+const fetch = require('node-fetch');
+
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}';
+const TOKEN = process.env.MEMORY_SERVICE_TOKEN;
+
+class MemoryServiceMCP extends Server {
+  constructor() {
+    super({
+      name: 'hive-memory-service',
+      version: '1.0.0',
+      description: 'Hive Consensus Memory Service'
+    });
+
+    this.registerTool({
+      name: 'query_memory',
+      description: 'Query the AI memory system for relevant learnings',
+      parameters: {
+        query: { type: 'string', required: true },
+        limit: { type: 'number', default: 5 }
+      },
+      handler: this.queryMemory.bind(this)
+    });
+
+    this.registerTool({
+      name: 'contribute_learning',
+      description: 'Contribute a new learning to the memory system',
+      parameters: {
+        type: { type: 'string', required: true },
+        category: { type: 'string', required: true },
+        content: { type: 'string', required: true },
+        code: { type: 'string' }
+      },
+      handler: this.contributeLearning.bind(this)
+    });
+  }
+
+  async queryMemory({ query, limit = 5 }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        client: '${toolId}',
+        context: { file: process.cwd() },
+        query,
+        options: { limit }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async contributeLearning({ type, category, content, code }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': '${toolId}-mcp'
+      },
+      body: JSON.stringify({
+        source: '${toolId}',
+        learning: {
+          type,
+          category,
+          content,
+          code,
+          context: { file: process.cwd(), success: true }
+        }
+      })
+    });
+
+    return await response.json();
+  }
+}
+
+// Start the MCP server
+const server = new MemoryServiceMCP();
+server.start();
+`;
+            fs.writeFileSync(wrapperPath, wrapperContent);
+            fs.chmodSync(wrapperPath, '755');
+            // 5. Update MCP configuration for Claude Code
+            const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
+            let mcpConfig = { servers: {} };
+            if (fs.existsSync(mcpConfigPath)) {
+                try {
+                    mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+                }
+                catch (_r) {
+                    mcpConfig = { servers: {} };
+                }
+            }
+            // Add or update the memory service server
+            mcpConfig.servers['hive-memory-service'] = {
+                command: 'node',
+                args: [wrapperPath],
+                env: {
+                    MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+                    MEMORY_SERVICE_TOKEN: token
+                },
+                description: 'Hive Consensus Memory Service - AI memory and learning system'
+            };
+            // Ensure directory exists
+            const mcpDir = path.dirname(mcpConfigPath);
+            if (!fs.existsSync(mcpDir)) {
+                fs.mkdirSync(mcpDir, { recursive: true });
+            }
+            fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+            // Also configure MCP for Grok if it's being installed
+            if (toolId === 'grok') {
+                const grokMcpConfigPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
+                let grokMcpConfig = { servers: {} };
+                if (fs.existsSync(grokMcpConfigPath)) {
+                    try {
+                        grokMcpConfig = JSON.parse(fs.readFileSync(grokMcpConfigPath, 'utf-8'));
+                    }
+                    catch (_s) {
+                        grokMcpConfig = { servers: {} };
+                    }
+                }
+                // Add or update the memory service server for Grok
+                grokMcpConfig.servers['hive-memory-service'] = {
+                    transport: 'stdio',
+                    command: 'node',
+                    args: [wrapperPath],
+                    env: {
+                        MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+                        MEMORY_SERVICE_TOKEN: token
+                    }
+                };
+                // Ensure Grok directory exists
+                const grokDir = path.dirname(grokMcpConfigPath);
+                if (!fs.existsSync(grokDir)) {
+                    fs.mkdirSync(grokDir, { recursive: true });
+                }
+                fs.writeFileSync(grokMcpConfigPath, JSON.stringify(grokMcpConfig, null, 2));
+                SafeLogger_1.logger.info(`[Main] Successfully configured Grok MCP with Memory Service`);
+            }
+            SafeLogger_1.logger.info(`[Main] Successfully configured ${toolId} with Memory Service`);
+            return {
+                success: true,
+                message: `${toolId} successfully connected to Memory Service`,
+                token: token.substring(0, 8) + '...' // Show partial token for confirmation
+            };
+        }
+        catch (error) {
+            SafeLogger_1.logger.error(`[Main] Failed to configure ${toolId}:`, error);
+            return {
+                success: false,
+                error: `Failed to configure: ${error.message || error}`
+            };
+        }
+    }));
+    // Check for updates
+    electron_1.ipcMain.handle('cli-tools-check-updates', () => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info('[Main] Checking for CLI tool updates');
+        // TODO: Implement update checking logic
+        return [];
+    }));
+    // Launch CLI tool with folder selection and resume detection
+    electron_1.ipcMain.handle('cli-tool-launch', (_, toolId, projectPath) => __awaiter(void 0, void 0, void 0, function* () {
+        SafeLogger_1.logger.info(`[Main] Launching CLI tool: ${toolId}${projectPath ? ` in ${projectPath}` : ''}`);
+        try {
+            // If no project path provided, show folder selection dialog
+            let selectedPath = projectPath;
+            if (!selectedPath) {
+                // Get proper tool name from registry
+                const toolConfig = cli_tools_1.CLI_TOOLS_REGISTRY[toolId];
+                const toolName = toolConfig ? toolConfig.name : toolId;
+                const result = yield electron_1.dialog.showOpenDialog(mainWindow, {
+                    properties: ['openDirectory'],
+                    title: `Select folder to launch ${toolName}`,
+                    buttonLabel: 'Launch Here'
+                });
+                if (result.canceled || !result.filePaths[0]) {
+                    SafeLogger_1.logger.info('[Main] User canceled folder selection');
+                    return { success: false, error: 'Folder selection canceled' };
+                }
+                selectedPath = result.filePaths[0];
+            }
+            SafeLogger_1.logger.info(`[Main] Selected folder: ${selectedPath}`);
+            // Import the AI tools database
+            const { AIToolsDatabase } = yield Promise.resolve().then(() => __importStar(require('./services/AIToolsDatabase')));
+            const aiToolsDb = AIToolsDatabase.getInstance();
+            // Check if tool has been launched in this repository before
+            const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
+            SafeLogger_1.logger.info(`[Main] Database check - Tool: ${toolId}, Path: ${selectedPath}, Previously launched: ${hasBeenLaunched}`);
+            // Get launch info for debugging
+            const launchInfo = aiToolsDb.getLaunchInfo(toolId, selectedPath);
+            if (launchInfo) {
+                SafeLogger_1.logger.info(`[Main] Previous launch info: Count: ${launchInfo.launch_count}, Last: ${launchInfo.last_launched_at}`);
+            }
+            // Determine the command to run
+            let command;
+            let apiKeyRow = null; // Store API key for Cline
+            if (toolId === 'claude-code') {
+                command = hasBeenLaunched ? 'claude --resume' : 'claude';
+            }
+            else if (toolId === 'gemini-cli') {
+                // Gemini CLI doesn't support --resume, always use base command
+                command = 'gemini';
+            }
+            else if (toolId === 'qwen-code') {
+                command = 'qwen';
+            }
+            else if (toolId === 'openai-codex') {
+                command = 'codex';
+            }
+            else if (toolId === 'grok') {
+                // SMART GROK LAUNCH: Check if API key is configured
+                // Grok stores config in ~/.grok/user-settings.json
+                const grokConfigPath = path.join(os.homedir(), '.grok', 'user-settings.json');
+                let hasGrokApiKey = false;
+                if (fs.existsSync(grokConfigPath)) {
+                    try {
+                        const grokConfig = JSON.parse(fs.readFileSync(grokConfigPath, 'utf-8'));
+                        hasGrokApiKey = !!(grokConfig.apiKey || process.env.GROK_API_KEY);
+                    }
+                    catch (_t) {
+                        // Config exists but couldn't be parsed
+                    }
+                }
+                // Check environment variable as fallback
+                if (!hasGrokApiKey && process.env.GROK_API_KEY) {
+                    hasGrokApiKey = true;
+                }
+                if (!hasGrokApiKey) {
+                    // First-time launch: We'll create a setup wizard in the terminal
+                    SafeLogger_1.logger.info('[Main] Grok API key not configured, will launch setup wizard');
+                    // We'll handle this in the terminal creation with a special flag
+                    command = 'grok:setup'; // Special command to trigger our setup wizard
+                }
+                else {
+                    // Normal launch - API key is configured
+                    command = 'grok';
+                }
+            }
+            else if (toolId === 'cline') {
+                // Always sync Cline configuration with latest OpenRouter API key from Hive
+                apiKeyRow = yield new Promise((resolve) => {
+                    if (!db) {
+                        resolve(null);
+                        return;
+                    }
+                    db.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+                        resolve(row);
+                    });
+                });
+                if (apiKeyRow && apiKeyRow.value) {
+                    // Update Cline configuration with current API key
+                    const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+                    const clineSettingsPath = path.join(clineConfigDir, 'cline_cli_settings.json');
+                    const keysPath = path.join(clineConfigDir, 'keys.json');
+                    // Ensure directories exist
+                    if (!fs.existsSync(clineConfigDir)) {
+                        fs.mkdirSync(clineConfigDir, { recursive: true });
+                    }
+                    // Read existing settings to preserve user preferences
+                    let existingSettings = {};
+                    if (fs.existsSync(clineSettingsPath)) {
+                        try {
+                            existingSettings = JSON.parse(fs.readFileSync(clineSettingsPath, 'utf-8'));
+                        }
+                        catch (e) {
+                            SafeLogger_1.logger.warn('[Main] Could not parse existing Cline settings');
+                        }
+                    }
+                    // Update or create settings file
+                    const clineSettings = {
+                        globalState: Object.assign(Object.assign({}, existingSettings.globalState), { apiProvider: 'openrouter', apiModelId: '', openRouterApiKey: apiKeyRow.value, openRouterModelId: '', openRouterModelInfo: '', autoApprovalSettings: {
+                                enabled: false,
+                                actions: {
+                                    readFiles: false,
+                                    editFiles: false,
+                                    executeSafeCommands: false,
+                                    useMcp: false
+                                },
+                                maxRequests: 20
+                            } }),
+                        settings: {
+                            'cline.enableCheckpoints': false
+                        }
+                    };
+                    // Fill in other empty fields
+                    const fields = ['awsRegion', 'awsUseCrossRegionInference', 'awsBedrockUsePromptCache',
+                        'awsBedrockEndpoint', 'awsProfile', 'awsUseProfile', 'vertexProjectId',
+                        'vertexRegion', 'openAiBaseUrl', 'openAiModelId', 'openAiModelInfo',
+                        'ollamaModelId', 'ollamaBaseUrl', 'ollamaApiOptionsCtxNum', 'lmStudioModelId',
+                        'lmStudioBaseUrl', 'anthropicBaseUrl', 'azureApiVersion', 'openRouterProviderSorting',
+                        'liteLlmBaseUrl', 'liteLlmModelId', 'qwenApiLine', 'requestyModelId',
+                        'requestyModelInfo', 'togetherModelId', 'asksageApiUrl', 'thinkingBudgetTokens',
+                        'reasoningEffort', 'favoritedModelIds'];
+                    fields.forEach(field => {
+                        if (!(field in clineSettings.globalState)) {
+                            clineSettings.globalState[field] = '';
+                        }
+                    });
+                    fs.writeFileSync(clineSettingsPath, JSON.stringify(clineSettings, null, 2));
+                    // Update keys file with current API key
+                    const keysContent = {
+                        openRouterApiKey: apiKeyRow.value
+                    };
+                    fs.writeFileSync(keysPath, JSON.stringify(keysContent, null, 2));
+                    SafeLogger_1.logger.info('[Main] Updated Cline config with current OpenRouter API key from Hive');
+                }
+                // We'll pass the API key through environment variables in the terminal creation
+                command = 'cline-cli task';
+            }
+            else {
+                // For other tools, just use their base command
+                command = toolId.replace('-cli', '').replace('-code', '');
+            }
+            SafeLogger_1.logger.info(`[Main] Using command: ${command} (previously launched: ${hasBeenLaunched})`);
+            // Record this launch in the database
+            aiToolsDb.recordLaunch(toolId, selectedPath, {
+                context: {
+                    resumeUsed: hasBeenLaunched,
+                    launchTime: new Date().toISOString()
+                }
+            });
+            // Send IPC to renderer to create a terminal tab with the tool
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                // FIRST: Update the global folder context to the selected path
+                // This ensures Explorer, Source Control, and Status Bar all update
+                SafeLogger_1.logger.info(`[Main] Sending menu-open-folder event for: ${selectedPath}`);
+                mainWindow.webContents.send('menu-open-folder', selectedPath);
+                // THEN: After a small delay to ensure folder context is set, launch the terminal
+                setTimeout(() => __awaiter(void 0, void 0, void 0, function* () {
+                    // Get proper tool name from registry
+                    const toolConfig = cli_tools_1.CLI_TOOLS_REGISTRY[toolId];
+                    const toolName = toolConfig ? toolConfig.name : toolId;
+                    // Prepare environment variables for tools if needed
+                    let env = {};
+                    // Cline needs OpenRouter API key (special case - we manage its API key)
+                    if (toolId === 'cline') {
+                        // Fetch the OpenRouter API key from database
+                        try {
+                            const apiKeyRow = yield new Promise((resolve, reject) => {
+                                if (!db) {
+                                    reject(new Error('Database not initialized'));
+                                    return;
+                                }
+                                db.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+                                    if (err)
+                                        reject(err);
+                                    else
+                                        resolve(row);
+                                });
+                            });
+                            if (apiKeyRow && apiKeyRow.value) {
+                                // Cline CLI seems to be looking for OPENAI_API_KEY even when configured for OpenRouter
+                                // This appears to be a bug in Cline CLI, so we'll set both variables
+                                env.OPENAI_API_KEY = apiKeyRow.value; // Work around Cline CLI bug
+                                env.OPEN_ROUTER_API_KEY = apiKeyRow.value;
+                                env.OPENROUTER_API_KEY = apiKeyRow.value; // Try different variations
+                                SafeLogger_1.logger.info('[Main] Adding OpenRouter API key to environment for Cline (multiple env vars for compatibility)');
+                            }
+                            else {
+                                SafeLogger_1.logger.warn('[Main] No OpenRouter API key found for Cline');
+                            }
+                        }
+                        catch (error) {
+                            SafeLogger_1.logger.error('[Main] Error fetching OpenRouter API key for Cline:', error);
+                        }
+                    }
+                    SafeLogger_1.logger.info(`[Main] Sending launch-ai-tool-terminal event with command: ${command}`);
+                    mainWindow.webContents.send('launch-ai-tool-terminal', {
+                        toolId: toolId,
+                        toolName: toolName,
+                        command: command,
+                        cwd: selectedPath,
+                        env: env // Pass environment variables
+                    });
+                }), 100); // Small delay to ensure folder opens first
+            }
+            SafeLogger_1.logger.info(`[Main] Completed launch sequence for ${toolId} in ${selectedPath}`);
+            return { success: true, path: selectedPath, command: command };
+        }
+        catch (error) {
+            SafeLogger_1.logger.error(`[Main] Failed to launch ${toolId}:`, error);
+            return { success: false, error: error.message };
+        }
+    }));
+    // TODO: Implement progress events when installation logic is added
 };
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 electron_1.app.on('ready', () => __awaiter(void 0, void 0, void 0, function* () {
+    // Clean up any orphaned processes from previous runs
+    yield PidTracker_1.PidTracker.cleanupOrphans();
     initDatabase();
     // Initialize ProcessManager with all process configurations
     initializeProcessManager();
     // Register Memory Service handlers BEFORE creating window
     // This ensures they're available when the renderer process starts
     registerMemoryServiceHandlers();
+    // Register WebSocket backend port handler EARLY to prevent warning
+    // Must be registered before window creation so it's available when renderer starts
+    electron_1.ipcMain.handle('websocket-backend-port', () => __awaiter(void 0, void 0, void 0, function* () {
+        const backendInfo = processManager.getProcessStatus('websocket-backend');
+        const port = (backendInfo === null || backendInfo === void 0 ? void 0 : backendInfo.port) || 8765;
+        SafeLogger_1.logger.info(`[Main] WebSocket backend port requested: ${port}`);
+        return port;
+    }));
+    // Register other IPC handlers once at app startup (not in createWindow)
+    // This prevents duplicate handler registration errors
+    registerGitHandlers();
+    registerFileSystemHandlers();
+    registerDialogHandlers();
     // Start all processes in PARALLEL for fast startup (2025 best practice)
-    console.log('[Main] 🚀 Starting all managed processes in parallel...');
+    SafeLogger_1.logger.info('[Main] 🚀 Starting all managed processes in parallel...');
     // Log initial ProcessManager status
-    console.log('[Main] Initial ProcessManager status:');
+    SafeLogger_1.logger.info('[Main] Initial ProcessManager status:');
     processManager.logStatus();
     // Start all services simultaneously - no blocking, no waiting
     const startupPromises = [];
@@ -1261,32 +2581,32 @@ electron_1.app.on('ready', () => __awaiter(void 0, void 0, void 0, function* () 
             if (backendInfo && backendInfo.port) {
                 websocketBackendPort = backendInfo.port;
             }
-            console.log(`[Main] ✅ WebSocket Backend started on port ${websocketBackendPort}`);
+            SafeLogger_1.logger.info(`[Main] ✅ WebSocket Backend started on port ${websocketBackendPort}`);
             return { name: 'websocket-backend', success: true };
         }
         else {
-            console.error('[Main] ❌ WebSocket Backend failed to start');
+            SafeLogger_1.logger.error('[Main] ❌ WebSocket Backend failed to start');
             return { name: 'websocket-backend', success: false };
         }
     })
         .catch((error) => {
-        console.error('[Main] ❌ WebSocket Backend error:', error.message);
+        SafeLogger_1.logger.error('[Main] ❌ WebSocket Backend error:', error.message);
         return { name: 'websocket-backend', success: false };
     }));
     // Start Memory Service in parallel (non-blocking, non-critical)
     startupPromises.push(processManager.startProcess('memory-service')
         .then((started) => {
         if (started) {
-            console.log('[Main] ✅ Memory Service started successfully');
+            SafeLogger_1.logger.info('[Main] ✅ Memory Service started successfully');
             return { name: 'memory-service', success: true };
         }
         else {
-            console.warn('[Main] ⚠️ Memory Service failed (non-critical)');
+            SafeLogger_1.logger.warn('[Main] ⚠️ Memory Service failed (non-critical)');
             return { name: 'memory-service', success: false };
         }
     })
         .catch((error) => {
-        console.warn('[Main] ⚠️ Memory Service error (non-critical):', error.message);
+        SafeLogger_1.logger.warn('[Main] ⚠️ Memory Service error (non-critical):', error.message);
         return { name: 'memory-service', success: false };
     }));
     // Wait for all services to complete startup attempts
@@ -1302,13 +2622,13 @@ electron_1.app.on('ready', () => __awaiter(void 0, void 0, void 0, function* () 
         }
     });
     // Log final status
-    console.log('[Main] Final ProcessManager status after parallel startup:');
+    SafeLogger_1.logger.info('[Main] Final ProcessManager status after parallel startup:');
     processManager.logStatus();
     if (!criticalServicesHealthy) {
-        console.error('[Main] ⚠️ Critical services (WebSocket Backend) failed to start');
+        SafeLogger_1.logger.error('[Main] ⚠️ Critical services (WebSocket Backend) failed to start');
     }
     else {
-        console.log('[Main] ✅ Critical services started successfully');
+        SafeLogger_1.logger.info('[Main] ✅ Critical services started successfully');
     }
     // Initialize CLI Tools Manager (commented out to avoid WebSocket issues)
     // initializeCliToolsManager();
@@ -1317,8 +2637,8 @@ electron_1.app.on('ready', () => __awaiter(void 0, void 0, void 0, function* () 
     // Don't initialize Git manager on startup - wait until a folder is opened
     // initGitManager(); 
     createWindow();
-    // Register dialog handlers (Git and FileSystem handlers are already registered in createWindow)
-    registerDialogHandlers();
+    // Dialog handlers are now registered in createWindow
+    // registerDialogHandlers();  // Removed - already registered in createWindow
 }));
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
@@ -1337,30 +2657,65 @@ electron_1.app.on('activate', () => {
         createWindow();
     }
 });
+// Track cleanup state to prevent duplicate cleanup
+let isCleaningUp = false;
+// Unified cleanup function
+function performCleanup(reason) {
+    return __awaiter(this, void 0, void 0, function* () {
+        if (isCleaningUp) {
+            SafeLogger_1.logger.info(`[Main] Cleanup already in progress (triggered by ${reason})`);
+            return;
+        }
+        isCleaningUp = true;
+        SafeLogger_1.logger.info(`[Main] Starting cleanup (reason: ${reason})...`);
+        try {
+            // Clean up all terminals first
+            (0, terminal_ipc_handlers_1.cleanupTerminals)();
+            // Stop memory service if running
+            yield processManager.stopProcess('memory-service');
+            // Clean up all other processes
+            yield processManager.cleanup();
+            SafeLogger_1.logger.info('[Main] Cleanup completed successfully');
+        }
+        catch (error) {
+            SafeLogger_1.logger.error('[Main] Error during cleanup:', error);
+        }
+    });
+}
 // Clean up processes on app quit
 electron_1.app.on('before-quit', (event) => __awaiter(void 0, void 0, void 0, function* () {
     event.preventDefault();
-    console.log('[Main] Cleaning up processes before quit...');
-    yield processManager.cleanup();
+    yield performCleanup('before-quit');
     electron_1.app.exit(0);
 }));
 // Handle unexpected termination
 process.on('SIGINT', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('[Main] Received SIGINT, cleaning up...');
-    yield processManager.cleanup();
+    yield performCleanup('SIGINT');
     process.exit(0);
 }));
 process.on('SIGTERM', () => __awaiter(void 0, void 0, void 0, function* () {
-    console.log('[Main] Received SIGTERM, cleaning up...');
-    yield processManager.cleanup();
+    yield performCleanup('SIGTERM');
     process.exit(0);
+}));
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => __awaiter(void 0, void 0, void 0, function* () {
+    SafeLogger_1.logger.error('[Main] Uncaught exception:', error);
+    yield performCleanup('uncaughtException');
+    process.exit(1);
+}));
+process.on('unhandledRejection', (reason) => __awaiter(void 0, void 0, void 0, function* () {
+    SafeLogger_1.logger.error('[Main] Unhandled rejection:', reason);
+    yield performCleanup('unhandledRejection');
+    process.exit(1);
 }));
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
 // Set up IPC handlers for backend communication
 electron_1.ipcMain.handle('backend-health', () => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const response = yield fetch('http://localhost:8765/health');
+        const backendInfo = processManager.getProcessStatus('websocket-backend');
+        const backendPort = (backendInfo === null || backendInfo === void 0 ? void 0 : backendInfo.port) || 8765;
+        const response = yield fetch(`http://localhost:${backendPort}/health`);
         return yield response.json();
     }
     catch (error) {
@@ -1369,7 +2724,9 @@ electron_1.ipcMain.handle('backend-health', () => __awaiter(void 0, void 0, void
 }));
 electron_1.ipcMain.handle('backend-test', () => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const response = yield fetch('http://localhost:8765/test', {
+        const backendInfo = processManager.getProcessStatus('websocket-backend');
+        const backendPort = (backendInfo === null || backendInfo === void 0 ? void 0 : backendInfo.port) || 8765;
+        const response = yield fetch(`http://localhost:${backendPort}/test`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify('Hello from Electron via IPC')
@@ -1382,7 +2739,9 @@ electron_1.ipcMain.handle('backend-test', () => __awaiter(void 0, void 0, void 0
 }));
 electron_1.ipcMain.handle('backend-consensus', (_, query) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const response = yield fetch('http://localhost:8765/api/consensus', {
+        const backendInfo = processManager.getProcessStatus('websocket-backend');
+        const backendPort = (backendInfo === null || backendInfo === void 0 ? void 0 : backendInfo.port) || 8765;
+        const response = yield fetch(`http://localhost:${backendPort}/api/consensus`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query })
@@ -1395,7 +2754,9 @@ electron_1.ipcMain.handle('backend-consensus', (_, query) => __awaiter(void 0, v
 }));
 electron_1.ipcMain.handle('backend-consensus-quick', (_, data) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const response = yield fetch('http://127.0.0.1:8765/api/consensus/quick', {
+        const backendInfo = processManager.getProcessStatus('websocket-backend');
+        const backendPort = (backendInfo === null || backendInfo === void 0 ? void 0 : backendInfo.port) || 8765;
+        const response = yield fetch(`http://127.0.0.1:${backendPort}/api/consensus/quick`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
@@ -1403,7 +2764,7 @@ electron_1.ipcMain.handle('backend-consensus-quick', (_, data) => __awaiter(void
         return yield response.json();
     }
     catch (error) {
-        console.error('Quick consensus error:', error);
+        SafeLogger_1.logger.error('Quick consensus error:', error);
         throw error;
     }
 }));
@@ -1422,11 +2783,11 @@ electron_1.ipcMain.handle('websocket-connect', (event, url) => __awaiter(void 0,
                 const backendInfo = processManager.getProcessStatus('websocket-backend');
                 const backendPort = (backendInfo === null || backendInfo === void 0 ? void 0 : backendInfo.port) || 8765;
                 url = url.replace(':8765', `:${backendPort}`);
-                console.log(`[Main] Using dynamic WebSocket port: ${backendPort}`);
+                SafeLogger_1.logger.info(`[Main] Using dynamic WebSocket port: ${backendPort}`);
             }
             wsConnection = new WebSocket(url);
             wsConnection.on('open', () => {
-                console.log('WebSocket connected in main process');
+                SafeLogger_1.logger.info('WebSocket connected in main process');
                 resolve({ connected: true });
             });
             wsConnection.on('message', (data) => {
@@ -1434,12 +2795,12 @@ electron_1.ipcMain.handle('websocket-connect', (event, url) => __awaiter(void 0,
                 event.sender.send('websocket-message', data.toString());
             });
             wsConnection.on('error', (error) => {
-                console.error('WebSocket error in main:', error);
+                SafeLogger_1.logger.error('WebSocket error in main:', error);
                 event.sender.send('websocket-error', error.message);
                 reject(error);
             });
             wsConnection.on('close', () => {
-                console.log('WebSocket closed in main process');
+                SafeLogger_1.logger.info('WebSocket closed in main process');
                 event.sender.send('websocket-closed');
                 wsConnection = null;
             });
@@ -1456,7 +2817,7 @@ electron_1.ipcMain.handle('websocket-send', (_, message) => __awaiter(void 0, vo
         return { sent: true };
     }
     // If not connected, try to reconnect once
-    console.log('WebSocket not ready, attempting reconnection...');
+    SafeLogger_1.logger.info('WebSocket not ready, attempting reconnection...');
     try {
         yield new Promise((resolve, reject) => {
             const timeout = setTimeout(() => reject('Connection timeout'), 3000);
@@ -1468,7 +2829,7 @@ electron_1.ipcMain.handle('websocket-send', (_, message) => __awaiter(void 0, vo
                 wsConnection = new WebSocket(`ws://127.0.0.1:${backendPort}/ws`);
                 wsConnection.once('open', () => {
                     clearTimeout(timeout);
-                    console.log('WebSocket reconnected successfully');
+                    SafeLogger_1.logger.info('WebSocket reconnected successfully');
                     resolve(true);
                 });
                 wsConnection.once('error', (err) => {
@@ -1499,7 +2860,7 @@ electron_1.ipcMain.handle('websocket-send', (_, message) => __awaiter(void 0, vo
         return { sent: true };
     }
     catch (error) {
-        console.error('Failed to reconnect WebSocket:', error);
+        SafeLogger_1.logger.error('Failed to reconnect WebSocket:', error);
         throw new Error('WebSocket not connected and reconnection failed');
     }
 }));
@@ -1583,7 +2944,7 @@ electron_1.ipcMain.handle('settings-test-keys', (_, { openrouterKey, hiveKey }) 
             result.openrouterValid = response.status === 200;
         }
         catch (error) {
-            console.error('Failed to test OpenRouter key:', error);
+            SafeLogger_1.logger.error('Failed to test OpenRouter key:', error);
         }
     }
     // Test Hive key - real D1 authentication
@@ -1633,7 +2994,7 @@ electron_1.ipcMain.handle('settings-test-keys', (_, { openrouterKey, hiveKey }) 
                     if (response.ok) {
                         const data = yield response.json();
                         // Log the D1 response to understand what fields are available
-                        console.log('D1 validation response:', JSON.stringify(data, null, 2));
+                        SafeLogger_1.logger.info('D1 validation response:', JSON.stringify(data, null, 2));
                         if (data.valid) {
                             // Parse tier information
                             const tier = data.tier || ((_a = data.user) === null || _a === void 0 ? void 0 : _a.subscription_tier) || 'free';
@@ -1712,7 +3073,7 @@ electron_1.ipcMain.handle('settings-test-keys', (_, { openrouterKey, hiveKey }) 
                     else {
                         // Handle error responses
                         const errorText = yield response.text();
-                        console.error('License validation failed:', response.status, errorText);
+                        SafeLogger_1.logger.error(`License validation failed: ${response.status} - ${errorText}`);
                         result.hiveValid = false;
                         result.licenseInfo = {
                             valid: false,
@@ -1721,7 +3082,7 @@ electron_1.ipcMain.handle('settings-test-keys', (_, { openrouterKey, hiveKey }) 
                     }
                 }
                 catch (error) {
-                    console.error('Failed to validate Hive license:', error);
+                    SafeLogger_1.logger.error('Failed to validate Hive license:', error);
                     result.hiveValid = false;
                     result.licenseInfo = {
                         valid: false,
@@ -1855,7 +3216,7 @@ electron_1.ipcMain.handle('settings-save-all', (_, settings) => __awaiter(void 0
            value = excluded.value,
            updated_at = excluded.updated_at`, ['active_profile_id', settings.selectedProfile, timestamp], (err) => {
                     if (err)
-                        console.error('Failed to save active profile:', err);
+                        SafeLogger_1.logger.error('Failed to save active profile:', err);
                 });
                 // Note: No is_default column in actual consensus_profiles table
             }
@@ -1984,11 +3345,11 @@ electron_1.ipcMain.handle('save-conversation', (_, data) => __awaiter(void 0, vo
     return new Promise((resolve) => {
         var _a;
         if (!db) {
-            console.error('Database not initialized for saving conversation');
+            SafeLogger_1.logger.error('Database not initialized for saving conversation');
             resolve(false);
             return;
         }
-        console.log('📝 Saving conversation to database:', {
+        SafeLogger_1.logger.info('📝 Saving conversation to database:', {
             id: data.conversationId,
             cost: data.totalCost,
             tokens: data.totalTokens
@@ -2012,7 +3373,7 @@ electron_1.ipcMain.handle('save-conversation', (_, data) => __awaiter(void 0, vo
             timestamp
         ], (err1) => {
             if (err1) {
-                console.error('Error saving conversation:', err1);
+                SafeLogger_1.logger.error('Error saving conversation:', err1);
                 resolve(false);
                 return;
             }
@@ -2029,7 +3390,7 @@ electron_1.ipcMain.handle('save-conversation', (_, data) => __awaiter(void 0, vo
                 timestamp
             ], (err2) => {
                 if (err2)
-                    console.error('Error saving to knowledge_conversations:', err2);
+                    SafeLogger_1.logger.error('Error saving to knowledge_conversations:', err2);
             });
             // Insert into conversation_usage for tracking
             db.run(`
@@ -2038,7 +3399,7 @@ electron_1.ipcMain.handle('save-conversation', (_, data) => __awaiter(void 0, vo
         ) VALUES (?, ?, ?)
       `, [userId, data.conversationId, timestamp], (err3) => {
                 if (err3)
-                    console.error('Error saving to conversation_usage:', err3);
+                    SafeLogger_1.logger.error('Error saving to conversation_usage:', err3);
             });
             // Track model usage for each stage using the active profile
             // Get the active profile to know which models were used
@@ -2076,7 +3437,7 @@ electron_1.ipcMain.handle('save-conversation', (_, data) => __awaiter(void 0, vo
           ) VALUES (?, ?, ?, ?, ?)
         `, [data.conversationId, timestamp, data.duration, data.totalCost || 0, timestamp], (err4) => {
                     if (err4)
-                        console.error('Error saving performance metrics:', err4);
+                        SafeLogger_1.logger.error('Error saving performance metrics:', err4);
                 });
             }
             // Insert into cost_analytics
@@ -2093,9 +3454,9 @@ electron_1.ipcMain.handle('save-conversation', (_, data) => __awaiter(void 0, vo
                 timestamp
             ], (err5) => {
                 if (err5)
-                    console.error('Error saving cost analytics:', err5);
+                    SafeLogger_1.logger.error('Error saving cost analytics:', err5);
             });
-            console.log(`✅ Saved conversation ${data.conversationId} to database`);
+            SafeLogger_1.logger.info(`✅ Saved conversation ${data.conversationId} to database`);
             resolve(true);
         });
     });
@@ -2117,14 +3478,14 @@ electron_1.ipcMain.handle('get-usage-count', () => __awaiter(void 0, void 0, voi
       AND date(timestamp, 'localtime') = date('now', 'localtime')
     `, [userId], (err, row) => {
             if (err) {
-                console.error('Error getting usage count:', err);
+                SafeLogger_1.logger.error('Error getting usage count:', err);
                 resolve({ used: 0, limit: 999999, remaining: 999999 });
                 return;
             }
             const used = (row === null || row === void 0 ? void 0 : row.count) || 0;
             const limit = 999999; // Unlimited for this user
             const remaining = limit - used;
-            console.log(`Usage count for user ${userId}: ${used} / ${limit}`);
+            SafeLogger_1.logger.info(`Usage count for user ${userId}: ${used} / ${limit}`);
             resolve({ used, limit, remaining });
         });
     });
@@ -2132,7 +3493,7 @@ electron_1.ipcMain.handle('get-usage-count', () => __awaiter(void 0, void 0, voi
 electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 0, function* () {
     return new Promise((resolve) => {
         if (!db) {
-            console.error('Database not initialized for analytics');
+            SafeLogger_1.logger.error('Database not initialized for analytics');
             resolve(null);
             return;
         }
@@ -2154,11 +3515,11 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
       AND user_id = ?
     `, [userId], (err1, row1) => {
             if (err1) {
-                console.error('Error getting conversation count:', err1);
+                SafeLogger_1.logger.error('Error getting conversation count:', err1);
                 resolve(null);
                 return;
             }
-            console.log('Analytics - Today queries for user:', row1 === null || row1 === void 0 ? void 0 : row1.count);
+            SafeLogger_1.logger.info('Analytics - Today queries for user:', row1 === null || row1 === void 0 ? void 0 : row1.count);
             analyticsData.todayQueries = (row1 === null || row1 === void 0 ? void 0 : row1.count) || 0;
             // Get all-time total queries for this user
             db.get(`
@@ -2166,7 +3527,7 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
         FROM conversation_usage 
         WHERE user_id = ?
       `, [userId], (errTotal, rowTotal) => {
-                console.log('Analytics - Total queries for user:', rowTotal === null || rowTotal === void 0 ? void 0 : rowTotal.count);
+                SafeLogger_1.logger.info('Analytics - Total queries for user:', rowTotal === null || rowTotal === void 0 ? void 0 : rowTotal.count);
                 analyticsData.totalQueries = (rowTotal === null || rowTotal === void 0 ? void 0 : rowTotal.count) || 0;
                 // Get TODAY's cost and token usage - join with conversation_usage for user filtering
                 // Convert UTC timestamps to localtime for date comparison
@@ -2183,8 +3544,8 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
           AND cu.user_id = ?
         `, [userId], (err2, row2) => {
                     if (err2)
-                        console.error('Error getting today cost data:', err2);
-                    console.log('Analytics - Today cost data:', row2);
+                        SafeLogger_1.logger.error('Error getting today cost data:', err2);
+                    SafeLogger_1.logger.info('Analytics - Today cost data:', row2);
                     analyticsData.todayCost = (row2 === null || row2 === void 0 ? void 0 : row2.total_cost) || 0;
                     analyticsData.todayAvgResponseTime = (row2 === null || row2 === void 0 ? void 0 : row2.avg_time) || 0;
                     analyticsData.todayTokenUsage = {
@@ -2205,8 +3566,8 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
             WHERE cu.user_id = ?
           `, [userId], (errAllTime, rowAllTime) => {
                         if (errAllTime)
-                            console.error('Error getting all-time cost data:', errAllTime);
-                        console.log('Analytics - All-time cost data:', rowAllTime);
+                            SafeLogger_1.logger.error('Error getting all-time cost data:', errAllTime);
+                        SafeLogger_1.logger.info('Analytics - All-time cost data:', rowAllTime);
                         analyticsData.totalCost = (rowAllTime === null || rowAllTime === void 0 ? void 0 : rowAllTime.total_cost) || 0;
                         analyticsData.avgResponseTime = (rowAllTime === null || rowAllTime === void 0 ? void 0 : rowAllTime.avg_time) || 0;
                         analyticsData.tokenUsage = {
@@ -2233,8 +3594,8 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
           LIMIT 10
         `, [userId], (err3, rows3) => {
                             if (err3)
-                                console.error('Error getting recent activity:', err3);
-                            console.log('Recent activity rows:', rows3 === null || rows3 === void 0 ? void 0 : rows3.slice(0, 2)); // Log first 2 rows
+                                SafeLogger_1.logger.error('Error getting recent activity:', err3);
+                            SafeLogger_1.logger.info('Recent activity rows:', rows3 === null || rows3 === void 0 ? void 0 : rows3.slice(0, 2)); // Log first 2 rows
                             analyticsData.recentActivity = (rows3 || []).map((row) => ({
                                 timestamp: row.timestamp,
                                 question: row.question || 'Query',
@@ -2258,7 +3619,7 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
             ORDER BY totalCost DESC
           `, [userId], (err4, rows4) => {
                                 if (err4) {
-                                    console.error('Error getting model usage from stage_outputs:', err4);
+                                    SafeLogger_1.logger.error('Error getting model usage from stage_outputs:', err4);
                                     // Fallback: Get models from consensus_profiles if stage_outputs is empty
                                     db.all(`
                 SELECT 
@@ -2351,7 +3712,7 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
                                                 timestamp: new Date().toISOString()
                                             }];
                                         // Resolve with complete data
-                                        console.log('Analytics - Complete data:', JSON.stringify(analyticsData, null, 2));
+                                        SafeLogger_1.logger.info('Analytics - Complete data:', JSON.stringify(analyticsData, null, 2));
                                         resolve(analyticsData);
                                         return;
                                     }
@@ -2369,7 +3730,7 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
                 AND cu.user_id = ?
               `, [hourStart.toISOString(), hourEnd.toISOString(), userId], (err5, row5) => {
                                         if (err5) {
-                                            console.error('Error getting hourly stats:', err5);
+                                            SafeLogger_1.logger.error('Error getting hourly stats:', err5);
                                             // Continue with default values even if error
                                             hourlyStats.push({
                                                 hour: hourStart.getHours().toString().padStart(2, '0') + ':00',
@@ -2399,38 +3760,9 @@ electron_1.ipcMain.handle('get-analytics', () => __awaiter(void 0, void 0, void 
             });
         });
     });
-    // Start Memory Service using ProcessManager
-    const startMemoryService = () => __awaiter(void 0, void 0, void 0, function* () {
-        const status = processManager.getProcessStatus('memory-service');
-        if (status && status.status === 'running') {
-            console.log('[Main] Memory Service already running');
-            return true;
-        }
-        try {
-            console.log('[Main] Starting Memory Service with ProcessManager...');
-            const started = yield processManager.startProcess('memory-service');
-            if (started) {
-                // Update port if it changed
-                const processInfo = processManager.getProcessStatus('memory-service');
-                if (processInfo === null || processInfo === void 0 ? void 0 : processInfo.port) {
-                    memoryServicePort = processInfo.port;
-                }
-            }
-            return started;
-        }
-        catch (error) {
-            console.error('[Main] Failed to start Memory Service:', error);
-            return false;
-        }
-    });
-    // Stop Memory Service using ProcessManager
-    const stopMemoryService = () => __awaiter(void 0, void 0, void 0, function* () {
-        yield processManager.stopProcess('memory-service');
-    });
-    // Clean up on app quit
-    electron_1.app.on('before-quit', () => __awaiter(void 0, void 0, void 0, function* () {
-        yield stopMemoryService();
-    }));
+    // Memory Service is now managed entirely by ProcessManager
+    // Use processManager.startProcess('memory-service') and processManager.stopProcess('memory-service')
+    // Memory service cleanup is now handled in the unified performCleanup function
     // Store reference to main window
     electron_1.app.on('browser-window-created', (_, window) => {
         if (!mainWindow) {

@@ -42,6 +42,7 @@ const cors_1 = __importDefault(require("cors"));
 const ws_1 = require("ws");
 const http = __importStar(require("http"));
 const crypto_1 = __importDefault(require("crypto"));
+const SafeLogger_1 = require("../utils/SafeLogger");
 class MemoryServiceServer {
     constructor(port = 3457) {
         this.server = null;
@@ -127,7 +128,7 @@ class MemoryServiceServer {
                 });
             }
             catch (error) {
-                console.error('[MemoryService] Query error:', error);
+                SafeLogger_1.logger.error('[MemoryService] Query error:', error);
                 res.status(500).json({ error: 'Query failed' });
             }
         });
@@ -152,7 +153,7 @@ class MemoryServiceServer {
                 });
             }
             catch (error) {
-                console.error('[MemoryService] Contribution error:', error);
+                SafeLogger_1.logger.error('[MemoryService] Contribution error:', error);
                 res.status(500).json({ error: 'Contribution failed' });
             }
         });
@@ -162,7 +163,7 @@ class MemoryServiceServer {
                 yield this.updateStats();
             }
             catch (err) {
-                console.error('[MemoryService] Stats update error:', err.message);
+                SafeLogger_1.logger.error('[MemoryService] Stats update error:', err.message);
             }
             res.json(this.stats);
         });
@@ -305,7 +306,7 @@ class MemoryServiceServer {
         if (!this.wss)
             return;
         this.wss.on('connection', (ws) => {
-            console.log('[MemoryService] WebSocket client connected');
+            SafeLogger_1.logger.info('[MemoryService] WebSocket client connected');
             // Send initial stats
             ws.send(JSON.stringify({
                 type: 'stats',
@@ -323,24 +324,24 @@ class MemoryServiceServer {
                     }
                 }
                 catch (error) {
-                    console.error('[MemoryService] WebSocket message error:', error);
+                    SafeLogger_1.logger.error('[MemoryService] WebSocket message error:', error);
                 }
             });
             ws.on('close', () => {
-                console.log('[MemoryService] WebSocket client disconnected');
+                SafeLogger_1.logger.info('[MemoryService] WebSocket client disconnected');
             });
         });
     }
     updateStats() {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                console.log('[MemoryService] Updating stats, querying database...');
+                SafeLogger_1.logger.info('[MemoryService] Updating stats, querying database...');
                 // Get total memories count via IPC
                 const result = yield this.queryDatabase('SELECT COUNT(*) as count FROM messages', []);
-                console.log('[MemoryService] Stats query result:', result);
+                SafeLogger_1.logger.info('[MemoryService] Stats query result:', result);
                 if (result && result[0]) {
                     this.stats.totalMemories = result[0].count || 0;
-                    console.log('[MemoryService] Total memories:', this.stats.totalMemories);
+                    SafeLogger_1.logger.info('[MemoryService] Total memories:', this.stats.totalMemories);
                 }
                 // Get today's messages count (contributions from consensus)
                 try {
@@ -348,11 +349,11 @@ class MemoryServiceServer {
                     if (todayResult && todayResult[0]) {
                         // This shows messages added today via consensus
                         this.stats.contributionsToday = todayResult[0].count || 0;
-                        console.log('[MemoryService] Messages added today:', this.stats.contributionsToday);
+                        SafeLogger_1.logger.info('[MemoryService] Messages added today:', this.stats.contributionsToday);
                     }
                 }
                 catch (error) {
-                    console.error('[MemoryService] Failed to get today\'s count:', error);
+                    SafeLogger_1.logger.error('[MemoryService] Failed to get today\'s count:', error);
                 }
                 // Get today's actual queries from conversation_usage table
                 // Each entry = 1 consensus query (simple or full), no estimations
@@ -365,15 +366,15 @@ class MemoryServiceServer {
                         const usageToday = activityResult[0].usage_count || 0;
                         // Always update with actual count from database
                         this.stats.queriesToday = usageToday;
-                        console.log('[MemoryService] Actual queries today:', usageToday);
+                        SafeLogger_1.logger.info('[MemoryService] Actual queries today:', usageToday);
                     }
                 }
                 catch (error) {
-                    console.error('[MemoryService] Failed to get today\'s query count:', error);
+                    SafeLogger_1.logger.error('[MemoryService] Failed to get today\'s query count:', error);
                 }
             }
             catch (error) {
-                console.error('[MemoryService] Stats update error:', error);
+                SafeLogger_1.logger.error('[MemoryService] Stats update error:', error);
             }
             // Connected tools count (in memory - resets on restart)
             this.stats.connectedTools = this.connectedTools.size;
@@ -417,13 +418,13 @@ class MemoryServiceServer {
     }
     start() {
         return new Promise((resolve) => {
-            // Create server and WebSocket when starting
-            this.server = http.createServer();
+            // Create server with Express app and WebSocket when starting
+            this.server = http.createServer(this.app); // CRITICAL: Attach Express app to server!
             this.wss = new ws_1.WebSocketServer({ server: this.server });
             this.setupWebSocket();
             this.server.listen(this.port, () => {
-                console.log(`[MemoryService] Server running on http://localhost:${this.port}`);
-                console.log(`[MemoryService] WebSocket available on ws://localhost:${this.port}`);
+                SafeLogger_1.logger.info(`[MemoryService] Server running on http://localhost:${this.port}`);
+                SafeLogger_1.logger.info(`[MemoryService] WebSocket available on ws://localhost:${this.port}`);
                 // Notify parent process we're ready
                 if (process.send) {
                     process.send({ type: 'ready', port: this.port });
@@ -431,13 +432,13 @@ class MemoryServiceServer {
                 // Update stats after a short delay to ensure IPC is ready
                 setTimeout(() => {
                     this.updateStats().catch(err => {
-                        console.error('[MemoryService] Initial stats update failed:', err.message);
+                        SafeLogger_1.logger.error('[MemoryService] Initial stats update failed:', err.message);
                     });
                 }, 500);
                 // Set up periodic stats updates to catch consensus contributions
                 setInterval(() => {
                     this.updateStats().catch(err => {
-                        console.error('[MemoryService] Periodic stats update failed:', err.message);
+                        SafeLogger_1.logger.error('[MemoryService] Periodic stats update failed:', err.message);
                     });
                 }, 10000); // Update every 10 seconds for more responsive updates
                 resolve(true);
@@ -448,7 +449,7 @@ class MemoryServiceServer {
         return new Promise((resolve) => {
             if (this.server) {
                 this.server.close(() => {
-                    console.log('[MemoryService] Server stopped');
+                    SafeLogger_1.logger.info('[MemoryService] Server stopped');
                     resolve(true);
                 });
             }
