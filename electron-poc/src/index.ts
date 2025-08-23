@@ -1441,6 +1441,9 @@ const registerSimpleCliToolHandlers = () => {
             } else if (toolId === 'claude-code') {
               const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
               version = match ? match[1] : 'Unknown';
+            } else if (toolId === 'qwen-code') {
+              const match = versionResult.stdout.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
+              version = match ? match[1] : 'Unknown';
             } else {
               // Generic version extraction
               const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
@@ -1577,6 +1580,14 @@ const registerSimpleCliToolHandlers = () => {
             });
             // Parse version from output - expecting format like "gemini-cli/0.1.18" or similar
             const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
+            version = match ? match[1] : 'Unknown';
+          } else if (toolId === 'qwen-code') {
+            // For Qwen Code, use qwen --version
+            const versionResult = await execAsync('qwen --version', {
+              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+            });
+            // Parse version from output
+            const match = versionResult.stdout.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else {
             // For other tools, try to get version from npm list

@@ -2170,12 +2170,28 @@ See `docs/cli-tools/GEMINI_TEMPLATE.md` for the complete working pattern that in
 9. **Add progress indicators** - Users need feedback during operations
 10. **Verify with actual commands** - Test that tools actually install and run
 
+#### Critical Lessons from Qwen Code Implementation
+
+1. **Package names don't match binary names!** - NPM package `@qwen-code/qwen-code` installs binary as `qwen`, not `qwen-code`
+2. **Always verify actual binary after install** - Check `which <command>` to find real binary name
+3. **Documentation can be wrong** - Qwen docs show `qwen-code` everywhere but reality is `qwen`
+4. **Check package.json bin entry** - The definitive source for actual binary name
+5. **Memory Service detection must be explicit** - Add each new tool to the detection list in detector.ts
+6. **Version output varies wildly** - Qwen outputs just `0.0.8` with no prefix, unlike other tools
+7. **Terminal display names must match binary** - Use actual command as key in displayNames map
+8. **Full rebuild often required** - HMR doesn't always work, use `npm run make` for reliability
+9. **Test immediately after changes** - Don't accumulate changes without verification
+10. **Document quirks immediately** - Create `<TOOL>_QUIRKS.md` for each tool's peculiarities
+
 ### COMPLETE AI CLI Tool Integration Pattern (Post-Gemini)
 
 #### Critical Missing Steps We Discovered
 
 ##### 1. UI Refresh Mechanism (CRITICAL - Was Missing!)
 **File**: `src/renderer.ts`
+
+**⚠️ CRITICAL BUG WE DISCOVERED MULTIPLE TIMES:**
+The UI will show "installed successfully" in console but won't update visually unless forceRefresh is implemented AND the app is properly rebuilt/restarted!
 
 ```typescript
 // Add forceRefresh parameter to renderCliToolsPanel
@@ -2199,6 +2215,12 @@ if (result.success) {
     }, 1000);
 }
 ```
+
+**TROUBLESHOOTING UI NOT UPDATING:**
+1. Check console - if it says "installed successfully" but UI doesn't change
+2. Verify forceRefresh parameter is passed as `true`
+3. Kill and restart the app (`npm start`) - hot reload doesn't always work
+4. If still not working, do full rebuild: `npm run make` then `npm start`
 
 ##### 2. Complete Handler Implementation (No Placeholders!)
 **File**: `src/index.ts`
@@ -2370,8 +2392,27 @@ gridContainer.appendChild(createCliToolCard({
 - [ ] Uninstall the tool if already installed (test fresh install)
 - [ ] Read the tool's documentation in `docs/cli-tools/`
 - [ ] Note the package manager (npm vs pip)
-- [ ] Identify version command and pattern
+- [ ] **CRITICAL: Verify actual binary name after manual install:**
+  ```bash
+  # For NPM packages:
+  npm install -g <package-name>
+  npm list -g --depth=0  # Shows installed package
+  cat $(npm root -g)/<package-name>/package.json | grep -A2 '"bin"'  # Shows binary mapping
+  which <expected-command>  # Verify actual command
+  
+  # Example with Qwen Code (documentation vs reality):
+  # Docs say: qwen-code --version
+  # Reality after install:
+  npm install -g @qwen-code/qwen-code
+  cat $(npm root -g)/@qwen-code/qwen-code/package.json | grep -A2 '"bin"'
+  # Shows: "bin": { "qwen": "dist/index.js" }  ← Binary is 'qwen', not 'qwen-code'!
+  which qwen  # ✓ Found
+  which qwen-code  # ✗ Not found
+  ```
+- [ ] Test version command with ACTUAL binary name
+- [ ] Identify version output pattern (may be just numbers like "0.0.8")
 - [ ] Check for special launch flags
+- [ ] Document quirks in `docs/cli-tools/<TOOL>_QUIRKS.md`
 
 #### Implementation Order (NEVER SKIP ANY!)
 1. **Module Import** - Add to top of `src/index.ts`

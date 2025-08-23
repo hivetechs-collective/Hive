@@ -121,14 +121,15 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
   'qwen-code': {
     id: 'qwen-code',
     name: 'Qwen Code',
-    description: 'Alibaba\'s open-source coding agent',
+    description: 'AI-powered command-line workflow tool (2000 req/day free)',
     command: 'qwen',
-    installCommand: 'pip install qwen-code',
-    updateCommand: 'pip install --upgrade qwen-code',
+    installCommand: 'npm install -g @qwen-code/qwen-code@latest',
+    updateCommand: 'npm update -g @qwen-code/qwen-code',
     versionCommand: 'qwen --version',
-    docsUrl: 'https://github.com/QwenLM/Qwen-Code',
+    versionRegex: /(?:qwen\/|v?)(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://github.com/QwenLM/qwen-code',
     icon: '🐉',
-    requiresPython: true
+    requiresNode: true
   },
   'gemini-cli': {
     id: 'gemini-cli',

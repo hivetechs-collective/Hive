@@ -118,7 +118,7 @@ export class CliToolsDetector {
       }
       
       // Check for memory service connection (for supported tools)
-      if (toolId === 'claude-code' || toolId === 'aider' || toolId === 'gemini-cli') {
+      if (toolId === 'claude-code' || toolId === 'aider' || toolId === 'gemini-cli' || toolId === 'qwen-code') {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       

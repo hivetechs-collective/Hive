@@ -2293,7 +2293,17 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeText: 'FREE',
                 badgeColor: '#28a745'
             }));
-            gridContainer.appendChild(createStaticToolCard('qwen-code', 'Qwen Code', 'Alibaba\'s open-source coding agent', 'OPEN SOURCE', '#6c757d', 'https://github.com/QwenLM/Qwen3-Coder'));
+            // Qwen Code - now with full detection and functionality
+            const qwenStatus = await electronAPI.detectCliTool('qwen-code');
+            gridContainer.appendChild(createCliToolCard({
+                id: 'qwen-code',
+                name: 'Qwen Code',
+                description: 'AI-powered command-line workflow tool (2000 req/day free)',
+                status: qwenStatus,
+                docsUrl: 'https://github.com/QwenLM/qwen-code',
+                badgeText: 'FREE 2K/DAY',
+                badgeColor: '#FF6600'  // Orange color for Alibaba
+            }));
             gridContainer.appendChild(createStaticToolCard('openai-codex', 'OpenAI Codex', 'GPT-powered terminal assistant', null, null, 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started'));
             gridContainer.appendChild(createStaticToolCard('aider', 'Aider', 'Git-integrated inline editing', null, null, 'https://aider.chat/docs/'));
             gridContainer.appendChild(createStaticToolCard('cline', 'Cline', 'Lightweight conversational agent', null, null, 'https://cline.bot/'));
