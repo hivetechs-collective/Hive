@@ -2183,6 +2183,39 @@ See `docs/cli-tools/GEMINI_TEMPLATE.md` for the complete working pattern that in
 9. **Test immediately after changes** - Don't accumulate changes without verification
 10. **Document quirks immediately** - Create `<TOOL>_QUIRKS.md` for each tool's peculiarities
 
+#### Lessons from OpenAI Codex Implementation
+
+1. **Clean implementation** - Package name matches binary name (`@openai/codex` → `codex`)
+2. **Version format** - Outputs `codex-cli 0.23.0` with "codex-cli" prefix
+3. **Memory Service bug confirmed** - After Configure, Details shows "Not connected" until Launch
+4. **UI refresh bug persistent** - 4th tool with same issue, 100% reproducible
+5. **All features work** - Install, Configure, Launch, Update all functional
+6. **GPT-5 and o-series models** - Advanced model support documented
+7. **Multimodal capabilities** - Supports images and diagrams as input
+8. **ChatGPT integration** - Can use ChatGPT Plus subscription instead of API key
+
+#### Memory Service Display Bug (Affects All Tools)
+
+**Bug Description:**
+After clicking "Configure" button and successfully connecting to Memory Service:
+- Configuration file is updated correctly
+- Connection is established
+- BUT "Details" button shows "Memory: Not connected"
+- Only after "Launch Terminal" does Details show "Memory: Connected ✓"
+
+**Root Cause:**
+The detector cache isn't cleared after configuration, so it returns stale data.
+
+**Workaround:**
+Launch the terminal once after configuration to force cache refresh.
+
+**Potential Fix:**
+```typescript
+// In configureCliTool function, after successful configuration:
+cliToolsDetector.clearCache(toolId);
+await renderCliToolsPanel(true);
+```
+
 ### COMPLETE AI CLI Tool Integration Pattern (Post-Gemini)
 
 #### Critical Missing Steps We Discovered
@@ -2190,8 +2223,27 @@ See `docs/cli-tools/GEMINI_TEMPLATE.md` for the complete working pattern that in
 ##### 1. UI Refresh Mechanism (CRITICAL - Was Missing!)
 **File**: `src/renderer.ts`
 
-**⚠️ CRITICAL BUG WE DISCOVERED MULTIPLE TIMES:**
-The UI will show "installed successfully" in console but won't update visually unless forceRefresh is implemented AND the app is properly rebuilt/restarted!
+**⚠️ CRITICAL BUG THAT HAPPENS WITH EVERY SINGLE TOOL (Claude Code, Gemini CLI, Qwen Code, OpenAI Codex):**
+The UI will show "installed successfully" in console but won't update visually even WITH forceRefresh! This is a CONSISTENT issue that occurs EVERY TIME!
+
+**Symptoms (happens 100% of the time):**
+- Console: "[INFO] [CLI Tools] <tool> installed successfully"
+- Console: "[INFO] [CLI Tools] Rendering CLI Tools panel..."
+- Console: "[INFO] [CLI Tools] Panel rendered successfully"
+- UI: Still shows "Install" button - NOT updated!
+
+**Root Cause:**
+The detection runs immediately after install but the tool isn't in PATH yet, or there's a cache issue with the detector.
+
+**REQUIRED WORKAROUND:**
+User MUST restart the app after installation. This is NOT optional - it happens EVERY time!
+
+**Potential Fixes to Implement:**
+1. Add a delay before detection: `setTimeout(() => detectTool(toolId), 3000)`
+2. Clear detector cache: `cliToolsDetector.clearCache(toolId)` before re-detecting
+3. Force PATH refresh in detector before checking
+4. Show a "Restart Required" message after successful install
+5. Implement a manual "Refresh Status" button that works
 
 ```typescript
 // Add forceRefresh parameter to renderCliToolsPanel
@@ -5907,6 +5959,13 @@ electron-poc/
   - **UI State Management**: Real-time status updates without full panel refresh
   - **Security Hardening**: Command injection prevention via whitelist validation
   - **Documentation**: Complete architectural documentation in MASTER_ARCHITECTURE.md
+- **v1.7.0 (2025-08-23)**: Complete AI CLI Tools Suite Implementation
+  - **Gemini CLI Integration**: Full implementation with FREE tier support
+  - **Qwen Code Integration**: Package/binary name mismatch discovered and documented
+  - **OpenAI Codex Integration**: GPT-5 and multimodal support implemented
+  - **UI Refresh Bug Documented**: Persistent issue affecting all tools after install
+  - **Memory Service Display Bug**: Cache issue after configuration identified
+  - **Comprehensive Lessons Learned**: Documentation of all quirks and workarounds
 - **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
   - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts
   - **Unified Cleanup Function**: Single performCleanup() prevents duplicate handlers

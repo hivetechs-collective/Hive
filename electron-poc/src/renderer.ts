@@ -2304,7 +2304,17 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeText: 'FREE 2K/DAY',
                 badgeColor: '#FF6600'  // Orange color for Alibaba
             }));
-            gridContainer.appendChild(createStaticToolCard('openai-codex', 'OpenAI Codex', 'GPT-powered terminal assistant', null, null, 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started'));
+            // OpenAI Codex - now with full detection and functionality
+            const codexStatus = await electronAPI.detectCliTool('openai-codex');
+            gridContainer.appendChild(createCliToolCard({
+                id: 'openai-codex',
+                name: 'OpenAI Codex',
+                description: 'OpenAI\'s agentic coding CLI with GPT-5 and o-series models',
+                status: codexStatus,
+                docsUrl: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
+                badgeText: codexStatus?.installed ? 'INSTALLED' : null,
+                badgeColor: '#007acc'
+            }));
             gridContainer.appendChild(createStaticToolCard('aider', 'Aider', 'Git-integrated inline editing', null, null, 'https://aider.chat/docs/'));
             gridContainer.appendChild(createStaticToolCard('cline', 'Cline', 'Lightweight conversational agent', null, null, 'https://cline.bot/'));
             

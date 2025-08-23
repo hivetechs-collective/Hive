@@ -1444,6 +1444,9 @@ const registerSimpleCliToolHandlers = () => {
             } else if (toolId === 'qwen-code') {
               const match = versionResult.stdout.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
               version = match ? match[1] : 'Unknown';
+            } else if (toolId === 'openai-codex') {
+              const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
+              version = match ? match[1] : 'Unknown';
             } else {
               // Generic version extraction
               const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
@@ -1588,6 +1591,14 @@ const registerSimpleCliToolHandlers = () => {
             });
             // Parse version from output
             const match = versionResult.stdout.match(/(?:qwen\/|v?)(\d+\.\d+\.\d+)/);
+            version = match ? match[1] : 'Unknown';
+          } else if (toolId === 'openai-codex') {
+            // For OpenAI Codex, use codex --version
+            const versionResult = await execAsync('codex --version', {
+              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+            });
+            // Parse version from output
+            const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else {
             // For other tools, try to get version from npm list
@@ -1909,6 +1920,8 @@ server.start();
         command = 'aider';
       } else if (toolId === 'qwen-code') {
         command = 'qwen';
+      } else if (toolId === 'openai-codex') {
+        command = 'codex';
       } else {
         // For other tools, just use their base command
         command = toolId.replace('-cli', '').replace('-code', '');

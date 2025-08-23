@@ -143,6 +143,19 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     docsUrl: 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli',
     icon: '✨',
     requiresNode: true
+  },
+  'openai-codex': {
+    id: 'openai-codex',
+    name: 'OpenAI Codex',
+    description: 'OpenAI\'s agentic coding CLI with GPT-5 and o-series models',
+    command: 'codex',
+    installCommand: 'npm install -g @openai/codex',
+    updateCommand: 'npm update -g @openai/codex',
+    versionCommand: 'codex --version',
+    versionRegex: /codex-cli (\d+\.\d+\.\d+)/,
+    docsUrl: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
+    icon: '🧠',
+    requiresNode: true
   }
 };
 
