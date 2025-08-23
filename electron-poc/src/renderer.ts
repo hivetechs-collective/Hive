@@ -3182,8 +3182,10 @@ async function uninstallCliTool(toolId: string): Promise<void> {
             }
             
             // Refresh the panel after a short delay to update buttons
-            setTimeout(() => {
-                renderCliToolsPanel(true);
+            setTimeout(async () => {
+                await renderCliToolsPanel(true);
+                // Also refresh the sidebar icon to show it's uninstalled
+                await refreshSidebarToolIcon(toolId);
             }, 1500);
             
         } else {
@@ -3312,9 +3314,14 @@ async function uninstallAllCliTools(): Promise<void> {
             }, 5000);
         }
         
-        // Refresh the entire panel to show updated statuses
-        setTimeout(() => {
-            renderCliToolsPanel(true);
+        // Refresh the entire panel to show updated statuses and sidebar icons
+        setTimeout(async () => {
+            await renderCliToolsPanel(true);
+            // Refresh all sidebar icons to show uninstalled status
+            const toolsToUninstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+            for (const toolId of toolsToUninstall) {
+                await refreshSidebarToolIcon(toolId);
+            }
         }, 1000);
         
     } catch (error) {
