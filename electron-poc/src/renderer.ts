@@ -3844,9 +3844,9 @@ setTimeout(() => {
     }
     
     // Initialize Isolated Terminal Panel
-    const isolatedTerminalPanel = document.getElementById('isolated-terminal-panel');
-    if (isolatedTerminalPanel) {
-        (window as any).isolatedTerminal = ttydTerminalPanel.initialize(isolatedTerminalPanel);
+    const isolatedTerminalPanelElement = document.getElementById('isolated-terminal-panel');
+    if (isolatedTerminalPanelElement) {
+        (window as any).isolatedTerminal = ttydTerminalPanel.initialize(isolatedTerminalPanelElement);
         console.log('✅ TTYD Terminal Panel initialized');
         
         // Listen for AI tool launch events from main process
@@ -3875,8 +3875,9 @@ setTimeout(() => {
         // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
         const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
         const consensusPanel = document.getElementById('consensus-chat');
+        const isolatedTerminalPanelForResize = document.querySelector('.isolated-terminal-panel') as HTMLElement;
         
-        if (isolatedTerminalResize && isolatedTerminalPanel) {
+        if (isolatedTerminalResize && isolatedTerminalPanelForResize) {
             let isResizing = false;
             let startX = 0;
             let startWidth = 0;
@@ -3884,7 +3885,7 @@ setTimeout(() => {
             isolatedTerminalResize.addEventListener('mousedown', (e) => {
                 isResizing = true;
                 startX = e.clientX;
-                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanel).width, 10);
+                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanelForResize).width, 10);
                 document.body.style.cursor = 'ew-resize';
                 e.preventDefault();
             });
@@ -3906,7 +3907,7 @@ setTimeout(() => {
                     
                     // Only apply the new width if center area would have at least 400px
                     if (remainingWidth >= 400) {
-                        isolatedTerminalPanel.style.width = newWidth + 'px';
+                        isolatedTerminalPanelForResize.style.width = newWidth + 'px';
                     }
                 } else {
                     isolatedTerminalPanel.style.width = newWidth + 'px';
@@ -3921,8 +3922,9 @@ setTimeout(() => {
             });
         }
         
-        // Get center area element for use in both handlers
+        // Get elements for use in both handlers
         const centerArea = document.getElementById('center-area');
+        const isolatedTerminalPanel = document.querySelector('.isolated-terminal-panel') as HTMLElement;
         
         // Isolated terminal panel collapse/expand (exactly like consensus panel)
         const toggleIsolatedTerminal = document.getElementById('toggle-isolated-terminal');

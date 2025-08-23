@@ -499,8 +499,18 @@ export class TTYDTerminalPanel {
         });
         
         // Check if arrows are needed on resize
+        // Use requestAnimationFrame to prevent ResizeObserver loop errors
+        let resizeAnimationFrame: number | null = null;
         const resizeObserver = new ResizeObserver(() => {
-            this.updateNavigationArrows();
+            // Cancel any pending animation frame
+            if (resizeAnimationFrame !== null) {
+                cancelAnimationFrame(resizeAnimationFrame);
+            }
+            // Schedule update for next animation frame
+            resizeAnimationFrame = requestAnimationFrame(() => {
+                this.updateNavigationArrows();
+                resizeAnimationFrame = null;
+            });
         });
         
         resizeObserver.observe(wrapper);
