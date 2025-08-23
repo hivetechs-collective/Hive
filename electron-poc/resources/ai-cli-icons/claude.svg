@@ -1,1 +1,18 @@
-File not found: /v1/AUTH_mw/wikipedia-commons-local-public.1d/1/1d/Claude_AI_logo.svg
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Claude's orange paint splatter style logo -->
+  <defs>
+    <radialGradient id="claudeGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#FF6B35;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F7931E;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+  <!-- Paint splatter effect -->
+  <path d="M120 30 C95 35, 70 50, 60 75 C50 100, 55 125, 70 145 C75 150, 70 155, 65 160 C60 165, 55 175, 60 185 C65 195, 75 200, 85 195 C90 193, 95 195, 100 200 C110 210, 125 215, 140 210 C155 205, 165 195, 170 180 C175 165, 175 150, 170 135 C168 130, 170 125, 175 120 C185 110, 190 95, 185 80 C180 65, 170 55, 155 50 C140 45, 125 40, 110 45 C105 47, 100 45, 95 40 C90 35, 110 30, 120 30" fill="url(#claudeGradient)"/>
+  <!-- Additional splatter drops -->
+  <circle cx="85" cy="65" r="8" fill="#FF6B35" opacity="0.8"/>
+  <circle cx="155" cy="85" r="6" fill="#F7931E" opacity="0.7"/>
+  <circle cx="145" cy="165" r="7" fill="#FF6B35" opacity="0.6"/>
+  <circle cx="95" cy="175" r="5" fill="#F7931E" opacity="0.8"/>
+  <!-- Center highlight -->
+  <ellipse cx="120" cy="120" rx="35" ry="40" fill="#FFFFFF" opacity="0.3"/>
+</svg>

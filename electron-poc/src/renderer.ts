@@ -57,6 +57,14 @@ import './vscode-scm.css';
 import hiveLogo from './Hive-Logo-small.jpg';
 import aiRobotIcon from './assets/ai-robot.png';
 import { SettingsModal } from './settings-modal';
+
+// Import AI CLI tool icons
+import claudeIcon from '../resources/ai-cli-icons/claude.svg';
+import geminiIcon from '../resources/ai-cli-icons/gemini.svg';
+import grokIcon from '../resources/ai-cli-icons/grok.svg';
+import qwenIcon from '../resources/ai-cli-icons/qwen.svg';
+import openaiIcon from '../resources/ai-cli-icons/openai.svg';
+import clineIcon from '../resources/ai-cli-icons/cline.svg';
 import { ConsensusWebSocket, formatTokens, formatCost, STAGE_DISPLAY_NAMES } from './consensus-websocket';
 import { MemoryDashboard } from './components/memory-dashboard';
 import { NeuralConsciousness } from './neural-consciousness';
@@ -415,27 +423,27 @@ document.body.innerHTML = `
         <!-- AI CLI Tool Quick Launch Icons -->
         <div class="ai-cli-icons-section">
           <button class="activity-btn cli-quick-launch" data-tool="claude-code" aria-label="Claude Code">
-            <img src="resources/ai-cli-icons/claude.svg" width="20" height="20" alt="Claude" />
+            <img src="${claudeIcon}" width="28" height="28" alt="Claude" style="object-fit: contain;" />
             <span class="activity-tooltip">Claude Code</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="gemini-cli" aria-label="Gemini CLI">
-            <img src="resources/ai-cli-icons/gemini.svg" width="20" height="20" alt="Gemini" />
+            <img src="${geminiIcon}" width="28" height="28" alt="Gemini" style="object-fit: contain;" />
             <span class="activity-tooltip">Gemini CLI</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="grok" aria-label="Grok">
-            <img src="resources/ai-cli-icons/grok.svg" width="20" height="20" alt="Grok" />
+            <img src="${grokIcon}" width="28" height="28" alt="Grok" style="object-fit: contain;" />
             <span class="activity-tooltip">Grok CLI</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="qwen-code" aria-label="Qwen Code">
-            <img src="resources/ai-cli-icons/qwen.svg" width="20" height="20" alt="Qwen" />
+            <img src="${qwenIcon}" width="28" height="28" alt="Qwen" style="object-fit: contain;" />
             <span class="activity-tooltip">Qwen Code</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="openai-codex" aria-label="OpenAI Codex">
-            <img src="resources/ai-cli-icons/openai.svg" width="20" height="20" alt="OpenAI" />
+            <img src="${openaiIcon}" width="28" height="28" alt="OpenAI" style="object-fit: contain;" />
             <span class="activity-tooltip">OpenAI Codex</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="cline" aria-label="Cline">
-            <img src="resources/ai-cli-icons/cline.svg" width="20" height="20" alt="Cline" />
+            <img src="${clineIcon}" width="28" height="28" alt="Cline" style="object-fit: contain;" />
             <span class="activity-tooltip">Cline</span>
           </button>
         </div>

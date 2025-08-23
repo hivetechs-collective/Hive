@@ -1,1 +1,13 @@
-File not found: /v1/AUTH_mw/wikipedia-commons-local-public.da/d/da/Grok_logo_%282023-2025%29.svg
+<svg width="240" height="240" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+  <!-- Grok logo - stylized X shape with gradient -->
+  <defs>
+    <linearGradient id="grokGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1DA1F2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0080FF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <!-- X shape for Grok (X.AI) -->
+  <path d="M 60 60 L 100 120 L 60 180 L 80 180 L 120 120 L 160 180 L 180 180 L 140 120 L 180 60 L 160 60 L 120 120 L 80 60 Z" fill="url(#grokGradient)" stroke="#0080FF" stroke-width="2"/>
+  <!-- Center dot -->
+  <circle cx="120" cy="120" r="8" fill="#1DA1F2"/>
+</svg>
