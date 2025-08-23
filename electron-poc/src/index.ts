@@ -1388,8 +1388,104 @@ const registerSimpleCliToolHandlers = () => {
   // Install CLI tool
   ipcMain.handle('cli-tool-install', async (_, toolId: string) => {
     logger.info(`[Main] Installing CLI tool: ${toolId}`);
-    // TODO: Implement installation logic
-    return { success: false, error: 'Installation not yet implemented' };
+    
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      // Get tool configuration from registry
+      const { CLI_TOOLS_REGISTRY } = require('./shared/types/cli-tools');
+      const toolConfig = CLI_TOOLS_REGISTRY[toolId];
+      
+      if (!toolConfig) {
+        logger.error(`[Main] Unknown tool ID for installation: ${toolId}`);
+        return { success: false, error: `Unknown tool: ${toolId}` };
+      }
+      
+      if (!toolConfig.installCommand) {
+        logger.error(`[Main] No installation command defined for: ${toolId}`);
+        return { success: false, error: `Installation not available for ${toolConfig.name}` };
+      }
+      
+      // Enhanced PATH for finding package managers
+      const enhancedPath = `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}`;
+      
+      logger.info(`[Main] Running installation command: ${toolConfig.installCommand}`);
+      
+      try {
+        // Run the installation command
+        const { stdout, stderr } = await execAsync(toolConfig.installCommand, {
+          env: { ...process.env, PATH: enhancedPath },
+          timeout: 120000 // 2 minutes timeout for installation
+        });
+        
+        logger.info(`[Main] Installation output: ${stdout}`);
+        if (stderr && !stderr.includes('WARN') && !stderr.includes('warning')) {
+          logger.warn(`[Main] Installation stderr: ${stderr}`);
+        }
+        
+        // Verify installation by checking if command exists
+        let version = 'Unknown';
+        try {
+          if (toolConfig.versionCommand) {
+            const versionResult = await execAsync(toolConfig.versionCommand, {
+              env: { ...process.env, PATH: enhancedPath },
+              timeout: 5000
+            });
+            
+            // Extract version based on tool
+            if (toolId === 'gemini-cli') {
+              const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
+              version = match ? match[1] : 'Unknown';
+            } else if (toolId === 'claude-code') {
+              const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
+              version = match ? match[1] : 'Unknown';
+            } else {
+              // Generic version extraction
+              const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+              version = match ? match[1] : 'Unknown';
+            }
+          }
+        } catch (versionError) {
+          logger.warn(`[Main] Could not get version after installation:`, versionError);
+        }
+        
+        logger.info(`[Main] ${toolConfig.name} installed successfully, version: ${version}`);
+        return { success: true, version, message: `Installed ${toolConfig.name} version ${version}` };
+        
+      } catch (error: any) {
+        logger.error(`[Main] Failed to install ${toolConfig.name}:`, error);
+        
+        // Check for specific error conditions
+        if (error.message?.includes('EACCES') || error.message?.includes('permission')) {
+          return { 
+            success: false, 
+            error: `Permission denied. Try running: sudo ${toolConfig.installCommand}` 
+          };
+        }
+        
+        if (error.message?.includes('npm: command not found')) {
+          return { 
+            success: false, 
+            error: 'npm not found. Please install Node.js first.' 
+          };
+        }
+        
+        if (error.message?.includes('pip: command not found')) {
+          return { 
+            success: false, 
+            error: 'pip not found. Please install Python first.' 
+          };
+        }
+        
+        return { success: false, error: error.message || 'Installation failed' };
+      }
+      
+    } catch (error: any) {
+      logger.error(`[Main] Unexpected error installing ${toolId}:`, error);
+      return { success: false, error: error.message || 'Unexpected error occurred' };
+    }
   });
   
   // Update CLI tool
@@ -1473,6 +1569,14 @@ const registerSimpleCliToolHandlers = () => {
             });
             // Parse version from output like "claude-code/1.0.86 darwin-arm64 node-v23.6.0"
             const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
+            version = match ? match[1] : 'Unknown';
+          } else if (toolId === 'gemini-cli') {
+            // For Gemini CLI, use gemini --version
+            const versionResult = await execAsync('gemini --version', {
+              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+            });
+            // Parse version from output - expecting format like "gemini-cli/0.1.18" or similar
+            const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
           } else {
             // For other tools, try to get version from npm list
@@ -1749,9 +1853,14 @@ server.start();
       // If no project path provided, show folder selection dialog
       let selectedPath = projectPath;
       if (!selectedPath) {
+        // Get proper tool name from registry
+        const { CLI_TOOLS_REGISTRY } = require('./shared/types/cli-tools');
+        const toolConfig = CLI_TOOLS_REGISTRY[toolId];
+        const toolName = toolConfig ? toolConfig.name : toolId;
+        
         const result = await dialog.showOpenDialog(mainWindow!, {
           properties: ['openDirectory'],
-          title: `Select folder to launch ${toolId === 'claude-code' ? 'Claude Code' : toolId}`,
+          title: `Select folder to launch ${toolName}`,
           buttonLabel: 'Launch Here'
         });
         
@@ -1783,8 +1892,15 @@ server.start();
       let command: string;
       if (toolId === 'claude-code') {
         command = hasBeenLaunched ? 'claude --resume' : 'claude';
+      } else if (toolId === 'gemini-cli') {
+        // Gemini CLI doesn't support --resume, always use base command
+        command = 'gemini';
+      } else if (toolId === 'aider') {
+        command = 'aider';
+      } else if (toolId === 'qwen-code') {
+        command = 'qwen';
       } else {
-        // For other tools, just use their base command (they may not support --resume)
+        // For other tools, just use their base command
         command = toolId.replace('-cli', '').replace('-code', '');
       }
       
@@ -1807,10 +1923,15 @@ server.start();
         
         // THEN: After a small delay to ensure folder context is set, launch the terminal
         setTimeout(() => {
+          // Get proper tool name from registry
+          const { CLI_TOOLS_REGISTRY } = require('./shared/types/cli-tools');
+          const toolConfig = CLI_TOOLS_REGISTRY[toolId];
+          const toolName = toolConfig ? toolConfig.name : toolId;
+          
           logger.info(`[Main] Sending launch-ai-tool-terminal event with command: ${command}`);
           mainWindow.webContents.send('launch-ai-tool-terminal', {
             toolId: toolId,
-            toolName: toolId === 'claude-code' ? 'Claude Code' : toolId,
+            toolName: toolName,
             command: command,
             cwd: selectedPath
           });

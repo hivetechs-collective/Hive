@@ -133,11 +133,15 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
   'gemini-cli': {
     id: 'gemini-cli',
     name: 'Gemini CLI',
-    description: 'Google\'s AI coding assistant',
+    description: 'Google\'s free AI coding assistant with 1M token context',
     command: 'gemini',
+    installCommand: 'npm install -g @google/gemini-cli',
+    updateCommand: 'npm update -g @google/gemini-cli',
     versionCommand: 'gemini --version',
-    docsUrl: 'https://cloud.google.com/gemini',
-    icon: '✨'
+    versionRegex: /(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli',
+    icon: '✨',
+    requiresNode: true
   }
 };
 

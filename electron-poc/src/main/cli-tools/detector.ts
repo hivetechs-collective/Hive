@@ -118,7 +118,7 @@ export class CliToolsDetector {
       }
       
       // Check for memory service connection (for supported tools)
-      if (toolId === 'claude-code' || toolId === 'aider') {
+      if (toolId === 'claude-code' || toolId === 'aider' || toolId === 'gemini-cli') {
         toolInfo.memoryServiceConnected = await this.checkMemoryServiceConnection(toolId);
       }
       
@@ -154,6 +154,13 @@ export class CliToolsDetector {
     if (config.id === 'claude-code') {
       // Claude Code outputs just the version number followed by (Claude Code)
       const match = cleanOutput.match(/^([\d.]+)/);
+      if (match) return match[1];
+    }
+    
+    // Special handling for Gemini CLI
+    if (config.id === 'gemini-cli') {
+      // Gemini CLI outputs format like "gemini-cli/0.1.18" or just "0.1.18"
+      const match = cleanOutput.match(/(?:gemini-cli\/)?(\d+\.\d+\.\d+)/);
       if (match) return match[1];
     }
     
