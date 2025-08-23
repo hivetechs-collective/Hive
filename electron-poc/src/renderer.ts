@@ -3297,7 +3297,7 @@ async function launchCliTool(toolId: string): Promise<void> {
         console.log(`[CLI Tools] ${toolId} is not installed. Redirecting to CLI Tools panel...`);
         
         // Switch to CLI Tools panel
-        const cliToolsButton = document.querySelector('[data-tool="cli-tools"]') as HTMLElement;
+        const cliToolsButton = document.querySelector('[data-view="cli-tools"]') as HTMLElement;
         if (cliToolsButton) {
             cliToolsButton.click();
             
@@ -4103,7 +4103,7 @@ setTimeout(() => {
             // Add a small indicator for uninstalled tools
             const indicator = document.createElement('span');
             indicator.className = 'cli-tool-status-indicator';
-            indicator.innerHTML = '⚠️';
+            indicator.innerHTML = '⬇';  // Download arrow icon
             indicator.title = 'Not installed - Click to install';
             btn.appendChild(indicator);
             

@@ -594,15 +594,17 @@ body {
   position: absolute;
   top: 2px;
   right: 2px;
-  font-size: 12px;
-  background: rgba(255, 152, 0, 0.9);
+  font-size: 14px;
+  background: linear-gradient(135deg, #4CAF50, #2196F3);
   border-radius: 50%;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  color: white;
+  font-weight: bold;
 }
 
 .cli-quick-launch.not-installed {
