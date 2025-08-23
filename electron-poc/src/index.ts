@@ -1680,62 +1680,6 @@ const registerSimpleCliToolHandlers = () => {
     logger.info(`[Main] Configuring CLI tool: ${toolId}`);
     
     try {
-      // Special handling for Grok CLI - needs Grok API key from X.AI
-      if (toolId === 'grok') {
-        logger.info('[Main] Special configuration for Grok CLI - checking for Grok API key');
-        
-        // For Grok, we need a Grok API key from X.AI
-        // Check if user has one configured (we could store it in our database or env)
-        const grokApiKey = process.env.GROK_API_KEY;
-        
-        if (!grokApiKey) {
-          logger.warn('[Main] No Grok API key found in environment');
-          return {
-            success: false,
-            error: 'Grok API key not configured. Please set GROK_API_KEY environment variable or get one from https://x.ai'
-          };
-        }
-        
-        // Create Grok configuration directory if it doesn't exist
-        const grokConfigDir = path.join(os.homedir(), '.grok');
-        if (!fs.existsSync(grokConfigDir)) {
-          fs.mkdirSync(grokConfigDir, { recursive: true });
-        }
-        
-        // Create Grok user settings file
-        const grokSettingsPath = path.join(grokConfigDir, 'user-settings.json');
-        
-        const grokSettings = {
-          apiKey: grokApiKey,
-          baseURL: 'https://api.x.ai/v1',
-          defaultModel: 'grok-4-latest',
-          temperature: 0.7,
-          maxTokens: 4096,
-          enableMorph: false,  // Can be enabled if user has Morph API key
-          maxToolRounds: 400
-        };
-        
-        fs.writeFileSync(grokSettingsPath, JSON.stringify(grokSettings, null, 2));
-        logger.info('[Main] Created Grok configuration at:', grokSettingsPath);
-        
-        // Configure Memory Service for Grok
-        const memoryServiceConfigured = await configureMemoryServiceForTool('grok');
-        
-        if (memoryServiceConfigured) {
-          logger.info('[Main] Successfully configured Grok CLI with API key and Memory Service');
-          return { 
-            success: true, 
-            message: 'Grok CLI configured with API key and Memory Service' 
-          };
-        } else {
-          logger.info('[Main] Successfully configured Grok CLI with API key (Memory Service optional)');
-          return { 
-            success: true, 
-            message: 'Grok CLI configured with API key' 
-          };
-        }
-      }
-      
       // Special handling for Cline - automatically configure with OpenRouter API key
       if (toolId === 'cline') {
         logger.info('[Main] Special configuration for Cline - using OpenRouter API key from Hive');
@@ -2256,18 +2200,7 @@ server.start();
           // Prepare environment variables for tools if needed
           let env: Record<string, string> = {};
           
-          // Grok CLI needs GROK_API_KEY
-          if (toolId === 'grok') {
-            const grokApiKey = process.env.GROK_API_KEY;
-            if (grokApiKey) {
-              env.GROK_API_KEY = grokApiKey;
-              logger.info('[Main] Adding Grok API key to environment for Grok CLI');
-            } else {
-              logger.warn('[Main] No Grok API key found for Grok CLI launch');
-            }
-          }
-          
-          // Cline needs OpenRouter API key
+          // Cline needs OpenRouter API key (special case - we manage its API key)
           if (toolId === 'cline') {
             // Fetch the OpenRouter API key from database
             try {
