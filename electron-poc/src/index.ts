@@ -1395,8 +1395,126 @@ const registerSimpleCliToolHandlers = () => {
   // Update CLI tool
   ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
     logger.info(`[Main] Updating CLI tool: ${toolId}`);
-    // TODO: Implement update logic
-    return { success: false, error: 'Update not yet implemented' };
+    
+    try {
+      const { exec } = require('child_process');
+      const { promisify } = require('util');
+      const execAsync = promisify(exec);
+      
+      // Map tool IDs to their NPM packages
+      const npmPackages: Record<string, string> = {
+        'claude-code': '@anthropic-ai/claude-code',
+        'gemini-cli': '@google/gemini-cli',
+        'qwen-code': '@qwen-code/qwen-code',
+        'openai-codex': '@openai/codex',
+        'cline': '@yaegaki/cline-cli'
+      };
+      
+      const packageName = npmPackages[toolId];
+      if (!packageName) {
+        logger.error(`[Main] Unknown tool ID for update: ${toolId}`);
+        return { success: false, error: `Unknown tool: ${toolId}` };
+      }
+      
+      // For Python-based tools like aider, use pip
+      if (toolId === 'aider') {
+        logger.info(`[Main] Updating ${toolId} via pip...`);
+        const command = 'pip install --upgrade aider-chat';
+        
+        try {
+          const { stdout, stderr } = await execAsync(command, {
+            env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+          });
+          
+          logger.info(`[Main] Pip update output: ${stdout}`);
+          if (stderr && !stderr.includes('WARNING')) {
+            logger.warn(`[Main] Pip update stderr: ${stderr}`);
+          }
+          
+          // Get updated version
+          const versionResult = await execAsync('aider --version', {
+            env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+          });
+          
+          const version = versionResult.stdout.trim().match(/\d+\.\d+\.\d+/)?.[0] || 'Unknown';
+          
+          logger.info(`[Main] ${toolId} updated successfully to version ${version}`);
+          return { success: true, version, message: `Updated to version ${version}` };
+        } catch (error: any) {
+          logger.error(`[Main] Failed to update ${toolId}:`, error);
+          return { success: false, error: error.message || 'Update failed' };
+        }
+      }
+      
+      // For NPM-based tools
+      logger.info(`[Main] Updating ${toolId} via npm...`);
+      
+      // Use npm update to get the latest version
+      const updateCommand = `npm update -g ${packageName}`;
+      
+      try {
+        logger.info(`[Main] Running: ${updateCommand}`);
+        const { stdout, stderr } = await execAsync(updateCommand, {
+          env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+        });
+        
+        logger.info(`[Main] NPM update output: ${stdout}`);
+        if (stderr && !stderr.includes('npm WARN')) {
+          logger.warn(`[Main] NPM update stderr: ${stderr}`);
+        }
+        
+        // Get the updated version
+        let version = 'Unknown';
+        try {
+          // For Claude Code, use claude --version
+          if (toolId === 'claude-code') {
+            const versionResult = await execAsync('claude --version', {
+              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+            });
+            // Parse version from output like "claude-code/1.0.86 darwin-arm64 node-v23.6.0"
+            const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
+            version = match ? match[1] : 'Unknown';
+          } else {
+            // For other tools, try to get version from npm list
+            const listResult = await execAsync(`npm list -g ${packageName} --depth=0`, {
+              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+            });
+            const versionMatch = listResult.stdout.match(new RegExp(`${packageName}@(\\d+\\.\\d+\\.\\d+)`));
+            version = versionMatch ? versionMatch[1] : 'Unknown';
+          }
+        } catch (versionError) {
+          logger.warn(`[Main] Could not get version for ${toolId}:`, versionError);
+        }
+        
+        logger.info(`[Main] ${toolId} updated successfully to version ${version}`);
+        return { success: true, version, message: `Updated to version ${version}` };
+        
+      } catch (error: any) {
+        logger.error(`[Main] Failed to update ${toolId}:`, error);
+        
+        // Check if it's a permission error
+        if (error.message?.includes('EACCES') || error.message?.includes('permission')) {
+          return { 
+            success: false, 
+            error: 'Permission denied. Try running the app with elevated permissions or update manually with: ' + updateCommand 
+          };
+        }
+        
+        // Check if npm is not found
+        if (error.message?.includes('npm: command not found')) {
+          return { 
+            success: false, 
+            error: 'npm not found. Please ensure Node.js and npm are installed.' 
+          };
+        }
+        
+        return { success: false, error: error.message || 'Update failed' };
+      }
+      
+    } catch (error: any) {
+      logger.error(`[Main] Unexpected error updating ${toolId}:`, error);
+      return { success: false, error: error.message || 'Unexpected error occurred' };
+    }
   });
   
   // Configure CLI tool
