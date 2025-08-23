@@ -2700,6 +2700,41 @@ function createStaticToolCard(id: string, name: string, description: string, bad
 }
 
 // CLI Tool Action Handlers
+/**
+ * Refresh a specific sidebar tool icon after installation/update
+ */
+async function refreshSidebarToolIcon(toolId: string): Promise<void> {
+    console.log(`[Sidebar] Refreshing icon status for ${toolId}`);
+    
+    const btn = document.querySelector(`.cli-quick-launch[data-tool="${toolId}"]`) as HTMLElement;
+    if (!btn) return;
+    
+    // Check the current installation status
+    const electronAPI = window.electronAPI as any;
+    const toolStatus = await electronAPI.detectCliTool(toolId);
+    
+    // Remove any existing status indicator
+    const existingIndicator = btn.querySelector('.cli-tool-status-indicator');
+    if (existingIndicator) {
+        existingIndicator.remove();
+    }
+    
+    if (toolStatus.installed) {
+        // Tool is installed - remove the not-installed class and restore full opacity
+        btn.classList.remove('not-installed');
+        console.log(`[Sidebar] ${toolId} icon updated - tool is installed`);
+    } else {
+        // Tool is not installed - add indicator
+        const indicator = document.createElement('span');
+        indicator.className = 'cli-tool-status-indicator';
+        indicator.innerHTML = '⬇';  // Download arrow icon
+        indicator.title = 'Not installed - Click to install';
+        btn.appendChild(indicator);
+        btn.classList.add('not-installed');
+        console.log(`[Sidebar] ${toolId} icon updated - tool is not installed`);
+    }
+}
+
 async function installCliTool(toolId: string): Promise<void> {
     console.log(`[CLI Tools] Install requested for ${toolId}`);
     
@@ -2721,6 +2756,8 @@ async function installCliTool(toolId: string): Promise<void> {
             console.log(`[CLI Tools] ${toolId} installed successfully`);
             // Force refresh the entire panel to update status
             await renderCliToolsPanel(true);
+            // Also refresh the sidebar icon for this tool
+            await refreshSidebarToolIcon(toolId);
         } else {
             console.error(`[CLI Tools] Failed to install ${toolId}:`, result.error);
             alert(`Failed to install: ${result.error}`);
@@ -2844,6 +2881,8 @@ async function updateCliTool(toolId: string): Promise<void> {
             // Force refresh the panel to show updated version
             setTimeout(async () => {
                 await renderCliToolsPanel(true);
+                // Also refresh the sidebar icon
+                await refreshSidebarToolIcon(toolId);
             }, 1000);
         } else {
             console.error(`[CLI Tools] Failed to update ${toolId}:`, result?.error || 'Unknown error');
@@ -2966,9 +3005,14 @@ async function installAllCliTools(): Promise<void> {
             }, 5000);
         }
         
-        // Refresh the entire panel to show updated statuses
-        setTimeout(() => {
-            renderCliToolsPanel(true);
+        // Refresh the entire panel to show updated statuses and sidebar icons
+        setTimeout(async () => {
+            await renderCliToolsPanel(true);
+            // Refresh all sidebar icons
+            const toolsToInstall = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+            for (const toolId of toolsToInstall) {
+                await refreshSidebarToolIcon(toolId);
+            }
         }, 1000);
         
     } catch (error) {
@@ -3077,9 +3121,14 @@ async function updateAllCliTools(): Promise<void> {
             }, 5000);
         }
         
-        // Refresh the entire panel to show updated statuses
-        setTimeout(() => {
-            renderCliToolsPanel(true);
+        // Refresh the entire panel to show updated statuses and sidebar icons
+        setTimeout(async () => {
+            await renderCliToolsPanel(true);
+            // Refresh all sidebar icons
+            const toolsToUpdate = ['claude-code', 'gemini-cli', 'qwen-code', 'openai-codex', 'grok', 'cline'];
+            for (const toolId of toolsToUpdate) {
+                await refreshSidebarToolIcon(toolId);
+            }
         }, 1000);
         
     } catch (error) {
