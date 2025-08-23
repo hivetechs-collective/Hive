@@ -156,6 +156,19 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     docsUrl: 'https://cline.bot',
     icon: '🤖',
     requiresNode: true
+  },
+  'grok': {
+    id: 'grok',
+    name: 'Grok CLI',
+    description: 'xAI Grok-powered terminal agent with MCP support',
+    command: 'grok',
+    installCommand: 'npm install -g @vibe-kit/grok-cli',
+    updateCommand: 'npm update -g @vibe-kit/grok-cli',
+    versionCommand: 'grok --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://github.com/superagent-ai/grok-cli',
+    icon: '🚀',
+    requiresNode: true
   }
 };
 

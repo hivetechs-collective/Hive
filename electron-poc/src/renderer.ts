@@ -2327,6 +2327,18 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeColor: '#28a745'
             }));
             
+            // Grok CLI - xAI powered terminal agent with MCP support
+            const grokStatus = await electronAPI.detectCliTool('grok');
+            gridContainer.appendChild(createCliToolCard({
+                id: 'grok',
+                name: 'Grok CLI',
+                description: 'xAI Grok-powered terminal agent with MCP support',
+                status: grokStatus,
+                docsUrl: 'https://github.com/superagent-ai/grok-cli',
+                badgeText: 'MCP',
+                badgeColor: '#ff6b6b'
+            }));
+            
             console.log('[CLI Tools] Panel rendered successfully');
         } catch (error) {
             console.error('[CLI Tools] Error rendering panel:', error);
