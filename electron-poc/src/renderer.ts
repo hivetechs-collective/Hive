@@ -438,7 +438,7 @@ document.body.innerHTML = `
             <img src="${qwenIcon}" width="42" height="42" alt="Qwen" style="object-fit: contain;" />
             <span class="activity-tooltip">Qwen Code</span>
           </button>
-          <button class="activity-btn cli-quick-launch openai-icon" data-tool="openai-codex" aria-label="OpenAI Codex">
+          <button class="activity-btn cli-quick-launch" data-tool="openai-codex" aria-label="OpenAI Codex">
             <img src="${openaiIcon}" width="42" height="42" alt="OpenAI" style="object-fit: contain;" />
             <span class="activity-tooltip">OpenAI Codex</span>
           </button>
