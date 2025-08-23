@@ -643,6 +643,120 @@ impl PythonModelService {
 - **User Experience**: Appears as single cohesive application
 - **2025 Performance**: Parallel startup, dynamic ports, zero blocking
 
+### Process Cleanup & Termination Architecture
+
+#### Overview
+A robust multi-layered cleanup system ensures no orphaned processes or port conflicts across development and production environments.
+
+#### Components
+
+**1. PidTracker System** (`src/utils/PidTracker.ts`)
+- Tracks all spawned process PIDs to disk (`/tmp/hive-electron-poc.pids`)
+- Cleans up orphaned processes from previous runs on startup
+- Removes PID tracking when processes terminate normally
+- Critical for development where apps may be force-killed
+
+**2. Unified Cleanup Function** (`src/index.ts`)
+```typescript
+async function performCleanup(reason: string) {
+  if (isCleaningUp) return;  // Prevent duplicate cleanup
+  isCleaningUp = true;
+  
+  // Clean up all terminals first
+  cleanupTerminals();
+  
+  // Stop memory service if running
+  await processManager.stopProcess('memory-service');
+  
+  // Clean up all other processes
+  await processManager.cleanup();
+}
+```
+
+**3. Signal Handlers**
+- `before-quit`: Normal app closure
+- `SIGINT`: Ctrl+C termination
+- `SIGTERM`: System shutdown
+- `uncaughtException`: Crash recovery
+- `unhandledRejection`: Promise error recovery
+
+**4. Development Cleanup Script** (`scripts/cleanup-dev.sh`)
+```bash
+# Kills lingering processes and frees ports
+./scripts/cleanup-dev.sh
+
+# Automatically kills:
+# - ttyd processes (terminal servers)
+# - memory-service processes
+# - backend-server processes
+# - Processes using ports 7100-7110, 3457
+```
+
+#### Cleanup Flow
+
+**Normal Shutdown**:
+```
+User Quits App
+    ↓
+app.on('before-quit')
+    ↓
+performCleanup('before-quit')
+    ↓
+├── cleanupTerminals()
+├── stopProcess('memory-service')
+├── processManager.cleanup()
+└── PidTracker removes PIDs
+    ↓
+app.exit(0)
+```
+
+**Force Termination Recovery**:
+```
+App killed with `kill -9`
+    ↓
+PIDs remain in /tmp/hive-electron-poc.pids
+    ↓
+Next app start
+    ↓
+app.on('ready')
+    ↓
+PidTracker.cleanupOrphans()
+    ↓
+├── Read PID file
+├── Check each PID if running
+├── SIGTERM to running processes
+├── SIGKILL if still running after 1s
+└── Clear PID file
+```
+
+#### Port Management During Cleanup
+
+**Port Release Flow**:
+```typescript
+// When process stops/crashes:
+1. Process termination detected
+2. PidTracker.removePid(pid)
+3. PortManager.releasePort(name)
+4. Port available for reallocation
+```
+
+**TTYD Terminal Cleanup**:
+- Each terminal tracked with unique ID
+- PID tracked via PidTracker
+- Port released via PortManager
+- Process killed on tab close or app quit
+
+#### Common Issues & Solutions
+
+**Issue**: Ports still in use after crash
+**Solution**: Run `./scripts/cleanup-dev.sh` or wait for auto-cleanup on next start
+
+**Issue**: Duplicate `before-quit` handlers
+**Solution**: Single unified cleanup function prevents conflicts
+
+**Issue**: Orphaned Python processes
+**Solution**: `kill_on_drop(true)` in Rust + PidTracker ensures cleanup
+
 ---
 
 ## Python Runtime & AI Helpers Architecture
@@ -4413,6 +4527,16 @@ electron-poc/
   - **Details Button**: Refresh tool status and restore full details view
   - **Persistent Configuration**: Tool configs saved in ~/.hive/cli-tools-config.json
   - **Memory Service Bridge**: Claude Code can now query and contribute to AI memory
+
+- **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
+  - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts
+  - **Unified Cleanup Function**: Single performCleanup() prevents duplicate handlers
+  - **Orphan Process Recovery**: Automatically kills lingering processes on startup
+  - **Development Cleanup Script**: scripts/cleanup-dev.sh for manual cleanup
+  - **Fixed Duplicate Handlers**: Removed duplicate before-quit handlers (lines 1639, 2865)
+  - **Claude Code Launch Integration**: AI tool launch with resume detection per repository
+  - **Global Folder Management**: Launch button updates File Explorer, Source Control, Status Bar
+  - **Fixed WebSocket Port Warning**: Early registration of websocket-backend-port handler
 
 - **v1.5.0 (2025-08-20)**: Memory Service Recovery & SafeLogger Cross-Process Support
   - **Fixed Memory Service Startup**: Resolved IPC ready message race condition in ProcessManager
