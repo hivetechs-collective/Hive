@@ -874,7 +874,8 @@ let websocketBackendPort = 8765; // Dynamic port for WebSocket backend
 // let cliToolsManager: CliToolsManager | null = null;  // DEPRECATED - using singleton pattern now
 
 // Function to update MCP configurations for all tools with the actual Memory Service port
-const updateAllMCPConfigurations = (actualPort: number) => {
+// This must be defined before initializeProcessManager where it's used
+function updateAllMCPConfigurations(actualPort: number) {
   const memoryServiceEndpoint = `http://localhost:${actualPort}`;
   logger.info(`[Main] Updating MCP configurations with Memory Service endpoint: ${memoryServiceEndpoint}`);
   
@@ -949,7 +950,7 @@ const updateAllMCPConfigurations = (actualPort: number) => {
   } catch (error) {
     logger.error('[Main] Failed to update MCP configurations:', error);
   }
-};
+}
 
 // Initialize ProcessManager and register all managed processes
 const initializeProcessManager = () => {
