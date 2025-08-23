@@ -873,6 +873,84 @@ let websocketBackendPort = 8765; // Dynamic port for WebSocket backend
 // Note: The manager is now initialized as a singleton in registerCliToolHandlers()
 // let cliToolsManager: CliToolsManager | null = null;  // DEPRECATED - using singleton pattern now
 
+// Function to update MCP configurations for all tools with the actual Memory Service port
+const updateAllMCPConfigurations = (actualPort: number) => {
+  const memoryServiceEndpoint = `http://localhost:${actualPort}`;
+  logger.info(`[Main] Updating MCP configurations with Memory Service endpoint: ${memoryServiceEndpoint}`);
+  
+  try {
+    // Read the CLI tools config to get tokens for each tool
+    const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+    if (!fs.existsSync(configPath)) {
+      logger.info('[Main] No CLI tools config found, skipping MCP updates');
+      return;
+    }
+    
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    
+    // Update MCP wrapper with the correct endpoint
+    const wrapperPath = path.join(os.homedir(), '.hive', 'memory-service-mcp-wrapper.js');
+    if (fs.existsSync(wrapperPath)) {
+      // Read the wrapper and update the ENDPOINT fallback
+      let wrapperContent = fs.readFileSync(wrapperPath, 'utf-8');
+      // Replace the hardcoded endpoint in the fallback
+      wrapperContent = wrapperContent.replace(
+        /const ENDPOINT = process\.env\.MEMORY_SERVICE_ENDPOINT \|\| '[^']+'/,
+        `const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}'`
+      );
+      fs.writeFileSync(wrapperPath, wrapperContent);
+      logger.info('[Main] Updated MCP wrapper with dynamic endpoint');
+    }
+    
+    // Update Claude Code MCP configuration
+    const claudeMcpPath = path.join(os.homedir(), '.claude', '.mcp.json');
+    if (fs.existsSync(claudeMcpPath)) {
+      try {
+        const claudeMcp = JSON.parse(fs.readFileSync(claudeMcpPath, 'utf-8'));
+        if (claudeMcp.servers?.['hive-memory-service']) {
+          const claudeToken = config['claude-code']?.memoryService?.token;
+          if (claudeToken) {
+            claudeMcp.servers['hive-memory-service'].env = {
+              MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+              MEMORY_SERVICE_TOKEN: claudeToken
+            };
+            fs.writeFileSync(claudeMcpPath, JSON.stringify(claudeMcp, null, 2));
+            logger.info('[Main] Updated Claude Code MCP configuration');
+          }
+        }
+      } catch (err) {
+        logger.error('[Main] Failed to update Claude MCP config:', err);
+      }
+    }
+    
+    // Update Grok MCP configuration
+    const grokMcpPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
+    if (fs.existsSync(grokMcpPath)) {
+      try {
+        const grokMcp = JSON.parse(fs.readFileSync(grokMcpPath, 'utf-8'));
+        if (grokMcp.servers?.['hive-memory-service']) {
+          const grokToken = config['grok']?.memoryService?.token;
+          if (grokToken) {
+            grokMcp.servers['hive-memory-service'].env = {
+              MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+              MEMORY_SERVICE_TOKEN: grokToken
+            };
+            fs.writeFileSync(grokMcpPath, JSON.stringify(grokMcp, null, 2));
+            logger.info('[Main] Updated Grok MCP configuration');
+          }
+        }
+      } catch (err) {
+        logger.error('[Main] Failed to update Grok MCP config:', err);
+      }
+    }
+    
+    // We could add similar updates for other tools here if they support MCP
+    
+  } catch (error) {
+    logger.error('[Main] Failed to update MCP configurations:', error);
+  }
+};
+
 // Initialize ProcessManager and register all managed processes
 const initializeProcessManager = () => {
   // Register Memory Service configuration with ts-node
@@ -934,6 +1012,9 @@ const initializeProcessManager = () => {
       if (msg.type === 'ready') {
         logger.info('[Main] Memory Service ready on port:', msg.port);
         memoryServicePort = msg.port || memoryServicePort;
+        
+        // Update MCP configurations for all tools with the actual dynamic port
+        updateAllMCPConfigurations(memoryServicePort);
       } else if (msg.type === 'db-query') {
         handleMemoryServiceDbQuery(msg);
       }
@@ -2352,6 +2433,40 @@ server.start();
       }
       
       fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+      
+      // Also configure MCP for Grok if it's being installed
+      if (toolId === 'grok') {
+        const grokMcpConfigPath = path.join(os.homedir(), '.grok', 'mcp-config.json');
+        let grokMcpConfig: any = { servers: {} };
+        
+        if (fs.existsSync(grokMcpConfigPath)) {
+          try {
+            grokMcpConfig = JSON.parse(fs.readFileSync(grokMcpConfigPath, 'utf-8'));
+          } catch {
+            grokMcpConfig = { servers: {} };
+          }
+        }
+        
+        // Add or update the memory service server for Grok
+        grokMcpConfig.servers['hive-memory-service'] = {
+          transport: 'stdio',
+          command: 'node',
+          args: [wrapperPath],
+          env: {
+            MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+            MEMORY_SERVICE_TOKEN: token
+          }
+        };
+        
+        // Ensure Grok directory exists
+        const grokDir = path.dirname(grokMcpConfigPath);
+        if (!fs.existsSync(grokDir)) {
+          fs.mkdirSync(grokDir, { recursive: true });
+        }
+        
+        fs.writeFileSync(grokMcpConfigPath, JSON.stringify(grokMcpConfig, null, 2));
+        logger.info(`[Main] Successfully configured Grok MCP with Memory Service`);
+      }
       
       logger.info(`[Main] Successfully configured ${toolId} with Memory Service`);
       return { 
