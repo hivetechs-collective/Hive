@@ -422,11 +422,11 @@ document.body.innerHTML = `
         
         <!-- AI CLI Tool Quick Launch Icons -->
         <div class="ai-cli-icons-section">
-          <button class="activity-btn cli-quick-launch" data-tool="claude-code" aria-label="Claude Code">
+          <button class="activity-btn cli-quick-launch claude-icon" data-tool="claude-code" aria-label="Claude Code">
             <img src="${claudeIcon}" width="42" height="42" alt="Claude" style="object-fit: contain;" />
             <span class="activity-tooltip">Claude Code</span>
           </button>
-          <button class="activity-btn cli-quick-launch" data-tool="gemini-cli" aria-label="Gemini CLI">
+          <button class="activity-btn cli-quick-launch gemini-icon" data-tool="gemini-cli" aria-label="Gemini CLI">
             <img src="${geminiIcon}" width="42" height="42" alt="Gemini" style="object-fit: contain;" />
             <span class="activity-tooltip">Gemini CLI</span>
           </button>

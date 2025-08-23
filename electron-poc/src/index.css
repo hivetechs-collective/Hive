@@ -538,6 +538,7 @@ body {
   opacity: 1;
   transition: transform 0.2s;
   filter: brightness(1.1);
+  color: #ffffff; /* Ensure currentColor is white for dark theme */
 }
 
 .cli-quick-launch:hover {
@@ -546,13 +547,31 @@ body {
 }
 
 .cli-quick-launch img {
-  filter: none;
+  filter: invert(1); /* Invert black icons to white for dark theme */
   opacity: 1;
   transition: filter 0.3s;
 }
 
 .cli-quick-launch:hover img {
-  filter: grayscale(0%) drop-shadow(0 0 3px rgba(255, 193, 7, 0.5));
+  filter: invert(1) drop-shadow(0 0 3px rgba(255, 193, 7, 0.5));
+}
+
+/* Claude icon already has colors, don't invert */
+.cli-quick-launch.claude-icon img {
+  filter: none;
+}
+
+.cli-quick-launch.claude-icon:hover img {
+  filter: drop-shadow(0 0 3px rgba(255, 193, 7, 0.5));
+}
+
+/* Gemini icon has gradient, don't invert */
+.cli-quick-launch.gemini-icon img {
+  filter: none;
+}
+
+.cli-quick-launch.gemini-icon:hover img {
+  filter: drop-shadow(0 0 3px rgba(255, 193, 7, 0.5));
 }
 
 /* Bottom Section for Settings */

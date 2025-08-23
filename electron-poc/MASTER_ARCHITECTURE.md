@@ -1123,7 +1123,7 @@ App Root (renderer.ts)
 Our application uses a sophisticated panel system that provides VS Code-like flexibility:
 
 **Panel Types**:
-1. **Fixed Panels**: Activity Bar (48px width)
+1. **Fixed Panels**: Activity Bar (56px width - widened for AI CLI icons)
 2. **Collapsible Panels**: Sidebar (260px default, can collapse to 0)
 3. **Resizable Panels**: Isolated Terminal & Consensus (200-600px range)
 4. **Flex Panels**: Main content area (grows to fill available space)
@@ -6583,7 +6583,9 @@ electron-poc/
 - **v1.7.2 (2025-08-23)**: AI CLI Tool Quick Launch Icons & UI Improvements
   - **Quick Launch Icons**: Implemented 6 AI tool icons in left sidebar for instant access
   - **Sidebar Reorganization**: Added dividers and fixed Settings at bottom
-  - **Icon Resources**: Official logos for Claude, Gemini, Grok, OpenAI; placeholders for Qwen, Cline
+  - **Icon Resources**: Official logos for all 6 tools - Claude, Gemini, Grok, Qwen, OpenAI, Cline
+  - **Dark Theme Icons**: Downloaded dark theme versions from LobeHub CDN for perfect visibility
+  - **Icon Styling**: Smart CSS with inversion for black icons, preserved colors for Claude/Gemini
   - **Launch Integration**: Icons use identical `launchCliTool()` function as Launch buttons
   - **Terminal Cleanup**: Hidden basic HTML terminal in favor of TTYD System Log
   - **TypeScript Fix**: Resolved @types/node version mismatch for clean compilation
