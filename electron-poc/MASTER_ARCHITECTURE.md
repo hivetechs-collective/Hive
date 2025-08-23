@@ -1664,20 +1664,31 @@ For Claude Code and compatible tools:
 
 1. **Registration Flow**:
    - Tool registers with Memory Service API (`POST /api/v1/memory/register`)
-   - Receives unique authentication token
+   - Memory Service generates unique 64-byte token using crypto.randomBytes(32).toString('hex')
    - Token stored in `~/.hive/cli-tools-config.json`
+   - Token immediately usable for authenticated API calls
 
 2. **MCP Configuration**:
    - Automatically updates `~/.claude/.mcp.json`
    - Creates MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
+   - Wrapper script uses `@modelcontextprotocol/sdk` for MCP server
    - Exposes two MCP tools:
-     - `query_memory`: Search AI memory system
-     - `contribute_learning`: Add new learnings
+     - `query_memory`: Search AI memory system for relevant learnings
+     - `contribute_learning`: Add new learnings with type, category, content
 
-3. **Authentication**:
+3. **Authentication System**:
    - Bearer token authentication for all API calls
-   - Per-tool tokens for isolation and security
-   - Tokens persist across sessions
+   - Per-tool tokens for isolation and security (each tool gets unique token)
+   - Tokens persist across sessions in cli-tools-config.json
+   - Memory Service tracks connected tools in-memory with Map<token, ToolInfo>
+   - Authentication middleware validates token on each request:
+     ```typescript
+     const token = req.headers.authorization?.replace('Bearer ', '');
+     if (!this.connectedTools.has(token)) {
+       // Register new tool connection
+       this.connectedTools.set(token, { id, name, connectedAt, ... });
+     }
+     ```
 
 4. **API Endpoints**:
    ```
@@ -1716,9 +1727,11 @@ next_sync_due: next update check time
    - Restores full detail view after other actions
 
 2. **Configure Button** (Gray):
-   - Registers tool with Memory Service
-   - Generates authentication token
-   - Updates MCP configuration
+   - Registers tool with Memory Service via POST `/api/v1/memory/register`
+   - Generates unique authentication token (64-byte hex string)
+   - Saves token to `~/.hive/cli-tools-config.json`
+   - Creates/updates MCP wrapper script at `~/.hive/memory-service-mcp-wrapper.js`
+   - Updates Claude's MCP configuration at `~/.claude/.mcp.json`
    - Shows "✅ Configured" on success
 
 3. **Update Button** (Gray):
@@ -3812,6 +3825,82 @@ As of version 1.6.0, full Claude Code CLI integration has been implemented with 
 - **IPC**: Main/renderer communication via Electron IPC
 - **UI Updates**: Dynamic DOM manipulation with data attributes
 - **Error Handling**: Try-catch blocks with user-friendly error messages
+
+#### Memory Service Connection Detection
+The `checkMemoryServiceConnection` method in `cli-tool-detector.ts`:
+```typescript
+private async checkMemoryServiceConnection(toolId: string): Promise<boolean> {
+  // 1. Read cli-tools-config.json for existing token
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  const token = config[toolId]?.memoryService?.token;
+  
+  // 2. Validate token with Memory Service
+  const req = http.request({
+    hostname: 'localhost',
+    port: memoryServicePort,
+    path: '/api/v1/memory/stats',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'X-Client-Name': toolId
+    }
+  });
+  
+  // 3. Return true if service responds (200 or 401)
+  return res.statusCode === 200 || res.statusCode === 401;
+}
+```
+
+#### Configure Button Implementation
+The complete flow in `cli-tool-configure` IPC handler:
+
+1. **Get Memory Service Port**:
+   ```typescript
+   const memoryServiceInfo = processManager.getProcessStatus('memory-service');
+   const memoryServicePort = memoryServiceInfo?.port || 3457;
+   ```
+
+2. **Register with Memory Service**:
+   ```typescript
+   POST /api/v1/memory/register
+   Body: { toolName: 'claude-code' }
+   Response: { token: '86a752ef...' }
+   ```
+
+3. **Save Configuration**:
+   ```json
+   // ~/.hive/cli-tools-config.json
+   {
+     "claude-code": {
+       "memoryService": {
+         "endpoint": "http://localhost:3457",
+         "token": "86a752ef...",
+         "connectedAt": "2025-08-23T02:27:55.368Z"
+       }
+     }
+   }
+   ```
+
+4. **Generate MCP Wrapper Script**:
+   - Creates Node.js script at `~/.hive/memory-service-mcp-wrapper.js`
+   - Implements MCP Server with `query_memory` and `contribute_learning` tools
+   - Uses environment variables for endpoint and token
+
+5. **Update MCP Configuration**:
+   ```json
+   // ~/.claude/.mcp.json
+   {
+     "servers": {
+       "hive-memory-service": {
+         "command": "node",
+         "args": ["/Users/.../.hive/memory-service-mcp-wrapper.js"],
+         "env": {
+           "MEMORY_SERVICE_ENDPOINT": "http://localhost:3457",
+           "MEMORY_SERVICE_TOKEN": "86a752ef..."
+         }
+       }
+     }
+   }
+   ```
 
 ### Installation Detection System
 

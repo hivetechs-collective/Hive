@@ -1402,8 +1402,218 @@ const registerSimpleCliToolHandlers = () => {
   // Configure CLI tool
   ipcMain.handle('cli-tool-configure', async (_, toolId: string) => {
     logger.info(`[Main] Configuring CLI tool: ${toolId}`);
-    // TODO: Implement configuration logic
-    return { success: false, error: 'Configuration not yet implemented' };
+    
+    try {
+      // 1. Get Memory Service port from ProcessManager
+      const memoryServiceInfo = processManager.getProcessStatus('memory-service');
+      const memoryServicePort = memoryServiceInfo?.port || 3457;
+      const memoryServiceEndpoint = `http://localhost:${memoryServicePort}`;
+      
+      // 2. Register with Memory Service to get a token
+      const http = require('http');
+      const crypto = require('crypto');
+      
+      const registerPromise = new Promise<{ token: string }>((resolve, reject) => {
+        const postData = JSON.stringify({
+          toolName: toolId
+        });
+        
+        const options = {
+          hostname: 'localhost',
+          port: memoryServicePort,
+          path: '/api/v1/memory/register',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(postData)
+          }
+        };
+        
+        const req = http.request(options, (res: any) => {
+          let data = '';
+          res.on('data', (chunk: any) => data += chunk);
+          res.on('end', () => {
+            try {
+              const result = JSON.parse(data);
+              if (result.token) {
+                resolve(result);
+              } else {
+                reject(new Error('No token received from Memory Service'));
+              }
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+        
+        req.on('error', reject);
+        req.write(postData);
+        req.end();
+      });
+      
+      const registrationResult = await registerPromise;
+      const token = registrationResult.token;
+      
+      // 3. Save token to cli-tools-config.json
+      const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+      let config: any = {};
+      
+      if (fs.existsSync(configPath)) {
+        config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      }
+      
+      config[toolId] = {
+        ...config[toolId],
+        memoryService: {
+          endpoint: memoryServiceEndpoint,
+          token: token,
+          connectedAt: new Date().toISOString()
+        }
+      };
+      
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      
+      // 4. Create MCP wrapper script
+      const wrapperPath = path.join(os.homedir(), '.hive', 'memory-service-mcp-wrapper.js');
+      const wrapperContent = `#!/usr/bin/env node
+/**
+ * MCP Wrapper for Hive Memory Service
+ * This script provides an MCP-compatible interface to the Memory Service
+ */
+
+const { Server } = require('@modelcontextprotocol/sdk');
+const fetch = require('node-fetch');
+
+const ENDPOINT = process.env.MEMORY_SERVICE_ENDPOINT || '${memoryServiceEndpoint}';
+const TOKEN = process.env.MEMORY_SERVICE_TOKEN;
+
+class MemoryServiceMCP extends Server {
+  constructor() {
+    super({
+      name: 'hive-memory-service',
+      version: '1.0.0',
+      description: 'Hive Consensus Memory Service'
+    });
+
+    this.registerTool({
+      name: 'query_memory',
+      description: 'Query the AI memory system for relevant learnings',
+      parameters: {
+        query: { type: 'string', required: true },
+        limit: { type: 'number', default: 5 }
+      },
+      handler: this.queryMemory.bind(this)
+    });
+
+    this.registerTool({
+      name: 'contribute_learning',
+      description: 'Contribute a new learning to the memory system',
+      parameters: {
+        type: { type: 'string', required: true },
+        category: { type: 'string', required: true },
+        content: { type: 'string', required: true },
+        code: { type: 'string' }
+      },
+      handler: this.contributeLearning.bind(this)
+    });
+  }
+
+  async queryMemory({ query, limit = 5 }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/query\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': 'claude-code-mcp'
+      },
+      body: JSON.stringify({
+        client: 'claude-code',
+        context: { file: process.cwd() },
+        query,
+        options: { limit }
+      })
+    });
+
+    return await response.json();
+  }
+
+  async contributeLearning({ type, category, content, code }) {
+    const response = await fetch(\`\${ENDPOINT}/api/v1/memory/contribute\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${TOKEN}\`,
+        'X-Client-Name': 'claude-code-mcp'
+      },
+      body: JSON.stringify({
+        source: 'claude-code',
+        learning: {
+          type,
+          category,
+          content,
+          code,
+          context: { file: process.cwd(), success: true }
+        }
+      })
+    });
+
+    return await response.json();
+  }
+}
+
+// Start the MCP server
+const server = new MemoryServiceMCP();
+server.start();
+`;
+      
+      fs.writeFileSync(wrapperPath, wrapperContent);
+      fs.chmodSync(wrapperPath, '755');
+      
+      // 5. Update MCP configuration for Claude Code
+      const mcpConfigPath = path.join(os.homedir(), '.claude', '.mcp.json');
+      let mcpConfig: any = { servers: {} };
+      
+      if (fs.existsSync(mcpConfigPath)) {
+        try {
+          mcpConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+        } catch {
+          mcpConfig = { servers: {} };
+        }
+      }
+      
+      // Add or update the memory service server
+      mcpConfig.servers['hive-memory-service'] = {
+        command: 'node',
+        args: [wrapperPath],
+        env: {
+          MEMORY_SERVICE_ENDPOINT: memoryServiceEndpoint,
+          MEMORY_SERVICE_TOKEN: token
+        },
+        description: 'Hive Consensus Memory Service - AI memory and learning system'
+      };
+      
+      // Ensure directory exists
+      const mcpDir = path.dirname(mcpConfigPath);
+      if (!fs.existsSync(mcpDir)) {
+        fs.mkdirSync(mcpDir, { recursive: true });
+      }
+      
+      fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+      
+      logger.info(`[Main] Successfully configured ${toolId} with Memory Service`);
+      return { 
+        success: true, 
+        message: `${toolId} successfully connected to Memory Service`,
+        token: token.substring(0, 8) + '...' // Show partial token for confirmation
+      };
+      
+    } catch (error) {
+      logger.error(`[Main] Failed to configure ${toolId}:`, error);
+      return { 
+        success: false, 
+        error: `Failed to configure: ${error.message}` 
+      };
+    }
   });
   
   // Check for updates

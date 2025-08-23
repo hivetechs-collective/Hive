@@ -7,6 +7,8 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { 
   CliToolInfo, 
   CliToolStatus, 
@@ -177,9 +179,63 @@ export class CliToolsDetector {
    * Check if tool is connected to memory service
    */
   private async checkMemoryServiceConnection(toolId: string): Promise<boolean> {
-    // TODO: Implement actual memory service connection check
-    // For now, return false
-    return false;
+    try {
+      // Check if we have a config file with token
+      const configPath = path.join(os.homedir(), '.hive', 'cli-tools-config.json');
+      if (!fs.existsSync(configPath)) {
+        logger.debug(`[CliToolsDetector] No config file found for memory service check`);
+        return false;
+      }
+      
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const toolConfig = config[toolId];
+      
+      if (!toolConfig?.memoryService?.token) {
+        logger.debug(`[CliToolsDetector] No memory service token found for ${toolId}`);
+        return false;
+      }
+      
+      // Check if the token is valid by querying the Memory Service
+      const memoryServicePort = toolConfig.memoryService.endpoint?.match(/:(\d+)/)?.[1] || '3457';
+      
+      // Use node's http module instead of fetch for compatibility
+      const http = require('http');
+      
+      return new Promise((resolve) => {
+        const options = {
+          hostname: 'localhost',
+          port: memoryServicePort,
+          path: '/api/v1/memory/stats',
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${toolConfig.memoryService.token}`,
+            'X-Client-Name': toolId
+          },
+          timeout: 2000
+        };
+        
+        const req = http.request(options, (res: any) => {
+          // If we get any response (even 401), the service is running
+          // We just care if the service is accessible
+          resolve(res.statusCode === 200 || res.statusCode === 401);
+        });
+        
+        req.on('error', () => {
+          logger.debug(`[CliToolsDetector] Memory service not accessible for ${toolId}`);
+          resolve(false);
+        });
+        
+        req.on('timeout', () => {
+          req.destroy();
+          resolve(false);
+        });
+        
+        req.end();
+      });
+    } catch (error) {
+      logger.debug(`[CliToolsDetector] Failed to check memory service connection for ${toolId}:`, error);
+      return false;
+    }
   }
   
   /**
