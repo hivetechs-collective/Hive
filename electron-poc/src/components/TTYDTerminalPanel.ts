@@ -617,27 +617,41 @@ export class TTYDTerminalPanel {
     }
     
     private fixPanelLayout(): void {
-        // Fix the panel layout after window state changes
+        // Fix the panel layout after window state changes or panel expansion
         const panel = document.querySelector('.isolated-terminal-panel') as HTMLElement;
         const contentContainer = document.getElementById('isolated-terminal-content');
         const tabsContainer = document.getElementById('isolated-terminal-tabs');
+        const headerContainer = document.querySelector('.isolated-terminal-header') as HTMLElement;
         
         if (!panel || !contentContainer || !tabsContainer) return;
+        
+        // Check if panel is in expand-to-fill mode
+        const isExpanded = panel.classList.contains('expand-to-fill');
         
         // Reset any weird dimensions
         const tabsHeight = 35; // Height of the tabs bar
         
-        // Ensure content container fills the panel properly
+        // Fix the panel height
+        if (isExpanded) {
+            // When expanded, ensure it fills available height
+            panel.style.height = '100%';
+        }
+        
+        // Ensure header has fixed height
+        if (headerContainer) {
+            headerContainer.style.height = `${tabsHeight}px`;
+            headerContainer.style.minHeight = `${tabsHeight}px`;
+            headerContainer.style.maxHeight = `${tabsHeight}px`;
+            headerContainer.style.flex = `0 0 ${tabsHeight}px`;
+        }
+        
+        // Ensure content container fills the remaining space
+        contentContainer.style.flex = '1 1 auto';
         contentContainer.style.position = 'relative';
         contentContainer.style.width = '100%';
         contentContainer.style.height = `calc(100% - ${tabsHeight}px)`;
-        contentContainer.style.top = 'auto';
-        contentContainer.style.left = 'auto';
-        
-        // Ensure tabs container has proper height
-        tabsContainer.parentElement!.style.height = `${tabsHeight}px`;
-        tabsContainer.parentElement!.style.minHeight = `${tabsHeight}px`;
-        tabsContainer.parentElement!.style.maxHeight = `${tabsHeight}px`;
+        contentContainer.style.minHeight = '0';
+        contentContainer.style.overflow = 'hidden';
         
         // Force all webviews to recalculate their dimensions
         this.tabs.forEach((tab) => {
@@ -743,6 +757,30 @@ export class TTYDTerminalPanel {
                 }, 100);
             }
         });
+        
+        // Watch for expand-to-fill class changes
+        const panel = document.querySelector('.isolated-terminal-panel');
+        if (panel) {
+            const classObserver = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                        const target = mutation.target as HTMLElement;
+                        const hasExpandClass = target.classList.contains('expand-to-fill');
+                        console.log('[TTYDTerminalPanel] Panel expand state changed:', hasExpandClass);
+                        
+                        // Fix layout when expansion state changes
+                        setTimeout(() => {
+                            this.fixPanelLayout();
+                        }, 50);
+                    }
+                });
+            });
+            
+            classObserver.observe(panel, {
+                attributes: true,
+                attributeFilter: ['class']
+            });
+        }
         
         const resizeObserver = new ResizeObserver(() => {
             // Debounce resize events to avoid excessive redraws

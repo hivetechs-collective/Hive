@@ -2247,7 +2247,21 @@ body {
   display: flex !important;
   flex-direction: column !important;
   min-height: 100px;
+  height: 100%;
   max-height: 100%;
+}
+
+/* When panel expands to fill available space */
+.isolated-terminal-panel.expand-to-fill {
+  width: auto !important;
+  flex: 1 1 auto !important;
+  height: 100% !important;
+}
+
+.isolated-terminal-header {
+  flex: 0 0 35px !important;
+  min-height: 35px !important;
+  max-height: 35px !important;
 }
 
 .isolated-terminal-content {
@@ -2255,6 +2269,18 @@ body {
   position: relative !important;
   overflow: hidden;
   min-height: 0;
+  height: calc(100% - 35px) !important;
+}
+
+/* Ensure webviews fill their container */
+.isolated-tab-content {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* TTYD Terminal Tab Styling */
