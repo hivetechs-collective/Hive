@@ -36,6 +36,7 @@
 .codicon-dash:before { content: '\eacc' }
 .codicon-close:before { content: '\ea76' }
 .codicon-discard:before { content: '\ea76' }
+.codicon-trash:before { content: '\ea81' }
 
 :root {
   /* Base Dioxus colors */

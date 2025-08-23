@@ -2258,39 +2258,60 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 <div style="display: flex; gap: 10px; margin-bottom: 20px; align-items: center;">
                     <button onclick="installAllCliTools()" style="
                         padding: 8px 16px;
-                        background: #007acc;
+                        background: linear-gradient(0deg, #0e639c, #1177bb);
                         color: #fff;
-                        border: none;
-                        border-radius: 3px;
-                        font-size: 13px;
-                        font-weight: 500;
+                        border: 1px solid #1e6ba8;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        font-weight: 600;
                         cursor: pointer;
-                        transition: background 0.2s ease;
+                        transition: all 0.15s ease;
                         display: flex;
                         align-items: center;
                         gap: 6px;
-                    " onmouseover="this.style.background='#1e8ad6'" 
-                       onmouseout="this.style.background='#007acc'">
-                        <span style="font-size: 16px;">📦</span>
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                    " onmouseover="this.style.background='linear-gradient(0deg, #1177bb, #2489ce)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.3)'" 
+                       onmouseout="this.style.background='linear-gradient(0deg, #0e639c, #1177bb)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 2px rgba(0,0,0,0.2)'">
+                        <span class="codicon codicon-cloud-download" style="font-size: 14px;"></span>
                         <span>Install All Tools</span>
                     </button>
                     <button onclick="updateAllCliTools()" style="
                         padding: 8px 16px;
-                        background: #2d7d2d;
+                        background: linear-gradient(0deg, #388a34, #45a642);
                         color: #fff;
-                        border: none;
-                        border-radius: 3px;
-                        font-size: 13px;
-                        font-weight: 500;
+                        border: 1px solid #2e7d32;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        font-weight: 600;
                         cursor: pointer;
-                        transition: background 0.2s ease;
+                        transition: all 0.15s ease;
                         display: flex;
                         align-items: center;
                         gap: 6px;
-                    " onmouseover="this.style.background='#3a9a3a'" 
-                       onmouseout="this.style.background='#2d7d2d'">
-                        <span style="font-size: 16px;">↻</span>
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                    " onmouseover="this.style.background='linear-gradient(0deg, #45a642, #52c550)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.3)'" 
+                       onmouseout="this.style.background='linear-gradient(0deg, #388a34, #45a642)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 2px rgba(0,0,0,0.2)'">
+                        <span class="codicon codicon-sync" style="font-size: 14px;"></span>
                         <span>Update All Tools</span>
+                    </button>
+                    <button onclick="uninstallAllCliTools()" style="
+                        padding: 8px 16px;
+                        background: linear-gradient(0deg, #5a1e1e, #6e2424);
+                        color: #fff;
+                        border: 1px solid #632424;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: all 0.15s ease;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+                    " onmouseover="this.style.background='linear-gradient(0deg, #6e2424, #832929)'; this.style.transform='translateY(-1px)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.3)'" 
+                       onmouseout="this.style.background='linear-gradient(0deg, #5a1e1e, #6e2424)'; this.style.transform='translateY(0)'; this.style.boxShadow='0 1px 2px rgba(0,0,0,0.2)'">
+                        <span class="codicon codicon-trash" style="font-size: 14px;"></span>
+                        <span>Uninstall All Tools</span>
                     </button>
                     <div id="batch-status" style="
                         display: none;
@@ -2444,19 +2465,92 @@ function createCliToolCard(toolInfo: CliToolCardInfo): HTMLDivElement {
     let buttons = '';
     if (isInstalled) {
         buttons = `
-            <button onclick="launchCliTool('${id}')" style="flex: 1; padding: 6px; background: #2196f3; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Launch in current project">Launch</button>
-            <button onclick="refreshCliToolDetails('${id}')" style="flex: 1; padding: 6px; background: #2d7d2d; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Refresh tool details">Details</button>
-            <button onclick="updateCliTool('${id}')" style="flex: 1; padding: 6px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Update</button>
-            <button onclick="uninstallCliTool('${id}')" style="flex: 1; padding: 6px; background: #d73a49; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;" title="Uninstall this tool"
-                onmouseover="this.style.background='#cb2431'" 
-                onmouseout="this.style.background='#d73a49'">Uninstall</button>
+            <button onclick="launchCliTool('${id}')" style="
+                flex: 1; 
+                padding: 6px 10px; 
+                background: linear-gradient(0deg, #0e639c, #1177bb); 
+                color: #fff; 
+                border: 1px solid rgba(255,255,255,0.1); 
+                border-radius: 3px; 
+                font-size: 11px; 
+                font-weight: 500;
+                cursor: pointer; 
+                transition: all 0.15s ease;
+            " onmouseover="this.style.background='linear-gradient(0deg, #1177bb, #2489ce)'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='linear-gradient(0deg, #0e639c, #1177bb)'; this.style.transform='translateY(0)'" 
+               title="Launch in current project">Launch</button>
+            <button onclick="refreshCliToolDetails('${id}')" style="
+                flex: 1; 
+                padding: 6px 10px; 
+                background: #3e3e42; 
+                color: #cccccc; 
+                border: 1px solid rgba(255,255,255,0.1); 
+                border-radius: 3px; 
+                font-size: 11px; 
+                font-weight: 500;
+                cursor: pointer; 
+                transition: all 0.15s ease;
+            " onmouseover="this.style.background='#45454a'; this.style.color='#ffffff'" 
+               onmouseout="this.style.background='#3e3e42'; this.style.color='#cccccc'" 
+               title="Refresh tool details">Details</button>
+            <button onclick="updateCliTool('${id}')" style="
+                flex: 1; 
+                padding: 6px 10px; 
+                background: linear-gradient(0deg, #388a34, #45a642); 
+                color: #fff; 
+                border: 1px solid rgba(255,255,255,0.1); 
+                border-radius: 3px; 
+                font-size: 11px; 
+                font-weight: 500;
+                cursor: pointer; 
+                transition: all 0.15s ease;
+            " onmouseover="this.style.background='linear-gradient(0deg, #45a642, #52c550)'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='linear-gradient(0deg, #388a34, #45a642)'; this.style.transform='translateY(0)'">Update</button>
+            <button onclick="uninstallCliTool('${id}')" style="
+                flex: 1; 
+                padding: 6px 10px; 
+                background: linear-gradient(0deg, #5a1e1e, #6e2424); 
+                color: #fff; 
+                border: 1px solid rgba(255,255,255,0.1); 
+                border-radius: 3px; 
+                font-size: 11px; 
+                font-weight: 500;
+                cursor: pointer; 
+                transition: all 0.15s ease;
+            " onmouseover="this.style.background='linear-gradient(0deg, #6e2424, #832929)'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='linear-gradient(0deg, #5a1e1e, #6e2424)'; this.style.transform='translateY(0)'" 
+               title="Uninstall this tool">Uninstall</button>
         `;
     } else {
         buttons = `
-            <button onclick="installCliTool('${id}')" style="flex: 1; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 3px; font-size: 12px; cursor: pointer;">Install</button>
+            <button onclick="installCliTool('${id}')" style="
+                flex: 1; 
+                padding: 6px 10px; 
+                background: linear-gradient(0deg, #0e639c, #1177bb); 
+                color: #fff; 
+                border: 1px solid rgba(255,255,255,0.1); 
+                border-radius: 3px; 
+                font-size: 11px; 
+                font-weight: 500;
+                cursor: pointer; 
+                transition: all 0.15s ease;
+            " onmouseover="this.style.background='linear-gradient(0deg, #1177bb, #2489ce)'; this.style.transform='translateY(-1px)'" 
+               onmouseout="this.style.background='linear-gradient(0deg, #0e639c, #1177bb)'; this.style.transform='translateY(0)'">Install</button>
         `;
     }
-    buttons += `<button onclick="window.open('${docsUrl}', '_blank')" style="padding: 6px 12px; background: #3e3e42; color: #ccc; border: none; border-radius: 3px; font-size: 11px; cursor: pointer;" title="View official documentation">Docs</button>`;
+    buttons += `<button onclick="window.open('${docsUrl}', '_blank')" style="
+        padding: 6px 12px; 
+        background: #252526; 
+        color: #8b8b8c; 
+        border: 1px solid #3e3e42; 
+        border-radius: 3px; 
+        font-size: 11px; 
+        font-weight: 500;
+        cursor: pointer; 
+        transition: all 0.15s ease;
+    " onmouseover="this.style.background='#2d2d30'; this.style.color='#cccccc'" 
+       onmouseout="this.style.background='#252526'; this.style.color='#8b8b8c'" 
+       title="View official documentation">Docs</button>`;
     
     card.innerHTML = `
         <h4 style="margin: 0 0 8px 0; color: #fff; font-size: 15px;">
@@ -2974,9 +3068,118 @@ async function uninstallCliTool(toolId: string): Promise<void> {
     }
 }
 
+/**
+ * Uninstall all installed AI CLI tools in sequence
+ */
+async function uninstallAllCliTools(): Promise<void> {
+    console.log('[CLI Tools] Uninstalling all tools...');
+    
+    // Confirm with user first
+    const confirmed = confirm('Are you sure you want to uninstall ALL AI CLI tools?\n\nThis will remove all tools globally from your system.\nYour configurations will be preserved for potential reinstallation.');
+    
+    if (!confirmed) {
+        console.log('[CLI Tools] Batch uninstall canceled');
+        return;
+    }
+    
+    // List of tools to uninstall (in order)
+    const toolsToUninstall = [
+        'claude-code',
+        'gemini-cli',
+        'qwen-code',
+        'openai-codex',
+        'cline',
+        'grok'
+    ];
+    
+    // Show status
+    const statusDiv = document.getElementById('batch-status');
+    if (statusDiv) {
+        statusDiv.style.display = 'flex';
+        statusDiv.innerHTML = '⏳ Checking installed tools...';
+    }
+    
+    try {
+        const electronAPI = window.electronAPI as any;
+        let uninstalledCount = 0;
+        let skippedCount = 0;
+        let failedCount = 0;
+        
+        for (const toolId of toolsToUninstall) {
+            // Check if installed
+            const status = await electronAPI.detectCliTool(toolId);
+            
+            if (!status?.installed) {
+                console.log(`[CLI Tools] ${toolId} not installed, skipping`);
+                skippedCount++;
+                continue;
+            }
+            
+            // Uninstall the tool
+            if (statusDiv) {
+                statusDiv.innerHTML = `🗑️ Uninstalling ${toolId}... (${uninstalledCount} uninstalled so far)`;
+            }
+            
+            try {
+                const result = await electronAPI.uninstallCliTool(toolId);
+                
+                if (result?.success) {
+                    uninstalledCount++;
+                    console.log(`[CLI Tools] Successfully uninstalled ${toolId}`);
+                    
+                    // Update the specific card UI
+                    const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+                    if (card) {
+                        const statusDiv = card.querySelector('.tool-status') as HTMLElement;
+                        if (statusDiv) {
+                            statusDiv.innerHTML = '✅ Uninstalled';
+                            statusDiv.style.color = '#4ec9b0';
+                        }
+                    }
+                } else {
+                    failedCount++;
+                    console.error(`[CLI Tools] Failed to uninstall ${toolId}:`, result?.error);
+                }
+            } catch (error) {
+                failedCount++;
+                console.error(`[CLI Tools] Error uninstalling ${toolId}:`, error);
+            }
+        }
+        
+        // Final status
+        if (statusDiv) {
+            if (failedCount === 0) {
+                statusDiv.innerHTML = `✅ Complete! ${uninstalledCount} uninstalled, ${skippedCount} not installed`;
+                statusDiv.style.color = '#4ec9b0';
+            } else {
+                statusDiv.innerHTML = `⚠️ Complete with errors: ${uninstalledCount} uninstalled, ${skippedCount} skipped, ${failedCount} failed`;
+                statusDiv.style.color = '#ffa500';
+            }
+            
+            // Hide status after 5 seconds
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Refresh the entire panel to show updated statuses
+        setTimeout(() => {
+            renderCliToolsPanel(true);
+        }, 1000);
+        
+    } catch (error) {
+        console.error('[CLI Tools] Error in batch uninstall:', error);
+        if (statusDiv) {
+            statusDiv.innerHTML = `❌ Error: ${error}`;
+            statusDiv.style.color = '#f44747';
+        }
+    }
+}
+
 // Make functions available globally
 (window as any).installAllCliTools = installAllCliTools;
 (window as any).updateAllCliTools = updateAllCliTools;
+(window as any).uninstallAllCliTools = uninstallAllCliTools;
 (window as any).uninstallCliTool = uninstallCliTool;
 
 /**
