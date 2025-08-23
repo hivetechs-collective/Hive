@@ -539,7 +539,7 @@ document.body.innerHTML = `
     </div>
 
     <!-- Isolated Terminal Panel (modeled after consensus panel) -->
-    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="width: 400px; background: #1e1e1e; display: flex; flex-direction: column; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30; position: relative;">
+    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="width: 400px; height: 100%; background: #1e1e1e; display: flex; flex-direction: column; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30; position: relative;">
       <!-- Collapse button for entire panel -->
       <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel">−</button>
       
