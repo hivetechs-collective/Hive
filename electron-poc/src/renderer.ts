@@ -2388,17 +2388,6 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeText: codexStatus?.installed ? 'INSTALLED' : null,
                 badgeColor: '#007acc'
             }));
-            // Cline - now with full detection and functionality
-            const clineStatus = await electronAPI.detectCliTool('cline');
-            gridContainer.appendChild(createCliToolCard({
-                id: 'cline',
-                name: 'Cline',
-                description: 'Task-based AI assistant with 47k+ GitHub stars',
-                status: clineStatus,
-                docsUrl: 'https://cline.bot',
-                badgeText: '47K ⭐',
-                badgeColor: '#28a745'
-            }));
             
             // Grok CLI - xAI powered terminal agent with MCP support
             const grokStatus = await electronAPI.detectCliTool('grok');
@@ -2410,6 +2399,18 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 docsUrl: 'https://github.com/superagent-ai/grok-cli',
                 badgeText: 'MCP',
                 badgeColor: '#ff6b6b'
+            }));
+            
+            // Cline - now with full detection and functionality (moved to bottom)
+            const clineStatus = await electronAPI.detectCliTool('cline');
+            gridContainer.appendChild(createCliToolCard({
+                id: 'cline',
+                name: 'Cline',
+                description: 'Task-based AI assistant with 47k+ GitHub stars',
+                status: clineStatus,
+                docsUrl: 'https://cline.bot',
+                badgeText: '47K ⭐',
+                badgeColor: '#28a745'
             }));
             
             console.log('[CLI Tools] Panel rendered successfully');
@@ -2788,8 +2789,8 @@ async function installAllCliTools(): Promise<void> {
         'gemini-cli', 
         'qwen-code',
         'openai-codex',
-        'cline',
-        'grok'
+        'grok',
+        'cline'  // Moved to last as least likely to be used
     ];
     
     // Show status
@@ -2891,8 +2892,8 @@ async function updateAllCliTools(): Promise<void> {
         'gemini-cli',
         'qwen-code', 
         'openai-codex',
-        'cline',
-        'grok'
+        'grok',
+        'cline'  // Moved to last as least likely to be used
     ];
     
     // Show status
@@ -3088,8 +3089,8 @@ async function uninstallAllCliTools(): Promise<void> {
         'gemini-cli',
         'qwen-code',
         'openai-codex',
-        'cline',
-        'grok'
+        'grok',
+        'cline'  // Moved to last as least likely to be used
     ];
     
     // Show status
