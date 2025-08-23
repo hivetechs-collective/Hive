@@ -3085,6 +3085,7 @@ setTimeout(() => {
                 toolName: string;
                 command: string;
                 cwd: string;
+                env?: Record<string, string>;  // Optional environment variables
             }) => {
                 console.log('📦 Launching AI tool terminal:', data);
                 // Get the TTYDTerminalPanel instance and create a terminal
@@ -3092,8 +3093,8 @@ setTimeout(() => {
                 if (terminal) {
                     // Note: The global folder context is already updated by the main process
                     // via the 'menu-open-folder' event before this terminal launch event
-                    // Call createTerminalTab with toolId and command
-                    terminal.createTerminalTab(data.toolId, data.command);
+                    // Call createTerminalTab with toolId, command, and optional env
+                    terminal.createTerminalTab(data.toolId, data.command, data.env);
                 } else {
                     console.error('[Renderer] Terminal panel not initialized');
                 }

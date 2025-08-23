@@ -1707,10 +1707,23 @@ const registerSimpleCliToolHandlers = () => {
         
         // Create Cline settings file with OpenRouter configuration
         const clineSettingsPath = path.join(clineConfigDir, 'cline_cli_settings.json');
+        
+        // Read existing settings if they exist to preserve user preferences
+        let existingSettings: any = {};
+        if (fs.existsSync(clineSettingsPath)) {
+          try {
+            existingSettings = JSON.parse(fs.readFileSync(clineSettingsPath, 'utf-8'));
+          } catch (e) {
+            logger.warn('[Main] Could not parse existing Cline settings, creating new');
+          }
+        }
+        
         const clineSettings = {
           globalState: {
+            ...existingSettings.globalState,
             apiProvider: 'openrouter',
             apiModelId: '',  // Let user choose model in Cline
+            openRouterApiKey: openrouterKey,  // Add the actual API key here
             awsRegion: '',
             awsUseCrossRegionInference: '',
             awsBedrockUsePromptCache: '',
@@ -2043,6 +2056,8 @@ server.start();
       
       // Determine the command to run
       let command: string;
+      let apiKeyRow: any = null;  // Store API key for Cline
+      
       if (toolId === 'claude-code') {
         command = hasBeenLaunched ? 'claude --resume' : 'claude';
       } else if (toolId === 'gemini-cli') {
@@ -2054,7 +2069,7 @@ server.start();
         command = 'codex';
       } else if (toolId === 'cline') {
         // Always sync Cline configuration with latest OpenRouter API key from Hive
-        const apiKeyRow = await new Promise<any>((resolve) => {
+        apiKeyRow = await new Promise<any>((resolve) => {
           if (!db) {
             resolve(null);
             return;
@@ -2075,11 +2090,23 @@ server.start();
             fs.mkdirSync(clineConfigDir, { recursive: true });
           }
           
+          // Read existing settings to preserve user preferences
+          let existingSettings: any = {};
+          if (fs.existsSync(clineSettingsPath)) {
+            try {
+              existingSettings = JSON.parse(fs.readFileSync(clineSettingsPath, 'utf-8'));
+            } catch (e) {
+              logger.warn('[Main] Could not parse existing Cline settings');
+            }
+          }
+          
           // Update or create settings file
           const clineSettings = {
             globalState: {
+              ...existingSettings.globalState,
               apiProvider: 'openrouter',
               apiModelId: '',  // Let user choose from 400+ models
+              openRouterApiKey: apiKeyRow.value,  // Include the actual API key
               openRouterModelId: '',  // Don't hardcode model
               openRouterModelInfo: '',
               autoApprovalSettings: {
@@ -2109,7 +2136,9 @@ server.start();
                           'reasoningEffort', 'favoritedModelIds'];
           
           fields.forEach(field => {
-            (clineSettings.globalState as any)[field] = '';
+            if (!(field in clineSettings.globalState)) {
+              (clineSettings.globalState as any)[field] = '';
+            }
           });
           
           fs.writeFileSync(clineSettingsPath, JSON.stringify(clineSettings, null, 2));
@@ -2123,6 +2152,7 @@ server.start();
           logger.info('[Main] Updated Cline config with current OpenRouter API key from Hive');
         }
         
+        // We'll pass the API key through environment variables in the terminal creation
         command = 'cline-cli task';
       } else {
         // For other tools, just use their base command
@@ -2147,17 +2177,49 @@ server.start();
         mainWindow.webContents.send('menu-open-folder', selectedPath);
         
         // THEN: After a small delay to ensure folder context is set, launch the terminal
-        setTimeout(() => {
+        setTimeout(async () => {
           // Get proper tool name from registry
           const toolConfig = CLI_TOOLS_REGISTRY[toolId];
           const toolName = toolConfig ? toolConfig.name : toolId;
+          
+          // Prepare environment variables for Cline if needed
+          let env: Record<string, string> = {};
+          if (toolId === 'cline') {
+            // Fetch the OpenRouter API key from database
+            try {
+              const apiKeyRow = await new Promise<any>((resolve, reject) => {
+                if (!db) {
+                  reject(new Error('Database not initialized'));
+                  return;
+                }
+                db.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+                  if (err) reject(err);
+                  else resolve(row);
+                });
+              });
+              
+              if (apiKeyRow && apiKeyRow.value) {
+                // Cline CLI seems to be looking for OPENAI_API_KEY even when configured for OpenRouter
+                // This appears to be a bug in Cline CLI, so we'll set both variables
+                env.OPENAI_API_KEY = apiKeyRow.value;  // Work around Cline CLI bug
+                env.OPEN_ROUTER_API_KEY = apiKeyRow.value;
+                env.OPENROUTER_API_KEY = apiKeyRow.value; // Try different variations
+                logger.info('[Main] Adding OpenRouter API key to environment for Cline (multiple env vars for compatibility)');
+              } else {
+                logger.warn('[Main] No OpenRouter API key found for Cline');
+              }
+            } catch (error) {
+              logger.error('[Main] Error fetching OpenRouter API key for Cline:', error);
+            }
+          }
           
           logger.info(`[Main] Sending launch-ai-tool-terminal event with command: ${command}`);
           mainWindow.webContents.send('launch-ai-tool-terminal', {
             toolId: toolId,
             toolName: toolName,
             command: command,
-            cwd: selectedPath
+            cwd: selectedPath,
+            env: env  // Pass environment variables
           });
         }, 100); // Small delay to ensure folder opens first
       }
