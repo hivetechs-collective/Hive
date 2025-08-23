@@ -1070,9 +1070,20 @@ App Root (renderer.ts)
 ├── Activity Bar (Left Edge)
 │   ├── Explorer
 │   ├── Source Control
-│   ├── Extensions
-│   ├── Settings
-│   └── CLI Tools
+│   ├── Divider
+│   ├── Analytics
+│   ├── Memory
+│   ├── CLI Tools
+│   ├── Divider
+│   ├── AI Quick Launch Icons (6 tools)
+│   │   ├── Claude Code
+│   │   ├── Gemini CLI
+│   │   ├── Grok
+│   │   ├── Qwen Code
+│   │   ├── OpenAI Codex
+│   │   └── Cline
+│   ├── Divider
+│   └── Settings (Fixed at bottom)
 ├── Sidebar Panel (Collapsible)
 │   ├── File Explorer
 │   ├── Source Control View
@@ -3743,17 +3754,29 @@ Based on the HiveTechs website's premium Paddle-inspired dark theme, the AI CLI 
 | **OpenAI Codex** | `openai.svg` | Wikipedia/Wikimedia Commons | SVG (2.9KB) | ✅ Official |
 | **Cline** | `cline.svg` | Custom placeholder | SVG (745 bytes) | 🔄 Placeholder |
 
-**Sidebar Quick Launch Implementation** (Planned):
-1. **Location**: Left activity bar, below existing navigation icons
-2. **Layout**: Vertical stack of 24x24px icons with 8px spacing
-3. **Interaction**:
-   - Single click: Launch tool if installed, show install prompt if not
-   - Right-click: Context menu (Launch, Update, Uninstall, Configure)
-   - Hover: Tooltip showing tool name, version, and status
-4. **Visual States**:
-   - Installed: Full opacity with subtle glow
-   - Not Installed: 50% opacity
-   - Running: Animated pulse effect
+**Sidebar Quick Launch Implementation** (✅ Implemented):
+1. **Location**: Left activity bar, between Memory icon and Settings
+2. **Layout**: Vertical stack of 20x20px icons with 4px gap
+3. **Organization**:
+   - Divider after Source Control icon
+   - Analytics, Memory, CLI Tools icons
+   - Divider
+   - 6 AI tool icons stacked vertically
+   - Divider
+   - Settings fixed at bottom
+4. **Interaction**:
+   - Single click: Launches tool using `launchCliTool()` function (identical to Launch buttons)
+   - Prompts for folder selection if tool not previously launched
+   - Shows launch status in tool's status area
+5. **Implementation Details**:
+   - Icons stored in `/resources/ai-cli-icons/`
+   - Click handlers use same `(window as any).launchCliTool(toolId)` as main panel
+   - Tool IDs: claude-code, gemini-cli, grok, qwen-code, openai-codex, cline
+6. **Visual Design**:
+   - Official logos downloaded from Wikipedia/Wikimedia Commons
+   - Custom placeholders for Qwen and Cline
+   - Consistent 20x20px size for all icons
+   - HiveTechs theme color scheme applied
    - Update Available: Small badge indicator
 
 **Icon Design Guidelines**:
@@ -6557,6 +6580,13 @@ electron-poc/
   - **updateAllMCPConfigurations**: Function to sync all tool configs with actual port
   - **Grok Auto-Creation Fix**: MCP config now created if missing on startup
   - **Grok Detection Fix**: Added 'grok' to memory service connection check list
+- **v1.7.2 (2025-08-23)**: AI CLI Tool Quick Launch Icons & UI Improvements
+  - **Quick Launch Icons**: Implemented 6 AI tool icons in left sidebar for instant access
+  - **Sidebar Reorganization**: Added dividers and fixed Settings at bottom
+  - **Icon Resources**: Official logos for Claude, Gemini, Grok, OpenAI; placeholders for Qwen, Cline
+  - **Launch Integration**: Icons use identical `launchCliTool()` function as Launch buttons
+  - **Terminal Cleanup**: Hidden basic HTML terminal in favor of TTYD System Log
+  - **TypeScript Fix**: Resolved @types/node version mismatch for clean compilation
   - **Dual-Location Support**: Detector checks both ~/.grok and ~/.hive for configs
   - **UI Theming**: Applied HiveTechs gradient theme to all AI CLI tool buttons
   - **Batch Operations**: Added Install All, Update All, Uninstall All buttons
