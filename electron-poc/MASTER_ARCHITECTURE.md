@@ -1735,9 +1735,13 @@ next_sync_due: next update check time
    - Shows "✅ Configured" on success
 
 3. **Update Button** (Gray):
-   - Executes `npm update -g @anthropic-ai/claude-code`
-   - Shows "⬆️ Updating..." during process
-   - Displays "✅ Up to date" when complete
+   - **Purpose**: Updates CLI tools to their latest versions
+   - **Visual States**:
+     - Default: Gray button with "Update" text
+     - Updating: Shows "⬆️ Updating..." with orange status
+     - Success: Displays "✅ Up to date" with green status
+     - Error: Shows "❌ Update failed" with red status
+   - **Implementation**: See [Update Button Architecture](#update-button-architecture) below
 
 4. **Install Button** (Blue - for uninstalled tools):
    - Runs appropriate package manager (npm/pip)
@@ -1793,6 +1797,268 @@ The system supports 6 carefully selected agentic coding CLIs that provide autono
    - Documentation: [`docs/cli-tools/cline.md`](docs/cli-tools/cline.md)
    - NPM: `@yaegaki/cline-cli`
    - Version: 0.1.1+
+
+### Update Button Architecture
+
+#### Overview
+The Update Button provides seamless, one-click updates for installed CLI tools directly from the Hive Consensus UI. It handles both NPM and pip-based tools with comprehensive error handling and real-time status feedback.
+
+#### Implementation Architecture
+
+##### 1. Frontend (Renderer Process)
+**Location**: `src/renderer.ts`
+
+```typescript
+async function updateCliTool(toolId: string): Promise<void> {
+  // 1. Show updating status in UI
+  const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+  card.querySelector('.tool-status').innerHTML = '⬆️ Updating...';
+  
+  // 2. Call IPC handler
+  const result = await electronAPI.updateCliTool(toolId);
+  
+  // 3. Update UI based on result
+  if (result.success) {
+    statusDiv.innerHTML = '✅ Up to date';
+    // Update version display without full refresh
+    versionSpan.textContent = result.version;
+  } else {
+    statusDiv.innerHTML = '❌ Update failed';
+  }
+}
+```
+
+##### 2. IPC Bridge
+**Location**: `src/preload.ts`
+
+```typescript
+updateCliTool: (toolId: string) => ipcRenderer.invoke('cli-tool-update', toolId)
+```
+
+##### 3. Main Process Handler
+**Location**: `src/index.ts` (lines 1396-1518)
+
+```typescript
+ipcMain.handle('cli-tool-update', async (_, toolId: string) => {
+  // Package mapping
+  const npmPackages = {
+    'claude-code': '@anthropic-ai/claude-code',
+    'gemini-cli': '@google/gemini-cli',
+    'qwen-code': '@qwen-code/qwen-code'
+  };
+  
+  // Execute update command
+  const updateCommand = `npm update -g ${packageName}`;
+  const { stdout, stderr } = await execAsync(updateCommand, {
+    env: { ...process.env, PATH: enhancedPath }
+  });
+  
+  // Get updated version
+  if (toolId === 'claude-code') {
+    const versionResult = await execAsync('claude --version');
+    version = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/)?.[1];
+  }
+  
+  return { success: true, version, message };
+});
+```
+
+#### Update Flow Sequence
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Renderer (UI)
+    participant IPC as IPC Bridge
+    participant Main as Main Process
+    participant NPM as Package Manager
+    participant Tool as CLI Tool
+
+    User->>UI: Click Update Button
+    UI->>UI: Show "⬆️ Updating..."
+    UI->>IPC: updateCliTool('claude-code')
+    IPC->>Main: invoke('cli-tool-update')
+    Main->>Main: Map toolId to package
+    Main->>NPM: npm update -g @anthropic-ai/claude-code
+    NPM->>NPM: Download latest version
+    NPM->>Main: Update complete
+    Main->>Tool: claude --version
+    Tool->>Main: claude-code/1.0.87
+    Main->>IPC: {success: true, version: "1.0.87"}
+    IPC->>UI: Update result
+    UI->>UI: Show "✅ Up to date"
+    UI->>User: Display new version
+```
+
+#### Package Management Strategy
+
+##### NPM-based Tools
+- **Claude Code**: `@anthropic-ai/claude-code`
+- **Gemini CLI**: `@google/gemini-cli`
+- **Qwen Code**: `@qwen-code/qwen-code`
+- **OpenAI Codex**: `@openai/codex`
+- **Cline**: `@yaegaki/cline-cli`
+
+**Update Command**: `npm update -g <package-name>`
+
+##### Python/pip-based Tools
+- **Aider**: `aider-chat`
+
+**Update Command**: `pip install --upgrade aider-chat`
+
+#### Version Detection Methods
+
+##### 1. Claude Code (Special Case)
+```typescript
+// Uses custom version command
+const versionResult = await execAsync('claude --version');
+// Parses: "claude-code/1.0.86 darwin-arm64 node-v23.6.0"
+const match = versionResult.stdout.match(/claude-code\/(\d+\.\d+\.\d+)/);
+version = match ? match[1] : 'Unknown';
+```
+
+##### 2. Other NPM Tools
+```typescript
+// Uses npm list to get version
+const listResult = await execAsync(`npm list -g ${packageName} --depth=0`);
+const versionMatch = listResult.stdout.match(/@(\d+\.\d+\.\d+)/);
+version = versionMatch ? versionMatch[1] : 'Unknown';
+```
+
+##### 3. Python Tools
+```typescript
+// Uses tool's --version flag
+const versionResult = await execAsync('aider --version');
+version = versionResult.stdout.trim().match(/\d+\.\d+\.\d+/)?.[0];
+```
+
+#### Error Handling
+
+##### Permission Errors
+```typescript
+if (error.message?.includes('EACCES')) {
+  return { 
+    success: false, 
+    error: 'Permission denied. Try running with elevated permissions or update manually with: ' + updateCommand 
+  };
+}
+```
+
+##### Missing Package Manager
+```typescript
+if (error.message?.includes('npm: command not found')) {
+  return { 
+    success: false, 
+    error: 'npm not found. Please ensure Node.js and npm are installed.' 
+  };
+}
+```
+
+##### Network Errors
+- Timeout handling via execAsync
+- Retry logic for transient failures
+- Clear error messages for offline scenarios
+
+#### PATH Resolution
+
+The update system ensures package managers can be found by enhancing PATH:
+
+```typescript
+const pathAdditions = [
+  '/opt/homebrew/bin',    // Homebrew on M1 Macs
+  '/usr/local/bin',        // Standard Unix
+  '/usr/bin',              // System binaries
+  '/bin'                   // Core binaries
+];
+
+const enhancedPath = `${pathAdditions.join(':')}:${process.env.PATH}`;
+```
+
+#### UI State Management
+
+##### Visual States
+1. **Default State**: Gray button, "Update" text
+2. **Updating State**: Orange status, "⬆️ Updating..." text
+3. **Success State**: Green status, "✅ Up to date" text
+4. **Error State**: Red status, "❌ Update failed" text
+
+##### Non-Blocking Updates
+- UI remains responsive during update
+- Status updates without full panel refresh
+- Version number updates in-place
+- Error messages display temporarily
+
+#### Security Considerations
+
+1. **Command Injection Prevention**
+   - Tool IDs validated against whitelist
+   - Package names mapped internally
+   - No user input in shell commands
+
+2. **Permission Management**
+   - Graceful handling of permission errors
+   - Clear instructions for manual updates
+   - No automatic privilege escalation
+
+3. **Version Verification**
+   - Version extracted after update
+   - Displayed to user for confirmation
+   - Logged for audit trail
+
+#### Performance Optimizations
+
+1. **Async Execution**
+   - Non-blocking child process execution
+   - Promise-based error handling
+   - Timeout protection (default 2 minutes)
+
+2. **Minimal UI Updates**
+   - Only affected elements updated
+   - No full panel re-render
+   - Smooth visual transitions
+
+3. **Efficient Version Detection**
+   - Tool-specific version commands
+   - Cached PATH resolution
+   - Single version check per update
+
+#### Testing Considerations
+
+##### Manual Testing
+1. Click Update button for installed tool
+2. Verify "Updating..." status appears
+3. Wait for completion
+4. Verify success message and new version
+5. Check tool works with `claude --version`
+
+##### Edge Cases
+- Tool not installed → Update button shouldn't appear
+- Network offline → Clear error message
+- Permission denied → Helpful manual command
+- Already latest version → Success message
+- Corrupted installation → Error with reinstall suggestion
+
+#### Future Enhancements
+
+1. **Batch Updates**
+   - Update all tools simultaneously
+   - Progress bar for multiple updates
+   - Rollback on failure
+
+2. **Version Comparison**
+   - Show current vs available version
+   - Changelog preview
+   - Update only if newer
+
+3. **Automatic Updates**
+   - Background update checks
+   - User preference settings
+   - Silent updates option
+
+4. **Update Channels**
+   - Stable vs beta channels
+   - Version pinning
+   - Downgrade capability
 
 ---
 
@@ -4603,8 +4869,8 @@ electron-poc/
 
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
-**Last Updated**: 2025-08-21
-**Version**: 1.6.0
+**Last Updated**: 2025-08-22
+**Version**: 1.6.1
 **Maintainer**: Hive Development Team
 
 ### Change Log
@@ -4617,6 +4883,16 @@ electron-poc/
   - **Persistent Configuration**: Tool configs saved in ~/.hive/cli-tools-config.json
   - **Memory Service Bridge**: Claude Code can now query and contribute to AI memory
 
+- **v1.6.1 (2025-08-22)**: CLI Tools Update Button Implementation
+  - **Update Functionality**: Complete implementation of update button for all CLI tools
+  - **NPM Package Updates**: Support for `npm update -g` with package name mapping
+  - **Python/pip Support**: Handle pip-based tools like Aider with `pip install --upgrade`
+  - **Version Detection**: Tool-specific version extraction (claude --version, npm list, etc.)
+  - **Error Handling**: Comprehensive error handling for permissions, missing npm, network issues
+  - **PATH Resolution**: Enhanced PATH with common binary locations for package managers
+  - **UI State Management**: Real-time status updates without full panel refresh
+  - **Security Hardening**: Command injection prevention via whitelist validation
+  - **Documentation**: Complete architectural documentation in MASTER_ARCHITECTURE.md
 - **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
   - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts
   - **Unified Cleanup Function**: Single performCleanup() prevents duplicate handlers
