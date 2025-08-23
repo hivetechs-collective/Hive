@@ -121,11 +121,36 @@ read -p "Would you like to set up your API key now? (y/n): " response
 echo ""
 
 if [[ "$response" =~ ^[Yy]$ ]]; then
-  echo "Please enter your Grok API key:"
-  read -s api_key
+  echo "Please enter your Grok API key (it will be visible for verification):"
+  echo ""
+  echo "📝 Paste your API key below and press Enter:"
+  read api_key
   echo ""
   
   if [ -n "$api_key" ]; then
+    # Show the key for verification (masked partially for security)
+    key_length=${#api_key}
+    if [ $key_length -gt 10 ]; then
+      # Show first 7 chars and last 4 chars with asterisks in between
+      first_part=${api_key:0:7}
+      last_part=${api_key: -4}
+      masked_middle=$(printf '*%.0s' {1..8})
+      echo "🔑 API Key to be saved: ${first_part}${masked_middle}${last_part}"
+    else
+      echo "🔑 API Key to be saved: [key too short, might be invalid]"
+    fi
+    echo ""
+    
+    # Confirm before saving
+    read -p "Is this correct? (y/n): " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      echo "❌ Setup cancelled. Please run the setup wizard again."
+      exit 0
+    fi
+    
+    echo ""
+    echo "💾 Saving API key..."
+    
     # Create the .grok directory if it doesn't exist
     mkdir -p ~/.grok
     
@@ -180,22 +205,30 @@ EOF
     fi
     
     echo ""
-    echo "🎉 Setup complete! Launching Grok CLI..."
+    echo "🎉 Setup complete! Your API key has been saved."
+    echo ""
+    echo "Launching Grok CLI in 2 seconds..."
     echo ""
     sleep 2
     exec grok
   else
-    echo "❌ No API key entered. Please set it up manually."
+    echo "❌ No API key entered. Please run the setup wizard again."
     echo ""
-    echo "You can add your API key later by editing ~/.grok/user-settings.json"
+    echo "You can also set up your API key manually by:"
+    echo "1. Running: grok config set apiKey YOUR_KEY"
+    echo "2. Editing: ~/.grok/user-settings.json"
+    echo "3. Setting: export GROK_API_KEY='your_key'"
   fi
 else
-  echo "You can set up your API key later by:"
-  echo "1. Adding it to ~/.grok/user-settings.json"
-  echo "2. Setting GROK_API_KEY environment variable"
-  echo "3. Using --api-key flag when running grok"
+  echo "You can set up your API key later using any of these methods:"
   echo ""
-  echo "When ready, launch Grok with: grok"
+  echo "1. Run: grok config set apiKey YOUR_KEY"
+  echo "2. Edit: ~/.grok/user-settings.json"
+  echo "3. Set environment: export GROK_API_KEY='your_key'"
+  echo "4. Use flag: grok --api-key YOUR_KEY"
+  echo ""
+  echo "To get your API key, visit:"
+  echo "https://console.x.ai/team/default/api-keys"
 fi
 `;
         
