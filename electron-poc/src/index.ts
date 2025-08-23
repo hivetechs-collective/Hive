@@ -14,6 +14,7 @@ import { EnhancedGitManager } from './git/EnhancedGitManager';
 import { FileSystemManager } from './file-system';
 import { ProcessManager } from './utils/ProcessManager';
 import { PortManager } from './utils/PortManager';
+import { PidTracker } from './utils/PidTracker';
 import { cliToolsDetector } from './main/cli-tools/detector';
 // Removed import - functions are now defined locally
 import { logger } from './utils/SafeLogger';
@@ -1503,6 +1504,9 @@ const registerSimpleCliToolHandlers = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
+  // Clean up any orphaned processes from previous runs
+  await PidTracker.cleanupOrphans();
+  
   initDatabase();
   
   // Initialize ProcessManager with all process configurations
@@ -1635,26 +1639,64 @@ app.on('activate', () => {
   }
 });
 
+// Track cleanup state to prevent duplicate cleanup
+let isCleaningUp = false;
+
+// Unified cleanup function
+async function performCleanup(reason: string) {
+  if (isCleaningUp) {
+    logger.info(`[Main] Cleanup already in progress (triggered by ${reason})`);
+    return;
+  }
+  
+  isCleaningUp = true;
+  logger.info(`[Main] Starting cleanup (reason: ${reason})...`);
+  
+  try {
+    // Clean up all terminals first
+    cleanupTerminals();
+    
+    // Stop memory service if running
+    await processManager.stopProcess('memory-service');
+    
+    // Clean up all other processes
+    await processManager.cleanup();
+    
+    logger.info('[Main] Cleanup completed successfully');
+  } catch (error) {
+    logger.error('[Main] Error during cleanup:', error);
+  }
+}
+
 // Clean up processes on app quit
 app.on('before-quit', async (event) => {
   event.preventDefault();
-  logger.info('[Main] Cleaning up processes before quit...');
-  cleanupTerminals();
-  await processManager.cleanup();
+  await performCleanup('before-quit');
   app.exit(0);
 });
 
 // Handle unexpected termination
 process.on('SIGINT', async () => {
-  logger.info('[Main] Received SIGINT, cleaning up...');
-  await processManager.cleanup();
+  await performCleanup('SIGINT');
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  logger.info('[Main] Received SIGTERM, cleaning up...');
-  await processManager.cleanup();
+  await performCleanup('SIGTERM');
   process.exit(0);
+});
+
+// Handle uncaught exceptions and unhandled rejections
+process.on('uncaughtException', async (error) => {
+  logger.error('[Main] Uncaught exception:', error);
+  await performCleanup('uncaughtException');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason) => {
+  logger.error('[Main] Unhandled rejection:', reason);
+  await performCleanup('unhandledRejection');
+  process.exit(1);
 });
 
 // In this file you can include the rest of your app's specific main process
@@ -2861,10 +2903,7 @@ ipcMain.handle('get-analytics', async () => {
 // Use processManager.startProcess('memory-service') and processManager.stopProcess('memory-service')
 
 
-// Clean up on app quit
-app.on('before-quit', async () => {
-  await processManager.stopProcess('memory-service');
-});
+// Memory service cleanup is now handled in the unified performCleanup function
 
 // Store reference to main window
 app.on('browser-window-created', (_, window) => {

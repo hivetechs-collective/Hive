@@ -7,6 +7,7 @@ import { ChildProcess, fork, spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 import { PortManager } from './PortManager';
+import { PidTracker } from './PidTracker';
 
 import { logger } from './SafeLogger';
 export interface ProcessConfig {
@@ -147,6 +148,11 @@ export class ProcessManager extends EventEmitter {
       info.process = childProcess;
       info.pid = childProcess.pid;
       info.lastStartTime = new Date();
+      
+      // Track the PID for cleanup on crash/restart
+      if (childProcess.pid) {
+        PidTracker.addPid(childProcess.pid, name);
+      }
       
       // Wait for process to be ready - check for 'ready' message or port binding
       // Binary processes like Rust servers may take longer to initialize
@@ -327,6 +333,11 @@ export class ProcessManager extends EventEmitter {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
+        // Remove PID tracking
+        if (info.pid) {
+          PidTracker.removePid(info.pid);
+        }
+        
         info.process = null;
         info.pid = undefined;
         
@@ -370,6 +381,11 @@ export class ProcessManager extends EventEmitter {
     
     // Clean up process reference
     if (info.process) {
+      // Remove PID tracking
+      if (info.pid) {
+        PidTracker.removePid(info.pid);
+      }
+      
       info.process = null;
       info.pid = undefined;
     }

@@ -7,6 +7,7 @@
 import { ChildProcess, spawn } from 'child_process';
 import { EventEmitter } from 'events';
 import { PortManager } from '../utils/PortManager';
+import { PidTracker } from '../utils/PidTracker';
 import { logger } from '../utils/SafeLogger';
 import ProcessManager from '../utils/ProcessManager';
 
@@ -126,6 +127,11 @@ export class TTYDManager extends EventEmitter {
       },
       detached: false
     });
+    
+    // Track the PID for cleanup
+    if (ttydProcess.pid) {
+      PidTracker.addPid(ttydProcess.pid, `ttyd-${config.id}`);
+    }
     
     // Create instance object
     const instance: TTYDInstance = {
@@ -281,6 +287,11 @@ export class TTYDManager extends EventEmitter {
     const instance = this.instances.get(id);
     if (!instance) {
       return;
+    }
+    
+    // Remove PID tracking
+    if (instance.process && instance.process.pid) {
+      PidTracker.removePid(instance.process.pid);
     }
     
     // Release the port
