@@ -2282,8 +2282,17 @@ async function renderCliToolsPanel() {
                 badgeColor: '#007acc'
             }));
             
-            // Other tools (static for now - will implement detection incrementally)
-            gridContainer.appendChild(createStaticToolCard('gemini-cli', 'Gemini CLI', 'Google\'s free AI coding assistant (1000 req/day)', 'FREE', '#28a745', 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli'));
+            // Gemini CLI - now with full detection and functionality
+            const geminiStatus = await electronAPI.detectCliTool('gemini-cli');
+            gridContainer.appendChild(createCliToolCard({
+                id: 'gemini-cli',
+                name: 'Gemini CLI',
+                description: 'Google\'s free AI coding assistant with 1M token context',
+                status: geminiStatus,
+                docsUrl: 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli',
+                badgeText: 'FREE',
+                badgeColor: '#28a745'
+            }));
             gridContainer.appendChild(createStaticToolCard('qwen-code', 'Qwen Code', 'Alibaba\'s open-source coding agent', 'OPEN SOURCE', '#6c757d', 'https://github.com/QwenLM/Qwen3-Coder'));
             gridContainer.appendChild(createStaticToolCard('openai-codex', 'OpenAI Codex', 'GPT-powered terminal assistant', null, null, 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started'));
             gridContainer.appendChild(createStaticToolCard('aider', 'Aider', 'Git-integrated inline editing', null, null, 'https://aider.chat/docs/'));
