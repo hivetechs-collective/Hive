@@ -470,8 +470,8 @@ document.body.innerHTML = `
         <!-- Analytics content will be mounted here -->
       </div>
 
-      <!-- Terminal Section (Bottom, resizable) -->
-      <div class="terminal-section" id="terminal-section" style="height: 200px;">
+      <!-- Terminal Section (Bottom, resizable) - Hidden since we use System Log in TTYD panel -->
+      <div class="terminal-section" id="terminal-section" style="height: 200px; display: none;">
         <div class="resize-handle horizontal-resize" id="terminal-resize"></div>
         <div class="terminal-header">
           <button class="collapse-btn" id="toggle-terminal" title="Toggle Terminal">−</button>
