@@ -1603,6 +1603,542 @@ Git Integration
 
 ---
 
+## Complete AI CLI Tools Integration Pattern
+
+### Executive Summary
+This section documents the complete architectural pattern for integrating AI CLI tools into Hive Consensus. Each tool follows the same comprehensive integration pattern, enabling seamless installation, configuration, updates, and terminal launching with full Memory Service integration via MCP protocol.
+
+### Core Integration Components
+
+#### 1. Tool Registry & Metadata
+**Location**: `src/utils/AI_CLI_TOOLS_REGISTRY.md`
+
+Each AI CLI tool requires:
+```typescript
+interface CliToolDefinition {
+  id: string;                    // Unique identifier (e.g., 'claude-code')
+  name: string;                  // Display name (e.g., 'Claude Code')
+  packageName: string;           // NPM/pip package (e.g., '@anthropic-ai/claude-code')
+  packageManager: 'npm' | 'pip'; // Installation method
+  command: string;               // Terminal command (e.g., 'claude')
+  versionCommand: string;        // Version check (e.g., 'claude --version')
+  versionPattern: RegExp;        // Version extraction pattern
+  docsUrl: string;              // Official documentation URL
+  description: string;          // Tool description
+  memoryServiceCompatible: boolean; // MCP support flag
+  resumeSupport: boolean;       // Supports --resume flag
+}
+```
+
+#### 2. Detection System
+**Location**: `src/main/cli-tools/detector.ts`
+
+```typescript
+class CliToolDetector {
+  async detectTool(toolId: string): Promise<ToolStatus> {
+    // 1. Check if tool command exists in PATH
+    const exists = await this.commandExists(toolId);
+    
+    // 2. Get version if installed
+    const version = exists ? await this.getVersion(toolId) : null;
+    
+    // 3. Check Memory Service connection
+    const memoryConnected = await this.checkMemoryServiceConnection(toolId);
+    
+    // 4. Get installation path
+    const path = await this.getToolPath(toolId);
+    
+    return {
+      installed: exists,
+      version,
+      path,
+      memoryServiceConnected,
+      updateAvailable: await this.checkForUpdates(toolId, version)
+    };
+  }
+}
+```
+
+#### 3. IPC Communication Layer
+**Location**: `src/index.ts` (Main Process Handlers)
+
+```typescript
+// Complete set of IPC handlers for each tool
+ipcMain.handle('cli-tool-detect', async (_, toolId) => { /* Detection logic */ });
+ipcMain.handle('cli-tool-install', async (_, toolId) => { /* Installation logic */ });
+ipcMain.handle('cli-tool-update', async (_, toolId) => { /* Update logic */ });
+ipcMain.handle('cli-tool-configure', async (_, toolId) => { /* MCP configuration */ });
+ipcMain.handle('cli-tool-launch', async (_, toolId) => { /* Terminal launch */ });
+ipcMain.handle('cli-tool-uninstall', async (_, toolId) => { /* Uninstallation */ });
+```
+
+#### 4. UI Component Architecture
+**Location**: `src/renderer.ts`
+
+```typescript
+interface CliToolCardUI {
+  // Visual states
+  states: {
+    notInstalled: { buttons: ['Install', 'Docs'], color: 'gray' };
+    installed: { buttons: ['Launch', 'Details', 'Configure', 'Update'], color: 'green' };
+    updating: { buttons: ['Cancel'], status: '⬆️ Updating...', color: 'orange' };
+    configuring: { buttons: [], status: '⚙️ Configuring...', color: 'blue' };
+    error: { buttons: ['Retry', 'Help'], status: '❌ Error', color: 'red' };
+  };
+  
+  // Dynamic updates without full refresh
+  updateStatus(status: string): void;
+  updateVersion(version: string): void;
+  updateMemoryConnection(connected: boolean): void;
+}
+```
+
+### Complete Integration Flow
+
+#### Phase 1: Detection & Display
+```mermaid
+graph TD
+    A[App Startup] --> B[Detect All CLI Tools]
+    B --> C{For Each Tool}
+    C --> D[Check Installation]
+    D --> E[Get Version]
+    E --> F[Check Memory Connection]
+    F --> G[Display Card in UI]
+    G --> H{Tool Installed?}
+    H -->|Yes| I[Show Launch/Configure/Update]
+    H -->|No| J[Show Install Button]
+```
+
+#### Phase 2: Installation Flow
+```typescript
+async function installCliTool(toolId: string): Promise<InstallResult> {
+  // 1. Pre-installation checks
+  await checkPrerequisites(toolId);  // Node.js, Python, etc.
+  
+  // 2. Execute installation
+  const command = getInstallCommand(toolId);
+  await executeCommand(command);
+  
+  // 3. Verify installation
+  const installed = await verifyInstallation(toolId);
+  
+  // 4. Auto-configure if Memory Service compatible
+  if (tool.memoryServiceCompatible) {
+    await configureMemoryService(toolId);
+  }
+  
+  // 5. Update UI
+  return { success: true, version: getVersion(toolId) };
+}
+```
+
+#### Phase 3: Memory Service Configuration
+```typescript
+async function configureMemoryService(toolId: string): Promise<ConfigResult> {
+  // 1. Register with Memory Service
+  const token = await registerTool(toolId);
+  
+  // 2. Save configuration
+  await saveConfig('~/.hive/cli-tools-config.json', { token });
+  
+  // 3. Create MCP wrapper
+  await createMCPWrapper(toolId, token);
+  
+  // 4. Update tool's MCP config
+  await updateToolMCPConfig(toolId);
+  
+  return { success: true, token };
+}
+```
+
+#### Phase 4: Launch Integration
+```typescript
+async function launchCliTool(toolId: string): Promise<LaunchResult> {
+  // 1. Check previous launches
+  const previousLaunch = await checkPreviousLaunch(toolId, currentFolder);
+  
+  // 2. Determine command
+  const command = previousLaunch ? 
+    `${tool.command} --resume` : 
+    tool.command;
+  
+  // 3. Create terminal
+  const terminal = await createTerminal({
+    command,
+    cwd: currentFolder,
+    title: tool.name
+  });
+  
+  // 4. Update global context
+  await updateGlobalFolder(currentFolder);
+  
+  return { success: true, terminalId: terminal.id };
+}
+```
+
+#### Phase 5: Update Mechanism
+```typescript
+async function updateCliTool(toolId: string): Promise<UpdateResult> {
+  // 1. Determine update command
+  const updateCommand = tool.packageManager === 'npm' ?
+    `npm update -g ${tool.packageName}` :
+    `pip install --upgrade ${tool.packageName}`;
+  
+  // 2. Execute update
+  await executeCommand(updateCommand);
+  
+  // 3. Get new version
+  const newVersion = await getVersion(toolId);
+  
+  // 4. Re-configure if needed
+  if (tool.memoryServiceCompatible) {
+    await verifyMemoryConnection(toolId);
+  }
+  
+  return { success: true, version: newVersion };
+}
+```
+
+### Terminal Integration Pattern
+
+#### TTYD Terminal Management
+**Location**: `src/services/TTYDManager.ts`
+
+```typescript
+class TTYDManager {
+  async createTerminal(options: TerminalOptions): Promise<Terminal> {
+    // 1. Allocate port (7100-7200 range)
+    const port = await this.allocatePort();
+    
+    // 2. Spawn ttyd process
+    const process = spawn('ttyd', [
+      '--port', port,
+      '--interface', '127.0.0.1',
+      '--writable',
+      '--',
+      '/bin/zsh', '-c', `sleep 0.5 && ${options.command}; exec /bin/zsh -i`
+    ]);
+    
+    // 3. Track PID for cleanup
+    PidTracker.recordPid(process.pid, `ttyd-${options.id}`);
+    
+    // 4. Return terminal info
+    return {
+      id: options.id,
+      url: `http://localhost:${port}`,
+      port,
+      process
+    };
+  }
+}
+```
+
+### Button Functionality Matrix
+
+| Button | Purpose | Visual State | IPC Handler | Result |
+|--------|---------|--------------|-------------|---------|
+| **Install** | Install tool | Blue, primary | `cli-tool-install` | Tool installed, auto-configured |
+| **Launch** | Open in terminal | Blue, primary | `cli-tool-launch` | Terminal with tool running |
+| **Details** | Refresh status | Green, secondary | `cli-tool-detect` | Updated version/status |
+| **Configure** | Setup Memory Service | Gray, secondary | `cli-tool-configure` | MCP configured, token saved |
+| **Update** | Update to latest | Gray, secondary | `cli-tool-update` | Latest version installed |
+| **Docs** | Open documentation | Gray, minimal | N/A (opens URL) | Browser with docs |
+
+### File System Organization
+
+```
+~/.hive/
+├── cli-tools-config.json       # Tool configurations and tokens
+├── memory-service-mcp-wrapper.js # MCP bridge for Memory Service
+├── ai-tools.db                 # Launch history database
+└── tools/                       # Local tool installations
+
+~/.claude/
+├── .mcp.json                   # MCP server configurations
+├── config.json                 # Claude Code settings
+└── settings.json               # Hooks and preferences
+
+/tmp/
+└── hive-electron-poc.pids      # Process tracking for cleanup
+```
+
+### Database Schema for Tool Tracking
+
+```sql
+-- Tool installations
+CREATE TABLE tool_installations (
+  tool_id TEXT PRIMARY KEY,
+  version TEXT,
+  installed_at TEXT,
+  last_updated TEXT,
+  memory_token TEXT
+);
+
+-- Launch history (for --resume support)
+CREATE TABLE launch_history (
+  id INTEGER PRIMARY KEY,
+  tool_id TEXT,
+  project_path TEXT,
+  launched_at TEXT,
+  launch_count INTEGER DEFAULT 1
+);
+
+-- Update tracking
+CREATE TABLE update_checks (
+  tool_id TEXT PRIMARY KEY,
+  last_checked TEXT,
+  latest_version TEXT,
+  current_version TEXT,
+  update_available BOOLEAN
+);
+```
+
+### Error Handling Patterns
+
+```typescript
+// Comprehensive error handling for each operation
+try {
+  const result = await operation();
+  return { success: true, data: result };
+} catch (error) {
+  // Permission errors
+  if (error.code === 'EACCES') {
+    return { success: false, error: 'Permission denied', suggestion: 'Run with sudo' };
+  }
+  
+  // Network errors
+  if (error.code === 'ENOTFOUND') {
+    return { success: false, error: 'Network error', suggestion: 'Check connection' };
+  }
+  
+  // Command not found
+  if (error.message.includes('command not found')) {
+    return { success: false, error: 'Prerequisite missing', suggestion: 'Install Node.js/Python' };
+  }
+  
+  // Generic fallback
+  return { success: false, error: error.message };
+}
+```
+
+### Testing Strategy
+
+#### Unit Tests
+```typescript
+describe('CliToolDetector', () => {
+  it('should detect installed Claude Code', async () => {
+    const status = await detector.detectTool('claude-code');
+    expect(status.installed).toBe(true);
+    expect(status.version).toMatch(/\d+\.\d+\.\d+/);
+  });
+});
+```
+
+#### Integration Tests
+```typescript
+describe('CLI Tool Integration', () => {
+  it('should complete full lifecycle', async () => {
+    // Install
+    await ipcRenderer.invoke('cli-tool-install', 'claude-code');
+    
+    // Configure
+    await ipcRenderer.invoke('cli-tool-configure', 'claude-code');
+    
+    // Launch
+    const result = await ipcRenderer.invoke('cli-tool-launch', 'claude-code');
+    expect(result.success).toBe(true);
+    
+    // Update
+    await ipcRenderer.invoke('cli-tool-update', 'claude-code');
+  });
+});
+```
+
+### Performance Considerations
+
+1. **Lazy Loading**: Tools detected on-demand, not all at startup
+2. **Caching**: Version info cached for 5 minutes
+3. **Non-blocking**: All operations async with UI feedback
+4. **Debouncing**: Status refreshes debounced to prevent spam
+5. **Parallel Operations**: Multiple tools can update simultaneously
+
+### Security Model
+
+1. **Token Isolation**: Each tool gets unique Memory Service token
+2. **Command Validation**: Tool IDs validated against whitelist
+3. **Path Sanitization**: All paths validated before execution
+4. **Permission Checks**: Graceful degradation without sudo
+5. **Audit Logging**: All operations logged for security review
+
+### Replication Guide for New AI CLI Tools
+
+#### Step-by-Step Implementation for Each New Tool
+
+##### Step 1: Add Tool Definition
+**File**: `src/utils/AI_CLI_TOOLS_REGISTRY.md`
+
+```typescript
+// Example: Adding Gemini CLI
+{
+  id: 'gemini-cli',
+  name: 'Gemini CLI',
+  packageName: '@google/gemini-cli',
+  packageManager: 'npm',
+  command: 'gemini',
+  versionCommand: 'gemini --version',
+  versionPattern: /gemini-cli\/(\d+\.\d+\.\d+)/,
+  docsUrl: 'https://cloud.google.com/gemini/docs',
+  description: 'Google\'s free AI coding assistant (1000 req/day)',
+  memoryServiceCompatible: true,
+  resumeSupport: false
+}
+```
+
+##### Step 2: Update Package Mappings
+**File**: `src/index.ts` (line ~1405)
+
+```typescript
+const npmPackages: Record<string, string> = {
+  'claude-code': '@anthropic-ai/claude-code',
+  'gemini-cli': '@google/gemini-cli',  // Add new tool here
+  // ... other tools
+};
+```
+
+##### Step 3: Add Version Detection Logic
+**File**: `src/index.ts` (update handler ~1470)
+
+```typescript
+if (toolId === 'gemini-cli') {
+  const versionResult = await execAsync('gemini --version');
+  version = versionResult.stdout.match(/gemini-cli\/(\d+\.\d+\.\d+)/)?.[1];
+}
+```
+
+##### Step 4: Create Documentation
+**File**: `docs/cli-tools/gemini-cli.md`
+
+```markdown
+# Gemini CLI Documentation
+
+## Overview
+[Tool description]
+
+## Installation
+npm install -g @google/gemini-cli
+
+## Features
+[List features]
+
+## Memory Service Integration
+[MCP compatibility details]
+```
+
+##### Step 5: Add UI Card
+**File**: `src/renderer.ts` (renderCliToolsPanel function)
+
+```typescript
+gridContainer.appendChild(createCliToolCard({
+  id: 'gemini-cli',
+  name: 'Gemini CLI',
+  description: 'Google\'s free AI coding assistant',
+  status: await electronAPI.detectCliTool('gemini-cli'),
+  docsUrl: 'https://cloud.google.com/gemini/docs',
+  badgeText: 'FREE',
+  badgeColor: '#28a745'
+}));
+```
+
+##### Step 6: Implement Tool-Specific Logic
+If the tool has unique requirements:
+
+```typescript
+// Special handling for tool-specific features
+if (toolId === 'gemini-cli') {
+  // Example: Gemini might need API key setup
+  await setupGeminiApiKey();
+  
+  // Example: Special authentication flow
+  await authenticateWithGoogle();
+}
+```
+
+#### Testing Checklist for New Tools
+
+- [ ] **Detection**: Tool correctly detected when installed
+- [ ] **Version**: Version extraction works correctly
+- [ ] **Installation**: Install button successfully installs tool
+- [ ] **Configuration**: Memory Service connection established
+- [ ] **Launch**: Tool launches in terminal with correct command
+- [ ] **Update**: Update button fetches and installs latest version
+- [ ] **Cleanup**: Tool processes cleaned up on app quit
+- [ ] **Error Handling**: All error cases show helpful messages
+- [ ] **UI State**: All visual states work correctly
+- [ ] **Documentation**: Tool documented in docs/cli-tools/
+
+#### Common Pitfalls to Avoid
+
+1. **Version Pattern Mismatch**
+   - Test version regex with actual output
+   - Handle edge cases (beta versions, etc.)
+
+2. **PATH Issues**
+   - Always include common binary paths
+   - Test on fresh system without tools in PATH
+
+3. **Permission Errors**
+   - Provide clear manual fallback commands
+   - Never attempt automatic sudo escalation
+
+4. **Memory Service Compatibility**
+   - Not all tools support MCP
+   - Gracefully handle non-compatible tools
+
+5. **Terminal Command Variations**
+   - Some tools use different commands than package name
+   - Example: Package `@anthropic-ai/claude-code` → Command `claude`
+
+#### Tool-Specific Considerations
+
+##### NPM-based Tools
+- Use `npm update -g` for updates
+- Check global npm prefix for installations
+- Handle npm permission issues gracefully
+
+##### Python/pip-based Tools
+- Use `pip install --upgrade` for updates
+- Check both pip and pip3
+- Handle virtual environment considerations
+
+##### Binary Tools
+- May need custom installation logic
+- Version detection might be non-standard
+- Update mechanism varies by tool
+
+#### Monitoring & Analytics
+
+Track usage for each tool:
+```sql
+CREATE TABLE tool_metrics (
+  tool_id TEXT,
+  action TEXT, -- 'install', 'launch', 'update', 'configure'
+  timestamp TEXT,
+  success BOOLEAN,
+  error_message TEXT,
+  duration_ms INTEGER
+);
+```
+
+#### Future Enhancements Path
+
+1. **Auto-Discovery**: Scan system for installed AI tools
+2. **Plugin System**: Allow community tool additions
+3. **Tool Marketplace**: Browse and install from catalog
+4. **Sync Settings**: Share tool configs across devices
+5. **Team Management**: Centralized tool deployment
+
+---
+
 ## CLI Tools Management
 
 ### Overview
@@ -4870,7 +5406,7 @@ electron-poc/
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
 **Last Updated**: 2025-08-22
-**Version**: 1.6.1
+**Version**: 1.6.2
 **Maintainer**: Hive Development Team
 
 ### Change Log
@@ -4883,6 +5419,17 @@ electron-poc/
   - **Persistent Configuration**: Tool configs saved in ~/.hive/cli-tools-config.json
   - **Memory Service Bridge**: Claude Code can now query and contribute to AI memory
 
+- **v1.6.2 (2025-08-22)**: Complete AI CLI Tools Integration Pattern Documentation
+  - **Integration Pattern**: Comprehensive architectural pattern for all AI CLI tools
+  - **Core Components**: Tool registry, detection system, IPC layer, UI architecture
+  - **Five-Phase Flow**: Detection, Installation, Configuration, Launch, Update
+  - **Terminal Management**: TTYD integration with port allocation and PID tracking
+  - **Button Matrix**: Complete functionality mapping for all UI buttons
+  - **Database Schema**: Tool tracking, launch history, update checks
+  - **Error Handling**: Comprehensive patterns for all error scenarios
+  - **Replication Guide**: Step-by-step instructions for adding new tools
+  - **Testing Strategy**: Unit and integration test patterns
+  - **Security Model**: Token isolation, command validation, audit logging
 - **v1.6.1 (2025-08-22)**: CLI Tools Update Button Implementation
   - **Update Functionality**: Complete implementation of update button for all CLI tools
   - **NPM Package Updates**: Support for `npm update -g` with package name mapping
