@@ -3049,20 +3049,25 @@ setTimeout(() => {
         console.log('✅ TTYD Terminal Panel initialized');
         
         // Listen for AI tool launch events from main process
-        window.electronAPI.onLaunchAIToolTerminal((data: {
-            toolId: string;
-            toolName: string;
-            command: string;
-            cwd: string;
-        }) => {
-            console.log('📦 Launching AI tool terminal:', data);
-            // Create a terminal with the AI tool
-            ttydTerminalPanel.createTerminal('ai-tool', {
-                toolId: data.toolId,
-                command: data.command,
-                cwd: data.cwd
+        if (window.electronAPI.onLaunchAIToolTerminal) {
+            window.electronAPI.onLaunchAIToolTerminal((data: {
+                toolId: string;
+                toolName: string;
+                command: string;
+                cwd: string;
+            }) => {
+                console.log('📦 Launching AI tool terminal:', data);
+                // Get the TTYDTerminalPanel instance and create a terminal
+                const terminal = (window as any).isolatedTerminal;
+                if (terminal) {
+                    terminal.createTerminal('ai-tool', {
+                        toolId: data.toolId,
+                        command: data.command,
+                        cwd: data.cwd
+                    });
+                }
             });
-        });
+        }
         
         // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
         const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
