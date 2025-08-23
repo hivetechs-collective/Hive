@@ -2242,6 +2242,46 @@ body {
   border-bottom-color: #007acc !important;
 }
 
+/* TTYD Terminal Tab Styling */
+.ttyd-tab-btn {
+  padding: 6px 12px;
+  background: #2d2d2d;
+  color: #969696;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+  transition: all 0.2s ease;
+  position: relative;
+  margin-right: 1px;
+}
+
+.ttyd-tab-btn:hover:not(.active) {
+  background: #3a3a3a;
+  color: #cccccc;
+}
+
+.ttyd-tab-btn.active {
+  background: #1e1e1e !important;
+  color: #cccccc !important;
+  border: 2px solid var(--hive-yellow) !important;
+  border-radius: 4px 4px 0 0;
+  z-index: 1;
+}
+
+.ttyd-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--hive-yellow);
+}
+
 /* Toast notifications */
 @keyframes slideIn {
   from {

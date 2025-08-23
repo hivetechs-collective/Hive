@@ -30,6 +30,7 @@ export class TTYDTerminalPanel {
         this.contentContainer = document.getElementById('isolated-terminal-content')!;
         
         this.initialize();
+        this.setupResizeObserver();
     }
 
     private initialize(): void {
@@ -90,24 +91,10 @@ export class TTYDTerminalPanel {
 
         // Create tab button
         const tabBtn = document.createElement('button');
-        tabBtn.className = 'isolated-tab active';
+        tabBtn.className = 'ttyd-tab-btn active';
         tabBtn.id = `tab-btn-${tab.id}`;  // Add ID for System Log tab too
         tabBtn.innerHTML = `
             <span>${tab.title}</span>
-        `;
-        tabBtn.style.cssText = `
-            padding: 6px 12px;
-            background: #1e1e1e;
-            border: none;
-            border-right: 1px solid #3c3c3c;
-            color: #cccccc;
-            cursor: pointer;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            flex-shrink: 0;
-            white-space: nowrap;
         `;
         
         tabBtn.addEventListener('click', () => this.switchToTab(tab.id));
@@ -243,26 +230,11 @@ export class TTYDTerminalPanel {
 
         // Create tab button
         const tabBtn = document.createElement('button');
-        tabBtn.className = 'isolated-tab';
+        tabBtn.className = 'ttyd-tab-btn';
         tabBtn.id = `tab-btn-${tab.id}`;
         tabBtn.innerHTML = `
             <span>${tab.title}</span>
             <span class="tab-close" style="margin-left: 8px; cursor: pointer;">×</span>
-        `;
-        tabBtn.style.cssText = `
-            padding: 6px 12px;
-            background: #2d2d2d;
-            border: none;
-            border-right: 1px solid #3c3c3c;
-            color: #969696;
-            cursor: pointer;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            position: relative;
-            flex-shrink: 0;
-            white-space: nowrap;
         `;
         
         // Add click handler for tab switching
@@ -340,8 +312,6 @@ export class TTYDTerminalPanel {
                 const currentTabBtn = document.getElementById(`tab-btn-${this.activeTabId}`);
                 if (currentTabBtn) {
                     currentTabBtn.classList.remove('active');
-                    currentTabBtn.style.background = '#2d2d2d';
-                    currentTabBtn.style.color = '#969696';
                 }
                 if (currentTab.element) {
                     currentTab.element.style.display = 'none';
@@ -354,8 +324,6 @@ export class TTYDTerminalPanel {
         const tabBtn = document.getElementById(`tab-btn-${tabId}`);
         if (tabBtn) {
             tabBtn.classList.add('active');
-            tabBtn.style.background = '#1e1e1e';
-            tabBtn.style.color = '#cccccc';
         }
         if (tab.element) {
             tab.element.style.display = 'block';
@@ -611,6 +579,63 @@ export class TTYDTerminalPanel {
             rightArrow.style.display = 'none';
             this.tabScrollOffset = 0;
             this.tabsContainer.style.transform = 'translateX(0)';
+        }
+    }
+    
+    private setupResizeObserver(): void {
+        // Observe the container for size changes
+        let resizeTimeout: NodeJS.Timeout | null = null;
+        const resizeObserver = new ResizeObserver(() => {
+            // Debounce resize events to avoid excessive redraws
+            if (resizeTimeout) {
+                clearTimeout(resizeTimeout);
+            }
+            
+            resizeTimeout = setTimeout(() => {
+                // Force refresh all active webviews to redraw terminal content
+                this.tabs.forEach((tab) => {
+                    if (tab.webview && tab.isActive) {
+                        // Force the webview to refresh by slightly adjusting its size
+                        const webview = tab.webview as any;
+                        
+                        // Store current dimensions
+                        const currentWidth = webview.style.width;
+                        const currentHeight = webview.style.height;
+                        
+                        // Trigger a reflow by changing dimensions slightly
+                        webview.style.width = '99.9%';
+                        webview.style.height = '99.9%';
+                        
+                        // Restore original dimensions after a brief delay
+                        requestAnimationFrame(() => {
+                            webview.style.width = currentWidth;
+                            webview.style.height = currentHeight;
+                            
+                            // Send resize event to the terminal inside the webview
+                            try {
+                                // Try to send a resize event to the terminal
+                                webview.executeJavaScript(`
+                                    if (window.term && window.term.fit) {
+                                        window.term.fit();
+                                    }
+                                    // Also trigger window resize for ttyd
+                                    window.dispatchEvent(new Event('resize'));
+                                `);
+                            } catch (e) {
+                                // Webview might not support executeJavaScript, that's ok
+                                console.log('[TTYDTerminalPanel] Could not send resize to terminal:', e);
+                            }
+                        });
+                    }
+                });
+                
+                resizeTimeout = null;
+            }, 100); // 100ms debounce
+        });
+        
+        // Observe the container element
+        if (this.container) {
+            resizeObserver.observe(this.container);
         }
     }
 }
