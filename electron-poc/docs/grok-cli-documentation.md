@@ -25,7 +25,7 @@ Grok CLI is an open-source AI agent that brings the power of Grok (from xAI) dir
 ### Prerequisites
 - Node.js 16 or higher
 - npm or yarn package manager
-- Grok API key from X.AI (https://x.ai)
+- Grok API key from X.AI (https://console.x.ai/team/default/api-keys)
 
 ### Global Installation
 ```bash
@@ -512,7 +512,7 @@ npm install -g @vibe-kit/grok-cli@0.0.23
 
 - **GitHub Repository**: https://github.com/superagent-ai/grok-cli
 - **NPM Package**: https://www.npmjs.com/package/@vibe-kit/grok-cli
-- **X.AI API Keys**: https://x.ai
+- **X.AI API Keys**: https://console.x.ai/team/default/api-keys
 - **Issue Tracker**: https://github.com/superagent-ai/grok-cli/issues
 - **Discord Community**: Check GitHub for link
 - **VibeKit Ecosystem**: https://github.com/superagent-ai/vibekit

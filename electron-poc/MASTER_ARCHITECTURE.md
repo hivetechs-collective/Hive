@@ -3054,10 +3054,10 @@ echo ""
 echo "To use Grok, you need an API key from X.AI"
 echo ""
 echo "📝 Steps to get your API key:"
-echo "   1. Visit https://x.ai"
+echo "   1. Visit https://console.x.ai/team/default/api-keys"
 echo "   2. Sign in or create an account"
-echo "   3. Navigate to API settings"
-echo "   4. Generate a new API key"
+echo "   3. Click 'Create API key'"
+echo "   4. Copy your new API key"
 echo ""
 read -p "Would you like to set up your API key now? (y/n): " response
 
