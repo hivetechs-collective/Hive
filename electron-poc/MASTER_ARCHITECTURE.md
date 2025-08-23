@@ -3168,6 +3168,199 @@ interface TerminalSettings {
 
 ---
 
+## Global Folder Management System
+
+### Overview
+The Global Folder Management System provides a unified project context across all IDE components, ensuring that File Explorer, Source Control, Terminal, and AI Tools all work with the same project folder. This creates a cohesive VS Code-like experience where the entire application is aware of and synchronized with the current project.
+
+### Architecture
+
+#### Core State Management
+```typescript
+// Global state variable in src/renderer.ts
+let currentOpenedFolder: string | null = null;
+
+// Exposed to window for global access
+(window as any).currentOpenedFolder = currentOpenedFolder;
+```
+
+#### Folder State Flow
+```
+User Action → Main Process → IPC Event → Renderer Handler → Update Global State → Notify All Components
+```
+
+### Folder Operations
+
+#### 1. Opening a Folder
+**Trigger Points**:
+- Menu: File > Open Folder
+- Welcome screen: "Open Folder" button
+- AI Tool Launch: Folder selection dialog
+- Command: `window.openFolder()`
+
+**Process Flow**:
+```typescript
+// Main Process (src/index.ts)
+Menu/Dialog → dialog.showOpenDialog() → mainWindow.webContents.send('menu-open-folder', path)
+
+// Renderer Process (src/renderer.ts)
+electronAPI.onMenuOpenFolder() → handleOpenFolder(folderPath) → {
+  1. Update currentOpenedFolder = folderPath
+  2. Update window.currentOpenedFolder
+  3. Update window title
+  4. Initialize Git: gitAPI.setFolder(folderPath)
+  5. Create/refresh File Explorer
+  6. Update Source Control view
+  7. Update status bar (git branch)
+  8. Setup file selection handlers
+}
+```
+
+#### 2. Closing a Folder
+**Trigger Points**:
+- Menu: File > Close Folder
+- Command: `handleCloseFolder()`
+
+**Process Flow**:
+```typescript
+// Main Process
+Menu → mainWindow.webContents.send('menu-close-folder')
+
+// Renderer Process
+electronAPI.onMenuCloseFolder() → handleCloseFolder() → {
+  1. Clear currentOpenedFolder = null
+  2. Clear window.currentOpenedFolder
+  3. Reset window title
+  4. Clear File Explorer
+  5. Reset Source Control
+  6. Show welcome screen
+}
+```
+
+### Component Integration
+
+#### File Explorer
+```typescript
+// Uses global folder as root
+window.fileExplorer.initialize(currentOpenedFolder);
+
+// File selections are relative to this folder
+fileExplorer.onFileSelect((filePath) => {
+  // filePath is relative to currentOpenedFolder
+  editorTabs.openFile(filePath);
+});
+```
+
+#### Source Control (Git)
+```typescript
+// Git operations scoped to current folder
+gitAPI.setFolder(currentOpenedFolder);
+
+// Status bar shows branch for current folder
+updateGitStatusBar(); // Uses currentOpenedFolder
+```
+
+#### Terminal System
+```typescript
+// New terminals use current folder as working directory
+createTerminalTab(toolId, command) {
+  cwd: window.currentOpenedFolder || process.env.HOME
+}
+```
+
+#### AI Tools Launch Integration
+```typescript
+// Launch button automatically sets global folder
+ipcMain.handle('cli-tool-launch', async (_, toolId) => {
+  // 1. Show folder selection dialog
+  const selectedPath = await selectFolder();
+  
+  // 2. FIRST: Update global folder context
+  mainWindow.webContents.send('menu-open-folder', selectedPath);
+  
+  // 3. THEN: Launch tool in that folder
+  setTimeout(() => {
+    mainWindow.webContents.send('launch-ai-tool-terminal', {
+      toolId, command, cwd: selectedPath
+    });
+  }, 100); // Ensures folder context is set first
+});
+```
+
+### IPC Communication
+
+#### Events
+```typescript
+// Main → Renderer Events
+'menu-open-folder'    // Opens a folder
+'menu-close-folder'   // Closes current folder
+'menu-open-file'      // Opens a specific file
+'menu-new-file'       // Creates new file
+'menu-save'           // Saves current file
+'menu-save-as'        // Save with new name
+
+// Preload Bridge (src/preload.ts)
+electronAPI: {
+  onMenuOpenFolder: (callback: (path: string) => void) => void;
+  onMenuCloseFolder: (callback: () => void) => void;
+  onMenuOpenFile: (callback: (path: string) => void) => void;
+  // ... other menu handlers
+}
+```
+
+### State Synchronization
+
+#### Automatic Updates
+When the global folder changes, these components automatically update:
+
+1. **Window Title**: Shows project name
+2. **File Explorer**: Displays folder tree
+3. **Source Control**: Shows git status
+4. **Status Bar**: Updates branch name
+5. **Terminal**: New terminals use folder as cwd
+6. **Editor**: File paths resolve relative to folder
+
+#### Event Listeners
+```typescript
+// Components watch for folder changes
+window.electronAPI.onMenuOpenFolder((folderPath) => {
+  // Each component updates accordingly
+  handleOpenFolder(folderPath);
+});
+```
+
+### Benefits
+
+1. **Single Source of Truth**: One variable manages all folder context
+2. **Automatic Synchronization**: All components stay in sync
+3. **Consistent UX**: VS Code-like project management
+4. **Clean Architecture**: Clear separation of concerns
+5. **Extensible**: Easy to add new folder-aware components
+
+### Usage Examples
+
+#### Opening Project via AI Tool Launch
+```typescript
+// User clicks Launch button → Selects folder → IDE updates
+1. Launch button clicked
+2. Folder selection dialog
+3. Global folder updated (Explorer, Git, Status Bar refresh)
+4. Terminal opens with AI tool in that folder
+5. All components now focused on selected project
+```
+
+#### Switching Projects
+```typescript
+// File > Open Folder → Select new project
+1. Menu action triggered
+2. New folder selected
+3. All components refresh with new context
+4. Previous project state cleared
+5. New project fully loaded
+```
+
+---
+
 ## AI Tools Launch System with Resume Detection
 
 ### Overview

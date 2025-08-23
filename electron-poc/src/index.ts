@@ -1464,15 +1464,22 @@ const registerSimpleCliToolHandlers = () => {
       
       // Send IPC to renderer to create a terminal tab with the tool
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('launch-ai-tool-terminal', {
-          toolId: toolId,
-          toolName: toolId === 'claude-code' ? 'Claude Code' : toolId,
-          command: command,
-          cwd: selectedPath
-        });
+        // FIRST: Update the global folder context to the selected path
+        // This ensures Explorer, Source Control, and Status Bar all update
+        mainWindow.webContents.send('menu-open-folder', selectedPath);
+        
+        // THEN: After a small delay to ensure folder context is set, launch the terminal
+        setTimeout(() => {
+          mainWindow.webContents.send('launch-ai-tool-terminal', {
+            toolId: toolId,
+            toolName: toolId === 'claude-code' ? 'Claude Code' : toolId,
+            command: command,
+            cwd: selectedPath
+          });
+        }, 100); // Small delay to ensure folder opens first
       }
       
-      logger.info(`[Main] AI tool launch event sent for ${toolId} in ${selectedPath}`);
+      logger.info(`[Main] Opened folder ${selectedPath} and sent AI tool launch event for ${toolId}`);
       return { success: true, path: selectedPath, command: command };
     } catch (error: any) {
       logger.error(`[Main] Failed to launch ${toolId}:`, error);

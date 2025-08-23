@@ -99,9 +99,11 @@ export class TTYDManager extends EventEmitter {
     
     // If we have a command to auto-execute (like 'claude'), prepare it
     if (config.command) {
-      // Use echo and shell to auto-type the command
-      // This approach ensures the command appears in the terminal history
-      ttydArgs.push('--', shell, '-c', `echo '${config.command}' && ${shell} -i`);
+      // Start an interactive shell that will execute the command after initialization
+      // We use a small sleep to ensure the shell is ready, then execute the command
+      // The command will appear in the terminal and execute properly
+      const initCommand = `sleep 0.5 && ${config.command}`;
+      ttydArgs.push('--', shell, '-c', `${initCommand}; exec ${shell} -i`);
     } else {
       // Just start the shell normally
       ttydArgs.push('--', shell);

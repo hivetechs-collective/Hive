@@ -104,6 +104,14 @@ declare global {
       onTerminalCreated?: (callback: (terminalInfo: any) => void) => void;
       onTerminalReady?: (callback: (terminalId: string, url: string) => void) => void;
       onTerminalExit?: (callback: (terminalId: string, code?: number) => void) => void;
+      
+      // AI Tool Launch Event
+      onLaunchAIToolTerminal?: (callback: (data: {
+        toolId: string;
+        toolName: string;
+        command: string;
+        cwd: string;
+      }) => void) => void;
     };
     
     // Global instances

@@ -3060,8 +3060,8 @@ setTimeout(() => {
                 // Get the TTYDTerminalPanel instance and create a terminal
                 const terminal = (window as any).isolatedTerminal;
                 if (terminal) {
-                    // Update the current folder for the terminal
-                    (window as any).currentOpenedFolder = data.cwd;
+                    // Note: The global folder context is already updated by the main process
+                    // via the 'menu-open-folder' event before this terminal launch event
                     // Call createTerminalTab with toolId and command
                     terminal.createTerminalTab(data.toolId, data.command);
                 } else {
