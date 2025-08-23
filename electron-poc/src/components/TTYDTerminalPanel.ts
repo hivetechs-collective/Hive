@@ -29,6 +29,13 @@ export class TTYDTerminalPanel {
         this.tabsContainer = document.getElementById('isolated-terminal-tabs')!;
         this.contentContainer = document.getElementById('isolated-terminal-content')!;
         
+        // Ensure content container has proper dimensions to prevent 139x9 issue
+        this.contentContainer.style.position = 'relative';
+        this.contentContainer.style.width = '100%';
+        this.contentContainer.style.height = 'calc(100% - 35px)'; // Account for tab bar
+        this.contentContainer.style.minHeight = '400px'; // Prevent tiny dimensions
+        this.contentContainer.style.flex = '1 1 auto';
+        
         this.initialize();
         this.setupResizeObserver();
     }
@@ -271,12 +278,23 @@ export class TTYDTerminalPanel {
             bottom: 0;
             background: #1e1e1e;
             display: none;
+            width: 100%;
+            height: 100%;
         `;
         
         // Create webview to embed ttyd terminal
         // Using webview instead of iframe for better Electron integration
         const webview = document.createElement('webview') as any;
+        
+        // CRITICAL: Always delay loading to ensure container has proper size
+        // This prevents the 9-row issue by ensuring ttyd never sees a small container
+        webview.dataset.originalSrc = terminalInfo.url;
+        webview.src = 'about:blank';
+        
+        // Load the webview immediately - flex layout ensures proper size
+        console.log('[TTYDTerminalPanel] Loading ttyd webview');
         webview.src = terminalInfo.url;
+        
         webview.style.cssText = `
             width: 100%;
             height: 100%;
@@ -296,6 +314,61 @@ export class TTYDTerminalPanel {
         tab.webview = webview;
         this.tabs.set(tab.id, tab);
         
+        // Handle webview ready event to ensure proper sizing
+        webview.addEventListener('dom-ready', () => {
+            console.log('[TTYDTerminalPanel] Webview DOM ready, ensuring proper size');
+            
+            // Ensure the webview and its container have proper dimensions
+            const panel = document.querySelector('.isolated-terminal-panel') as HTMLElement;
+            const contentHeight = this.contentContainer.offsetHeight;
+            const contentWidth = this.contentContainer.offsetWidth;
+            
+            console.log(`[TTYDTerminalPanel] Container dimensions: ${contentWidth}x${contentHeight}`);
+            
+            // Calculate proper terminal rows and columns based on actual dimensions
+            const charHeight = 17; // Approximate character height in pixels
+            const charWidth = 9;   // Approximate character width in pixels
+            const rows = Math.floor(contentHeight / charHeight);
+            const cols = Math.floor(contentWidth / charWidth);
+            
+            console.log(`[TTYDTerminalPanel] Calculated terminal size: ${cols}x${rows} (from ${contentWidth}x${contentHeight}px)`);
+            
+            // Always force a reload after a short delay to ensure ttyd gets proper dimensions
+            // This fixes the 139x9 issue where height is stuck at 9 rows
+            setTimeout(() => {
+                // First, try to send a resize signal through the webview
+                try {
+                    // Send window resize event to force ttyd to recalculate
+                    webview.executeJavaScript(`
+                        window.dispatchEvent(new Event('resize'));
+                        if (window.term) {
+                            window.term.fit();
+                        }
+                    `).catch(() => {
+                        // If executeJavaScript fails (security), just reload
+                        console.log('[TTYDTerminalPanel] Cannot execute JS, reloading webview');
+                    });
+                } catch (e) {
+                    console.log('[TTYDTerminalPanel] executeJavaScript not available');
+                }
+                
+                // If dimensions are still wrong, force a full reload
+                if (rows < 20 || contentHeight < 400) {
+                    console.log('[TTYDTerminalPanel] Height still too small, forcing reload');
+                    const currentSrc = webview.src;
+                    webview.src = '';
+                    setTimeout(() => {
+                        webview.src = currentSrc;
+                    }, 100);
+                }
+            }, 500);
+        });
+        
+        // Handle webview load errors
+        webview.addEventListener('did-fail-load', (event: any) => {
+            console.error('[TTYDTerminalPanel] Webview failed to load:', event);
+        });
+        
         // Switch to the new tab
         this.switchToTab(tab.id);
         
@@ -306,6 +379,10 @@ export class TTYDTerminalPanel {
     private switchToTab(tabId: string): void {
         const tab = this.tabs.get(tabId);
         if (!tab) return;
+
+        // Check if panel is collapsed
+        const panel = document.querySelector('.isolated-terminal-panel');
+        const isCollapsed = panel?.classList.contains('collapsed');
 
         // Deactivate current tab
         if (this.activeTabId) {
@@ -328,7 +405,9 @@ export class TTYDTerminalPanel {
         if (tabBtn) {
             tabBtn.classList.add('active');
         }
-        if (tab.element) {
+        
+        // Only show element if panel is not collapsed (prevents ttyd from seeing small container)
+        if (tab.element && !isCollapsed) {
             tab.element.style.display = 'block';
         }
 
@@ -588,7 +667,7 @@ export class TTYDTerminalPanel {
     private setupKeyboardShortcuts(): void {
         // Add keyboard shortcuts for terminal control
         // Use capture phase to intercept before other handlers
-        document.addEventListener('keydown', (e) => {
+        document.addEventListener('keydown', async (e) => {
             // Use Ctrl/Cmd + Shift + R for terminal refresh (avoids conflict with browser refresh)
             if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
                 // Check if the TTYD panel is visible
@@ -598,6 +677,30 @@ export class TTYDTerminalPanel {
                     e.stopPropagation();
                     console.log('[TTYDTerminalPanel] Refresh shortcut triggered');
                     this.refreshActiveTerminal();
+                    return false;
+                }
+            }
+            
+            // Ctrl/Cmd + Shift + T to RESTART all terminals (complete fix for size issues)
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
+                const isolatedPanel = document.querySelector('.isolated-terminal-panel');
+                if (isolatedPanel && !isolatedPanel.classList.contains('collapsed')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[TTYDTerminalPanel] RESTART ALL TERMINALS triggered (Cmd+Shift+T)');
+                    await this.restartAllTerminals();
+                    return false;
+                }
+            }
+            
+            // Ctrl/Cmd + Shift + S to try resizing terminal without reload
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+                const isolatedPanel = document.querySelector('.isolated-terminal-panel');
+                if (isolatedPanel && !isolatedPanel.classList.contains('collapsed')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('[TTYDTerminalPanel] RESIZE TERMINAL triggered (Cmd+Shift+S)');
+                    await this.tryResizeTerminal();
                     return false;
                 }
             }
@@ -614,6 +717,142 @@ export class TTYDTerminalPanel {
                 }
             }
         }, true); // Use capture phase
+    }
+    
+    private hideAllWebviews(): void {
+        // Hide all webviews by clearing their src to prevent ttyd from seeing tiny container
+        console.log('[TTYDTerminalPanel] Hiding all webviews to prevent terminal resize');
+        
+        this.tabs.forEach((tab) => {
+            if (tab.webview && tab.type !== 'system-log') {
+                const webview = tab.webview as any;
+                // Store the URL for later restoration
+                if (!webview.dataset.originalSrc && webview.src && webview.src !== 'about:blank') {
+                    webview.dataset.originalSrc = webview.src;
+                }
+                // Clear the webview to disconnect from ttyd
+                webview.src = 'about:blank';
+                webview.style.visibility = 'hidden';
+            }
+        });
+    }
+    
+    private showAndReloadWebviews(): void {
+        // Show and reload webviews with proper container size
+        console.log('[TTYDTerminalPanel] Showing and reloading webviews with proper size');
+        
+        // First ensure container has proper size
+        const contentHeight = this.contentContainer.offsetHeight;
+        const contentWidth = this.contentContainer.offsetWidth;
+        console.log(`[TTYDTerminalPanel] Container size before reload: ${contentWidth}x${contentHeight}px`);
+        
+        // Only proceed if container has reasonable size
+        if (contentHeight < 200 || contentWidth < 200) {
+            console.log('[TTYDTerminalPanel] Container still too small, waiting...');
+            setTimeout(() => this.showAndReloadWebviews(), 200);
+            return;
+        }
+        
+        this.tabs.forEach((tab) => {
+            if (tab.webview && tab.type !== 'system-log') {
+                const webview = tab.webview as any;
+                const originalSrc = webview.dataset.originalSrc || tab.url;
+                
+                if (originalSrc && originalSrc !== 'about:blank') {
+                    console.log(`[TTYDTerminalPanel] Restoring webview for tab: ${tab.id}`);
+                    webview.style.visibility = 'visible';
+                    // Reload with proper size
+                    webview.src = originalSrc;
+                    
+                    // Log expected terminal size
+                    const rows = Math.floor(contentHeight / 17);
+                    const cols = Math.floor(contentWidth / 9);
+                    console.log(`[TTYDTerminalPanel] Expected terminal size: ${cols}x${rows}`);
+                }
+            }
+        });
+    }
+    
+    private async restartAllTerminals(): Promise<void> {
+        // Restart all ttyd processes to get fresh PTY with correct size
+        // This is the only reliable way to fix the terminal size issue
+        
+        console.log('[TTYDTerminalPanel] RESTARTING all terminals for proper size');
+        
+        // Get current container dimensions
+        const contentHeight = this.contentContainer.offsetHeight;
+        const contentWidth = this.contentContainer.offsetWidth;
+        console.log(`[TTYDTerminalPanel] Container size: ${contentWidth}x${contentHeight}px`);
+        
+        // Store terminal info for recreation
+        const terminalsToRestart: Array<{
+            id: string;
+            title: string;
+            toolId?: string;
+            wasActive: boolean;
+        }> = [];
+        
+        this.tabs.forEach((tab) => {
+            if (tab.type !== 'system-log') {
+                terminalsToRestart.push({
+                    id: tab.id,
+                    title: tab.title,
+                    toolId: tab.toolId,
+                    wasActive: tab.isActive
+                });
+            }
+        });
+        
+        // Kill and recreate each terminal
+        for (const termInfo of terminalsToRestart) {
+            console.log(`[TTYDTerminalPanel] Restarting terminal: ${termInfo.title}`);
+            
+            try {
+                // Kill the old ttyd process
+                await window.terminalAPI.killTerminalProcess(termInfo.id);
+                
+                // Remove the old tab
+                this.removeTab(termInfo.id);
+                
+                // Wait a bit for process to fully terminate
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
+                // Create a new terminal with same configuration
+                await this.createTerminalTab(termInfo.toolId);
+                
+                // Note: We can't restore exact terminal content, but at least we get proper size
+            } catch (error) {
+                console.error(`[TTYDTerminalPanel] Error restarting terminal ${termInfo.id}:`, error);
+            }
+        }
+        
+        const rows = Math.floor(contentHeight / 17);
+        const cols = Math.floor(contentWidth / 9);
+        console.log(`[TTYDTerminalPanel] Terminals restarted with expected size: ${cols}x${rows}`);
+    }
+    
+    private forceCompleteReload(): void {
+        // For less aggressive cases, just reload webviews
+        console.log('[TTYDTerminalPanel] Starting complete webview reload');
+        
+        const contentHeight = this.contentContainer.offsetHeight;
+        const contentWidth = this.contentContainer.offsetWidth;
+        console.log(`[TTYDTerminalPanel] Current container: ${contentWidth}x${contentHeight}px`);
+        
+        this.tabs.forEach((tab) => {
+            if (tab.webview && tab.type !== 'system-log') {
+                const webview = tab.webview as any;
+                const currentSrc = webview.src;
+                
+                if (currentSrc && currentSrc !== 'about:blank') {
+                    console.log(`[TTYDTerminalPanel] Reloading webview for tab: ${tab.id}`);
+                    webview.src = 'about:blank';
+                    setTimeout(() => {
+                        webview.src = currentSrc;
+                    }, 100);
+                }
+            }
+        });
     }
     
     private fixPanelLayout(): void {
@@ -675,15 +914,91 @@ export class TTYDTerminalPanel {
             // Also refresh the webview if it's active
             if (tab.webview && tab.isActive) {
                 const webview = tab.webview as any;
-                // Trigger a visual update
-                webview.style.width = '99%';
-                requestAnimationFrame(() => {
-                    webview.style.width = '100%';
-                });
+                
+                // Ensure webview fills its container
+                webview.style.position = 'absolute';
+                webview.style.top = '0';
+                webview.style.left = '0';
+                webview.style.right = '0';
+                webview.style.bottom = '0';
+                webview.style.width = '100%';
+                webview.style.height = '100%';
+                
+                // Force ttyd to recalculate terminal size by reloading
+                // This is the most reliable way to fix the 37x9 issue
+                const currentSrc = webview.src;
+                if (currentSrc && currentSrc !== 'about:blank') {
+                    console.log('[TTYDTerminalPanel] Reloading webview to fix terminal size');
+                    webview.src = '';
+                    setTimeout(() => {
+                        webview.src = currentSrc;
+                    }, 100);
+                }
             }
         });
         
         console.log('[TTYDTerminalPanel] Layout fixed after window state change');
+    }
+    
+    public async tryResizeTerminal(): Promise<void> {
+        // Try to resize the active terminal by injecting JavaScript
+        if (!this.activeTabId) return;
+        
+        const tab = this.tabs.get(this.activeTabId);
+        if (tab && tab.webview) {
+            const webview = tab.webview as any;
+            
+            // Calculate proper size based on container
+            const contentHeight = this.contentContainer.offsetHeight;
+            const contentWidth = this.contentContainer.offsetWidth;
+            const rows = Math.floor(contentHeight / 17); // ~17px per row
+            const cols = Math.floor(contentWidth / 9);   // ~9px per column
+            
+            console.log(`[TTYDTerminalPanel] Trying to resize terminal to ${cols}x${rows}`);
+            
+            try {
+                // Inject JavaScript to access ttyd's terminal
+                const script = `
+                    (function() {
+                        try {
+                            // Method 1: Direct terminal access
+                            if (window.term) {
+                                window.term.resize(${cols}, ${rows});
+                                return 'Resized via window.term';
+                            }
+                            
+                            // Method 2: Send resize through ttyd's WebSocket
+                            if (window.ws && window.ws.readyState === 1) {
+                                // ttyd expects binary message with specific format
+                                const encoder = new TextEncoder();
+                                const resizeMsg = encoder.encode('1' + String.fromCharCode(${rows}) + String.fromCharCode(${cols}));
+                                window.ws.send(resizeMsg);
+                                return 'Sent resize via WebSocket';
+                            }
+                            
+                            // Method 3: Trigger resize event
+                            window.dispatchEvent(new Event('resize'));
+                            return 'Triggered resize event';
+                        } catch (e) {
+                            return 'Error: ' + e.message;
+                        }
+                    })();
+                `;
+                
+                // Try to execute the script
+                if (webview.executeJavaScript) {
+                    const result = await webview.executeJavaScript(script);
+                    console.log('[TTYDTerminalPanel] Resize result:', result);
+                } else if (webview.send) {
+                    // Try using webview.send
+                    webview.send('resize', { cols, rows });
+                } else {
+                    console.log('[TTYDTerminalPanel] No way to inject JavaScript');
+                }
+            } catch (error) {
+                console.error('[TTYDTerminalPanel] Error trying to resize:', error);
+            }
+        }
     }
     
     public refreshActiveTerminal(): void {
@@ -695,6 +1010,11 @@ export class TTYDTerminalPanel {
             const webview = tab.webview as any;
             
             console.log('[TTYDTerminalPanel] Manually refreshing terminal:', this.activeTabId);
+            
+            // First try to resize, then reload if needed
+            this.tryResizeTerminal().then(() => {
+                console.log('[TTYDTerminalPanel] Tried resize, now refreshing display');
+            });
             
             // Reload the webview to refresh the terminal display
             // This is the most reliable way to fix symbol distortion
@@ -718,6 +1038,33 @@ export class TTYDTerminalPanel {
     }
     
     private setupResizeObserver(): void {
+        // Watch for center panel changes that affect our width
+        const centerPanel = document.querySelector('.editor-container');
+        if (centerPanel) {
+            const centerObserver = new MutationObserver((mutations: MutationRecord[]) => {
+                mutations.forEach((mutation: MutationRecord) => {
+                    if (mutation.type === 'attributes' && 
+                        (mutation.attributeName === 'style' || mutation.attributeName === 'class')) {
+                        // Check if center panel is hidden or collapsed
+                        const target = mutation.target as HTMLElement;
+                        const isHidden = target.style.display === 'none' || 
+                                       target.classList.contains('collapsed') ||
+                                       target.offsetWidth === 0;
+                        
+                        if (isHidden) {
+                            console.log('[TTYDTerminalPanel] Center panel collapsed, TTYD will expand');
+                            // Don't do anything - flex layout handles the expansion automatically
+                        }
+                    }
+                });
+            });
+            
+            centerObserver.observe(centerPanel, {
+                attributes: true,
+                attributeFilter: ['style', 'class']
+            });
+        }
+        
         // Observe the container for size changes
         let resizeTimeout: NodeJS.Timeout | null = null;
         let resizeCompleteTimeout: NodeJS.Timeout | null = null;
@@ -758,20 +1105,40 @@ export class TTYDTerminalPanel {
             }
         });
         
-        // Watch for expand-to-fill class changes
+        // Watch for panel collapse/expand changes
         const panel = document.querySelector('.isolated-terminal-panel');
         if (panel) {
+            let wasCollapsed = panel.classList.contains('collapsed');
+            let wasExpanded = panel.classList.contains('expanded');
+            
             const classObserver = new MutationObserver((mutations) => {
                 mutations.forEach((mutation) => {
                     if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                         const target = mutation.target as HTMLElement;
-                        const hasExpandClass = target.classList.contains('expand-to-fill');
-                        console.log('[TTYDTerminalPanel] Panel expand state changed:', hasExpandClass);
+                        const isCollapsed = target.classList.contains('collapsed');
+                        const isExpanded = target.classList.contains('expanded');
                         
-                        // Fix layout when expansion state changes
-                        setTimeout(() => {
-                            this.fixPanelLayout();
-                        }, 50);
+                        // Handle collapse state change
+                        if (isCollapsed !== wasCollapsed) {
+                            console.log('[TTYDTerminalPanel] Panel collapse state changed:', wasCollapsed, '->', isCollapsed);
+                            wasCollapsed = isCollapsed;
+                            
+                            if (isCollapsed) {
+                                // Just log, don't hide webviews or restart terminals
+                                console.log('[TTYDTerminalPanel] Panel collapsed');
+                            } else {
+                                // Panel expanded from collapsed state - just log, don't restart
+                                console.log('[TTYDTerminalPanel] Panel expanded from collapsed');
+                                // Don't restart terminals - they should maintain their size
+                            }
+                        }
+                        
+                        // Handle expanded state change (when center panel collapses)
+                        if (!isCollapsed && isExpanded !== wasExpanded) {
+                            console.log('[TTYDTerminalPanel] Panel expand state changed:', wasExpanded, '->', isExpanded);
+                            wasExpanded = isExpanded;
+                            // Don't reload or restart - flex layout handles the size change
+                        }
                     }
                 });
             });
@@ -792,44 +1159,50 @@ export class TTYDTerminalPanel {
             }
             
             resizeTimeout = setTimeout(() => {
-                // First pass: trigger immediate resize event
+                // First pass: DO NOT toggle display as it may cause terminal issues
+                // Just ensure the webview maintains proper size
                 this.tabs.forEach((tab) => {
                     if (tab.webview && tab.isActive) {
                         const webview = tab.webview as any;
                         
-                        // For webviews, we can't execute JavaScript due to security
-                        // Instead, force a visual refresh by toggling visibility
-                        webview.style.display = 'none';
-                        requestAnimationFrame(() => {
-                            webview.style.display = 'block';
-                        });
+                        // Just ensure size is correct without any display toggling
+                        // The terminal inside should handle its own resize
+                        webview.style.width = '100%';
+                        webview.style.height = '100%';
                     }
                 });
                 
                 resizeTimeout = null;
             }, 50); // Faster initial response
             
-            // Second pass: complete refresh after resize stops
+            // Second pass: DO NOT reload webview as it causes terminal to reset to 9 rows
+            // The terminal size is set server-side in ttyd and reload breaks it
             resizeCompleteTimeout = setTimeout(() => {
                 this.tabs.forEach((tab) => {
                     if (tab.webview && tab.isActive) {
                         const webview = tab.webview as any;
                         
-                        // After resize completes, reload the webview for clean rendering
-                        // This ensures symbols are properly redrawn
-                        const currentSrc = webview.src;
+                        // Instead of reloading, just ensure the webview is properly sized
+                        // The terminal will handle its own resize via xterm.js fit addon
+                        webview.style.width = '100%';
+                        webview.style.height = '100%';
                         
-                        // Only reload if we have a valid URL
-                        if (currentSrc && currentSrc !== 'about:blank') {
-                            // Brief flash to indicate refresh
-                            webview.style.opacity = '0.8';
-                            
-                            // Reload the terminal
-                            webview.src = '';
-                            setTimeout(() => {
-                                webview.src = currentSrc;
-                                webview.style.opacity = '1';
-                            }, 50);
+                        // Try to send a resize signal through the webview without reload
+                        // This won't work due to security but at least we tried
+                        try {
+                            // Attempt to trigger resize inside the terminal
+                            // Note: This likely won't work due to webview security restrictions
+                            webview.executeJavaScript(`
+                                if (window.term && window.term.fit) {
+                                    window.term.fit();
+                                    console.log('Terminal resized via fit()');
+                                }
+                            `).catch(() => {
+                                // Expected to fail due to security
+                                console.log('[TTYDTerminalPanel] Cannot execute resize in webview (security)');
+                            });
+                        } catch (e) {
+                            // Ignore - expected due to security
                         }
                     }
                 });

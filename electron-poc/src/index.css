@@ -475,10 +475,22 @@ body {
 }
 
 /* Isolated Terminal Panel - default state */
+/* TTYD Terminal Panel - Primary Definition */
 .isolated-terminal-panel {
-  flex-shrink: 0;
-  flex-grow: 0;
-  flex-basis: auto;
+  flex: 0 0 450px;  /* Fixed default width of 450px */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  border-left: 1px solid #2d2d30;
+  border-right: 1px solid #2d2d30;
+  position: relative;
+  transition: flex 0.2s ease;
+}
+
+/* When center is collapsed, TTYD takes remaining space */
+.isolated-terminal-panel.expanded {
+  flex: 1 1 auto;  /* Take all available space when expanded */
 }
 
 /* Left Sidebar - VS Code Style with Activity Bar + Panel */
@@ -1192,28 +1204,19 @@ body {
 }
 
 /* Center area normal state - takes remaining space */
-.center-area {
-  flex: 1;
-  min-width: 0; /* Allow it to shrink when collapsed */
-  position: relative;
-}
+/* REMOVED DUPLICATE - Primary definition is at line 1067 */
 
 .center-area:not(.collapsed) {
-  min-width: 400px; /* Only apply min-width when not collapsed */
+  min-width: 200px; /* Reduced min-width for better flexibility */
 }
 
 /* Isolated terminal panel normal state */
-.isolated-terminal-panel {
-  flex-shrink: 0;
-  flex-grow: 0;
-  width: 400px;
-  transition: flex 0.3s ease;
-}
+/* Removed duplicate - see line 478 for primary definition */
 
-/* When center is collapsed, TTYD can expand to fill space */
-.isolated-terminal-panel.expand-to-fill {
-  flex: 1 !important;
-  width: auto !important;
+/* Collapsed state for TTYD panel */
+.isolated-terminal-panel.collapsed {
+  flex: 0 0 40px !important;
+  overflow: hidden;
 }
 
 /* Ensure editor tabs have space for the collapse button */
@@ -2243,13 +2246,7 @@ body {
 }
 
 /* Isolated Terminal Panel Layout Fix */
-.isolated-terminal-panel {
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 100px;
-  height: 100%;
-  max-height: 100%;
-}
+/* Removed duplicate - consolidated in primary definition at line 478 */
 
 /* When panel expands to fill available space */
 .isolated-terminal-panel.expand-to-fill {
@@ -2272,8 +2269,9 @@ body {
   flex: 1 1 auto !important;
   position: relative !important;
   overflow: hidden;
-  min-height: 0;
+  min-height: 200px !important;
   height: calc(100% - 35px) !important;
+  width: 100% !important;
 }
 
 /* Ensure webviews fill their container */

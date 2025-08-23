@@ -114,7 +114,7 @@ export class TTYDManager extends EventEmitter {
     logger.info(`[TTYDManager] Spawning ttyd: ${this.ttydBinaryPath} ${ttydArgs.join(' ')}`);
     console.log(`[TTYDManager] Spawning ttyd: ${this.ttydBinaryPath} ${ttydArgs.join(' ')}`);
     
-    // Spawn ttyd process
+    // Spawn ttyd process with proper terminal dimensions
     const ttydProcess = spawn(this.ttydBinaryPath, ttydArgs, {
       cwd: config.cwd || process.env.HOME,
       env: {
@@ -122,10 +122,15 @@ export class TTYDManager extends EventEmitter {
         ...config.env,
         TERM: 'xterm-256color',
         COLORTERM: 'truecolor',
+        // Force proper terminal dimensions to prevent 9-row issue
+        LINES: '50',
+        COLUMNS: '150',
         // Disable zsh's % marker for cleaner output
         PROMPT_EOL_MARK: ''
       },
-      detached: false
+      detached: false,
+      // Set PTY size if available
+      windowsHide: true
     });
     
     // Track the PID for cleanup

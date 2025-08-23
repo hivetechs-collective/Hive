@@ -506,8 +506,7 @@ document.body.innerHTML = `
       <!-- Collapse button for center area (positioned on right to avoid tab arrows) -->
       <button class="panel-collapse-btn" id="toggle-center-area" title="Collapse Editor" style="right: 10px; left: auto;">−</button>
       
-      <!-- Resize handle for center area (right edge) -->
-      <div class="resize-handle vertical-resize" id="center-area-resize" style="position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: ew-resize; z-index: 10;"></div>
+      <!-- Resize handle removed - using fixed flex layout instead -->
       
       <!-- Editor Area -->
       <div class="editor-area" id="editor-area">
@@ -539,12 +538,11 @@ document.body.innerHTML = `
     </div>
 
     <!-- Isolated Terminal Panel (modeled after consensus panel) -->
-    <div class="isolated-terminal-panel" id="isolated-terminal-panel" style="width: 400px; height: 100%; background: #1e1e1e; display: flex; flex-direction: column; border-left: 1px solid #2d2d30; border-right: 1px solid #2d2d30; position: relative;">
+    <div class="isolated-terminal-panel" id="isolated-terminal-panel">
       <!-- Collapse button for entire panel -->
       <button class="panel-collapse-btn" id="toggle-isolated-terminal" title="Collapse Terminal Panel">−</button>
       
-      <!-- Left resize handle (like consensus panel) -->
-      <div class="resize-handle vertical-resize" id="isolated-terminal-resize" style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; cursor: ew-resize; z-index: 10;"></div>
+      <!-- Resize handle removed - using fixed flex layout instead -->
       
       <!-- Terminal tabs header -->
       <div class="isolated-terminal-header" style="height: 35px; background: #252526; display: flex; align-items: center; border-bottom: 1px solid #3c3c3c; padding-left: 30px;">
@@ -3899,55 +3897,8 @@ setTimeout(() => {
             });
         }
         
-        // Setup resize handler for the isolated terminal panel (exactly like consensus panel)
-        const isolatedTerminalResize = document.getElementById('isolated-terminal-resize');
-        const consensusPanel = document.getElementById('consensus-chat');
-        const isolatedTerminalPanelForResize = document.querySelector('.isolated-terminal-panel') as HTMLElement;
-        
-        if (isolatedTerminalResize && isolatedTerminalPanelForResize) {
-            let isResizing = false;
-            let startX = 0;
-            let startWidth = 0;
-            
-            isolatedTerminalResize.addEventListener('mousedown', (e) => {
-                isResizing = true;
-                startX = e.clientX;
-                startWidth = parseInt(window.getComputedStyle(isolatedTerminalPanelForResize).width, 10);
-                document.body.style.cursor = 'ew-resize';
-                e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                
-                // Calculate new width with increased maximum (1200px instead of 600px)
-                const deltaX = startX - e.clientX;
-                const newWidth = Math.min(Math.max(startWidth + deltaX, 200), 1200);
-                
-                // Ensure center area maintains minimum width of 400px
-                const centerArea = document.getElementById('center-area');
-                if (centerArea) {
-                    const windowWidth = window.innerWidth;
-                    const sidebarWidth = document.getElementById('left-sidebar')?.offsetWidth || 0;
-                    const consensusWidth = document.getElementById('consensus-chat')?.offsetWidth || 0;
-                    const remainingWidth = windowWidth - sidebarWidth - newWidth - consensusWidth;
-                    
-                    // Only apply the new width if center area would have at least 400px
-                    if (remainingWidth >= 400) {
-                        isolatedTerminalPanelForResize.style.width = newWidth + 'px';
-                    }
-                } else {
-                    isolatedTerminalPanel.style.width = newWidth + 'px';
-                }
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                }
-            });
-        }
+        // REMOVED resize handler for isolated terminal panel - now using auto-flex layout
+        // This prevents the terminal resize issues when dragging
         
         // Get elements for use in both handlers
         const centerArea = document.getElementById('center-area');
@@ -3962,19 +3913,19 @@ setTimeout(() => {
                 if (isCollapsed) {
                     // Expand TTYD panel
                     isolatedTerminalPanel.classList.remove('collapsed');
-                    isolatedTerminalPanel.style.width = '400px';
+                    isolatedTerminalPanel.style.width = ''; // Let CSS handle width via flex
                     toggleIsolatedTerminal.textContent = '−';
                     toggleIsolatedTerminal.title = 'Collapse Terminal Panel';
                     
                     // Check if center area is collapsed, if so, expand TTYD to fill
                     if (centerArea && centerArea.classList.contains('collapsed')) {
-                        isolatedTerminalPanel.classList.add('expand-to-fill');
+                        isolatedTerminalPanel.classList.add('expanded');
                     }
                 } else {
                     // Collapse TTYD panel
                     isolatedTerminalPanel.classList.add('collapsed');
-                    isolatedTerminalPanel.classList.remove('expand-to-fill');
-                    isolatedTerminalPanel.style.width = '40px';
+                    isolatedTerminalPanel.classList.remove('expanded');
+                    isolatedTerminalPanel.style.width = ''; // Let CSS handle width
                     toggleIsolatedTerminal.textContent = '+';
                     toggleIsolatedTerminal.title = 'Expand Terminal Panel';
                 }
@@ -3993,9 +3944,9 @@ setTimeout(() => {
                     toggleCenterArea.textContent = '−';
                     toggleCenterArea.title = 'Collapse Editor';
                     
-                    // Remove expand-to-fill from TTYD panel
+                    // Remove expanded from TTYD panel
                     if (isolatedTerminalPanel) {
-                        isolatedTerminalPanel.classList.remove('expand-to-fill');
+                        isolatedTerminalPanel.classList.remove('expanded');
                     }
                 } else {
                     // Collapse center area
@@ -4003,55 +3954,16 @@ setTimeout(() => {
                     toggleCenterArea.textContent = '+';
                     toggleCenterArea.title = 'Expand Editor';
                     
-                    // Add expand-to-fill to TTYD panel if it's not collapsed
+                    // Add expanded to TTYD panel if it's not collapsed
                     if (isolatedTerminalPanel && !isolatedTerminalPanel.classList.contains('collapsed')) {
-                        isolatedTerminalPanel.classList.add('expand-to-fill');
+                        isolatedTerminalPanel.classList.add('expanded');
                     }
                 }
             });
         }
         
-        // Center area resize handler
-        const centerAreaResize = document.getElementById('center-area-resize');
-        if (centerAreaResize && centerArea) {
-            let isResizing = false;
-            let startX = 0;
-            let startWidth = 0;
-            
-            centerAreaResize.addEventListener('mousedown', (e) => {
-                // Only allow resize if not collapsed
-                if (centerArea.classList.contains('collapsed')) return;
-                
-                isResizing = true;
-                startX = e.clientX;
-                startWidth = centerArea.offsetWidth;
-                document.body.style.cursor = 'ew-resize';
-                e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (!isResizing) return;
-                
-                const deltaX = e.clientX - startX;
-                const newWidth = Math.min(Math.max(startWidth + deltaX, 400), window.innerWidth - 600);
-                
-                // Apply the new width and disable flex
-                centerArea.style.width = newWidth + 'px';
-                centerArea.style.flex = '0 0 auto'; // Disable flex growth when manually sized
-                
-                // Adjust TTYD panel to not use flex when center is manually sized
-                if (isolatedTerminalPanel && !isolatedTerminalPanel.classList.contains('collapsed')) {
-                    isolatedTerminalPanel.style.flex = '0 0 auto';
-                }
-            });
-            
-            document.addEventListener('mouseup', () => {
-                if (isResizing) {
-                    isResizing = false;
-                    document.body.style.cursor = '';
-                }
-            });
-        }
+        // REMOVED center area resize handler - now using auto-flex layout
+        // Panels will automatically adjust to fill available space
     }
     
     // Listen for menu events from main process

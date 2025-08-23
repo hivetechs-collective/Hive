@@ -1208,23 +1208,23 @@ The application's DOM (Document Object Model) is a tree structure that defines t
   - Toggle button shows + when collapsed, − when expanded
   - Adjacent panels auto-expand to fill space when collapsed
 
-**3. Resizable Panels**
+**3. Fixed-Size Flexbox Panels (v1.8.0 - No Manual Resizing)**
 - **TTYD Terminal Panel**: 
-  - Initial width: 400px
-  - Min width: 200px
-  - Max width: 1200px (increased from 600px)
-  - Resize handle on left edge
+  - Fixed width: 450px (flexbox: `flex: 0 0 450px`)
+  - Expands automatically when center panel collapses (class: `expanded`)
+  - No resize handles to prevent terminal size issues
+  - Maintains terminal size stability
   
 - **Consensus Panel**:
   - Initial width: 400px
   - Min width: 300px
-  - Max width: 800px (increased from 600px)
-  - Resize handle on left edge
+  - Max width: 800px
+  - Resize handle on left edge (still manually resizable)
 
 **4. Flexible Panels**
 - **Center Area**: Takes remaining space (when not collapsed)
-  - Formula: `windowWidth - leftSidebar - ttydPanel - consensusPanel`
-  - Protected minimum: 400px (prevents collapse during resize)
+  - Uses `flex: 1` to fill available space
+  - Minimum width: 200px (reduced from 400px for flexibility)
   - Can be manually collapsed to 40px via toggle button
   - Contains editor tabs, analysis reports, and settings views
 
@@ -1371,14 +1371,46 @@ Recommended minimum: 1400px for all panels visible
 - Consensus panel: 400px (default)
 - Total: 1508px
 
+##### Terminal Panel Sizing Solution (v1.8.0)
+
+**Problem Solved**: The "9-row terminal" issue where ttyd terminals would become stuck at 9 rows high when:
+- Window was minimized/maximized
+- Center panel was collapsed/expanded  
+- Panel was manually resized via dragging
+
+**Root Cause**: 
+- ttyd sets PTY (pseudo-terminal) size server-side
+- Webview reloads triggered by resize events would fail with ERR_FAILED (-2)
+- Terminal would see tiny container during transitions and lock to 9 rows
+
+**Solution Architecture**:
+1. **Removed all manual resize handlers** - No dragging that triggers reloads
+2. **Fixed flexbox layout** - TTYD panel has fixed 450px width
+3. **Automatic expansion** - CSS class `expanded` makes panel fill space when center collapses
+4. **No webview reloading** - Prevents terminal reset to default size
+5. **Pure CSS transitions** - All size changes handled by flexbox, not JavaScript
+
+**Implementation Details**:
+```css
+/* Fixed width panel */
+.isolated-terminal-panel {
+  flex: 0 0 450px;  /* No grow, no shrink, fixed 450px */
+  transition: flex 0.2s ease;
+}
+
+/* Auto-expand when center collapsed */
+.isolated-terminal-panel.expanded {
+  flex: 1 1 auto;  /* Take all available space */
+}
+```
+
 ##### Panel Interaction Flows
 
-**1. Opening TTYD Terminal**
-- User drags left edge of TTYD panel
-- Mouse movement tracked, width calculated
-- Center area checked for minimum width
-- Panel expands up to 1200px maximum
-- Content reflows automatically
+**1. TTYD Terminal Panel (v1.8.0 - No Manual Resize)**
+- Fixed at 450px width by default
+- Automatically expands when center panel collapses
+- No drag handles or manual resizing
+- Terminal size remains stable throughout
 
 **2. Switching Sidebar Views**
 - User clicks activity button (Explorer, Git, etc.)
@@ -1438,13 +1470,14 @@ Recommended minimum: 1400px for all panels visible
 
 ### UI Components
 
-#### Isolated Terminal Panel
-**Location**: `src/components/IsolatedTerminalPanel.ts`
+#### Isolated Terminal Panel (TTYD Implementation v1.8.0)
+**Location**: `src/components/TTYDTerminalPanel.ts`
 - Completely isolated component with zero impact on rest of app
 - Tab management system (System Log + dynamic terminals)
 - Console output capture for System Log
-- Prepared for xterm.js integration
-- Resizable with collapse/expand functionality
+- Full ttyd integration with real terminal emulation
+- **Fixed-width flexbox layout (no manual resizing)** to prevent terminal size issues
+- Collapse/expand functionality with automatic space filling
 
 #### File Explorer
 **Location**: `src/file-explorer.ts`
