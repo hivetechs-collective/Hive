@@ -2315,8 +2315,17 @@ async function renderCliToolsPanel(forceRefresh: boolean = false) {
                 badgeText: codexStatus?.installed ? 'INSTALLED' : null,
                 badgeColor: '#007acc'
             }));
-            gridContainer.appendChild(createStaticToolCard('aider', 'Aider', 'Git-integrated inline editing', null, null, 'https://aider.chat/docs/'));
-            gridContainer.appendChild(createStaticToolCard('cline', 'Cline', 'Lightweight conversational agent', null, null, 'https://cline.bot/'));
+            // Cline - now with full detection and functionality
+            const clineStatus = await electronAPI.detectCliTool('cline');
+            gridContainer.appendChild(createCliToolCard({
+                id: 'cline',
+                name: 'Cline',
+                description: 'Task-based AI assistant with 47k+ GitHub stars',
+                status: clineStatus,
+                docsUrl: 'https://cline.bot',
+                badgeText: '47K ⭐',
+                badgeColor: '#28a745'
+            }));
             
             console.log('[CLI Tools] Panel rendered successfully');
         } catch (error) {

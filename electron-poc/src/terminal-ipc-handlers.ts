@@ -243,8 +243,8 @@ function getToolDisplayName(toolId: string): string {
     'qwen-coder': 'Qwen',
     'openai-codex': 'Codex',
     'codex': 'Codex',
-    'aider': 'Aider',
-    'cline': 'Cline'
+    'cline': 'Cline',
+    'cline-cli': 'Cline'
   };
   
   return toolNames[toolId] || toolId;

@@ -69,19 +69,6 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     icon: '🤖',
     requiresNode: true
   },
-  'aider': {
-    id: 'aider',
-    name: 'Aider',
-    description: 'AI pair programming in your terminal',
-    command: 'aider',
-    installCommand: 'pip install aider-chat',
-    updateCommand: 'pip install --upgrade aider-chat',
-    versionCommand: 'aider --version',
-    versionRegex: /aider (\d+\.\d+\.\d+)/,
-    docsUrl: 'https://aider.chat',
-    icon: '🔧',
-    requiresPython: true
-  },
   'cursor': {
     id: 'cursor',
     name: 'Cursor',
@@ -155,6 +142,19 @@ export const CLI_TOOLS_REGISTRY: Record<string, CliToolConfig> = {
     versionRegex: /codex-cli (\d+\.\d+\.\d+)/,
     docsUrl: 'https://help.openai.com/en/articles/11096431-openai-codex-cli-getting-started',
     icon: '🧠',
+    requiresNode: true
+  },
+  'cline': {
+    id: 'cline',
+    name: 'Cline',
+    description: 'Task-based AI assistant with 47k+ GitHub stars',
+    command: 'cline-cli',
+    installCommand: 'npm install -g @yaegaki/cline-cli',
+    updateCommand: 'npm update -g @yaegaki/cline-cli',
+    versionCommand: 'cline-cli --version',
+    versionRegex: /(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://cline.bot',
+    icon: '🤖',
     requiresNode: true
   }
 };

@@ -1447,6 +1447,10 @@ const registerSimpleCliToolHandlers = () => {
             } else if (toolId === 'openai-codex') {
               const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
               version = match ? match[1] : 'Unknown';
+            } else if (toolId === 'cline') {
+              // Cline outputs just version number like "0.0.1"
+              const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+              version = match ? match[1] : 'Unknown';
             } else {
               // Generic version extraction
               const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
@@ -1456,6 +1460,10 @@ const registerSimpleCliToolHandlers = () => {
         } catch (versionError) {
           logger.warn(`[Main] Could not get version after installation:`, versionError);
         }
+        
+        // CRITICAL FIX: Clear the detector cache for this tool so UI refresh works
+        logger.info(`[Main] Clearing detector cache for ${toolId} after successful install`);
+        cliToolsDetector.clearCache(toolId);
         
         logger.info(`[Main] ${toolConfig.name} installed successfully, version: ${version}`);
         return { success: true, version, message: `Installed ${toolConfig.name} version ${version}` };
@@ -1600,6 +1608,14 @@ const registerSimpleCliToolHandlers = () => {
             // Parse version from output
             const match = versionResult.stdout.match(/codex-cli (\d+\.\d+\.\d+)/);
             version = match ? match[1] : 'Unknown';
+          } else if (toolId === 'cline') {
+            // For Cline, use cline-cli --version
+            const versionResult = await execAsync('cline-cli --version', {
+              env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH}` }
+            });
+            // Parse version from output
+            const match = versionResult.stdout.match(/(\d+\.\d+\.\d+)/);
+            version = match ? match[1] : 'Unknown';
           } else {
             // For other tools, try to get version from npm list
             const listResult = await execAsync(`npm list -g ${packageName} --depth=0`, {
@@ -1611,6 +1627,10 @@ const registerSimpleCliToolHandlers = () => {
         } catch (versionError) {
           logger.warn(`[Main] Could not get version for ${toolId}:`, versionError);
         }
+        
+        // CRITICAL FIX: Clear the detector cache for this tool so UI refresh works
+        logger.info(`[Main] Clearing detector cache for ${toolId} after successful update`);
+        cliToolsDetector.clearCache(toolId);
         
         logger.info(`[Main] ${toolId} updated successfully to version ${version}`);
         return { success: true, version, message: `Updated to version ${version}` };
@@ -1648,6 +1668,118 @@ const registerSimpleCliToolHandlers = () => {
     logger.info(`[Main] Configuring CLI tool: ${toolId}`);
     
     try {
+      // Special handling for Cline - automatically configure with OpenRouter API key
+      if (toolId === 'cline') {
+        logger.info('[Main] Special configuration for Cline - using OpenRouter API key from Hive');
+        
+        // Get OpenRouter API key from Hive's database
+        if (!db) {
+          logger.error('[Main] Database not initialized');
+          return {
+            success: false,
+            error: 'Database not initialized. Please restart the application.'
+          };
+        }
+        
+        const apiKeyRow = await new Promise<any>((resolve, reject) => {
+          db!.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        });
+        
+        if (!apiKeyRow || !apiKeyRow.value) {
+          logger.error('[Main] No OpenRouter API key found in Hive configuration');
+          return {
+            success: false,
+            error: 'OpenRouter API key not configured in Hive. Please configure it in Settings first.'
+          };
+        }
+        
+        const openrouterKey = apiKeyRow.value;
+        logger.info('[Main] Found OpenRouter API key in Hive configuration');
+        
+        // Create Cline configuration directory if it doesn't exist
+        const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+        if (!fs.existsSync(clineConfigDir)) {
+          fs.mkdirSync(clineConfigDir, { recursive: true });
+        }
+        
+        // Create Cline settings file with OpenRouter configuration
+        const clineSettingsPath = path.join(clineConfigDir, 'cline_cli_settings.json');
+        const clineSettings = {
+          globalState: {
+            apiProvider: 'openrouter',
+            apiModelId: '',  // Let user choose model in Cline
+            awsRegion: '',
+            awsUseCrossRegionInference: '',
+            awsBedrockUsePromptCache: '',
+            awsBedrockEndpoint: '',
+            awsProfile: '',
+            awsUseProfile: '',
+            vertexProjectId: '',
+            vertexRegion: '',
+            openAiBaseUrl: '',
+            openAiModelId: '',
+            openAiModelInfo: '',
+            ollamaModelId: '',
+            ollamaBaseUrl: '',
+            ollamaApiOptionsCtxNum: '',
+            lmStudioModelId: '',
+            lmStudioBaseUrl: '',
+            anthropicBaseUrl: '',
+            azureApiVersion: '',
+            openRouterModelId: '',  // Don't hardcode model - OpenRouter has 400+ models
+            openRouterModelInfo: '',
+            openRouterProviderSorting: '',
+            liteLlmBaseUrl: '',
+            liteLlmModelId: '',
+            qwenApiLine: '',
+            requestyModelId: '',
+            requestyModelInfo: '',
+            togetherModelId: '',
+            asksageApiUrl: '',
+            thinkingBudgetTokens: '',
+            reasoningEffort: '',
+            favoritedModelIds: '',
+            autoApprovalSettings: {
+              enabled: false,
+              actions: {
+                readFiles: false,
+                editFiles: false,
+                executeSafeCommands: false,
+                useMcp: false
+              },
+              maxRequests: 20
+            }
+          },
+          settings: {
+            'cline.enableCheckpoints': false
+          }
+        };
+        
+        // Write the configuration file
+        fs.writeFileSync(clineSettingsPath, JSON.stringify(clineSettings, null, 2));
+        
+        // Create a keys file for Cline with the OpenRouter API key
+        // Cline reads API keys from a separate keys file
+        const keysPath = path.join(clineConfigDir, 'keys.json');
+        const keysContent = {
+          openRouterApiKey: openrouterKey
+        };
+        fs.writeFileSync(keysPath, JSON.stringify(keysContent, null, 2));
+        
+        // Also create storage directory if it doesn't exist
+        const storageDir = path.join(clineConfigDir, 'storage');
+        if (!fs.existsSync(storageDir)) {
+          fs.mkdirSync(storageDir, { recursive: true });
+        }
+        
+        logger.info('[Main] Successfully configured Cline with OpenRouter API key from Hive');
+        
+        // Continue with Memory Service configuration for all tools
+      }
+      
       // 1. Get Memory Service port from ProcessManager
       const memoryServiceInfo = processManager.getProcessStatus('memory-service');
       const memoryServicePort = memoryServiceInfo?.port || 3457;
@@ -1851,11 +1983,11 @@ server.start();
         token: token.substring(0, 8) + '...' // Show partial token for confirmation
       };
       
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`[Main] Failed to configure ${toolId}:`, error);
       return { 
         success: false, 
-        error: `Failed to configure: ${error.message}` 
+        error: `Failed to configure: ${error.message || error}` 
       };
     }
   });
@@ -1916,12 +2048,82 @@ server.start();
       } else if (toolId === 'gemini-cli') {
         // Gemini CLI doesn't support --resume, always use base command
         command = 'gemini';
-      } else if (toolId === 'aider') {
-        command = 'aider';
       } else if (toolId === 'qwen-code') {
         command = 'qwen';
       } else if (toolId === 'openai-codex') {
         command = 'codex';
+      } else if (toolId === 'cline') {
+        // Always sync Cline configuration with latest OpenRouter API key from Hive
+        const apiKeyRow = await new Promise<any>((resolve) => {
+          if (!db) {
+            resolve(null);
+            return;
+          }
+          db.get('SELECT value FROM configurations WHERE key = ?', ['openrouter_api_key'], (err, row) => {
+            resolve(row);
+          });
+        });
+        
+        if (apiKeyRow && apiKeyRow.value) {
+          // Update Cline configuration with current API key
+          const clineConfigDir = path.join(os.homedir(), '.cline_cli');
+          const clineSettingsPath = path.join(clineConfigDir, 'cline_cli_settings.json');
+          const keysPath = path.join(clineConfigDir, 'keys.json');
+          
+          // Ensure directories exist
+          if (!fs.existsSync(clineConfigDir)) {
+            fs.mkdirSync(clineConfigDir, { recursive: true });
+          }
+          
+          // Update or create settings file
+          const clineSettings = {
+            globalState: {
+              apiProvider: 'openrouter',
+              apiModelId: '',  // Let user choose from 400+ models
+              openRouterModelId: '',  // Don't hardcode model
+              openRouterModelInfo: '',
+              autoApprovalSettings: {
+                enabled: false,
+                actions: {
+                  readFiles: false,
+                  editFiles: false,
+                  executeSafeCommands: false,
+                  useMcp: false
+                },
+                maxRequests: 20
+              }
+            },
+            settings: {
+              'cline.enableCheckpoints': false
+            }
+          };
+          
+          // Fill in other empty fields
+          const fields = ['awsRegion', 'awsUseCrossRegionInference', 'awsBedrockUsePromptCache', 
+                          'awsBedrockEndpoint', 'awsProfile', 'awsUseProfile', 'vertexProjectId',
+                          'vertexRegion', 'openAiBaseUrl', 'openAiModelId', 'openAiModelInfo',
+                          'ollamaModelId', 'ollamaBaseUrl', 'ollamaApiOptionsCtxNum', 'lmStudioModelId',
+                          'lmStudioBaseUrl', 'anthropicBaseUrl', 'azureApiVersion', 'openRouterProviderSorting',
+                          'liteLlmBaseUrl', 'liteLlmModelId', 'qwenApiLine', 'requestyModelId',
+                          'requestyModelInfo', 'togetherModelId', 'asksageApiUrl', 'thinkingBudgetTokens',
+                          'reasoningEffort', 'favoritedModelIds'];
+          
+          fields.forEach(field => {
+            (clineSettings.globalState as any)[field] = '';
+          });
+          
+          fs.writeFileSync(clineSettingsPath, JSON.stringify(clineSettings, null, 2));
+          
+          // Update keys file with current API key
+          const keysContent = {
+            openRouterApiKey: apiKeyRow.value
+          };
+          fs.writeFileSync(keysPath, JSON.stringify(keysContent, null, 2));
+          
+          logger.info('[Main] Updated Cline config with current OpenRouter API key from Hive');
+        }
+        
+        command = 'cline-cli task';
       } else {
         // For other tools, just use their base command
         command = toolId.replace('-cli', '').replace('-code', '');
