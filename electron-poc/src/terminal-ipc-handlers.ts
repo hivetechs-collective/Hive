@@ -237,8 +237,11 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
 function getToolDisplayName(toolId: string): string {
   const toolNames: Record<string, string> = {
     'claude-code': 'Claude',
+    'gemini-cli': 'Gemini',
     'gemini': 'Gemini',
+    'qwen-code': 'Qwen',
     'qwen-coder': 'Qwen',
+    'openai-codex': 'Codex',
     'codex': 'Codex',
     'aider': 'Aider',
     'cline': 'Cline'

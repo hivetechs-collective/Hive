@@ -1746,10 +1746,10 @@ class MemoryServiceMCP extends Server {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': 'claude-code-mcp'
+        'X-Client-Name': '${toolId}-mcp'
       },
       body: JSON.stringify({
-        client: 'claude-code',
+        client: '${toolId}',
         context: { file: process.cwd() },
         query,
         options: { limit }
@@ -1765,10 +1765,10 @@ class MemoryServiceMCP extends Server {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': \`Bearer \${TOKEN}\`,
-        'X-Client-Name': 'claude-code-mcp'
+        'X-Client-Name': '${toolId}-mcp'
       },
       body: JSON.stringify({
-        source: 'claude-code',
+        source: '${toolId}',
         learning: {
           type,
           category,
