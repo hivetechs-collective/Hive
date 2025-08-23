@@ -16,6 +16,7 @@ import { ProcessManager } from './utils/ProcessManager';
 import { PortManager } from './utils/PortManager';
 import { PidTracker } from './utils/PidTracker';
 import { cliToolsDetector } from './main/cli-tools/detector';
+import { CLI_TOOLS_REGISTRY } from './shared/types/cli-tools';
 // Removed import - functions are now defined locally
 import { logger } from './utils/SafeLogger';
 import { registerTerminalHandlers, cleanupTerminals } from './terminal-ipc-handlers';
@@ -1395,7 +1396,6 @@ const registerSimpleCliToolHandlers = () => {
       const execAsync = promisify(exec);
       
       // Get tool configuration from registry
-      const { CLI_TOOLS_REGISTRY } = require('./shared/types/cli-tools');
       const toolConfig = CLI_TOOLS_REGISTRY[toolId];
       
       if (!toolConfig) {
@@ -1854,7 +1854,6 @@ server.start();
       let selectedPath = projectPath;
       if (!selectedPath) {
         // Get proper tool name from registry
-        const { CLI_TOOLS_REGISTRY } = require('./shared/types/cli-tools');
         const toolConfig = CLI_TOOLS_REGISTRY[toolId];
         const toolName = toolConfig ? toolConfig.name : toolId;
         
@@ -1924,7 +1923,6 @@ server.start();
         // THEN: After a small delay to ensure folder context is set, launch the terminal
         setTimeout(() => {
           // Get proper tool name from registry
-          const { CLI_TOOLS_REGISTRY } = require('./shared/types/cli-tools');
           const toolConfig = CLI_TOOLS_REGISTRY[toolId];
           const toolName = toolConfig ? toolConfig.name : toolId;
           
