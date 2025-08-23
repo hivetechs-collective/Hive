@@ -438,7 +438,7 @@ document.body.innerHTML = `
             <img src="${qwenIcon}" width="42" height="42" alt="Qwen" style="object-fit: contain;" />
             <span class="activity-tooltip">Qwen Code</span>
           </button>
-          <button class="activity-btn cli-quick-launch" data-tool="openai-codex" aria-label="OpenAI Codex">
+          <button class="activity-btn cli-quick-launch openai-icon" data-tool="openai-codex" aria-label="OpenAI Codex">
             <img src="${openaiIcon}" width="42" height="42" alt="OpenAI" style="object-fit: contain;" />
             <span class="activity-tooltip">OpenAI Codex</span>
           </button>
@@ -3289,6 +3289,41 @@ async function uninstallAllCliTools(): Promise<void> {
 async function launchCliTool(toolId: string): Promise<void> {
     console.log(`[CLI Tools] Launch requested for ${toolId}`);
     
+    // First, check if the tool is installed
+    const electronAPI = window.electronAPI as any;
+    const toolStatus = await electronAPI.detectCliTool(toolId);
+    
+    if (!toolStatus.installed) {
+        console.log(`[CLI Tools] ${toolId} is not installed. Redirecting to CLI Tools panel...`);
+        
+        // Switch to CLI Tools panel
+        const cliToolsButton = document.querySelector('[data-tool="cli-tools"]') as HTMLElement;
+        if (cliToolsButton) {
+            cliToolsButton.click();
+            
+            // Wait for panel to render, then highlight the install button
+            setTimeout(() => {
+                const toolCard = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
+                if (toolCard) {
+                    // Add highlight effect
+                    toolCard.style.animation = 'pulse-highlight 1s ease-in-out 3';
+                    
+                    // Scroll to the card
+                    toolCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    
+                    // Show a notification in the card
+                    const statusDiv = toolCard.querySelector('.tool-status') as HTMLElement;
+                    if (statusDiv) {
+                        statusDiv.innerHTML = '⚠️ Please install this tool first';
+                        statusDiv.style.color = '#FFC107';
+                    }
+                }
+            }, 300);
+        }
+        return;
+    }
+    
+    // Tool is installed, proceed with launch
     // Show launching status  
     const card = document.querySelector(`[data-tool-id="${toolId}"]`) as HTMLElement;
     if (card) {
@@ -3305,7 +3340,6 @@ async function launchCliTool(toolId: string): Promise<void> {
         // 2. Check database for previous launches
         // 3. Determine command (claude vs claude --resume)
         // 4. Send event to create terminal
-        const electronAPI = window.electronAPI as any;
         const result = await electronAPI.launchCliTool(toolId);
         
         if (result.success) {
@@ -4057,11 +4091,27 @@ setTimeout(() => {
     
     // Add click handlers for AI CLI quick launch buttons - use the same launchCliTool function as Launch buttons
     const cliQuickLaunchButtons = document.querySelectorAll('.cli-quick-launch');
-    cliQuickLaunchButtons.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const toolId = btn.getAttribute('data-tool');
-            if (!toolId) return;
+    cliQuickLaunchButtons.forEach(async (btn) => {
+        const toolId = btn.getAttribute('data-tool');
+        if (!toolId) return;
+        
+        // Check installation status and add visual indicator
+        const electronAPI = window.electronAPI as any;
+        const toolStatus = await electronAPI.detectCliTool(toolId);
+        
+        if (!toolStatus.installed) {
+            // Add a small indicator for uninstalled tools
+            const indicator = document.createElement('span');
+            indicator.className = 'cli-tool-status-indicator';
+            indicator.innerHTML = '⚠️';
+            indicator.title = 'Not installed - Click to install';
+            btn.appendChild(indicator);
             
+            // Add visual styling for uninstalled tools
+            btn.classList.add('not-installed');
+        }
+        
+        btn.addEventListener('click', async () => {
             // Use the exact same launchCliTool function that the Launch buttons use
             console.log(`[Sidebar] Launching ${toolId} via quick launch icon...`);
             await (window as any).launchCliTool(toolId);
