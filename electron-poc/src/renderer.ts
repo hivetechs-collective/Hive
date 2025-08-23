@@ -423,27 +423,27 @@ document.body.innerHTML = `
         <!-- AI CLI Tool Quick Launch Icons -->
         <div class="ai-cli-icons-section">
           <button class="activity-btn cli-quick-launch claude-icon" data-tool="claude-code" aria-label="Claude Code">
-            <img src="${claudeIcon}" width="42" height="42" alt="Claude" style="object-fit: contain;" />
+            <img src="${claudeIcon}" width="24" height="24" alt="Claude" style="object-fit: contain;" />
             <span class="activity-tooltip">Claude Code</span>
           </button>
           <button class="activity-btn cli-quick-launch gemini-icon" data-tool="gemini-cli" aria-label="Gemini CLI">
-            <img src="${geminiIcon}" width="42" height="42" alt="Gemini" style="object-fit: contain;" />
+            <img src="${geminiIcon}" width="24" height="24" alt="Gemini" style="object-fit: contain;" />
             <span class="activity-tooltip">Gemini CLI</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="grok" aria-label="Grok">
-            <img src="${grokIcon}" width="42" height="42" alt="Grok" style="object-fit: contain;" />
+            <img src="${grokIcon}" width="24" height="24" alt="Grok" style="object-fit: contain;" />
             <span class="activity-tooltip">Grok CLI</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="qwen-code" aria-label="Qwen Code">
-            <img src="${qwenIcon}" width="42" height="42" alt="Qwen" style="object-fit: contain;" />
+            <img src="${qwenIcon}" width="24" height="24" alt="Qwen" style="object-fit: contain;" />
             <span class="activity-tooltip">Qwen Code</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="openai-codex" aria-label="OpenAI Codex">
-            <img src="${openaiIcon}" width="42" height="42" alt="OpenAI" style="object-fit: contain;" />
+            <img src="${openaiIcon}" width="24" height="24" alt="OpenAI" style="object-fit: contain;" />
             <span class="activity-tooltip">OpenAI Codex</span>
           </button>
           <button class="activity-btn cli-quick-launch" data-tool="cline" aria-label="Cline">
-            <img src="${clineIcon}" width="42" height="42" alt="Cline" style="object-fit: contain;" />
+            <img src="${clineIcon}" width="24" height="24" alt="Cline" style="object-fit: contain;" />
             <span class="activity-tooltip">Cline</span>
           </button>
         </div>

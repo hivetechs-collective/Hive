@@ -1123,7 +1123,7 @@ App Root (renderer.ts)
 Our application uses a sophisticated panel system that provides VS Code-like flexibility:
 
 **Panel Types**:
-1. **Fixed Panels**: Activity Bar (56px width - widened for AI CLI icons)
+1. **Fixed Panels**: Activity Bar (48px width - optimized for AI CLI icons)
 2. **Collapsible Panels**: Sidebar (260px default, can collapse to 0)
 3. **Resizable Panels**: Isolated Terminal & Consensus (200-600px range)
 4. **Flex Panels**: Main content area (grows to fill available space)
@@ -3754,9 +3754,9 @@ Based on the HiveTechs website's premium Paddle-inspired dark theme, the AI CLI 
 | **OpenAI Codex** | `openai.svg` | Wikipedia/Wikimedia Commons | SVG (2.9KB) | ✅ Official |
 | **Cline** | `cline.svg` | Custom placeholder | SVG (745 bytes) | 🔄 Placeholder |
 
-**Sidebar Quick Launch Implementation** (✅ Implemented):
+**Sidebar Quick Launch Implementation** (✅ Fully Implemented):
 1. **Location**: Left activity bar, between Memory icon and Settings
-2. **Layout**: Vertical stack of 20x20px icons with 4px gap
+2. **Layout**: Vertical stack of 24x24px icons with 4px gap (scaled from 42x42 for consistency)
 3. **Organization**:
    - Divider after Source Control icon
    - Analytics, Memory, CLI Tools icons
@@ -3764,16 +3764,31 @@ Based on the HiveTechs website's premium Paddle-inspired dark theme, the AI CLI 
    - 6 AI tool icons stacked vertically
    - Divider
    - Settings fixed at bottom
-4. **Interaction**:
-   - Single click: Launches tool using `launchCliTool()` function (identical to Launch buttons)
-   - Prompts for folder selection if tool not previously launched
-   - Shows launch status in tool's status area
-5. **Implementation Details**:
-   - Icons stored in `/resources/ai-cli-icons/`
-   - Click handlers use same `(window as any).launchCliTool(toolId)` as main panel
-   - Tool IDs: claude-code, gemini-cli, grok, qwen-code, openai-codex, cline
-6. **Visual Design**:
-   - Official logos downloaded from Wikipedia/Wikimedia Commons
+4. **Smart Click Interaction**:
+   - **Installed Tools**: Single click launches tool using `launchCliTool()` function
+   - **Uninstalled Tools**: Redirects to AI CLI Tools panel with auto-highlight of tool card
+   - **Folder Selection**: Prompts for folder if tool not previously launched
+   - **Status Feedback**: Shows launch status in tool's status area
+5. **Visual Indicators**:
+   - **Download Badge**: Blue download arrow (↓) for uninstalled tools
+   - **Position**: Bottom-right corner of icon (bottom: -2px, right: -2px)
+   - **Style**: Blue gradient background (#2196F3 to #1976D2)
+   - **Auto-Refresh**: Icons update automatically after install/update/uninstall
+6. **CSS Implementation**:
+   - **Icon Brightness**: All sidebar icons brightened to #cccccc (from #858585)
+   - **Filter Strategy**: `filter: invert(1)` for black icons (OpenAI, Qwen, Grok, Cline)
+   - **Preserved Colors**: Claude and Gemini icons keep original colors (no inversion)
+   - **Hover Effects**: All icons use `filter: brightness(1.1)` on hover
+   - **Activity Bar Width**: 48px (optimized from initial 56px expansion)
+7. **Technical Architecture**:
+   - **Webpack Imports**: SVG icons imported as ES modules in renderer.ts
+   - **IPC Integration**: Uses `window.electronAPI.detectCliTool()` for status checks
+   - **Refresh Function**: `refreshSidebarToolIcon()` updates individual icon states
+   - **Event Delegation**: Click handlers check installation status before action
+8. **Implementation Details**:
+   - **Function Call**: Uses same `(window as any).launchCliTool(toolId)` as main panel
+   - **Tool IDs**: claude-code, gemini-cli, grok, qwen-code, openai-codex, cline
+   - **Icons Source**: `/resources/ai-cli-icons/` directory with official SVG logos
    - Custom placeholders for Qwen and Cline
    - Consistent 20x20px size for all icons
    - HiveTechs theme color scheme applied
@@ -6523,8 +6538,8 @@ electron-poc/
 
 *This document is the single source of truth for the Hive Consensus architecture. It should be updated whenever significant architectural changes are made.*
 
-**Last Updated**: 2025-08-22
-**Version**: 1.6.2
+**Last Updated**: 2025-08-23
+**Version**: 1.7.3
 **Maintainer**: Hive Development Team
 
 ### Change Log
@@ -6594,6 +6609,15 @@ electron-poc/
   - **Batch Operations**: Added Install All, Update All, Uninstall All buttons
   - **Tool Reordering**: Cline moved to bottom as least-used tool
   - **Comprehensive Lessons Learned**: Documentation of all quirks and workarounds
+- **v1.7.3 (2025-08-23)**: Icon Sizing, Brightness Consistency & Smart Click Handling
+  - **Icon Size Optimization**: Scaled AI CLI icons from 42x42 to 24x24 for visual consistency
+  - **Brightness Unification**: Brightened all sidebar icons from #858585 to #cccccc for equal visibility
+  - **Smart Click Handling**: Uninstalled tools redirect to AI CLI Tools panel with auto-highlight
+  - **Download Indicators**: Blue download arrow badge for uninstalled tools instead of warning symbol
+  - **Auto-Refresh Icons**: Sidebar icons automatically refresh after install/update/uninstall operations
+  - **CSS Filter Strategy**: Intelligent use of invert() for black icons while preserving colored logos
+  - **Activity Bar Width**: Optimized at 48px (initially expanded to 56px, then reverted)
+  - **Hover Effects**: Consistent brightness(1.1) filter across all icons for unified interaction
 - **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
   - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts
   - **Unified Cleanup Function**: Single performCleanup() prevents duplicate handlers
