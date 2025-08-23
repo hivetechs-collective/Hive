@@ -2127,15 +2127,308 @@ After reading, you should know:
 }
 ```
 
-##### Step 2: Update Package Mappings
-**File**: `src/index.ts` (line ~1405)
+##### Step 1.5: CRITICAL - Import Registry at Module Level
+**File**: `src/index.ts` (TOP OF FILE)
 
 ```typescript
-const npmPackages: Record<string, string> = {
-  'claude-code': '@anthropic-ai/claude-code',
-  'gemini-cli': '@google/gemini-cli',  // Add new tool here
-  // ... other tools
+// ⚠️ CRITICAL: Import at the top of the file, NEVER use runtime require()
+import { CLI_TOOLS_REGISTRY } from './shared/types/cli-tools';
+
+// ❌ NEVER DO THIS (breaks after webpack bundling):
+// const { CLI_TOOLS_REGISTRY } = require('./shared/types/cli-tools');
+```
+
+**Why this is critical:**
+- Webpack bundles all modules at build time
+- Runtime `require()` with relative paths fails after bundling
+- The relative path `'./shared/types/cli-tools'` doesn't exist in webpack output
+- This causes "Installation not yet implemented" or similar errors
+- **LESSON LEARNED**: Claude Code was pre-installed, so Install button was never tested
+- **SOLUTION**: Gemini CLI exposed this issue and led to the fix
+
+### DEFINITIVE TEMPLATE - Use Gemini CLI Pattern
+
+**IMPORTANT**: The Gemini CLI implementation is now our definitive template for all AI CLI tool integrations.
+
+See `docs/cli-tools/GEMINI_TEMPLATE.md` for the complete working pattern that includes:
+1. **Module-level imports** - Fixes webpack bundling issues
+2. **All four buttons working** - Install, Update, Configure, Launch
+3. **Dynamic tool IDs** - No hardcoded references
+4. **MCP integration** - Proper wrapper generation
+5. **Full testing coverage** - All functionality verified
+
+#### Key Lessons from Gemini CLI Implementation
+
+1. **Always test with fresh installs** - Don't assume pre-installed tools represent the full pattern
+2. **Module-level imports are critical** - Runtime requires break after webpack bundling
+3. **Use dynamic references everywhere** - Tool IDs should never be hardcoded
+4. **Test all buttons before declaring complete** - Each button has unique requirements
+5. **Document the working pattern immediately** - Future tools need the complete template
+6. **UI must refresh after operations** - Add forceRefresh mechanism to update status
+7. **Never leave placeholders** - Every handler must be fully implemented
+8. **Test the complete flow** - Install → Configure → Launch → Update cycle
+9. **Add progress indicators** - Users need feedback during operations
+10. **Verify with actual commands** - Test that tools actually install and run
+
+### COMPLETE AI CLI Tool Integration Pattern (Post-Gemini)
+
+#### Critical Missing Steps We Discovered
+
+##### 1. UI Refresh Mechanism (CRITICAL - Was Missing!)
+**File**: `src/renderer.ts`
+
+```typescript
+// Add forceRefresh parameter to renderCliToolsPanel
+async function renderCliToolsPanel(forceRefresh: boolean = false) {
+    const container = document.getElementById('cli-tools-container');
+    if (container && (container.innerHTML.trim() === '' || forceRefresh)) {
+        // Render panel
+    }
+}
+
+// In install handler - MUST force refresh
+if (result.success) {
+    console.log(`[CLI Tools] ${toolId} installed successfully`);
+    await renderCliToolsPanel(true); // Force refresh!
+}
+
+// In update handler - MUST force refresh
+if (result.success) {
+    setTimeout(async () => {
+        await renderCliToolsPanel(true); // Force refresh!
+    }, 1000);
+}
+```
+
+##### 2. Complete Handler Implementation (No Placeholders!)
+**File**: `src/index.ts`
+
+```typescript
+ipcMain.handle('cli-tool-install', async (_, toolId: string) => {
+    console.log(`[Main] Installing CLI tool: ${toolId}`);
+    
+    // CRITICAL: Use imported registry, NOT runtime require!
+    const toolConfig = CLI_TOOLS_REGISTRY[toolId];
+    if (!toolConfig) {
+        return { success: false, error: `Unknown tool: ${toolId}` };
+    }
+    
+    if (!toolConfig.installCommand) {
+        return { success: false, error: `Installation not available` };
+    }
+    
+    try {
+        // Show progress to user
+        const { stdout, stderr } = await execAsync(toolConfig.installCommand, {
+            env: { ...process.env, PATH: enhancedPath }
+        });
+        
+        // Verify installation worked
+        const versionResult = await execAsync(toolConfig.versionCommand, {
+            env: { ...process.env, PATH: enhancedPath }
+        });
+        
+        // Tool-specific version extraction
+        let version = 'Unknown';
+        if (toolId === 'gemini-cli') {
+            const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
+            version = match ? match[1] : 'Unknown';
+        }
+        
+        return { 
+            success: true, 
+            version,
+            message: `${toolConfig.name} installed successfully`
+        };
+    } catch (error) {
+        console.error(`[Main] Install error for ${toolId}:`, error);
+        return { success: false, error: error.message };
+    }
+});
+```
+
+##### 3. Terminal Display Names (Was Missing!)
+**File**: `src/terminal-ipc-handlers.ts`
+
+```typescript
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+    'claude-code': 'Claude',
+    'gemini-cli': 'Gemini',  // MUST add for each tool
+    'qwen-code': 'Qwen',
+    'aider': 'Aider',
+    'cline': 'Cline'
 };
+```
+
+##### 4. Progress Indicators (Essential UX)
+**File**: `src/renderer.ts`
+
+```typescript
+async function installCliTool(toolId: string): Promise<void> {
+    const card = document.querySelector(`[data-tool-id="${toolId}"]`);
+    if (card) {
+        const statusDiv = card.querySelector('.tool-status');
+        if (statusDiv) {
+            statusDiv.innerHTML = '⏳ Installing...'; // Show progress!
+            statusDiv.style.color = '#FFA500';
+        }
+    }
+    // ... rest of installation
+}
+```
+
+##### 5. Testing Checklist (MUST DO ALL)
+```bash
+# 1. Uninstall tool first to test fresh install
+npm uninstall -g @google/gemini-cli
+
+# 2. Test Install button
+# - Click Install
+# - Verify "Installing..." appears
+# - Verify panel refreshes after success
+# - Verify status shows "Installed"
+
+# 3. Test Configure button
+# - Click Configure
+# - Verify MCP wrapper created
+# - Check ~/.hive/mcp/ for wrapper script
+
+# 4. Test Launch button
+# - Click Launch
+# - Verify terminal opens
+# - Verify tool name in terminal tab
+# - Verify tool actually runs
+
+# 5. Test Update button
+# - Click Update
+# - Verify "Updating..." appears
+# - Verify panel refreshes
+# - Verify version updates
+```
+
+### Gemini CLI - Complete Implementation Details
+
+#### What Makes Gemini Special
+- **FREE Tier**: 1000 requests/day at no cost
+- **1M Token Context**: Massive context window
+- **MCP Support**: Full Memory Service integration
+- **Google Integration**: Works with Google Cloud
+- **No API Key Required**: Works out of the box
+
+#### Gemini-Specific Configuration
+**File**: `src/shared/types/cli-tools.ts`
+
+```typescript
+'gemini-cli': {
+    id: 'gemini-cli',
+    name: 'Gemini CLI',
+    description: 'Google\'s free AI coding assistant with 1M token context',
+    command: 'gemini',
+    installCommand: 'npm install -g @google/gemini-cli',
+    updateCommand: 'npm update -g @google/gemini-cli',
+    versionCommand: 'gemini --version',
+    versionRegex: /(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/,
+    docsUrl: 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli',
+    requiresNode: true
+}
+```
+
+#### Gemini Version Detection Pattern
+```typescript
+// Gemini outputs: "gemini-cli/1.2.3" or "v1.2.3"
+if (toolId === 'gemini-cli') {
+    const match = versionResult.stdout.match(/(?:gemini-cli\/|v?)(\d+\.\d+\.\d+)/);
+    version = match ? match[1] : 'Unknown';
+}
+```
+
+#### Gemini Launch Command
+```typescript
+if (toolId === 'gemini-cli') {
+    // Gemini uses --chat flag for interactive mode
+    launchCommand = 'gemini --chat';
+}
+```
+
+#### Gemini UI Card with FREE Badge
+```typescript
+const geminiStatus = await electronAPI.detectCliTool('gemini-cli');
+gridContainer.appendChild(createCliToolCard({
+    id: 'gemini-cli',
+    name: 'Gemini CLI',
+    description: 'Google\'s free AI coding assistant with 1M token context',
+    status: geminiStatus,
+    docsUrl: 'https://cloud.google.com/gemini/docs/codeassist/gemini-cli',
+    badgeText: 'FREE',  // Highlight free tier
+    badgeColor: '#28a745'  // Green for free
+}));
+```
+
+### Systematic Approach for Remaining AI CLI Tools
+
+#### Pre-Implementation Checklist
+- [ ] Uninstall the tool if already installed (test fresh install)
+- [ ] Read the tool's documentation in `docs/cli-tools/`
+- [ ] Note the package manager (npm vs pip)
+- [ ] Identify version command and pattern
+- [ ] Check for special launch flags
+
+#### Implementation Order (NEVER SKIP ANY!)
+1. **Module Import** - Add to top of `src/index.ts`
+2. **Tool Configuration** - Add to `CLI_TOOLS_REGISTRY`
+3. **Install Handler** - Complete implementation, no placeholders
+4. **Update Handler** - Tool-specific version checking
+5. **Configure Handler** - MCP wrapper with dynamic tool ID
+6. **Launch Handler** - Tool-specific command flags
+7. **Terminal Names** - Add to `TOOL_DISPLAY_NAMES`
+8. **UI Card** - Dynamic detection with badges
+9. **UI Refresh** - Ensure forceRefresh works
+10. **Test Everything** - All 4 buttons must work
+
+#### Testing Protocol (MANDATORY)
+```bash
+# For each new tool:
+1. npm uninstall -g [tool-package]  # Start fresh
+2. npm start                         # Run app
+3. Click Install → Verify completes and refreshes
+4. Click Configure → Verify MCP wrapper created
+5. Click Launch → Verify terminal opens with tool
+6. Click Update → Verify checks for updates
+7. Run test script: node test-[tool-name].js
+```
+
+#### Common Mistakes to Avoid
+- ❌ Assuming pre-installed tools work like fresh installs
+- ❌ Using runtime require() instead of module imports
+- ❌ Forgetting to add forceRefresh to UI
+- ❌ Leaving \"not yet implemented\" placeholders
+- ❌ Hardcoding tool IDs anywhere
+- ❌ Not testing all 4 buttons
+- ❌ Skipping terminal display names
+- ❌ Missing progress indicators
+
+#### Next Tools to Implement (Use Gemini Template!)
+1. **Qwen Code** - Use pip, open source
+2. **Aider** - Git integration, pip install
+3. **Cline** - Lightweight, npm package
+4. **OpenAI Codex** - Requires API key setup
+
+**REMEMBER**: Follow `docs/cli-tools/GEMINI_TEMPLATE.md` exactly!
+
+##### Step 2: Update Package Mappings
+**File**: `src/index.ts` (in install/update handlers)
+
+```typescript
+// Use the imported CLI_TOOLS_REGISTRY directly
+const toolConfig = CLI_TOOLS_REGISTRY[toolId];
+if (!toolConfig) {
+  return { success: false, error: `Unknown tool: ${toolId}` };
+}
+
+// For install handler
+const installCommand = toolConfig.installCommand;
+// For update handler  
+const updateCommand = toolConfig.updateCommand;
 ```
 
 ##### Step 3: Add Version Detection Logic

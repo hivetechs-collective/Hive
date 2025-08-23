@@ -2243,9 +2243,9 @@ function hideAnalyticsPanel(): void {
 }
 
 // CLI Tools Panel Management
-async function renderCliToolsPanel() {
+async function renderCliToolsPanel(forceRefresh: boolean = false) {
     const container = document.getElementById('cli-tools-container');
-    if (container && container.innerHTML.trim() === '') {
+    if (container && (container.innerHTML.trim() === '' || forceRefresh)) {
         console.log('[CLI Tools] Rendering CLI Tools panel...');
         
         // Show loading state first
@@ -2310,7 +2310,7 @@ async function renderCliToolsPanel() {
             `;
         }
     } else {
-        console.log('[CLI Tools] Panel already rendered');
+        console.log('[CLI Tools] Panel already rendered (use forceRefresh=true to refresh)');
     }
 }
 
@@ -2429,8 +2429,8 @@ async function installCliTool(toolId: string): Promise<void> {
         
         if (result.success) {
             console.log(`[CLI Tools] ${toolId} installed successfully`);
-            // Refresh the tool status
-            await renderCliToolsPanel();
+            // Force refresh the entire panel to update status
+            await renderCliToolsPanel(true);
         } else {
             console.error(`[CLI Tools] Failed to install ${toolId}:`, result.error);
             alert(`Failed to install: ${result.error}`);
@@ -2543,17 +2543,9 @@ async function updateCliTool(toolId: string): Promise<void> {
                 }
             }
             
-            // Don't refresh the entire panel, just update the version if needed
+            // Force refresh the panel to show updated version
             setTimeout(async () => {
-                // Re-detect to get updated version
-                const electronAPI = window.electronAPI as any;
-                const updatedStatus = await electronAPI.detectCliTool(toolId);
-                if (updatedStatus && updatedStatus.version && card) {
-                    const versionSpan = card.querySelector(`span[data-version="${toolId}"]`) as HTMLElement;
-                    if (versionSpan) {
-                        versionSpan.textContent = updatedStatus.version;
-                    }
-                }
+                await renderCliToolsPanel(true);
             }, 1000);
         } else {
             console.error(`[CLI Tools] Failed to update ${toolId}:`, result?.error || 'Unknown error');
