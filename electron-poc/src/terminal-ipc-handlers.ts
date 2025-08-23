@@ -7,6 +7,9 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import TTYDManager from './services/TTYDManager';
 import ProcessManager from './utils/ProcessManager';
 import { logger } from './utils/SafeLogger';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 // Initialize managers
 const processManager = new ProcessManager();
@@ -96,12 +99,13 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
         logger.info('[TerminalIPC] Launching Grok setup wizard');
         
         // Create a multi-line bash script that guides the user through setup
-        actualCommand = `bash -c '
+        // Create a temporary script file for better handling of the setup wizard
+        const scriptContent = `#!/bin/bash
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "                 🚀 Grok CLI Setup Wizard"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "Welcome to Grok CLI! Let'\''s get you set up."
+echo "Welcome to Grok CLI! Let's get you set up."
 echo ""
 echo "To use Grok, you need an API key from X.AI"
 echo ""
@@ -111,30 +115,70 @@ echo "   2. Sign in or create an account"
 echo "   3. Navigate to API settings"
 echo "   4. Generate a new API key"
 echo ""
-echo "Once you have your API key, you have several options:"
-echo ""
-echo "Option 1: Set as environment variable (recommended)"
-echo "   export GROK_API_KEY=\"your_api_key_here\""
-echo ""
-echo "Option 2: Save in configuration file"
-echo "   mkdir -p ~/.grok"
-echo "   echo '\''{ \"apiKey\": \"your_api_key_here\" }'\'' > ~/.grok/user-settings.json"
-echo ""
-echo "Option 3: Use command line flag"
-echo "   grok --api-key your_api_key_here"
-echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 read -p "Would you like to set up your API key now? (y/n): " response
-if [ \"$response\" = \"y\" ] || [ \"$response\" = \"Y\" ]; then
-  echo ""
+echo ""
+
+if [[ "$response" =~ ^[Yy]$ ]]; then
   echo "Please enter your Grok API key:"
   read -s api_key
   echo ""
-  if [ -n \"$api_key\" ]; then
+  
+  if [ -n "$api_key" ]; then
+    # Create the .grok directory if it doesn't exist
     mkdir -p ~/.grok
-    echo \"{ \\\"apiKey\\\": \\\"$api_key\\\" }\" > ~/.grok/user-settings.json
-    echo "✅ API key saved to ~/.grok/user-settings.json"
+    
+    # Check if user-settings.json exists and has content
+    if [ -f ~/.grok/user-settings.json ]; then
+      # Backup existing file
+      cp ~/.grok/user-settings.json ~/.grok/user-settings.json.bak
+      
+      # Read existing settings and add apiKey using a more reliable method
+      if command -v python3 >/dev/null 2>&1; then
+        python3 -c "
+import json
+import sys
+
+try:
+    with open('$HOME/.grok/user-settings.json', 'r') as f:
+        settings = json.load(f)
+except:
+    settings = {}
+
+settings['apiKey'] = '$api_key'
+if 'baseURL' not in settings:
+    settings['baseURL'] = 'https://api.x.ai/v1'
+if 'defaultModel' not in settings:
+    settings['defaultModel'] = 'grok-4-latest'
+
+with open('$HOME/.grok/user-settings.json', 'w') as f:
+    json.dump(settings, f, indent=2)
+print('✅ API key added to existing configuration')
+"
+      else
+        # Fallback: create new config with just the essentials
+        cat > ~/.grok/user-settings.json << EOF
+{
+  "apiKey": "$api_key",
+  "baseURL": "https://api.x.ai/v1",
+  "defaultModel": "grok-4-latest"
+}
+EOF
+        echo "✅ API key saved to ~/.grok/user-settings.json"
+      fi
+    else
+      # Create new config file
+      cat > ~/.grok/user-settings.json << EOF
+{
+  "apiKey": "$api_key",
+  "baseURL": "https://api.x.ai/v1",
+  "defaultModel": "grok-4-latest"
+}
+EOF
+      echo "✅ API key saved to ~/.grok/user-settings.json"
+    fi
+    
     echo ""
     echo "🎉 Setup complete! Launching Grok CLI..."
     echo ""
@@ -143,14 +187,25 @@ if [ \"$response\" = \"y\" ] || [ \"$response\" = \"Y\" ]; then
   else
     echo "❌ No API key entered. Please set it up manually."
     echo ""
-    echo "When ready, you can launch Grok with: grok"
+    echo "You can add your API key later by editing ~/.grok/user-settings.json"
   fi
 else
+  echo "You can set up your API key later by:"
+  echo "1. Adding it to ~/.grok/user-settings.json"
+  echo "2. Setting GROK_API_KEY environment variable"
+  echo "3. Using --api-key flag when running grok"
   echo ""
-  echo "You can set up your API key later using one of the options above."
   echo "When ready, launch Grok with: grok"
 fi
-'`;
+`;
+        
+        // Write the script to a temporary file
+        const scriptPath = path.join(os.tmpdir(), `grok-setup-${Date.now()}.sh`);
+        fs.writeFileSync(scriptPath, scriptContent);
+        fs.chmodSync(scriptPath, '755');
+        
+        // Run the script
+        actualCommand = `bash ${scriptPath}; rm -f ${scriptPath}`;
       }
       
       // Create terminal via TTYDManager
