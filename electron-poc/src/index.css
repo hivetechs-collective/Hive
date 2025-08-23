@@ -1179,6 +1179,54 @@ body {
   display: none;
 }
 
+/* Collapsed state for center area */
+.center-area.collapsed {
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  flex: 0 0 40px !important;
+}
+
+.center-area.collapsed > *:not(.panel-collapse-btn):not(.resize-handle) {
+  display: none;
+}
+
+/* Center area normal state - takes remaining space */
+.center-area {
+  flex: 1;
+  min-width: 0; /* Allow it to shrink when collapsed */
+  position: relative;
+}
+
+.center-area:not(.collapsed) {
+  min-width: 400px; /* Only apply min-width when not collapsed */
+}
+
+/* Isolated terminal panel normal state */
+.isolated-terminal-panel {
+  flex-shrink: 0;
+  flex-grow: 0;
+  width: 400px;
+  transition: flex 0.3s ease;
+}
+
+/* When center is collapsed, TTYD can expand to fill space */
+.isolated-terminal-panel.expand-to-fill {
+  flex: 1 !important;
+  width: auto !important;
+}
+
+/* Ensure editor tabs have space for the collapse button */
+.center-area .editor-area {
+  padding-top: 35px; /* Space for collapse button */
+}
+
+/* Editor tabs wrapper positioning */
+.center-area .editor-tabs-wrapper {
+  position: relative;
+  top: 0;
+}
+
 /* Content Panels */
 .content-panel {
   display: none;
