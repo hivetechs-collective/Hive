@@ -54,6 +54,9 @@ export class TTYDTerminalPanel {
         
         // Set up tab navigation arrows
         this.setupTabNavigation();
+        
+        // Set up keyboard shortcuts
+        this.setupKeyboardShortcuts();
     }
     
     private setupIpcListeners(): void {
@@ -582,55 +585,187 @@ export class TTYDTerminalPanel {
         }
     }
     
+    private setupKeyboardShortcuts(): void {
+        // Add keyboard shortcuts for terminal control
+        document.addEventListener('keydown', (e) => {
+            // Ctrl/Cmd + R to refresh active terminal (fix symbol distortion)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'r' && !e.shiftKey) {
+                // Check if the TTYD panel is visible and has focus
+                const isolatedPanel = document.querySelector('.isolated-terminal-panel');
+                if (isolatedPanel && !isolatedPanel.classList.contains('collapsed')) {
+                    e.preventDefault();
+                    this.refreshActiveTerminal();
+                }
+            }
+        });
+    }
+    
+    public refreshActiveTerminal(): void {
+        // Manually refresh the active terminal to fix symbol distortion
+        if (!this.activeTabId) return;
+        
+        const tab = this.tabs.get(this.activeTabId);
+        if (tab && tab.webview) {
+            const webview = tab.webview as any;
+            
+            console.log('[TTYDTerminalPanel] Manually refreshing terminal:', this.activeTabId);
+            
+            try {
+                // Try to send a clear and redraw command
+                webview.executeJavaScript(`
+                    // Send Ctrl+L to clear and redraw terminal
+                    const clearEvent = new KeyboardEvent('keydown', {
+                        key: 'l',
+                        code: 'KeyL',
+                        ctrlKey: true,
+                        bubbles: true
+                    });
+                    document.dispatchEvent(clearEvent);
+                    
+                    // Also trigger resize to recalculate dimensions
+                    window.dispatchEvent(new Event('resize'));
+                    
+                    // For xterm.js
+                    if (window.term) {
+                        if (window.term.refresh) {
+                            window.term.refresh(0, window.term.rows - 1);
+                        }
+                        if (window.term.fit) {
+                            window.term.fit();
+                        }
+                    }
+                    
+                    console.log('Terminal refreshed');
+                `);
+            } catch (e) {
+                // If executeJavaScript fails, reload the webview
+                console.log('[TTYDTerminalPanel] Reloading webview for refresh');
+                const currentSrc = webview.src;
+                
+                // Show a brief loading state
+                webview.style.opacity = '0.5';
+                
+                // Reload after a brief delay
+                setTimeout(() => {
+                    webview.src = currentSrc;
+                    webview.style.opacity = '1';
+                }, 100);
+            }
+        }
+    }
+    
     private setupResizeObserver(): void {
         // Observe the container for size changes
         let resizeTimeout: NodeJS.Timeout | null = null;
+        let resizeCompleteTimeout: NodeJS.Timeout | null = null;
+        
         const resizeObserver = new ResizeObserver(() => {
             // Debounce resize events to avoid excessive redraws
             if (resizeTimeout) {
                 clearTimeout(resizeTimeout);
             }
+            if (resizeCompleteTimeout) {
+                clearTimeout(resizeCompleteTimeout);
+            }
             
             resizeTimeout = setTimeout(() => {
-                // Force refresh all active webviews to redraw terminal content
+                // First pass: trigger immediate resize event
                 this.tabs.forEach((tab) => {
                     if (tab.webview && tab.isActive) {
-                        // Force the webview to refresh by slightly adjusting its size
                         const webview = tab.webview as any;
                         
-                        // Store current dimensions
-                        const currentWidth = webview.style.width;
-                        const currentHeight = webview.style.height;
-                        
-                        // Trigger a reflow by changing dimensions slightly
-                        webview.style.width = '99.9%';
-                        webview.style.height = '99.9%';
-                        
-                        // Restore original dimensions after a brief delay
-                        requestAnimationFrame(() => {
-                            webview.style.width = currentWidth;
-                            webview.style.height = currentHeight;
-                            
-                            // Send resize event to the terminal inside the webview
-                            try {
-                                // Try to send a resize event to the terminal
-                                webview.executeJavaScript(`
-                                    if (window.term && window.term.fit) {
+                        // Send resize event to the terminal inside the webview
+                        try {
+                            webview.executeJavaScript(`
+                                // Trigger window resize for ttyd
+                                window.dispatchEvent(new Event('resize'));
+                                
+                                // Force terminal to recalculate dimensions
+                                if (window.term) {
+                                    // For xterm.js if present
+                                    if (window.term.fit) {
                                         window.term.fit();
                                     }
-                                    // Also trigger window resize for ttyd
-                                    window.dispatchEvent(new Event('resize'));
-                                `);
-                            } catch (e) {
-                                // Webview might not support executeJavaScript, that's ok
-                                console.log('[TTYDTerminalPanel] Could not send resize to terminal:', e);
-                            }
-                        });
+                                    // Force a refresh of the terminal display
+                                    if (window.term.refresh) {
+                                        window.term.refresh(0, window.term.rows - 1);
+                                    }
+                                }
+                                
+                                // For ttyd, trigger multiple resize events to ensure proper redraw
+                                setTimeout(() => window.dispatchEvent(new Event('resize')), 10);
+                                setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+                            `);
+                        } catch (e) {
+                            console.log('[TTYDTerminalPanel] Could not send resize to terminal:', e);
+                        }
                     }
                 });
                 
                 resizeTimeout = null;
-            }, 100); // 100ms debounce
+            }, 50); // Faster initial response
+            
+            // Second pass: complete refresh after resize stops
+            resizeCompleteTimeout = setTimeout(() => {
+                this.tabs.forEach((tab) => {
+                    if (tab.webview && tab.isActive) {
+                        const webview = tab.webview as any;
+                        
+                        // More aggressive refresh for symbol clarity
+                        try {
+                            webview.executeJavaScript(`
+                                // Clear and redraw the terminal to fix symbol distortion
+                                if (window.term) {
+                                    // Store cursor position
+                                    const cursorX = window.term.buffer?.active?.cursorX || 0;
+                                    const cursorY = window.term.buffer?.active?.cursorY || 0;
+                                    
+                                    // Force complete refresh
+                                    if (window.term.reset) {
+                                        // Soft reset to redraw without clearing
+                                        window.term.refresh(0, window.term.rows - 1);
+                                    }
+                                    
+                                    // Restore cursor
+                                    if (window.term.buffer?.active) {
+                                        window.term.buffer.active.cursorX = cursorX;
+                                        window.term.buffer.active.cursorY = cursorY;
+                                    }
+                                }
+                                
+                                // For ttyd, force a complete redraw by sending Ctrl+L (clear screen)
+                                // This helps with symbol rendering issues
+                                const event = new KeyboardEvent('keydown', {
+                                    key: 'l',
+                                    code: 'KeyL',
+                                    ctrlKey: true,
+                                    bubbles: true
+                                });
+                                document.dispatchEvent(event);
+                                
+                                // Final resize event
+                                window.dispatchEvent(new Event('resize'));
+                            `);
+                        } catch (e) {
+                            // If executeJavaScript is not supported, try reloading the webview
+                            // This is more aggressive but ensures symbols are redrawn correctly
+                            if (tab.url && webview.src !== tab.url) {
+                                // URL might have changed, update it
+                                webview.src = tab.url;
+                            } else {
+                                // Force reload the current content
+                                const currentSrc = webview.src;
+                                webview.src = 'about:blank';
+                                setTimeout(() => {
+                                    webview.src = currentSrc;
+                                }, 10);
+                            }
+                        }
+                    }
+                });
+                
+                resizeCompleteTimeout = null;
+            }, 500); // Wait for resize to complete
         });
         
         // Observe the container element
