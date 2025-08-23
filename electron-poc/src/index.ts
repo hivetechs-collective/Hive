@@ -1497,6 +1497,14 @@ const registerSimpleCliToolHandlers = () => {
   });
   
   // TODO: Implement progress events when installation logic is added
+  
+  // Handler for getting the WebSocket backend port
+  ipcMain.handle('websocket-backend-port', async () => {
+    const backendInfo = processManager.getProcessStatus('websocket-backend');
+    const port = backendInfo?.port || 8765;
+    logger.info(`[Main] WebSocket backend port requested: ${port}`);
+    return port;
+  });
 };
 
 // This method will be called when Electron has finished
