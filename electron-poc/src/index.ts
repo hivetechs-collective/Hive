@@ -1497,14 +1497,6 @@ const registerSimpleCliToolHandlers = () => {
   });
   
   // TODO: Implement progress events when installation logic is added
-  
-  // Handler for getting the WebSocket backend port
-  ipcMain.handle('websocket-backend-port', async () => {
-    const backendInfo = processManager.getProcessStatus('websocket-backend');
-    const port = backendInfo?.port || 8765;
-    logger.info(`[Main] WebSocket backend port requested: ${port}`);
-    return port;
-  });
 };
 
 // This method will be called when Electron has finished
@@ -1519,6 +1511,15 @@ app.on('ready', async () => {
   // Register Memory Service handlers BEFORE creating window
   // This ensures they're available when the renderer process starts
   registerMemoryServiceHandlers();
+  
+  // Register WebSocket backend port handler EARLY to prevent warning
+  // Must be registered before window creation so it's available when renderer starts
+  ipcMain.handle('websocket-backend-port', async () => {
+    const backendInfo = processManager.getProcessStatus('websocket-backend');
+    const port = backendInfo?.port || 8765;
+    logger.info(`[Main] WebSocket backend port requested: ${port}`);
+    return port;
+  });
   
   // Register other IPC handlers once at app startup (not in createWindow)
   // This prevents duplicate handler registration errors
