@@ -3470,7 +3470,8 @@ function setupResizeHandles() {
 // Function to handle opening a folder
 async function handleOpenFolder(folderPath: string) {
     try {
-        console.log('[Menu] Opening folder:', folderPath);
+        console.log('[handleOpenFolder] Opening folder:', folderPath);
+        console.log('[handleOpenFolder] Previous folder:', currentOpenedFolder);
         
         // Update the current opened folder state
         currentOpenedFolder = folderPath;

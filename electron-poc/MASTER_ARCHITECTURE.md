@@ -3275,15 +3275,25 @@ ipcMain.handle('cli-tool-launch', async (_, toolId) => {
   // 1. Show folder selection dialog
   const selectedPath = await selectFolder();
   
-  // 2. FIRST: Update global folder context
+  // 2. Check launch history for resume detection
+  const aiToolsDb = AIToolsDatabase.getInstance();
+  const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
+  const command = hasBeenLaunched ? 'claude --resume' : 'claude';
+  
+  // 3. FIRST: Update global folder context
+  // This triggers handleOpenFolder() which updates:
+  // - File Explorer, Source Control, Status Bar
   mainWindow.webContents.send('menu-open-folder', selectedPath);
   
-  // 3. THEN: Launch tool in that folder
+  // 4. THEN: Launch tool in that folder
   setTimeout(() => {
     mainWindow.webContents.send('launch-ai-tool-terminal', {
       toolId, command, cwd: selectedPath
     });
   }, 100); // Ensures folder context is set first
+  
+  // 5. Record launch for future resume detection
+  aiToolsDb.recordLaunch(toolId, selectedPath);
 });
 ```
 
@@ -3292,19 +3302,25 @@ ipcMain.handle('cli-tool-launch', async (_, toolId) => {
 #### Events
 ```typescript
 // Main → Renderer Events
-'menu-open-folder'    // Opens a folder
-'menu-close-folder'   // Closes current folder
-'menu-open-file'      // Opens a specific file
-'menu-new-file'       // Creates new file
-'menu-save'           // Saves current file
-'menu-save-as'        // Save with new name
+'menu-open-folder'         // Opens a folder (from menu or AI tool launch)
+'menu-close-folder'        // Closes current folder
+'menu-open-file'           // Opens a specific file
+'menu-new-file'            // Creates new file
+'menu-save'                // Saves current file
+'menu-save-as'             // Save with new name
+'launch-ai-tool-terminal'  // Creates terminal tab with AI tool
 
 // Preload Bridge (src/preload.ts)
 electronAPI: {
   onMenuOpenFolder: (callback: (path: string) => void) => void;
   onMenuCloseFolder: (callback: () => void) => void;
   onMenuOpenFile: (callback: (path: string) => void) => void;
-  // ... other menu handlers
+  onLaunchAIToolTerminal: (callback: (data: {
+    toolId: string;
+    command: string;
+    cwd: string;
+  }) => void) => void;
+  // ... other handlers
 }
 ```
 
@@ -3339,14 +3355,26 @@ window.electronAPI.onMenuOpenFolder((folderPath) => {
 
 ### Usage Examples
 
-#### Opening Project via AI Tool Launch
+#### Opening Project via AI Tool Launch (Complete Flow)
 ```typescript
 // User clicks Launch button → Selects folder → IDE updates
-1. Launch button clicked
-2. Folder selection dialog
-3. Global folder updated (Explorer, Git, Status Bar refresh)
-4. Terminal opens with AI tool in that folder
-5. All components now focused on selected project
+1. Launch button clicked in AI Tools Manager
+2. Folder selection dialog appears
+3. User selects project directory
+4. Database checks for previous launches
+5. Global folder context updated via 'menu-open-folder' event:
+   - handleOpenFolder() called
+   - currentOpenedFolder = selectedPath
+   - Window title updates to show project name
+   - File Explorer initializes with folder tree
+   - Git integration sets folder context
+   - Source Control view refreshes
+   - Status bar shows git branch
+6. Terminal tab created with appropriate command:
+   - First time: 'claude'
+   - Subsequent: 'claude --resume'
+7. Launch recorded in database for future sessions
+8. All IDE components now synchronized on project
 ```
 
 #### Switching Projects
@@ -3531,6 +3559,37 @@ interface LaunchButtonState {
 4. **Per-Repository**: Each project maintains its own history
 5. **Cross-Session**: Works across app restarts
 
+### Integration Benefits
+
+1. **Unified Experience**: Launch button serves dual purpose:
+   - Opens project in IDE (Explorer, Git, etc.)
+   - Launches AI tool with proper context
+
+2. **Smart Detection**: Database tracking ensures:
+   - First launch uses base command
+   - Subsequent launches use resume flag
+   - Per-repository granularity
+
+3. **Complete IDE Sync**: Single action updates:
+   - File Explorer with project tree
+   - Source Control with git status
+   - Status Bar with branch info
+   - Terminal with AI tool
+   - Window title with project name
+
+### Debugging and Logging
+
+```typescript
+// Enhanced logging for troubleshooting
+logger.info(`[Main] Database check - Tool: ${toolId}, Path: ${selectedPath}, Previously launched: ${hasBeenLaunched}`);
+logger.info(`[Main] Sending menu-open-folder event for: ${selectedPath}`);
+logger.info(`[Main] Sending launch-ai-tool-terminal event with command: ${command}`);
+
+// Renderer side logging
+console.log('[handleOpenFolder] Opening folder:', folderPath);
+console.log('[handleOpenFolder] Previous folder:', currentOpenedFolder);
+```
+
 ---
 
 ## Installation Detection & Dynamic UI Management
@@ -3569,33 +3628,42 @@ As of version 1.6.0, full Claude Code CLI integration has been implemented with 
    }
    ```
 
-4. **Terminal Launch Flow**:
+4. **Complete Terminal Launch Flow**:
    ```typescript
    // 1. User clicks Launch button
    await electronAPI.launchCliTool('claude-code');
    
    // 2. Main process shows folder dialog
    const { canceled, filePaths } = await dialog.showOpenDialog({
-     properties: ['openDirectory']
+     properties: ['openDirectory'],
+     title: 'Select folder to launch Claude Code',
+     buttonLabel: 'Launch Here'
    });
    
    // 3. Check launch history in database
    const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(
      'claude-code', selectedPath
    );
+   logger.info(`Database check - Previously launched: ${hasBeenLaunched}`);
    
    // 4. Determine command based on history
    const command = hasBeenLaunched ? 'claude --resume' : 'claude';
    
-   // 5. Send event to renderer to create terminal tab
-   mainWindow.webContents.send('launch-ai-tool-terminal', {
-     toolId: 'claude-code',
-     toolName: 'Claude',
-     command: command,
-     cwd: selectedPath
-   });
+   // 5. CRITICAL: Update global folder context FIRST
+   // This ensures Explorer, Git, and Status Bar all update
+   mainWindow.webContents.send('menu-open-folder', selectedPath);
    
-   // 6. Record launch in database for future resume detection
+   // 6. After delay, send terminal creation event
+   setTimeout(() => {
+     mainWindow.webContents.send('launch-ai-tool-terminal', {
+       toolId: 'claude-code',
+       toolName: 'Claude',
+       command: command,
+       cwd: selectedPath
+     });
+   }, 100); // Ensures folder context is set first
+   
+   // 7. Record launch in database for future resume detection
    aiToolsDb.recordLaunch('claude-code', selectedPath);
    ```
 

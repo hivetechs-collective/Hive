@@ -1442,6 +1442,13 @@ const registerSimpleCliToolHandlers = () => {
       
       // Check if tool has been launched in this repository before
       const hasBeenLaunched = aiToolsDb.hasBeenLaunchedBefore(toolId, selectedPath);
+      logger.info(`[Main] Database check - Tool: ${toolId}, Path: ${selectedPath}, Previously launched: ${hasBeenLaunched}`);
+      
+      // Get launch info for debugging
+      const launchInfo = aiToolsDb.getLaunchInfo(toolId, selectedPath);
+      if (launchInfo) {
+        logger.info(`[Main] Previous launch info: Count: ${launchInfo.launch_count}, Last: ${launchInfo.last_launched_at}`);
+      }
       
       // Determine the command to run
       let command: string;
@@ -1466,10 +1473,12 @@ const registerSimpleCliToolHandlers = () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         // FIRST: Update the global folder context to the selected path
         // This ensures Explorer, Source Control, and Status Bar all update
+        logger.info(`[Main] Sending menu-open-folder event for: ${selectedPath}`);
         mainWindow.webContents.send('menu-open-folder', selectedPath);
         
         // THEN: After a small delay to ensure folder context is set, launch the terminal
         setTimeout(() => {
+          logger.info(`[Main] Sending launch-ai-tool-terminal event with command: ${command}`);
           mainWindow.webContents.send('launch-ai-tool-terminal', {
             toolId: toolId,
             toolName: toolId === 'claude-code' ? 'Claude Code' : toolId,
@@ -1479,7 +1488,7 @@ const registerSimpleCliToolHandlers = () => {
         }, 100); // Small delay to ensure folder opens first
       }
       
-      logger.info(`[Main] Opened folder ${selectedPath} and sent AI tool launch event for ${toolId}`);
+      logger.info(`[Main] Completed launch sequence for ${toolId} in ${selectedPath}`);
       return { success: true, path: selectedPath, command: command };
     } catch (error: any) {
       logger.error(`[Main] Failed to launch ${toolId}:`, error);
