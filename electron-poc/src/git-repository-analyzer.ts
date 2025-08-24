@@ -3,12 +3,26 @@
  * Analyzes repository for size issues and provides optimization recommendations
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+// Note: This module should be used from the main process only
+// The renderer will call these functions through IPC
 
-const execAsync = promisify(exec);
+// Use browser-compatible alternatives
+const fs = {
+  existsSync: (path: string) => false, // Stub
+  promises: {
+    stat: async (path: string) => ({ size: 0 }),
+    readdir: async (path: string) => [] as string[]
+  }
+};
+const path = {
+  join: (...args: string[]) => args.join('/')
+};
+
+// We'll use window.gitAPI to execute git commands instead
+const execAsync = async (command: string, options?: any): Promise<{ stdout: string; stderr?: string }> => {
+  // This will be called through IPC in the actual implementation
+  throw new Error('Git commands must be executed through the main process');
+};
 
 export interface RepositoryAnalysis {
   totalSize: number;

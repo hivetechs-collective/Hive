@@ -10,8 +10,9 @@ import { GitDecorationProvider } from './git-decoration-provider';
 import { GitGraphView } from './git-graph';
 import { notifications } from './notification';
 import { GitErrorHandler, GitErrorOptions } from './git-error-handler';
-import { GitRepositoryAnalyzer } from './git-repository-analyzer';
-import { GitChunkedPush, PushProgress } from './git-chunked-push';
+// Temporarily disabled - needs to be moved to main process
+// import { GitRepositoryAnalyzer } from './git-repository-analyzer';
+// import { GitChunkedPush, PushProgress } from './git-chunked-push';
 
 interface ResourceGroup {
   id: string;
@@ -822,10 +823,10 @@ export class VSCodeSCMView {
         }
       }, 500);
       
-      // Add timeout for push operation - 30 seconds
+      // Add timeout for push operation - 2 minutes for large repos
       const pushPromise = window.gitAPI.push();
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Push operation timed out after 30 seconds')), 30000)
+        setTimeout(() => reject(new Error('Push operation timed out after 2 minutes. This may be due to repository size exceeding GitHub\'s 2GB limit.')), 120000)
       );
       
       try {
@@ -1342,54 +1343,14 @@ export class VSCodeSCMView {
   public async pushWithChunks() {
     const notificationId = notifications.show({
       title: 'Chunked Push',
-      message: 'Preparing to push large repository in chunks...',
-      type: 'loading',
-      duration: 0
+      message: 'This feature needs to be implemented through the main process...',
+      type: 'info',
+      duration: 5000
     });
     
-    try {
-      const chunkedPush = new GitChunkedPush(
-        window.currentOpenedFolder || process.cwd(),
-        (progress: PushProgress) => {
-          // Update notification with progress
-          let message = '';
-          if (progress.status === 'pushing') {
-            message = `Pushing chunk ${progress.currentChunk}/${progress.totalChunks} (${progress.pushedCommits}/${progress.totalCommits} commits)`;
-          } else if (progress.status === 'completed') {
-            message = `Successfully pushed ${progress.totalCommits} commits`;
-          } else if (progress.status === 'failed') {
-            message = progress.error || 'Push failed';
-          }
-          
-          notifications.update(notificationId, {
-            title: progress.status === 'completed' ? 'Push Successful' : 
-                   progress.status === 'failed' ? 'Push Failed' : 'Pushing Changes',
-            message,
-            type: progress.status === 'completed' ? 'success' : 
-                  progress.status === 'failed' ? 'error' : 'loading',
-            duration: progress.status === 'completed' || progress.status === 'failed' ? 5000 : 0
-          });
-        }
-      );
-      
-      // Use smart push to automatically select best strategy
-      await chunkedPush.smartPush();
-      
-      // Refresh after successful push
-      await this.refresh();
-      
-    } catch (error: any) {
-      console.error('[SCM] Chunked push failed:', error);
-      notifications.update(notificationId, {
-        title: 'Chunked Push Failed',
-        message: error?.message || 'Failed to push using chunked strategy',
-        type: 'error',
-        duration: 5000
-      });
-      
-      // Show alternative solutions
-      GitErrorHandler.showSizeLimitSolutions();
-    }
+    // TODO: Implement through IPC to main process
+    // For now, show the solutions dialog
+    GitErrorHandler.showSizeLimitSolutions();
   }
   
   /**
@@ -1397,76 +1358,15 @@ export class VSCodeSCMView {
    */
   public async analyzeRepository() {
     const notificationId = notifications.show({
-      title: 'Analyzing Repository',
-      message: 'Scanning for large files and size issues...',
-      type: 'loading',
-      duration: 0
+      title: 'Repository Analysis',
+      message: 'This feature needs to be implemented through the main process...',
+      type: 'info',
+      duration: 5000
     });
     
-    try {
-      const analyzer = new GitRepositoryAnalyzer(window.currentOpenedFolder || process.cwd());
-      const analysis = await analyzer.analyze();
-      
-      // Format analysis results
-      let message = `Repository Analysis:\n`;
-      message += `Total Size: ${GitRepositoryAnalyzer.formatBytes(analysis.totalSize)}\n`;
-      message += `Git Objects: ${GitRepositoryAnalyzer.formatBytes(analysis.gitObjectsSize)}\n`;
-      message += `Working Tree: ${GitRepositoryAnalyzer.formatBytes(analysis.workingTreeSize)}\n`;
-      
-      if (analysis.largeFiles.length > 0) {
-        message += `\nLarge Files (Top 5):\n`;
-        analysis.largeFiles.slice(0, 5).forEach(file => {
-          const size = GitRepositoryAnalyzer.formatBytes(file.size);
-          const status = file.inLFS ? ' (LFS)' : file.inHistory ? ' (in history)' : '';
-          message += `• ${file.path}: ${size}${status}\n`;
-        });
-      }
-      
-      if (analysis.recommendations.length > 0) {
-        message += `\nRecommendations:\n`;
-        analysis.recommendations.forEach(rec => {
-          message += `${rec}\n`;
-        });
-      }
-      
-      notifications.update(notificationId, {
-        title: 'Repository Analysis Complete',
-        message,
-        type: 'info',
-        duration: 0 // Keep visible until user dismisses
-      });
-      
-      // Add action buttons for recommendations
-      if (analysis.recommendations.some(r => r.includes('Git LFS'))) {
-        this.showErrorActions({
-          title: '',
-          message: '',
-          type: 'general',
-          actions: [
-            {
-              label: 'Setup Git LFS',
-              action: () => {
-                GitErrorHandler.openGitLFSDocumentation();
-              },
-              primary: true
-            },
-            {
-              label: 'View Solutions',
-              action: () => {
-                GitErrorHandler.showSizeLimitSolutions();
-              }
-            }
-          ]
-        }, notificationId);
-      }
-    } catch (error: any) {
-      notifications.update(notificationId, {
-        title: 'Analysis Failed',
-        message: error?.message || 'Failed to analyze repository',
-        type: 'error',
-        duration: 5000
-      });
-    }
+    // TODO: Implement through IPC to main process
+    // For now, show the solutions dialog
+    GitErrorHandler.showSizeLimitSolutions();
   }
 
   public destroy() {

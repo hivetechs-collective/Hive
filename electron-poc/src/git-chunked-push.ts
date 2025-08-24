@@ -3,11 +3,15 @@
  * Handles large repository pushes by splitting them into manageable chunks
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+// Note: This module should be used from the main process only
+// The renderer will call these functions through IPC
 import { notifications } from './notification';
 
-const execAsync = promisify(exec);
+// We'll use window.gitAPI to execute git commands instead
+const execAsync = async (command: string, options?: any): Promise<{ stdout: string; stderr?: string }> => {
+  // This will be called through IPC in the actual implementation
+  throw new Error('Git commands must be executed through the main process');
+};
 
 export interface ChunkedPushOptions {
   remote?: string;
