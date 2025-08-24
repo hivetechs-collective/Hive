@@ -4852,10 +4852,11 @@ The terminal system has been successfully implemented using ttyd (terminal serve
 **Tab Types & Naming Convention**:
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ ◀ │ System Log | Claude | Gemini | Qwen | Terminal 1 | Terminal 2 | + │ ▶ │
+│ ◀ │ System Log | Claude | Gemini | Qwen | Terminal 1 | Terminal 2 | 🔄 | 📊 | + │ ▶ │
 └──────────────────────────────────────────────────────────────────┘
-        ↑                            ↑                        ↑
-    Navigation arrows      AI Tool Tabs (Named)      Generic Terminals (Numbered)
+        ↑            ↑                    ↑              ↑       ↑    ↑
+    Navigation   AI Tool Tabs      Generic Terminals  Refresh  Toggle  New
+      arrows      (Named)            (Numbered)                System Log
     (appear on overflow)
 ```
 
@@ -4865,6 +4866,13 @@ The terminal system has been successfully implemented using ttyd (terminal serve
    - Non-closeable, non-interactive
    - Shows backend activity, memory service status, process logs
    - Auto-scrolls to bottom for latest messages
+   - **Toggle Visibility Feature** (v1.8.1):
+     - Hidden by default on startup for cleaner UI
+     - Toggle button (📊 icon) in terminal header bar
+     - Button opacity: 70% when hidden, 100% when visible
+     - Tooltip: "Toggle System Log (📊)"
+     - When hidden, other tabs remain functional
+     - Automatically switches to another tab if System Log was active
    - Search functionality to find specific logs
 
 2. **AI Tool Tabs** (Named by Tool)
@@ -7444,6 +7452,15 @@ electron-poc/
   - **Collapse State Persistence**: All three main panels (TTYD, Center, Consensus) maintain collapse state
   - **Toggle Icons**: Consistent + (collapsed) and − (expanded) symbols across all panels
   - **Performance Improvement**: Eliminated ResizeObserver notification delivery errors
+- **v1.8.1 (2025-08-24)**: System Log Toggle & Terminal Tab Stability Fixes
+  - **System Log Toggle Feature**: Added toggle button (📊) to show/hide System Log tab
+  - **Hidden by Default**: System Log tab now starts hidden for cleaner initial UI
+  - **Toggle Button Design**: Log list icon with 70% opacity when hidden, 100% when visible
+  - **Tooltip Enhancement**: "Toggle System Log (📊)" tooltip for clear functionality
+  - **Smart Tab Switching**: Automatically switches to another tab when hiding active System Log
+  - **Centralized ProcessManager**: Fixed terminal tab issues with single ProcessManager instance
+  - **Port Conflict Resolution**: Resolved EADDRINUSE errors through centralized port allocation
+  - **Control Tower Architecture**: ProcessManager serves as single source of truth for all processes
 - **v1.6.0 (2025-08-22)**: Enhanced Process Cleanup & Claude Code Integration
   - **PidTracker System**: Tracks all process PIDs to disk for cleanup across restarts
   - **Unified Cleanup Function**: Single performCleanup() prevents duplicate handlers

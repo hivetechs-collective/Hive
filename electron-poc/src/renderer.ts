@@ -574,6 +574,15 @@ document.body.innerHTML = `
           </svg>
         </button>
         
+        <!-- System Log toggle button -->
+        <button class="isolated-terminal-system-log-toggle" id="isolated-terminal-system-log-toggle" title="Toggle System Log (📊)" style="padding: 0 8px; background: transparent; border: none; color: #cccccc; cursor: pointer; font-size: 14px; transition: all 0.2s ease;">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <!-- Terminal/log icon similar to VS Code's output panel -->
+            <path d="M2 2v12h12V2H2zm11 11H3V3h10v10z"/>
+            <path d="M4 5h8v1H4zm0 2h8v1H4zm0 2h6v1H4zm0 2h7v1H4z"/>
+          </svg>
+        </button>
+        
         <button class="isolated-terminal-new-tab" id="isolated-terminal-new-tab" title="New Terminal" style="padding: 0 10px; background: transparent; border: none; color: #969696; cursor: pointer; font-size: 18px;">+</button>
       </div>
       

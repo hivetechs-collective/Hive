@@ -56,6 +56,20 @@ export class TTYDTerminalPanel {
             console.error('[TTYDTerminalPanel] New tab button not found!');
         }
         
+        // Set up System Log toggle button
+        const systemLogToggle = document.getElementById('isolated-terminal-system-log-toggle');
+        if (systemLogToggle) {
+            console.log('[TTYDTerminalPanel] Found System Log toggle button, adding listener');
+            systemLogToggle.addEventListener('click', () => {
+                console.log('[TTYDTerminalPanel] System Log toggle button clicked');
+                this.toggleSystemLog();
+            });
+            // Initialize button appearance - keep it bright but indicate state with slight opacity
+            systemLogToggle.style.opacity = '0.7';  // More visible even when System Log is hidden
+        } else {
+            console.error('[TTYDTerminalPanel] System Log toggle button not found!');
+        }
+        
         // Listen for terminal creation events from main process
         this.setupIpcListeners();
         
@@ -112,6 +126,7 @@ export class TTYDTerminalPanel {
         tabBtn.innerHTML = `
             <span>${tab.title}</span>
         `;
+        tabBtn.style.display = 'none';  // Hide System Log tab by default
         
         tabBtn.addEventListener('click', () => this.switchToTab(tab.id));
         this.tabsContainer.appendChild(tabBtn);
@@ -691,6 +706,53 @@ export class TTYDTerminalPanel {
             this.tabScrollOffset = 0;
             this.tabsContainer.style.transform = 'translateX(0)';
         }
+    }
+    
+    private toggleSystemLog(): void {
+        const systemLogTab = this.tabs.get('system-log');
+        const systemLogTabBtn = document.getElementById('tab-btn-system-log');
+        const systemLogToggle = document.getElementById('isolated-terminal-system-log-toggle');
+        
+        if (!systemLogTab || !systemLogTabBtn || !systemLogToggle) {
+            console.error('[TTYDTerminalPanel] System Log tab or button not found');
+            return;
+        }
+        
+        // Toggle visibility
+        if (systemLogTabBtn.style.display === 'none') {
+            // Show System Log tab
+            systemLogTabBtn.style.display = 'flex';
+            systemLogToggle.style.opacity = '1';  // Full brightness when visible
+            console.log('[TTYDTerminalPanel] System Log tab shown');
+            
+            // If no other tabs are active, make System Log active
+            if (!this.activeTabId || this.activeTabId === 'system-log') {
+                this.switchToTab('system-log');
+            }
+        } else {
+            // Hide System Log tab
+            systemLogTabBtn.style.display = 'none';
+            systemLogToggle.style.opacity = '0.7';  // Still fairly bright when hidden
+            console.log('[TTYDTerminalPanel] System Log tab hidden');
+            
+            // If System Log was active, switch to another tab
+            if (this.activeTabId === 'system-log') {
+                const remainingTabs = Array.from(this.tabs.keys()).filter(id => id !== 'system-log');
+                if (remainingTabs.length > 0) {
+                    // Switch to the last tab (most recently created)
+                    this.switchToTab(remainingTabs[remainingTabs.length - 1]);
+                } else {
+                    // No other tabs, hide the content
+                    if (systemLogTab.element) {
+                        systemLogTab.element.style.display = 'none';
+                    }
+                    this.activeTabId = null;
+                }
+            }
+        }
+        
+        // Update navigation arrows
+        this.updateNavigationArrows();
     }
     
     private setupKeyboardShortcuts(): void {

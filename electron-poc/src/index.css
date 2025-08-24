@@ -475,6 +475,13 @@ body {
 }
 
 /* Isolated Terminal Panel - default state */
+/* System Log Toggle Button Hover Effect */
+.isolated-terminal-system-log-toggle:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+  border-radius: 4px;
+}
+
 /* TTYD Terminal Panel - Primary Definition */
 .isolated-terminal-panel {
   flex: 0 0 450px;  /* Fixed default width of 450px */
