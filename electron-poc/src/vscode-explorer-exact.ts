@@ -54,8 +54,8 @@ export class VSCodeExplorerExact {
       this.attachStyles();
     }
     
-    // If no root path set, show welcome message
-    if (!this.rootPath) {
+    // If no root path set or empty string, show welcome message
+    if (!this.rootPath || this.rootPath.trim() === '') {
       console.log('[VSCodeExplorer] No root path set, showing welcome message');
       this.showWelcomeMessage();
       return;
@@ -315,7 +315,16 @@ export class VSCodeExplorerExact {
 
   private async loadRootDirectory() {
     try {
+      // Don't try to load if rootPath is empty
+      if (!this.rootPath || this.rootPath.trim() === '') {
+        console.warn('[VSCodeExplorer] Cannot load directory: rootPath is empty');
+        this.rootNodes = [];
+        return;
+      }
+      
       console.log('[VSCodeExplorer] Loading root directory:', this.rootPath);
+      console.log('[VSCodeExplorer] rootPath type:', typeof this.rootPath);
+      console.log('[VSCodeExplorer] rootPath value:', JSON.stringify(this.rootPath));
       const rootItems = await window.fileAPI.getFileTree(this.rootPath);
       
       if (!rootItems || rootItems.length === 0) {
@@ -898,8 +907,19 @@ export class VSCodeExplorerExact {
     await this.render();
   }
 
+  public getCurrentPath(): string {
+    return this.rootPath;
+  }
+
   public async createFile(fileName: string) {
     console.log('[VSCodeExplorer] Create file:', fileName);
+    
+    // Check if we have a valid root path
+    if (!this.rootPath || this.rootPath.trim() === '') {
+      console.error('[VSCodeExplorer] Cannot create file: no folder is open');
+      alert('Please open a folder first');
+      return;
+    }
     
     // Get the current directory (use selected directory or root)
     let targetDir = this.rootPath;
@@ -931,6 +951,13 @@ export class VSCodeExplorerExact {
 
   public async createFolder(folderName: string) {
     console.log('[VSCodeExplorer] Create folder:', folderName);
+    
+    // Check if we have a valid root path
+    if (!this.rootPath || this.rootPath.trim() === '') {
+      console.error('[VSCodeExplorer] Cannot create folder: no folder is open');
+      alert('Please open a folder first');
+      return;
+    }
     
     // Get the current directory (use selected directory or root)
     let targetDir = this.rootPath;

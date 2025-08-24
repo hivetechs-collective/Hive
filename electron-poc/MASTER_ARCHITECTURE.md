@@ -1558,12 +1558,13 @@ GET  /api/analytics           - Fetch usage analytics
 
 #### Performance Optimizations
 - **No Polling**: Event-driven updates only (no intervals)
-- **In-Place Updates**: Git decorations update without tree rebuild
-- **Scroll Preservation**: Maintains scroll position during renders
+- **In-Place Updates**: Git decorations update without tree rebuild via `updateGitDecorationsInPlace()`
+- **Scroll Preservation**: Maintains scroll position during renders using `requestAnimationFrame()`
 - **Debounced Operations**: 500ms delay for Git refresh on typing
 - **Lazy Loading**: Directory contents loaded on-demand
 - **Cached Lookups**: Git status cached in Map structure
 - **DOM Fragment Rendering**: Batched DOM updates for performance
+- **Efficient Re-renders**: Only updates changed content areas, preserves tree expansion state
 
 ### File Menu System
 **Implementation**: `src/index.ts` (main process)
@@ -1578,7 +1579,7 @@ File Menu
 ├── Save (Ctrl/Cmd+S)
 ├── Save As (Ctrl/Cmd+Shift+S)
 ├── ─────────────
-├── Auto Save [Toggle]
+├── Auto Save [Toggle] ✓
 ├── ─────────────
 ├── Close Tab (Ctrl/Cmd+W)
 ├── Close All Tabs
@@ -1587,11 +1588,12 @@ File Menu
 ```
 
 #### Auto-Save Feature
-- **Toggle Option**: Checkbox in File menu
+- **Toggle Option**: Checkbox in File menu (checked state persists)
 - **Default Delay**: 1000ms after last change
-- **Implementation**: Debounced save on content changes
-- **Visual Feedback**: Dirty indicator (orange dot) on unsaved tabs
+- **Implementation**: Debounced save on content changes via `autoSaveTimeout`
+- **Visual Feedback**: Dirty indicator (orange dot #FFA500) on unsaved tabs
 - **Persistence**: Saves editor state before closing
+- **IPC Event**: `menu-toggle-auto-save` toggles the feature
 
 #### IPC Communication
 - Main process sends menu events via IPC
@@ -1612,19 +1614,21 @@ File Menu
 - **Multi-file Editing**:
   - Unlimited open tabs
   - Tab switching with preserved state
-  - Unsaved changes indicator (orange dot)
+  - Unsaved changes indicator (orange dot - #FFA500)
   - Close button per tab
 - **Auto-Save System**:
   - Configurable delay (default 1000ms)
   - Debounced save on content changes
-  - Toggle via File menu
+  - Toggle via File menu (checkbox state)
   - Visual feedback for save operations
+  - Persists auto-save preference
 - **Git Integration**:
   - Debounced refresh on content changes (500ms)
   - Immediate refresh after save operations
   - Updates Explorer decorations in-place
   - Triggers SCM view refresh on save
-  - Orange dot indicator for unsaved changes
+  - Orange dot indicator (#FFA500) for unsaved changes
+  - Properly updates both window.scmView and window.fileExplorer
 - **File Operations**:
   - Save (Ctrl/Cmd+S)
   - Save As (not yet implemented)
@@ -1661,9 +1665,17 @@ App Root (renderer.ts)
 │   │   └── Cline
 │   ├── Divider
 │   └── Settings (Fixed at bottom)
-├── Sidebar Panel (Collapsible)
-│   ├── File Explorer
-│   ├── Source Control View
+├── Sidebar Panel (320px width)
+│   ├── File Explorer (scrollable)
+│   ├── Source Control View (scrollable)
+│   │   ├── Header (fixed)
+│   │   ├── Commit Input (fixed)
+│   │   ├── File Groups (scrollable)
+│   │   │   ├── Staged Changes
+│   │   │   ├── Changes
+│   │   │   └── Untracked
+│   │   ├── Git Graph (300px fixed)
+│   │   └── Status Bar (fixed)
 │   ├── Settings Panel
 │   └── CLI Tools Panel
 ├── Main Content Area
@@ -2344,18 +2356,34 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
 
 #### Source Control Panel
 **Implementation**: `src/vscode-scm-view.ts`
-- Staged/unstaged file lists with icons
-- Inline diff visualization
-- Commit message input with validation
-- Push/pull/sync buttons with status indicators
-- Branch selector dropdown
-- File action buttons (stage, unstage, discard)
+- **File Groups**:
+  - Staged Changes section
+  - Changes section (unstaged modifications)
+  - Untracked section (new untracked files)
+- **File Status Display**:
+  - Proper handling of `working_dir` property from simple-git
+  - Fallback support for `working` property
+  - Accurate grouping based on index and working tree status
+  - TypeScript interface updated to include `working_dir?: string`
+- **Action Buttons**:
+  - Stage/unstage individual files
+  - Stage all (only stages tracked files, excludes untracked)
+  - Unstage all for staged section
+  - Discard changes per file or section
+  - Delete untracked files (trash icon)
+- **UI Layout**:
+  - Scrollable content area with flexbox layout
+  - Fixed height sections (header, commit input, status bar)
+  - Content area uses `flex: 1 1 auto` with `overflow-y: auto`
+  - Git graph section reduced to 300px for more file space
+  - Width increased to 320px for better button visibility
 - **Event-driven refresh** (no polling intervals)
-- Updates triggered by:
+- **Refresh Triggers**:
   - File save operations
   - Git operations (commit, stage, unstage)
-  - Manual refresh button
+  - Manual refresh button (properly wired to window.scmView)
   - Folder changes
+  - Editor content changes (debounced 500ms)
 
 #### Git Decoration Provider
 **Implementation**: `src/git-decoration-provider.ts`
@@ -2367,13 +2395,16 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
   - Status badges (M, A, D, U, R)
   - Tooltips with detailed status
 - **Integrates with**:
-  - File Explorer (decorations)
+  - File Explorer (decorations via `updateGitDecorationsInPlace()`)
   - Source Control view (file status)
+  - Editor tabs (triggers refresh on save/change)
 - **Update triggers**:
-  - File saves
+  - File saves (immediate)
+  - Editor content changes (debounced 500ms)
   - Git operations
-  - Manual refresh only
+  - Manual refresh button
 - **In-place DOM updates** without tree rebuilds
+- **Handles both `working_dir` and `working` properties** from different Git libraries
 
 ### Event-Driven Update Architecture
 
@@ -2406,6 +2437,29 @@ The application uses a **purely event-driven architecture** with no polling inte
    - Immediate refresh on save
    - In-place DOM updates for decorations
    - No tree rebuilds for status changes
+
+6. **Fixed Source Control Untracked Files Display**:
+   - Problem: Untracked files not showing in Source Control panel
+   - Root cause: simple-git uses `working_dir` property, not `working`
+   - Solution: Updated to check both `working_dir` and `working` properties
+   - Result: All three sections (Staged, Changes, Untracked) display correctly
+
+7. **Fixed Source Control Refresh Button**:
+   - Problem: Refresh button not triggering updates
+   - Root cause: window.scmView reference not consistently set
+   - Solution: Ensure both window.gitUI and window.scmView are set when creating VSCodeSCMView
+   - Result: Manual refresh button works properly
+
+8. **Added Scrollable Source Control Panel**:
+   - Problem: Can't see all files when many changes exist
+   - Solution: Implemented proper flexbox layout with scrollable content area
+   - Changes: Content area gets `flex: 1 1 auto`, other sections `flex-shrink: 0`
+   - Result: Smooth scrolling through all file changes
+
+9. **Fixed Stage All Behavior**:
+   - Problem: Stage All was including untracked files
+   - Solution: Filter to only stage tracked files with modifications
+   - Result: Matches VS Code behavior - untracked files must be staged individually
 
 #### Update Flow
 ```
@@ -6356,6 +6410,10 @@ fileExplorer.onFileSelect((filePath) => {
   // filePath is relative to currentOpenedFolder
   editorTabs.openFile(filePath);
 });
+
+// Explorer always respects currentOpenedFolder
+// When reopened, checks if current path matches global folder
+// Updates if necessary via getCurrentPath() method
 ```
 
 #### Source Control (Git)
@@ -6365,6 +6423,11 @@ gitAPI.setFolder(currentOpenedFolder);
 
 // Status bar shows branch for current folder
 updateGitStatusBar(); // Uses currentOpenedFolder
+
+// Source Control properly handles both window.gitUI and window.scmView
+// Ensures refresh button works by maintaining both references
+window.gitUI = new VSCodeSCMView(container);
+window.scmView = window.gitUI; // Both references needed for proper operation
 ```
 
 #### Terminal System

@@ -787,9 +787,18 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                     
                     // Check if we need to initialize or update the explorer
                     if (currentOpenedFolder) {
-                        // If explorer doesn't exist, create it
-                        if (!window.fileExplorer) {
-                            console.log('Creating new file explorer for:', currentOpenedFolder);
+                        console.log('[Explorer Activation] currentOpenedFolder value:', currentOpenedFolder);
+                        console.log('[Explorer Activation] currentOpenedFolder type:', typeof currentOpenedFolder);
+                        
+                        // Check if explorer exists and is showing the wrong folder
+                        const needsUpdate = window.fileExplorer && window.fileExplorer.getCurrentPath() !== currentOpenedFolder;
+                        
+                        // If explorer doesn't exist OR container is empty OR showing wrong folder, create/update it
+                        if (!window.fileExplorer || !container.querySelector('.explorer-folders-view') || needsUpdate) {
+                            if (needsUpdate) {
+                                console.log('Explorer showing wrong folder. Current:', window.fileExplorer.getCurrentPath(), 'Should be:', currentOpenedFolder);
+                            }
+                            console.log('Creating/updating file explorer for:', currentOpenedFolder);
                             container.innerHTML = ''; // Clear any existing content
                             window.fileExplorer = new VSCodeExplorerExact(container);
                             window.fileExplorer.initialize(currentOpenedFolder);
@@ -811,9 +820,7 @@ function toggleSidebarPanel(panelType: 'explorer' | 'git') {
                                 }
                             });
                         } else {
-                            // Explorer already exists, but we need to ensure it's showing the correct folder
-                            console.log('Explorer exists, reinitializing with:', currentOpenedFolder);
-                            window.fileExplorer.initialize(currentOpenedFolder);
+                            console.log('Explorer already showing correct folder:', currentOpenedFolder);
                         }
                     } else {
                         // Show VS Code-style welcome screen
@@ -4365,11 +4372,14 @@ function setupResizeHandles() {
 async function handleOpenFolder(folderPath: string) {
     try {
         console.log('[handleOpenFolder] Opening folder:', folderPath);
+        console.log('[handleOpenFolder] Folder path type:', typeof folderPath);
+        console.log('[handleOpenFolder] Folder path value:', JSON.stringify(folderPath));
         console.log('[handleOpenFolder] Previous folder:', currentOpenedFolder);
         
         // Update the current opened folder state
         currentOpenedFolder = folderPath;
         (window as any).currentOpenedFolder = currentOpenedFolder;
+        console.log('[handleOpenFolder] Set currentOpenedFolder to:', currentOpenedFolder);
         
         // Update window title with folder name
         const folderName = folderPath.split('/').pop() || folderPath;
@@ -4386,27 +4396,41 @@ async function handleOpenFolder(folderPath: string) {
         // Refresh the file explorer with the new folder
         const explorerContainer = document.getElementById('explorer-content');
         if (explorerContainer) {
-            // Clear existing explorer and create a new one with the opened folder
-            explorerContainer.innerHTML = '';
-            window.fileExplorer = new VSCodeExplorerExact(explorerContainer);
-            await window.fileExplorer.initialize(folderPath);
+            // Check if explorer panel is currently visible
+            const explorerPanel = document.getElementById('explorer-sidebar');
+            const isExplorerVisible = explorerPanel && explorerPanel.style.display !== 'none';
             
-            // Reconnect file selection handler for the editor
-            window.fileExplorer.onFileSelect((filePath: string) => {
-                console.log('File selected:', filePath);
-                if (window.editorTabs) {
-                    // Wrap in try-catch to prevent errors from bubbling to webpack
-                    try {
-                        window.editorTabs.openFile(filePath).catch((err: any) => {
-                            console.error('Error opening file:', err);
-                        });
-                    } catch (err) {
-                        console.error('Error calling openFile:', err);
+            if (isExplorerVisible) {
+                // Explorer is visible, update it immediately
+                console.log('[handleOpenFolder] Explorer is visible, updating now');
+                explorerContainer.innerHTML = '';
+                window.fileExplorer = new VSCodeExplorerExact(explorerContainer);
+                await window.fileExplorer.initialize(folderPath);
+                
+                // Reconnect file selection handler for the editor
+                window.fileExplorer.onFileSelect((filePath: string) => {
+                    console.log('File selected:', filePath);
+                    if (window.editorTabs) {
+                        // Wrap in try-catch to prevent errors from bubbling to webpack
+                        try {
+                            window.editorTabs.openFile(filePath).catch((err: any) => {
+                                console.error('Error opening file:', err);
+                            });
+                        } catch (err) {
+                            console.error('Error calling openFile:', err);
+                        }
+                    } else {
+                        console.error('editorTabs not found');
                     }
-                } else {
-                    console.error('editorTabs not found');
+                });
+            } else {
+                // Explorer is not visible, just clear the existing instance so it gets recreated with the new folder when activated
+                console.log('[handleOpenFolder] Explorer is not visible, clearing instance for later recreation');
+                if (window.fileExplorer) {
+                    window.fileExplorer = null;
+                    explorerContainer.innerHTML = '';
                 }
-            });
+            }
         }
         
         // Update Git manager with the new folder
@@ -4568,7 +4592,8 @@ if (typeof window !== 'undefined' && (window as any).electronAPI) {
                 window.scmView.destroy();
             }
             // Create new SCM view which will show welcome since no folder is open
-            window.scmView = new VSCodeSCMView(scmContainer);
+            window.gitUI = new VSCodeSCMView(scmContainer);
+            window.scmView = window.gitUI;
         }
         
         // Close all editor tabs

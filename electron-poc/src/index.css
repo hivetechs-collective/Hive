@@ -21,6 +21,9 @@
 
 /* Codicon icon content codes - From official VS Code CDN 2025 */
 .codicon-refresh:before { content: '\eb37' }
+.codicon-new-file:before { content: '\ea7f' }
+.codicon-new-folder:before { content: '\ea80' }
+.codicon-collapse-all:before { content: '\eab4' }
 .codicon-check:before { content: '\eab2' }
 .codicon-cloud-download:before { content: '\eac2' }
 .codicon-cloud-upload:before { content: '\eac3' }
@@ -645,7 +648,7 @@ body {
 
 /* Sidebar Panel - VS Code style panel area */
 .sidebar-panel {
-  width: 240px;
+  width: 320px;
   background: var(--background-secondary);
   border-right: 1px solid var(--border-color);
   display: none; /* Hidden by default */

@@ -40,13 +40,28 @@ export class VSCodeSCMView {
     await this.refresh();
     // Auto-refresh removed - will refresh on Git operations and file saves only
     
-    // Set up global reference
-    (window as any).scmView = this;
+    // Global reference is now set in renderer.ts when creating the instance
   }
 
   public async refresh() {
+    console.log('[SCM] Refresh button clicked!');
     try {
+      // Check if a folder is open first
+      const currentFolder = (window as any).currentOpenedFolder;
+      if (!currentFolder) {
+        console.log('[SCM] No folder open, showing welcome view');
+        this.gitStatus = null;
+        this.render();
+        return;
+      }
+      
+      console.log('[SCM] Getting git status for:', currentFolder);
       this.gitStatus = await window.gitAPI.getStatus();
+      console.log('[SCM] Got git status with', this.gitStatus?.files?.length || 0, 'files');
+      
+      // Check for untracked files
+      const untracked = this.gitStatus?.files?.filter(f => (f.working_dir === '?' || f.working === '?') && f.index === '?') || [];
+      console.log('[SCM] Untracked files:', untracked.map(f => f.path));
     } catch (error) {
       console.error('[SCM] Failed to refresh:', error);
       // Set gitStatus to null to show welcome message
@@ -54,6 +69,7 @@ export class VSCodeSCMView {
     }
     // Always render, even if there was an error
     this.render();
+    console.log('[SCM] Render complete');
   }
 
   private render() {
@@ -157,16 +173,21 @@ export class VSCodeSCMView {
         </div>
 
         <!-- Resource Groups -->
-        <div class="scm-view-content">
+        <div class="scm-view-content" style="
+          flex: 1 1 auto;
+          overflow-y: auto;
+          overflow-x: hidden;
+          min-height: 0;
+          max-height: calc(100vh - 400px);
+        ">
           ${groups.map(group => this.renderResourceGroup(group)).join('')}
         </div>
         
         <!-- Git Graph Section -->
         <div id="git-graph-container" style="
           border-top: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);
-          height: 65vh;
-          min-height: 400px;
-          max-height: 800px;
+          height: 300px;
+          flex-shrink: 0;
           overflow: hidden;
         "></div>
 
@@ -221,10 +242,20 @@ export class VSCodeSCMView {
 
     const groups: ResourceGroup[] = [];
     const { files } = this.gitStatus;
+    
+    // Debug logging
+    console.log('[SCM] Grouping files:', files.map(f => ({
+      path: f.path,
+      index: f.index || ' ',
+      working: f.working_dir || f.working || ' ',
+      indexChar: f.index ? f.index.charCodeAt(0) : 32,
+      workingChar: (f.working_dir || f.working) ? (f.working_dir || f.working).charCodeAt(0) : 32
+    })));
 
-    // Staged Changes
+    // Staged Changes (Index Group in VS Code)
     const staged = files.filter(f => f.index !== ' ' && f.index !== '?');
     if (staged.length > 0) {
+      console.log('[SCM] Staged files:', staged.map(f => f.path));
       groups.push({
         id: 'staged',
         label: 'Staged Changes',
@@ -232,11 +263,20 @@ export class VSCodeSCMView {
       });
     }
 
-    // Changes
-    const changes = files.filter(f => 
-      f.working !== ' ' && f.working !== '?' && !(f.index !== ' ' && f.index !== '?')
-    );
+    // Changes (Working Tree Group in VS Code - modified/deleted files)
+    const changes = files.filter(f => {
+      // Has working tree changes but not untracked
+      // Note: simple-git uses 'working_dir' not 'working'
+      const working = f.working_dir || f.working || ' ';
+      const hasWorkingChanges = working !== ' ' && working !== '?';
+      // Not staged
+      const notStaged = f.index === ' ';
+      const isInChanges = hasWorkingChanges && notStaged;
+      console.log(`[SCM] File ${f.path}: working='${working}' index='${f.index}' -> inChanges=${isInChanges}`);
+      return isInChanges;
+    });
     if (changes.length > 0) {
+      console.log('[SCM] Changes files:', changes.map(f => f.path));
       groups.push({
         id: 'changes',
         label: 'Changes',
@@ -244,9 +284,16 @@ export class VSCodeSCMView {
       });
     }
 
-    // Untracked
-    const untracked = files.filter(f => f.working === '?');
+    // Untracked (Untracked Group in VS Code - new files)
+    const untracked = files.filter(f => {
+      // Note: simple-git uses 'working_dir' not 'working'
+      const working = f.working_dir || f.working || ' ';
+      const isUntracked = working === '?' && f.index === '?';
+      console.log(`[SCM] File ${f.path}: working='${working}' index='${f.index}' -> untracked=${isUntracked}`);
+      return isUntracked;
+    });
     if (untracked.length > 0) {
+      console.log('[SCM] Untracked files:', untracked.map(f => f.path));
       groups.push({
         id: 'untracked',
         label: 'Untracked',
@@ -297,6 +344,9 @@ export class VSCodeSCMView {
     const folderPath = file.path.includes('/') ? 
       file.path.substring(0, file.path.lastIndexOf('/')) : '';
     
+    // Debug log
+    console.log(`[SCM] Rendering file ${file.path} in group ${groupId}, working: '${file.working}', index: '${file.index}'`);
+    
     const statusIcon = this.getStatusIcon(file);
     const isSelected = this.selectedFiles.has(file.path);
     
@@ -328,7 +378,10 @@ export class VSCodeSCMView {
               <span class="codicon codicon-add"></span>
             </button>
           ` : groupId === 'untracked' ? `
-            <button class="icon-button" title="Stage Changes" onclick="event.stopPropagation(); window.scmView?.stageFile('${escapedPath}')">
+            <button class="icon-button" title="Delete File" onclick="event.stopPropagation(); window.scmView?.deleteUntrackedFile('${escapedPath}')" style="color: #f48771;">
+              <span class="codicon codicon-trash"></span>
+            </button>
+            <button class="icon-button" title="Stage File" onclick="event.stopPropagation(); window.scmView?.stageFile('${escapedPath}')">
               <span class="codicon codicon-add"></span>
             </button>
           ` : groupId === 'staged' ? `
@@ -502,11 +555,47 @@ export class VSCodeSCMView {
     }
   }
 
+  public async deleteUntrackedFile(path: string) {
+    const fileName = path.split('/').pop() || path;
+    if (confirm(`Delete untracked file "${fileName}"? This cannot be undone.`)) {
+      try {
+        // Use git clean to remove the untracked file
+        await window.gitAPI.clean([path]);
+        await this.refresh();
+        
+        // Also refresh File Explorer
+        if (window.fileExplorer) {
+          await window.fileExplorer.refreshGitStatus();
+        }
+        
+        notifications.show({
+          title: 'File Deleted',
+          message: `Deleted untracked file: ${fileName}`,
+          type: 'info',
+          duration: 3000
+        });
+      } catch (error) {
+        console.error('Failed to delete untracked file:', error);
+        notifications.show({
+          title: 'Delete Failed',
+          message: `Failed to delete ${fileName}: ${error}`,
+          type: 'error',
+          duration: 5000
+        });
+      }
+    }
+  }
+
   public async stageAll() {
     try {
-      const changes = this.gitStatus?.files.filter(f => 
-        f.working !== ' ' && !(f.index !== ' ' && f.index !== '?')
-      ) || [];
+      // Only stage tracked files with changes (not untracked files)
+      const changes = this.gitStatus?.files.filter(f => {
+        const working = f.working_dir || f.working || ' ';
+        const hasWorkingChanges = working !== ' ' && working !== '?';
+        const isNotStaged = f.index === ' ';
+        const isTracked = working !== '?'; // Not untracked
+        return hasWorkingChanges && isNotStaged && isTracked;
+      }) || [];
       await window.gitAPI.stage(changes.map(f => f.path));
       await this.refresh();
     } catch (error) {
@@ -527,22 +616,57 @@ export class VSCodeSCMView {
   }
 
   public async discardAll(groupId: string) {
-    // Different confirmation messages based on group
-    let confirmMessage = 'Discard all changes?';
-    if (groupId === 'staged') {
-      confirmMessage = 'Discard all staged changes? This will unstage and discard the changes.';
-    } else if (groupId === 'untracked') {
-      confirmMessage = 'Remove all untracked files? This will permanently delete these files.';
-    }
-    
-    if (!confirm(confirmMessage)) return;
-    
-    try {
-      let files: string[] = [];
+    if (groupId === 'changes') {
+      // For the Changes group - only modified/deleted files
+      const files = this.gitStatus?.files
+        .filter(f => ((f.working_dir === 'M' || f.working_dir === 'D') || (f.working === 'M' || f.working === 'D')) && f.index === ' ')
+        .map(f => f.path) || [];
       
-      if (groupId === 'staged') {
+      if (files.length === 0) return;
+      
+      const confirmMessage = `Discard ${files.length} change(s)?`;
+      if (!confirm(confirmMessage)) return;
+      
+      try {
+        await window.gitAPI.discard(files);
+      } catch (error) {
+        console.error('Failed to discard changes:', error);
+        notifications.show({
+          title: 'Discard Failed',
+          message: `Failed to discard changes: ${error}`,
+          type: 'error',
+          duration: 5000
+        });
+      }
+    } else if (groupId === 'untracked') {
+      // For the Untracked group - delete untracked files
+      const files = this.gitStatus?.files
+        .filter(f => (f.working_dir === '?' || f.working === '?') && f.index === '?')
+        .map(f => f.path) || [];
+      
+      if (files.length === 0) return;
+      
+      const confirmMessage = `Delete ${files.length} untracked file(s)? This cannot be undone.`;
+      if (!confirm(confirmMessage)) return;
+      
+      try {
+        await window.gitAPI.clean(files);
+      } catch (error) {
+        console.error('Failed to delete untracked files:', error);
+        notifications.show({
+          title: 'Delete Failed',
+          message: `Failed to delete untracked files: ${error}`,
+          type: 'error',
+          duration: 5000
+        });
+      }
+    } else if (groupId === 'staged') {
+      const confirmMessage = 'Discard all staged changes? This will unstage and discard the changes.';
+      if (!confirm(confirmMessage)) return;
+      
+      try {
         // For staged files: first unstage, then discard
-        files = this.gitStatus?.files
+        const files = this.gitStatus?.files
           .filter(f => f.index !== ' ' && f.index !== '?')
           .map(f => f.path) || [];
         
@@ -551,49 +675,29 @@ export class VSCodeSCMView {
           await window.gitAPI.unstage(files);
           // Then discard the changes (but only for modified files, not new files)
           const modifiedFiles = this.gitStatus?.files
-            .filter(f => f.index === 'M' || f.working === 'M')
+            .filter(f => f.index === 'M' || f.working_dir === 'M' || f.working === 'M')
             .map(f => f.path) || [];
           if (modifiedFiles.length > 0) {
             await window.gitAPI.discard(modifiedFiles);
           }
         }
-      } else if (groupId === 'changes') {
-        // For unstaged changes: discard directly
-        files = this.gitStatus?.files
-          .filter(f => f.working === 'M' || f.working === 'D')
-          .map(f => f.path) || [];
-        
-        if (files.length > 0) {
-          await window.gitAPI.discard(files);
-        }
-      } else if (groupId === 'untracked') {
-        // For untracked files: we need to remove them from the filesystem
-        files = this.gitStatus?.files
-          .filter(f => f.working === '?' && f.index === '?')
-          .map(f => f.path) || [];
-        
-        if (files.length > 0) {
-          // Use git clean to remove untracked files
-          await window.gitAPI.clean(files);
-        }
+      } catch (error) {
+        console.error('Failed to discard staged:', error);
+        notifications.show({
+          title: 'Discard Failed',
+          message: `Failed to discard staged changes: ${error}`,
+          type: 'error',
+          duration: 5000
+        });
       }
-      
-      // Refresh the view after operations
-      await this.refresh();
-      
-      // Also refresh File Explorer to update Git decorations
-      if (window.fileExplorer) {
-        await window.fileExplorer.refreshGitStatus();
-      }
-      
-    } catch (error) {
-      console.error('Failed to discard all:', error);
-      notifications.show({
-        title: 'Discard Failed',
-        message: `Failed to discard changes: ${error}`,
-        type: 'error',
-        duration: 5000
-      });
+    }
+    
+    // Refresh the view after operations
+    await this.refresh();
+    
+    // Also refresh File Explorer to update Git decorations
+    if (window.fileExplorer) {
+      await window.fileExplorer.refreshGitStatus();
     }
   }
 

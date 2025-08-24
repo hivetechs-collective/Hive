@@ -2,6 +2,7 @@ export interface GitFileStatus {
   path: string;
   index: string;  // X in XY format - staged status
   working: string; // Y in XY format - working tree status
+  working_dir?: string; // Alternative property used by simple-git library
   renamed?: string;
 }
 
