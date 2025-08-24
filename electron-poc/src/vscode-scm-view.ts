@@ -863,6 +863,17 @@ export class VSCodeSCMView {
   public async pull() {
     console.log('[SCM] Pull button clicked');
     
+    // Check if branch has upstream
+    if (!this.gitStatus?.hasUpstream) {
+      notifications.show({
+        title: 'No upstream branch',
+        message: 'This branch has no upstream branch set. Push first to create it.',
+        type: 'warning',
+        duration: 4000
+      });
+      return;
+    }
+    
     // Check if there's anything to pull
     if (this.gitStatus?.behind === 0) {
       notifications.show({
@@ -908,7 +919,25 @@ export class VSCodeSCMView {
     const ahead = this.gitStatus?.ahead || 0;
     const behind = this.gitStatus?.behind || 0;
     
-    console.log('[SCM] Sync status - branch:', branch, 'ahead:', ahead, 'behind:', behind);
+    console.log('[SCM] Sync status - branch:', branch, 'ahead:', ahead, 'behind:', behind, 'hasUpstream:', this.gitStatus?.hasUpstream);
+    
+    // Check if branch has upstream
+    if (!this.gitStatus?.hasUpstream) {
+      // If we have commits to push, do push to create upstream
+      if (ahead > 0) {
+        console.log('[SCM] No upstream, but have commits to push - will push to create upstream');
+        await this.push();
+        return;
+      } else {
+        notifications.show({
+          title: 'No upstream branch',
+          message: 'This branch has no upstream branch set. Make a commit and push to create it.',
+          type: 'warning',
+          duration: 4000
+        });
+        return;
+      }
+    }
     
     // If nothing to sync
     if (ahead === 0 && behind === 0) {
