@@ -1,4 +1,4 @@
-export type OperationType = 'status' | 'stage' | 'unstage' | 'commit' | 'push' | 'pull' | 'fetch' | 'sync' | 'branch' | 'checkout';
+export type OperationType = 'status' | 'stage' | 'unstage' | 'commit' | 'push' | 'pull' | 'fetch' | 'sync' | 'branch' | 'checkout' | 'clean';
 
 export interface Operation {
   id: string;

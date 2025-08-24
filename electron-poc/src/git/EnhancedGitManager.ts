@@ -414,6 +414,17 @@ export class EnhancedGitManager {
   async discard(files: string[]): Promise<void> {
     await this.git.checkout(['--', ...files]);
   }
+
+  /**
+   * Remove untracked files
+   */
+  async clean(files: string[]): Promise<void> {
+    // Use git clean -f to remove untracked files
+    // We specify each file explicitly for safety
+    for (const file of files) {
+      await this.git.clean('f', ['--', file]);
+    }
+  }
   
   /**
    * Initialize Git repository

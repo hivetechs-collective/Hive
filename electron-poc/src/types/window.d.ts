@@ -39,6 +39,7 @@ declare global {
       unstage(files: string[]): Promise<void>;
       commit(message: string): Promise<void>;
       discard(files: string[]): Promise<void>;
+      clean(files: string[]): Promise<void>;
       push(): Promise<void>;
       pull(): Promise<void>;
       fetch(): Promise<void>;

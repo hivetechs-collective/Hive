@@ -142,6 +142,7 @@ contextBridge.exposeInMainWorld('gitAPI', {
   unstage: (files: string[]) => ipcRenderer.invoke('git-unstage', files),
   commit: (message: string) => ipcRenderer.invoke('git-commit', message),
   discard: (files: string[]) => ipcRenderer.invoke('git-discard', files),
+  clean: (files: string[]) => ipcRenderer.invoke('git-clean', files),
   push: () => ipcRenderer.invoke('git-push'),
   pull: () => ipcRenderer.invoke('git-pull'),
   sync: () => ipcRenderer.invoke('git-sync'),

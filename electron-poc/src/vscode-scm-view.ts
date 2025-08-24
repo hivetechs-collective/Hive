@@ -320,7 +320,14 @@ export class VSCodeSCMView {
           </div>
         </div>
         <div class="scm-resource-actions">
-          ${groupId === 'changes' || groupId === 'untracked' ? `
+          ${groupId === 'changes' ? `
+            <button class="icon-button" title="Discard Changes" onclick="event.stopPropagation(); window.scmView?.discardFile('${escapedPath}')">
+              <span class="codicon codicon-discard"></span>
+            </button>
+            <button class="icon-button" title="Stage Changes" onclick="event.stopPropagation(); window.scmView?.stageFile('${escapedPath}')">
+              <span class="codicon codicon-add"></span>
+            </button>
+          ` : groupId === 'untracked' ? `
             <button class="icon-button" title="Stage Changes" onclick="event.stopPropagation(); window.scmView?.stageFile('${escapedPath}')">
               <span class="codicon codicon-add"></span>
             </button>
@@ -520,21 +527,73 @@ export class VSCodeSCMView {
   }
 
   public async discardAll(groupId: string) {
-    if (!confirm('Discard all changes?')) return;
+    // Different confirmation messages based on group
+    let confirmMessage = 'Discard all changes?';
+    if (groupId === 'staged') {
+      confirmMessage = 'Discard all staged changes? This will unstage and discard the changes.';
+    } else if (groupId === 'untracked') {
+      confirmMessage = 'Remove all untracked files? This will permanently delete these files.';
+    }
+    
+    if (!confirm(confirmMessage)) return;
     
     try {
       let files: string[] = [];
-      if (groupId === 'changes') {
+      
+      if (groupId === 'staged') {
+        // For staged files: first unstage, then discard
         files = this.gitStatus?.files
-          .filter(f => f.working !== ' ' && f.working !== '?')
+          .filter(f => f.index !== ' ' && f.index !== '?')
           .map(f => f.path) || [];
+        
+        if (files.length > 0) {
+          // First unstage all
+          await window.gitAPI.unstage(files);
+          // Then discard the changes (but only for modified files, not new files)
+          const modifiedFiles = this.gitStatus?.files
+            .filter(f => f.index === 'M' || f.working === 'M')
+            .map(f => f.path) || [];
+          if (modifiedFiles.length > 0) {
+            await window.gitAPI.discard(modifiedFiles);
+          }
+        }
+      } else if (groupId === 'changes') {
+        // For unstaged changes: discard directly
+        files = this.gitStatus?.files
+          .filter(f => f.working === 'M' || f.working === 'D')
+          .map(f => f.path) || [];
+        
+        if (files.length > 0) {
+          await window.gitAPI.discard(files);
+        }
+      } else if (groupId === 'untracked') {
+        // For untracked files: we need to remove them from the filesystem
+        files = this.gitStatus?.files
+          .filter(f => f.working === '?' && f.index === '?')
+          .map(f => f.path) || [];
+        
+        if (files.length > 0) {
+          // Use git clean to remove untracked files
+          await window.gitAPI.clean(files);
+        }
       }
-      if (files.length > 0) {
-        await window.gitAPI.discard(files);
-        await this.refresh();
+      
+      // Refresh the view after operations
+      await this.refresh();
+      
+      // Also refresh File Explorer to update Git decorations
+      if (window.fileExplorer) {
+        await window.fileExplorer.refreshGitStatus();
       }
+      
     } catch (error) {
       console.error('Failed to discard all:', error);
+      notifications.show({
+        title: 'Discard Failed',
+        message: `Failed to discard changes: ${error}`,
+        type: 'error',
+        duration: 5000
+      });
     }
   }
 

@@ -319,6 +319,21 @@ export class GitManager {
     }
   }
 
+  async clean(files: string[]): Promise<void> {
+    if (!this.isRepo) return;
+
+    try {
+      // Use git clean -f to remove untracked files
+      // We specify each file explicitly for safety
+      for (const file of files) {
+        await this.git.clean('f', ['--', file]);
+      }
+    } catch (error) {
+      console.error('Git clean error:', error);
+      throw error;
+    }
+  }
+
   private pushWithSpawn(args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
       console.log(`[GitManager] Spawning: git push ${args.join(' ')}`);

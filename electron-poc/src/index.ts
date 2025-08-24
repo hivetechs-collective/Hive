@@ -261,6 +261,13 @@ const registerGitHandlers = () => {
     return await gitManager.discard(files);
   });
 
+  ipcMain.handle('git-clean', async (_, files: string[]) => {
+    if (!gitManager) {
+      throw new Error('No folder open');
+    }
+    return await gitManager.clean(files);
+  });
+
   ipcMain.handle('git-push', async () => {
     logger.info('[Main] git-push IPC called');
     if (!gitManager) {
