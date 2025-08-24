@@ -45,6 +45,11 @@ export class EditorTabs {
   private editorsContainer: HTMLElement;
   private diffEditor: monaco.editor.IStandaloneDiffEditor | null = null;
   private saveCallbacks: ((path: string, content: string) => void)[] = [];
+  
+  // Auto-save configuration
+  private autoSaveEnabled: boolean = false;
+  private autoSaveDelay: number = 1000; // Default 1 second delay
+  private autoSaveTimeouts = new Map<string, NodeJS.Timeout>();
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -242,6 +247,7 @@ export class EditorTabs {
   }
   
   private fileWatchHandlerSet = false;
+  private gitRefreshTimeout: NodeJS.Timeout | null = null;
 
   /**
    * Open Git diff view for a file
@@ -348,8 +354,42 @@ export class EditorTabs {
       // Track changes for dirty state
       editor.onDidChangeModelContent(() => {
         if (!tab.isDirty) {
+          console.log('[EditorTabs] File content changed, marking as dirty:', tab.name);
           tab.isDirty = true;
           this.renderTabs();
+          
+          // Debounce Git status refresh to avoid too many updates while typing
+          // This ensures File Explorer and Source Control update after a short delay
+          if (this.gitRefreshTimeout) {
+            clearTimeout(this.gitRefreshTimeout);
+          }
+          
+          this.gitRefreshTimeout = setTimeout(() => {
+            if (window.scmView) {
+              window.scmView.refresh();
+            }
+            if (window.fileExplorer) {
+              window.fileExplorer.refreshGitStatus();
+            }
+          }, 500); // Refresh after 500ms of no typing
+        }
+        
+        // Handle auto-save if enabled
+        if (this.autoSaveEnabled && tab.isDirty) {
+          // Clear any existing auto-save timeout for this tab
+          const existingTimeout = this.autoSaveTimeouts.get(tab.id);
+          if (existingTimeout) {
+            clearTimeout(existingTimeout);
+          }
+          
+          // Set new auto-save timeout
+          const timeout = setTimeout(() => {
+            console.log('[EditorTabs] Auto-saving:', tab.name);
+            this.saveTab(tab.id);
+            this.autoSaveTimeouts.delete(tab.id);
+          }, this.autoSaveDelay);
+          
+          this.autoSaveTimeouts.set(tab.id, timeout);
         }
       });
 
@@ -474,18 +514,30 @@ export class EditorTabs {
    */
   private async saveTab(tabId: string): Promise<void> {
     const tab = this.tabs.find(t => t.id === tabId);
+    console.log('[EditorTabs] saveTab called for:', tabId, 'tab:', tab?.name, 'isDirty:', tab?.isDirty);
     if (!tab || !tab.isDirty) return;
 
     const editor = this.editors.get(tabId);
     if (!editor) return;
 
     const content = editor.getValue();
+    console.log('[EditorTabs] Saving file:', tab.path, 'content length:', content.length);
     
     try {
       await window.fileAPI.writeFile(tab.path, content);
+      console.log('[EditorTabs] File saved successfully:', tab.path);
       tab.isDirty = false;
       tab.content = content;
       this.renderTabs();
+      
+      // Immediately refresh Git status after save
+      // This ensures the file shows as modified in Git
+      if (window.scmView) {
+        window.scmView.refresh();
+      }
+      if (window.fileExplorer) {
+        window.fileExplorer.refreshGitStatus();
+      }
       
       // Notify callbacks
       this.saveCallbacks.forEach(cb => cb(tab.path, content));
@@ -509,10 +561,20 @@ export class EditorTabs {
       // Tab content
       const nameEl = document.createElement('span');
       nameEl.className = 'tab-name';
-      nameEl.textContent = tab.name;
+      
       if (tab.isDirty) {
-        nameEl.textContent = '● ' + nameEl.textContent;
+        // Create a colored dot for unsaved changes
+        const dot = document.createElement('span');
+        dot.style.color = '#FFA500'; // Orange color for better visibility
+        dot.style.fontSize = '16px';
+        dot.style.marginRight = '4px';
+        dot.textContent = '●';
+        nameEl.appendChild(dot);
       }
+      
+      const textNode = document.createElement('span');
+      textNode.textContent = tab.name;
+      nameEl.appendChild(textNode);
       
       // Close button
       const closeBtn = document.createElement('button');
@@ -895,5 +957,74 @@ export class EditorTabs {
     this.editors.clear();
     this.models.clear();
     this.tabs = [];
+    // Clear auto-save timeouts
+    this.autoSaveTimeouts.forEach(timeout => clearTimeout(timeout));
+    this.autoSaveTimeouts.clear();
   }
+  
+  /**
+   * Enable or disable auto-save
+   */
+  public setAutoSave(enabled: boolean, delay?: number): void {
+    this.autoSaveEnabled = enabled;
+    if (delay !== undefined) {
+      this.autoSaveDelay = delay;
+    }
+    console.log('[EditorTabs] Auto-save:', enabled ? `enabled (${this.autoSaveDelay}ms delay)` : 'disabled');
+    
+    // Clear any pending auto-save timeouts if disabling
+    if (!enabled) {
+      this.autoSaveTimeouts.forEach(timeout => clearTimeout(timeout));
+      this.autoSaveTimeouts.clear();
+    }
+  }
+  
+  /**
+   * Get auto-save status
+   */
+  public getAutoSaveStatus(): { enabled: boolean; delay: number } {
+    return {
+      enabled: this.autoSaveEnabled,
+      delay: this.autoSaveDelay
+    };
+  }
+  
+  /**
+   * Get the active tab
+   */
+  public getActiveTab(): EditorTab | null {
+    if (!this.activeTabId) return null;
+    return this.tabs.find(t => t.id === this.activeTabId) || null;
+  }
+  
+  /**
+   * Save the active tab
+   */
+  public async saveActiveTab(): Promise<void> {
+    if (this.activeTabId) {
+      await this.saveTab(this.activeTabId);
+    }
+  }
+  
+  /**
+   * Create a new untitled file
+   */
+  public createNewFile(): void {
+    const untitledCount = this.tabs.filter(t => t.name.startsWith('Untitled')).length;
+    const name = `Untitled-${untitledCount + 1}`;
+    const tab: EditorTab = {
+      id: `untitled-${Date.now()}`,
+      name,
+      path: '',
+      content: '',
+      isDirty: false,
+      language: 'plaintext'
+    };
+    
+    this.tabs.push(tab);
+    this.renderTabs();
+    this.createEditor(tab);
+    this.activateTab(tab.id);
+  }
+  
 }

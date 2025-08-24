@@ -36,9 +36,9 @@ export class VSCodeSCMView {
     // Don't initialize Git decoration provider without a folder
     // It will be initialized when a folder is opened
     
-    // Start auto-refresh
+    // Initial refresh only - no auto-refresh interval
     await this.refresh();
-    this.refreshInterval = setInterval(() => this.refresh(), 2000);
+    // Auto-refresh removed - will refresh on Git operations and file saves only
     
     // Set up global reference
     (window as any).scmView = this;

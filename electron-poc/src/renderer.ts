@@ -4628,8 +4628,16 @@ async function initializeCliToolDetector() {
 initializeCliToolDetector();
 
 // Define global functions for opening folder and cloning repository
-window.openFolder = async () => {
+window.openFolder = async (folderPath?: string) => {
     try {
+        // If a folder path is provided, open it directly
+        if (folderPath) {
+            console.log('[OpenFolder] Opening provided folder:', folderPath);
+            handleOpenFolder(folderPath);
+            return;
+        }
+        
+        // Otherwise, show the folder selection dialog
         console.log('[OpenFolder] Starting folder selection...');
         const result = await window.electronAPI.showOpenDialog({
             properties: ['openDirectory']
@@ -4638,10 +4646,10 @@ window.openFolder = async () => {
         console.log('[OpenFolder] Dialog result:', result);
         
         if (!result.canceled && result.filePaths.length > 0) {
-            const folderPath = result.filePaths[0];
-            console.log('[OpenFolder] Selected folder:', folderPath);
+            const selectedFolder = result.filePaths[0];
+            console.log('[OpenFolder] Selected folder:', selectedFolder);
             // Use the same handleOpenFolder function that File > Open Folder uses
-            handleOpenFolder(folderPath);
+            handleOpenFolder(selectedFolder);
         } else {
             console.log('[OpenFolder] Folder selection was canceled');
         }
@@ -4675,3 +4683,116 @@ window.cloneRepository = async () => {
 };
 
 // Testing Git modification indicator
+
+
+// ========== FILE MENU EVENT HANDLERS ==========
+// Listen for menu events from the main process
+(function setupMenuHandlers() {
+    // Auto-save toggle
+    window.electronAPI.onMenuToggleAutoSave((enabled: boolean) => {
+        if (window.editorTabs) {
+            window.editorTabs.setAutoSave(enabled, 1000); // 1 second delay
+            console.log('[Menu] Auto-save:', enabled ? 'enabled' : 'disabled');
+        }
+    });
+    
+    // Save current file
+    window.electronAPI.onMenuSave(() => {
+        if (window.editorTabs) {
+            // Save the active tab
+            const activeTab = window.editorTabs.getActiveTab();
+            if (activeTab) {
+                window.editorTabs.saveActiveTab();
+            }
+        }
+    });
+    
+    // Save As
+    window.electronAPI.onMenuSaveAs(async () => {
+        if (window.editorTabs) {
+            const activeTab = window.editorTabs.getActiveTab();
+            if (activeTab) {
+                // TODO: Implement save as dialog
+                console.log('[Menu] Save As not yet implemented');
+            }
+        }
+    });
+    
+    // Open file
+    window.electronAPI.onMenuOpenFile((filePath: string) => {
+        if (window.editorTabs && filePath) {
+            window.editorTabs.openFile(filePath);
+        }
+    });
+    
+    // New file
+    window.electronAPI.onMenuNewFile(() => {
+        if (window.editorTabs) {
+            // Create a new untitled file
+            window.editorTabs.createNewFile();
+        }
+    });
+    
+    // Close tab
+    window.electronAPI.onMenuCloseTab(() => {
+        if (window.editorTabs) {
+            const activeTab = window.editorTabs.getActiveTab();
+            if (activeTab) {
+                window.editorTabs.closeTab(activeTab.id);
+            }
+        }
+    });
+    
+    // Close all tabs
+    window.electronAPI.onMenuCloseAllTabs(() => {
+        if (window.editorTabs) {
+            window.editorTabs.closeAllTabs();
+        }
+    });
+    
+    // Open folder
+    window.electronAPI.onMenuOpenFolder((folderPath: string) => {
+        if (folderPath) {
+            window.openFolder(folderPath);
+        }
+    });
+    
+    // Close folder
+    window.electronAPI.onMenuCloseFolder(() => {
+        window.closeFolder();
+    });
+    
+    console.log('[Menu] Event handlers registered');
+})();
+
+
+// Close the current folder
+window.closeFolder = () => {
+    // Clear current folder
+    window.currentOpenedFolder = null;
+    
+    // Clear file explorer
+    if (window.fileExplorer) {
+        const explorerContainer = document.querySelector('.file-explorer-container');
+        if (explorerContainer) {
+            explorerContainer.innerHTML = '';
+        }
+        window.fileExplorer = null;
+    }
+    
+    // Clear git status
+    if (window.scmView) {
+        window.scmView = null;
+        const gitContainer = document.querySelector('.scm-view');
+        if (gitContainer && gitContainer.parentElement) {
+            gitContainer.parentElement.innerHTML = '';
+        }
+    }
+    
+    // Close all editor tabs
+    if (window.editorTabs) {
+        window.editorTabs.closeAllTabs();
+    }
+    
+    console.log('[CloseFolder] Folder closed');
+};

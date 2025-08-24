@@ -704,6 +704,17 @@ const createApplicationMenu = () => {
         },
         { type: 'separator' },
         {
+          label: 'Auto Save',
+          type: 'checkbox',
+          checked: false,
+          click: (menuItem: any) => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-toggle-auto-save', menuItem.checked);
+            }
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'Close Tab',
           accelerator: 'CmdOrCtrl+W',
           click: () => {
@@ -712,9 +723,17 @@ const createApplicationMenu = () => {
             }
           }
         },
+        {
+          label: 'Close All Tabs',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-close-all-tabs');
+            }
+          }
+        },
         { type: 'separator' },
         {
-          label: 'Quit',
+          label: 'Exit',
           accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
           click: () => {
             app.quit();

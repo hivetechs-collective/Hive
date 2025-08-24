@@ -84,11 +84,11 @@ export class GitDecorationProvider extends EventEmitter {
     // Initial Git status load
     await this.updateGitStatus();
     
-    // Set up polling for Git status changes (since we can't use file watchers in renderer)
-    // Poll every 2 seconds for changes
-    this.updateInterval = setInterval(() => {
-      this.scheduleUpdate();
-    }, 2000);
+    // Removed automatic polling - will update on demand when files change or are saved
+    // Updates will be triggered by:
+    // - File saves in the editor
+    // - Git operations (commit, stage, unstage, etc.)
+    // - Manual refresh requests
     
     console.log('[GitDecorationProvider] Initialized with', this.decorations.size, 'decorations');
   }
@@ -275,9 +275,7 @@ export class GitDecorationProvider extends EventEmitter {
     if (this.updateTimer) {
       clearTimeout(this.updateTimer);
     }
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval);
-    }
+    // No interval to clear anymore
     this.decorations.clear();
     this.gitStatus.clear();
     this.removeAllListeners();

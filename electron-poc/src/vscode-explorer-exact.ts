@@ -88,8 +88,8 @@ export class VSCodeExplorerExact {
       
       // Listen for decoration changes
       this.gitDecorationProvider.on('decorationsChanged', (changedPaths: string[]) => {
-        console.log('[VSCodeExplorer] Git decorations changed, re-rendering...');
-        this.render(); // Re-render when Git status changes
+        console.log('[VSCodeExplorer] Git decorations changed, updating in place...');
+        this.updateGitDecorationsInPlace(); // Update decorations without re-rendering
       });
       
       // Initialize the provider
@@ -360,6 +360,10 @@ export class VSCodeExplorerExact {
 
     console.log('[VSCodeExplorer] Rendering tree...');
     
+    // Save scroll position before render
+    const scrollContainer = this.container.querySelector('.monaco-list') as HTMLElement;
+    const scrollTop = scrollContainer?.scrollTop || 0;
+    
     // Get flattened visible nodes
     const flatNodes = await this.getFlattenedNodes();
     
@@ -381,6 +385,14 @@ export class VSCodeExplorerExact {
     
     // Attach event listeners
     this.attachEventListeners();
+    
+    // Restore scroll position after render
+    if (scrollContainer) {
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => {
+        scrollContainer.scrollTop = scrollTop;
+      });
+    }
   }
 
   private createTreeElement(node: TreeNode): HTMLElement {
@@ -740,15 +752,29 @@ export class VSCodeExplorerExact {
   private async toggleExpanded(node: TreeNode) {
     console.log('[VSCodeExplorer] Toggling:', node.name);
     
+    // Save current scroll position before any changes
+    const scrollContainer = this.container.querySelector('.monaco-list') as HTMLElement;
+    const scrollTop = scrollContainer?.scrollTop || 0;
+    
     if (node.collapsibleState === TreeItemCollapsibleState.Collapsed) {
       node.collapsibleState = TreeItemCollapsibleState.Expanded;
       this.expandedNodes.add(node.path);
+      
+      // Lazy load children if not loaded yet
+      if (!node.children) {
+        node.children = await this.loadDirectoryChildren(node);
+      }
     } else {
       node.collapsibleState = TreeItemCollapsibleState.Collapsed;
       this.expandedNodes.delete(node.path);
     }
     
     await this.render();
+    
+    // Restore scroll position after render
+    if (scrollContainer) {
+      scrollContainer.scrollTop = scrollTop;
+    }
   }
 
   private updateSelection() {
@@ -780,6 +806,76 @@ export class VSCodeExplorerExact {
     
     await this.loadRootDirectory();
     await this.render();
+  }
+  
+  public async refreshGitStatus() {
+    // Lightweight refresh that only updates Git decorations
+    // without reloading the entire tree structure
+    console.log('[VSCodeExplorer] Refreshing Git status only...');
+    
+    if (this.gitDecorationProvider) {
+      await this.gitDecorationProvider.refreshStatus();
+      // Update Git decorations in-place without re-rendering the entire tree
+      await this.updateGitDecorationsInPlace();
+    }
+  }
+  
+  private async updateGitDecorationsInPlace() {
+    // Update existing DOM elements with new Git status without rebuilding the tree
+    const rowsContainer = this.container.querySelector('.monaco-list-rows');
+    if (!rowsContainer) return;
+    
+    const rows = rowsContainer.querySelectorAll('.monaco-list-row');
+    rows.forEach((row: Element) => {
+      const path = row.getAttribute('data-path');
+      if (!path) return;
+      
+      const decoration = this.gitDecorationProvider?.getDecoration(path);
+      
+      // Update Git status attribute
+      if (decoration?.badge) {
+        let status = '';
+        switch (decoration.badge) {
+          case 'M': status = 'modified'; break;
+          case 'A': status = 'added'; break;
+          case 'D': status = 'deleted'; break;
+          case 'U': status = 'untracked'; break;
+          case 'R': status = 'renamed'; break;
+        }
+        if (status) {
+          row.setAttribute('data-git-status', status);
+        }
+      } else {
+        row.removeAttribute('data-git-status');
+      }
+      
+      // Update label color
+      const label = row.querySelector('.label-name') as HTMLElement;
+      if (label && decoration?.color) {
+        label.style.color = decoration.color;
+      } else if (label) {
+        label.style.color = '';
+      }
+      
+      // Update or add Git indicator badge
+      let indicator = row.querySelector('.git-indicator') as HTMLElement;
+      if (decoration?.badge) {
+        if (!indicator) {
+          // Create new indicator
+          indicator = document.createElement('span');
+          indicator.className = 'git-indicator';
+          const container = row.querySelector('.monaco-icon-label-container');
+          if (container) {
+            container.appendChild(indicator);
+          }
+        }
+        indicator.textContent = decoration.badge;
+        indicator.className = 'git-indicator ' + (status || '');
+      } else if (indicator) {
+        // Remove indicator if no longer needed
+        indicator.remove();
+      }
+    });
   }
 
   public async collapseAll() {

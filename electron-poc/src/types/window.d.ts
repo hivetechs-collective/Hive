@@ -87,8 +87,15 @@ declare global {
       showMessageBox(options: any): Promise<any>;
       setTitle(title: string): Promise<void>;
       onMenuOpenFolder(callback: (folderPath: string) => void): void;
+      onMenuCloseFolder(callback: () => void): void;
+      onMenuOpenFile(callback: (filePath: string) => void): void;
       onMenuNewFile(callback: () => void): void;
-      onMenuSaveFile(callback: () => void): void;
+      onMenuSave(callback: () => void): void;
+      onMenuSaveAs(callback: () => void): void;
+      onMenuCloseTab(callback: () => void): void;
+      onMenuCloseAllTabs(callback: () => void): void;
+      onMenuToggleAutoSave(callback: (enabled: boolean) => void): void;
+      onMenuResetState(callback: () => void): void;
       
       // Memory Service API
       startMemoryService(): Promise<boolean>;
@@ -124,7 +131,8 @@ declare global {
     currentOpenedFolder?: string;
     
     // Global functions
-    openFolder: () => Promise<void>;
+    openFolder: (folderPath?: string) => Promise<void>;
+    closeFolder: () => void;
     cloneRepository: () => Promise<void>;
   }
 }

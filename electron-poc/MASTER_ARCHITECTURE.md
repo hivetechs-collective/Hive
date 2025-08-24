@@ -1527,6 +1527,117 @@ GET  /api/analytics           - Fetch usage analytics
 
 ## User Interface Architecture
 
+### File Explorer Component
+**Implementation**: `src/vscode-explorer-exact.ts`
+
+#### Architecture
+- **Tree Structure**: Recursive TreeNode interface with parent/child relationships
+- **Virtual Rendering**: Only renders visible nodes for performance
+- **Lazy Loading**: Directory contents loaded on demand
+- **State Management**: Tracks expanded/collapsed nodes
+- **Event System**: Drag & drop, click, double-click handlers
+
+#### Features
+- **File Operations**:
+  - Create new files/folders
+  - Rename via F2 key
+  - Delete via Delete key
+  - Move via drag & drop
+- **Visual Features**:
+  - VS Code exact styling
+  - File type icons with colors
+  - Indentation levels
+  - Chevron indicators for folders
+  - Selection highlighting
+- **Git Integration**:
+  - Status badges (M, A, D, U, R) with colors
+  - Color-coded filenames based on status
+  - Event-driven refresh (no polling)
+  - In-place decoration updates
+  - Integration with GitDecorationProvider
+
+#### Performance Optimizations
+- **No Polling**: Event-driven updates only (no intervals)
+- **In-Place Updates**: Git decorations update without tree rebuild
+- **Scroll Preservation**: Maintains scroll position during renders
+- **Debounced Operations**: 500ms delay for Git refresh on typing
+- **Lazy Loading**: Directory contents loaded on-demand
+- **Cached Lookups**: Git status cached in Map structure
+- **DOM Fragment Rendering**: Batched DOM updates for performance
+
+### File Menu System
+**Implementation**: `src/index.ts` (main process)
+
+#### Menu Structure
+```typescript
+File Menu
+├── New File (Ctrl/Cmd+N)
+├── Open File (Ctrl/Cmd+O)
+├── Open Folder (Ctrl/Cmd+K Ctrl/Cmd+O)
+├── ─────────────
+├── Save (Ctrl/Cmd+S)
+├── Save As (Ctrl/Cmd+Shift+S)
+├── ─────────────
+├── Auto Save [Toggle]
+├── ─────────────
+├── Close Tab (Ctrl/Cmd+W)
+├── Close All Tabs
+├── Close Folder
+└── Exit (Ctrl/Cmd+Q)
+```
+
+#### Auto-Save Feature
+- **Toggle Option**: Checkbox in File menu
+- **Default Delay**: 1000ms after last change
+- **Implementation**: Debounced save on content changes
+- **Visual Feedback**: Dirty indicator (orange dot) on unsaved tabs
+- **Persistence**: Saves editor state before closing
+
+#### IPC Communication
+- Main process sends menu events via IPC
+- Renderer listens via `electronAPI.onMenu*` handlers
+- Bidirectional communication for dialogs
+- Type-safe interfaces in `window.d.ts`
+
+### Editor Tabs Component
+**Implementation**: `src/editor-tabs.ts`
+
+#### Architecture
+- **Tab Management**: Array of tab objects with unique IDs
+- **Monaco Integration**: One Monaco editor instance per tab
+- **Model Management**: Separate text models for each file
+- **State Tracking**: Dirty state, active tab, file paths
+
+#### Features
+- **Multi-file Editing**:
+  - Unlimited open tabs
+  - Tab switching with preserved state
+  - Unsaved changes indicator (orange dot)
+  - Close button per tab
+- **Auto-Save System**:
+  - Configurable delay (default 1000ms)
+  - Debounced save on content changes
+  - Toggle via File menu
+  - Visual feedback for save operations
+- **Git Integration**:
+  - Debounced refresh on content changes (500ms)
+  - Immediate refresh after save operations
+  - Updates Explorer decorations in-place
+  - Triggers SCM view refresh on save
+  - Orange dot indicator for unsaved changes
+- **File Operations**:
+  - Save (Ctrl/Cmd+S)
+  - Save As (not yet implemented)
+  - Close tab (X button or Ctrl/Cmd+W)
+  - Close all tabs
+
+#### Event Handling
+- Content change detection via Monaco API
+- File save triggers via keyboard shortcuts
+- Menu command handlers
+- Tab click/close events
+- Drag & drop support (planned)
+
 ### Component Hierarchy
 ```
 App Root (renderer.ts)
@@ -2212,11 +2323,121 @@ WHERE date(timestamp, 'localtime') = date('now', 'localtime')
 - Supports username/password and tokens
 
 ### Visual Interface
-- File status indicators (M, A, D, U, ?)
+
+#### File Explorer Git Integration
+**Implementation**: `src/vscode-explorer-exact.ts`
+- **Real-time Git Status Indicators**:
+  - Modified (M) - Orange color (#e2c08d)
+  - Added (A) - Green color (#73c991)
+  - Deleted (D) - Red color (#f48771)
+  - Untracked (U) - Green with different shade
+  - Renamed (R) - Blue color (#4fc3f7)
+- **Visual Feedback**:
+  - Badge indicators next to filenames
+  - Color-coded file labels
+  - Data attributes for CSS styling
+  - Tooltips with Git status details
+- **Auto-refresh on Changes**:
+  - Debounced refresh (500ms) on editor changes
+  - Immediate refresh after save operations
+  - Git watcher for external changes
+
+#### Source Control Panel
+**Implementation**: `src/vscode-scm-view.ts`
+- Staged/unstaged file lists with icons
 - Inline diff visualization
-- Commit message input
-- Push/pull notifications
-- Branch selector
+- Commit message input with validation
+- Push/pull/sync buttons with status indicators
+- Branch selector dropdown
+- File action buttons (stage, unstage, discard)
+- **Event-driven refresh** (no polling intervals)
+- Updates triggered by:
+  - File save operations
+  - Git operations (commit, stage, unstage)
+  - Manual refresh button
+  - Folder changes
+
+#### Git Decoration Provider
+**Implementation**: `src/git-decoration-provider.ts`
+- **Centralized Git status management**
+- **Event-driven updates** (no polling)
+- **Caches file status** in Map structure
+- **Provides decoration data**:
+  - Color coding for file labels
+  - Status badges (M, A, D, U, R)
+  - Tooltips with detailed status
+- **Integrates with**:
+  - File Explorer (decorations)
+  - Source Control view (file status)
+- **Update triggers**:
+  - File saves
+  - Git operations
+  - Manual refresh only
+- **In-place DOM updates** without tree rebuilds
+
+### Event-Driven Update Architecture
+
+#### Philosophy
+The application uses a **purely event-driven architecture** with no polling intervals. This ensures optimal performance and prevents unnecessary CPU usage.
+
+#### Recent Performance Fixes (v1.9.0)
+1. **Removed All Polling Intervals**:
+   - ~~SCM view 2-second refresh~~ → Event-driven only
+   - ~~GitDecorationProvider 2-second polling~~ → On-demand updates
+   - Result: 0% idle CPU usage
+
+2. **Fixed Explorer Constant Refresh Bug**:
+   - Problem: Tree collapsed/expanded every 2 seconds
+   - Solution: `updateGitDecorationsInPlace()` method
+   - Result: Stable tree with preserved expansion state
+
+3. **Fixed Scroll Reset Bug**:
+   - Problem: Scroll position reset to top on every update
+   - Solution: Save/restore scroll position in `render()`
+   - Uses `requestAnimationFrame()` for smooth restoration
+
+4. **Fixed Double Folder Dialog**:
+   - Problem: AI tools showed second dialog after folder selection
+   - Solution: `window.openFolder(path?)` accepts optional path
+   - Result: Single unified folder management system
+
+5. **Optimized Git Updates**:
+   - Debounced refresh on typing (500ms)
+   - Immediate refresh on save
+   - In-place DOM updates for decorations
+   - No tree rebuilds for status changes
+
+#### Update Flow
+```
+User Action → Event Trigger → Targeted Update → DOM Manipulation
+```
+
+#### Key Principles
+1. **No Polling**: Zero `setInterval` calls for UI updates
+2. **Targeted Updates**: Only update what changed
+3. **Scroll Preservation**: Maintain user position during updates
+4. **Debounced Operations**: Prevent excessive updates while typing
+5. **In-Place Updates**: Modify existing DOM rather than rebuild
+
+#### Event Sources
+- **File Operations**:
+  - Save (Ctrl/Cmd+S) → Immediate Git refresh
+  - Content change → Debounced refresh (500ms)
+  - Auto-save → Triggered after 1000ms idle
+- **Git Operations**:
+  - Commit/Stage/Unstage → Full refresh
+  - External changes → File watcher triggers
+- **User Interactions**:
+  - Folder expand/collapse → Render with scroll preservation
+  - File selection → Direct DOM update
+  - Tab switches → Monaco editor swap
+
+#### Performance Features
+- **updateGitDecorationsInPlace()**: Updates badges without tree rebuild
+- **requestAnimationFrame()**: Ensures smooth scroll restoration
+- **Document Fragments**: Batch DOM operations
+- **Lazy Loading**: Load directory contents on-demand
+- **Debounced Saves**: Prevent excessive file writes
 
 ---
 
@@ -6068,9 +6289,9 @@ User Action → Main Process → IPC Event → Renderer Handler → Update Globa
 #### 1. Opening a Folder
 **Trigger Points**:
 - Menu: File > Open Folder
-- Welcome screen: "Open Folder" button
-- AI Tool Launch: Folder selection dialog
-- Command: `window.openFolder()`
+- Welcome screen: "Open Folder" button  
+- AI Tool Launch: Automatic via handleOpenFolder
+- Command: `window.openFolder(path?)` - accepts optional path
 
 **Process Flow**:
 ```typescript
@@ -6078,13 +6299,25 @@ User Action → Main Process → IPC Event → Renderer Handler → Update Globa
 Menu/Dialog → dialog.showOpenDialog() → mainWindow.webContents.send('menu-open-folder', path)
 
 // Renderer Process (src/renderer.ts)
-electronAPI.onMenuOpenFolder() → handleOpenFolder(folderPath) → {
+// Fixed: window.openFolder now accepts optional path parameter
+window.openFolder = async (folderPath?: string) => {
+  if (folderPath) {
+    handleOpenFolder(folderPath);  // Direct open without dialog
+  } else {
+    // Show dialog only if no path provided
+    const result = await showOpenDialog();
+    if (result.filePaths[0]) handleOpenFolder(result.filePaths[0]);
+  }
+}
+
+// Central handler for all folder opens
+handleOpenFolder(folderPath) → {
   1. Update currentOpenedFolder = folderPath
   2. Update window.currentOpenedFolder
   3. Update window title
   4. Initialize Git: gitAPI.setFolder(folderPath)
   5. Create/refresh File Explorer
-  6. Update Source Control view
+  6. Update Source Control view (no more welcome screen)
   7. Update status bar (git branch)
   8. Setup file selection handlers
 }

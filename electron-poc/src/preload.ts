@@ -120,6 +120,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onMenuCloseTab: (callback: () => void) => {
     ipcRenderer.on('menu-close-tab', callback);
   },
+  onMenuCloseAllTabs: (callback: () => void) => {
+    ipcRenderer.on('menu-close-all-tabs', callback);
+  },
+  onMenuToggleAutoSave: (callback: (enabled: boolean) => void) => {
+    ipcRenderer.on('menu-toggle-auto-save', (_, enabled) => callback(enabled));
+  },
   onMenuResetState: (callback: () => void) => {
     ipcRenderer.on('menu-reset-state', callback);
   }

@@ -209,6 +209,12 @@ export class FileExplorer {
     this.render();
   }
   
+  public async refreshGitStatus() {
+    // Refresh only Git status without reloading the entire tree
+    // This is more efficient than a full refresh when files are being edited
+    this.render();
+  }
+  
   public setFileTree(tree: FileNode[]) {
     this.fileTree = tree;
     this.updateVisibleNodes();
