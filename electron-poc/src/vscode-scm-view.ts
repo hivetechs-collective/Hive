@@ -201,8 +201,8 @@ export class VSCodeSCMView {
           <div class="scm-status-branch">
             <span class="codicon codicon-git-branch"></span>
             <span>${this.gitStatus.branch}</span>
-            ${this.gitStatus.ahead > 0 ? `<span class="badge">↑${this.gitStatus.ahead}</span>` : ''}
-            ${this.gitStatus.behind > 0 ? `<span class="badge">↓${this.gitStatus.behind}</span>` : ''}
+            ${this.gitStatus.ahead > 0 ? `<span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px;">↑${this.gitStatus.ahead}</span>` : ''}
+            ${this.gitStatus.behind > 0 ? `<span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px;">↓${this.gitStatus.behind}</span>` : ''}
           </div>
           <div class="scm-status-actions">
             <!-- Removed redundant sync and refresh buttons -->
@@ -880,6 +880,23 @@ export class VSCodeSCMView {
       );
       
       console.log('[SCM] Execution result:', result);
+      
+      // Show success notification
+      if (result.success) {
+        notifications.show({
+          title: '✅ Push Successful',
+          message: result.message,
+          type: 'info',
+          duration: 5000
+        });
+      } else {
+        notifications.show({
+          title: '⚠️ Push Partially Successful',
+          message: result.message,
+          type: 'warning',
+          duration: 0 // Keep visible until dismissed
+        });
+      }
       
       // Refresh status after successful push
       await this.refresh();
