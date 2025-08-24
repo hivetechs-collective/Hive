@@ -10,9 +10,10 @@ import { GitDecorationProvider } from './git-decoration-provider';
 import { GitGraphView } from './git-graph';
 import { notifications } from './notification';
 import { GitErrorHandler, GitErrorOptions } from './git-error-handler';
-// Temporarily disabled - needs to be moved to main process
-// import { GitRepositoryAnalyzer } from './git-repository-analyzer';
-// import { GitChunkedPush, PushProgress } from './git-chunked-push';
+import { GitPushStrategyAnalyzer } from './git-push-strategy';
+import { GitPushDialog } from './git-push-dialog';
+import { GitPushExecutor } from './git-push-executor';
+import { GitConsensusAdvisor } from './git-consensus-advisor';
 
 interface ResourceGroup {
   id: string;
@@ -769,10 +770,10 @@ export class VSCodeSCMView {
   }
 
   public async push() {
-    console.log('[SCM] Push button clicked');
+    console.log('[SCM] Smart push button clicked');
     
     // Check if gitAPI is available
-    if (!window.gitAPI || !window.gitAPI.push) {
+    if (!window.gitAPI) {
       alert('Git API not available!');
       console.error('[SCM] window.gitAPI:', window.gitAPI);
       return;
@@ -794,81 +795,112 @@ export class VSCodeSCMView {
       return;
     }
     
-    // Show loading notification
-    const pushMessage = !this.gitStatus?.hasUpstream ? 
-      `Publishing branch ${branch} to remote...` : 
-      `Pushing ${aheadCount} commit(s) to remote...`;
-    
-    console.log('[SCM] Showing push notification:', pushMessage);
-    const notificationId = notifications.show({
-      title: !this.gitStatus?.hasUpstream ? 'Publishing Branch' : 'Git Push',
-      message: pushMessage,
-      type: 'loading',
-      duration: 0 // Persistent until updated
-    });
-
     try {
-      console.log('[SCM] About to call gitAPI.push()');
+      // Get repository stats
+      console.log('[SCM] Getting repository stats...');
+      const stats = await (window.gitAPI as any).getRepoStats();
+      console.log('[SCM] Repository stats:', stats);
       
-      // Show progress with regular updates
-      let progressInterval = setInterval(() => {
-        const currentMessage = document.querySelector('.notification-message');
-        if (currentMessage && currentMessage.textContent) {
-          const dots = (currentMessage.textContent.match(/\./g) || []).length;
-          if (dots < 3) {
-            currentMessage.textContent += '.';
-          } else {
-            currentMessage.textContent = currentMessage.textContent.replace(/\.+$/, '');
-          }
-        }
-      }, 500);
+      // Analyze and get strategy recommendations
+      const analysis = GitPushStrategyAnalyzer.analyzeRepository(stats, this.gitStatus!);
+      console.log('[SCM] Analysis result:', analysis);
       
-      // Add timeout for push operation - 2 minutes for large repos
-      const pushPromise = window.gitAPI.push();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Push operation timed out after 2 minutes. This may be due to repository size exceeding GitHub\'s 2GB limit.')), 120000)
+      // Get intelligent recommendation (simulated AI analysis for safety)
+      // This uses the same logic the consensus AI would use, but doesn't interfere
+      // with the actual consensus engine or AI Helpers
+      console.log('[SCM] Getting intelligent strategy recommendation...');
+      
+      const aiAdvice = await GitConsensusAdvisor.getStrategyAdvice(
+        stats, 
+        this.gitStatus
       );
       
-      try {
-        await Promise.race([pushPromise, timeoutPromise]);
-        clearInterval(progressInterval);
-        
-        console.log('[SCM] Push completed, refreshing status...');
-        await this.refresh();
-        console.log('[SCM] Status refreshed, new ahead count:', this.gitStatus?.ahead);
-        
-        // Update to success notification
-        const successMessage = !this.gitStatus?.hasUpstream ? 
-          `Successfully published ${branch} to remote` :
-          `Successfully pushed ${aheadCount} commit(s) to ${branch}`;
-          
-        notifications.update(notificationId, {
-          title: 'Push Successful',
-          message: successMessage,
-          type: 'success',
-          duration: 3000
-        });
-      } catch (innerError) {
-        clearInterval(progressInterval);
-        throw innerError;
+      if (aiAdvice) {
+        console.log('[SCM] Intelligent recommendation:', aiAdvice);
       }
+      
+      // Get available strategies
+      let strategies = GitPushStrategyAnalyzer.getPushStrategies(analysis, this.gitStatus);
+      
+      // If we have AI advice, enhance the recommendation message
+      if (aiAdvice) {
+        // Find the strategy that matches the AI recommendation
+        const recommendedIndex = strategies.findIndex(s => 
+          s.label.toLowerCase().includes(aiAdvice.recommendedStrategy.toLowerCase().split(' ')[0])
+        );
+        
+        if (recommendedIndex >= 0) {
+          // Clear all other recommendations
+          strategies.forEach(s => s.recommended = false);
+          
+          // Mark the AI-recommended strategy
+          strategies[recommendedIndex].recommended = true;
+          strategies[recommendedIndex].confidence = aiAdvice.confidence;
+          
+          // Add AI reasoning to the description
+          const originalDesc = strategies[recommendedIndex].description;
+          strategies[recommendedIndex].description = `${originalDesc}\n\n🤖 AI Analysis: ${aiAdvice.reasoning}`;
+          
+          // Add risks if provided
+          if (aiAdvice.risks && aiAdvice.risks.length > 0) {
+            strategies[recommendedIndex].cons = [
+              ...(strategies[recommendedIndex].cons || []),
+              ...aiAdvice.risks
+            ];
+          }
+        }
+        
+        // Re-sort with AI confidence
+        strategies.sort((a, b) => b.confidence - a.confidence);
+      }
+      
+      console.log('[SCM] Available strategies:', strategies);
+      
+      // Create explanation text
+      const explanation = aiAdvice 
+        ? `🤖 Intelligent Analysis: ${aiAdvice.reasoning}`
+        : `Repository: ${analysis.totalSize} | ${analysis.commitCount} commits | ${analysis.recommendation}`;
+      
+      // Show strategy selection dialog
+      const selectedStrategy = await GitPushDialog.show(analysis, strategies, explanation);
+      
+      if (!selectedStrategy) {
+        console.log('[SCM] User cancelled strategy selection');
+        return;
+      }
+      
+      console.log('[SCM] User selected strategy:', selectedStrategy);
+      
+      // Execute the selected strategy  
+      const result = await GitPushExecutor.execute(
+        selectedStrategy, 
+        analysis,
+        window.gitAPI,
+        this.gitStatus
+      );
+      
+      console.log('[SCM] Execution result:', result);
+      
+      // Refresh status after successful push
+      await this.refresh();
+      
     } catch (error: any) {
-      console.error('[SCM] Push failed:', error);
+      console.error('[SCM] Smart push failed:', error);
       
       // Parse the error to get structured information
       const errorInfo = GitErrorHandler.parseError(error);
       
-      // Update notification with parsed error
-      notifications.update(notificationId, {
+      // Show error notification
+      notifications.show({
         title: errorInfo.title,
         message: errorInfo.message,
         type: 'error',
-        duration: errorInfo.type === 'size-limit' ? 0 : 5000 // Keep size limit errors visible
+        duration: errorInfo.type === 'size-limit' ? 0 : 5000
       });
       
       // Show action buttons for errors with actions
       if (errorInfo.actions && errorInfo.actions.length > 0) {
-        this.showErrorActions(errorInfo, notificationId);
+        this.showErrorActions(errorInfo, '');
       }
     }
   }

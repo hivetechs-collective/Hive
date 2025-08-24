@@ -156,7 +156,9 @@ contextBridge.exposeInMainWorld('gitAPI', {
   getFileDiff: (commitHash: string, filePath: string) => ipcRenderer.invoke('git-file-diff', commitHash, filePath),
   setFolder: (folderPath: string) => ipcRenderer.invoke('git-set-folder', folderPath),
   getSubmoduleStatus: (submodulePath: string) => ipcRenderer.invoke('git-submodule-status', submodulePath),
-  getSubmoduleDiff: (submodulePath: string) => ipcRenderer.invoke('git-submodule-diff', submodulePath)
+  getSubmoduleDiff: (submodulePath: string) => ipcRenderer.invoke('git-submodule-diff', submodulePath),
+  pushChunked: () => ipcRenderer.invoke('git-push-chunked'),
+  getRepoStats: () => ipcRenderer.invoke('git-repo-stats')
 });
 
 // Helper to safely invoke IPC calls and prevent Event objects from being thrown

@@ -55,6 +55,13 @@ declare global {
       getSubmoduleDiff(submodulePath: string): Promise<string>;
       analyzeRepository?(): Promise<any>;
       openMergeTool?(): Promise<void>;
+      pushChunked(): Promise<string>;
+      getRepoStats(): Promise<{
+        totalSize: string;
+        largestPack: string;
+        commitCount: number;
+        recommendation: string;
+      }>;
     };
     
     // Terminal API

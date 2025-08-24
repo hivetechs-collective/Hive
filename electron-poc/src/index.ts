@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItem, shell } from 'electron';
+import { GitChunkedPushMain } from './git-chunked-push-main';
 
 // Set the app name immediately
 app.setName('Hive Consensus');
@@ -288,6 +289,61 @@ const registerGitHandlers = () => {
       }
     } catch (error: any) {
       logger.error('[Main] git-push failed:', error);
+      throw error;
+    }
+  });
+  
+  // Chunked push for large repositories
+  ipcMain.handle('git-push-chunked', async () => {
+    logger.info('[Main] git-push-chunked IPC called');
+    if (!gitManager) {
+      throw new Error('No folder open');
+    }
+    try {
+      // Get the repository path from the git manager
+      let repoPath: string;
+      if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+        repoPath = gitManager.getRepoPath();
+      } else {
+        // Fallback to accessing the property directly
+        repoPath = (gitManager as any).repoPath;
+      }
+      
+      logger.info('[Main] Using repository path for chunked push:', repoPath);
+      const result = await GitChunkedPushMain.pushInBatches(repoPath);
+      logger.info('[Main] git-push-chunked result:', result);
+      if (!result.success) {
+        throw new Error(result.message);
+      }
+      return result.message;
+    } catch (error: any) {
+      logger.error('[Main] git-push-chunked failed:', error);
+      throw error;
+    }
+  });
+  
+  // Get repository statistics
+  ipcMain.handle('git-repo-stats', async () => {
+    logger.info('[Main] git-repo-stats IPC called');
+    if (!gitManager) {
+      throw new Error('No folder open');
+    }
+    try {
+      // Get the repository path from the git manager
+      let repoPath: string;
+      if ('getRepoPath' in gitManager && typeof gitManager.getRepoPath === 'function') {
+        repoPath = gitManager.getRepoPath();
+      } else {
+        // Fallback to accessing the property directly
+        repoPath = (gitManager as any).repoPath;
+      }
+      
+      logger.info('[Main] Using repository path for stats:', repoPath);
+      const stats = await GitChunkedPushMain.getRepoStats(repoPath);
+      logger.info('[Main] Repository stats:', stats);
+      return stats;
+    } catch (error: any) {
+      logger.error('[Main] git-repo-stats failed:', error);
       throw error;
     }
   });
