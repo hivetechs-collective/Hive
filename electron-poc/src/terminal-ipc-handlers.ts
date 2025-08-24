@@ -11,9 +11,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-// Initialize managers
-const processManager = new ProcessManager();
-const ttydManager = new TTYDManager(processManager);
+// Managers will be initialized when registerTerminalHandlers is called
+let processManager: ProcessManager;
+let ttydManager: TTYDManager;
 
 // Track active terminal numbers to reuse closed ones
 const activeTerminalNumbers = new Set<number>();
@@ -37,8 +37,10 @@ function getNextTerminalNumber(): number {
 
 /**
  * Register all terminal-related IPC handlers
+ * @param mainWindow - The main browser window
+ * @param processManagerInstance - The ProcessManager instance from the main process
  */
-export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): void {
+export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow, processManagerInstance: ProcessManager): void {
   console.log('[TerminalIPC] Registering TTYD terminal handlers');
   logger.info('[TerminalIPC] Registering TTYD terminal handlers');
   
@@ -48,6 +50,11 @@ export function registerTerminalHandlers(mainWindow: Electron.BrowserWindow): vo
     logger.info('[TerminalIPC] Terminal IPC handlers already registered, skipping');
     return;
   }
+  
+  // Initialize managers with the shared ProcessManager instance
+  processManager = processManagerInstance;
+  ttydManager = new TTYDManager(processManager);
+  
   handlersRegistered = true;
   mainWindowRef = mainWindow;
   console.log('[TerminalIPC] Handlers registered, mainWindow set');

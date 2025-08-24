@@ -146,17 +146,26 @@ export class PortManager {
     let currentPort = port;
     let portToUse: number | null = null;
     
+    // Check if preferred port is already allocated to another service
+    const isPortAllocatedToAnother = Array.from(this.allocatedPorts.values()).includes(currentPort);
+    
     // Check preferred port first
-    if (await this.isPortAvailable(currentPort)) {
+    if (!isPortAllocatedToAnother && await this.isPortAvailable(currentPort)) {
       portToUse = currentPort;
       logger.info(`[PortManager] Port ${currentPort} is available for ${serviceName}`);
     } else {
-      logger.info(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
+      if (isPortAllocatedToAnother) {
+        logger.info(`[PortManager] Port ${currentPort} is allocated to another service, finding next available port...`);
+      } else {
+        logger.info(`[PortManager] Port ${currentPort} is in use, finding next available port...`);
+      }
       
       // Try alternative ports if provided
       if (alternativePorts && alternativePorts.length > 0) {
         for (const altPort of alternativePorts) {
-          if (await this.isPortAvailable(altPort)) {
+          // Check if this port is allocated to another service
+          const isAltPortAllocated = Array.from(this.allocatedPorts.values()).includes(altPort);
+          if (!isAltPortAllocated && await this.isPortAvailable(altPort)) {
             portToUse = altPort;
             logger.info(`[PortManager] Using alternative port ${altPort} for ${serviceName}`);
             break;
@@ -170,7 +179,9 @@ export class PortManager {
         const maxPort = port + 100; // Search up to 100 ports ahead
         
         while (currentPort < maxPort) {
-          if (await this.isPortAvailable(currentPort)) {
+          // Check if this port is allocated to another service
+          const isCurrentPortAllocated = Array.from(this.allocatedPorts.values()).includes(currentPort);
+          if (!isCurrentPortAllocated && await this.isPortAvailable(currentPort)) {
             portToUse = currentPort;
             logger.info(`[PortManager] Found available port ${currentPort} for ${serviceName}`);
             break;

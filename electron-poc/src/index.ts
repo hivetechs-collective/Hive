@@ -34,6 +34,10 @@ if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+// Single source of truth for all process and port management
+// Initialize early so it's available for all components
+const processManager = new ProcessManager();
+
 let db: Database | null = null;
 let mainWindow: BrowserWindow | null = null;
 
@@ -173,9 +177,9 @@ const createWindow = (show: boolean = true): BrowserWindow => {
   // Open the DevTools.
   // mainWindow.webContents.openDevTools(); // Disabled to prevent warning overlay
   
-  // Register terminal handlers (needs mainWindow reference)
+  // Register terminal handlers with the shared ProcessManager
   // This is safe to call multiple times as it updates the window reference
-  registerTerminalHandlers(mainWindow);
+  registerTerminalHandlers(mainWindow, processManager);
   
   // Create application menu
   createApplicationMenu();
@@ -874,8 +878,7 @@ const createApplicationMenu = () => {
 };
 
 // ========== MEMORY SERVICE INTEGRATION ==========
-// Memory Service management - uses ProcessManager for production-ready management
-const processManager = new ProcessManager();
+// Memory Service management - uses the shared ProcessManager instance
 let memoryServicePort = 3457;
 let websocketBackendPort = 8765; // Dynamic port for WebSocket backend
 

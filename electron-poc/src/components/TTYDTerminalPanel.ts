@@ -501,7 +501,16 @@ export class TTYDTerminalPanel {
         if (this.activeTabId === tabId) {
             const remainingTabs = Array.from(this.tabs.keys());
             if (remainingTabs.length > 0) {
-                this.switchToTab(remainingTabs[0]);
+                // Switch to the last tab (most recently created) instead of first (System Log)
+                // But prefer non-system-log tabs
+                const nonSystemLogTabs = remainingTabs.filter(id => id !== 'system-log');
+                if (nonSystemLogTabs.length > 0) {
+                    // Switch to the last non-system-log tab
+                    this.switchToTab(nonSystemLogTabs[nonSystemLogTabs.length - 1]);
+                } else {
+                    // Only switch to System Log if it's the only tab left
+                    this.switchToTab(remainingTabs[0]);
+                }
             }
         }
         
