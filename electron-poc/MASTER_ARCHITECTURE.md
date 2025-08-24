@@ -123,6 +123,106 @@ Electron Main Process (Orchestrator)
     └── Git Status Monitor
 ```
 
+### ProcessManager - Central Control Tower (v2.1.0)
+**Location**: `src/utils/ProcessManager.ts`
+**Initialization**: Created as singleton at app start in `src/index.ts`
+
+The ProcessManager serves as the single source of truth for all process and port management across the application. It acts as the "control tower" coordinating all services, ports, and inter-process communication.
+
+#### Architecture Principles
+- **SINGLE INSTANCE**: Only ONE ProcessManager instance exists, created at app initialization
+- **CENTRALIZED PORT MANAGEMENT**: All port allocations go through ProcessManager's PortManager
+- **NO DUPLICATE INSTANCES**: All components receive the shared ProcessManager instance
+- **EVENT-DRIVEN COORDINATION**: Real-time status updates via EventEmitter pattern
+
+#### Key Components
+
+##### 1. ProcessManager Singleton
+```typescript
+// Created once at app start (src/index.ts:39)
+const processManager = new ProcessManager();
+
+// Passed to all components that need it:
+- StartupOrchestrator receives it in constructor
+- Terminal handlers receive it via registerTerminalHandlers(mainWindow, processManager)
+- Memory Service uses it for port allocation
+- WebSocket Backend uses it for lifecycle management
+```
+
+##### 2. PortManager Integration
+**Location**: `src/utils/PortManager.ts`
+
+PortManager is a static utility class used by ProcessManager to:
+- Track ALL allocated ports globally in a Map
+- Check port availability both physically and in allocation registry
+- Prevent port conflicts between services
+- Automatically find next available port when conflicts occur
+
+```typescript
+class PortManager {
+  private static allocatedPorts: Map<string, number> = new Map();
+  
+  static async allocatePort(config: PortConfig): Promise<number> {
+    // 1. Check if port is already allocated to ANY service
+    const isPortAllocatedToAnother = Array.from(this.allocatedPorts.values()).includes(port);
+    
+    // 2. Check if port is physically available
+    if (!isPortAllocatedToAnother && await this.isPortAvailable(port)) {
+      // 3. Allocate and track the port
+      this.allocatedPorts.set(serviceName, port);
+      return port;
+    }
+    
+    // 4. Find next available port (7100, 7101, 7102, etc.)
+    // Continues until finding both unallocated AND available port
+  }
+}
+```
+
+##### 3. TTYD Terminal Management
+**Location**: `src/services/TTYDManager.ts`
+
+TTYDManager receives the shared ProcessManager instance and uses PortManager for port allocation:
+- Each terminal gets a unique port (7100, 7101, 7102, etc.)
+- Port conflicts are automatically resolved
+- Failed terminals properly release their ports
+
+```typescript
+// Terminal handler registration with shared ProcessManager
+registerTerminalHandlers(mainWindow: BrowserWindow, processManager: ProcessManager) {
+  // Initialize TTYDManager with shared ProcessManager
+  ttydManager = new TTYDManager(processManager);
+}
+```
+
+#### Process Lifecycle Management
+
+##### Service Registration
+```typescript
+processManager.registerProcess('memory-service', {
+  scriptPath: memoryServicePath,
+  port: 3457,
+  alternativePorts: Array.from({ length: 100 }, (_, i) => 3457 + i),
+  env: { /* environment variables */ }
+});
+```
+
+##### Service Startup Flow
+1. StartupOrchestrator requests service start
+2. ProcessManager allocates port via PortManager
+3. Process spawned with allocated port
+4. ProcessManager monitors port availability
+5. Status events emitted to StartupOrchestrator
+6. Visual progress updated in splash screen
+
+##### Port Conflict Resolution
+When multiple services request the same port:
+1. First service gets preferred port (e.g., 7100)
+2. Second service automatically gets next available (7101)
+3. Third service gets 7102, and so on
+4. All allocations tracked in central registry
+5. Released ports become available for reuse
+
 ### Startup Orchestrator System (v2.0.0 - Event-Driven Architecture)
 **Location**: `src/startup/StartupOrchestrator.ts`
 
