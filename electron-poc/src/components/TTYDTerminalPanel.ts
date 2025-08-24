@@ -70,8 +70,14 @@ export class TTYDTerminalPanel {
         // Listen for terminal creation from main process
         window.terminalAPI.onTerminalCreated((terminalInfo: any) => {
             console.log('[TTYDTerminalPanel] Terminal created event:', terminalInfo);
-            // Don't add tab here - we handle it in createTerminalTab to avoid duplicates
-            // This event is mainly for external terminal creation (e.g., from AI tools)
+            // Check if this tab already exists to avoid duplicates
+            if (!this.tabs.has(terminalInfo.id)) {
+                // This is from an external source (like AI CLI tools) - add the tab
+                console.log('[TTYDTerminalPanel] Adding tab for external terminal:', terminalInfo.id);
+                this.addTerminalTab(terminalInfo);
+            } else {
+                console.log('[TTYDTerminalPanel] Tab already exists for:', terminalInfo.id);
+            }
         });
         
         // Listen for terminal ready events
