@@ -202,6 +202,14 @@ export class TTYDTerminalPanel {
         const terminalId = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         console.log('[TTYDTerminalPanel] createTerminalTab called with toolId:', toolId, 'command:', command, 'env:', env);
         
+        // Mark that we're creating this terminal internally to avoid duplicate tabs
+        this.tabs.set(terminalId, {
+            id: terminalId,
+            title: 'Creating...',
+            type: 'terminal',
+            isActive: false
+        } as TTYDTerminalTab);
+        
         try {
             console.log('[TTYDTerminalPanel] Calling window.terminalAPI.createTerminalProcess...');
             // Request terminal creation from main process
@@ -217,13 +225,19 @@ export class TTYDTerminalPanel {
             
             if (result.success && result.terminal) {
                 console.log('[TTYDTerminalPanel] Terminal created successfully:', result.terminal);
-                // Add the terminal tab here since we control when it's called
+                // Remove the placeholder
+                this.tabs.delete(terminalId);
+                // Add the real terminal tab
                 this.addTerminalTab(result.terminal);
             } else {
                 console.error('[TTYDTerminalPanel] Failed to create terminal:', result.error);
+                // Remove the placeholder on failure
+                this.tabs.delete(terminalId);
             }
         } catch (error) {
             console.error('[TTYDTerminalPanel] Error creating terminal:', error);
+            // Remove the placeholder on error
+            this.tabs.delete(terminalId);
         }
     }
     
