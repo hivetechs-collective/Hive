@@ -102,12 +102,12 @@ export class TTYDTerminalPanel {
             id: 'system-log',
             title: '📊 System Log',
             type: 'system-log',
-            isActive: true
+            isActive: false  // System Log should NOT be active by default
         };
 
         // Create tab button
         const tabBtn = document.createElement('button');
-        tabBtn.className = 'ttyd-tab-btn active';
+        tabBtn.className = 'ttyd-tab-btn';  // Remove 'active' class
         tabBtn.id = `tab-btn-${tab.id}`;  // Add ID for System Log tab too
         tabBtn.innerHTML = `
             <span>${tab.title}</span>
@@ -119,7 +119,7 @@ export class TTYDTerminalPanel {
         // Create content area for system log
         const content = document.createElement('div');
         content.id = `isolated-content-${tab.id}`;
-        content.className = 'isolated-tab-content active';
+        content.className = 'isolated-tab-content';  // Remove 'active' class
         content.style.cssText = `
             position: absolute;
             top: 0;
@@ -127,7 +127,7 @@ export class TTYDTerminalPanel {
             right: 0;
             bottom: 0;
             background: #1e1e1e;
-            display: block;
+            display: none;  // Hide by default since it's not active
             overflow-y: auto;
             padding: 10px;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -142,7 +142,7 @@ export class TTYDTerminalPanel {
         
         tab.element = content;
         this.tabs.set(tab.id, tab);
-        this.activeTabId = tab.id;
+        // Don't set activeTabId here - let the first terminal or AI tool take focus
         
         // Set up console capture for system log
         this.setupConsoleCapture(content);
