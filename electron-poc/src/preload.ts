@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showSaveDialog: (options: any) => ipcRenderer.invoke('show-save-dialog', options),
   showMessageBox: (options: any) => ipcRenderer.invoke('show-message-box', options),
   setTitle: (title: string) => ipcRenderer.invoke('set-title', title),
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   
   // Memory Service API
   startMemoryService: () => ipcRenderer.invoke('memory-service-start'),

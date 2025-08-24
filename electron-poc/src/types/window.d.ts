@@ -53,6 +53,8 @@ declare global {
       sync(): Promise<void>;
       getSubmoduleStatus(submodulePath: string): Promise<string>;
       getSubmoduleDiff(submodulePath: string): Promise<string>;
+      analyzeRepository?(): Promise<any>;
+      openMergeTool?(): Promise<void>;
     };
     
     // Terminal API
@@ -97,6 +99,7 @@ declare global {
       onMenuCloseAllTabs(callback: () => void): void;
       onMenuToggleAutoSave(callback: (enabled: boolean) => void): void;
       onMenuResetState(callback: () => void): void;
+      openExternal?(url: string): Promise<void>;
       
       // Memory Service API
       startMemoryService(): Promise<boolean>;

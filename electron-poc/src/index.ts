@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItem } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog, MenuItem, shell } from 'electron';
 
 // Set the app name immediately
 app.setName('Hive Consensus');
@@ -485,6 +485,16 @@ const registerDialogHandlers = () => {
   ipcMain.handle('show-message-box', async (_, options: any) => {
     const result = await dialog.showMessageBox(mainWindow!, options);
     return result;
+  });
+  
+  ipcMain.handle('open-external', async (_, url: string) => {
+    try {
+      await shell.openExternal(url);
+      return true;
+    } catch (error) {
+      console.error('Failed to open external URL:', error);
+      return false;
+    }
   });
   
   ipcMain.handle('show-input-dialog', async (_, title: string, defaultValue?: string) => {
