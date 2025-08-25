@@ -212,7 +212,7 @@ export class GitChunkedPushMain {
           try {
             const result = await execAsync(
               `git rev-list --objects origin/${gitStatus.branch}..HEAD 2>/dev/null | git cat-file --batch-check='%(objectsize) %(objectname)' | awk '{sum+=$1} END {print sum}'`,
-              { cwd: repoPath, shell: true }
+              { cwd: repoPath, shell: '/bin/bash' }
             );
             pushObjects = result.stdout;
           } catch (e) {
@@ -220,7 +220,7 @@ export class GitChunkedPushMain {
             // Try counting just the commits we're ahead
             const result = await execAsync(
               `git rev-list HEAD~${gitStatus.ahead}..HEAD --objects | git cat-file --batch-check='%(objectsize) %(objectname)' | awk '{sum+=$1} END {print sum}'`,
-              { cwd: repoPath, shell: true }
+              { cwd: repoPath, shell: '/bin/bash' }
             );
             pushObjects = result.stdout;
           }

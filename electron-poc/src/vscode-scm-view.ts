@@ -833,7 +833,8 @@ export class VSCodeSCMView {
       
       // Override analysis if nothing to push
       if (aheadCount === 0) {
-        analysis.recommendation = 'No commits to push. Use Custom Command for special operations.';
+        // Keep the recommendation but update the reasoning
+        analysis.reasoning = ['No commits to push', 'Use Custom Command for special operations like cross-branch pushing'];
         analysis.commitCount = 0;
         console.log('[SCM] Overriding analysis for 0 commits ahead scenario');
       }
@@ -1187,7 +1188,7 @@ export class VSCodeSCMView {
       console.log('[SCM] Available branches:', branchData);
       
       // Handle both array format and object format
-      const branches = Array.isArray(branchData) ? branchData : (branchData.all || []);
+      const branches = Array.isArray(branchData) ? branchData : ((branchData as any).all || []);
       
       if (!branches || branches.length === 0) {
         alert('No branches available');
