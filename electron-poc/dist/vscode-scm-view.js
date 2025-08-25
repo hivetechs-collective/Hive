@@ -157,9 +157,34 @@ class VSCodeSCMView {
         }
         // First render - create the entire structure
         this.container.innerHTML = `
-      <div class="scm-view">
+      <div class="scm-view" style="
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 22px);
+        overflow: hidden;
+      ">
+        <!-- Branch Status Bar - Always visible at top -->
+        <div class="scm-status-bar" style="
+          flex-shrink: 0;
+          border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);
+        ">
+          <div class="scm-status-branch" style="position: relative;">
+            <span class="codicon codicon-git-branch"></span>
+            <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView?.showBranchSwitcher?.()">${this.gitStatus.branch}</span>
+            <span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: ${(this.gitStatus.ahead || 0) > 0 ? 'pointer' : 'default'};" 
+                  onclick="${(this.gitStatus.ahead || 0) > 0 ? 'window.scmView?.push()' : ''}"
+                  title="${(this.gitStatus.ahead || 0) > 0 ? 'Click to push' : 'Nothing to push'}">↑${this.gitStatus.ahead || 0}</span>
+            <span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px; cursor: ${(this.gitStatus.behind || 0) > 0 ? 'pointer' : 'default'};" 
+                  onclick="${(this.gitStatus.behind || 0) > 0 ? 'window.scmView?.pullAndPush()' : ''}"
+                  title="${(this.gitStatus.behind || 0) > 0 ? 'Click to sync (pull then push)' : 'Up to date'}">↓${this.gitStatus.behind || 0}</span>
+          </div>
+          <div class="scm-status-actions">
+            <!-- Removed redundant sync and refresh buttons -->
+          </div>
+        </div>
+
         <!-- Header with VS Code-style toolbar -->
-        <div class="scm-view-header">
+        <div class="scm-view-header" style="flex-shrink: 0;">
           <div class="scm-provider-container">
             <div class="scm-toolbar">
               <button class="scm-toolbar-button" title="Refresh" onclick="window.scmView?.refresh()">
@@ -183,7 +208,7 @@ class VSCodeSCMView {
         </div>
 
         <!-- Commit Input -->
-        <div class="scm-input-container">
+        <div class="scm-input-container" style="flex-shrink: 0;">
           <div class="scm-editor">
             <textarea 
               class="scm-input" 
@@ -198,40 +223,26 @@ class VSCodeSCMView {
           </div>
         </div>
 
-        <!-- Resource Groups -->
-        <div class="scm-view-content" style="
-          flex: 1 1 auto;
+        <!-- All scrollable content including resource groups and commits -->
+        <div style="
+          flex: 1;
           overflow-y: auto;
           overflow-x: hidden;
           min-height: 0;
-          max-height: calc(100vh - 400px);
         ">
-          ${groups.map(group => this.renderResourceGroup(group)).join('')}
-        </div>
-        
-        <!-- Git Graph Section -->
-        <div id="git-graph-container" style="
-          border-top: 1px solid var(--vscode-sideBarSectionHeader-border, #1e1e1e);
-          height: 300px;
-          flex-shrink: 0;
-          overflow: hidden;
-        "></div>
-
-        <!-- Status Bar -->
-        <div class="scm-status-bar">
-          <div class="scm-status-branch" style="position: relative;">
-            <span class="codicon codicon-git-branch"></span>
-            <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView?.showBranchSwitcher?.()">${this.gitStatus.branch}</span>
-            <span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: ${(this.gitStatus.ahead || 0) > 0 ? 'pointer' : 'default'};" 
-                  onclick="${(this.gitStatus.ahead || 0) > 0 ? 'window.scmView?.push()' : ''}"
-                  title="${(this.gitStatus.ahead || 0) > 0 ? 'Click to push' : 'Nothing to push'}">↑${this.gitStatus.ahead || 0}</span>
-            <span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px; cursor: ${(this.gitStatus.behind || 0) > 0 ? 'pointer' : 'default'};" 
-                  onclick="${(this.gitStatus.behind || 0) > 0 ? 'window.scmView?.pullAndPush()' : ''}"
-                  title="${(this.gitStatus.behind || 0) > 0 ? 'Click to sync (pull then push)' : 'Up to date'}">↓${this.gitStatus.behind || 0}</span>
+          <!-- Resource Groups -->
+          <div class="scm-view-content">
+            ${groups.map(group => this.renderResourceGroup(group)).join('')}
           </div>
-          <div class="scm-status-actions">
-            <!-- Removed redundant sync and refresh buttons -->
-          </div>
+          
+          <!-- Git Graph Container for commits -->
+          <div id="git-graph-container" style="
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-bottom: 5px;
+          "></div>
         </div>
       </div>
     `;
@@ -353,7 +364,11 @@ class VSCodeSCMView {
           </div>
         </div>
         ${isExpanded ? `
-          <div class="scm-resource-group-content">
+          <div class="scm-resource-group-content" style="
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+          ">
             ${group.resources.map(resource => this.renderResource(resource, group.id)).join('')}
           </div>
         ` : ''}

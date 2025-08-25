@@ -758,6 +758,12 @@ body {
   padding: 8px;
 }
 
+/* Remove padding for git content to eliminate gaps */
+#git-content {
+  padding: 0;
+  overflow: hidden;
+}
+
 /* Sidebar Divider */
 .sidebar-divider {
   width: 32px;

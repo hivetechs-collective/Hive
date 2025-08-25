@@ -2505,28 +2505,83 @@ git gc --prune=now --aggressive
 
 #### Source Control Panel
 **Implementation**: `src/vscode-scm-view.ts`
-- **File Groups**:
-  - Staged Changes section
-  - Changes section (unstaged modifications)
-  - Untracked section (new untracked files)
-- **File Status Display**:
-  - Proper handling of `working_dir` property from simple-git
-  - Fallback support for `working` property
-  - Accurate grouping based on index and working tree status
-  - TypeScript interface updated to include `working_dir?: string`
-- **Action Buttons**:
+
+##### Layout Architecture
+The Source Control panel uses a sophisticated flexbox layout to ensure all content remains visible and accessible:
+
+```typescript
+// Main container structure
+<div class="scm-view" style="
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 22px);  // Accounts for bottom status bar
+  overflow: hidden;
+">
+  <!-- Fixed sections at top -->
+  <div class="scm-status-bar">    // Branch info & sync indicators
+  <div class="scm-view-header">    // Toolbar with Git actions
+  <div class="scm-input-container"> // Commit message input
+  
+  <!-- Scrollable content area -->
+  <div style="flex: 1; overflow-y: auto;">
+    <div class="scm-view-content">  // Resource groups
+    <div id="git-graph-container">  // Commits section
+  </div>
+</div>
+```
+
+##### Key Design Features
+1. **Branch Status Bar** (Fixed at top):
+   - Displays current branch name with clickable branch switcher
+   - Push/Pull indicators with click-to-action:
+     - Blue badge (↑N) - commits ahead, click to push
+     - Red badge (↓N) - commits behind, click to sync
+   - Always visible (shows 0 when no commits)
+   - Border-bottom for visual separation
+   - `flex-shrink: 0` to prevent compression
+
+2. **Resource Groups** (Independently scrollable):
+   - Each section has `max-height: 200px` with `overflow-y: auto`
+   - Three main groups:
+     - **Staged Changes**: Files in index ready to commit
+     - **Changes**: Modified tracked files (unstaged)
+     - **Untracked**: New files not yet tracked by Git
+   - Individual file actions (stage/unstage/discard)
+   - Group actions (stage all, unstage all, discard all)
+   - Proper handling of `working_dir` property from simple-git
+   - Fallback support for `working` property
+   - TypeScript interface updated to include `working_dir?: string`
+
+3. **Commits Section** (Bottom scrollable):
+   - Git Graph container with commit history
+   - `max-height: 200px` with independent scrolling
+   - Shows recent commits with messages and timestamps
+   - 5px padding-bottom to ensure last item visibility
+
+##### Scrolling Behavior
+- **Main container**: Uses flexbox with `flex: 1` for scrollable area
+- **Individual sections**: Each has its own scrollbar when content exceeds 200px
+- **Parent container**: `#git-content` has `padding: 0` to eliminate gaps (fixed in CSS)
+- **Overflow management**: Prevents content from extending below app's bottom bar
+- **Height calculation**: `calc(100vh - 22px)` accounts for bottom status bar
+
+##### Action Buttons
+- **File-level actions**:
   - Stage/unstage individual files
+  - Discard changes per file
+  - Delete untracked files (trash icon)
+  - Open diff view on click
+- **Group-level actions**:
   - Stage all (only stages tracked files, excludes untracked)
   - Unstage all for staged section
-  - Discard changes per file or section
-  - Delete untracked files (trash icon)
+  - Discard all changes in group
+- **Global Git operations**:
+  - Commit (Ctrl+Enter in message box)
+  - Push (toolbar button or click ahead indicator)
+  - Pull (toolbar button)
+  - Sync (pull then push)
   - **Smart Push Button** - Launches intelligent push dialog
-  - **Refresh Button** - Force panel recreation
-- **Branch Display** (Enhanced):
-  - Current branch with icon
-  - **Clickable Ahead/Behind Badges**:
-    - Always visible (shows 0 when no commits)
-    - Blue badges with hover effects
+  - **Refresh Button** - Removed to reduce UI clutter (v1.8.2)
     - Click ahead (↑) → Launch Smart Push
     - Click behind (↓) → Fetch then Smart Push
     - Real-time updates after operations
@@ -5763,11 +5818,11 @@ The terminal system has been successfully implemented using ttyd (terminal serve
 **Tab Types & Naming Convention**:
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ ◀ │ System Log | Claude | Gemini | Qwen | Terminal 1 | Terminal 2 | 🔄 | 📊 | + │ ▶ │
+│ ◀ │ System Log | Claude | Gemini | Qwen | Terminal 1 | Terminal 2 | 📊 | + │ ▶ │
 └──────────────────────────────────────────────────────────────────┘
-        ↑            ↑                    ↑              ↑       ↑    ↑
-    Navigation   AI Tool Tabs      Generic Terminals  Refresh  Toggle  New
-      arrows      (Named)            (Numbered)                System Log
+        ↑            ↑                    ↑              ↑    ↑
+    Navigation   AI Tool Tabs      Generic Terminals  Toggle  New
+      arrows      (Named)            (Numbered)       System Log
     (appear on overflow)
 ```
 
@@ -6617,14 +6672,21 @@ class SystemLogManager {
 }
 ```
 
-**System Log Features (Current Implementation)**:
+**System Log Features (Current Implementation - v1.8.2)**:
 - **Simple HTML Rendering**: Uses divs instead of xterm to avoid control characters
 - **Console Capture**: Intercepts console.log, console.error, console.warn
-- **Color Coding**: INFO (#569cd6), WARN (#dcdcaa), ERROR (#f44747)
-- **Auto-scroll**: Automatically scrolls to bottom for new entries
+- **Color Coding**: INFO (#cccccc), WARN (#dcdcaa), ERROR (#f44747)
+- **Smart Auto-Scroll**: 
+  - Automatically scrolls to bottom for new entries when viewing recent logs
+  - Pauses auto-scroll when user scrolls up (>100px from bottom)
+  - Resumes auto-scroll when user returns to bottom (<20px from bottom)
+  - Multiple scroll attempts to ensure reliability
+- **Manual Scrolling**: Full support for reviewing log history
 - **Timestamps**: Shows time in toLocaleTimeString() format
 - **Clean Output**: Simple args.join(' ') for readable messages
 - **No xterm.js**: Avoids terminal control characters that cause display issues
+- **Word Wrapping**: Long messages wrap properly with `word-wrap: break-word`
+- **Performance**: Limited to 1000 entries to prevent memory issues
 
 **System Log Filter Feature (Planned Enhancement)**:
 ```
@@ -8252,6 +8314,13 @@ hive-2025-08-20T19-30-45-123Z.log
 
 ## Recent Improvements (2025-08-25)
 
+### System Log Enhancements (v1.8.2)
+- **Smart Auto-Scroll**: Intelligently pauses when reviewing history, resumes at bottom
+- **Manual Scrolling**: Full support for reviewing past logs without interruption
+- **Improved Reliability**: Multiple scroll attempts ensure logs stay visible
+- **Cleaner UI**: Removed unnecessary refresh button from terminal panel
+- **Performance**: Optimized with 1000 entry limit and efficient DOM updates
+
 ### AI Tools Launch Tracking System
 - **Launch History Database**: Track AI tool launches per repository
 - **Intelligent Resume**: Automatic `--continue` flag for previously used tools
@@ -8459,6 +8528,22 @@ electron-poc/
   - **Collapse State Persistence**: All three main panels (TTYD, Center, Consensus) maintain collapse state
   - **Toggle Icons**: Consistent + (collapsed) and − (expanded) symbols across all panels
   - **Performance Improvement**: Eliminated ResizeObserver notification delivery errors
+- **v1.8.2 (2025-08-25)**: System Log Auto-Scroll & UI Refinements
+  - **Smart Auto-Scroll**: System Log now intelligently handles scrolling behavior
+  - **Manual Scroll Detection**: Auto-scroll pauses when user scrolls up >100px from bottom
+  - **Auto-Resume**: Auto-scroll resumes when user returns to within 20px of bottom
+  - **Refresh Button Removal**: Removed unnecessary refresh button from terminal panel header
+  - **Cleaner Controls**: Terminal panel now only shows essential controls (toggle, new tab)
+  - **Improved Reliability**: Multiple scroll attempts ensure new logs are always visible
+  - **Performance Optimization**: Efficient DOM updates with 1000 entry limit
+  - **AI Tools Database Integration**: Launch tracking now uses unified hive-ai.db connection
+  - **Smart Git Push Documentation**: Added comprehensive push strategy documentation
+  - **Source Control Panel Layout Fix**: Redesigned with proper flexbox for optimal scrolling
+    - Branch info stays fixed at top with sync indicators
+    - Each resource group (Staged, Changes, Untracked) scrolls independently (200px max)
+    - Commits section has its own scrollbar (200px max)
+    - Eliminated gaps with `#git-content { padding: 0 }` CSS fix
+    - Height calculation `calc(100vh - 22px)` prevents bottom bar overflow
 - **v1.8.1 (2025-08-24)**: System Log Toggle & Terminal Tab Stability Fixes
   - **System Log Toggle Feature**: Added toggle button (📊) to show/hide System Log tab
   - **Hidden by Default**: System Log tab now starts hidden for cleaner initial UI
