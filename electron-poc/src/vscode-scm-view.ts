@@ -1166,6 +1166,12 @@ export class VSCodeSCMView {
   public async recreatePanel() {
     console.log('[SCM] Recreating entire Source Control panel...');
     
+    // Clear git graph view reference before clearing DOM
+    if (this.gitGraphView) {
+      this.gitGraphView.destroy();
+      this.gitGraphView = null;
+    }
+    
     // Clear and recreate the entire panel
     const container = this.container;
     container.innerHTML = '';

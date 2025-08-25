@@ -183,8 +183,8 @@ export class GitPushStrategyAnalyzer {
     }
 
     return {
-      totalSize: stats.totalSize,
-      sizeInMB: repoSizeInMB,  // Keep repo size for reference
+      totalSize: usingPushSize ? (pushSize || stats.pushSize || stats.totalSize) : stats.totalSize,
+      sizeInMB: sizeInMB,  // Use the actual size being used for decisions
       commitCount: stats.commitCount,
       hasLargeFiles: sizeInMB > 100,
       hasUnpushedCommits: gitStatus.ahead || 0,
@@ -221,9 +221,13 @@ export class GitPushStrategyAnalyzer {
         'Subject to 2GB pack limits',
         'Can be slow for many commits'
       ],
-      estimatedTime: analysis.sizeInMB < 100 ? '< 1 minute' : 
-                    analysis.sizeInMB > 2000 ? 'Will fail - exceeds 2GB limit' :
-                    `~${Math.ceil(analysis.sizeInMB / 100)} minutes`,
+      estimatedTime: analysis.pushSizeMB > 0 ? 
+                    (analysis.pushSizeMB < 100 ? '< 1 minute' : 
+                     analysis.pushSizeMB > 2000 ? 'Will fail - exceeds 2GB limit' :
+                     `~${Math.ceil(analysis.pushSizeMB / 100)} minutes`) :
+                    (analysis.sizeInMB < 100 ? '< 1 minute' : 
+                     analysis.sizeInMB > 2000 ? 'Will fail - exceeds 2GB limit' :
+                     `~${Math.ceil(analysis.sizeInMB / 100)} minutes`),
       command: 'git push origin branch-name'
     });
 
@@ -269,7 +273,7 @@ export class GitPushStrategyAnalyzer {
           'Not suitable for shared branches'
         ],
         requirements: ['No other developers on branch', 'Backup recommended'],
-        estimatedTime: `~${Math.ceil(analysis.sizeInMB / 200)} minutes`,
+        estimatedTime: `~${Math.ceil((analysis.pushSizeMB > 0 ? analysis.pushSizeMB : analysis.sizeInMB) / 200)} minutes`,
         command: 'git push --force origin branch-name'
       });
     }
@@ -294,7 +298,7 @@ export class GitPushStrategyAnalyzer {
           'Branch proliferation',
           'May confuse workflow'
         ],
-        estimatedTime: `~${Math.ceil(analysis.sizeInMB / 150)} minutes`,
+        estimatedTime: `~${Math.ceil((analysis.pushSizeMB > 0 ? analysis.pushSizeMB : analysis.sizeInMB) / 150)} minutes`,
         command: 'git push origin HEAD:feature-fresh-[date]'
       });
     } else {
@@ -304,7 +308,8 @@ export class GitPushStrategyAnalyzer {
         label: 'Push Fresh Branch to Remote',
         description: 'Establish upstream for your fresh branch to enable collaboration',
         icon: '🚀',
-        recommended: !gitStatus?.hasUpstream && analysis.sizeInMB < 1500 && 
+        recommended: !gitStatus?.hasUpstream && 
+                     (analysis.pushSizeMB > 0 ? analysis.pushSizeMB < 1500 : analysis.sizeInMB < 1500) && 
                      analysis.recommendation !== PushStrategy.CHUNKED,
         pros: [
           'Establishes remote tracking',
@@ -312,9 +317,11 @@ export class GitPushStrategyAnalyzer {
           'Allows team collaboration',
           'Preserves your fresh start'
         ],
-        cons: analysis.sizeInMB > 1500 ? ['May fail due to repository size'] : [],
-        estimatedTime: analysis.sizeInMB > 2000 ? 'Will likely fail - use chunked push' :
-                      `~${Math.ceil(analysis.sizeInMB / 150)} minutes`,
+        cons: (analysis.pushSizeMB > 0 ? analysis.pushSizeMB > 1500 : analysis.sizeInMB > 1500) ? 
+              ['May fail due to size'] : [],
+        estimatedTime: (analysis.pushSizeMB > 0 ? analysis.pushSizeMB > 2000 : analysis.sizeInMB > 2000) ? 
+                      'Will likely fail - use chunked push' :
+                      `~${Math.ceil((analysis.pushSizeMB > 0 ? analysis.pushSizeMB : analysis.sizeInMB) / 150)} minutes`,
         command: `git push -u origin ${gitStatus?.branch || 'branch-name'}`
       });
     }
