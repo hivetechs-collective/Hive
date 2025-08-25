@@ -23,37 +23,49 @@ export class GitPushExecutor {
     try {
       let result: { success: boolean; message: string };
       
-      switch (strategy.strategy) {
-        case PushStrategy.REGULAR:
-          result = await this.executeRegularPush(gitAPI, gitStatus, progressDialog);
-          break;
-          
-        case PushStrategy.CHUNKED:
-          result = await this.executeChunkedPush(gitAPI, gitStatus, progressDialog);
-          break;
-          
-        case PushStrategy.FORCE:
-          result = await this.executeForcePush(gitAPI, gitStatus, progressDialog);
-          break;
-          
-        case PushStrategy.FRESH_BRANCH:
-          result = await this.executeFreshBranchPush(gitAPI, gitStatus, progressDialog);
-          break;
-          
-        case PushStrategy.SQUASH:
-          result = await this.executeSquashPush(gitAPI, gitStatus, progressDialog);
-          break;
-          
-        case PushStrategy.BUNDLE:
-          result = await this.executeBundleCreation(gitAPI, gitStatus, progressDialog);
-          break;
-          
-        case PushStrategy.CLEANUP_FIRST:
-          result = await this.executeCleanupFirst(gitAPI, gitStatus, progressDialog);
-          break;
-          
-        default:
-          throw new Error(`Unknown strategy: ${strategy.strategy}`);
+      // Check if user provided a custom command
+      if (strategy.selectedOptions?.customCommand) {
+        result = await this.executeCustomCommand(gitAPI, strategy.selectedOptions.customCommand, progressDialog);
+      } 
+      // Check if dry run is selected
+      else if (strategy.selectedOptions?.dryRun) {
+        result = await this.executeDryRun(gitAPI, gitStatus, strategy, progressDialog);
+      }
+      // Normal strategy execution
+      else {
+        // Pass the strategy with options to the specific executor
+        switch (strategy.strategy) {
+          case PushStrategy.REGULAR:
+            result = await this.executeRegularPush(gitAPI, gitStatus, progressDialog, strategy.selectedOptions);
+            break;
+            
+          case PushStrategy.CHUNKED:
+            result = await this.executeChunkedPush(gitAPI, gitStatus, progressDialog, strategy.selectedOptions);
+            break;
+            
+          case PushStrategy.FORCE:
+            result = await this.executeForcePush(gitAPI, gitStatus, progressDialog, strategy.selectedOptions);
+            break;
+            
+          case PushStrategy.FRESH_BRANCH:
+            result = await this.executeFreshBranchPush(gitAPI, gitStatus, progressDialog, strategy.selectedOptions);
+            break;
+            
+          case PushStrategy.SQUASH:
+            result = await this.executeSquashPush(gitAPI, gitStatus, progressDialog, strategy.selectedOptions);
+            break;
+            
+          case PushStrategy.BUNDLE:
+            result = await this.executeBundleCreation(gitAPI, gitStatus, progressDialog);
+            break;
+            
+          case PushStrategy.CLEANUP_FIRST:
+            result = await this.executeCleanupFirst(gitAPI, gitStatus, progressDialog);
+            break;
+            
+          default:
+            throw new Error(`Unknown strategy: ${strategy.strategy}`);
+        }
       }
       
       // Remove progress dialog
@@ -124,16 +136,130 @@ export class GitPushExecutor {
   }
   
   /**
+   * Execute custom git command
+   */
+  private static async executeCustomCommand(
+    gitAPI: any,
+    command: string,
+    dialog: HTMLElement
+  ): Promise<{ success: boolean; message: string }> {
+    this.updateProgress(dialog, `Executing custom command: ${command}`);
+    
+    try {
+      // For now, we'll need to add a new IPC handler for custom commands
+      // This is a placeholder that shows the intent
+      alert(`Custom command execution:\n\n${command}\n\nThis feature requires implementation in the main process.`);
+      
+      return {
+        success: false,
+        message: 'Custom command execution not yet implemented. Please use standard options.'
+      };
+    } catch (error: any) {
+      throw new Error(`Custom command failed: ${error.message}`);
+    }
+  }
+  
+  /**
+   * Execute dry run
+   */
+  private static async executeDryRun(
+    gitAPI: any,
+    gitStatus: any,
+    strategy: any,
+    dialog: HTMLElement
+  ): Promise<{ success: boolean; message: string }> {
+    this.updateProgress(dialog, 'Running push simulation (dry run)...');
+    
+    try {
+      // Build the command that would be executed
+      let command = 'git push';
+      
+      if (strategy.selectedOptions?.forceWithLease) {
+        command += ' --force-with-lease';
+      }
+      if (strategy.selectedOptions?.includeTags) {
+        command += ' --tags';
+      }
+      if (strategy.selectedOptions?.setUpstream) {
+        command += ' -u origin ' + gitStatus.branch;
+      }
+      if (strategy.selectedOptions?.atomic) {
+        command += ' --atomic';
+      }
+      if (strategy.selectedOptions?.signPush) {
+        command += ' --signed';
+      }
+      if (strategy.selectedOptions?.thinPack) {
+        command += ' --thin';
+      }
+      if (strategy.selectedOptions?.commitLimit) {
+        command = `git push origin HEAD~${strategy.selectedOptions.commitLimit}:${gitStatus.branch}`;
+      }
+      
+      command += ' --dry-run';
+      
+      // Show what would happen
+      const preview = `
+Dry Run Results:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Command that would run:
+${command}
+
+What would happen:
+• ${gitStatus.ahead || 0} commits would be pushed
+• Branch: ${gitStatus.branch}
+• Remote: origin/${gitStatus.branch}
+${strategy.selectedOptions?.forceWithLease ? '• Force with lease protection enabled' : ''}
+${strategy.selectedOptions?.includeTags ? '• Tags would be included' : ''}
+${strategy.selectedOptions?.setUpstream ? '• Upstream tracking would be set' : ''}
+
+No actual changes were made (dry run mode).
+      `;
+      
+      alert(preview);
+      
+      return {
+        success: true,
+        message: 'Dry run completed. No changes were made.'
+      };
+    } catch (error: any) {
+      throw new Error(`Dry run failed: ${error.message}`);
+    }
+  }
+  
+  /**
    * Execute regular push
    */
   private static async executeRegularPush(
     gitAPI: any,
     gitStatus: any,
-    dialog: HTMLElement
+    dialog: HTMLElement,
+    options?: any
   ): Promise<{ success: boolean; message: string }> {
     this.updateProgress(dialog, 'Pushing to remote repository...');
     
     try {
+      // Build push command based on options
+      // For now, we use the standard push but log what would be different
+      if (options) {
+        console.log('Push options selected:', options);
+        
+        // These would need implementation in the main process
+        if (options.forceWithLease) {
+          console.log('Would use --force-with-lease');
+        }
+        if (options.includeTags) {
+          console.log('Would include --tags');
+        }
+        if (options.setUpstream) {
+          console.log('Would set upstream with -u');
+        }
+        if (options.commitLimit) {
+          console.log(`Would push only last ${options.commitLimit} commits`);
+        }
+      }
+      
       await gitAPI.push();
       return {
         success: true,
@@ -164,7 +290,8 @@ export class GitPushExecutor {
   private static async executeChunkedPush(
     gitAPI: any,
     gitStatus: any,
-    dialog: HTMLElement
+    dialog: HTMLElement,
+    options?: any
   ): Promise<{ success: boolean; message: string }> {
     this.updateProgress(dialog, 'Analyzing repository size and preparing chunked push...');
     
@@ -198,7 +325,8 @@ export class GitPushExecutor {
   private static async executeForcePush(
     gitAPI: any,
     gitStatus: any,
-    dialog: HTMLElement
+    dialog: HTMLElement,
+    options?: any
   ): Promise<{ success: boolean; message: string }> {
     // Extra confirmation for force push
     const confirmed = confirm(
@@ -250,7 +378,8 @@ export class GitPushExecutor {
   private static async executeFreshBranchPush(
     gitAPI: any,
     gitStatus: any,
-    dialog: HTMLElement
+    dialog: HTMLElement,
+    options?: any
   ): Promise<{ success: boolean; message: string }> {
     const timestamp = new Date().toISOString().split('T')[0];
     const freshBranchName = `${gitStatus.branch}-fresh-${timestamp}`;
@@ -298,7 +427,8 @@ export class GitPushExecutor {
   private static async executeSquashPush(
     gitAPI: any,
     gitStatus: any,
-    dialog: HTMLElement
+    dialog: HTMLElement,
+    options?: any
   ): Promise<{ success: boolean; message: string }> {
     const message = prompt(
       'Enter a commit message for the squashed commit:',

@@ -33,7 +33,6 @@ export interface PushStrategyOption {
   description: string;
   icon: string;
   recommended: boolean;
-  confidence: number; // 0-100
   pros: string[];
   cons: string[];
   requirements?: string[];
@@ -41,9 +40,20 @@ export interface PushStrategyOption {
   command?: string;
   // AI-enhanced properties
   aiEnhanced?: boolean;
-  aiConfidence?: number;
   aiReasoning?: string;
   aiExplanation?: string;
+  // User-selected options
+  selectedOptions?: {
+    forceWithLease?: boolean;
+    includeTags?: boolean;
+    setUpstream?: boolean;
+    dryRun?: boolean;
+    commitLimit?: number;
+    customCommand?: string;
+    atomic?: boolean;
+    signPush?: boolean;
+    thinPack?: boolean;
+  };
 }
 
 export class GitPushStrategyAnalyzer {
@@ -174,11 +184,7 @@ export class GitPushStrategyAnalyzer {
       label: 'Standard Push',
       description: 'Normal git push to remote repository',
       icon: '📤',
-      recommended: analysis.recommendation === PushStrategy.REGULAR && analysis.sizeInMB < 1500,
-      confidence: analysis.sizeInMB < 500 ? 95 : 
-                 analysis.sizeInMB < 1000 ? 70 : 
-                 analysis.sizeInMB < 1500 ? 40 :
-                 analysis.sizeInMB < 2000 ? 10 : 0, // 0% for > 2GB - will fail!
+      recommended: analysis.recommendation === PushStrategy.REGULAR,
       pros: [
         'Preserves all history',
         'Standard Git workflow',
@@ -202,9 +208,6 @@ export class GitPushStrategyAnalyzer {
       description: 'Push commits in smaller batches to avoid size limits',
       icon: '📦',
       recommended: analysis.recommendation === PushStrategy.CHUNKED,
-      confidence: analysis.sizeInMB > 2000 ? 95 :  // BEST option for > 2GB
-                 analysis.sizeInMB > 1500 ? 85 : 
-                 analysis.sizeInMB > 1000 ? 70 : 50,
       pros: [
         'Handles large repositories',
         'Automatic retry with smaller batches',
@@ -229,7 +232,6 @@ export class GitPushStrategyAnalyzer {
         description: 'Replace remote branch entirely with local version',
         icon: '💪',
         recommended: analysis.recommendation === PushStrategy.FORCE,
-        confidence: analysis.branchStatus === 'diverged' ? 70 : 30,
         pros: [
           'Bypasses merge conflicts',
           'Simple and direct',
@@ -255,7 +257,6 @@ export class GitPushStrategyAnalyzer {
         description: 'Push to a completely new branch name',
         icon: '🌱',
         recommended: analysis.recommendation === PushStrategy.FRESH_BRANCH,
-        confidence: analysis.sizeInMB > 5000 ? 90 : 40,
         pros: [
           'Avoids all conflict issues',
           'Clean start without baggage',
@@ -279,11 +280,6 @@ export class GitPushStrategyAnalyzer {
         icon: '🚀',
         recommended: !gitStatus?.hasUpstream && analysis.sizeInMB < 1500 && 
                      analysis.recommendation !== PushStrategy.CHUNKED,
-        confidence: !gitStatus?.hasUpstream ? 
-                   (analysis.sizeInMB < 500 ? 95 :
-                    analysis.sizeInMB < 1000 ? 75 :
-                    analysis.sizeInMB < 1500 ? 50 :
-                    analysis.sizeInMB < 2000 ? 20 : 5) : 0,
         pros: [
           'Establishes remote tracking',
           'Enables pull request creation',
@@ -305,9 +301,6 @@ export class GitPushStrategyAnalyzer {
         description: 'Combine all commits into one and push',
         icon: '🎯',
         recommended: analysis.recommendation === PushStrategy.SQUASH,
-        confidence: (analysis.sizeInMB > 2000 && analysis.commitCount > 100) ? 85 : // Good for large repos with many commits
-                   analysis.hasUnpushedCommits > 50 ? 75 : 
-                   analysis.hasUnpushedCommits > 20 ? 60 : 40,
         pros: [
           'Dramatically reduces push size',
           'Clean commit history',
@@ -332,7 +325,6 @@ export class GitPushStrategyAnalyzer {
         description: 'Export repository as file for manual upload',
         icon: '📁',
         recommended: analysis.recommendation === PushStrategy.BUNDLE,
-        confidence: 30,
         pros: [
           'Bypasses Git protocol entirely',
           'Works for any size',
@@ -357,7 +349,6 @@ export class GitPushStrategyAnalyzer {
         description: 'Remove large files from history before pushing',
         icon: '🧹',
         recommended: analysis.recommendation === PushStrategy.CLEANUP_FIRST,
-        confidence: analysis.sizeInMB > 10000 ? 95 : 60,
         pros: [
           'Permanent size reduction',
           'Improves repo performance',
@@ -374,17 +365,8 @@ export class GitPushStrategyAnalyzer {
       });
     }
 
-    // Sort by confidence (highest first)
-    strategies.sort((a, b) => b.confidence - a.confidence);
-    
-    // Ensure only the top strategy is marked as recommended
-    // Clear all recommended flags first
-    strategies.forEach(s => s.recommended = false);
-    
-    // Mark only the highest confidence strategy as recommended
-    if (strategies.length > 0 && strategies[0].confidence > 50) {
-      strategies[0].recommended = true;
-    }
+    // Don't sort - keep strategies in logical order
+    // The recommended strategy is already marked based on analysis
 
     return strategies;
   }

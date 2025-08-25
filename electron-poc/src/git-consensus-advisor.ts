@@ -10,7 +10,6 @@
 
 export interface GitStrategyAdvice {
   recommendedStrategy: string;
-  confidence: number;
   reasoning: string;
   risks: string[];
   alternativeStrategy?: string;
@@ -76,7 +75,6 @@ Recommend ONE strategy with confidence (0-100) and brief reasoning.`;
       // 10GB+ - Only chunked or cleanup will work
       return {
         recommendedStrategy: 'Chunked Push',
-        confidence: 98,
         reasoning: `With ${stats.totalSize}, this repository far exceeds GitHub's 2GB limit. Chunked push will intelligently split your ${stats.commitCount} commits into manageable batches.`,
         risks: ['Will take significant time', 'Network interruptions may require restart'],
         alternativeStrategy: 'Squash Push'
@@ -85,7 +83,6 @@ Recommend ONE strategy with confidence (0-100) and brief reasoning.`;
       // 2-10GB - Chunked is best, squash is alternative
       return {
         recommendedStrategy: 'Chunked Push',
-        confidence: 95,
         reasoning: `Repository size (${stats.totalSize}) exceeds GitHub's pack limit. Chunked push ensures success.`,
         risks: ['Longer push time'],
         alternativeStrategy: 'Squash Push'
@@ -94,7 +91,6 @@ Recommend ONE strategy with confidence (0-100) and brief reasoning.`;
       // 1.5-2GB - Approaching limits
       return {
         recommendedStrategy: 'Chunked Push',
-        confidence: 85,
         reasoning: 'Repository approaching GitHub limits. Chunked push provides safety margin.',
         risks: ['Slightly slower than standard push'],
         alternativeStrategy: 'Standard Push'
@@ -103,7 +99,6 @@ Recommend ONE strategy with confidence (0-100) and brief reasoning.`;
       // Fresh branch scenario
       return {
         recommendedStrategy: 'Standard Push',
-        confidence: 90,
         reasoning: 'Fresh branch needs initial push to establish tracking.',
         risks: ['None if repository under 1.5GB'],
         alternativeStrategy: 'Chunked Push'
@@ -112,7 +107,6 @@ Recommend ONE strategy with confidence (0-100) and brief reasoning.`;
       // Many commits
       return {
         recommendedStrategy: 'Squash Push',
-        confidence: 75,
         reasoning: `With ${gitStatus.ahead} unpushed commits, squashing could significantly reduce push size.`,
         risks: ['Loses granular commit history'],
         alternativeStrategy: 'Chunked Push'
@@ -121,7 +115,6 @@ Recommend ONE strategy with confidence (0-100) and brief reasoning.`;
       // Normal scenario
       return {
         recommendedStrategy: 'Standard Push',
-        confidence: 95,
         reasoning: 'Repository size and commit count are within normal limits.',
         risks: [],
         alternativeStrategy: 'Chunked Push'
