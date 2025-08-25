@@ -231,6 +231,19 @@ export class GitPushDialog {
           </label>
         </div>
         
+        <!-- Push to Different Branch -->
+        <div style="margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.15); border-radius: 4px;">
+          <label style="display: flex; align-items: center; font-size: 12px; cursor: pointer; margin-bottom: 8px;">
+            <input type="checkbox" id="push-opt-different-branch" style="margin-right: 6px;" />
+            <span>Push to different branch <span style="opacity: 0.6;">(e.g., push feature to main)</span></span>
+          </label>
+          <input type="text" id="push-opt-target-branch" placeholder="Target branch (e.g., main)" 
+                 style="width: 200px; padding: 4px; background: var(--vscode-input-background, #3c3c3c); 
+                        border: 1px solid var(--vscode-input-border, #3c3c3c); 
+                        color: var(--vscode-input-foreground, #ccc); border-radius: 2px; font-size: 11px;
+                        display: none; margin-left: 22px;" />
+        </div>
+        
         <!-- Advanced Options (Collapsible) -->
         <details id="advanced-options" style="margin-top: 12px;">
           <summary style="cursor: pointer; font-size: 12px; color: var(--vscode-textLink-foreground, #3794ff); user-select: none;">
@@ -301,7 +314,21 @@ export class GitPushDialog {
         resolve(null);
       };
       
+      const executeButton = document.createElement('button');
+      executeButton.textContent = 'Execute Push';
+      executeButton.style.cssText = `
+        padding: 8px 20px;
+        background: var(--vscode-button-background, #0e639c);
+        color: var(--vscode-button-foreground, #fff);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+      `;
+      
       footer.appendChild(cancelButton);
+      footer.appendChild(executeButton);
       
       // Assemble dialog
       dialog.appendChild(header);
@@ -312,30 +339,122 @@ export class GitPushDialog {
       dialog.appendChild(footer);
       overlay.appendChild(dialog);
       
+      // Track selected strategy
+      let selectedStrategyIndex: number | null = null;
+      
       // Add click handlers for strategies
       const strategyElements = dialog.querySelectorAll('.strategy-option');
       strategyElements.forEach((element) => {
         element.addEventListener('click', () => {
-          const index = parseInt(element.getAttribute('data-strategy') || '0');
-          const selectedStrategy = strategies[index];
+          // Remove previous selection
+          strategyElements.forEach(el => {
+            el.classList.remove('selected');
+            (el as HTMLElement).style.background = '';
+          });
           
-          // Collect selected options
-          selectedStrategy.selectedOptions = {
-            forceWithLease: (document.getElementById('push-opt-force-lease') as HTMLInputElement)?.checked,
-            includeTags: (document.getElementById('push-opt-tags') as HTMLInputElement)?.checked,
-            setUpstream: (document.getElementById('push-opt-upstream') as HTMLInputElement)?.checked,
-            dryRun: (document.getElementById('push-opt-dry-run') as HTMLInputElement)?.checked,
-            commitLimit: parseInt((document.getElementById('push-opt-commit-limit') as HTMLInputElement)?.value) || undefined,
-            customCommand: (document.getElementById('push-opt-custom-cmd') as HTMLInputElement)?.value || undefined,
-            atomic: (document.getElementById('push-opt-atomic') as HTMLInputElement)?.checked,
-            signPush: (document.getElementById('push-opt-sign') as HTMLInputElement)?.checked,
-            thinPack: (document.getElementById('push-opt-thin') as HTMLInputElement)?.checked
-          };
+          // Mark as selected
+          element.classList.add('selected');
+          (element as HTMLElement).style.background = 'rgba(14, 99, 156, 0.2)';
           
-          overlay.remove();
-          resolve(selectedStrategy);
+          selectedStrategyIndex = parseInt(element.getAttribute('data-strategy') || '0');
         });
       });
+      
+      // Handle push to different branch checkbox
+      const differentBranchCheckbox = document.getElementById('push-opt-different-branch') as HTMLInputElement;
+      const targetBranchInput = document.getElementById('push-opt-target-branch') as HTMLInputElement;
+      
+      if (differentBranchCheckbox && targetBranchInput) {
+        differentBranchCheckbox.addEventListener('change', () => {
+          targetBranchInput.style.display = differentBranchCheckbox.checked ? 'block' : 'none';
+          if (differentBranchCheckbox.checked) {
+            targetBranchInput.focus();
+          }
+        });
+      }
+      
+      // Handle dry run checkbox to update button text
+      const dryRunCheckbox = document.getElementById('push-opt-dry-run') as HTMLInputElement;
+      const customCmdInput = document.getElementById('push-opt-custom-cmd') as HTMLInputElement;
+      
+      const updateExecuteButton = () => {
+        if (customCmdInput?.value) {
+          executeButton.textContent = dryRunCheckbox?.checked ? 'Preview Command' : 'Execute Command';
+        } else {
+          executeButton.textContent = dryRunCheckbox?.checked ? 'Run Dry Run' : 'Execute Push';
+        }
+      };
+      
+      if (dryRunCheckbox) {
+        dryRunCheckbox.addEventListener('change', updateExecuteButton);
+      }
+      if (customCmdInput) {
+        customCmdInput.addEventListener('input', updateExecuteButton);
+      }
+      
+      // Execute button handler
+      executeButton.onclick = () => {
+        // Use custom command if provided
+        const customCommand = (document.getElementById('push-opt-custom-cmd') as HTMLInputElement)?.value;
+        
+        // Check if push to different branch is selected
+        const pushToDifferentBranch = (document.getElementById('push-opt-different-branch') as HTMLInputElement)?.checked;
+        const targetBranch = (document.getElementById('push-opt-target-branch') as HTMLInputElement)?.value;
+        
+        // Build custom command if pushing to different branch
+        let finalCustomCommand = customCommand;
+        if (!customCommand && pushToDifferentBranch && targetBranch) {
+          const currentBranch = strategies[0]?.description?.match(/on (\S+)/)?.[1] || 'HEAD';
+          finalCustomCommand = `git push origin ${currentBranch}:${targetBranch}`;
+          
+          // Add force-with-lease if selected
+          if ((document.getElementById('push-opt-force-lease') as HTMLInputElement)?.checked) {
+            finalCustomCommand += ' --force-with-lease';
+          }
+        }
+        
+        // If we have a custom command, execute it
+        if (finalCustomCommand) {
+          const customStrategy: PushStrategyOption = {
+            strategy: 'custom' as any,
+            label: 'Custom Command',
+            description: finalCustomCommand,
+            icon: '⚡',
+            recommended: false,
+            selectedOptions: {
+              customCommand: finalCustomCommand,
+              dryRun: (document.getElementById('push-opt-dry-run') as HTMLInputElement)?.checked
+            }
+          };
+          overlay.remove();
+          resolve(customStrategy);
+          return;
+        }
+        
+        // Otherwise use selected strategy
+        if (selectedStrategyIndex === null) {
+          // Auto-select first strategy if none selected
+          selectedStrategyIndex = 0;
+        }
+        
+        const selectedStrategy = strategies[selectedStrategyIndex];
+        
+        // Collect selected options
+        selectedStrategy.selectedOptions = {
+          forceWithLease: (document.getElementById('push-opt-force-lease') as HTMLInputElement)?.checked,
+          includeTags: (document.getElementById('push-opt-tags') as HTMLInputElement)?.checked,
+          setUpstream: (document.getElementById('push-opt-upstream') as HTMLInputElement)?.checked,
+          dryRun: (document.getElementById('push-opt-dry-run') as HTMLInputElement)?.checked,
+          commitLimit: parseInt((document.getElementById('push-opt-commit-limit') as HTMLInputElement)?.value) || undefined,
+          customCommand: finalCustomCommand || undefined,
+          atomic: (document.getElementById('push-opt-atomic') as HTMLInputElement)?.checked,
+          signPush: (document.getElementById('push-opt-sign') as HTMLInputElement)?.checked,
+          thinPack: (document.getElementById('push-opt-thin') as HTMLInputElement)?.checked
+        };
+        
+        overlay.remove();
+        resolve(selectedStrategy);
+      };
       
       // Add styles
       const style = document.createElement('style');

@@ -175,29 +175,39 @@ export class GitPushExecutor {
       // Build command display for user
       let command = 'git push';
       
-      if (strategy.selectedOptions?.forceWithLease) {
-        command += ' --force-with-lease';
+      // Use custom command if provided
+      if (strategy.selectedOptions?.customCommand) {
+        command = strategy.selectedOptions.customCommand;
+        // Add dry-run if not already present
+        if (!command.includes('--dry-run')) {
+          command += ' --dry-run';
+        }
+      } else {
+        // Build command from options
+        if (strategy.selectedOptions?.forceWithLease) {
+          command += ' --force-with-lease';
+        }
+        if (strategy.selectedOptions?.includeTags) {
+          command += ' --tags';
+        }
+        if (strategy.selectedOptions?.setUpstream) {
+          command += ' -u origin ' + gitStatus.branch;
+        }
+        if (strategy.selectedOptions?.atomic) {
+          command += ' --atomic';
+        }
+        if (strategy.selectedOptions?.signPush) {
+          command += ' --signed';
+        }
+        if (strategy.selectedOptions?.thinPack) {
+          command += ' --thin';
+        }
+        if (strategy.selectedOptions?.commitLimit) {
+          command = `git push origin HEAD~${strategy.selectedOptions.commitLimit}:${gitStatus.branch}`;
+        }
+        
+        command += ' --dry-run';
       }
-      if (strategy.selectedOptions?.includeTags) {
-        command += ' --tags';
-      }
-      if (strategy.selectedOptions?.setUpstream) {
-        command += ' -u origin ' + gitStatus.branch;
-      }
-      if (strategy.selectedOptions?.atomic) {
-        command += ' --atomic';
-      }
-      if (strategy.selectedOptions?.signPush) {
-        command += ' --signed';
-      }
-      if (strategy.selectedOptions?.thinPack) {
-        command += ' --thin';
-      }
-      if (strategy.selectedOptions?.commitLimit) {
-        command = `git push origin HEAD~${strategy.selectedOptions.commitLimit}:${gitStatus.branch}`;
-      }
-      
-      command += ' --dry-run';
       
       // Show what would happen
       const preview = `
