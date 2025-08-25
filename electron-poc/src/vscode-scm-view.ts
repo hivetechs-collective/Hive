@@ -162,7 +162,7 @@ export class VSCodeSCMView {
         ">
           <div class="scm-status-branch" style="position: relative;">
             <span class="codicon codicon-git-branch"></span>
-            <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView?.showBranchSwitcher?.()">${this.gitStatus.branch}</span>
+            <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView.showBranchSwitcher()">${this.gitStatus.branch}</span>
             <span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px; cursor: ${(this.gitStatus.ahead || 0) > 0 ? 'pointer' : 'default'};" 
                   onclick="${(this.gitStatus.ahead || 0) > 0 ? 'window.scmView?.push()' : ''}"
                   title="${(this.gitStatus.ahead || 0) > 0 ? 'Click to push' : 'Nothing to push'}">↑${this.gitStatus.ahead || 0}</span>
@@ -1220,11 +1220,6 @@ export class VSCodeSCMView {
       // Handle both array format and object format
       const branches = Array.isArray(branchData) ? branchData : ((branchData as any).all || []);
       
-      if (!branches || branches.length === 0) {
-        alert('No branches available');
-        return;
-      }
-      
       // Create modal dialog for branch selection
       const modal = document.createElement('div');
       modal.className = 'git-branch-modal';
@@ -1235,14 +1230,15 @@ export class VSCodeSCMView {
         transform: translate(-50%, -50%);
         background: var(--vscode-dropdown-background, #252526);
         border: 1px solid var(--vscode-dropdown-border, #454545);
-        border-radius: 4px;
-        padding: 16px;
+        border-radius: 6px;
+        padding: 0;
         z-index: 10000;
-        min-width: 300px;
+        min-width: 350px;
         max-width: 500px;
-        max-height: 400px;
-        overflow-y: auto;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        max-height: 500px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
       `;
       
       // Add backdrop
@@ -1257,63 +1253,234 @@ export class VSCodeSCMView {
         z-index: 9999;
       `;
       
-      // Build branch list HTML
+      // Separate branches into local and remote
       const currentBranch = this.gitStatus?.branch || '';
-      let branchListHtml = '<h3 style="margin: 0 0 12px 0; color: var(--vscode-foreground);">Switch Branch</h3>';
-      branchListHtml += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+      const localBranches: any[] = [];
+      const remoteBranches: any[] = [];
       
       for (const branch of branches) {
-        // Handle both string and object format
         const branchName = typeof branch === 'string' ? branch : branch.name;
-        const isCurrentBranch = (typeof branch === 'object' && branch.current) || 
-                               branchName === currentBranch || 
-                               branchName === `* ${currentBranch}`;
-        const cleanBranchName = branchName.replace('* ', '').trim();
+        const cleanName = branchName.replace('* ', '').trim();
         
-        branchListHtml += `
-          <button 
-            class="branch-item" 
+        if (cleanName.startsWith('remotes/') || cleanName.includes('origin/')) {
+          remoteBranches.push({ name: cleanName, original: branch });
+        } else {
+          localBranches.push({ name: cleanName, original: branch });
+        }
+      }
+      
+      // Build modal HTML with better organization
+      let modalHtml = `
+        <!-- Header -->
+        <div style="
+          padding: 16px 20px;
+          border-bottom: 1px solid var(--vscode-dropdown-border, #454545);
+          background: var(--vscode-sideBar-background, #252526);
+        ">
+          <h3 style="
+            margin: 0;
+            color: var(--vscode-foreground);
+            font-size: 14px;
+            font-weight: 600;
+          ">Branch Management</h3>
+        </div>
+        
+        <!-- Search Bar -->
+        <div style="
+          padding: 12px 20px;
+          border-bottom: 1px solid var(--vscode-dropdown-border, #454545);
+        ">
+          <input 
+            type="text" 
+            id="branchSearchInput"
+            placeholder="Filter branches..."
             style="
-              padding: 8px 12px;
-              text-align: left;
-              background: ${isCurrentBranch ? 'var(--vscode-list-activeSelectionBackground, #094771)' : 'transparent'};
-              color: var(--vscode-foreground);
-              border: 1px solid ${isCurrentBranch ? 'var(--vscode-list-activeSelectionBorder, #007acc)' : 'transparent'};
+              width: 100%;
+              padding: 6px 10px;
+              background: var(--vscode-input-background, #3c3c3c);
+              color: var(--vscode-input-foreground);
+              border: 1px solid var(--vscode-input-border, #3c3c3c);
               border-radius: 4px;
-              cursor: ${isCurrentBranch ? 'default' : 'pointer'};
-              font-family: var(--vscode-font-family);
               font-size: 13px;
-              ${!isCurrentBranch ? 'hover: background: var(--vscode-list-hoverBackground, #2a2d2e);' : ''}
+              outline: none;
             "
-            ${isCurrentBranch ? 'disabled' : `onclick="window.scmView?.switchToBranch?.('${cleanBranchName}')"`}
+            oninput="window.scmView.filterBranches(this.value)"
+          />
+        </div>
+        
+        <!-- Create New Branch Button -->
+        <div style="
+          padding: 12px 20px;
+          border-bottom: 1px solid var(--vscode-dropdown-border, #454545);
+        ">
+          <button 
+            style="
+              width: 100%;
+              padding: 8px 12px;
+              background: var(--vscode-button-background, #0e639c);
+              color: var(--vscode-button-foreground, white);
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 13px;
+              font-weight: 500;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              gap: 6px;
+            "
+            onmouseover="this.style.background='var(--vscode-button-hoverBackground, #1177bb)'"
+            onmouseout="this.style.background='var(--vscode-button-background, #0e639c)'"
+            onclick="window.scmView.showCreateBranchDialog()"
           >
-            ${isCurrentBranch ? '✓ ' : ''}${cleanBranchName}
-            ${isCurrentBranch ? ' (current)' : ''}
+            <span class="codicon codicon-add"></span>
+            Create New Branch
           </button>
+        </div>
+        
+        <!-- Branch Lists Container -->
+        <div style="
+          flex: 1;
+          overflow-y: auto;
+          padding: 12px 0;
+        " id="branchListContainer">
+      `;
+      
+      // Local Branches Section
+      if (localBranches.length > 0) {
+        modalHtml += `
+          <div class="branch-section">
+            <div style="
+              padding: 4px 20px;
+              font-size: 11px;
+              font-weight: 600;
+              text-transform: uppercase;
+              color: var(--vscode-foreground);
+              opacity: 0.6;
+            ">Local Branches</div>
+            <div style="padding: 4px 0;">
+        `;
+        
+        for (const branch of localBranches) {
+          const isCurrentBranch = branch.name === currentBranch;
+          
+          modalHtml += `
+            <div 
+              class="branch-item ${isCurrentBranch ? 'current' : ''}" 
+              style="
+                padding: 8px 20px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                cursor: ${isCurrentBranch ? 'default' : 'pointer'};
+                background: ${isCurrentBranch ? 'var(--vscode-list-activeSelectionBackground, #094771)' : 'transparent'};
+                color: var(--vscode-foreground);
+                font-size: 13px;
+              "
+              ${!isCurrentBranch ? `
+                onmouseover="this.style.background='var(--vscode-list-hoverBackground, #2a2d2e)'"
+                onmouseout="this.style.background='transparent'"
+                onclick="window.scmView.switchToBranch('${branch.name}')"
+              ` : ''}
+              data-branch-name="${branch.name.toLowerCase()}"
+            >
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="codicon codicon-git-branch" style="opacity: 0.7;"></span>
+                <span>${branch.name}</span>
+                ${isCurrentBranch ? '<span style="margin-left: 8px; opacity: 0.6;">(current)</span>' : ''}
+              </div>
+              ${isCurrentBranch ? '<span style="color: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);">✓</span>' : ''}
+            </div>
+          `;
+        }
+        
+        modalHtml += `
+            </div>
+          </div>
         `;
       }
       
-      branchListHtml += '</div>';
-      branchListHtml += `
-        <div style="margin-top: 16px; text-align: right;">
+      // Remote Branches Section
+      if (remoteBranches.length > 0) {
+        modalHtml += `
+          <div class="branch-section" style="margin-top: 12px;">
+            <div style="
+              padding: 4px 20px;
+              font-size: 11px;
+              font-weight: 600;
+              text-transform: uppercase;
+              color: var(--vscode-foreground);
+              opacity: 0.6;
+            ">Remote Branches</div>
+            <div style="padding: 4px 0;">
+        `;
+        
+        for (const branch of remoteBranches) {
+          const displayName = branch.name.replace('remotes/', '').replace('origin/', '');
+          
+          modalHtml += `
+            <div 
+              class="branch-item remote" 
+              style="
+                padding: 8px 20px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                cursor: pointer;
+                background: transparent;
+                color: var(--vscode-foreground);
+                font-size: 13px;
+                opacity: 0.8;
+              "
+              onmouseover="this.style.background='var(--vscode-list-hoverBackground, #2a2d2e)'"
+              onmouseout="this.style.background='transparent'"
+              onclick="window.scmView.checkoutRemoteBranch('${branch.name}')"
+              data-branch-name="${displayName.toLowerCase()}"
+            >
+              <span class="codicon codicon-cloud" style="opacity: 0.7;"></span>
+              <span>${displayName}</span>
+              <span style="opacity: 0.5; font-size: 11px;">(remote)</span>
+            </div>
+          `;
+        }
+        
+        modalHtml += `
+            </div>
+          </div>
+        `;
+      }
+      
+      modalHtml += `
+        </div>
+        
+        <!-- Footer -->
+        <div style="
+          padding: 12px 20px;
+          border-top: 1px solid var(--vscode-dropdown-border, #454545);
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+        ">
           <button 
             style="
               padding: 6px 14px;
               background: var(--vscode-button-secondaryBackground, #3a3d41);
               color: var(--vscode-button-secondaryForeground);
-              border: 1px solid var(--vscode-button-border, transparent);
+              border: none;
               border-radius: 4px;
               cursor: pointer;
               font-size: 13px;
             "
-            onclick="window.scmView?.closeBranchSwitcher?.()"
+            onmouseover="this.style.background='var(--vscode-button-secondaryHoverBackground, #45494e)'"
+            onmouseout="this.style.background='var(--vscode-button-secondaryBackground, #3a3d41)'"
+            onclick="window.scmView.closeBranchSwitcher()"
           >
-            Cancel
+            Close
           </button>
         </div>
       `;
       
-      modal.innerHTML = branchListHtml;
+      modal.innerHTML = modalHtml;
       
       // Add to DOM
       document.body.appendChild(backdrop);
@@ -1325,6 +1492,12 @@ export class VSCodeSCMView {
       
       // Close on backdrop click
       backdrop.onclick = () => this.closeBranchSwitcher();
+      
+      // Focus search input
+      setTimeout(() => {
+        const searchInput = document.getElementById('branchSearchInput');
+        if (searchInput) searchInput.focus();
+      }, 100);
       
     } catch (error) {
       console.error('[SCM] Failed to get branches:', error);
@@ -1382,6 +1555,251 @@ export class VSCodeSCMView {
       notifications.show({
         title: 'Branch Switch Failed',
         message: error?.message || 'Failed to switch branch',
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+  
+  public filterBranches(searchTerm: string) {
+    const container = document.getElementById('branchListContainer');
+    if (!container) return;
+    
+    const branchItems = container.querySelectorAll('.branch-item');
+    const lowerSearch = searchTerm.toLowerCase();
+    
+    branchItems.forEach((item: any) => {
+      const branchName = item.getAttribute('data-branch-name') || '';
+      if (branchName.includes(lowerSearch)) {
+        item.style.display = 'flex';
+      } else {
+        item.style.display = 'none';
+      }
+    });
+  }
+  
+  public async showCreateBranchDialog() {
+    console.log('[SCM] Opening create branch dialog');
+    
+    // Close the branch switcher first
+    this.closeBranchSwitcher();
+    
+    // Create a simple dialog for branch name input
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: var(--vscode-dropdown-background, #252526);
+      border: 1px solid var(--vscode-dropdown-border, #454545);
+      border-radius: 6px;
+      padding: 20px;
+      z-index: 10001;
+      min-width: 300px;
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+    `;
+    
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
+    `;
+    
+    dialog.innerHTML = `
+      <h3 style="margin: 0 0 16px 0; color: var(--vscode-foreground); font-size: 14px;">
+        Create New Branch
+      </h3>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; color: var(--vscode-foreground); font-size: 13px;">
+          Branch name:
+        </label>
+        <input 
+          type="text" 
+          id="newBranchName"
+          placeholder="feature/new-feature"
+          style="
+            width: 100%;
+            padding: 6px 10px;
+            background: var(--vscode-input-background, #3c3c3c);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border, #3c3c3c);
+            border-radius: 4px;
+            font-size: 13px;
+            outline: none;
+          "
+          onkeypress="if(event.key === 'Enter') window.scmView.createBranch()"
+        />
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 8px;">
+        <button 
+          style="
+            padding: 6px 14px;
+            background: var(--vscode-button-secondaryBackground, #3a3d41);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+          "
+          onclick="window.scmView.closeCreateBranchDialog()"
+        >
+          Cancel
+        </button>
+        <button 
+          style="
+            padding: 6px 14px;
+            background: var(--vscode-button-background, #0e639c);
+            color: var(--vscode-button-foreground, white);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+          "
+          onclick="window.scmView.createBranch()"
+        >
+          Create
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(backdrop);
+    document.body.appendChild(dialog);
+    
+    // Store references
+    (window as any).createBranchDialog = dialog;
+    (window as any).createBranchBackdrop = backdrop;
+    
+    // Focus input
+    setTimeout(() => {
+      const input = document.getElementById('newBranchName') as HTMLInputElement;
+      if (input) input.focus();
+    }, 100);
+    
+    // Close on backdrop click
+    backdrop.onclick = () => this.closeCreateBranchDialog();
+  }
+  
+  public closeCreateBranchDialog() {
+    const dialog = (window as any).createBranchDialog;
+    const backdrop = (window as any).createBranchBackdrop;
+    
+    if (dialog) dialog.remove();
+    if (backdrop) backdrop.remove();
+    
+    delete (window as any).createBranchDialog;
+    delete (window as any).createBranchBackdrop;
+  }
+  
+  public async createBranch() {
+    const input = document.getElementById('newBranchName') as HTMLInputElement;
+    if (!input) return;
+    
+    const branchName = input.value.trim();
+    if (!branchName) {
+      alert('Please enter a branch name');
+      return;
+    }
+    
+    try {
+      console.log('[SCM] Creating new branch:', branchName);
+      
+      // Close the dialog
+      this.closeCreateBranchDialog();
+      
+      // Show progress notification
+      const notificationId = notifications.show({
+        title: 'Creating Branch',
+        message: `Creating branch: ${branchName}...`,
+        type: 'info',
+        duration: 0
+      });
+      
+      // Create the branch
+      await window.gitAPI.createBranch(branchName);
+      
+      // Update notification
+      notifications.update(notificationId, {
+        title: 'Branch Created',
+        message: `Successfully created and switched to branch: ${branchName}`,
+        type: 'success',
+        duration: 3000
+      });
+      
+      // Refresh the Git panel
+      await this.refresh();
+      
+      // Also refresh file explorer
+      if (window.fileExplorer) {
+        await window.fileExplorer.refreshGitStatus();
+      }
+      
+    } catch (error: any) {
+      console.error('[SCM] Failed to create branch:', error);
+      notifications.show({
+        title: 'Branch Creation Failed',
+        message: error?.message || 'Failed to create branch',
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+  
+  public async checkoutRemoteBranch(remoteBranchName: string) {
+    // Extract the local branch name from the remote branch
+    const localBranchName = remoteBranchName.replace('remotes/origin/', '').replace('origin/', '');
+    
+    try {
+      console.log('[SCM] Checking out remote branch:', remoteBranchName, 'as:', localBranchName);
+      
+      // Close the modal first
+      this.closeBranchSwitcher();
+      
+      // Show progress notification
+      const notificationId = notifications.show({
+        title: 'Checking Out Remote Branch',
+        message: `Creating local branch: ${localBranchName}...`,
+        type: 'info',
+        duration: 0
+      });
+      
+      // Try to checkout the remote branch (git will create a local tracking branch)
+      try {
+        // First try to switch if it already exists locally
+        await window.gitAPI.switchBranch(localBranchName);
+      } catch {
+        // If that fails, create a new branch tracking the remote
+        await window.gitAPI.createBranch(localBranchName);
+        // Then set it to track the remote
+        // Note: This might need additional git command support in the backend
+      }
+      
+      // Update notification
+      notifications.update(notificationId, {
+        title: 'Branch Checked Out',
+        message: `Successfully switched to branch: ${localBranchName}`,
+        type: 'success',
+        duration: 3000
+      });
+      
+      // Refresh the Git panel
+      await this.refresh();
+      
+      // Also refresh file explorer
+      if (window.fileExplorer) {
+        await window.fileExplorer.refreshGitStatus();
+      }
+      
+    } catch (error: any) {
+      console.error('[SCM] Failed to checkout remote branch:', error);
+      notifications.show({
+        title: 'Checkout Failed',
+        message: error?.message || 'Failed to checkout remote branch',
         type: 'error',
         duration: 5000
       });
