@@ -60,9 +60,20 @@ export class VSCodeSCMView {
         return;
       }
       
+      // Fetch from remote to get latest ahead/behind counts
+      console.log('[SCM] Fetching from remote to get latest status...');
+      try {
+        await window.gitAPI.fetch();
+        console.log('[SCM] Fetch completed successfully');
+      } catch (fetchError) {
+        console.log('[SCM] Fetch failed (might be offline):', fetchError);
+        // Continue anyway - we can still show local status
+      }
+      
       console.log('[SCM] Getting git status for:', currentFolder);
       this.gitStatus = await window.gitAPI.getStatus();
       console.log('[SCM] Got git status with', this.gitStatus?.files?.length || 0, 'files');
+      console.log('[SCM] Branch:', this.gitStatus?.branch, 'Ahead:', this.gitStatus?.ahead, 'Behind:', this.gitStatus?.behind);
       
       // Check for untracked files
       const untracked = this.gitStatus?.files?.filter(f => (f.working_dir === '?' || f.working === '?') && f.index === '?') || [];
@@ -198,9 +209,9 @@ export class VSCodeSCMView {
 
         <!-- Status Bar -->
         <div class="scm-status-bar">
-          <div class="scm-status-branch">
+          <div class="scm-status-branch" style="position: relative;">
             <span class="codicon codicon-git-branch"></span>
-            <span>${this.gitStatus.branch}</span>
+            <span class="branch-switcher" style="cursor: pointer; text-decoration: underline;" onclick="window.scmView?.showBranchSwitcher?.()">${this.gitStatus.branch}</span>
             ${this.gitStatus.ahead > 0 ? `<span class="badge" style="background: #007acc; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 8px; font-size: 11px;">↑${this.gitStatus.ahead}</span>` : ''}
             ${this.gitStatus.behind > 0 ? `<span class="badge" style="background: #f48771; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 4px; font-size: 11px;">↓${this.gitStatus.behind}</span>` : ''}
           </div>
@@ -1051,6 +1062,185 @@ export class VSCodeSCMView {
       notifications.update(notificationId, {
         title: 'Sync Failed',
         message: error?.message || 'An error occurred during sync',
+        type: 'error',
+        duration: 5000
+      });
+    }
+  }
+  
+  public async showBranchSwitcher() {
+    console.log('[SCM] Opening branch switcher');
+    
+    try {
+      // Get list of branches
+      const branchData = await window.gitAPI.getBranches();
+      console.log('[SCM] Available branches:', branchData);
+      
+      // Handle both array format and object format
+      const branches = Array.isArray(branchData) ? branchData : (branchData.all || []);
+      
+      if (!branches || branches.length === 0) {
+        alert('No branches available');
+        return;
+      }
+      
+      // Create modal dialog for branch selection
+      const modal = document.createElement('div');
+      modal.className = 'git-branch-modal';
+      modal.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: var(--vscode-dropdown-background, #252526);
+        border: 1px solid var(--vscode-dropdown-border, #454545);
+        border-radius: 4px;
+        padding: 16px;
+        z-index: 10000;
+        min-width: 300px;
+        max-width: 500px;
+        max-height: 400px;
+        overflow-y: auto;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      `;
+      
+      // Add backdrop
+      const backdrop = document.createElement('div');
+      backdrop.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+      `;
+      
+      // Build branch list HTML
+      const currentBranch = this.gitStatus?.branch || '';
+      let branchListHtml = '<h3 style="margin: 0 0 12px 0; color: var(--vscode-foreground);">Switch Branch</h3>';
+      branchListHtml += '<div style="display: flex; flex-direction: column; gap: 4px;">';
+      
+      for (const branch of branches) {
+        // Handle both string and object format
+        const branchName = typeof branch === 'string' ? branch : branch.name;
+        const isCurrentBranch = (typeof branch === 'object' && branch.current) || 
+                               branchName === currentBranch || 
+                               branchName === `* ${currentBranch}`;
+        const cleanBranchName = branchName.replace('* ', '').trim();
+        
+        branchListHtml += `
+          <button 
+            class="branch-item" 
+            style="
+              padding: 8px 12px;
+              text-align: left;
+              background: ${isCurrentBranch ? 'var(--vscode-list-activeSelectionBackground, #094771)' : 'transparent'};
+              color: var(--vscode-foreground);
+              border: 1px solid ${isCurrentBranch ? 'var(--vscode-list-activeSelectionBorder, #007acc)' : 'transparent'};
+              border-radius: 4px;
+              cursor: ${isCurrentBranch ? 'default' : 'pointer'};
+              font-family: var(--vscode-font-family);
+              font-size: 13px;
+              ${!isCurrentBranch ? 'hover: background: var(--vscode-list-hoverBackground, #2a2d2e);' : ''}
+            "
+            ${isCurrentBranch ? 'disabled' : `onclick="window.scmView?.switchToBranch?.('${cleanBranchName}')"`}
+          >
+            ${isCurrentBranch ? '✓ ' : ''}${cleanBranchName}
+            ${isCurrentBranch ? ' (current)' : ''}
+          </button>
+        `;
+      }
+      
+      branchListHtml += '</div>';
+      branchListHtml += `
+        <div style="margin-top: 16px; text-align: right;">
+          <button 
+            style="
+              padding: 6px 14px;
+              background: var(--vscode-button-secondaryBackground, #3a3d41);
+              color: var(--vscode-button-secondaryForeground);
+              border: 1px solid var(--vscode-button-border, transparent);
+              border-radius: 4px;
+              cursor: pointer;
+              font-size: 13px;
+            "
+            onclick="window.scmView?.closeBranchSwitcher?.()"
+          >
+            Cancel
+          </button>
+        </div>
+      `;
+      
+      modal.innerHTML = branchListHtml;
+      
+      // Add to DOM
+      document.body.appendChild(backdrop);
+      document.body.appendChild(modal);
+      
+      // Store references for cleanup
+      (window as any).branchSwitcherModal = modal;
+      (window as any).branchSwitcherBackdrop = backdrop;
+      
+      // Close on backdrop click
+      backdrop.onclick = () => this.closeBranchSwitcher();
+      
+    } catch (error) {
+      console.error('[SCM] Failed to get branches:', error);
+      alert('Failed to get branch list');
+    }
+  }
+  
+  public closeBranchSwitcher() {
+    const modal = (window as any).branchSwitcherModal;
+    const backdrop = (window as any).branchSwitcherBackdrop;
+    
+    if (modal) modal.remove();
+    if (backdrop) backdrop.remove();
+    
+    delete (window as any).branchSwitcherModal;
+    delete (window as any).branchSwitcherBackdrop;
+  }
+  
+  public async switchToBranch(branchName: string) {
+    console.log('[SCM] Switching to branch:', branchName);
+    
+    try {
+      // Close the modal first
+      this.closeBranchSwitcher();
+      
+      // Show progress notification
+      const notificationId = notifications.show({
+        title: 'Switching Branch',
+        message: `Switching to branch: ${branchName}...`,
+        type: 'info',
+        duration: 0
+      });
+      
+      // Switch branch
+      await window.gitAPI.switchBranch(branchName);
+      
+      // Update notification
+      notifications.update(notificationId, {
+        title: 'Branch Switched',
+        message: `Successfully switched to branch: ${branchName}`,
+        type: 'success',
+        duration: 3000
+      });
+      
+      // Refresh the Git panel
+      await this.refresh();
+      
+      // Also refresh file explorer to update decorations
+      if (window.fileExplorer) {
+        await window.fileExplorer.refreshGitStatus();
+      }
+      
+    } catch (error: any) {
+      console.error('[SCM] Failed to switch branch:', error);
+      notifications.show({
+        title: 'Branch Switch Failed',
+        message: error?.message || 'Failed to switch branch',
         type: 'error',
         duration: 5000
       });
