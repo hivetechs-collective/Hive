@@ -263,6 +263,34 @@ export class TTYDTerminalPanel {
         port: number;
         toolId?: string;
     }): void {
+        // Ensure tabs container exists
+        if (!this.tabsContainer) {
+            this.tabsContainer = document.getElementById('isolated-terminal-tabs');
+            if (!this.tabsContainer) {
+                console.error('[TTYDTerminalPanel] Tabs container not found! Attempting to recreate...');
+                // Try to find and recreate if missing
+                const wrapper = document.querySelector('.isolated-terminal-tabs-wrapper');
+                if (wrapper) {
+                    // Check if it already has the tabs container as a child
+                    let existingTabs = wrapper.querySelector('#isolated-terminal-tabs');
+                    if (!existingTabs) {
+                        this.tabsContainer = document.createElement('div');
+                        this.tabsContainer.id = 'isolated-terminal-tabs';
+                        this.tabsContainer.className = 'isolated-terminal-tabs';
+                        this.tabsContainer.style.cssText = 'display: flex; align-items: center; transition: transform 0.3s ease; white-space: nowrap;';
+                        wrapper.appendChild(this.tabsContainer);
+                        console.log('[TTYDTerminalPanel] Recreated tabs container');
+                    } else {
+                        this.tabsContainer = existingTabs as HTMLElement;
+                        console.log('[TTYDTerminalPanel] Found existing tabs container');
+                    }
+                } else {
+                    console.error('[TTYDTerminalPanel] Cannot create tabs container - wrapper not found');
+                    return;
+                }
+            }
+        }
+        
         const tab: TTYDTerminalTab = {
             id: terminalInfo.id,
             title: terminalInfo.title || `Terminal ${this.terminalCounter++}`,
@@ -272,6 +300,9 @@ export class TTYDTerminalPanel {
             url: terminalInfo.url,
             port: terminalInfo.port
         };
+        
+        // Add tab to our internal map
+        this.tabs.set(tab.id, tab);
 
         // Create tab button
         const tabBtn = document.createElement('button');
@@ -300,6 +331,7 @@ export class TTYDTerminalPanel {
         
         // Append to the tabs container (which is separate from the new tab button)
         this.tabsContainer.appendChild(tabBtn);
+        console.log('[TTYDTerminalPanel] Tab button added to container:', tab.id, 'Container children:', this.tabsContainer.children.length);
 
         // Create content area with iframe for ttyd
         const content = document.createElement('div');

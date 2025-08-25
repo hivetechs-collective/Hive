@@ -83,12 +83,14 @@ export class GitPushStrategyAnalyzer {
       repoSizeInMB = value * (multipliers[unit] || 1);
     }
     
-    // Use push size for decisions if we have commits to push
-    const sizeInMB = (gitStatus.ahead > 0 && pushSizeMB >= 0) ? pushSizeMB : repoSizeInMB;
-    const usingPushSize = (gitStatus.ahead > 0 && pushSizeMB >= 0);
+    // Use push size for decisions if we have commits to push AND push size was provided
+    const sizeInMB = (gitStatus.ahead > 0 && typeof stats.pushSizeMB === 'number') ? pushSizeMB : repoSizeInMB;
+    const usingPushSize = (gitStatus.ahead > 0 && typeof stats.pushSizeMB === 'number');
     
     console.log(`[GitPushStrategyAnalyzer] Using ${usingPushSize ? 'PUSH' : 'REPO'} size for recommendations`);
     console.log(`[GitPushStrategyAnalyzer] Push size: ${pushSizeMB}MB, Repo size: ${repoSizeInMB}MB, Using: ${sizeInMB}MB`);
+    console.log(`[GitPushStrategyAnalyzer] stats.pushSizeMB type: ${typeof stats.pushSizeMB}, value: ${stats.pushSizeMB}`);
+    console.log(`[GitPushStrategyAnalyzer] gitStatus.ahead: ${gitStatus.ahead}`);
 
     // Determine branch status
     let branchStatus: 'new' | 'existing' | 'diverged' = 'existing';
@@ -130,7 +132,7 @@ export class GitPushStrategyAnalyzer {
         reasoning.push('Continue pushing changes normally');
         reasoning.push('Consider creating a Pull Request to main when ready');
       }
-    } else if (sizeInMB > 10000) { // > 10GB
+    } else if (!usingPushSize && sizeInMB > 10000) { // > 10GB - only check if using repo size
       if (isMainBranch) {
         recommendation = PushStrategy.CLEANUP_FIRST;
         reasoning.push('Repository exceeds 10GB - cleanup is essential');

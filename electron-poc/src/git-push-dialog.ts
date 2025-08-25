@@ -78,7 +78,7 @@ export class GitPushDialog {
             <div style="font-size: 24px; font-weight: bold; color: #007acc;">
               ${analysis.totalSize}
             </div>
-            <div style="font-size: 11px; opacity: 0.7;">Repository Size</div>
+            <div style="font-size: 11px; opacity: 0.7;">${analysis.hasUnpushedCommits > 0 ? 'Push Size' : 'Repository Size'}</div>
           </div>
           <div>
             <div style="font-size: 24px; font-weight: bold; color: #73c991;">
