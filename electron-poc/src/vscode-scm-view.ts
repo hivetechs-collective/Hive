@@ -835,7 +835,6 @@ export class VSCodeSCMView {
           
           // Mark the AI-recommended strategy
           strategies[recommendedIndex].recommended = true;
-          strategies[recommendedIndex].confidence = aiAdvice.confidence;
           
           // Add AI reasoning to the description
           const originalDesc = strategies[recommendedIndex].description;
@@ -849,9 +848,6 @@ export class VSCodeSCMView {
             ];
           }
         }
-        
-        // Re-sort with AI confidence
-        strategies.sort((a, b) => b.confidence - a.confidence);
       }
       
       console.log('[SCM] Available strategies:', strategies);
