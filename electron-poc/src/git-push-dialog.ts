@@ -435,6 +435,8 @@ export class GitPushDialog {
             description: finalCustomCommand,
             icon: '⚡',
             recommended: false,
+            pros: ['Full control over push command', 'Flexible options'],
+            cons: ['Requires Git knowledge', 'No safety checks'],
             selectedOptions: {
               customCommand: finalCustomCommand,
               dryRun: (document.getElementById('push-opt-dry-run') as HTMLInputElement)?.checked
